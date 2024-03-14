@@ -106,7 +106,9 @@
    :logseq.color {:schema
                   {:type :default :hide? true}
                   :closed-values
-                  (mapv #(hash-map :value % :uuid (random-uuid))
+                  (mapv #(hash-map :db-ident (keyword "logseq.color" %)
+                                   :value %
+                                   :uuid (random-uuid))
                         ;; Stringified version of frontend.colors/COLORS. Too basic to couple
                         ["tomato" "red" "crimson" "pink" "plum" "purple" "violet" "indigo" "blue" "cyan" "teal" "green" "grass" "orange" "brown"])
                   :visible true}
@@ -118,13 +120,17 @@
    :logseq.table.headers {:schema
                           {:type :default :hide? true}
                           :closed-values
-                          (mapv #(hash-map :value % :uuid (random-uuid))
+                          (mapv #(hash-map :db-ident (keyword "logseq.table.headers" %)
+                                           :value %
+                                           :uuid (random-uuid))
                                 ["uppercase" "capitalize" "capitalize-first" "lowercase"])
                           :visible true}
    :logseq.table.hover {:schema
                         {:type :default :hide? true}
                         :closed-values
-                        (mapv #(hash-map :value % :uuid (random-uuid))
+                        (mapv #(hash-map :db-ident (keyword "logseq.table.hover" %)
+                                         :value %
+                                         :uuid (random-uuid))
                               ["row" "col" "both" "none"])
                         :visible true}
    :logseq.table.borders {:schema {:type :checkbox :hide? true}

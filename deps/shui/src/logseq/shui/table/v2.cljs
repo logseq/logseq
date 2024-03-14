@@ -449,7 +449,7 @@
                                      :table-underflow? table-underflow?
                                      :cell-col-map cell-col-map)]
     ; (js/console.log "shui table opts context" (clj->js context)) 
-    (js/console.log "shui table opts" (clj->js table-opts)) 
+    ;; (js/console.log "shui table opts" (clj->js table-opts))
     ; (js/console.log "shui table opts" (pr-str table-opts)) 
     ;; Scrollable Container: if the table is larger than the container, manage the scrolling effects here
     (table-scrollable-overflow handle-root-width-change
