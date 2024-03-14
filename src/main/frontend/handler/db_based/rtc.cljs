@@ -13,6 +13,13 @@
      (let [token (state/get-auth-id-token)]
        (.rtc-upload-graph worker repo token "TODO:remote-graph-name")))))
 
+(defn <rtc-delete-graph!
+  [graph-uuid]
+  (when-let [^js worker @state/*db-worker]
+    (user-handler/<wrap-ensure-id&access-token
+     (let [token (state/get-auth-id-token)]
+       (.rtc-delete-graph worker token graph-uuid)))))
+
 (defn <rtc-download-graph!
   [repo graph-uuid]
   (when-let [^js worker @state/*db-worker]
@@ -38,10 +45,15 @@
            token (state/get-auth-id-token)]
        (p/let [result (.rtc-get-graphs worker repo token)
                graphs (bean/->clj result)
-               result (mapv (fn [graph]
-                              {:GraphName (:graph-name graph)
-                               :GraphUUID (:graph-uuid graph)
-                               :group (:group graph)
-                               :rtc-graph? true})
-                            graphs)]
+               result (->> graphs
+                           (remove (fn [graph]
+                                     (= (:graph-status graph) "deleting")))
+                           (mapv (fn [graph]
+                                   (merge
+                                    {:GraphName (or (:graph-name graph)
+                                                   ;; FIXME: remove this later
+                                                    (str (:graph-uuid graph)))
+                                     :GraphUUID (:graph-uuid graph)
+                                     :rtc-graph? true}
+                                    (dissoc graph :graph-uuid :graph-name)))))]
          (state/set-state! :rtc/graphs result))))))
