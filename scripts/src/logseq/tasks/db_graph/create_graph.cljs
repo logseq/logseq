@@ -44,7 +44,6 @@
   ;; Same order as frontend.db.conn/start!
   (let [conn (sqlite-db/open-db! dir db-name)]
     (cli-pipeline/add-listener conn)
-    (ldb/create-default-pages! conn {:db-graph? true})
     (setup-init-data conn additional-config)
     conn))
 
