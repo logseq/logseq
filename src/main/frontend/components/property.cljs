@@ -644,7 +644,7 @@
                                          :align "start"}
                          :auto-side? true
                          :auto-focus? true
-                         :as-dropdown? true}))}
+                         :as-dropdown? false}))}
          (:block/original-name property)))]))
 
 (defn- resolve-linked-block-if-exists

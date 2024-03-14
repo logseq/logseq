@@ -5,7 +5,7 @@
   "author": "Logseq",
   "scripts": {
     "watch:ui:examples": "parcel serve ./examples/index.html",
-    "build:ui:only": "parcel build --target ui --no-source-maps",
+    "build:ui:only": "parcel build --target ui",
     "build:ui": "rm -rf .parcel-cache && yarn build:ui:only",
     "watch:storybook": "storybook dev -p 6006",
     "postinstall": "yarn build:ui"
@@ -39,6 +39,7 @@
     "react-day-picker": "^8.9.1",
     "react-dom": "^18",
     "react-hook-form": "^7.48.2",
+    "react-remove-scroll": "^2.5.7",
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
     "yup": "^1.3.2",
