@@ -238,6 +238,10 @@ html[data-theme=dark] {
   overflow-y: auto;
 }
 
+.ui__popover-content {
+  @apply !pointer-events-auto;
+}
+
 .ui__multi-select-content {
   @apply relative;
 

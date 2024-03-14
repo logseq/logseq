@@ -66,7 +66,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger, PopoverArrow } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger, PopoverArrow, PopoverRemoveScroll } from '@/components/ui/popover'
 import {
   Dialog,
   DialogClose,
@@ -157,6 +157,7 @@ const shadui = {
   PopoverTrigger,
   PopoverContent,
   PopoverArrow,
+  PopoverRemoveScroll,
   Dialog,
   DialogPortal,
   DialogOverlay,

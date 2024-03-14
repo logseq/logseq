@@ -3,6 +3,7 @@ import * as PopoverPrimitive from '@radix-ui/react-popover'
 
 // @ts-ignore
 import { cn } from '@/lib/utils'
+import { RemoveScroll } from 'react-remove-scroll'
 
 const Popover = PopoverPrimitive.Root
 
@@ -30,4 +31,6 @@ const PopoverContent = React.forwardRef<
 ))
 PopoverContent.displayName = PopoverPrimitive.Content.displayName
 
-export { Popover, PopoverTrigger, PopoverContent, PopoverArrow }
+const PopoverRemoveScroll = RemoveScroll
+
+export { Popover, PopoverTrigger, PopoverRemoveScroll, PopoverContent, PopoverArrow }

@@ -9,6 +9,7 @@
 (def popover (util/lsui-wrap "Popover"))
 (def popover-trigger (util/lsui-wrap "PopoverTrigger"))
 (def popover-content (util/lsui-wrap "PopoverContent"))
+(def popover-remove-scroll (util/lsui-wrap "PopoverRemoveScroll"))
 (def dropdown-menu (util/lsui-wrap "DropdownMenu"))
 (def dropdown-menu-trigger (util/lsui-wrap "DropdownMenuTrigger"))
 (def dropdown-menu-content (util/lsui-wrap "DropdownMenuContent"))
@@ -113,6 +114,20 @@
         (js/setTimeout #(detach-popup! id) 128)
         (when (and auto-focus? target)
           (js/setTimeout #(.focus target) 256))))
+    [open?])
+
+  ;; disableOutsidePointerEvents
+  (rum/use-effect!
+    (fn []
+      (when-not as-dropdown?
+        (let [^js style js/document.body.style
+              set-pointer-event! #(set! (. style -pointerEvents) %)
+              try-unset! #(when (nil? (seq @*popups))
+                            (set-pointer-event! nil))]
+          (if open?
+            (set-pointer-event! "none")
+            (try-unset!))
+          #(try-unset!))))
     [open?])
 
   (when-let [[x y _ height] position]
