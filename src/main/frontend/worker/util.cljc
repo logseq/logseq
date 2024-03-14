@@ -6,6 +6,9 @@
                      [cljs.core.async.impl.channels :refer [ManyToManyChannel]]
                      [clojure.core.async :as async]
                      [clojure.string :as string]
+                     [goog.crypt :as crypt]
+                     [goog.crypt.Hmac]
+                     [goog.crypt.Sha256]
                      [logseq.common.util :as common-util]
                      [logseq.db :as ldb]
                      [logseq.db.sqlite.common-db :as sqlite-common-db])))
@@ -99,4 +102,19 @@
      (defn get-pool-name
        [graph-name]
        (str "logseq-pool-" (sqlite-common-db/sanitize-db-name graph-name)))
-     ))
+
+     (defn- decode-username
+       [username]
+       (let [arr (new js/Uint8Array (count username))]
+         (doseq [i (range (count username))]
+           (aset arr i (.charCodeAt username i)))
+         (.decode (new js/TextDecoder "utf-8") arr)))
+
+     (defn parse-jwt [jwt]
+       (some-> jwt
+               (string/split ".")
+               second
+               (#(.decodeString ^js crypt/base64 % true))
+               js/JSON.parse
+               (js->clj :keywordize-keys true)
+               (update :cognito:username decode-username)))))

@@ -8,6 +8,7 @@
 (def general-attrs-schema-coll
   [[:updated-at {:optional true} :int]
    [:created-at {:optional true} :int]
+   [:created-by {:optional true} :string]
    [:alias {:optional true} [:maybe [:sequential :uuid]]]
    [:type {:optional true} [:maybe [:sequential :string]]]
    [:schema {:optional true} [:maybe :string]]
@@ -50,6 +51,7 @@
       [:content {:optional true} :string]
       [:updated-at {:optional true} :int]
       [:created-at {:optional true} :int]
+      [:created-by {:optional true} :string]
       [:tags {:optional true} [:map
                                [:add {:optional true} [:maybe [:set :uuid]]]
                                [:retract {:optional true} [:maybe [:set :uuid]]]]]
