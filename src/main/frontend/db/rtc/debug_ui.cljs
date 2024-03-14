@@ -56,7 +56,8 @@
                                         (map
                                          #(into {}
                                                 (filter second
-                                                 (select-keys % [:graph-uuid :graph-status :group])))
+                                                 (select-keys % [:graph-uuid :graph-name
+                                                                 :graph-status :group])))
                                          graph-list))))))]
 
      [:pre.select-text
@@ -152,8 +153,15 @@
                  {:on-click (fn []
                               (let [repo (state/get-current-repo)
                                     token (state/get-auth-id-token)
+                                    remote-graph-name (:upload-as-graph-name state)
                                     ^js worker @db-browser/*worker]
-                                (.rtc-upload-graph worker repo token)))})]
+                                (.rtc-upload-graph worker repo token remote-graph-name)))})
+      [:input.form-input.my-2
+        {:on-change (fn [e] (swap! debug-state assoc :upload-as-graph-name (util/evalue e)))
+         :on-focus (fn [e] (let [v (.-value (.-target e))]
+                             (when (= v "remote graph name here")
+                               (set! (.-value (.-target e)) ""))))
+         :default-value "remote graph name here"}]]
      [:div
       (ui/button (str "delete graph")
                  {:on-click (fn []

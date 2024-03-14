@@ -9,7 +9,7 @@
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.ws :refer [<send!]]
+            [frontend.worker.rtc.ws :as ws :refer [<send!]]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.db.frontend.schema :as db-schema]
@@ -37,7 +37,7 @@
 
 (defn <upload-graph
   "Upload current repo to remote, return remote {:req-id xxx :graph-uuid <new-remote-graph-uuid>}"
-  [state repo conn]
+  [state repo conn remote-graph-name]
   (go
     (let [{:keys [url key all-blocks-str]}
           (with-sub-data-from-ws state
@@ -46,23 +46,23 @@
                   all-blocks-str (transit/write (transit/writer :json) all-blocks)]
               (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
       (<! (http/put url {:body all-blocks-str}))
-      (with-sub-data-from-ws state
-        (<? (<send! state {:req-id (get-req-id) :action "full-upload-graph" :s3-key key}))
-        (let [r (<! (get-result-ch))]
-          (if-not (:graph-uuid r)
-            (ex-info "upload graph failed" r)
-            (let [^js worker-obj (:worker/object @worker-state/*state)]
-              (d/transact! conn
-                           [{:db/ident :graph/uuid :graph/uuid (:graph-uuid r)}
-                            {:db/ident :graph/local-tx :graph/local-tx (:graph-uuid r)}])
-              (<! (p->c
-                   (p/do!
-                     (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
-              (op-mem-layer/init-empty-ops-store! repo)
-              (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
-              (op-mem-layer/update-local-tx! repo (:t r))
-              (<! (op-mem-layer/<sync-to-idb-layer! repo))
-              r)))))))
+      (let [r (<? (ws/<send&receive state {:action "full-upload-graph"
+                                           :s3-key key
+                                           :graph-name remote-graph-name}))]
+        (if-not (:graph-uuid r)
+          (ex-info "upload graph failed" r)
+          (let [^js worker-obj (:worker/object @worker-state/*state)]
+            (d/transact! conn
+                         [{:db/ident :graph/uuid :graph/uuid (:graph-uuid r)}
+                          {:db/ident :graph/local-tx :graph/local-tx (:graph-uuid r)}])
+            (<! (p->c
+                 (p/do!
+                  (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
+            (op-mem-layer/init-empty-ops-store! repo)
+            (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
+            (op-mem-layer/update-local-tx! repo (:t r))
+            (<! (op-mem-layer/<sync-to-idb-layer! repo))
+            r))))))
 
 (def block-type-kw->str
   {:block-type/property     "property"
@@ -148,11 +148,8 @@
   [state repo graph-uuid]
   (go-try
    (let [{:keys [url]}
-         (with-sub-data-from-ws state
-           (<? (<send! state {:req-id (get-req-id)
-                              :action "full-download-graph"
-                              :graph-uuid graph-uuid}))
-           (<! (get-result-ch)))
+         (<? (ws/<send&receive state {:action "full-download-graph"
+                                      :graph-uuid graph-uuid}))
          {:keys [status body] :as r} (<! (http/get url))
          repo (str "logseq_db_" repo)]
      (if (not= 200 status)

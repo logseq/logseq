@@ -1,7 +1,5 @@
 (ns frontend.worker.rtc.core
   "Main ns for rtc related fns"
-  (:require-macros
-   [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-bean.core :as bean]
             [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
@@ -31,8 +29,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
-            [malli.util :as mu]
-            [promesa.core :as p]))
+            [malli.util :as mu]))
 
 ;;                     +-------------+
 ;;                     |             |
@@ -1036,21 +1033,15 @@
 
 (defn <get-block-content-versions
   [state block-uuid]
-  (let [d (p/deferred)]
-    (go
-      (when (some-> state :*graph-uuid deref)
-        (with-sub-data-from-ws state
-          (<? (ws/<send! state {:req-id (get-req-id)
-                                :action "query-block-content-versions"
-                                :block-uuids [block-uuid]
-                                :graph-uuid @(:*graph-uuid state)}))
-          (let [{:keys [ex-message ex-data versions]} (<! (get-result-ch))]
-            (if ex-message
-              (do
-                (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
-                (p/resolve! d nil))
-              (p/resolve! d (bean/->js versions)))))))
-    d))
+  (go
+    (when (some-> state :*graph-uuid deref)
+      (let [{:keys [ex-message ex-data versions]}
+            (<? (ws/<send&receive state {:action "query-block-content-versions"
+                                         :block-uuids [block-uuid]
+                                         :graph-uuid @(:*graph-uuid state)}))]
+        (if ex-data
+          (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
+          (bean/->js versions))))))
 
 ;; (defn- <query-page-blocks
 ;;   [state page-block-uuid]
@@ -1157,33 +1148,22 @@
 
 (defn <get-graphs
   [repo token]
-  (let [d (p/deferred)]
-    (go
-      (let [state (or @*state (<! (<init-state repo token true)))
-            graph-list (with-sub-data-from-ws state
-                         (<? (ws/<send! state {:req-id (get-req-id)
-                                               :action "list-graphs"}))
-                         (:graphs (<! (get-result-ch))))]
-        (p/resolve! d (bean/->js graph-list))))
-    d))
+  (go
+    (let [state (or @*state (<! (<init-state repo token true)))
+          graph-list (:graphs (<? (ws/<send&receive state {:action "list-graphs"})))]
+      (bean/->js graph-list))))
 
 
 (defn <delete-graph
   [token graph-uuid]
-  (let [d (p/deferred)]
-    (go
-      (let [state (or @*state (<! (<init-state nil token true)))
-            r (with-sub-data-from-ws state
-                (<? (ws/<send! state {:req-id (get-req-id)
-                                      :action "delete-graph"
-                                      :graph-uuid graph-uuid}))
-                (<! (get-result-ch)))
-            {:keys [ex-message]} r]
-        (if ex-message
-          (do (prn ::delete-graph-failed graph-uuid)
-              (p/resolve! d false))
-          (p/resolve! d true))))
-    d))
+  (go
+    (let [state (or @*state (<! (<init-state nil token true)))
+          {:keys [ex-data]} (<? (ws/<send&receive state {:action "delete-graph"
+                                                         :graph-uuid graph-uuid}))]
+      (if ex-data
+        (do (prn ::delete-graph-failed graph-uuid ex-data)
+            false)
+        true))))
 
 ;;; APIs (ends)
 

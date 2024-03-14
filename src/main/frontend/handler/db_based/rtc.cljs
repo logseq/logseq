@@ -11,7 +11,7 @@
   (when-let [^js worker @state/*db-worker]
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
-       (.rtc-upload-graph worker repo token)))))
+       (.rtc-upload-graph worker repo token "TODO:remote-graph-name")))))
 
 (defn <rtc-download-graph!
   [repo graph-uuid]
