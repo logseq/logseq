@@ -39,8 +39,9 @@
        (p/let [result (.rtc-get-graphs worker repo token)
                graphs (bean/->clj result)
                result (mapv (fn [graph]
-                              {:GraphName (str (:graph-uuid graph)) ; FIXME: update when our server supports name
+                              {:GraphName (:graph-name graph)
                                :GraphUUID (:graph-uuid graph)
+                               :group (:group graph)
                                :rtc-graph? true})
                             graphs)]
          (state/set-state! :rtc/graphs result))))))
