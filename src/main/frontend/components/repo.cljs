@@ -82,11 +82,15 @@
                                                              (state/pub-event! [:graph/unlinked repo current-repo])))
                                      action-confirm-fn (if only-cloud?
                                                          (fn []
-                                                           (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                           (go (<! (file-sync/<delete-graph GraphUUID))
-                                                               (state/delete-repo! repo)
-                                                               (state/delete-remote-graph! repo)
-                                                               (state/set-state! [:file-sync/remote-graphs :loading] false)))
+                                                           (let [current-repo (state/get-current-repo)
+                                                                 delete-graph (if (config/db-based-graph? current-repo)
+                                                                                rtc-handler/<rtc-delete-graph!
+                                                                                file-sync/<delete-graph)]
+                                                             (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                                             (go (<! (delete-graph GraphUUID))
+                                                                 (state/delete-repo! repo)
+                                                                 (state/delete-remote-graph! repo)
+                                                                 (state/set-state! [:file-sync/remote-graphs :loading] false))))
                                                          unlink-or-remote-fn)
                                      confirm-fn
                                      (fn []
@@ -109,7 +113,9 @@
   (let [login? (boolean (state/sub :auth/id-token))
         repos (state/sub [:me :repos])
         repos (util/distinct-by :url repos)
-        remotes (state/sub [:file-sync/remote-graphs :graphs])
+        remotes (concat
+                 (state/sub :rtc/graphs)
+                 (state/sub [:file-sync/remote-graphs :graphs]))
         remotes-loading? (state/sub [:file-sync/remote-graphs :loading])
         repos (if (and login? (seq remotes))
                 (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
@@ -134,7 +140,6 @@
               (t :open-a-directory)
               :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
-        ;; TODO: support rtc
         (when (and (file-sync/enable-sync?) login?)
           [:div
            [:hr]
@@ -146,7 +151,9 @@
                (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
               :background "gray"
               :disabled remotes-loading?
-              :on-click #(file-sync/load-session-graphs))]]
+              :on-click (fn []
+                          (file-sync/load-session-graphs)
+                          (when config/dev? (rtc-handler/<get-remote-graphs))))]]
            (repos-inner remote-graphs)])]]
       (widgets/add-graph))))
 

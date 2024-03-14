@@ -897,12 +897,14 @@ Similar to re-frame subscriptions"
 
 (defn delete-remote-graph!
   [repo]
-  (swap! state update-in [:file-sync/remote-graphs :graphs]
-         (fn [repos]
-           (remove #(and
-                     (:GraphUUID repo)
-                     (:GraphUUID %)
-                     (= (:GraphUUID repo) (:GraphUUID %))) repos))))
+  (let [remove-repo! (fn [repos]
+                       (remove #(and
+                                 (:GraphUUID repo)
+                                 (:GraphUUID %)
+                                 (= (:GraphUUID repo) (:GraphUUID %))) repos))]
+    (if (:rtc-graph? repo)
+      (swap! state update :rtc/graphs remove-repo!)
+      (swap! state update-in [:file-sync/remote-graphs :graphs] remove-repo!))))
 
 (defn add-remote-graph!
   [repo]
