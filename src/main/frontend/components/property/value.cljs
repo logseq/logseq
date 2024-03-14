@@ -603,15 +603,17 @@
      (shui/dropdown-menu-trigger
       {:class "jtrigger flex flex-1"
        :on-click #(set-open! (not open?))
-       :on-key-down (fn [e]
-                      (when (= " " (util/ekey e))
-                        (set-open! true)))}
-      (if (string/blank? value)
-        [:div.opacity-50.pointer.text-sm "Empty"]
-        (value-f)))
-     (shui/dropdown-menu-content
-      {:align "start"
-       :on-interact-outside #(set-open! false)
+       :on-key-down (fn [^js e]
+                      (case (util/ekey e)
+                        (" " "Enter")
+                        (do (set-open! true) (util/stop e))
+                        :dune))}
+       (if (string/blank? value)
+         [:div.opacity-50.pointer.text-sm "Empty"]
+         (value-f)))
+      (shui/dropdown-menu-content
+        {:align "start"
+         :on-interact-outside #(set-open! false)
        :onEscapeKeyDown #(set-open! false)}
       [:div.property-select
        (case type
@@ -760,7 +762,6 @@
       (let [toggle-fn #(shui/popup-hide!)
             content-fn (fn [{:keys [_id content-props]}]
                          (select-cp {:content-props content-props}))]
-        ;;
         [:div.multi-values.jtrigger
          {:tab-index "0"
           :ref *el
@@ -771,11 +772,12 @@
                           (shui/popup-show! (rum/deref *el) content-fn
                             {:as-dropdown? true :as-content? false
                              :align "start" :auto-focus? true}))))
-          :on-key-up (fn [^js e]
-                       (case (.-key e)
-                         (" " "Enter")
-                         (some-> (rum/deref *el) (.click))
-                         :dune))
+          :on-key-down (fn [^js e]
+                         (case (.-key e)
+                           (" " "Enter")
+                           (do (some-> (rum/deref *el) (.click))
+                               (util/stop e))
+                           :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
          (values-cp toggle-fn)])
       (select-cp {:content-props nil}))))
@@ -783,16 +785,16 @@
 (rum/defc property-value < rum/reactive
   [block property v opts]
   (ui/catch-error
-   (ui/block-error "Something wrong" {})
-   (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
-         editor-id (str dom-id "-editor")
-         schema (:block/schema property)
-         multiple-values? (= :many (:cardinality schema))
-         editor-args {:block property
-                      :parent-block block
-                      :format :markdown}]
-     (cond
-       multiple-values?
+    (ui/block-error "Something wrong" {})
+    (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+          editor-id (str dom-id "-editor")
+          schema (:block/schema property)
+          multiple-values? (= :many (:cardinality schema))
+          editor-args {:block property
+                       :parent-block block
+                       :format :markdown}]
+      (cond
+        multiple-values?
        (multiple-values block property v opts schema)
 
        :else
