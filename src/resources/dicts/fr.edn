@@ -173,22 +173,13 @@
     :linked-references/filter-heading "Filtrer"
     :linked-references/filter-includes "Inclut : "
     :linked-references/reference-count (fn [filtered-count total]
-                                           (cond
-                                               (= filtered-count nil)
-                                               (cond
-                                                   (= total 0)
-                                                   "Aucune référence liée"
-                                                   (= total 1)
-                                                   "1 référence liée"
-                                                   :else
-                                                   (str total " références liées")
-                                               )
-                                               (= filtered-count 1)
-                                               (str "1 référence liée / " total)
-                                               :else
-                                               (str filtered-count " références liées / " total)
-                                           )
-                                       )
+                                           (if (= filtered-count nil)
+                                               (if (<= total 1)
+                                                   (str total " référence liée")
+                                                   (str total " références liées"))
+                                               (if (<= filtered-count 1)
+                                                   (str filtered-count " référence liée / " total)
+                                                   (str filtered-count " références liées / " total))))
     :linked-references/filter-search "Rechercher dans les pages liées"
     :linked-references/unexpected-error "Références liées : erreur inattendue. Veuillez d'abord ré-indexer votre graphe."
     :on-boarding/add-graph "Ajouter un graphe"
@@ -823,17 +814,9 @@
     :settings-page/auto-chmod-desc "Désactiver pour permettre l'édition par plusieurs utilisateurs avec les permissions données par l'appartenance au groupe."
     :settings-page/tab-keymap "Raccourcis"
     :unlinked-references/reference-count  (fn [total]
-                                              (cond
-                                                  (= total nil)
+                                              (if (or (= total nil) (= total ""))
                                                   "Références non liées"
-                                                  (= total "")
-                                                  "Références non liées"
-                                                  (= total 0)
-                                                  "Aucune référence non liée"
-                                                  (= total 1)
-                                                  "1 référence non liée"
-                                                  (> total 1)
-                                                  (str total " références non liées")
-                                              )
-                                          )
+                                                  (if (<= total 1)
+                                                      (str total " référence non liée")
+                                                      (str total " références non liées"))))
 }
