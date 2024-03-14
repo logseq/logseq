@@ -234,7 +234,7 @@
                   (do
                     (upsert-property! repo k-name (assoc property-schema :type property-type)
                                       {:property-uuid property-uuid})
-                    (let [status? (= "status" (string/lower-case k-name))
+                    (let [status? (= :task/status (:db/ident property))
                           new-value (cond
                                       (and multiple-values? old-value
                                            (not= old-value :frontend.components.property/new-value-placeholder))
@@ -378,17 +378,16 @@
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
   [repo block-ids k-name v]
-  (let [k-name (name k-name)
-        property (db/entity repo [:block/name (common-util/page-name-sanity-lc k-name)])
+  (let [property (db-property/get-by-ident-or-name (db/get-db repo) k-name)
         property-uuid (or (:block/uuid property) (db/new-block-id))
         type (:type (:block/schema property))
         infer-schema (when-not type (infer-schema-from-input-string v))
         property-type (or type infer-schema :default)
         _ (when (nil? property)
-            (upsert-property! repo k-name (assoc (:block/schema property) :type property-type)
+            (upsert-property! repo (name k-name) (assoc (:block/schema property) :type property-type)
                               {:property-uuid property-uuid}))
         {:keys [cardinality]} (:block/schema property)
-        status? (= "status" (string/lower-case k-name))
+        status? (= :task/status (:db/ident property))
         txs (mapcat
              (fn [id]
                (when-let [block (db/entity [:block/uuid id])]
@@ -845,11 +844,11 @@
      :from-property-id (:db/id from-property)}))
 
 (defn batch-set-property-closed-value!
-  [block-ids property-name closed-value]
+  [block-ids db-ident closed-value]
   (let [repo (state/get-current-repo)
-        closed-value-id (:block/uuid (pu/get-closed-value-entity-by-name property-name closed-value))]
+        closed-value-id (:block/uuid (pu/get-closed-value-entity-by-name db-ident closed-value))]
     (when closed-value-id
       (batch-set-property! repo
                            block-ids
-                           property-name
+                           db-ident
                            closed-value-id))))

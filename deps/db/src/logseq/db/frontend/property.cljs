@@ -197,9 +197,21 @@
   [repo db block]
   (= :whiteboard-shape (get-block-property-value repo db block :ls-type)))
 
+(defn get-built-in
+  "Gets a built-in page/class/property/X by its :db/ident"
+  [db db-ident]
+  (d/entity db db-ident))
+
+(defn get-by-ident-or-name
+  "Gets a property by ident or name"
+  [db ident-or-name]
+  (if (and (keyword? ident-or-name) (namespace ident-or-name))
+    (get-built-in db ident-or-name)
+    (d/entity db [:block/name (common-util/page-name-sanity-lc (name ident-or-name))])))
+
 (defn get-closed-property-values
-  [db property-name]
-  (when-let [property (get-property db property-name)]
+  [db ident-or-name]
+  (when-let [property (get-by-ident-or-name db ident-or-name)]
     (get-in property [:block/schema :values])))
 
 (defn closed-value-name
@@ -210,8 +222,8 @@
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"
-  [db property-name value-name]
-  (let [values (get-closed-property-values db property-name)]
+  [db db-ident value-name]
+  (let [values (get-closed-property-values db db-ident)]
     (some (fn [id]
             (let [e (d/entity db [:block/uuid id])]
               (when (= (closed-value-name e) value-name)
