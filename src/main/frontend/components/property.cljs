@@ -605,13 +605,14 @@
                                                                                  (:block/uuid property)
                                                                                  {:properties {icon-property-id icon}})]
                                   (shui/popup-hide! id)))))}))]
-       [:button.flex
-        (when-not config/publishing?
-          {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
-        (if icon
-          (icon-component/icon icon)
-          [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
-           [:span.bullet]])])
+       (trigger-as :button
+         (-> (when-not config/publishing?
+               {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
+           (assoc :class "flex items-center"))
+         (if icon
+           (icon-component/icon icon)
+           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
+            [:span.bullet]])))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger.pl-2
@@ -695,9 +696,10 @@
             {:class "col-span-3"}
             (inline-text {} :markdown (get-in property [:block/schema :description]))]
            (when-not collapsed?
-             [:div.property-value {:class (if block?
-                                            "block-property-value"
-                                            "col-span-3 inline-grid")}
+             [:div.property-value
+              {:class (if block?
+                        "block-property-value"
+                        "col-span-3 inline-grid")}
               (pv/property-value block property v opts)]))]))))
 
 (rum/defc properties-section < rum/reactive db-mixins/query
