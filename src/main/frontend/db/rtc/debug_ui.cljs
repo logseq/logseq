@@ -14,7 +14,7 @@
             [logseq.shui.ui :as shui]
             [logseq.db :as ldb]))
 
-(defonce debug-state (atom nil))
+(defonce debug-state (:rtc/state @state/state))
 
 (defn- stop
   []
@@ -41,7 +41,7 @@
                              (let [repo (state/get-current-repo)
                                    ^object worker @db-browser/*worker]
                                (p/let [result (.rtc-get-debug-state worker repo)
-                                       new-state (bean/->clj result)]
+                                       new-state (ldb/read-transit-str result)]
                                  (swap! debug-state (fn [old] (merge old new-state)))))))
       (ui/button "graph-list"
                  :icon "refresh"

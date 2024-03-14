@@ -971,7 +971,7 @@
   (state/set-modal! multi-tabs-dialog {:container-overflow-visible? true}))
 
 (defmethod handle :rtc/sync-state [[_ state]]
-  (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
+  (state/update-state! :rtc/state (fn [old] (merge old state))))
 
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid]]
   (->

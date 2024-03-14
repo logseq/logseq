@@ -286,6 +286,7 @@
       :file-sync/graph-state                 {:current-graph-uuid nil}
       ;; graph-uuid -> ...
 
+      :rtc/state                             (atom {})
       :rtc/graphs                            []
       ;; graph-url -> {:in-transaction? Boolean :txs []}
       :rtc/remote-batch-tx-state             {}

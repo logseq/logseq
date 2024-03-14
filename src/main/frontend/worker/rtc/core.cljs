@@ -1175,3 +1175,8 @@
                  (when (or (not= new-state old-state)
                            (= :open (:rtc-state new-state)))
                    (worker-util/post-message :rtc-sync-state new-state))))))
+
+(add-watch op-mem-layer/*ops-store :update-rtc-state
+           (fn [_ _ _ _new]
+             (when (:*repo @*state)
+               (swap! *state update :counter (fnil inc 0)))))

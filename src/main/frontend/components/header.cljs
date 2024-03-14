@@ -11,6 +11,7 @@
             [frontend.handler :as handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as fs-sync]
+            [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
@@ -235,6 +236,11 @@
               (ui/icon "search" {:size ui/icon-size})])))]]
 
      [:div.r.flex.drag-region
+      (when (and current-repo
+                 config/dev?
+                 (config/db-based-graph? current-repo))
+        (rtc-indicator/indicator))
+
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
                  (not (config/db-based-graph? current-repo))
