@@ -79,7 +79,6 @@
             [rum.core :as rum]
             [frontend.rum :as r]
             [frontend.persist-db.browser :as db-browser]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
             [electron.ipc :as ipc]
             [frontend.date :as date]

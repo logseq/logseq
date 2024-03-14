@@ -32,6 +32,8 @@
         gen-ops-fn (fn []
                      (let [r (rtc-const/to-ws-ops-decoder
                               (rtc-core/sort-remote-ops
+                               ;; FIXME: Remove ignore when test is fixed
+                               #_:clj-kondo/ignore
                                (rtc-core/gen-block-uuid->remote-ops repo conn)))]
                        (is (rtc-const/to-ws-ops-validator r) r)
                        r))]
