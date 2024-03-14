@@ -102,9 +102,9 @@
                                          ["move" {:block-uuid (str uuid3) :epoch 3}]
                                          ["update" {:block-uuid (str uuid4) :epoch 4}]])
     (let [_ (op-mem-layer/new-branch! repo)
-          r1 (rtc-core/gen-block-uuid->remote-ops repo conn :n 1)
+          r1 (rtc-core/gen-block-uuid->remote-ops repo conn "user-uuid" :n 1)
           _ (op-mem-layer/rollback! repo)
-          r2 (rtc-core/gen-block-uuid->remote-ops repo conn :n 2)]
+          r2 (rtc-core/gen-block-uuid->remote-ops repo conn "user-uuid" :n 2)]
       (is (= {uuid2 [:move]}
              (update-vals r1 keys)))
       (is (= {uuid2 [:move]

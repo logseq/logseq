@@ -32,9 +32,7 @@
         gen-ops-fn (fn []
                      (let [r (rtc-const/to-ws-ops-decoder
                               (rtc-core/sort-remote-ops
-                               ;; FIXME: Remove ignore when test is fixed
-                               #_:clj-kondo/ignore
-                               (rtc-core/gen-block-uuid->remote-ops repo conn)))]
+                               (rtc-core/gen-block-uuid->remote-ops repo conn "user-uuid")))]
                        (is (rtc-const/to-ws-ops-validator r) r)
                        r))]
     (testing "create a new page"

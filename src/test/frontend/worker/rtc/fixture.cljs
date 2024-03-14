@@ -21,14 +21,16 @@
   []
   (let [data-from-ws-chan (chan (async/sliding-buffer 100))
         ws (rtc-mock/mock-websocket data-from-ws-chan)]
-    (assoc (rtc-core/init-state ws data-from-ws-chan test-helper/test-db-name-db-version "" true)
+    (assoc (rtc-core/init-state ws data-from-ws-chan test-helper/test-db-name-db-version
+                                "" "user-uuid" true)
            :*auto-push-client-ops? (atom false))))
 
 (defn- init-state-helper-for-asset-sync-loop
   []
   (let [data-from-ws-chan (chan (async/sliding-buffer 100))
         ws (rtc-mock/mock-websocket data-from-ws-chan)
-        rtc-state (rtc-core/init-state ws data-from-ws-chan test-helper/test-db-name-db-version "" true)]
+        rtc-state (rtc-core/init-state ws data-from-ws-chan test-helper/test-db-name-db-version
+                                       "" "user-uuid" true)]
     (assoc (asset-sync/init-state-from-rtc-state rtc-state)
            :*auto-push-assets-update-ops? (atom false))))
 

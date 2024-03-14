@@ -599,7 +599,7 @@
               remove-page-ops (vals remove-page-ops-map)]
 
           ;; (worker-state/start-batch-tx-mode!)
-          (js/console.groupCollapsed ::apply-remote-ops-log)
+          (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
@@ -958,7 +958,6 @@
     (reset! (:*db-conn state) conn)
     (reset! (:*date-formatter state) date-formatter)
     (reset! (:*rtc-state state) :open)
-    (swap! *state update :counter inc)
     (let [{:keys [data-from-ws-pub _client-op-update-chan]} state
           push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-coercer))
           stop-rtc-loop-chan (chan)
@@ -1058,28 +1057,26 @@
 ;;                                    :block-uuids [page-block-uuid]})))))
 
 (defn init-state
-  [ws data-from-ws-chan repo token dev-mode?]
+  [ws data-from-ws-chan repo token user-uuid dev-mode?]
   ;; {:post [(m/validate state-schema %)]}
-  (let [user-uuid (:sub (worker-util/parse-jwt token))]
-    (assert (some? user-uuid) token)
-    {:*rtc-state (atom :closed :validator rtc-state-validator)
-     :*graph-uuid (atom nil)
-     :user-uuid user-uuid
-     :*repo (atom repo)
-     :*db-conn (atom nil)
-     :*token (atom token)
-     :*date-formatter (atom nil)
-     :data-from-ws-chan data-from-ws-chan
-     :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
-     :toggle-auto-push-client-ops-chan (chan (async/sliding-buffer 1))
-     :*auto-push-client-ops? (atom true :validator boolean?)
-     :*stop-rtc-loop-chan (atom nil)
-     :force-push-client-ops-chan (chan (async/sliding-buffer 1))
-     :*ws (atom ws)
+  {:*rtc-state (atom :closed :validator rtc-state-validator)
+   :*graph-uuid (atom nil)
+   :user-uuid user-uuid
+   :*repo (atom repo)
+   :*db-conn (atom nil)
+   :*token (atom token)
+   :*date-formatter (atom nil)
+   :data-from-ws-chan data-from-ws-chan
+   :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
+   :toggle-auto-push-client-ops-chan (chan (async/sliding-buffer 1))
+   :*auto-push-client-ops? (atom true :validator boolean?)
+   :*stop-rtc-loop-chan (atom nil)
+   :force-push-client-ops-chan (chan (async/sliding-buffer 1))
+   :*ws (atom ws)
      ;; used to trigger state watch
-     :counter 0
-     :dev-mode? dev-mode?
-     :*block-update-log (atom {})}))
+   :counter 0
+   :dev-mode? dev-mode?
+   :*block-update-log (atom {})})
 
 (defn get-debug-state
   ([repo]
@@ -1117,7 +1114,9 @@
           ws-opened-ch (chan)
           ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
-      (let [state (init-state ws data-from-ws-chan repo token dev-mode?)]
+      (let [state (init-state ws data-from-ws-chan repo token
+                              (:sub (worker-util/parse-jwt token))
+                              dev-mode?)]
         (when reset-*state?
           (reset! *state state)
           (swap! *state update :counter inc))
