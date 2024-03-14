@@ -638,7 +638,7 @@
 
   (rtc-get-debug-state
    [_this repo]
-   (bean/->js (rtc-core/get-debug-state repo)))
+   (ldb/write-transit-str (rtc-core/get-debug-state repo)))
 
   (rtc-get-block-update-log
    [_this block-uuid]

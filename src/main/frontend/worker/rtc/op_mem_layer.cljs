@@ -105,7 +105,7 @@
 (def ops-store-schema-coercer (m/coercer ops-store-schema))
 
 
-(defonce ^:private *ops-store (atom {} :validator ops-store-schema-coercer))
+(defonce *ops-store (atom {} :validator ops-store-schema-coercer))
 
 (defn- merge-add-retract-maps
   [m1 m2]
@@ -449,11 +449,13 @@
 
 (defn get-unpushed-block-update-count
   [repo]
-  (some-> (get @*ops-store repo)
-          :current-branch
-          :block-uuid->ops
-          keys
-          count))
+  (or
+   (some-> (get @*ops-store repo)
+           :current-branch
+           :block-uuid->ops
+           keys
+           count)
+   0))
 
 (defn get-unpushed-asset-update-count
   [repo]
