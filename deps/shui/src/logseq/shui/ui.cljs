@@ -6,10 +6,11 @@
             [logseq.shui.select.multi :as select-multi]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.popup.core :as popup-core]
+            [logseq.shui.base.core :as base-core]
             [logseq.shui.form.core :as form-core]))
 
-(def button (util/lsui-wrap "Button" {:static? false}))
-(def link (util/lsui-wrap "Link"))
+(def button base-core/button)
+(def link base-core/link)
 (def tabler-icon icon-v2/root)
 
 (def alert (util/lsui-wrap "Alert"))

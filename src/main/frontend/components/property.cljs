@@ -190,10 +190,11 @@
   ([as & props-or-children]
    (let [[props children] [(first props-or-children) (rest props-or-children)]
          props (cond->
-                 {:on-key-up #(case (.-key %)
-                               (" " "Enter")
-                               (some-> (.-target %) (.click))
-                               :dune)}
+                 {:on-key-down #(case (.-key %)
+                                  (" " "Enter")
+                                  (do (some-> (.-target %) (.click))
+                                      (.preventDefault %))
+                                  :dune)}
                  (map? props)
                  (merge props))]
      [as props children])))
