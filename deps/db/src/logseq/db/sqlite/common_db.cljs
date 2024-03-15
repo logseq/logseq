@@ -117,7 +117,7 @@
 
 (defn get-structured-blocks
   [db]
-  (let [special-pages (map #(d/pull db '[*] [:block/name %]) #{"tags"})
+  (let [special-pages (map #(d/pull db '[*] %) #{:logseq.property/tags})
         structured-blocks (->> (d/datoms db :avet :block/type)
                                (keep (fn [e]
                                        (when (contains? #{"closed value" "property" "class"} (:v e))

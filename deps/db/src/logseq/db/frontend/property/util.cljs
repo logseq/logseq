@@ -13,7 +13,7 @@
    :block/format :markdown
    :block/uuid block-id
    :block/page page-id
-   :block/properties {(:block/uuid (d/entity db :created-from-property)) (:block/uuid property)}
+   :block/properties {(:block/uuid (d/entity db :logseq.property/created-from-property)) (:block/uuid property)}
    :block/schema {:value value}
    :block/parent page-id})
 

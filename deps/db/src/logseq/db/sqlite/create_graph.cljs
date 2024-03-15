@@ -17,14 +17,14 @@
         built-in-properties (->>
                              (map (fn [[k v]]
                                     (assert (keyword? k))
-                                    [k (assoc v :db-ident (get v :db-ident k))])
+                                    [k (assoc v :db-ident (get v :db-ident (keyword "logseq.property" (name k))))])
                                   db-property/built-in-properties)
                              (into {}))]
     (mapcat
      (fn [[k-keyword {:keys [schema original-name closed-values db-ident]}]]
        (let [k-name (name k-keyword)
              id (if (contains? db-property/first-stage-properties k-keyword)
-                  (let [id (:block/uuid (d/entity db k-keyword))]
+                  (let [id (:block/uuid (d/entity db db-ident))]
                     (assert (uuid? id) "First stage properties are not created yet")
                     id)
                   (d/squuid))
@@ -47,7 +47,7 @@
   [db* config-content]
   (let [db (d/db-with db*
                       (map (fn [p]
-                             {:db/ident p
+                             {:db/ident (keyword "logseq.property" (name p))
                               :block/name (name p)
                               :block/uuid (random-uuid)}) db-property/first-stage-properties))
         initial-data [{:db/ident :db/type :db/type "db"}

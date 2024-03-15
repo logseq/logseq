@@ -21,8 +21,7 @@
            :visible true
            :schema {:type :page
                     :cardinality :many}}
-   :tags {:db-ident :tags
-          :original-name "Tags"
+   :tags {:original-name "Tags"
           :attribute :block/tags
           :visible true
           :schema {:type :page

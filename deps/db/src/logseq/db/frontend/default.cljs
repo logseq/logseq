@@ -29,5 +29,5 @@
 (defn mark-block-as-built-in
   "Marks built-in blocks as built-in? including pages, classes, properties and closed values"
   [db block]
-  (let [built-in-property-id (:block/uuid (d/entity db :built-in?))]
+  (let [built-in-property-id (:block/uuid (d/entity db :logseq.property/built-in?))]
     (update block :block/properties assoc built-in-property-id true)))
