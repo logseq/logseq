@@ -558,13 +558,10 @@
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
   [db class-entity property-entity]
-  (let [class-properties (some (fn [[_k v]]
-                                 (when (= (:original-name v) (:block/original-name class-entity))
-                                   (set (get-in v [:schema :properties]))))
-                               db-class/built-in-classes)]
-    (and (built-in? db class-entity)
-         (built-in? db property-entity)
-         (contains? class-properties (:block/name property-entity)))))
+  (and (built-in? db class-entity)
+       (contains? (:block/type class-entity) "class")
+       (built-in? db property-entity)
+       (contains? (set (get-in class-entity [:block/schema :properties])) (:block/uuid property-entity))))
 
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
