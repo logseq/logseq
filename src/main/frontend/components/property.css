@@ -56,15 +56,27 @@
             @apply relative;
 
             &-id {
-                @apply absolute left-[-24px] top-[2px] rounded-full leading-none
-                flex items-center justify-center bg-primary/90 text-primary-foreground border-none
+                @apply absolute left-[-26px] top-[3px] rounded-full leading-none
+                flex items-center justify-center bg-primary text-primary-foreground border-none
                 text-xs min-w-[20px] min-h-[20px];
             }
         }
 
         .property-value {
             .jtrigger-id {
-                @apply left-[-32px] top-0;
+                @apply left-[-34px] top-[2px];
+            }
+
+            &-inner[data-type=checkbox] {
+                .jtrigger-id {
+                    @apply left-[-44px] top-[-2px];
+                }
+            }
+
+            &-inner[data-type=date] {
+                .jtrigger-id {
+                    @apply top-[4px];
+                }
             }
         }
     }
