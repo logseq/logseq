@@ -642,7 +642,7 @@
 
 (defn db-based-cycle-todo!
   [block]
-  (let [task (db/entity [:block/name "task"])
+  (let [task (db/entity :logseq.class/task)
         status-id (:block/uuid (db/entity :task/status))
         status-value-id (get-in block [:block/properties status-id])
         status-value (when status-value-id (db/entity [:block/uuid status-value-id]))

@@ -265,8 +265,7 @@
                                     :block/refs refs}
                                    ;; Add task tag
                                    (when status?
-                                     (when-let [task-id (:db/id (db-property/get-property (db/get-db repo) "task"))]
-                                       [:db/add (:db/id block) :block/tags task-id]))]]
+                                     [:db/add (:db/id block) :block/tags :logseq.class/task])]]
                       (db/transact! repo tx-data {:outliner-op :save-block}))))))))))))
 
 (defn- convert-one-to-many-values!
@@ -405,8 +404,7 @@
                        :block/properties block-properties
                        :block/refs refs}
                       (when status?
-                        (when-let [task-id (:db/id (db-property/get-property (db/get-db repo) "task"))]
-                          [:db/add (:db/id block) :block/tags task-id]))]))))
+                        [:db/add (:db/id block) :block/tags :logseq.class/task])]))))
              block-ids)]
     (when (seq txs)
       (db/transact! repo txs {:outliner-op :save-block}))))

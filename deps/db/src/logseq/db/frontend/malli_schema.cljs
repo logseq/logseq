@@ -110,6 +110,7 @@
    (concat
     [:map
      [:block/namespace {:optional true} :int]
+     [:db/ident {:optional true} :keyword]
      [:block/schema
       {:optional true}
       [:map
