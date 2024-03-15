@@ -148,7 +148,7 @@
                                                             :value       value
                                                             :description description
                                                             :icon        icon}))))))))
-          opts {:toggle-fn #(shui/popup-show! % content-fn {:as-dropdown? true})}]
+          opts {:toggle-fn #(shui/popup-show! % content-fn)}]
 
       (choice-with-close
        block
@@ -200,38 +200,40 @@
                                     (pu-component/update-property! property @*property-name @*property-schema)))}))
      (if config/publishing?
        (constantly [])
-       [:a.fade-link.flex.flex-row.items-center.gap-1.leading-8
-        {:on-click
-         (fn [e]
-           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))]
-             (shui/popup-show! e
-                              (fn [{:keys [id]}]
-                                (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
-                                  (if (= :page property-type)
-                                    (property-value/select-page property
-                                                                {:multiple-choices? false
-                                                                 :dropdown?         false
-                                                                 :close-modal?      false
-                                                                 :on-chosen         (fn [chosen]
-                                                                                      (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
-                                                                                        (swap! *property-schema update :values (fnil conj []) closed-value)))})
-                                    (let [values (->> values
-                                                      (map second)
-                                                      (remove uuid?)
-                                                      (remove string/blank?)
-                                                      distinct)]
+       (shui/button
+         {:variant :secondary
+          :size :sm
+          :on-click
+          (fn [e]
+            (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))]
+              (shui/popup-show! (.-target e)
+                (fn [{:keys [id]}]
+                  (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}]
+                    (if (= :page property-type)
+                      (property-value/select-page property
+                        {:multiple-choices? false
+                         :dropdown? false
+                         :close-modal? false
+                         :on-chosen (fn [chosen]
+                                      (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
+                                        (swap! *property-schema update :values (fnil conj []) closed-value)))})
+                      (let [values (->> values
+                                     (map second)
+                                     (remove uuid?)
+                                     (remove string/blank?)
+                                     distinct)]
 
-                                      (if (seq values)
-                                        (add-existing-values property *property-schema values opts)
-                                        (item-config
-                                         property
-                                         nil
-                                         (assoc opts :on-save
-                                                (fn [value icon description]
-                                                  (p/let [closed-value (<upsert-closed-value! property {:value       value
-                                                                                                        :description description
-                                                                                                        :icon        icon})]
-                                                    (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
-                              {:as-dropdown? true})))}
-        (ui/icon "plus" {:size 16})
-        "Add choice"])]))
+                        (if (seq values)
+                          (add-existing-values property *property-schema values opts)
+                          (item-config
+                            property
+                            nil
+                            (assoc opts :on-save
+                                        (fn [value icon description]
+                                          (p/let [closed-value (<upsert-closed-value! property {:value value
+                                                                                                :description description
+                                                                                                :icon icon})]
+                                            (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
+                {:content-props {:class "w-auto"}})))}
+         (ui/icon "plus" {:size 16})
+         "Add choice"))]))

@@ -89,49 +89,44 @@
         initial-month (when value'
                         (js/Date. (.getYear value') (.getMonth value')))]
     [:div.flex.flex-row.gap-1.items-center
-     (shui/popover
-      {:open open?}
-      (shui/popover-trigger
-       {:class "jtrigger flex flex-row items-center"
-        :on-click (fn [e]
-                    (if config/publishing?
-                      (navigate-to-date-page value)
-                      (do
-                        (util/stop e)
-                        (set-open! (not open?)))))
-        :on-key-down (fn [e]
-                       (when (contains? #{" " "Enter"} (util/ekey e))
-                         (set-open! true)))}
-       (ui/icon "calendar" {:size 16}))
-      (shui/popover-content
-       {:align "start"
-        :on-click #(util/stop %)
-        :class "p-0"
-        :on-interact-outside #(set-open! false)
-        :onEscapeKeyDown #(set-open! false)}
-        (let [select-handler! (fn [^js d]
-                                ;; force local to UTC
-                                (when d
-                                  (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
-                                    (let [journal (date/js-date->journal-title gd)]
-                                      (p/do!
-                                        (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                                          (page-handler/<create! journal {:redirect? false
-                                                                          :create-first-block? false}))
-                                        (when (fn? on-change)
-                                          (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                                        (set-open! false)
-                                        (exit-edit-property))))))]
-          (shui/calendar
-            {:mode "single"
-             :initial-focus true
-             :selected initial-day
-             :default-month initial-month
-             :class-names {:months ""}
-             :on-day-key-down (fn [^js d _ ^js e]
-                                (when (= "Enter" (.-key e))
-                                  (select-handler! d)))
-             :on-select select-handler!}))))
+     (let [content-fn
+           (fn [{:keys [id]}]
+             (let [select-handler!
+                   (fn [^js d]
+                     ;; force local to UTC
+                     (when d
+                       (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
+                         (let [journal (date/js-date->journal-title gd)]
+                           (p/do!
+                             (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                               (page-handler/<create! journal {:redirect? false
+                                                               :create-first-block? false}))
+                             (when (fn? on-change)
+                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                             (shui/popup-hide! id)
+                             (exit-edit-property))))))]
+               (shui/calendar
+                 {:mode "single"
+                  :initial-focus true
+                  :selected initial-day
+                  :default-month initial-month
+                  :class-names {:months ""}
+                  :on-day-key-down (fn [^js d _ ^js e]
+                                     (when (= "Enter" (.-key e))
+                                       (select-handler! d)))
+                  :on-select select-handler!})))]
+       (shui/button
+         {:class "jtrigger !p-1"
+          :variant :text
+          :size :sm
+          :on-click (fn [e]
+                      (if config/publishing?
+                        (navigate-to-date-page value)
+                        (do
+                          (util/stop e)
+                          (shui/popup-show! (.-target e) content-fn
+                            {:align "start" :auto-focus? true}))))}
+         (ui/icon "calendar" {:size 16})))
 
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
