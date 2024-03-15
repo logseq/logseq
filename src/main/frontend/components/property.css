@@ -51,7 +51,22 @@
 
     .property-pair {
         @apply grid grid-cols-5 gap-1;
-        /* grid-template-columns: repeat(auto-fit, 120px); */
+
+        .jtrigger {
+            @apply relative;
+
+            &-id {
+                @apply absolute left-[-24px] top-[2px] rounded-full leading-none
+                flex items-center justify-center bg-primary/90 text-primary-foreground border-none
+                text-xs min-w-[20px] min-h-[20px];
+            }
+        }
+
+        .property-value {
+            .jtrigger-id {
+                @apply left-[-32px] top-0;
+            }
+        }
     }
 
     .add-button-link {
