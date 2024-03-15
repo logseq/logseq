@@ -95,7 +95,7 @@
              (select/select opts)))]
 
     [:div.flex.flex-1.cursor-pointer
-     {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true})}
+     {:on-click #(shui/popup-show! (.-target %) content-fn)}
      (if (seq schema-classes)
        [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
         (for [class schema-classes]
@@ -630,8 +630,7 @@
                                          :avoidCollisions true
                                          :align "start"}
                          :auto-side? true
-                         :auto-focus? true
-                         :as-dropdown? false}))}
+                         :auto-focus? true}))}
          (:block/original-name property)))]))
 
 (defn- resolve-linked-block-if-exists
