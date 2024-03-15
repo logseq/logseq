@@ -73,7 +73,9 @@
 
 (rum/defc date-picker
   [value {:keys [on-change editing?]}]
-  (let [[open? set-open!] (rum/use-state editing?)
+  (let [;; FIXME: Remove ignore when editing bug is fixed
+        #_:clj-kondo/ignore
+        [open? set-open!] (rum/use-state editing?)
         page (when (uuid? value)
                (db/entity [:block/uuid value]))
         title (when page (:block/original-name page))

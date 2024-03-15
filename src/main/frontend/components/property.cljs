@@ -211,11 +211,11 @@
   {:init (fn [state]
            (let [*values (atom :loading)]
              (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                 (:block/uuid (nth (:rum/args state) 1)))]
+                                                                 (:block/uuid (first (:rum/args state))))]
                (reset! *values result))
              (assoc state ::values *values)))
    :will-mount (fn [state]
-                 (let [[_block property _opts] (:rum/args state)]
+                 (let [[property _opts] (:rum/args state)]
                    (reset! (::property-name state) (:block/original-name property))
                    (reset! (::property-schema state) (:block/schema property))
                    (state/set-state! :editor/property-configure? true)
@@ -225,7 +225,7 @@
                    (when-let [*show-property-config? (:*show-new-property-config? (last (:rum/args state)))]
                      (reset! *show-property-config? false))
                    state)}
-  [state block property {:keys [toggle-fn inline-text class-schema? add-new-property? _*show-new-property-config?] :as opts}]
+  [state property {:keys [inline-text add-new-property? _*show-new-property-config?] :as opts}]
   (let [values (rum/react (::values state))]
     (when-not (= :loading values)
       (let [*property-name (::property-name state)
@@ -617,14 +617,12 @@
           :on-click (fn [^js e]
                       (shui/popup-show!
                         (.-target e)
-                        (fn [{:keys [id]}]
+                        (fn [_]
                           [:div.p-2
                            [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                           (property-config block property
+                           (property-config property
                              {:inline-text inline-text
-                              :page-cp page-cp
-                              :class-schema? class-schema?
-                              :toggle-fn #(shui/popup-hide! id)})])
+                              :page-cp page-cp})])
                         {:content-props {:class "property-configure-popup-content"
                                          :collisionPadding {:bottom 10 :top 10}
                                          :avoidCollisions true

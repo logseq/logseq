@@ -115,7 +115,7 @@
                       :else :page)))
     [:div.flex.flex-col.gap-1
      (if (= mode :property)
-       (property-component/property-config page page {:inline-text component-block/inline-text})
+       (property-component/property-config page {:inline-text component-block/inline-text})
        [:<>
         (when (= mode :class)
           (class-component/configure page {:show-title? false}))
