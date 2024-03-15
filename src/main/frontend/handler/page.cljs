@@ -431,6 +431,6 @@
 (defn toggle-properties!
   [page-entity]
   (let [properties (:block/properties page-entity)
-        pid (:block/uuid (db/entity :hide-properties?))]
+        pid (:block/uuid (db/entity :logseq.property/hide-properties?))]
     (db/transact! [{:db/id (:db/id page-entity)
                     :block/properties (update properties pid not)}])))

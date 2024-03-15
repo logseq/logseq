@@ -10,7 +10,6 @@
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus]
-            [logseq.db.frontend.class :as db-class]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Use it as an input argument for datalog queries
@@ -553,7 +552,7 @@
 (defn built-in?
   "Built-in page or block"
   [db entity]
-  (get (:block/properties entity) (:block/uuid (d/entity db :built-in?))))
+  (get (:block/properties entity) (:block/uuid (d/entity db :logseq.property/built-in?))))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"

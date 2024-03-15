@@ -155,7 +155,7 @@
         [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
                                   [nil page* nil])
         id (pu/get-page-uuid page)
-        class? (= (:block/name property) "tags")]
+        class? (= :logseq.property/tags (:block/ident property))]
     (if (nil? id)
       (let [inline-class-uuid
             (when inline-class
@@ -207,13 +207,13 @@
   [property
    {:keys [block classes multiple-choices? dropdown? input-opts on-chosen] :as opts}]
   (let [repo (state/get-current-repo)
-        tags? (= :tags (:db/ident property))
-        alias? (= :alias (:db/ident property))
+        tags? (= :logseq.property/tags (:db/ident property))
+        alias? (= :logseq.property/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         selected-choices (when block
                            (->>
                             (if tags-or-alias?
-                              (->> (if (= "tags" (:block/name property))
+                              (->> (if tags?
                                      (:block/tags block)
                                      (:block/alias block))
                                    (map (fn [e] (:block/original-name e))))
@@ -688,7 +688,7 @@
                           :default)
                  type (if (= :block type)
                         (let [v-block (db/entity [:block/uuid value])]
-                          (if (get-in v-block [:block/properties (:block/uuid (db/entity :created-from-template))])
+                          (if (get-in v-block [:block/properties (:block/uuid (db/entity :logseq.property/created-from-template))])
                             :template
                             type))
                         type)

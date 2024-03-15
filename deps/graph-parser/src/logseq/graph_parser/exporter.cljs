@@ -811,7 +811,7 @@
                        :filename-format (or (:file/name-format config) :legacy)
                        :verbose (:verbose options)}
      :user-options (select-keys options [:tag-classes :property-classes])
-     :page-tags-uuid (:block/uuid (d/entity @conn [:block/name "pagetags"]))
+     :page-tags-uuid (:block/uuid (d/entity @conn :logseq.property/pagetags))
      :import-state (new-import-state)
      :macros (or (:macros options) (:macros config))}
     (merge (select-keys options [:set-ui-state :export-file :notify-user]))))

@@ -426,8 +426,8 @@
                              block-value? (and (= :default (get-in property [:block/schema :type] :default))
                                                (uuid? value))
                              property-block (when block-value? (db/entity [:block/uuid value]))
-                             created-from-block-uuid (:block/uuid (db/entity :created-from-block))
-                             created-from-property-uuid (:block/uuid (db/entity :created-from-property))
+                             created-from-block-uuid (:block/uuid (db/entity :logseq.property/created-from-block))
+                             created-from-property-uuid (:block/uuid (db/entity :logseq.property/created-from-property))
                              retract-blocks-tx (when (and property-block
                                                           (some? (get-in property-block [:block/properties created-from-block-uuid]))
                                                           (some? (get-in property-block [:block/properties created-from-property-uuid])))
@@ -593,12 +593,12 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :block/properties {(:block/uuid (db/entity :source-page-id)) current-page-id})))
+                            :block/properties {(:block/uuid (db/entity :logseq.property/source-page-id)) current-page-id})))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
-        properties {(:block/uuid (db/entity :created-from-block)) (:block/uuid block)
-                    (:block/uuid (db/entity :created-from-property)) (:block/uuid property)}
+        properties {(:block/uuid (db/entity :logseq.property/created-from-block)) (:block/uuid block)
+                    (:block/uuid (db/entity :logseq.property/created-from-property)) (:block/uuid property)}
         parent (-> {:block/uuid parent-id
                     :block/format :markdown
                     :block/content ""
@@ -645,13 +645,13 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :block/properties {(:block/uuid (db/entity :source-page-id)) current-page-id})))
+                            :block/properties {(:block/uuid (db/entity :logseq.property/source-page-id)) current-page-id})))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)
-        properties {(:block/uuid (db/entity :created-from-block)) (:block/uuid block)
-                    (:block/uuid (db/entity :created-from-property)) (:block/uuid property)
-                    (:block/uuid (db/entity :created-from-template)) (:block/uuid template)}
+        properties {(:block/uuid (db/entity :logseq.property/created-from-block)) (:block/uuid block)
+                    (:block/uuid (db/entity :logseq.property/created-from-property)) (:block/uuid property)
+                    (:block/uuid (db/entity :logseq.property/created-from-template)) (:block/uuid template)}
         new-block (-> {:block/uuid block-id
                        :block/format :markdown
                        :block/content ""
@@ -835,8 +835,8 @@
         [created-from-block created-from-property]
         (some (fn [block]
                 (let [properties (:block/properties block)
-                      from-block (get properties (:block/uuid (db/entity :created-from-block)))
-                      from-property (get properties (:block/uuid (db/entity :created-from-property)))]
+                      from-block (get properties (:block/uuid (db/entity :logseq.property/created-from-block)))
+                      from-property (get properties (:block/uuid (db/entity :logseq.property/created-from-property)))]
                   (when (and from-block from-property)
                     [from-block from-property]))) (reverse parents))
         from-block (when created-from-block (db/entity [:block/uuid created-from-block]))

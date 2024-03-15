@@ -55,7 +55,7 @@
         tag-pages (concat tag-pages*
                           ;; built-in property needs to be public to display tags
                           (when (seq tag-pages*)
-                            (some-> (d/entity db [:block/name "tags"]) :db/id vector)))
+                            (some-> (d/entity db :logseq.property/tags) :db/id vector)))
         property-pages (mapcat (fn [ent]
                                  (let [props (:block/properties ent)]
                                    (->> (keys props)
