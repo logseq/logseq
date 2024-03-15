@@ -85,6 +85,7 @@
                                  (cond->
                                   {:block/original-name (or original-name k-name)
                                    :block/name (common-util/page-name-sanity-lc k-name)
+                                   :db/ident (keyword "logseq.class" k-name)
                                    :block/uuid (d/squuid)}
                                    (seq properties)
                                    (assoc-in [:block/schema :properties] properties)))))))

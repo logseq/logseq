@@ -311,9 +311,7 @@
                                 (common-marker/clean-marker content (get m :block/format :markdown))))
        matched-status-id
        (update :db/other-tx (fn [tx]
-                              (if-let [task (d/entity @conn [:block/name "task"])]
-                                (conj tx [:db/add (:db/id m) :block/tags (:db/id task)])
-                                tx)))
+                              (conj tx [:db/add (:db/id m) :block/tags :logseq.class/task])))
 
        true
        (dissoc :block/marker :block/priority)))
