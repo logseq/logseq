@@ -234,9 +234,6 @@
             property (db/sub-block (:db/id property))
             built-in? (ldb/built-in? (db/get-db) property)
             disabled? (or built-in? config/publishing?)
-            hide-delete? (or (= (:db/id block) (:db/id property)) ; property page
-                             add-new-property?)
-            class? (contains? (:block/type block) "class")
             property-type (get-in property [:block/schema :type])
             save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
             enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
@@ -389,17 +386,7 @@
                                   (swap! *property-schema assoc :description (util/evalue e)))
                  :on-blur       save-property-fn
                  :disabled      disabled?
-                 :default-value (:description @*property-schema)})])]]
-
-          (when-not (or hide-delete? (ldb/built-in-class-property? (db/get-db) block property))
-            (shui/button
-             {:variant :secondary
-              :class "mt-4 hover:text-red-700"
-              :on-click (fn [e]
-                          (util/stop e)
-                          (handle-delete-property! block property {:class? class? :class-schema? class-schema?})
-                          (when toggle-fn (toggle-fn)))}
-             "Delete property from this block"))]]))))
+                 :default-value (:description @*property-schema)})])]]]]))))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
