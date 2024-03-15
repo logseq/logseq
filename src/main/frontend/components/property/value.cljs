@@ -109,30 +109,34 @@
         :class "p-0"
         :on-interact-outside #(set-open! false)
         :onEscapeKeyDown #(set-open! false)}
-       (shui/calendar
-        {:mode "single"
-         :initial-focus true
-         :selected initial-day
-         :default-month initial-month
-         :class-names {:months ""}
-         :on-select (fn [^js d]
-                     ;; force local to UTC
-                      (when d
-                        (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
-                          (let [journal (date/js-date->journal-title gd)]
-                            (p/do!
-                             (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                               (page-handler/<create! journal {:redirect? false
-                                                               :create-first-block? false}))
-                             (when (fn? on-change)
-                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                             (set-open! false)
-                             (exit-edit-property))))))})))
+        (let [select-handler! (fn [^js d]
+                                ;; force local to UTC
+                                (when d
+                                  (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
+                                    (let [journal (date/js-date->journal-title gd)]
+                                      (p/do!
+                                        (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                                          (page-handler/<create! journal {:redirect? false
+                                                                          :create-first-block? false}))
+                                        (when (fn? on-change)
+                                          (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                                        (set-open! false)
+                                        (exit-edit-property))))))]
+          (shui/calendar
+            {:mode "single"
+             :initial-focus true
+             :selected initial-day
+             :default-month initial-month
+             :class-names {:months ""}
+             :on-day-key-down (fn [^js d _ ^js e]
+                                (when (= "Enter" (.-key e))
+                                  (select-handler! d)))
+             :on-select select-handler!}))))
 
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
          (page-cp {:disable-preview? true
-                  :hide-close-button? true} page)))]))
+                   :hide-close-button? true} page)))]))
 
 
 (rum/defc property-value-date-picker
