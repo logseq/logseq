@@ -19,11 +19,11 @@ module.exports = {
       'entitlements-inherit': 'entitlements.plist',
       'signature-flags': 'library'
     },
-    osxNotarize: {
+    osxNotarize: process.env['APPLE_ID'] ? {
       appleId: process.env['APPLE_ID'],
       appleIdPassword: process.env['APPLE_ID_PASSWORD'],
       ascProvider: process.env['APPLE_ASC_PROVIDER']
-    },
+    } : undefined,
   },
   makers: [
     {
