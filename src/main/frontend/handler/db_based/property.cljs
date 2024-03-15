@@ -793,7 +793,10 @@
                                 {:db/id id
                                  :block/properties (dissoc properties property-id)}
                                 {:db/id id
-                                 :block/properties (assoc properties property-id (get value->block-id value))})))
+                                 :block/properties (assoc properties property-id
+                                                          (if (set? value)
+                                                            (set (map value->block-id value))
+                                                            (get value->block-id value)))})))
                           block-values))]
       (db/transact! (state/get-current-repo) tx-data
                     {:outliner-op :insert-blocks})
