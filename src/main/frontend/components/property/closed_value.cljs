@@ -217,23 +217,23 @@
                          :on-chosen (fn [chosen]
                                       (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
                                         (swap! *property-schema update :values (fnil conj []) closed-value)))})
-                      (let [values (->> values
-                                     (map second)
-                                     (remove uuid?)
-                                     (remove string/blank?)
-                                     distinct)]
-
-                        (if (seq values)
-                          (add-existing-values property *property-schema values opts)
+                      (let [values' (->> (if (= :many (get-in property [:block/schema :cardinality]))
+                                           (mapcat second values)
+                                           (map second values))
+                                         (remove uuid?)
+                                         (remove string/blank?)
+                                         distinct)]
+                        (if (seq values')
+                          (add-existing-values property *property-schema values' opts)
                           (item-config
-                            property
-                            nil
-                            (assoc opts :on-save
-                                        (fn [value icon description]
-                                          (p/let [closed-value (<upsert-closed-value! property {:value value
-                                                                                                :description description
-                                                                                                :icon icon})]
-                                            (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
+                           property
+                           nil
+                           (assoc opts :on-save
+                                  (fn [value icon description]
+                                    (p/let [closed-value (<upsert-closed-value! property {:value value
+                                                                                          :description description
+                                                                                          :icon icon})]
+                                      (swap! *property-schema update :values (fnil conj []) closed-value))))))))))
                 {:content-props {:class "w-auto"}})))}
          (ui/icon "plus" {:size 16})
          "Add choice"))]))
