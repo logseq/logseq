@@ -788,18 +788,21 @@
     (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
           editor-id (str dom-id "-editor")
           schema (:block/schema property)
+          type (some-> schema (get :type :default))
           multiple-values? (= :many (:cardinality schema))
           editor-args {:block property
                        :parent-block block
                        :format :markdown}]
-      (cond
-        multiple-values?
-       (multiple-values block property v opts schema)
+      [:div.property-value-inner
+       {:data-type type}
+       (cond
+         multiple-values?
+         (multiple-values block property v opts schema)
 
-       :else
-       (property-scalar-value block property v
-                              (merge
-                               opts
-                               {:editor-args editor-args
-                                :editor-id editor-id
-                                :dom-id dom-id}))))))
+         :else
+         (property-scalar-value block property v
+           (merge
+             opts
+             {:editor-args editor-args
+              :editor-id editor-id
+              :dom-id dom-id})))])))
