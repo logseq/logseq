@@ -68,7 +68,7 @@
 
                    (instance? js/MouseEvent (or (.-nativeEvent event) event))
                    (do (vreset! *target (.-target (or (.-nativeEvent event) event)))
-                     [(.-clientX event) (.-clientY event)])
+                       [(.-clientX event) (.-clientY event)])
 
                    (instance? js/Element event)
                    (let [^js rect (.getBoundingClientRect event)
@@ -77,11 +77,11 @@
                          height (.-height rect)
                          bottom (.-bottom rect)]
                      (do (vreset! *target event)
-                       [(+ left (case (keyword align)
-                                  :start 0
-                                  :end width
-                                  (/ width 2)))
-                        (- bottom height) width height]))
+                         [(+ left (case (keyword align)
+                                    :start 0
+                                    :end width
+                                    (/ width 2)))
+                          (- bottom height) width height]))
                    :else [0 0])]
     (upsert-popup!
       (merge opts
@@ -105,7 +105,7 @@
     (hide! id)))
 
 (rum/defc x-popup
-  [{:keys [id open? content position as-dropdown? as-content?
+  [{:keys [id open? content position as-dropdown? as-content? force-popover?
            auto-side? auto-focus? target root-props content-props]
     :as _props}]
   (rum/use-effect!
@@ -117,23 +117,23 @@
     [open?])
 
   ;; disableOutsidePointerEvents
-  (rum/use-effect!
-    (fn []
-      (when-not as-dropdown?
-        (let [^js style js/document.body.style
-              set-pointer-event! #(set! (. style -pointerEvents) %)
-              try-unset! #(when (nil? (seq @*popups))
-                            (set-pointer-event! nil))]
-          (if open?
-            (set-pointer-event! "none")
-            (try-unset!))
-          #(try-unset!))))
-    [open?])
+  ;(rum/use-effect!
+  ;  (fn []
+  ;    (when-not as-dropdown?
+  ;      (let [^js style js/document.body.style
+  ;            set-pointer-event! #(set! (. style -pointerEvents) %)
+  ;            try-unset! #(when (nil? (seq @*popups))
+  ;                          (set-pointer-event! nil))]
+  ;        (if open?
+  ;          (set-pointer-event! "none")
+  ;          (try-unset!))
+  ;        #(try-unset!))))
+  ;  [open?])
 
   (when-let [[x y _ height] position]
-    (let [popup-root (if as-dropdown? dropdown-menu popover)
-          popup-trigger (if as-dropdown? dropdown-menu-trigger popover-trigger)
-          popup-content (if as-dropdown? dropdown-menu-content popover-content)
+    (let [popup-root (if (not force-popover?) dropdown-menu popover)
+          popup-trigger (if (not force-popover?) dropdown-menu-trigger popover-trigger)
+          popup-content (if (not force-popover?) dropdown-menu-content popover-content)
           auto-side-fn (fn []
                          (let [vh js/window.innerHeight
                                [th bh] [y (- vh (+ y height))]]
@@ -154,8 +154,15 @@
                            :width 1
                            :top y
                            :left x}} ""))
-        (let [content-props (merge {:onEscapeKeyDown #(hide! id)
-                                    :onPointerDownOutside #(hide! id)} content-props)
+        (let [content-props (cond-> (merge {:onEscapeKeyDown #(hide! id)
+                                            :onPointerDownOutside #(hide! id)}
+                                      content-props)
+                              (and (not force-popover?)
+                                (not as-dropdown?))
+                              (assoc :on-key-down (fn [^js e]
+                                                    (some-> content-props :on-key-down (apply [e]))
+                                                    (set! (. e -defaultPrevented) true))
+                                     :on-pointer-move #(set! (. % -defaultPrevented) true)))
               content (if (fn? content)
                         (content (cond-> {:id id}
                                    as-content?
