@@ -886,11 +886,6 @@
   dependencies:
     mini-svg-data-uri "^1.2.3"
 
-"@tailwindcss/line-clamp@0.4.2":
-  version "0.4.2"
-  resolved "https://registry.yarnpkg.com/@tailwindcss/line-clamp/-/line-clamp-0.4.2.tgz#f353c5a8ab2c939c6267ac5b907f012e5ee130f9"
-  integrity sha512-HFzAQuqYCjyy/SX9sLGB1lroPzmcnWv1FHkIpmypte10hptf4oPUfucryMKovZh2u0uiS9U5Ty3GghWfEJGwVw==
-
 "@tailwindcss/typography@0.5.7":
   version "0.5.7"
   resolved "https://registry.yarnpkg.com/@tailwindcss/typography/-/typography-0.5.7.tgz#e0b95bea787ee14c5a34a74fc824e6fe86ea8855"
