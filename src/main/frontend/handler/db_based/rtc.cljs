@@ -4,7 +4,9 @@
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [frontend.config :as config]
-            [frontend.handler.user :as user-handler]))
+            [frontend.handler.user :as user-handler]
+            [frontend.db :as db]
+            [logseq.db :as ldb]))
 
 (defn <rtc-create-graph!
   [repo]
@@ -30,11 +32,17 @@
 (defn <rtc-start!
   [repo]
   (when-let [^js worker @state/*db-worker]
-    (user-handler/<wrap-ensure-id&access-token
-     (let [token (state/get-auth-id-token)]
-       (.rtc-start worker repo token
-                   (and config/dev?
-                        (state/sub [:ui/developer-mode?])))))))
+    (when (ldb/get-graph-rtc-uuid (db/get-db repo))
+      (user-handler/<wrap-ensure-id&access-token
+       (let [token (state/get-auth-id-token)]
+         (.rtc-start worker repo token
+                     (and config/dev?
+                          (state/sub [:ui/developer-mode?]))))))))
+
+(defn <rtc-stop!
+  []
+  (when-let [^js worker @state/*db-worker]
+    (.rtc-stop worker)))
 
 ;; TODO: shared graphs need `shared-by`, user name
 (defn <get-remote-graphs

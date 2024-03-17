@@ -1082,20 +1082,23 @@
   ([repo]
    (get-debug-state repo @*state))
   ([repo state]
-   (let [graph-uuid (op-mem-layer/get-graph-uuid repo)
-         local-tx (op-mem-layer/get-local-tx repo)
-         unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)]
-     (cond->
-         {:graph-uuid graph-uuid
-          :local-tx local-tx
-          :unpushed-block-update-count unpushed-block-update-count}
-         state
-         (merge
-          {:user-uuid (:user-uuid state)
-           :rtc-state @(:*rtc-state state)
-           :ws-state (some-> @(:*ws state) ws/get-state)
-           :auto-push-updates? (when-let [a (:*auto-push-client-ops? state)]
-                                 @a)})))))
+   (let [*conn (:*db-conn state)
+         conn (when *conn @*conn)]
+     (when conn
+       (let [graph-uuid (ldb/get-graph-rtc-uuid @conn)
+             local-tx (op-mem-layer/get-local-tx repo)
+             unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)]
+         (cond->
+          {:graph-uuid graph-uuid
+           :local-tx local-tx
+           :unpushed-block-update-count unpushed-block-update-count}
+           state
+           (merge
+            {:user-uuid (:user-uuid state)
+             :rtc-state @(:*rtc-state state)
+             :ws-state (some-> @(:*ws state) ws/get-state)
+             :auto-push-updates? (when-let [a (:*auto-push-client-ops? state)]
+                                   @a)})))))))
 
 (defn get-block-update-log
   ([block-uuid]
@@ -1120,12 +1123,16 @@
         (when reset-*state?
           (reset! *state state)
           (swap! *state update :counter inc))
+        (add-watch (:*rtc-state @*state) :update-rtc-state
+                   (fn [_ _ _ _new]
+                     (when (:*repo @*state)
+                       (swap! *state update :counter (fnil inc 0)))))
         state))))
 
 (defn <start-rtc
   [repo conn token dev-mode?]
   (go
-    (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
+    (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
       (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
             state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
             _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
@@ -1186,7 +1193,7 @@
                            (= :open (:rtc-state new-state)))
                    (worker-util/post-message :rtc-sync-state new-state))))))
 
-(add-watch op-mem-layer/*ops-store :update-rtc-state
+(add-watch op-mem-layer/*ops-store :update-ops-state
            (fn [_ _ _ _new]
              (when (:*repo @*state)
                (swap! *state update :counter (fnil inc 0)))))

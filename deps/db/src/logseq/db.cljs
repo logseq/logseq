@@ -585,6 +585,10 @@
    :block/content ""
    :block/format :markdown})
 
+(defn get-graph-rtc-uuid
+  [db]
+  (when db (:graph/uuid (d/entity db :graph/uuid))))
+
 (comment
   (defn db-based-graph?
     "Whether the current graph is db-only"

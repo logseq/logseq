@@ -154,12 +154,15 @@
 (defn get-initial-data
   "Returns initial data"
   [db]
-  (let [favorites (get-favorites db)
+  (let [idents (remove nil?
+                       (when-let [id (:graph/uuid (d/entity db :graph/uuid))]
+                         [{:db/ident :graph/uuid :graph/uuid id}]))
+        favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
         home-page-data (get-home-page db all-files)
         structured-blocks (get-structured-blocks db)]
-    (concat favorites latest-journals all-files home-page-data structured-blocks)))
+    (concat idents favorites latest-journals all-files home-page-data structured-blocks)))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
