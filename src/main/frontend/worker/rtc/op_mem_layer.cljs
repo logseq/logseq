@@ -434,13 +434,6 @@
       (assert (contains? repo-ops-store :current-branch) repo)
       (asset-uuid->ops asset-uuid))))
 
-
-(defn get-graph-uuid
-  [repo]
-  (some-> (get @*ops-store repo)
-          :current-branch
-          :graph-uuid))
-
 (defn get-local-tx
   [repo]
   (some-> (get @*ops-store repo)

@@ -128,16 +128,18 @@
           blocks)))
 
 (defn- <transact-remote-all-blocks-to-sqlite
-  [all-blocks repo]
+  [all-blocks repo graph-uuid]
   (go-try
    (let [{:keys [t blocks]} all-blocks
          blocks* (replace-db-id-with-temp-id blocks)
          blocks-with-page-id (fill-block-fields blocks*)
+         tx-data (concat blocks-with-page-id
+                       [{:db/ident :graph/uuid :graph/uuid graph-uuid}])
          ^js worker-obj (:worker/object @worker-state/*state)
          work (p/do!
                (.createOrOpenDB worker-obj repo {:close-other-db? false})
                (.exportDB worker-obj repo)
-               (.transact worker-obj repo blocks-with-page-id {:rtc-download-graph? true} (worker-state/get-context))
+               (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
                (.closeDB worker-obj repo))]
      (<? (p->c work))
 
@@ -154,11 +156,15 @@
          repo (str "logseq_db_" repo)]
      (if (not= 200 status)
        (ex-info "<download-graph failed" r)
-       (let [all-blocks (transit/read transit-r body)]
+       (let [^js worker-obj (:worker/object @worker-state/*state)
+             all-blocks (transit/read transit-r body)]
          (worker-state/set-rtc-downloading-graph! true)
          (op-mem-layer/init-empty-ops-store! repo)
-         (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo))
+         (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo graph-uuid))
          (op-mem-layer/update-graph-uuid! repo graph-uuid)
          (prn ::download-graph repo (@@#'op-mem-layer/*ops-store repo))
          (<! (op-mem-layer/<sync-to-idb-layer! repo))
+         (<! (p->c
+              (p/do!
+               (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
          (worker-state/set-rtc-downloading-graph! false))))))
