@@ -963,25 +963,24 @@ independent of format as format specific heading characters are stripped"
       (let [ids' (map (fn [id] [:block/uuid id]) ids)]
         (db-utils/pull-many repo '[*] ids')))))
 
-;; TODO: use the tree directly
-(defn- flatten-tree
-  [blocks-tree]
-  (if-let [children (:block/_parent blocks-tree)]
-    (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
-    [blocks-tree]))
-
 (defn get-block-and-children
-  [repo block-uuid]
-  (some-> (d/q
-           '[:find [(pull ?block ?block-attrs) ...]
-             :in $ ?id ?block-attrs
-             :where
-             [?block :block/uuid ?id]]
-           (conn/get-db repo)
-           block-uuid
-           block-attrs)
-          first
-          flatten-tree))
+  [repo id & {:keys [page]}]
+  (let [eid (if (integer? id) id [:block/uuid id])
+        db (conn/get-db repo)
+        e (d/entity db eid)
+        page (or page
+                 (let [page (:block/page e)]
+                   {:db/id (:db/id page)
+                    :block/name (:block/name page)
+                    :block/original-name (:block/original-name page)
+                    :block/journal-day (:block/journal-day page)}))
+        current-block (-> (select-keys e (filter keyword? block-attrs)) ; remove both :block/page and :block/_parent
+                          (assoc :block/page page))]
+    (lazy-seq
+     (cons current-block
+           (mapcat
+            (comp #(get-block-and-children repo % :page page) first)
+            (d/datoms db :avet :block/parent eid))))))
 
 (defn get-file-page
   ([file-path]
