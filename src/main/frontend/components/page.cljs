@@ -136,17 +136,15 @@
         [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
          [:span.bullet-container.cursor
           [:span.bullet]]]
-        [:div.flex.flex-1 {:tabIndex 0
-                           :on-key-press (fn [e]
-                                           (when (= "Enter" (util/ekey e))
-                                             (click-handler-fn)))
-                           :on-click click-handler-fn
-                           :on-drag-enter #(set-hover! true)
-                           :on-drag-over #(util/stop %)
-                           :on-drop drop-handler-fn
-                           :on-drag-leave #(set-hover! false)}
-         [:span.opacity-70
-          "Click here to edit..."]]]])))
+        (shui/trigger-as :div.flex.flex-1
+          {:tabIndex 0
+           :on-click click-handler-fn
+           :on-drag-enter #(set-hover! true)
+           :on-drag-over #(util/stop %)
+           :on-drop drop-handler-fn
+           :on-drag-leave #(set-hover! false)}
+          [:span.opacity-70
+           "Click here to edit..."])]])))
 
 (rum/defc add-button
   [args]
