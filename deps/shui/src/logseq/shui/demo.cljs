@@ -310,19 +310,28 @@
          :size     :md}
         "Custom icon")])
 
-   ;; Tips
-   (section-item "Tips"
-     [:div.flex.flex-row.flex-wrap.gap-2
-      (ui/tooltip-provider
-        (ui/tooltip
-          (ui/tooltip-trigger
-            (ui/button
-              {:variant  :outline
-               :on-click #(dialog-core/open! [:h1.text-9xl.text-center.scale-110 "🍄"])}
-              "Tip for hint?"))
-          (ui/tooltip-content
-            {:class "w-42 px-8 py-4 text-xl border-green-rx-08 bg-green-rx-07-alpha"}
-            "🍄")))])
+   [:div.flex.flex-row.space-x-16.items-center
+    ;; Tips
+    (section-item "Tips"
+      [:div.flex.flex-row.flex-wrap.gap-2
+       (ui/tooltip-provider
+         (ui/tooltip
+           (ui/tooltip-trigger
+             (ui/button
+               {:variant :outline
+                :on-click #(dialog-core/open! [:h1.text-9xl.text-center.scale-110 "🍄"])}
+               "Tip for hint?"))
+           (ui/tooltip-content
+             {:class "w-42 px-8 py-4 text-xl border-green-rx-08 bg-green-rx-07-alpha"}
+             "🍄")))])
+    ;; Avatar
+    (section-item "Avatar"
+      [:div.flex.flex-row.space-x-6.items-center
+       (ui/avatar
+         (ui/avatar-image {:src "https://avatars.githubusercontent.com/u/63385289?s=200&v=4"})
+         (ui/avatar-fallback "L"))
+       (ui/avatar
+         (ui/avatar-fallback "CH"))])]
 
    ;; Badge
    (section-item "Badge"
