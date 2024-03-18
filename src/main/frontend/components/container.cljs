@@ -849,45 +849,35 @@
         ;; fixme: this mixin will register global event listeners on window
         ;; which might cause unexpected issues
         (mixins/listen state js/window "contextmenu"
-          (fn [e]
+          (fn [^js e]
             (let [target (gobj/get e "target")
                   block-el (.closest target ".bullet-container[blockid]")
                   block-id (some-> block-el (.getAttribute "blockid"))
                   {:keys [block block-ref]} (state/sub :block-ref/context)
                   {:keys [page]} (state/sub :page-title/context)]
 
-              (let [handled (cond
+              (let [show!
+                    (fn [content]
+                      (shui/popup-show! e
+                        (fn [{:keys [id]}]
+                          [:div {:on-click #(shui/popup-hide! id)} content])
+                        {:content-props {:class "w-[280px] ls-context-menu-content"}}))
+
+                    handled
+                    (cond
                       page
                       (do
-                        (shui/popup-show!
-                          e
-                          (fn [{:keys [id]}]
-                            [:div
-                             {:on-click #(shui/popup-hide! id)}
-                             (cp-content/page-title-custom-context-menu-content page)])
-                          {:content-props {:class "ls-context-menu-content"}})
+                        (show! (cp-content/page-title-custom-context-menu-content page))
                         (state/set-state! :page-title/context nil))
 
                       block-ref
                       (do
-                        (shui/popup-show!
-                          e
-                          (fn [{:keys [id]}]
-                            [:div
-                             {:on-click #(shui/popup-hide! id)}
-                             (cp-content/block-ref-custom-context-menu-content block block-ref)])
-                          {:content-props {:class "ls-context-menu-content"}})
+                        (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
                         (state/set-state! :block-ref/context nil))
 
                       ;; block selection
                       (and (state/selection?) (not (d/has-class? target "bullet")))
-                      (shui/popup-show!
-                        e
-                        (fn [{:keys [id]}]
-                          [:div
-                           {:on-click #(shui/popup-hide! id)}
-                           (cp-content/custom-context-menu-content)])
-                        {:content-props {:class "ls-context-menu-content"}})
+                      (show! (cp-content/custom-context-menu-content))
 
                       ;; block bullet
                       (and block-id (parse-uuid block-id))
@@ -895,13 +885,7 @@
                         (when block
                           (state/clear-selection!)
                           (state/conj-selection-block! block :down))
-                        (shui/popup-show!
-                          e
-                          (fn [{:keys [id]}]
-                            [:div
-                             {:on-click #(shui/popup-hide! id)}
-                             (cp-content/block-context-menu-content target (uuid block-id))])
-                          {:content-props {:class "ls-context-menu-content"}}))
+                        (show! (cp-content/block-context-menu-content target (uuid block-id))))
 
                       :else
                       false)]
