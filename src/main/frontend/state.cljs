@@ -287,6 +287,8 @@
       ;; graph-uuid -> ...
 
       :rtc/state                             (atom {})
+      :rtc/uploading?                        false
+      :rtc/downloading?                      false
       :rtc/graphs                            []
       ;; graph-url -> {:in-transaction? Boolean :txs []}
       :rtc/remote-batch-tx-state             {}
