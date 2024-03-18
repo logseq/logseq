@@ -325,7 +325,7 @@
                    (when class?
                      (add-tag (state/get-current-repo) (:block/uuid edit-block) tag {:tag-entity tag-entity}))))))
            (editor-handler/insert-command! id
-                                           (str "#" wrapped-tag)
+                                           (if class? "" (str "#" wrapped-tag))
                                            format
                                            {:last-pattern last-pattern
                                             :end-pattern (when wrapped? page-ref/right-brackets)
