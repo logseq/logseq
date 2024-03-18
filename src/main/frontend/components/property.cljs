@@ -186,19 +186,6 @@
                   :disabled    false}
                  (svg/info)))]))
 
-(defn trigger-as
-  ([as & props-or-children]
-   (let [[props children] [(first props-or-children) (rest props-or-children)]
-         props (cond->
-                 {:on-key-down #(case (.-key %)
-                                  (" " "Enter")
-                                  (do (some-> (.-target %) (.click))
-                                      (.preventDefault %))
-                                  :dune)}
-                 (map? props)
-                 (merge props))]
-     [as props children])))
-
 (rum/defcs ^:large-vars/cleanup-todo property-config
   "All changes to a property must update the db and the *property-schema. Failure to do
    so can result in data loss"
@@ -592,7 +579,7 @@
                                                                                  (:block/uuid property)
                                                                                  {:properties {icon-property-id icon}})]
                                   (shui/popup-hide! id)))))}))]
-       (trigger-as :button
+       (shui/trigger-as :button
          (-> (when-not config/publishing?
                {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
            (assoc :class "flex items-center"))
@@ -606,7 +593,7 @@
         {:on-click #(route-handler/redirect-to-page! (:block/name property))}
         (:block/original-name property)]
 
-       (trigger-as :a
+       (shui/trigger-as :a
          {:tabIndex 0
           :title (str "Configure property: " (:block/original-name property))
           :class "property-k flex select-none jtrigger pl-2"
