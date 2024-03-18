@@ -1575,8 +1575,9 @@ Similar to re-frame subscriptions"
       (try (f) (catch :default _e nil)))))
 
 (defn close-modal!
-  []
-  (when-not (or (editing?) (:error/multiple-tabs-access-opfs? @state))
+  [& {:keys [force?]
+      :or {force? false}}]
+  (when (or force? (not (or (editing?) (:error/multiple-tabs-access-opfs? @state))))
     (close-dropdowns!)
     (if (seq (get-sub-modals))
       (close-sub-modal!)
