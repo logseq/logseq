@@ -365,10 +365,16 @@
 
 (defn checkbox
   [option]
-  (let [on-change (:on-change option)
-        option (cond-> (dissoc option :on-change)
-                 on-change
-                 (assoc :on-checked-change on-change))]
+  (let [on-change' (:on-change option)
+        on-click' (:on-click option)
+        option (cond-> (dissoc option :on-change :on-click)
+                 (or on-change' on-click')
+                 (assoc :on-click
+                        (fn [^js e]
+                          (some-> on-click' (apply [e]))
+                          (let [checked? (= (.-state (.-dataset (.-target e))) "checked")]
+                            (set! (. (.-target e) -checked) (not checked?))
+                            (some-> on-change' (apply [e]))))))]
     (shui/checkbox
      (merge option
             {:disabled (or (:disabled option) config/publishing?)}))))
@@ -717,10 +723,9 @@
          [:label.sublabel
           (when sub-checkbox?
             (checkbox
-             {:checked false
-              :on-change     (fn [e]
-                               (let [checked (.. e -target -checked)]
-                                 (reset! *sub-checkbox-selected [checked])))}))
+              {:on-change (fn [e]
+                            (let [checked (.. e -target -checked)]
+                              (reset! *sub-checkbox-selected [checked])))}))
           [:h3.subline.text-gray-400
            (if (keyword? sub-title)
              (t sub-title)
