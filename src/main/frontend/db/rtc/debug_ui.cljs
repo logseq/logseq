@@ -58,8 +58,9 @@
                                          #(into {}
                                                 (filter second
                                                         (select-keys % [:graph-uuid :graph-name
-                                                                        :graph-status :user-type
-                                                                        :grant-by-user])))
+                                                                        :graph-status
+                                                                        :graph<->user-user-type
+                                                                        :graph<->user-grant-by-user])))
                                          graph-list))))))
       (shui/button
        {:size :sm
