@@ -57,7 +57,8 @@
                                          #(into {}
                                                 (filter second
                                                  (select-keys % [:graph-uuid :graph-name
-                                                                 :graph-status :group])))
+                                                                 :graph-status :user-type
+                                                                 :grant-by-user])))
                                          graph-list))))))]
 
      [:pre.select-text
