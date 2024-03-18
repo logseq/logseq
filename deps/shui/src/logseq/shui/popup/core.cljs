@@ -66,7 +66,8 @@
         position (cond
                    (vector? event) event
 
-                   (instance? js/MouseEvent (or (.-nativeEvent event) event))
+                   (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
+                     (instance? js/goog.events.BrowserEvent event))
                    (do (vreset! *target (.-target (or (.-nativeEvent event) event)))
                        [(.-clientX event) (.-clientY event)])
 
