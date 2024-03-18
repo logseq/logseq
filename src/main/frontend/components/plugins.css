@@ -857,7 +857,11 @@
       @apply px-[5px] py-1 text-sm relative w-full;
 
       &.extra-item {
-        @apply opacity-80 px-4 py-1.5 hover:opacity-100;
+        @apply opacity-80 px-3 py-1.5 hover:opacity-100;
+
+        .ui__icon {
+          @apply pr-[2px];
+        }
       }
     }
 
@@ -869,7 +873,7 @@
       }
 
       div[data-injected-ui] > a.button {
-        @apply h-auto;
+        @apply h-auto px-1.5;
       }
 
       div[data-injected-ui] :is(.ti, .tie) {
