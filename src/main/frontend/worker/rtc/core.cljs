@@ -1129,9 +1129,15 @@
   [repo conn token dev-mode?]
   (go
     (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-      (do (assert (and (#{:closed nil} (some-> @*state :*ws deref ws/get-state))
-                       (#{:closed nil} (some-> @*state :*rtc-state deref)))
-                  "*state should be :closed")
+      (do (assert (and (contains? #{:closed nil} (some-> @*state :*ws deref ws/get-state))
+                       (contains? #{:closed nil} (some-> @*state :*rtc-state deref)))
+                  (str
+                   "*state should be :closed"
+                   :ws
+                   (some-> @*state :*ws deref ws/get-state)
+
+                   :rtc
+                   (some-> @*state :*rtc-state deref)))
           (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
                 state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
                 _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
