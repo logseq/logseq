@@ -187,14 +187,15 @@
                            :options      {:on-click (fn [e]
                                                       (when-let [on-click (:on-click opts)]
                                                         (on-click e))
-                                                      (if (gobj/get e "shiftKey")
+                                                      (if (and (gobj/get e "shiftKey")
+                                                               (not (and rtc-graph? remote?)))
                                                         (state/pub-event! [:graph/open-new-window url])
                                                         (cond
-                                                          (or local? db-only?)
-                                                          (state/pub-event! [:graph/switch url])
-
                                                           (and rtc-graph? remote?)
                                                           (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+
+                                                          (or local? db-only?)
+                                                          (state/pub-event! [:graph/switch url])
 
                                                           :else
                                                           (state/pub-event! [:graph/pull-down-remote-graph graph]))))}})))
