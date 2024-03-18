@@ -16,7 +16,8 @@
    [:properties {:optional true} [:maybe :string ; transit-json-string
                                   ]]
    [:link {:optional true} [:maybe :uuid]]
-   [:journal-day {:optional true} [:maybe :int]]])
+   [:journal-day {:optional true} [:maybe :int]]
+   [:ident {:optional true} [:maybe :string]]])
 
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
@@ -68,7 +69,8 @@
                                                                           ]]]
                                      [:retract {:optional true} [:set :uuid]]]]
       [:link {:optional true} :uuid]
-      [:journal-day {:optional true} :int]]]]
+      [:journal-day {:optional true} :int]
+      [:ident {:optional true} :string]]]]
    [:update-page
     [:cat :keyword
      [:map
