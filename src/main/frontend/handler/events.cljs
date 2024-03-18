@@ -117,13 +117,14 @@
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (enable-beta-features!)
+              (async/<! (rtc-handler/<get-remote-graphs))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
                   (when (some #(and (= (:url %) repo)
-                                 (vector? (:sync-meta %))
-                                 (util/uuid-string? (first (:sync-meta %)))
-                                 (util/uuid-string? (second (:sync-meta %)))) repos)
+                                    (vector? (:sync-meta %))
+                                    (util/uuid-string? (first (:sync-meta %)))
+                                    (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
