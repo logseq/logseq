@@ -610,7 +610,7 @@
                         (do (set-open! true) (util/stop e))
                         :dune))}
        (if (string/blank? value)
-         [:div.opacity-50.pointer.text-sm "Empty"]
+         [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"]
          (value-f)))
       (shui/dropdown-menu-content
         {:align "start"
@@ -711,7 +711,7 @@
                                     (util/stop e)
                                     (<create-new-block-from-template! block property template))}
                        (str "Use template #" (:block/original-name template))]))
-                  [:div.opacity-50.pointer.text-sm "Empty"])
+                  [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])
                 (case type
                   :template
                   (property-template-value {:editor-id editor-id}
@@ -738,7 +738,8 @@
                          (select-item property type item opts))
                        (when date?
                          [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
-                      (when-not editing? [:div.opacity-50.pointer.text-sm "Empty"])))
+                      (when-not editing?
+                        (shui/button {:class "empty-btn" :variant :text} "Empty"))))
         select-cp (fn [select-opts]
                     (let [select-opts (merge {:multiple-choices? true
                                               :dropdown? editing?
@@ -795,7 +796,7 @@
           editor-args {:block property
                        :parent-block block
                        :format :markdown}]
-      [:div.property-value-inner
+      [:div.property-value-inner.w-full
        {:data-type type}
        (cond
          multiple-values?
