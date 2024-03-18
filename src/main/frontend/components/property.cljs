@@ -104,7 +104,7 @@
             (when-let [page (db/entity [:block/uuid class])]
               (let [page-name (:block/original-name page)]
                 [:a.text-sm (str "#" page-name)]))))]
-       [:div.opacity-50.pointer.text-sm "Empty"])])])
+       [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])])])
 
 (defn- property-type-label
   [property-type]

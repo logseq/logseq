@@ -138,6 +138,10 @@
     }
 }
 
+.ui__button.empty-btn {
+    @apply !h-7 !px-0 font-normal opacity-50;
+}
+
 .closed-values-properties {
     .select-item {
         @apply flex items-center;
