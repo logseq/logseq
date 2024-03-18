@@ -466,7 +466,7 @@
   (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
         text (t :plugin/auto-check-for-updates)]
 
-    [:div.flex.items-center.justify-between.px-4.py-2
+    [:div.flex.items-center.justify-between.px-3.py-2
      {:on-click (fn []
                   (let [t (not enabled)]
                     (set-enabled! t)
