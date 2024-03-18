@@ -1184,6 +1184,12 @@
             false)
         true))))
 
+(defn <get-online-info
+  [state]
+  (go
+    (when (and state @(:*graph-uuid state))
+      (bean/->js (:users (<? (ws/<send&receive state {:action "get-online-info"})))))))
+
 ;;; APIs (ends)
 
 (add-watch *state :notify-main-thread
