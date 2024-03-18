@@ -105,7 +105,7 @@
    :logseq.color {:schema
                   {:type :default :hide? true}
                   :closed-values
-                  (mapv #(hash-map :db-ident (keyword "logseq.color" %)
+                  (mapv #(hash-map :db-ident (keyword "logseq.property" (str "color." %))
                                    :value %
                                    :uuid (random-uuid))
                         ;; Stringified version of frontend.colors/COLORS. Too basic to couple
@@ -119,7 +119,7 @@
    :logseq.table.headers {:schema
                           {:type :default :hide? true}
                           :closed-values
-                          (mapv #(hash-map :db-ident (keyword "logseq.table.headers" %)
+                          (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "headers." %))
                                            :value %
                                            :uuid (random-uuid))
                                 ["uppercase" "capitalize" "capitalize-first" "lowercase"])
@@ -127,7 +127,7 @@
    :logseq.table.hover {:schema
                         {:type :default :hide? true}
                         :closed-values
-                        (mapv #(hash-map :db-ident (keyword "logseq.table.hover" %)
+                        (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "hover." %))
                                          :value %
                                          :uuid (random-uuid))
                               ["row" "col" "both" "none"])
@@ -185,6 +185,16 @@
     (let [block (or (d/entity db (:db/id block)) block)]
       (when-let [properties (:block/properties block)]
         (lookup repo db properties key)))))
+
+(defn name->db-ident
+  "Converts a built-in property's keyword name to its :db/ident equivalent.
+  Legacy property names that had pseduo-namespacing are converted to their new
+  format e.g. :logseq.table.headers -> :logseq.property.table/headers"
+  [legacy-name]
+  ;; Migrate legacy names that have logseq.* style names but no namespace
+  (if-let [[_ additional-ns prop-name] (re-matches  #"logseq(.*)\.([^.]+)" (name legacy-name))]
+    (keyword (str "logseq.property" additional-ns) prop-name)
+    (keyword "logseq.property" (name legacy-name))))
 
 (defn get-pid
   "Get a property's id (name or uuid) given its name. For file and db graphs"
