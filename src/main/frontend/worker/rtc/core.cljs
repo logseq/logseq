@@ -1162,7 +1162,7 @@
 (defn <get-graphs
   [repo token]
   (go
-    (let [state (or @*state (<! (<init-state repo token true)))
+    (let [state (or @*state (<! (<init-state repo token false)))
           graph-list (:graphs (<? (ws/<send&receive state {:action "list-graphs"})))]
       (bean/->js graph-list))))
 
