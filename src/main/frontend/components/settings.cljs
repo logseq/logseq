@@ -619,9 +619,7 @@
                  (and protocol host port (str protocol "://" host ":" port)))]
               (ui/icon "edit")]
              :class "text-sm"
-             :on-click #(state/set-sub-modal!
-                         (fn [_] (plugins/user-proxy-settings-panel agent-opts))
-                         {:id :https-proxy-panel :center? true})))
+             :on-click #(state/pub-event! [:go/proxy-settings agent-opts])))
 
 (defn plugin-system-switcher-row []
   (row-with-button-action

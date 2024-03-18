@@ -979,11 +979,10 @@ html[data-theme='dark'] {
   }
 }
 
-.ui__modal[label=plugins-dashboard] {
-  .panel-content {
-    overflow-y: auto;
-    max-height: calc(100vh - 50px);
-  }
+.ui__dialog-content[label=plugins-dashboard] {
+  @apply w-auto overflow-y-auto max-w-[90vw] 2xl:max-w-[1300px];
+
+  max-height: calc(100vh - 50px);
 }
 
 body[data-page=plugins] {

@@ -12,6 +12,7 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
+            [logseq.shui.ui :as shui]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
@@ -1400,9 +1401,8 @@
 
 (defn open-plugins-modal!
   []
-  (state/set-modal!
-    (fn [_close!]
-      (plugins-page))
+  (shui/dialog-open!
+    (plugins-page)
     {:label "plugins-dashboard"}))
 
 (defn open-waiting-updates-modal!
