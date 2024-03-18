@@ -83,10 +83,11 @@
                 (js/Date. (date/journal-title->long title))
                 value)
         value' (when-not (string/blank? value)
-                 (try
-                   (tc/to-local-date value)
-                   (catch :default e
-                     (js/console.error e))))
+                 (when-not (uuid? value)
+                   (try
+                     (tc/to-local-date value)
+                     (catch :default e
+                       (js/console.error e)))))
         initial-day (some-> value' (.getTime) (js/Date.))
         initial-month (when value'
                         (js/Date. (.getYear value') (.getMonth value')))]
@@ -100,35 +101,35 @@
                        (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
                          (let [journal (date/js-date->journal-title gd)]
                            (p/do!
-                             (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
-                               (page-handler/<create! journal {:redirect? false
-                                                               :create-first-block? false}))
-                             (when (fn? on-change)
-                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                             (shui/popup-hide! id)
-                             (exit-edit-property))))))]
+                            (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                              (page-handler/<create! journal {:redirect? false
+                                                              :create-first-block? false}))
+                            (when (fn? on-change)
+                              (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                            (shui/popup-hide! id)
+                            (exit-edit-property))))))]
                (shui/calendar
-                 {:mode "single"
-                  :initial-focus true
-                  :selected initial-day
-                  :default-month initial-month
-                  :class-names {:months ""}
-                  :on-day-key-down (fn [^js d _ ^js e]
-                                     (when (= "Enter" (.-key e))
-                                       (select-handler! d)))
-                  :on-select select-handler!})))]
+                {:mode "single"
+                 :initial-focus true
+                 :selected initial-day
+                 :default-month initial-month
+                 :class-names {:months ""}
+                 :on-day-key-down (fn [^js d _ ^js e]
+                                    (when (= "Enter" (.-key e))
+                                      (select-handler! d)))
+                 :on-select select-handler!})))]
        (shui/button
-         {:class "jtrigger !p-1"
-          :variant :text
-          :size :sm
-          :on-click (fn [e]
-                      (if config/publishing?
-                        (navigate-to-date-page value)
-                        (do
-                          (util/stop e)
-                          (shui/popup-show! (.-target e) content-fn
-                            {:align "start" :auto-focus? true}))))}
-         (ui/icon "calendar" {:size 16})))
+        {:class "jtrigger !p-1"
+         :variant :text
+         :size :sm
+         :on-click (fn [e]
+                     (if config/publishing?
+                       (navigate-to-date-page value)
+                       (do
+                         (util/stop e)
+                         (shui/popup-show! (.-target e) content-fn
+                                           {:align "start" :auto-focus? true}))))}
+        (ui/icon "calendar" {:size 16})))
 
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]

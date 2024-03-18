@@ -164,7 +164,7 @@
     (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
       (reset! (::electron-multiple-windows? state) multiple-windows?))))
 
-(defn- repos-dropdown-links [repos current-repo *multiple-windows? & {:as opts}]
+(defn- repos-dropdown-links [repos current-repo downloading-graph-id *multiple-windows? & {:as opts}]
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
@@ -177,28 +177,32 @@
                                        :else GraphName)
                             short-repo-name (if (or local? db-only?)
                                               (text-util/get-graph-name-from-path repo-url)
-                                              GraphName)]
+                                              GraphName)
+                            downloading? (and downloading-graph-id (= GraphUUID downloading-graph-id))]
                         (when short-repo-name
                           {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
                                           (when remote? [:span.pl-1.flex.items-center
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
-                                                         (ui/icon "cloud" {:size 18})])]
+                                                         (ui/icon "cloud" {:size 18})
+                                                         (when downloading?
+                                                           [:span.opacity.text-sm.pl-1 "downloading"])])]
                            :hover-detail repo-url ;; show full path on hover
                            :options      {:on-click (fn [e]
-                                                      (when-let [on-click (:on-click opts)]
-                                                        (on-click e))
-                                                      (if (and (gobj/get e "shiftKey")
-                                                               (not (and rtc-graph? remote?)))
-                                                        (state/pub-event! [:graph/open-new-window url])
-                                                        (cond
-                                                          (and rtc-graph? remote?)
-                                                          (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+                                                      (when-not downloading?
+                                                        (when-let [on-click (:on-click opts)]
+                                                          (on-click e))
+                                                        (if (and (gobj/get e "shiftKey")
+                                                                 (not (and rtc-graph? remote?)))
+                                                          (state/pub-event! [:graph/open-new-window url])
+                                                          (cond
+                                                            (and rtc-graph? remote?)
+                                                            (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
 
-                                                          (or local? db-only?)
-                                                          (state/pub-event! [:graph/switch url])
+                                                            (or local? db-only?)
+                                                            (state/pub-event! [:graph/switch url])
 
-                                                          :else
-                                                          (state/pub-event! [:graph/pull-down-remote-graph graph]))))}})))
+                                                            :else
+                                                            (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
                     switch-repos)
         refresh-link (let [nfs-repo? (config/local-file-based-graph? current-repo)]
                        (when (and nfs-repo?
@@ -240,9 +244,10 @@
       (let [repos (state/sub [:me :repos])
             remotes (state/sub [:file-sync/remote-graphs :graphs])
             rtc-graphs (state/sub :rtc/graphs)
+            downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
             repos (if (and (or (seq remotes) (seq rtc-graphs)) login?)
                     (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos)
-            links (repos-dropdown-links repos current-repo multiple-windows? opts)
+            links (repos-dropdown-links repos current-repo downloading-graph-id multiple-windows? opts)
             render-content (fn [{:keys [toggle-fn]}]
                              (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
                                    repo-name (db/get-repo-name current-repo)
