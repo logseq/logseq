@@ -26,6 +26,7 @@
             [frontend.components.db-based.page :as db-page]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [logseq.shui.ui :as shui]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
@@ -454,8 +455,8 @@
     (state/close-sub-modal! "ls-focused-settings-modal")))
 
 (defmethod handle :go/proxy-settings [[_ agent-opts]]
-  (state/set-sub-modal!
-    (fn [_] (plugin/user-proxy-settings-panel agent-opts))
+  (shui/dialog-open!
+    (plugin/user-proxy-settings-panel agent-opts)
     {:id :https-proxy-panel :center? true}))
 
 
