@@ -1024,15 +1024,11 @@
 
 (defn <grant-graph-access-to-others
   [state graph-uuid & {:keys [target-user-uuids target-user-emails]}]
-  (go
-    (let [r (<? (ws/<send&receive state
-                                  (cond-> {:action "grant-access"
-                                           :graph-uuid graph-uuid}
-                                    target-user-uuids (assoc :target-user-uuids target-user-uuids)
-                                    target-user-emails (assoc :target-user-emails target-user-emails))))]
-      (if-let [ex-message (:ex-message r)]
-        (prn ::<grant-graph-access-to-others ex-message (:ex-data r))
-        (prn ::<grant-graph-access-to-others :succ)))))
+  (ws/<send&receive state
+                    (cond-> {:action "grant-access"
+                             :graph-uuid graph-uuid}
+                      target-user-uuids (assoc :target-user-uuids target-user-uuids)
+                      target-user-emails (assoc :target-user-emails target-user-emails))))
 
 (defn <toggle-auto-push-client-ops
   [state]
