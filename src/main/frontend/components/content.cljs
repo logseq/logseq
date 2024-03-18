@@ -25,6 +25,7 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
@@ -399,31 +400,47 @@
                         (cond
                           page
                           (do
-                            (common-handler/show-custom-context-menu!
-                             e
-                             (page-title-custom-context-menu-content page))
+                            (shui/popup-show!
+                              e
+                              (fn [{:keys [id]}]
+                                [:div
+                                 {:on-click #(shui/popup-hide! id)}
+                                 (page-title-custom-context-menu-content page)])
+                              {:content-props {:class "ls-context-menu-content"}})
                             (state/set-state! :page-title/context nil))
 
                           block-ref
                           (do
-                            (common-handler/show-custom-context-menu!
-                             e
-                             (block-ref-custom-context-menu-content block block-ref))
+                            (shui/popup-show!
+                              e
+                              (fn [{:keys [id]}]
+                                [:div
+                                 {:on-click #(shui/popup-hide! id)}
+                                 (block-ref-custom-context-menu-content block block-ref)])
+                              {:content-props {:class "ls-context-menu-content"}})
                             (state/set-state! :block-ref/context nil))
 
                           (and (state/selection?) (not (d/has-class? target "bullet")))
-                          (common-handler/show-custom-context-menu!
-                           e
-                           (custom-context-menu-content))
+                          (shui/popup-show!
+                            e
+                            (fn [{:keys [id]}]
+                              [:div
+                               {:on-click #(shui/popup-hide! id)}
+                               (custom-context-menu-content)])
+                            {:content-props {:class "ls-context-menu-content"}})
 
                           (and block-id (parse-uuid block-id))
                           (let [block (.closest target ".ls-block")]
                             (when block
                               (state/clear-selection!)
                               (state/conj-selection-block! block :down))
-                            (common-handler/show-custom-context-menu!
-                             e
-                             (block-context-menu-content target (uuid block-id))))
+                            (shui/popup-show!
+                              e
+                              (fn [{:keys [id]}]
+                                [:div
+                                 {:on-click #(shui/popup-hide! id)}
+                                 (block-context-menu-content target (uuid block-id))])
+                              {:content-props {:class "ls-context-menu-content"}}))
 
                           :else
                           nil))))))
