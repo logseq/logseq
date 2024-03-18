@@ -2546,11 +2546,10 @@
                                                     (js/setTimeout #(editor-handler/escape-editing select?) 10))))}
                                      edit-input-id
                                      config))]
-          (if (and (seq (:block/tags block)) db-based?)
-            [:div.flex.flex-1.flex-row.gap-1.items-start
-             editor-cp
-             [:div {:style {:margin-top 2}} (tags config block)]]
-            editor-cp))]
+          [:div.flex.flex-1.flex-row.gap-1.items-start
+           editor-cp
+           (when (and (seq (:block/tags block)) db-based?)
+             [:div {:style {:margin-top 2}} (tags config block)])])]
        (let [refs-count (if (seq (:block/_refs block))
                           (count (:block/_refs block))
                           (rum/react *refs-count))]
@@ -2575,16 +2574,16 @@
                          (:embed-parent config))
                 [:a.opacity-70.hover:opacity-100.svg-small.inline
                  {:on-pointer-down (fn [e]
-                                   (util/stop e)
-                                   (when-let [block (:embed-parent config)]
-                                     (editor-handler/edit-block! block :max (:block/uuid block))))}
+                                     (util/stop e)
+                                     (when-let [block (:embed-parent config)]
+                                       (editor-handler/edit-block! block :max (:block/uuid block))))}
                  svg/edit])
 
               (when block-reference-only?
                 [:a.opacity-70.hover:opacity-100.svg-small.inline
                  {:on-pointer-down (fn [e]
-                                   (util/stop e)
-                                   (editor-handler/edit-block! block :max (:block/uuid block)))}
+                                     (util/stop e)
+                                     (editor-handler/edit-block! block :max (:block/uuid block)))}
                  svg/edit])
 
               (block-refs-count block refs-count *hide-block-refs?)])]
