@@ -81,6 +81,7 @@
    [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
+   [:block/collapsed-properties {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]])
 
 (def page-attrs
@@ -203,7 +204,6 @@
    [:block/path-refs {:optional true} [:set :int]]
    [:block/macros {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
-   [:block/collapsed-properties {:optional true} [:set :int]]
     ;; other
    [:block/marker {:optional true} :string]
    [:block/deadline {:optional true} :int]
