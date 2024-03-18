@@ -28,14 +28,14 @@
 (defn <rtc-download-graph!
   [repo graph-uuid]
   (when-let [^js worker @state/*db-worker]
-    (state/set-state! :rtc/downloading? true)
+    (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
        (->
         (.rtc-download-graph worker repo token graph-uuid)
         (p/finally
           (fn []
-            (state/set-state! :rtc/downloading? false))))))))
+            (state/set-state! :rtc/downloading-graph-uuid nil))))))))
 
 (defn <rtc-start!
   [repo]

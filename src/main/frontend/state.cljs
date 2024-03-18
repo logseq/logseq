@@ -288,7 +288,7 @@
 
       :rtc/state                             (atom {})
       :rtc/uploading?                        false
-      :rtc/downloading?                      false
+      :rtc/downloading-graph-uuid            nil
       :rtc/graphs                            []
       :rtc/online-info                       (atom {})
       ;; graph-url -> {:in-transaction? Boolean :txs []}
