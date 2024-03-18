@@ -847,61 +847,46 @@
       color: var(--ls-primary-text-color);
     }
   }
+}
 
-  .toolbar-plugins-manager {
-    &-trigger {
-      .menu-links-wrapper {
-        max-height: 80vh;
+.toolbar-plugins-manager {
+  &-content {
+    @apply max-h-[80vh];
+
+    > .ui__dropdown-menu-item {
+      @apply px-[5px] py-1 text-sm relative w-full;
+
+      &.extra-item {
+        @apply opacity-80 px-4 py-1.5 hover:opacity-100;
+      }
+    }
+
+    .item-wrap {
+      @apply pr-[28px] text-sm relative w-full;
+
+      .ti {
+        @apply text-[18px];
       }
 
-      .menu-link {
-        @apply px-[5px] py-1.5;
-
-        &.extra-item {
-          @apply opacity-80 px-4 py-1.5;
-
-          .title-wrap {
-            margin-left: 8px !important;
-          }
-
-          &:hover {
-            opacity: 1;
-          }
-        }
+      div[data-injected-ui] > a.button {
+        @apply h-auto;
       }
 
-      .item-wrap {
-        padding-right: 28px;
-        font-size: 14px;
-        position: relative;
-
-        div[data-injected-ui] :is(.ti, .tie) {
-          position: relative;
-          bottom: -1px;
-        }
+      div[data-injected-ui] :is(.ti, .tie) {
+        @apply relative bottom-[-2px];
       }
+    }
 
-      .pin {
-        position: absolute;
-        top: 0;
-        right: 0;
-        height: 100%;
-        padding: 0 6px;
+    .pin {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+      padding: 0 6px;
 
-        &.pinned {
-          color: var(--ls-link-ref-text-color);
-          opacity: 90;
-        }
-      }
-
-      .menu-links-wrapper {
-        a {
-          @apply !text-popover-foreground/80;
-
-          &.button {
-            @apply h-auto hover:bg-transparent scale-95;
-          }
-        }
+      &.pinned {
+        color: var(--ls-link-ref-text-color);
+        opacity: 90;
       }
     }
   }

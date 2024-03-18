@@ -1029,54 +1029,71 @@
 (rum/defc toolbar-plugins-manager-list
   [updates-coming items]
   (let [badge-updates? (and (not (plugin-handler/get-auto-checking?))
-                            (seq (state/all-available-coming-updates updates-coming)))]
-    (ui/dropdown-with-links
-      (fn [{:keys [toggle-fn]}]
-        [:div.toolbar-plugins-manager
-         {:on-click toggle-fn}
-         [:a.button.relative
-          (ui/icon "puzzle" {:size 20})
-          (when badge-updates?
-            (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]])
+                         (seq (state/all-available-coming-updates updates-coming)))
+        items (fn []
+                (->> (concat
+                       (for [[_ {:keys [key pinned?] :as opts} pid] items
+                             :let [pkey (str (name pid) ":" key)]]
+                         {:title key
+                          :item [:div.flex.items-center.item-wrap
+                                 (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
+                                 [:span {:style {:padding-left "2px"}} key]
+                                 [:span.pin.flex.items-center.opacity-60
+                                  {:class (util/classnames [{:pinned pinned?}])}
+                                  (ui/icon (if pinned? "pinned" "pin"))]]
+                          :options {:on-click (fn [^js e]
+                                                (let [^js target (.-target e)
+                                                      user-btn? (boolean (.closest target "div[data-injected-ui]"))]
+                                                  (when-not user-btn?
+                                                    (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add)))
+                                                  true))}})
+                       [{:hr true}
+                        {:title (t :plugins)
+                         :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
+                                   :class "extra-item mt-2"}
+                         :icon (ui/icon "apps")}
+                        {:title (t :settings)
+                         :options {:on-click #(plugin-handler/goto-plugins-settings!)
+                                   :class "extra-item"}
+                         :icon (ui/icon "adjustments")}
 
-      ;; items
-      (concat
-        (for [[_ {:keys [key pinned?] :as opts} pid] items
-              :let [pkey (str (name pid) ":" key)]]
-          {:title   key
-           :item    [:div.flex.items-center.item-wrap
-                     (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
-                     [:span {:style {:padding-left "2px"}} key]
-                     [:span.pin.flex.items-center.opacity-60
-                      {:class (util/classnames [{:pinned pinned?}])}
-                      (ui/icon (if pinned? "pinned" "pin"))]]
-           :options {:on-click (fn [^js e]
-                                 (let [^js target (.-target e)
-                                       user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
-                                   (when-not user-btn?
-                                     (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
-                                 false)}})
-        [{:hr true}
-         {:title   (t :plugins)
-          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
-                    :class    "extra-item mt-2"}
-          :icon    (ui/icon "apps")}
-         {:title   (t :settings)
-          :options {:on-click #(plugin-handler/goto-plugins-settings!)
-                    :class    "extra-item"}
-          :icon    (ui/icon "adjustments")}
+                        (when badge-updates?
+                          {:title [:div.flex.items-center.space-x-5.leading-none
+                                   [:span (t :plugin/found-updates)] (ui/point "bg-red-700" 5 {:style {:margin-top 2}})]
+                           :options {:on-click #(open-waiting-updates-modal!)
+                                     :class "extra-item"}
+                           :icon (ui/icon "download")})]
 
-         (when badge-updates?
-           {:title   [:div.flex.items-center.space-x-5.leading-none
-                      [:span (t :plugin/found-updates)] (ui/point "bg-red-700" 5 {:style {:margin-top 2}})]
-            :options {:on-click #(open-waiting-updates-modal!)
-                      :class    "extra-item"}
-            :icon    (ui/icon "download")})]
+                       [{:hr true :key "dropdown-more"}
+                        {:title (auto-check-for-updates-control)
+                         :options {:no-padding? true}}])
+                  (remove nil?)))]
 
-        [{:hr true :key "dropdown-more"}
-         {:title (auto-check-for-updates-control)
-          :options {:no-padding? true}}])
-      {:trigger-class "toolbar-plugins-manager-trigger"})))
+    [:div.toolbar-plugins-manager
+     {:on-click (fn [^js e]
+                  (shui/popup-show! (.-target e)
+                    (fn [{:keys [id]}]
+                      (for [{:keys [hr item title options icon]} (items)]
+                        (let [on-click' (:on-click options)]
+                          (if hr
+                            (shui/dropdown-menu-separator)
+                            (shui/dropdown-menu-item
+                              (assoc options
+                                :on-click (fn [^js e]
+                                            (when on-click'
+                                              (when-not (false? (on-click' e))
+                                                (shui/popup-hide! id)))))
+                              (or item
+                                [:span.flex.items-center.gap-1.w-full
+                                 icon [:div title]]))))))
+                    {:as-dropdown? true
+                     :content-props {:class "toolbar-plugins-manager-content"}}))}
+
+     [:a.button.relative.toolbar-plugins-manager-trigger
+      (ui/icon "puzzle" {:size 20})
+      (when badge-updates?
+        (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]]
+    ))
 
 (rum/defc header-ui-items-list-wrap
   [children]
@@ -1087,9 +1104,9 @@
       (fn []
         (when-let [^js wrap-el (rum/deref *wrap-el)]
           (when-let [^js header-el (.closest wrap-el ".cp__header")]
-            (let [^js header-l        (.querySelector header-el "* > .l")
-                  ^js header-r        (.querySelector header-el "* > .r")
-                  set-max-width!      #(when (number? %) (set! (.-maxWidth (.-style wrap-el)) (str % "px")))
+            (let [^js header-l (.querySelector header-el "* > .l")
+                  ^js header-r (.querySelector header-el "* > .r")
+                  set-max-width! #(when (number? %) (set! (.-maxWidth (.-style wrap-el)) (str % "px")))
                   calc-wrap-max-width #(let [width-l  (.-offsetWidth header-l)
                                              width-t  (-> (js/document.querySelector "#main-content-container") (.-offsetWidth))
                                              children (to-array (.-children header-r))
