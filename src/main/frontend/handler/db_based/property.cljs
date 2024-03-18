@@ -682,7 +682,7 @@
   (assert (and (uuid? new-id) (uuid? old-id)))
   (let [schema (-> (:block/schema property)
                    (update :values (fn [values]
-                                     (conj (remove #{old-id} values) new-id))))]
+                                     (vec (conj (remove #{old-id} values) new-id)))))]
     (db/transact! (state/get-current-repo)
                   [{:db/id (:db/id property)
                     :block/schema schema}]
@@ -773,7 +773,7 @@
     (let [values' (remove string/blank? values)
           property-schema (:block/schema property)]
       (if (every? uuid? values')
-        (p/let [new-value-ids (remove #(nil? (db/entity [:block/uuid %])) values')]
+        (p/let [new-value-ids (vec (remove #(nil? (db/entity [:block/uuid %])) values'))]
           (when (seq new-value-ids)
             (let [property-tx {:db/id (:db/id property)
                                :block/schema (assoc property-schema :values new-value-ids)}]
