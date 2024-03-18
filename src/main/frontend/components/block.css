@@ -385,10 +385,6 @@
   &.selected {
     border-radius: 2px;
   }
-
-  span.bullet-container:not(.as-order-list) .selected {
-    border: 3px solid;
-  }
 }
 
 .ls-block {
