@@ -16,6 +16,9 @@
     closed-schema?
     mu/closed-schema))
 
+;; FIXME: flexible schema
+;; e.g. ent-map example:
+;; {:block/tx-id 536872023}
 (defn validate-tx-report!
   "Validates the datascript tx-report for entities that have changed. Returns
   boolean indicating if db is valid"
