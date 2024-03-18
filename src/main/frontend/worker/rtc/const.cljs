@@ -22,7 +22,7 @@
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
 
-(def block-type-schema [:enum "property" "class" "whiteboard" "hidden" "closed value"])
+(def block-type-schema [:enum "property" "class" "whiteboard" "hidden" "closed value" "macro"])
 (def block-pos-schema
   ":sibling:  sibling of target-block(:target-uuid)
   :child: child of target-block(:target-uuid)
