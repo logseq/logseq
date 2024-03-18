@@ -20,6 +20,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
@@ -34,7 +35,8 @@
             [goog.string :as gstring]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.db :as ldb]))
 
 (defn toggle
   [label-for name state on-toggle & [detail-text]]
@@ -1126,29 +1128,62 @@
 
   [:<>])
 
+(rum/defcs settings-collaboration < rum/reactive
+  (rum/local "" ::invite-email)
+  {:will-mount (fn [state]
+                 ;; TODO: get all members including offline members
+                 (rtc-handler/<rtc-get-online-info)
+                 state)}
+  [state]
+  (let [*invite-email (::invite-email state)
+        current-repo (state/get-current-repo)
+        users (get (state/sub :rtc/online-info) current-repo)]
+    [:div.panel-wrap.is-collaboration.mb-8
+     [:div.flex.flex-col.gap-2.mt-4
+      [:h2.opacity-50.font-medium "Members:"]
+      [:div.users.flex.flex-col.gap-1
+       (for [{:keys [user-name user-email graph<->user-user-type]} users]
+         [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
+          [:div user-name]
+          (when user-email [:div.opacity-50.text-sm user-email])
+          (when graph<->user-user-type [:div.opacity-50.text-sm graph<->user-user-type])])]
+      [:div.flex.flex-col.gap-2.mt-4
+       (shui/input
+        {:placeholder   "Email address"
+         :on-change     #(reset! *invite-email (util/evalue %))})
+       (shui/button
+        {:on-click (fn []
+                     (let [user-email @*invite-email
+                           graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
+                       (when-not (string/blank? user-email)
+                         (when graph-uuid
+                           (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
+        "Invite")]]]))
+
 (rum/defcs settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
-    {:will-mount
-     (fn [state]
-       (state/load-app-user-cfgs)
-       state)
-     :did-mount
-     (fn [state]
-       (let [active-tab (first (:rum/args state))
-             *active (::active state)]
-         (when (keyword? active-tab)
-           (reset! *active [active-tab nil])))
-       state)
-     :will-unmount
-     (fn [state]
-       (state/close-settings!)
-       state)}
-    rum/reactive
+  {:will-mount
+   (fn [state]
+     (state/load-app-user-cfgs)
+     state)
+   :did-mount
+   (fn [state]
+     (let [active-tab (first (:rum/args state))
+           *active (::active state)]
+       (when (keyword? active-tab)
+         (reset! *active [active-tab nil])))
+     state)
+   :will-unmount
+   (fn [state]
+     (state/close-settings!)
+     state)}
+  rum/reactive
   [state _active-tab]
   (let [current-repo (state/sub :git/current-repo)
         _installed-plugins (state/sub :plugin/installed-plugins)
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
-        *active (::active state)]
+        *active (::active state)
+        logged-in? (user-handler/logged-in?)]
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
@@ -1159,7 +1194,7 @@
        [:ul.settings-menu
         (for [[label id text icon]
               [(when config/ENABLE-SETTINGS-ACCOUNT-TAB
-                [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
+                 [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
@@ -1172,6 +1207,8 @@
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
+               (when logged-in?
+                 [:collaboration "collaboration" (t :settings-page/tab-collaboration) (ui/icon "users")])
 
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
@@ -1220,5 +1257,8 @@
 
          :features
          (settings-features)
+
+         :collaboration
+         (settings-collaboration)
 
          nil)]]]))

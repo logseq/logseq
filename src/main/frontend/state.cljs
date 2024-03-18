@@ -290,6 +290,7 @@
       :rtc/uploading?                        false
       :rtc/downloading?                      false
       :rtc/graphs                            []
+      :rtc/online-info                       (atom {})
       ;; graph-url -> {:in-transaction? Boolean :txs []}
       :rtc/remote-batch-tx-state             {}
 

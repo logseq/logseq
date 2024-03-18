@@ -571,12 +571,10 @@
     (when-let [state @rtc-core/*state]
       (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
             target-user-emails (ldb/read-transit-str target-user-emails-str)]
-
         (rtc-core/<grant-graph-access-to-others
          state graph-uuid
          :target-user-uuids target-user-uuids
-         :target-user-emails target-user-emails)
-        nil))))
+         :target-user-emails target-user-emails)))))
 
   (rtc-upload-graph
    [this repo token remote-graph-name]

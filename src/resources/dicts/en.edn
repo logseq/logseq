@@ -315,6 +315,7 @@
  :settings-page/tab-advanced "Advanced"
  :settings-page/tab-assets "Assets"
  :settings-page/tab-features "Features"
+ :settings-page/tab-collaboration "Collaboration"
  :settings-page/plugin-system "Plugins"
  :settings-page/enable-flashcards "Flashcards"
  :settings-page/network-proxy "Network proxy"

@@ -7,7 +7,8 @@
             [frontend.handler.user :as user-handler]
             [frontend.db :as db]
             [logseq.db :as ldb]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]))
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [frontend.handler.notification :as notification]))
 
 (defn <rtc-create-graph!
   [repo]
@@ -73,3 +74,24 @@
                                          :rtc-graph? true})
                                       (dissoc graph :graph-uuid :graph-name)))))]
            (state/set-state! :rtc/graphs result)))))))
+
+(defn <rtc-get-online-info
+  []
+  (when-let [^js worker @state/*db-worker]
+    (p/let [result (.rtc-get-online-info worker)
+            result (bean/->clj result)
+            repo (state/get-current-repo)]
+      (state/set-state! :rtc/online-info {repo result}))))
+
+(defn <rtc-invite-email
+  [graph-uuid email]
+  (when-let [^js worker @state/*db-worker]
+    (->
+     (p/do!
+      (.rtc-grant-graph-access worker graph-uuid
+                               (ldb/write-transit-str [])
+                               (ldb/write-transit-str [email]))
+      (notification/show! (str "Invitation sent!") :success))
+     (p/catch (fn [e]
+                (notification/show! (str "Something wrong, please try again.") :error)
+                (js/console.error e))))))

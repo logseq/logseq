@@ -30,6 +30,8 @@
        (if chan
          (async/go
            (let [result (async/<! chan)]
-             (p/resolve! d result)))
+             (if (instance? ExceptionInfo result)
+               (p/reject! d result)
+               (p/resolve! d result))))
          (p/resolve! d nil))
        d)))
