@@ -17,7 +17,9 @@
         built-in-properties (->>
                              (map (fn [[k v]]
                                     (assert (keyword? k))
-                                    [k (assoc v :db-ident (get v :db-ident (keyword "logseq.property" (name k))))])
+                                    [k (assoc v
+                                              :db-ident
+                                              (get v :db-ident (db-property/name->db-ident k)))])
                                   db-property/built-in-properties)
                              (into {}))]
     (mapcat
