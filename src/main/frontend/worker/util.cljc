@@ -97,7 +97,7 @@
      (defn post-message
        [type data]
        (when (exists? js/self)
-         (.postMessage js/self (frontend.worker.util/profile "Worker write transit: " (ldb/write-transit-str [type data])))))
+         (.postMessage js/self (ldb/write-transit-str [type data]))))
 
      (defn get-pool-name
        [graph-name]

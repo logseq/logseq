@@ -55,6 +55,6 @@
                   (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
                   (js/console.error "Unexpected webworker error:" data))
                 (if (string? data)
-                  (let [[e payload] (util/profile "UI read transit: " (ldb/read-transit-str data))]
+                  (let [[e payload] (ldb/read-transit-str data)]
                     (handle (keyword e) wrapped-worker payload))
                   (js/console.error "Worker received invalid data from worker: " data))))))))

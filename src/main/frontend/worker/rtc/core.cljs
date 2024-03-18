@@ -1123,10 +1123,12 @@
         (when reset-*state?
           (reset! *state state)
           (swap! *state update :counter inc))
-        (add-watch (:*rtc-state @*state) :update-rtc-state
-                   (fn [_ _ _ _new]
-                     (when (:*repo @*state)
-                       (swap! *state update :counter (fnil inc 0)))))
+        (when-let [*rtc-state (:*rtc-state @*state)]
+          (add-watch *rtc-state
+                     :update-rtc-state
+                     (fn [_ _ _ _new]
+                       (when (:*repo @*state)
+                         (swap! *state update :counter (fnil inc 0))))))
         state))))
 
 (defn <start-rtc
@@ -1186,8 +1188,9 @@
 
 (add-watch *state :notify-main-thread
            (fn [_ _ old new]
-             (when-let [repo @(:*repo new)]
-               (let [new-state (get-debug-state repo new)
+             (when-let [*repo (:*repo new)]
+               (let [repo @*repo
+                     new-state (get-debug-state repo new)
                      old-state (get-debug-state repo old)]
                  (when (or (not= new-state old-state)
                            (= :open (:rtc-state new-state)))
@@ -1195,5 +1198,5 @@
 
 (add-watch op-mem-layer/*ops-store :update-ops-state
            (fn [_ _ _ _new]
-             (when (:*repo @*state)
+             (when (and *state (:*repo @*state))
                (swap! *state update :counter (fnil inc 0)))))
