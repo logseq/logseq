@@ -154,7 +154,7 @@
               :disabled remotes-loading?
               :on-click (fn []
                           (file-sync/load-session-graphs)
-                          (when config/dev? (rtc-handler/<get-remote-graphs))))]]
+                          (rtc-handler/<get-remote-graphs)))]]
            (repos-inner remote-graphs)])]]
       (widgets/add-graph))))
 
@@ -285,7 +285,7 @@
                                                      [:a.flex {:title "Refresh remote graphs"
                                                                :on-click (fn []
                                                                            (file-sync/load-session-graphs)
-                                                                           (when config/dev? (rtc-handler/<get-remote-graphs)))}
+                                                                           (rtc-handler/<get-remote-graphs))}
                                                       (ui/icon "refresh")]))]))]
         (when (seq repos)
           (ui/dropdown-with-links render-content links links-header))))))
