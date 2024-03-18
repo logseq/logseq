@@ -45,6 +45,7 @@
                                  (swap! debug-state (fn [old] (merge old new-state)))))))
       (ui/button "graph-list"
                  :icon "refresh"
+                 :class "mr-2"
                  :on-click (fn [_]
                              (let [repo (state/get-current-repo)
                                    token (state/get-auth-id-token)
@@ -56,10 +57,17 @@
                                         (map
                                          #(into {}
                                                 (filter second
-                                                 (select-keys % [:graph-uuid :graph-name
-                                                                 :graph-status :user-type
-                                                                 :grant-by-user])))
-                                         graph-list))))))]
+                                                        (select-keys % [:graph-uuid :graph-name
+                                                                        :graph-status :user-type
+                                                                        :grant-by-user])))
+                                         graph-list))))))
+      (shui/button
+       {:size :sm
+        :on-click #(let [^object worker @db-browser/*worker]
+                     (p/let [result (.rtc-get-online-info worker)
+                             result* (bean/->clj result)]
+                       (swap! debug-state assoc :online-info result*)))}
+       (shui/tabler-icon "refresh") "online-info")]
 
      [:pre.select-text
       (-> {:user-uuid (user/user-uuid)
@@ -69,6 +77,7 @@
            :local-tx (:local-tx state)
            :pending-block-update-count (:unpushed-block-update-count state)
            :remote-graphs (:remote-graphs state)
+           :online-info (:online-info state)
            :auto-push-updates? (:auto-push-updates? state)
            :current-page (state/get-current-page)
            :blocks-count (when-let [page (state/get-current-page)]
@@ -158,11 +167,11 @@
                                     ^js worker @db-browser/*worker]
                                 (.rtc-upload-graph worker repo token remote-graph-name)))})
       [:input.form-input.my-2
-        {:on-change (fn [e] (swap! debug-state assoc :upload-as-graph-name (util/evalue e)))
-         :on-focus (fn [e] (let [v (.-value (.-target e))]
-                             (when (= v "remote graph name here")
-                               (set! (.-value (.-target e)) ""))))
-         :default-value "remote graph name here"}]]
+       {:on-change (fn [e] (swap! debug-state assoc :upload-as-graph-name (util/evalue e)))
+        :on-focus (fn [e] (let [v (.-value (.-target e))]
+                            (when (= v "remote graph name here")
+                              (set! (.-value (.-target e)) ""))))
+        :default-value "remote graph name here"}]]
      [:div
       (ui/button (str "delete graph")
                  {:on-click (fn []
