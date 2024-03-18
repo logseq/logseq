@@ -356,15 +356,15 @@
                          :on-key-down (fn [^js e]
                                         (when (= (gobj/get e "key") "Enter")
                                           (new-db-f)))}]
-     [:div.flex.flex-row.items-center.gap-1
-      (when (user-handler/logged-in?)
+     (when (user-handler/logged-in?)
+       [:div.flex.flex-row.items-center.gap-1
         (shui/checkbox
          {:id "rtc-sync"
           :value @*cloud?
-          :on-checked-change #(swap! *cloud? not)}))
-      [:label.opacity-70.text-sm
-       {:for "rtc-sync"}
-       "Use Logseq Sync?"]]
+          :on-checked-change #(swap! *cloud? not)})
+        [:label.opacity-70.text-sm
+         {:for "rtc-sync"}
+         "Use Logseq Sync?"]])
 
      (shui/button
       {:on-click new-db-f
