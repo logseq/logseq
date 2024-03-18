@@ -6,14 +6,16 @@
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
             [frontend.db :as db]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]))
 
 (defn <rtc-create-graph!
   [repo]
   (when-let [^js worker @state/*db-worker]
     (user-handler/<wrap-ensure-id&access-token
-     (let [token (state/get-auth-id-token)]
-       (.rtc-upload-graph worker repo token "TODO:remote-graph-name")))))
+     (let [token (state/get-auth-id-token)
+           repo-name (sqlite-common-db/sanitize-db-name repo)]
+       (.rtc-upload-graph worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid]
