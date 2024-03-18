@@ -457,9 +457,9 @@
                                                      "BracketLeft" (util/stop e)
                                                      "BracketRight" (util/stop e)
                                                      nil)))))
-        (.addEventListener element "mousedown"
+        (.addEventListener element "pointerdown"
                            (fn [e]
-                             (util/stop e)
+                             (.stopPropagation e)
                              (state/clear-selection!)
                              (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
                                (state/set-editing! id (.getValue editor) block nil {:move-cursor? false}))))
