@@ -2,7 +2,6 @@
   "Debug UI for rtc module"
   (:require [cljs-bean.core :as bean]
             [fipp.edn :as fipp]
-            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.user :as user]
             [frontend.persist-db.browser :as db-browser]
@@ -92,8 +91,7 @@
                                        (let [token (state/get-auth-id-token)
                                              ^object worker @db-browser/*worker]
                                          (.rtc-start worker (state/get-current-repo) token
-                                                     (and config/dev?
-                                                          (state/sub [:ui/developer-mode?])))))})
+                                                     (state/sub [:ui/developer-mode?]))))})
 
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "send pending ops")

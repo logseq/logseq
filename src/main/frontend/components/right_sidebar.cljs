@@ -454,7 +454,7 @@
                                                                      (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
-        (when (and config/dev? (state/sub [:ui/developer-mode?]))
+        (when (state/sub [:ui/developer-mode?])
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}

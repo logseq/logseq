@@ -44,8 +44,7 @@
       (user-handler/<wrap-ensure-id&access-token
        (let [token (state/get-auth-id-token)]
          (.rtc-start worker repo token
-                     (and config/dev?
-                          (state/sub [:ui/developer-mode?]))))))))
+                     (state/sub [:ui/developer-mode?])))))))
 
 (defn <rtc-stop!
   []
