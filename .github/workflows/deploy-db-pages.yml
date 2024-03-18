@@ -35,6 +35,10 @@ jobs:
       - name: Fetch yarn deps
         run: yarn cache clean && yarn install --frozen-lockfile
 
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=false" >> $GITHUB_ENV
+
       - name: Build Released-Web
         run: |
           yarn gulp:build && clojure -M:cljs release app  --config-merge '{:compiler-options {:source-map-include-sources-content false :source-map-detail-level :symbols}}'
