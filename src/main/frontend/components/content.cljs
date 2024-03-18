@@ -386,64 +386,6 @@
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
 (rum/defc hiccup-content < rum/static
-  (mixins/event-mixin
-   (fn [state]
-     ;; fixme: this mixin will register global event listeners on window
-     ;; which might cause unexpected issues
-     (mixins/listen state js/window "contextmenu"
-                    (fn [e]
-                      (let [target (gobj/get e "target")
-                            block-el (.closest target ".bullet-container[blockid]")
-                            block-id (some-> block-el (.getAttribute "blockid"))
-                            {:keys [block block-ref]} (state/sub :block-ref/context)
-                            {:keys [page]} (state/sub :page-title/context)]
-                        (cond
-                          page
-                          (do
-                            (shui/popup-show!
-                              e
-                              (fn [{:keys [id]}]
-                                [:div
-                                 {:on-click #(shui/popup-hide! id)}
-                                 (page-title-custom-context-menu-content page)])
-                              {:content-props {:class "ls-context-menu-content"}})
-                            (state/set-state! :page-title/context nil))
-
-                          block-ref
-                          (do
-                            (shui/popup-show!
-                              e
-                              (fn [{:keys [id]}]
-                                [:div
-                                 {:on-click #(shui/popup-hide! id)}
-                                 (block-ref-custom-context-menu-content block block-ref)])
-                              {:content-props {:class "ls-context-menu-content"}})
-                            (state/set-state! :block-ref/context nil))
-
-                          (and (state/selection?) (not (d/has-class? target "bullet")))
-                          (shui/popup-show!
-                            e
-                            (fn [{:keys [id]}]
-                              [:div
-                               {:on-click #(shui/popup-hide! id)}
-                               (custom-context-menu-content)])
-                            {:content-props {:class "ls-context-menu-content"}})
-
-                          (and block-id (parse-uuid block-id))
-                          (let [block (.closest target ".ls-block")]
-                            (when block
-                              (state/clear-selection!)
-                              (state/conj-selection-block! block :down))
-                            (shui/popup-show!
-                              e
-                              (fn [{:keys [id]}]
-                                [:div
-                                 {:on-click #(shui/popup-hide! id)}
-                                 (block-context-menu-content target (uuid block-id))])
-                              {:content-props {:class "ls-context-menu-content"}}))
-
-                          :else
-                          nil))))))
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup

@@ -15,6 +15,9 @@
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
             [frontend.components.handbooks :as handbooks]
+            [dommy.core :as d]
+            [frontend.components.page-menu :as page-menu]
+            [frontend.components.content :as cp-content]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -32,6 +35,9 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.recent :as recent-handler]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.components.export :as export]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -42,6 +48,8 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
+            [logseq.common.util.block-ref :as block-ref]
+            [frontend.util.url :as url-util]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.dialog.core :as shui-dialog]
             [logseq.shui.popup.core :as shui-popup]
@@ -127,10 +135,12 @@
             (if whiteboard-page?
               (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
               (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))
-      :on-context-menu #(shui/popup-show! (.-target %) (x-menu-content)
-                          {:as-dropdown? true
-                           :content-props {:on-click (fn [] (shui/popup-hide!))
-                                           :class "w-60"}})}
+      :on-context-menu (fn [^js e]
+                         (shui/popup-show! e (x-menu-content)
+                           {:as-dropdown? true
+                            :content-props {:on-click (fn [] (shui/popup-hide!))
+                                            :class "w-60"}})
+                         (util/stop e))}
      [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitled? "opacity-50")}
       (if untitled? (t :untitled)
@@ -728,6 +738,16 @@
                :left (str (first position) "px")
                :top (str (second position) "px")}} links]]))
 
+(rum/defc page-title-custom-context-menu-content
+  [page]
+  (when-not (string/blank? page)
+    (let [page-menu-options (page-menu/page-menu page)]
+      [:.menu-links-wrapper
+       (for [{:keys [title options]} page-menu-options]
+         (rum/with-key
+           (ui/menu-link options title)
+           title))])))
+
 (rum/defc custom-context-menu < rum/reactive
   []
   (let [show? (state/sub :custom-context-menu/show?)
@@ -821,6 +841,74 @@
 
      (when handbooks-open?
        (handbooks/handbooks-popup))]))
+
+(rum/defc app-context-menu-observer
+  < rum/static
+    (mixins/event-mixin
+      (fn [state]
+        ;; fixme: this mixin will register global event listeners on window
+        ;; which might cause unexpected issues
+        (mixins/listen state js/window "contextmenu"
+          (fn [e]
+            (let [target (gobj/get e "target")
+                  block-el (.closest target ".bullet-container[blockid]")
+                  block-id (some-> block-el (.getAttribute "blockid"))
+                  {:keys [block block-ref]} (state/sub :block-ref/context)
+                  {:keys [page]} (state/sub :page-title/context)]
+
+              (let [handled (cond
+                      page
+                      (do
+                        (shui/popup-show!
+                          e
+                          (fn [{:keys [id]}]
+                            [:div
+                             {:on-click #(shui/popup-hide! id)}
+                             (cp-content/page-title-custom-context-menu-content page)])
+                          {:content-props {:class "ls-context-menu-content"}})
+                        (state/set-state! :page-title/context nil))
+
+                      block-ref
+                      (do
+                        (shui/popup-show!
+                          e
+                          (fn [{:keys [id]}]
+                            [:div
+                             {:on-click #(shui/popup-hide! id)}
+                             (cp-content/block-ref-custom-context-menu-content block block-ref)])
+                          {:content-props {:class "ls-context-menu-content"}})
+                        (state/set-state! :block-ref/context nil))
+
+                      ;; block selection
+                      (and (state/selection?) (not (d/has-class? target "bullet")))
+                      (shui/popup-show!
+                        e
+                        (fn [{:keys [id]}]
+                          [:div
+                           {:on-click #(shui/popup-hide! id)}
+                           (cp-content/custom-context-menu-content)])
+                        {:content-props {:class "ls-context-menu-content"}})
+
+                      ;; block bullet
+                      (and block-id (parse-uuid block-id))
+                      (let [block (.closest target ".ls-block")]
+                        (when block
+                          (state/clear-selection!)
+                          (state/conj-selection-block! block :down))
+                        (shui/popup-show!
+                          e
+                          (fn [{:keys [id]}]
+                            [:div
+                             {:on-click #(shui/popup-hide! id)}
+                             (cp-content/block-context-menu-content target (uuid block-id))])
+                          {:content-props {:class "ls-context-menu-content"}}))
+
+                      :else
+                      false)]
+                (when (not (false? handled))
+                  (util/stop e))))))))
+  []
+  nil)
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
@@ -944,10 +1032,13 @@
 
       (select/select-modal)
       (custom-context-menu)
-      (plugins/custom-js-installer {:t t
-                                    :current-repo current-repo
-                                    :nfs-granted? granted?
-                                    :db-restoring? db-restoring?})
+      (plugins/custom-js-installer
+        {:t t
+         :current-repo current-repo
+         :nfs-granted? granted?
+         :db-restoring? db-restoring?})
+      (app-context-menu-observer)
+
       [:a#download.hidden]
       (when (and (not config/mobile?)
                  (not config/publishing?))
