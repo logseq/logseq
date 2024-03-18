@@ -957,6 +957,10 @@
     (reset! (:*repo state) repo)
     (reset! (:*db-conn state) conn)
     (reset! (:*date-formatter state) date-formatter)
+    (add-watch (:*rtc-state state)
+               :update-rtc-state
+               (fn [_ _ _ _new]
+                 (swap! *state update :counter (fnil inc 0))))
     (reset! (:*rtc-state state) :open)
     (let [{:keys [data-from-ws-pub _client-op-update-chan]} state
           push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-coercer))
@@ -975,39 +979,39 @@
           (when loop-started-ch (async/close! loop-started-ch))
           (<?
            (go-try
-             (loop [push-client-ops-ch
-                    (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
-               (let [{:keys [push-data-from-ws client-op-update stop continue]}
-                     (async/alt!
-                       toggle-auto-push-client-ops-ch {:continue true}
-                       force-push-client-ops-ch {:client-op-update true}
-                       push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
-                                                 {:client-op-update true}
-                                                 {:continue true}))
-                       push-data-from-ws-ch ([v] {:push-data-from-ws v})
-                       stop-rtc-loop-chan {:stop true}
-                       :priority true)]
-                 (cond
-                   continue
-                   (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
+            (loop [push-client-ops-ch
+                   (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
+              (let [{:keys [push-data-from-ws client-op-update stop continue]}
+                    (async/alt!
+                      toggle-auto-push-client-ops-ch {:continue true}
+                      force-push-client-ops-ch {:client-op-update true}
+                      push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
+                                                {:client-op-update true}
+                                                {:continue true}))
+                      push-data-from-ws-ch ([v] {:push-data-from-ws v})
+                      stop-rtc-loop-chan {:stop true}
+                      :priority true)]
+                (cond
+                  continue
+                  (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
 
-                   push-data-from-ws
-                   (let [r (<! (<push-data-from-ws-handler state repo conn date-formatter push-data-from-ws))]
-                     (when (= r ::need-pull-remote-data)
+                  push-data-from-ws
+                  (let [r (<! (<push-data-from-ws-handler state repo conn date-formatter push-data-from-ws))]
+                    (when (= r ::need-pull-remote-data)
                        ;; trigger a force push, which can pull remote-diff-data from local-t to remote-t
-                       (async/put! force-push-client-ops-ch true))
-                     (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
+                      (async/put! force-push-client-ops-ch true))
+                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
-                   client-op-update
+                  client-op-update
                    ;; FIXME: access token expired
-                   (let [_ (<? (<client-op-update-handler state token))]
-                     (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
+                  (let [_ (<? (<client-op-update-handler state token))]
+                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
-                   stop
-                   (stop-rtc-helper state)
+                  stop
+                  (stop-rtc-helper state)
 
-                   :else
-                   nil)))))
+                  :else
+                  nil)))))
           (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch)
           (catch :default e
             (case (:type (ex-data e))
@@ -1123,12 +1127,6 @@
         (when reset-*state?
           (reset! *state state)
           (swap! *state update :counter inc))
-        (when-let [*rtc-state (:*rtc-state @*state)]
-          (add-watch *rtc-state
-                     :update-rtc-state
-                     (fn [_ _ _ _new]
-                       (when (:*repo @*state)
-                         (swap! *state update :counter (fnil inc 0))))))
         state))))
 
 (defn <start-rtc

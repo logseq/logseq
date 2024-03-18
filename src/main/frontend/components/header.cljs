@@ -23,9 +23,7 @@
             [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [clojure.string :as string]
-            [frontend.db :as db]
-            [logseq.db :as ldb]))
+            [clojure.string :as string]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -240,8 +238,7 @@
      [:div.r.flex.drag-region
       (when (and current-repo
                  config/dev? (user-handler/logged-in?)
-                 (config/db-based-graph? current-repo)
-                 (some? (ldb/get-graph-rtc-uuid (db/get-db current-repo))))
+                 (config/db-based-graph? current-repo))
         (rtc-indicator/indicator))
 
       (when (and current-repo

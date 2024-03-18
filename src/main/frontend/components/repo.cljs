@@ -22,7 +22,8 @@
             [frontend.util.fs :as fs-util]
             [frontend.handler.user :as user-handler]
             [logseq.shui.ui :as shui]
-            [frontend.handler.db-based.rtc :as rtc-handler]))
+            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.worker.async-util :as async-util]))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]
@@ -309,23 +310,38 @@
   (or (fs-util/include-reserved-chars? graph-name)
       (string/includes? graph-name "+")))
 
-(rum/defcs new-db-graph <
+(rum/defcs new-db-graph < rum/reactive
   (rum/local "" ::graph-name)
   (rum/local false ::cloud?)
+  (rum/local false ::creating-db?)
   [state]
-  (let [*graph-name (::graph-name state)
+  (let [*creating-db? (::creating-db? state)
+        *graph-name (::graph-name state)
         *cloud? (::cloud? state)
         new-db-f (fn []
-                   (when-not (string/blank? @*graph-name)
+                   (when-not (or (string/blank? @*graph-name)
+                                 @*creating-db?)
                      (if (invalid-graph-name? @*graph-name)
                        (invalid-graph-name-warning)
-                       (p/let [repo (repo-handler/new-db! @*graph-name)]
-                         (p/do!
-                          (when @*cloud?
-                            (p/do!
-                             (rtc-handler/<rtc-create-graph! repo)
-                             (rtc-handler/<rtc-start! repo)))
-                          (state/close-modal!))))))]
+                       (do
+                         (reset! *creating-db? true)
+                         (p/let [repo (repo-handler/new-db! @*graph-name)]
+                           (when @*cloud?
+                             (->
+                              (p/do!
+                               (state/set-state! :rtc/uploading? true)
+                               (async-util/c->p (rtc-handler/<rtc-create-graph! repo))
+                               (state/set-state! :rtc/uploading? false)
+                                ;; No need to wait for rtc-start since it's a go loop that'll
+                                ;; return a value once it's stopped
+                               (and (rtc-handler/<rtc-start! repo) false))
+                              (p/catch (fn [error]
+                                         (reset! *creating-db? false)
+                                         (state/set-state! :rtc/uploading? false)
+                                         (prn :debug :create-db-failed)
+                                         (js/console.error error)))))
+                           (reset! *creating-db? false)
+                           (state/close-modal! {:force? true}))))))]
     [:div.new-graph.flex.flex-col.p-4.gap-4
      [:h1.title.mb-4 "Create new graph: "]
      [:input.form-input {:value @*graph-name
@@ -337,12 +353,18 @@
      [:div.flex.flex-row.items-center.gap-1
       (when (user-handler/logged-in?)
         (shui/checkbox
-         {:value @*cloud?
+         {:id "rtc-sync"
+          :value @*cloud?
           :on-checked-change #(swap! *cloud? not)}))
-      [:div.opacity-70.text-sm "Use Logseq Sync?"]]
+      [:label.opacity-70.text-sm
+       {:for "rtc-sync"}
+       "Use Logseq Sync?"]]
 
-     (ui/button "Submit"
-                :on-click new-db-f
-                :on-key-down   (fn [^js e]
-                                 (when (= (gobj/get e "key") "Enter")
-                                   (new-db-f))))]))
+     (shui/button
+      {:on-click new-db-f
+       :on-key-down   (fn [^js e]
+                        (when (= (gobj/get e "key") "Enter")
+                          (new-db-f)))}
+      (if @*creating-db?
+        (ui/loading "Creating graph")
+        "Submit"))]))
