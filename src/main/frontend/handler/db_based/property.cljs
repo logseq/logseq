@@ -759,48 +759,56 @@
   "Adds existing values as closed values and returns their new block uuids"
   [property values]
   (when (seq values)
-    (p/let [property-id (:block/uuid property)
-            property-schema (:block/schema property)
-            page (get-property-hidden-page property)
-            page-tx (when-not (e/entity? page) page)
-            page-id (:block/uuid page)
-            values' (remove string/blank? values)
-            closed-value-blocks (map (fn [value]
-                                       (db-property-util/build-closed-value-block
-                                        (db/get-db)
-                                        (db/new-block-id)
-                                        value
-                                        [:block/uuid page-id]
-                                        property
-                                        {}))
-                                     values')
-            value->block-id (zipmap
-                             (map #(get-in % [:block/schema :value]) closed-value-blocks)
-                             (map :block/uuid closed-value-blocks))
-            new-value-ids (mapv :block/uuid closed-value-blocks)
-            property-tx {:db/id (:db/id property)
-                         :block/schema (assoc property-schema :values new-value-ids)}
-            property-values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))
-            block-values (->> property-values
-                              (remove #(uuid? (first %))))
-            tx-data (concat
-                     (when page-tx [page-tx])
-                     closed-value-blocks
-                     [property-tx]
-                     (map (fn [[id value]]
-                            (let [properties (:block/properties (db/entity id))]
-                              (if (string/blank? value) ; remove blank property values
-                                {:db/id id
-                                 :block/properties (dissoc properties property-id)}
-                                {:db/id id
-                                 :block/properties (assoc properties property-id
-                                                          (if (set? value)
-                                                            (set (map value->block-id value))
-                                                            (get value->block-id value)))})))
-                          block-values))]
-      (db/transact! (state/get-current-repo) tx-data
-                    {:outliner-op :insert-blocks})
-      new-value-ids)))
+    (let [values' (remove string/blank? values)
+          property-schema (:block/schema property)]
+      (if (every? uuid? values')
+        (p/let [new-value-ids (remove #(nil? (db/entity [:block/uuid %])) values')]
+          (when (seq new-value-ids)
+            (let [property-tx {:db/id (:db/id property)
+                               :block/schema (assoc property-schema :values new-value-ids)}]
+              (db/transact! (state/get-current-repo) [property-tx]
+                            {:outliner-op :insert-blocks})
+              new-value-ids)))
+        (p/let [property-id (:block/uuid property)
+                page (get-property-hidden-page property)
+                page-tx (when-not (e/entity? page) page)
+                page-id (:block/uuid page)
+                closed-value-blocks (map (fn [value]
+                                           (db-property-util/build-closed-value-block
+                                            (db/get-db)
+                                            (db/new-block-id)
+                                            value
+                                            [:block/uuid page-id]
+                                            property
+                                            {}))
+                                         values')
+                value->block-id (zipmap
+                                 (map #(get-in % [:block/schema :value]) closed-value-blocks)
+                                 (map :block/uuid closed-value-blocks))
+                new-value-ids (mapv :block/uuid closed-value-blocks)
+                property-tx {:db/id (:db/id property)
+                             :block/schema (assoc property-schema :values new-value-ids)}
+                property-values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))
+                block-values (->> property-values
+                                  (remove #(uuid? (first %))))
+                tx-data (concat
+                         (when page-tx [page-tx])
+                         closed-value-blocks
+                         [property-tx]
+                         (map (fn [[id value]]
+                                (let [properties (:block/properties (db/entity id))]
+                                  (if (string/blank? value) ; remove blank property values
+                                    {:db/id id
+                                     :block/properties (dissoc properties property-id)}
+                                    {:db/id id
+                                     :block/properties (assoc properties property-id
+                                                              (if (set? value)
+                                                                (set (map value->block-id value))
+                                                                (get value->block-id value)))})))
+                              block-values))]
+          (db/transact! (state/get-current-repo) tx-data
+                        {:outliner-op :insert-blocks})
+          new-value-ids)))))
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"
