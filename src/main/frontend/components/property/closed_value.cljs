@@ -109,10 +109,11 @@
 
 (rum/defcs choice-with-close <
   (rum/local false ::hover?)
-  [state item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
+  [state property item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
   (let [*hover? (::hover? state)
         value (db-property/closed-value-name item)
-        page? (:block/original-name item)]
+        page? (:block/original-name item)
+        date? (= :date (:type (:block/schema property)))]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
@@ -120,8 +121,20 @@
       (icon-component/icon-picker (pu/get-block-property-value item :icon)
                                   {:on-chosen (fn [_e icon]
                                                 (update-icon icon))})
-      (if (and page? (:page-cp parent-opts))
-        ((:page-cp parent-opts) {} item)
+      (cond
+        date?
+        [:div.flex.flex-row.items-center.gap-1
+         (property-value/date-picker (:block/original-name item)
+                                    {:on-change (fn [page]
+                                                  (db-property-handler/replace-closed-value property
+                                                                                            (:block/uuid page)
+                                                                                            (:block/uuid item)))})
+         ((:page-cp parent-opts) {:preview? false} item)]
+
+        (and page? (:page-cp parent-opts))
+        ((:page-cp parent-opts) {:preview? false} item)
+
+        :else
         [:a {:on-click toggle-fn}
          value])]
      (when @*hover?
@@ -151,6 +164,7 @@
           opts {:toggle-fn #(shui/popup-show! % content-fn)}]
 
       (choice-with-close
+       property
        block
        (assoc opts
               :delete-choice

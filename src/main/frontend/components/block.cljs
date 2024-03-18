@@ -720,7 +720,7 @@
           modal? (:modal/show? @state/state)]
       (if (and (not (util/mobile?))
                (not= (util/page-name-sanity-lc page-name-in-block) (:id config))
-               (not preview?)
+               (not (false? preview?))
                (not disable-preview?)
                (not modal?))
         (page-preview-trigger (assoc config :children inner) page-name)

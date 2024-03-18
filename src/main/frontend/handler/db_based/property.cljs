@@ -677,6 +677,17 @@
   (when (contains? #{:task/status :task/priority} (:db/ident property))
     (state/pub-event! [:init/commands])))
 
+(defn replace-closed-value
+  [property new-id old-id]
+  (assert (and (uuid? new-id) (uuid? old-id)))
+  (let [schema (-> (:block/schema property)
+                   (update :values (fn [values]
+                                     (conj (remove #{old-id} values) new-id))))]
+    (db/transact! (state/get-current-repo)
+                  [{:db/id (:db/id property)
+                    :block/schema schema}]
+                  {:outliner-op :save-block})))
+
 (defn upsert-closed-value
   "id should be a block UUID or nil"
   [property {:keys [id value icon description]
