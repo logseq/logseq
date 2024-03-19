@@ -933,7 +933,7 @@
 }
 
 .lsp-frame-readme {
-  margin: -2rem;
+  margin: -1.5rem;
   min-height: 75vh;
   min-width: 900px;
 }
@@ -983,6 +983,10 @@ html[data-theme='dark'] {
   @apply w-auto overflow-y-auto max-w-[90vw] 2xl:max-w-[1300px];
 
   max-height: calc(100vh - 50px);
+}
+
+.ui__dialog-content[label=plugin-readme] {
+  @apply w-auto max-w-6xl;
 }
 
 body[data-page=plugins] {

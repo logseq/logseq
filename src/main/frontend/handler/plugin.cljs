@@ -18,6 +18,7 @@
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
             [frontend.components.svg :as svg]
+            [logseq.shui.ui :as shui]
             [frontend.context.i18n :refer [t]]
             [frontend.config :as config]
             [frontend.format :as format]))
@@ -468,11 +469,11 @@
                   content (parse-user-md-content content item)]
             (and (string/blank? (string/trim content)) (throw nil))
             (state/set-state! :plugin/active-readme [content item])
-            (state/set-sub-modal! (fn [_] (display))))
+            (shui/dialog-open! (fn [_] (display)) {:label "plugin-readme"}))
           (p/catch #(do (js/console.warn %)
                         (notification/show! "No README content." :warning))))
       ;; market
-      (state/set-sub-modal! (fn [_] (display repo nil))))))
+      (shui/dialog-open! (fn [_] (display repo nil)) {:label "plugin-readme"}))))
 
 (defn load-unpacked-plugin
   []
