@@ -3,8 +3,7 @@
             [logseq.shui.ui :as ui]
             [logseq.shui.form.core :refer [yup yup-resolver] :as form-core]
             [promesa.core :as p]
-            [logseq.shui.dialog.core :as dialog-core]
-            [cljs-bean.core :as bean]))
+            [logseq.shui.dialog.core :as dialog-core]))
 
 (rum/defc section-item
   [title children]
@@ -226,8 +225,20 @@
             {:on-click #(set-open! false)
              :size     :md} "🍄 * Footer"))))))
 
+
 (rum/defc page []
   [:div.sm:p-10
+   [:hr]
+   [:input
+    {:type "checkbox" :on-change #(js/console.log "===>> onChange:" % (.-value (.-target %)))}]
+   (ui/checkbox {:on-click
+                 (fn [^js e] (js/console.log "==>> click:"
+                               (set! (. (.-target e) -checked) (.-state (.-dataset (.-target e))) )
+                               (.-checked (.-target e))
+                               ))
+                 :on-checked-change #(js/console.log "==>> on checked change:" %)
+                 } "abc")
+
    [:h1.text-3xl.font-bold "Logseq UI"]
    [:hr]
 
