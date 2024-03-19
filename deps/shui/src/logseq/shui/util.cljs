@@ -18,8 +18,6 @@
 ;; |--------|-------------------|-------------| \ head
 ;; |--------|-------------------|             | /
 ;; |        |                   |             |
-;; |        |                   |             |
-;; |        |                   |             |
 ;; |--------|-------------------|-------------|
 
 (def $app (partial gdom/getElement "app-container"))
@@ -112,7 +110,17 @@
                     x))
       data)))
 
-(def dev? (some-> (aget js/window "LSUtils") (aget "isDev")))
+(defn $LSUtils [] (aget js/window "LSUtils"))
+(def dev? (some-> ($LSUtils) (aget "isDev")))
+
+(defn uuid-color
+  [uuid-str]
+  (some-> ($LSUtils) (aget "uniqolor")
+    (apply [uuid-str
+            #js {:saturation #js [55, 70],
+                 :lightness 70,
+                 :differencePoint 60}])
+    (aget "color")))
 
 (defn get-path
   "Returns the component path."

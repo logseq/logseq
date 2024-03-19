@@ -90,6 +90,7 @@ import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import * as uniqolor from 'uniqolor'
 
 declare global {
   var LSUI: any
@@ -192,7 +193,8 @@ function setupGlobals() {
   window.LSUI = shadui
 
   window.LSUtils = {
-    isDev: process.env.NODE_ENV === 'development'
+    isDev: process.env.NODE_ENV === 'development',
+    uniqolor,
   }
 }
 
