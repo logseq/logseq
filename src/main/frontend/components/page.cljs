@@ -472,7 +472,7 @@
              (when-not whiteboard?
                [:div.ls-page-title.flex-1.flex-row.w-full
                 (page-title page-name icon title format fmt-journal?)])
-             (when (not config/publishing?)
+             (when (and (not config/publishing?) (not whiteboard?))
                (when config/lsp-enabled?
                  [:div.flex.flex-row
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
