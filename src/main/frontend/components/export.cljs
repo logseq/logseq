@@ -150,147 +150,148 @@
         *copied? (::copied? state)
         *content (::content state)]
     [:div.export.resize
-     (when-not whiteboard?
-       [:div.flex
-        {:class "mb-2"}
-        (ui/button "Text"
-                   :class "mr-4 w-20"
-                   :on-click #(do (reset! *export-block-type :text)
-                                  (reset! *content (export-helper root-block-uuids-or-page-name))))
-        (ui/button "OPML"
-                   :class "mr-4 w-20"
-                   :on-click #(do (reset! *export-block-type :opml)
-                                  (reset! *content (export-helper root-block-uuids-or-page-name))))
-        (ui/button "HTML"
-                   :class "mr-4 w-20"
-                   :on-click #(do (reset! *export-block-type :html)
-                                  (reset! *content (export-helper root-block-uuids-or-page-name))))
-        (when-not (seq? root-block-uuids-or-page-name)
-          (ui/button "PNG"
-                     :class "w-20"
-                     :on-click #(do (reset! *export-block-type :png)
+     {:class "-m-5"}
+     [:div.p-6
+      (when-not whiteboard?
+        [:div.flex.pb-3
+         (ui/button "Text"
+           :class "mr-4 w-20"
+           :on-click #(do (reset! *export-block-type :text)
+                          (reset! *content (export-helper root-block-uuids-or-page-name))))
+         (ui/button "OPML"
+           :class "mr-4 w-20"
+           :on-click #(do (reset! *export-block-type :opml)
+                          (reset! *content (export-helper root-block-uuids-or-page-name))))
+         (ui/button "HTML"
+           :class "mr-4 w-20"
+           :on-click #(do (reset! *export-block-type :html)
+                          (reset! *content (export-helper root-block-uuids-or-page-name))))
+         (when-not (seq? root-block-uuids-or-page-name)
+           (ui/button "PNG"
+             :class "w-20"
+             :on-click #(do (reset! *export-block-type :png)
+                            (reset! *content nil)
+                            (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
+
+      (if (= :png tp)
+        [:div.flex.items-center.justify-center.relative
+         (when (not @*content) [:div.absolute (ui/loading "")])
+         [:img {:alt "export preview" :id "export-preview" :class "my-4" :style {:visibility (when (not @*content) "hidden")}}]]
+
+        [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}])
+
+      (if (= :png tp)
+        [:div.flex.items-center
+         [:div (t :export-transparent-background)]
+         (ui/checkbox {:class "mr-2 ml-4"
+                       :on-change (fn [e]
                                     (reset! *content nil)
-                                    (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
+                                    (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
+        (let [options (->> text-indent-style-options
+                        (mapv (fn [opt]
+                                (if (= @*text-indent-style (:label opt))
+                                  (assoc opt :selected true)
+                                  opt))))]
+          [:div [:div.flex.items-center
+                 [:label.mr-4
+                  {:style {:visibility (if (= :text tp) "visible" "hidden")}}
+                  "Indentation style:"]
+                 [:select.block.my-2.text-lg.rounded.border.py-0.px-1
+                  {:style {:visibility (if (= :text tp) "visible" "hidden")}
+                   :on-change (fn [e]
+                                (let [value (util/evalue e)]
+                                  (state/set-export-block-text-indent-style! value)
+                                  (reset! *text-indent-style value)
+                                  (reset! *content (export-helper root-block-uuids-or-page-name))))}
+                  (for [{:keys [label value selected]} options]
+                    [:option (cond->
+                               {:key label
+                                :value (or value label)}
+                               selected
+                               (assoc :selected selected))
+                     label])]]
+           [:div.flex.items-center
+            (ui/checkbox {:class "mr-2"
+                          :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                          :value (contains? @*text-remove-options :page-ref)
+                          :on-change (fn [e]
+                                       (state/update-export-block-text-remove-options! e :page-ref)
+                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+            [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+             "[[text]] -> text"]
 
-     (if (= :png tp)
-       [:div.flex.items-center.justify-center.relative
-        (when (not @*content) [:div.absolute (ui/loading "")])
-        [:img {:alt "export preview" :id "export-preview" :class "my-4" :style {:visibility (when (not @*content) "hidden")}}]]
+            (ui/checkbox {:class "mr-2 ml-4"
+                          :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                          :value (contains? @*text-remove-options :emphasis)
+                          :on-change (fn [e]
+                                       (state/update-export-block-text-remove-options! e :emphasis)
+                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
-       [:textarea.overflow-y-auto.h-96 {:value @*content :read-only true}])
+            [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+             "remove emphasis"]
 
-     (if (= :png tp)
-       [:div.flex.items-center
-        [:div (t :export-transparent-background)]
-        (ui/checkbox {:class "mr-2 ml-4"
-                      :on-change (fn [e]
-                                   (reset! *content nil)
-                                   (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
-       (let [options (->> text-indent-style-options
-                          (mapv (fn [opt]
-                                  (if (= @*text-indent-style (:label opt))
-                                    (assoc opt :selected true)
-                                    opt))))]
-         [:div [:div.flex.items-center
-                [:label.mr-4
-                 {:style {:visibility (if (= :text tp) "visible" "hidden")}}
-                 "Indentation style:"]
-                [:select.block.my-2.text-lg.rounded.border.py-0.px-1
-                 {:style     {:visibility (if (= :text tp) "visible" "hidden")}
-                  :on-change (fn [e]
-                               (let [value (util/evalue e)]
-                                 (state/set-export-block-text-indent-style! value)
-                                 (reset! *text-indent-style value)
-                                 (reset! *content (export-helper root-block-uuids-or-page-name))))}
-                 (for [{:keys [label value selected]} options]
-                   [:option (cond->
-                             {:key   label
-                              :value (or value label)}
-                              selected
-                              (assoc :selected selected))
-                    label])]]
-          [:div.flex.items-center
-           (ui/checkbox {:class "mr-2"
-                         :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                         :value (contains? @*text-remove-options :page-ref)
-                         :on-change (fn [e]
-                                      (state/update-export-block-text-remove-options! e :page-ref)
-                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
-           [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-            "[[text]] -> text"]
+            (ui/checkbox {:class "mr-2 ml-4"
+                          :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+                          :value (contains? @*text-remove-options :tag)
+                          :on-change (fn [e]
+                                       (state/update-export-block-text-remove-options! e :tag)
+                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
 
-           (ui/checkbox {:class "mr-2 ml-4"
-                         :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                         :value (contains? @*text-remove-options :emphasis)
-                         :on-change (fn [e]
-                                      (state/update-export-block-text-remove-options! e :emphasis)
-                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
+            [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+             "remove #tags"]]
 
-           [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-            "remove emphasis"]
+           [:div.flex.items-center
+            (ui/checkbox {:class "mr-2"
+                          :style {:visibility (if (#{:text} tp) "visible" "hidden")}
+                          :value (boolean (:newline-after-block @*text-other-options))
+                          :on-change (fn [e]
+                                       (state/update-export-block-text-other-options!
+                                         :newline-after-block (boolean (util/echecked? e)))
+                                       (reset! *text-other-options (state/get-export-block-text-other-options))
+                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+            [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
+             "newline after block"]
 
-           (ui/checkbox {:class "mr-2 ml-4"
-                         :style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-                         :value (contains? @*text-remove-options :tag)
-                         :on-change (fn [e]
-                                      (state/update-export-block-text-remove-options! e :tag)
-                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
+            (ui/checkbox {:class "mr-2 ml-4"
+                          :style {:visibility (if (#{:text} tp) "visible" "hidden")}
+                          :value (contains? @*text-remove-options :property)
+                          :on-change (fn [e]
+                                       (state/update-export-block-text-remove-options! e :property)
+                                       (reset! *text-remove-options (state/get-export-block-text-remove-options))
+                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+            [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
+             "remove properties"]]
 
-           [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-            "remove #tags"]]
+           [:div.flex.items-center
+            [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
+             "level <="]
+            [:select.block.my-2.text-lg.rounded.border.px-2.py-0
+             {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
+              :value (or (:keep-only-level<=N @*text-other-options) :all)
+              :on-change (fn [e]
+                           (let [value (util/evalue e)
+                                 level (if (= "all" value) :all (util/safe-parse-int value))]
+                             (state/update-export-block-text-other-options! :keep-only-level<=N level)
+                             (reset! *text-other-options (state/get-export-block-text-other-options))
+                             (reset! *content (export-helper root-block-uuids-or-page-name))))}
+             (for [n (cons "all" (range 1 10))]
+               [:option {:key n :value n} n])]]]))
 
-          [:div.flex.items-center
-           (ui/checkbox {:class "mr-2"
-                         :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                         :value (boolean (:newline-after-block @*text-other-options))
-                         :on-change (fn [e]
-                                      (state/update-export-block-text-other-options!
-                                       :newline-after-block (boolean (util/echecked? e)))
-                                      (reset! *text-other-options (state/get-export-block-text-other-options))
-                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
-           [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
-            "newline after block"]
-
-           (ui/checkbox {:class "mr-2 ml-4"
-                         :style {:visibility (if (#{:text} tp) "visible" "hidden")}
-                         :value (contains? @*text-remove-options :property)
-                         :on-change (fn [e]
-                                      (state/update-export-block-text-remove-options! e :property)
-                                      (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                      (reset! *content (export-helper root-block-uuids-or-page-name)))})
-           [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
-            "remove properties"]]
-
-          [:div.flex.items-center
-           [:label.mr-2 {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
-            "level <="]
-           [:select.block.my-2.text-lg.rounded.border.px-2.py-0
-            {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}
-             :value (or (:keep-only-level<=N @*text-other-options) :all)
-             :on-change (fn [e]
-                          (let [value (util/evalue e)
-                                level (if (= "all" value) :all (util/safe-parse-int value))]
-                            (state/update-export-block-text-other-options! :keep-only-level<=N level)
-                            (reset! *text-other-options (state/get-export-block-text-other-options))
-                            (reset! *content (export-helper root-block-uuids-or-page-name))))}
-            (for [n (cons "all" (range 1 10))]
-              [:option {:key n :value n} n])]]]))
-
-     (when @*content
-       [:div.mt-4.flex.flex-row.gap-2
-        (ui/button (if @*copied? (t :export-copied-to-clipboard) (t :export-copy-to-clipboard))
-                   :class "mr-4"
-                   :on-click (fn []
-                               (if (= tp :png)
-                                 (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
-                                 (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
-                               (reset! *copied? true)))
-        (ui/button (t :export-save-to-file)
-                   :on-click #(let [file-name (if (string? root-block-uuids-or-page-name)
-                                                (-> (db/get-page root-block-uuids-or-page-name)
-                                                    (util/get-page-original-name))
-                                                (t/now))]
-                                (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]))
+      (when @*content
+        [:div.mt-4.flex.flex-row.gap-2
+         (ui/button (if @*copied? (t :export-copied-to-clipboard) (t :export-copy-to-clipboard))
+           :class "mr-4"
+           :on-click (fn []
+                       (if (= tp :png)
+                         (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
+                         (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
+                       (reset! *copied? true)))
+         (ui/button (t :export-save-to-file)
+           :on-click #(let [file-name (if (string? root-block-uuids-or-page-name)
+                                        (-> (db/get-page root-block-uuids-or-page-name)
+                                          (util/get-page-original-name))
+                                        (t/now))]
+                        (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))

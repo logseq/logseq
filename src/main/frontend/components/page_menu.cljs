@@ -136,9 +136,10 @@
 
           (when (or (state/get-current-page) whiteboard?)
             {:title   (t :export-page)
-             :options {:on-click #(state/set-modal!
+             :options {:on-click #(shui/dialog-open!
                                    (fn []
-                                     (export/export-blocks (:block/name page) {:whiteboard? whiteboard?})))}})
+                                     (export/export-blocks (:block/name page) {:whiteboard? whiteboard?}))
+                                    {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))
