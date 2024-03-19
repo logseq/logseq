@@ -979,7 +979,7 @@ html[data-theme='dark'] {
 }
 
 .ui__dialog-content[label=plugins-dashboard] {
-  @apply w-auto overflow-y-auto max-w-[90vw] 2xl:max-w-[1300px];
+  @apply overflow-y-hidden max-w-[90vw] lg:max-w-[1246px];
 
   max-height: calc(100vh - 50px);
 }
