@@ -62,11 +62,10 @@
 
 (rum/defc rtc-collaborators < rum/reactive
   {:will-mount (fn [state]
-                 (rtc-handler/<rtc-get-online-info)
+                 (js/setTimeout #(rtc-handler/<rtc-get-online-info) 3000)
                  state)}
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-
         users (get (state/sub :rtc/online-info) (state/get-current-repo))]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-3
