@@ -48,12 +48,14 @@
   (when-let [^js worker @state/*db-worker]
     (when (ldb/get-graph-rtc-uuid (db/get-db repo))
       (user-handler/<wrap-ensure-id&access-token
-        ;; TODO: `<rtc-stop!` can return a chan so that we can remove timeout usage
+        ;; TODO: `<rtc-stop!` can return a chan so that we can remove timeout
        (<rtc-stop!)
-       (async/<! (async/timeout 100))
        (let [token (state/get-auth-id-token)]
-         (.rtc-start worker repo token
-                     (state/sub [:ui/developer-mode?])))))))
+         (-> (.rtc-start worker repo token
+                         (state/sub [:ui/developer-mode?]))
+             (p/then (fn [result]
+                       (when (= "rtc-not-closed-yet" result)
+                         (js/setTimeout #(<rtc-start! repo) 200))))))))))
 
 (defn <get-remote-graphs
   []
