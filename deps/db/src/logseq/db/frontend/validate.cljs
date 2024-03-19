@@ -4,7 +4,8 @@
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [malli.util :as mu]
             [malli.core :as m]
-            [cljs.pprint :as pprint]))
+            [cljs.pprint :as pprint]
+            [malli.error :as me]))
 
 (defn update-schema
   "Updates the db schema to add a datascript db for property validations
@@ -23,13 +24,12 @@
   (let [changed-ids (->> tx-data (map :e) distinct)
         ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
         ent-maps (vec (db-malli-schema/update-properties-in-ents ent-maps*))
-        db-schema (update-schema db-malli-schema/DB db-after validate-options)]
+        db-schema (update-schema db-malli-schema/DB db-after validate-options)
+        explain-result (m/explain db-schema ent-maps)]
     (js/console.log "changed eids:" changed-ids tx-meta)
-    (if-let [errors (->> ent-maps
-                         (m/explain db-schema)
-                         :errors)]
+    (if (:errors explain-result)
       (do (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
-          (pprint/pprint {:errors errors})
+          (pprint/pprint {:errors (me/humanize explain-result)})
           (pprint/pprint {:entity-maps ent-maps})
           false)
       true)))
