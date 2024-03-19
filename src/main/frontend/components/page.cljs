@@ -471,12 +471,12 @@
                 (page-blocks-collapse-control title *control-show? *all-collapsed?)])
              (when-not whiteboard?
                [:div.ls-page-title.flex-1.flex-row.w-full
-                (page-title page-name icon title format fmt-journal?)])
+                (page-title page-name icon title format fmt-journal?)]
              (when (not config/publishing?)
                (when config/lsp-enabled?
                  [:div.flex.flex-row
                   (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                  (plugins/hook-ui-items :pagebar)]))])
+                  (plugins/hook-ui-items :pagebar)])))])
           [:div
            (when (and block? (not sidebar?) (not whiteboard?))
              (let [config {:id "block-parent"
