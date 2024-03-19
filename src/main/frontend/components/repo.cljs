@@ -340,9 +340,7 @@
                                (state/set-state! :rtc/uploading? false)
                                 ;; No need to wait for rtc-start since it's a go loop that'll
                                 ;; return a value once it's stopped
-                               (and (p/do!
-                                     (rtc-handler/<rtc-stop!)
-                                     (rtc-handler/<rtc-start! repo)) false))
+                               (and (rtc-handler/<rtc-start! repo) false))
                               (p/catch (fn [error]
                                          (reset! *creating-db? false)
                                          (state/set-state! :rtc/uploading? false)
