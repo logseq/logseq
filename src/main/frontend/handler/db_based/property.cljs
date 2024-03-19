@@ -234,7 +234,7 @@
                   (do
                     (upsert-property! repo k-name (assoc property-schema :type property-type)
                                       {:property-uuid property-uuid})
-                    (let [status? (= :task/status (:db/ident property))
+                    (let [status? (= :logseq.task/status (:db/ident property))
                           new-value (cond
                                       (and multiple-values? old-value
                                            (not= old-value :frontend.components.property/new-value-placeholder))
@@ -386,7 +386,7 @@
             (upsert-property! repo (name k-name) (assoc (:block/schema property) :type property-type)
                               {:property-uuid property-uuid}))
         {:keys [cardinality]} (:block/schema property)
-        status? (= :task/status (:db/ident property))
+        status? (= :logseq.task/status (:db/ident property))
         txs (mapcat
              (fn [id]
                (when-let [block (db/entity [:block/uuid id])]
@@ -674,7 +674,7 @@
 (defn re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
   [property]
-  (when (contains? #{:task/status :task/priority} (:db/ident property))
+  (when (contains? #{:logseq.task/status :logseq.task/priority} (:db/ident property))
     (state/pub-event! [:init/commands])))
 
 (defn replace-closed-value
