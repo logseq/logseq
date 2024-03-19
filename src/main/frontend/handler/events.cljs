@@ -179,9 +179,7 @@
          (srs/update-cards-due-count!)
          (state/pub-event! [:graph/ready graph])
          (if db-based?
-           (p/do!
-             (rtc-handler/<rtc-stop!)
-             (rtc-handler/<rtc-start! graph))
+           (rtc-handler/<rtc-start! graph)
            (file-sync-restart!))
          (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
            (fs/watch-dir! dir-name)))))))
