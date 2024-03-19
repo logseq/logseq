@@ -43,6 +43,7 @@
     "react-remove-scroll": "^2.5.7",
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
+    "uniqolor": "1.1.1",
     "yup": "^1.3.2",
     "zod": "^3.22.4"
   },

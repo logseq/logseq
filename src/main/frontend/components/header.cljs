@@ -5,6 +5,7 @@
             [frontend.components.plugins :as plugins]
             [frontend.components.server :as server]
             [frontend.components.right-sidebar :as sidebar]
+            [frontend.components.settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -19,6 +20,8 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
+            [logseq.shui.util :as shui-util]
             [frontend.util :as util]
             [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
@@ -53,6 +56,29 @@
         [:span (t :login)]
         (when loading?
           [:span.ml-2 (ui/loading "")])]])))
+
+(rum/defc rtc-collaborators
+  [online-info]
+  (let [users (some-> online-info (vals) (flatten))]
+    [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-2
+     {:on-click #(shui/dialog-open!
+                   (fn []
+                     [:div
+                      [:h1.text-lg.-mt-6.-ml-2 "Collaborators:"]
+                      (settings/settings-collaboration)]))}
+     [:a.opacity-70.text-xs {:class "pt-[4px] pr-1"}
+      (if (not (seq users))
+        (shui/tabler-icon "user-plus")
+        "Collaborators: ")]
+     (for [{:keys [user-email user-name user-uuid]} users
+           :let [color (shui-util/uuid-color user-uuid)]]
+       (shui/avatar
+         {:class "w-6 h-6"
+          :style {:app-region "no-drag"}
+          :title user-email}
+         (shui/avatar-fallback
+           {:style {:background-color (str color "50")}}
+           (subs user-name 0 2))))]))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
@@ -239,7 +265,9 @@
       (when (and current-repo
                  (user-handler/logged-in?)
                  (config/db-based-graph? current-repo))
-        (rtc-indicator/indicator))
+        [:<>
+         (rtc-collaborators (state/sub :rtc/online-info))
+         (rtc-indicator/indicator)])
 
       (when (and current-repo
                  (not (config/demo-graph? current-repo))
