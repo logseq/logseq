@@ -62,7 +62,14 @@
 
 (rum/defc rtc-collaborators < rum/reactive
   {:will-mount (fn [state]
-                 (js/setTimeout #(rtc-handler/<rtc-get-online-info) 3000)
+                 (let [*interval (atom nil)]
+                   (reset! *interval
+                           (js/setInterval
+                            (fn []
+                              (if (= :open (:rtc-state @(:rtc/state @state/state)))
+                                (rtc-handler/<rtc-get-online-info)
+                                (when @*interval (js/clearInterval @*interval))))
+                            5000)))
                  state)}
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
