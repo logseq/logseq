@@ -157,9 +157,12 @@
   (let [config (if (map? content-or-config)
                  content-or-config
                  {:content content-or-config})
-        config (merge config (first config'))]
-    (upsert-modal!
-      (merge {:id (gen-id) :open? true} config))))
+        content (:content config)
+        config (merge {:id (gen-id) :open? true} config (first config'))
+        config (cond-> config
+                 (fn? content)
+                 (assoc :content (content config)))]
+    (upsert-modal! config)))
 
 (defn alert!
   [content-or-config & config']
