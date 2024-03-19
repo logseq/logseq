@@ -45,15 +45,22 @@
          (update blocks 0 #(default-db/mark-block-as-built-in db %))))
      built-in-properties)))
 
+(defn kv
+  "Creates a key-value pair tx with the key under the :db/ident namespace :logseq.kv.
+   For example, the :db/type key is stored under an entity with ident :logseq.kv.db/type"
+  [key value]
+  {:db/ident (keyword (str "logseq.kv." (namespace key)) (name key))
+   key value})
+
 (defn build-db-initial-data
   [db* config-content]
   (let [db (d/db-with db*
                       (map (fn [p]
-                             {:db/ident (keyword "logseq.property" (name p))
+                             {:db/ident (db-property/name->db-ident p)
                               :block/name (name p)
                               :block/uuid (random-uuid)}) db-property/first-stage-properties))
-        initial-data [{:db/ident :db/type :db/type "db"}
-                      {:db/ident :schema/version :schema/version db-schema/version}]
+        initial-data [(kv :db/type "db")
+                      (kv :schema/version db-schema/version)]
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content

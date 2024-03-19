@@ -125,7 +125,7 @@
 (defn db-based-statuses
   []
   (map (fn [id] (get-in (db/entity [:block/uuid id]) [:block/schema :value]))
-    (pu/get-closed-property-values :task/status)))
+    (pu/get-closed-property-values :logseq.task/status)))
 
 (defn db-based-embed-page
   []
@@ -161,7 +161,7 @@
 (defn db-based-priorities
   []
   (map (fn [id] (get-in (db/entity [:block/uuid id]) [:block/schema :value]))
-    (pu/get-closed-property-values :task/priority)))
+    (pu/get-closed-property-values :logseq.task/priority)))
 
 (defn get-priorities
   []
@@ -659,7 +659,7 @@
 (defn- db-based-set-status
   [status]
   (when-let [block (state/get-edit-block)]
-    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :task/status status)))
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/status status)))
 
 (defmethod handle-step :editor/set-status [[_ status] format]
   (if (config/db-based-graph? (state/get-current-repo))
@@ -679,7 +679,7 @@
 (defn- db-based-set-priority
   [priority]
   (when-let [block (state/get-edit-block)]
-    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :task/priority priority)))
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/priority priority)))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
   (if (config/db-based-graph? (state/get-current-repo))

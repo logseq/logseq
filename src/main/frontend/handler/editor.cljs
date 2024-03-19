@@ -643,17 +643,17 @@
 (defn db-based-cycle-todo!
   [block]
   (let [task (db/entity :logseq.class/task)
-        status-id (:block/uuid (db/entity :task/status))
+        status-id (:block/uuid (db/entity :logseq.task/status))
         status-value-id (get-in block [:block/properties status-id])
         status-value (when status-value-id (db/entity [:block/uuid status-value-id]))
         next-status (case (:db/ident status-value)
-                      :task/status.todo
-                      :task/status.doing
-                      :task/status.doing
-                      :task/status.done
-                      :task/status.done
+                      :logseq.task/status.todo
+                      :logseq.task/status.doing
+                      :logseq.task/status.doing
+                      :logseq.task/status.done
+                      :logseq.task/status.done
                       nil
-                      :task/status.todo)
+                      :logseq.task/status.todo)
         next-status-id (when next-status (:block/uuid (db/entity next-status)))
         properties (if next-status-id
                      (assoc (:block/properties block) status-id next-status-id)

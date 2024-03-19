@@ -18,12 +18,17 @@
      (testing "namespaces"
        (is (= '() (remove namespace default-idents))
            "All default :db/ident's have namespaces")
-       (is (= #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
-                "logseq.class"
-                ;; TODO: These should start with logseq
-                "task" "schema" "db"}
-              (set (distinct (keep namespace default-idents))))
-           "All default :db/ident's have known namespaces"))
+       (is (= []
+              (->> (keep namespace default-idents)
+                   (remove #(string/starts-with? % "logseq."))))
+           "All default :db/ident namespaces start with logseq.")
+       (is (= #{"logseq.property" "logseq.class" "logseq.task" "logseq.kv"}
+              (->> (keep namespace default-idents)
+                   ;; only pull 1st and 2nd level namespaces e.g. logseq and logseq.property
+                   (keep #(re-find #"^([^.]+\.?([^.]+)?)" %))
+                   (map first)
+                   set))
+           "All default :db/ident's top-level namespaces are known"))
 
       (testing "closed values"
         (let [closed-value-ents (filter #(string/includes? (name (:db/ident %)) ".") ident-ents)
