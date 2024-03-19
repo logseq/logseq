@@ -46,8 +46,8 @@
 (rum/defc repos-inner
   "Graph list in `All graphs` page"
   [repos]
-  (for [{:keys [url remote? GraphUUID GraphName] :as repo} repos
-        :let [only-cloud? (and remote? (nil? url))
+  (for [{:keys [root url remote? GraphUUID GraphName] :as repo} repos
+        :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
     [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
      (normalized-graph-label repo #(if only-cloud?
@@ -195,11 +195,11 @@
                                                                  (not (and rtc-graph? remote?)))
                                                           (state/pub-event! [:graph/open-new-window url])
                                                           (cond
+                                                            (:root graph) ; exists locally
+                                                            (state/pub-event! [:graph/switch url])
+
                                                             (and rtc-graph? remote?)
                                                             (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
-
-                                                            (or local? db-only?)
-                                                            (state/pub-event! [:graph/switch url])
 
                                                             :else
                                                             (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))

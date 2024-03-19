@@ -62,8 +62,7 @@
          (p/let [result (.rtc-get-graphs worker repo token)
                  graphs (bean/->clj result)
                  result (->> graphs
-                             (remove (fn [graph]
-                                       (= (:graph-status graph) "deleting")))
+                             (remove (fn [graph] (= (:graph-status graph) "deleting")))
                              (mapv (fn [graph]
                                      (merge
                                       (let [url (str config/db-version-prefix (:graph-name graph))]
