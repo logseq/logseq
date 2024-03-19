@@ -60,16 +60,16 @@
 (rum/defc rtc-collaborators
   [online-info]
   (let [users (some-> online-info (vals) (flatten))]
-    [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-2
+    [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-3
      {:on-click #(shui/dialog-open!
                    (fn []
                      [:div
                       [:h1.text-lg.-mt-6.-ml-2 "Collaborators:"]
                       (settings/settings-collaboration)]))}
-     [:a.opacity-70.text-xs {:class "pt-[4px] pr-1"}
+     [:a.opacity-70.text-xs {:class "pt-[3px] pr-1"}
       (if (not (seq users))
         (shui/tabler-icon "user-plus")
-        "Collaborators: ")]
+        (shui/tabler-icon "user-plus"))]
      (for [{:keys [user-email user-name user-uuid]} users
            :let [color (shui-util/uuid-color user-uuid)]]
        (shui/avatar
@@ -77,8 +77,9 @@
           :style {:app-region "no-drag"}
           :title user-email}
          (shui/avatar-fallback
-           {:style {:background-color (str color "50")}}
-           (subs user-name 0 2))))]))
+           {:style {:background-color (str color "50")
+                    :font-size 11}}
+           (some-> (subs user-name 0 2) (string/upper-case)))))]))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
