@@ -530,9 +530,12 @@
   }
 }
 
-.settings-modal {
-  @apply -m-8 rounded-lg;
-  /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
+.ui__dialog-content[label=app-settings] {
+  @apply w-auto md:max-w-4xl overflow-hidden;
+
+  .settings-modal {
+    @apply -mx-6 -mt-10 -mb-6 rounded-xl;
+  }
 }
 
 .cp__sidebar-main-content {

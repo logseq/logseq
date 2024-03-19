@@ -36,7 +36,7 @@
 
     > article {
       @apply p-4 flex-1 min-h-[12rem] w-auto overflow-y-auto;
-      @apply md:max-h-[70vh] md:w-[40rem];
+      @apply md:max-h-[70vh] md:w-[44rem];
     }
 
     > aside > .cp__settings-header,
@@ -499,12 +499,14 @@ body[data-settings-tab=keymap] {
       }
     }
   }
+
+  .ui__dialog-content[label=app-settings] {
+    @apply max-w-none;
+  }
 }
 
-.ui__modal[label=accent-colors-picker] {
-  .panel-content {
-    @apply sm:min-w-[520px];
-  }
+.ui__dialog-content[label=accent-colors-picker] {
+  @apply pt-4 pb-8 px-8;
 }
 
 .cp__accent-colors {

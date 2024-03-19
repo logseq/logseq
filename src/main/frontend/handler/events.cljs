@@ -355,13 +355,11 @@
 
 (defmethod handle :modal/toggle-accent-colors-modal [_]
   (let [label "accent-colors-picker"]
-    (if (or (= label (state/get-modal-id))
-          (= label (some-> (state/get-sub-modals) (first) :modal/id)))
-      (state/close-sub-modal! label)
-      (state/set-sub-modal!
+    (if (shui/dialog-get label)
+      (shui/dialog-close! label)
+      (shui/dialog-open!
         #(settings/modal-accent-colors-inner)
-        {:center? true
-         :id      label
+        {:id      label
          :label   label}))))
 
 (rum/defc modal-output
