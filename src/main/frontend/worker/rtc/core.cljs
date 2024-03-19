@@ -155,13 +155,25 @@
                        :conn (second args)}}
       (apply outliner-core/insert-blocks! args)))
 
+(defmethod transact-db! :insert-no-order-blocks [_ conn block-uuids]
+  (ldb/transact! conn
+                 (mapv (fn [block-uuid]
+                         ;; add block/content block/format to satisfy the normal-block schema
+                         {:block/uuid block-uuid
+                          ;; NOTE: block without :block/left
+                          ;; must be `logseq.db.frontend.malli-schema.closed-value-block`
+                          :block/type #{"closed value"}})
+                       block-uuids)
+                 {:persist-op? false}))
+
+
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
-   {:persist-op? false
-    :outliner-op :save-block
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
-   (apply outliner-core/save-block! args)))
+      {:persist-op? false
+       :outliner-op :save-block
+       :transact-opts {:repo (first args)
+                       :conn (second args)}}
+      (apply outliner-core/save-block! args)))
 
 (defmethod transact-db! :delete-whiteboard-blocks [_ conn block-uuids]
   (ldb/transact! conn
@@ -223,17 +235,21 @@
                       [(d/entity @conn [:block/uuid block-uuid])]
                       {:children? true})))))
 
+
 (defn- insert-or-move-block
   [repo conn block-uuid remote-parents remote-left-uuid move? op-value]
-  (when (and (seq remote-parents) remote-left-uuid)
+  (when (seq remote-parents)
     (let [first-remote-parent (first remote-parents)
           local-parent (d/entity @conn [:block/uuid first-remote-parent])
           whiteboard-page-block? (whiteboard-page-block? local-parent)
           ;; when insert blocks in whiteboard, local-left is ignored
-          local-left (when-not whiteboard-page-block? (d/entity @conn [:block/uuid remote-left-uuid]))
+          ;; remote-left-uuid is nil when it's :no-order block
+          local-left (when-not whiteboard-page-block?
+                       (when remote-left-uuid
+                         (d/entity @conn [:block/uuid remote-left-uuid])))
           b (d/entity @conn [:block/uuid block-uuid])]
-      (case [whiteboard-page-block? (some? local-parent) (some? local-left)]
-        [false false true]
+      (case [whiteboard-page-block? (some? local-parent) (some? local-left) (some? remote-left-uuid)]
+        [false false true true]
         (if move?
           (transact-db! :move-blocks repo conn [b] local-left true)
           (transact-db! :insert-blocks repo conn
@@ -242,7 +258,7 @@
                           :block/format :markdown}]
                         local-left {:sibling? true :keep-uuid? true}))
 
-        [false true true]
+        [false true true true]
         (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
           (if move?
             (transact-db! :move-blocks repo conn [b] local-left sibling?)
@@ -251,7 +267,7 @@
                             :block/format :markdown}]
                           local-left {:sibling? sibling? :keep-uuid? true})))
 
-        [false true false]
+        [false true false true]
         (if move?
           (transact-db! :move-blocks repo conn [b] local-parent false)
           (transact-db! :insert-blocks repo conn
@@ -259,16 +275,21 @@
                           :block/format :markdown}]
                         local-parent {:sibling? false :keep-uuid? true}))
 
+        [false true false false]
+        (if move?
+          (transact-db! :move-blocks repo conn [b] local-parent false)
+          (transact-db! :insert-no-order-blocks conn [block-uuid]))
+
         ;; Don't need to insert-whiteboard-block here,
         ;; will do :upsert-whiteboard-block in `update-block-attrs`
-        [true true false]
+        ([true true false true] [true true false false])
         (when (nil? (:properties op-value))
           ;; when :properties is nil, this block should be treat as normal block
           (if move?
             (transact-db! :move-blocks repo conn [b] local-parent false)
             (transact-db! :insert-blocks repo conn [{:block/uuid block-uuid :block/content "" :block/format :markdown}]
                           local-parent {:sibling? false :keep-uuid? true})))
-        [true true true]
+        ([true true true true] [true true true false])
         (when (nil? (:properties op-value))
           (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
             (if move?
@@ -311,15 +332,10 @@
       (nil? local-b)
       :not-exist
 
-      (and (nil? (:block/left local-b))
-           (not= (:block/uuid (:block/parent local-b)) remote-parent-uuid))
-      ;; blocks don't have :block/left
+      (not= [remote-left-uuid remote-parent-uuid]
+            [(:block/uuid (:block/left local-b)) (:block/uuid (:block/parent local-b))])
       :wrong-pos
 
-      (and (:block/left local-b)
-           (or (not= (:block/uuid (:block/parent local-b)) remote-parent-uuid)
-               (not= (:block/uuid (:block/left local-b)) remote-left-uuid)))
-      :wrong-pos
       :else nil)))
 
 (defn- upsert-whiteboard-block
