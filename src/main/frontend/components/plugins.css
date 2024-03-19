@@ -973,10 +973,9 @@ html[data-theme='dark'] {
   }
 }
 
-.ui__modal[label=plugin-settings-modal] {
-  .ui__modal-close-wrap {
-    padding-top: 14px;
-  }
+.ui__dialog-content[label=plugin-settings-modal] {
+  @apply w-auto lg:max-w-5xl p-0 gap-0
+  top-[10%] translate-y-0 !animate-none;
 }
 
 .ui__dialog-content[label=plugins-dashboard] {

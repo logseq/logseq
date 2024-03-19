@@ -1422,10 +1422,9 @@
 
 (defn open-focused-settings-modal!
   [title]
-  (state/set-sub-modal!
-    (fn [_close!]
+  (shui/dialog-open!
+    (fn []
       [:div.settings-modal.of-plugins
        (focused-settings-content title)])
-    {:center? false
-     :label   "plugin-settings-modal"
+    {:label   "plugin-settings-modal"
      :id      "ls-focused-settings-modal"}))
