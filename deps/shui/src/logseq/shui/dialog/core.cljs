@@ -3,8 +3,8 @@
             [daiquiri.interpreter :refer [interpret]]
             [medley.core :as medley]
             [logseq.shui.util :as util]
-            [promesa.core :as p]
-            [clojure.string :as string]))
+            [logseq.shui.base.core :as base]
+            [promesa.core :as p]))
 
 ;; provider
 (def dialog (util/lsui-wrap "Dialog"))
@@ -69,6 +69,39 @@
   (when-let [[index] (get-modal id)]
     (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
 
+;; apis
+(defn open!
+  [content-or-config & config']
+  (let [config (if (map? content-or-config)
+                 content-or-config
+                 {:content content-or-config})
+        content (:content config)
+        config (merge {:id (gen-id) :open? true} config (first config'))
+        config (cond-> config
+                 (fn? content)
+                 (assoc :content (content config)))]
+    (upsert-modal! config)))
+
+(defn alert!
+  [content-or-config & config']
+  (let [deferred (p/deferred)]
+    (open! content-or-config
+      (merge {:alert? :default :deferred deferred} (first config')))
+    (p/promise deferred)))
+
+(defn confirm!
+  [content-or-config & config']
+  (alert! content-or-config (assoc (first config') :alert? :confirm)))
+
+(defn close!
+  ([] (close! (some-> (last @*modals) (:id))))
+  ([id] (update-modal! id :open? false)))
+
+(defn close-all! []
+  (doseq [{:keys [id]} @*modals]
+    (close! id)))
+
+;; components
 (rum/defc modal-inner
   [config]
   (let [{:keys [id title description content footer on-open-change open?]} config
@@ -121,7 +154,12 @@
         (alert-dialog-footer
           (if footer
             footer
-            [:<> (alert-dialog-action {:key "ok" :on-click #(p/resolve! deferred true)} "OK")]))))))
+            [:<>
+             (base/button
+               {:key "ok"
+                :on-click #(do (close!) (p/resolve! deferred true))
+                :size :sm
+                } "OK")]))))))
 
 (rum/defc confirm-inner
   [config]
@@ -129,8 +167,17 @@
     (alert-inner
       (assoc config :footer
              [:<>
-              (alert-dialog-cancel {:key "cancel" :on-click #(p/reject! deferred false)} "Cancel")
-              (alert-dialog-action {:key "ok" :on-click #(p/resolve! deferred true)} "OK")]))))
+              (base/button
+                {:key "cancel"
+                 :on-click #(do (close!) (p/reject! deferred false))
+                 :variant :outline
+                 :size :sm}
+                "Cancel")
+              (base/button
+                {:key "ok"
+                 :on-click #(do (close!) (p/resolve! deferred true))
+                 :size :sm
+                 } "OK")]))))
 
 (rum/defc install-modals
   < rum/static
@@ -150,35 +197,3 @@
           (confirm-inner config)
           ;; modal
           (modal-inner config))))))
-
-;; apis
-(defn open!
-  [content-or-config & config']
-  (let [config (if (map? content-or-config)
-                 content-or-config
-                 {:content content-or-config})
-        content (:content config)
-        config (merge {:id (gen-id) :open? true} config (first config'))
-        config (cond-> config
-                 (fn? content)
-                 (assoc :content (content config)))]
-    (upsert-modal! config)))
-
-(defn alert!
-  [content-or-config & config']
-  (let [deferred (p/deferred)]
-    (open! content-or-config
-      (merge {:alert? :default :deferred deferred} (first config')))
-    (p/promise deferred)))
-
-(defn confirm!
-  [content-or-config & config']
-  (alert! content-or-config (assoc (first config') :alert? :confirm)))
-
-(defn close!
-  ([] (close! (some-> (last @*modals) (:id))))
-  ([id] (update-modal! id :open? false)))
-
-(defn close-all! []
-  (doseq [{:keys [id]} @*modals]
-    (close! id)))

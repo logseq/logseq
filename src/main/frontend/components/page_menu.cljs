@@ -1,5 +1,6 @@
 (ns frontend.components.page-menu
-  (:require [frontend.commands :as commands]
+  (:require [clojure.string :as string]
+            [frontend.commands :as commands]
             [frontend.components.export :as export]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -8,6 +9,8 @@
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [frontend.handler.shell :as shell]
@@ -30,38 +33,25 @@
                                           (notification/show! msg :warning))})
   (state/close-modal!))
 
-(defn delete-page-dialog
+(defn delete-page-confirm!
   [page-name]
-  (fn [close-fn]
-    [:div
-     [:div.sm:flex.items-center
-      [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
-       [:span.text-error.text-xl
-        (ui/icon "alert-triangle")]]
-      [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium
-        (if (config/db-based-graph? (state/get-current-repo))
-          (t :page/db-delete-confirmation)
-          (t :page/delete-confirmation))]]]
-
-     [:div.mt-5.sm:mt-4.flex.gap-4
-      (ui/button
-       (t :cancel)
-       {:theme :gray
-        :on-click close-fn})
-      (ui/button
-       (t :yes)
-       {:class "ui__modal-enter"
-        :on-click (fn []
-                    (delete-page! page-name))
-        :button-props {:autoFocus "on"}})]]))
+  (when-not (string/blank? page-name)
+    (-> (shui/dialog-confirm!
+          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
+                   [:span.top-1.relative
+                    (shui/tabler-icon "alert-triangle")]
+                   (if (config/db-based-graph? (state/get-current-repo))
+                     (t :page/db-delete-confirmation)
+                     (t :page/delete-confirmation))]
+           :content [:p.opacity-60 (str "- " page-name)]})
+      (p/then #(delete-page! page-name)))))
 
 (defn ^:large-vars/cleanup-todo page-menu
   [page-name]
   (when-let [page-name (or
-                        page-name
-                        (state/get-current-page)
-                        (state/get-current-whiteboard))]
+                         page-name
+                         (state/get-current-page)
+                         (state/get-current-whiteboard))]
     (let [page-name (util/page-name-sanity-lc page-name)
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
@@ -121,10 +111,10 @@
                         (and db-based?
                              built-in-property?))
             {:title   (t :page/delete)
-             :options {:on-click #(state/set-modal! (delete-page-dialog page-name))}})
+             :options {:on-click #(delete-page-confirm! page-name)}})
 
           (when (and (not (mobile-util/native-platform?))
-                     (state/get-current-page))
+                  (state/get-current-page))
             {:title (t :page/slide-view)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!
