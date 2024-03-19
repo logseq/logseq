@@ -1149,23 +1149,17 @@
   [repo conn token dev-mode?]
   (go
     (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-      (do (assert (and (contains? #{:closed :closing nil} (some-> @*state :*ws deref ws/get-state))
-                       (contains? #{:closed nil} (some-> @*state :*rtc-state deref)))
-                  (str
-                   "*state should be :closed"
-                   :ws
-                   (some-> @*state :*ws deref ws/get-state)
-
-                   :rtc
-                   (some-> @*state :*rtc-state deref)))
-          (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
-                state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
-                _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
-                config (worker-state/get-config repo)
-                c1 (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config))
-                c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
-            (<! c1)
-            (<! c2)))
+      (if-not (and (contains? #{:closed :closing nil} (some-> @*state :*ws deref ws/get-state))
+                   (contains? #{:closed nil} (some-> @*state :*rtc-state deref)))
+        "rtc-not-closed-yet"
+        (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
+              state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
+              _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
+              config (worker-state/get-config repo)
+              c1 (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config))
+              c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
+          (<! c1)
+          (<! c2)))
       (worker-util/post-message :notification
                                 [[:div
                                   [:p "RTC is not supported for this graph"]]
