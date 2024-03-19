@@ -1129,7 +1129,7 @@
   [repo conn token dev-mode?]
   (go
     (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-      (do (assert (and (contains? #{:closed nil} (some-> @*state :*ws deref ws/get-state))
+      (do (assert (and (contains? #{:closed :closing nil} (some-> @*state :*ws deref ws/get-state))
                        (contains? #{:closed nil} (some-> @*state :*rtc-state deref)))
                   (str
                    "*state should be :closed"
