@@ -121,10 +121,12 @@
      [system-theme?])
 
     (rum/use-effect!
-     #(when settings-open?
+     #(if settings-open?
         (shui/dialog-open!
           (fn [] [:div.settings-modal (settings/settings settings-open?)])
-          {:label "app-settings"}))
+          {:label "app-settings"
+           :id :app-settings})
+        (shui/dialog-close! :app-settings))
      [settings-open?])
 
     (rum/use-effect!

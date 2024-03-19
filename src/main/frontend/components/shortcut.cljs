@@ -6,6 +6,7 @@
             [frontend.state :as state]
             [frontend.search :as search]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.rum :as r]
             [goog.events :as events]
             [promesa.core :as p]
@@ -15,7 +16,7 @@
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.modules.shortcut.config :as shortcut-config]
-            [logseq.shui.core :as shui])
+            [logseq.shui.core :as shui-core])
   (:import [goog.events KeyHandler]))
 
 (defonce categories
@@ -169,10 +170,10 @@
           args [id label binding user-binding
                 {:saved-cb (fn [] (-> (p/delay 500) (p/then refresh-shortcuts-list!)))
                  :modal-id modal-id}]]
-      (state/set-sub-modal!
+      (shui/dialog-open!
         (fn [] (apply customize-shortcut-dialog-inner args))
-        {:center? true
-         :id      modal-id
+        {:id      modal-id
+         :class "w-auto md:max-w-2xl"
          :payload args}))))
 
 (rum/defc shortcut-conflicts-display
@@ -234,6 +235,7 @@
                 ;; show conflicts
                 (set-key-conflicts! conflicts-map)))))]
 
+    ;; TODO: back interaction for the shui dialog
     (rum/use-effect!
      (fn []
        (let [mid (state/sub :modal/id)
@@ -268,7 +270,7 @@
                           (set-keystroke! #(util/trim-safe (str % (shortcut/keyname e))))))
 
           ;; active
-         (.focus el)
+          (js/setTimeout #(.focus el) 128)
 
           ;; teardown
          #(do (some-> teardown-global! (apply nil))
@@ -343,7 +345,7 @@
                         (let [binding' (if (= binding binding') nil binding')]
                           (shortcut/persist-user-shortcut! k binding')
                            ;(notification/show! "Saved!" :success)
-                          (state/close-modal!)
+                          (shui/dialog-close!)
                           (saved-cb))))))]]]))
 
 (defn build-categories-map
@@ -475,6 +477,6 @@
 
                         (not unset?)
                         [:code.flex.items-center.bg-transparent
-                         (shui/shortcut
+                         (shui-core/shortcut
                            (string/join " | " (map #(dh/binding-for-display id %) binding))
                            {:size :md :interactive? true})])]]))))])])]]))

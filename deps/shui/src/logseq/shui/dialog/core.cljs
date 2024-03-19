@@ -175,8 +175,9 @@
   [content-or-config & config']
   (alert! content-or-config (assoc (first config') :alert? :confirm)))
 
-(defn close! [id]
-  (update-modal! id :open? false))
+(defn close!
+  ([] (close! (some-> (last @*modals) (:id))))
+  ([id] (update-modal! id :open? false)))
 
 (defn close-all! []
   (doseq [{:keys [id]} @*modals]
