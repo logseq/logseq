@@ -155,8 +155,12 @@
   "Returns initial data"
   [db]
   (let [idents (remove nil?
-                       (when-let [id (:graph/uuid (d/entity db :graph/uuid))]
-                         [{:db/ident :graph/uuid :graph/uuid id}]))
+                       (let [e (d/entity db :graph/uuid)
+                             id (:graph/uuid e)]
+                         (when id
+                           [{:db/id (:db/id e)
+                             :db/ident :graph/uuid
+                             :graph/uuid id}])))
         favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
