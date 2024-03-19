@@ -506,7 +506,7 @@ body[data-settings-tab=keymap] {
 }
 
 .ui__dialog-content[label=accent-colors-picker] {
-  @apply pt-4 pb-8 px-8;
+  @apply pt-4 pb-8 px-8 lg:max-w-xl;
 }
 
 .cp__accent-colors {

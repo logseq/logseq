@@ -75,13 +75,14 @@
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
         users (get (state/sub :rtc/online-info) (state/get-current-repo))]
     (when rtc-graph-id
-      [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-3
-       {:on-click #(shui/dialog-open!
-                    (fn []
-                      [:div
-                       [:h1.text-lg.-mt-6.-ml-2 "Collaborators:"]
-                       (settings/settings-collaboration)]))}
-       [:a.opacity-70.text-xs {:class "pt-[3px] pr-1"}
+      [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-2
+       [:a.opacity-70.text-xs
+        {:class "pt-[3px] pr-1"
+         :on-click #(shui/dialog-open!
+                      (fn []
+                        [:div
+                         [:h1.text-lg.-mt-6.-ml-2 "Collaborators:"]
+                         (settings/settings-collaboration)]))}
         (if (not (seq users))
           (shui/tabler-icon "user-plus")
           (shui/tabler-icon "user-plus"))]
