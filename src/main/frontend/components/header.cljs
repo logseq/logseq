@@ -26,7 +26,10 @@
             [frontend.version :refer [version]]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.db :as db]
+            [logseq.db :as ldb]))
 
 (rum/defc home-button
   < {:key-fn #(identity "home-button")}
@@ -57,29 +60,37 @@
         (when loading?
           [:span.ml-2 (ui/loading "")])]])))
 
-(rum/defc rtc-collaborators
-  [online-info]
-  (let [users (some-> online-info (vals) (flatten))]
-    [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-3
-     {:on-click #(shui/dialog-open!
-                   (fn []
-                     [:div
-                      [:h1.text-lg.-mt-6.-ml-2 "Collaborators:"]
-                      (settings/settings-collaboration)]))}
-     [:a.opacity-70.text-xs {:class "pt-[3px] pr-1"}
-      (if (not (seq users))
-        (shui/tabler-icon "user-plus")
-        (shui/tabler-icon "user-plus"))]
-     (for [{:keys [user-email user-name user-uuid]} users
-           :let [color (shui-util/uuid-color user-uuid)]]
-       (shui/avatar
-         {:class "w-6 h-6"
-          :style {:app-region "no-drag"}
-          :title user-email}
-         (shui/avatar-fallback
-           {:style {:background-color (str color "50")
-                    :font-size 11}}
-           (some-> (subs user-name 0 2) (string/upper-case)))))]))
+(rum/defc rtc-collaborators < rum/reactive
+  {:will-mount (fn [state]
+                 (rtc-handler/<rtc-get-online-info)
+                 state)}
+  []
+  (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
+
+        users (get (state/sub :rtc/online-info) (state/get-current-repo))]
+    (when rtc-graph-id
+      [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-3
+       {:on-click #(shui/dialog-open!
+                    (fn []
+                      [:div
+                       [:h1.text-lg.-mt-6.-ml-2 "Collaborators:"]
+                       (settings/settings-collaboration)]))}
+       [:a.opacity-70.text-xs {:class "pt-[3px] pr-1"}
+        (if (not (seq users))
+          (shui/tabler-icon "user-plus")
+          (shui/tabler-icon "user-plus"))]
+       (when (seq users)
+         (for [{:keys [user-email user-name user-uuid]} users
+               :let [color (shui-util/uuid-color user-uuid)]]
+           (when user-name
+             (shui/avatar
+              {:class "w-6 h-6"
+               :style {:app-region "no-drag"}
+               :title user-email}
+              (shui/avatar-fallback
+               {:style {:background-color (str color "50")
+                        :font-size 11}}
+               (some-> (subs user-name 0 2) (string/upper-case)))))))])))
 
 (rum/defc left-menu-button < rum/reactive
   < {:key-fn #(identity "left-menu-toggle-button")}
@@ -267,7 +278,8 @@
                  (user-handler/logged-in?)
                  (config/db-based-graph? current-repo))
         [:<>
-         (rtc-collaborators (state/sub :rtc/online-info))
+         (rum/with-key (rtc-collaborators)
+           (str "collab-" current-repo))
          (rtc-indicator/indicator)])
 
       (when (and current-repo

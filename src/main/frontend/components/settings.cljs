@@ -5,7 +5,6 @@
             [frontend.colors :as colors]
             [frontend.components.assets :as assets]
             [frontend.components.file-sync :as fs]
-            [frontend.components.plugins :as plugins]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -1131,7 +1130,6 @@
 (rum/defcs settings-collaboration < rum/reactive
   (rum/local "" ::invite-email)
   {:will-mount (fn [state]
-                 ;; TODO: get all members including offline members
                  (rtc-handler/<rtc-get-online-info)
                  state)}
   [state]
