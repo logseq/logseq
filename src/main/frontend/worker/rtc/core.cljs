@@ -634,13 +634,20 @@
       (seq add*) (assoc :add add*)
       (seq retract) (assoc :retract retract))))
 
+(defn- ->pos
+  [left-uuid parent-uuid]
+  (cond
+    (or (nil? left-uuid) (nil? parent-uuid)) :no-order
+    (not= left-uuid parent-uuid)             :sibling
+    :else                                    :child))
+
 (defmulti local-block-ops->remote-ops-aux (fn [tp & _] tp))
 
 (defmethod local-block-ops->remote-ops-aux :move-op
   [_ & {:keys [parent-uuid left-uuid block-uuid *remote-ops *depend-on-block-uuid-set]}]
   (when parent-uuid
     (let [target-uuid (or left-uuid parent-uuid)
-          pos (if (not= left-uuid parent-uuid) :sibling :child)]
+          pos         (->pos left-uuid parent-uuid)]
       (swap! *remote-ops conj [:move {:block-uuid block-uuid :target-uuid target-uuid :pos pos}])
       (swap! *depend-on-block-uuid-set conj target-uuid))))
 
@@ -670,7 +677,7 @@
                                   (seq add*)    (assoc :add add*)
                                   (seq retract) (assoc :retract retract))))
         target-uuid         (or left-uuid parent-uuid)
-        pos                 (if (not= left-uuid parent-uuid) :sibling :child)]
+        pos                 (->pos left-uuid parent-uuid)]
     (swap! *remote-ops conj
            [:update
             (cond-> {:block-uuid block-uuid}
