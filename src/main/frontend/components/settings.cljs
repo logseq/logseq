@@ -1147,7 +1147,7 @@
           [:div user-name]
           (when user-email [:div.opacity-50.text-sm user-email])
           (when graph<->user-user-type [:div.opacity-50.text-sm graph<->user-user-type])])]
-      [:div.flex.flex-col.gap-2.mt-4
+      [:div.flex.flex-col.gap-4.mt-4
        (shui/input
         {:placeholder   "Email address"
          :on-change     #(reset! *invite-email (util/evalue %))})
