@@ -55,7 +55,6 @@
          (.rtc-start worker repo token
                      (state/sub [:ui/developer-mode?])))))))
 
-;; TODO: shared graphs need `shared-by`, user name
 (defn <get-remote-graphs
   []
   (let [^js worker @state/*db-worker]
