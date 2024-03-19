@@ -32,6 +32,10 @@
   (let [state (rum/react debug-state)
         rtc-state (:rtc-state state)]
     [:div
+     {:on-click (fn [^js e]
+                  (when-let [^js btn (.closest (.-target e) ".ui__button")]
+                    (.setAttribute btn "disabled" "true")
+                    (js/setTimeout #(.removeAttribute btn "disabled") 2000)))}
      [:div.flex.gap-2.flex-wrap.items-center.pb-3
       (shui/button
         {:size :sm
@@ -103,7 +107,7 @@
 
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "send pending ops")
-                              {:on-click (fn [] (push-pending-ops))})]
+                              {:icon "brand-telegram" :on-click (fn [] (push-pending-ops))})]
         [:div.mr-2 (ui/button (str "Toggle auto push updates("
                                    (if (:auto-push-client-ops? state)
                                      "ON" "OFF")
@@ -122,9 +126,9 @@
 
      (when (some? state)
        [:hr]
-       [:div.flex.flex-row.items-center
+       [:div.flex.flex-row.items-center.gap-2
         (ui/button "grant graph access to"
-                   {:class "mr-2"
+                   {:icon "award"
                     :on-click (fn []
                                 (let [user-uuid (some-> (:grant-access-to-user state) parse-uuid)
                                       user-email (when-not user-uuid (:grant-access-to-user state))]
@@ -134,7 +138,8 @@
                                                                (some-> user-uuid vector ldb/write-transit-str)
                                                                (some-> user-email vector ldb/write-transit-str))))))})
 
-        [:input.form-input.my-2
+        [:b "➡️"]
+        [:input.form-input.my-2.py-1
          {:on-change (fn [e] (swap! debug-state assoc :grant-access-to-user (util/evalue e)))
           :on-focus (fn [e] (let [v (.-value (.-target e))]
                               (when (= v "input email or user-uuid here")
