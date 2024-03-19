@@ -149,7 +149,7 @@
 
        (when current-repo
          {:title (t :export-graph)
-          :options {:on-click #(state/set-modal! export/export)}
+          :options {:on-click #(shui/dialog-open! export/export)}
           :icon (ui/icon "database-export")})
 
        (when (and current-repo (state/enable-editing?))
