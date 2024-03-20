@@ -235,14 +235,11 @@
       [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
       [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
       [:li {:on-click
-            #(let [confirm-fn
-                   (ui/make-confirm-modal
-                     {:title      (t :plugin/delete-alert name)
-                      :on-confirm (fn [_ {:keys [close-fn]}]
-                                    (close-fn)
-                                    (plugin-common-handler/unregister-plugin id)
-                                    (plugin-config-handler/remove-plugin id))})]
-               (state/set-sub-modal! confirm-fn {:center? true}))}
+            #(-> (shui/dialog-confirm!
+                   [:b (t :plugin/delete-alert name)])
+               (p/then (fn []
+                         (plugin-common-handler/unregister-plugin id)
+                         (plugin-config-handler/remove-plugin id))))}
        (t :plugin/uninstall)]]]
 
     (when (seq sponsors)
