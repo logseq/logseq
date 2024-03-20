@@ -75,7 +75,7 @@ body {
   }
 
   pre {
-    background: var(--ls-secondary-background-color, #f6f8fa);
+    background-color: var(--ls-secondary-background-color, hsl(var(--secondary)));
     margin: 1rem 0;
     line-height: 1.45em;
     overflow: auto;
@@ -96,8 +96,7 @@ body {
   }
 
   pre.code {
-    background: #282a36;
-    background: var(--ls-secondary-background-color);
+    background-color: var(--ls-secondary-background-color, hsl(var(--secondary)));
     color: var(--ls-primary-text-color, #f8f8f2);
   }
 
