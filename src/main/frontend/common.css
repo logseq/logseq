@@ -115,11 +115,14 @@ body {
     text-indent: 0;
     padding: 8px 20px;
     border-left: 4px solid;
-    border-left-color: var(--ls-page-blockquote-border-color, hsl(var(--primary)/.4));
-    background-color: var(--ls-page-blockquote-bg-color, hsl(var(--secondary)));
+    background-color: var(--ls-page-blockquote-bg-color, var(--lx-gray-04, hsl(var(--secondary))));
     color: var(--ls-page-blockquote-color, hsl(var(--secondary-foreground)));
     margin: 1rem 0;
     font-size: 1rem;
+  }
+
+  html blockquote {
+    border-left-color: var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha, hsl(var(--primary)/.4)));
   }
 
   summary {
