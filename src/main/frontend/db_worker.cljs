@@ -629,10 +629,10 @@
    (async-util/c->p
     (rtc-core/<delete-graph token graph-uuid)))
 
-  (rtc-get-online-info
+  (rtc-get-users-info
    [_this]
    (async-util/c->p
-    (rtc-core/<get-online-info @rtc-core/*state)))
+    (rtc-core/<get-users-info @rtc-core/*state)))
 
   (rtc-get-block-content-versions
    [_this block-id]

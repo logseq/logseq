@@ -78,14 +78,14 @@
                                       (dissoc graph :graph-uuid :graph-name)))))]
            (state/set-state! :rtc/graphs result)))))))
 
-(defn <rtc-get-online-info
+(defn <rtc-get-users-info
   []
   (when (ldb/get-graph-rtc-uuid (db/get-db))
     (when-let [^js worker @state/*db-worker]
       (p/let [repo (state/get-current-repo)
-              result (.rtc-get-online-info worker)
+              result (.rtc-get-users-info worker)
               result (bean/->clj result)]
-        (state/set-state! :rtc/online-info {repo result})))))
+        (state/set-state! :rtc/users-info {repo result})))))
 
 (defn <rtc-invite-email
   [graph-uuid email]

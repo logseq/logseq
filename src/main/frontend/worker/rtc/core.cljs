@@ -1210,11 +1210,11 @@
             false)
         true))))
 
-(defn <get-online-info
+(defn <get-users-info
   [state]
   (go
     (when (and state @(:*graph-uuid state))
-      (bean/->js (:users (<? (ws/<send&receive state {:action "get-online-info"})))))))
+      (bean/->js (:users (<? (ws/<send&receive state {:action "get-users-info"})))))))
 
 ;;; APIs (ends)
 
