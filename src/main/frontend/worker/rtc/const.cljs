@@ -176,7 +176,7 @@
       [:graph-uuid :uuid]
       [:target-user-uuids {:optional true} [:sequential :uuid]]
       [:target-user-emails {:optional true} [:sequential :string]]]]
-    ["get-online-info"
+    ["get-users-info"
      [:map
       [:req-id :string]
       [:action :string]]]

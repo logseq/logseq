@@ -71,7 +71,7 @@
       (shui/button
        {:size :sm
         :on-click #(let [^object worker @db-browser/*worker]
-                     (p/let [result (.rtc-get-online-info worker)
+                     (p/let [result (.rtc-get-users-info worker)
                              result* (bean/->clj result)]
                        (swap! debug-state assoc :online-info result*)))}
        (shui/tabler-icon "users") "online-info")]

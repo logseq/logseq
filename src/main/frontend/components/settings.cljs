@@ -1130,12 +1130,12 @@
 (rum/defcs settings-collaboration < rum/reactive
   (rum/local "" ::invite-email)
   {:will-mount (fn [state]
-                 (rtc-handler/<rtc-get-online-info)
+                 (rtc-handler/<rtc-get-users-info)
                  state)}
   [state]
   (let [*invite-email (::invite-email state)
         current-repo (state/get-current-repo)
-        users (get (state/sub :rtc/online-info) current-repo)]
+        users (get (state/sub :rtc/users-info) current-repo)]
     [:div.panel-wrap.is-collaboration.mb-8
      [:div.flex.flex-col.gap-2.mt-4
       [:h2.opacity-50.font-medium "Members:"]

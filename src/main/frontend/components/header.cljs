@@ -67,13 +67,13 @@
                            (js/setInterval
                             (fn []
                               (if (= :open (:rtc-state @(:rtc/state @state/state)))
-                                (rtc-handler/<rtc-get-online-info)
+                                (rtc-handler/<rtc-get-users-info)
                                 (when @*interval (js/clearInterval @*interval))))
                             5000)))
                  state)}
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
-        users (get (state/sub :rtc/online-info) (state/get-current-repo))]
+        users (get (state/sub :rtc/users-info) (state/get-current-repo))]
     (when rtc-graph-id
       [:div.rtc-collaborators.flex.gap-2.text-sm.py-2.bg-gray-01.px-2.flex-1.ml-2
        [:a.opacity-70.text-xs
