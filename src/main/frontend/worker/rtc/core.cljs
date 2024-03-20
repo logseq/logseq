@@ -830,6 +830,14 @@
                           (op-mem-layer/intersection-block-uuids repo depend-on-block-uuids))
                (assoc r current-handling-block-uuid (into {} remote-ops)))))))
 
+(defn- merge-remove-remove-ops
+  [remote-remove-ops]
+  (when-let [block-uuids (->> remote-remove-ops
+                              (mapcat (fn [[_ {:keys [block-uuids]}]] block-uuids))
+                              distinct
+                              seq)]
+    [[:remove {:block-uuids block-uuids}]]))
+
 (defn sort-remote-ops
   [block-uuid->remote-ops]
   (let [block-uuid->dep-uuid
@@ -855,10 +863,11 @@
                            (some->> (get-in block-uuid->remote-ops [block-uuid :move])
                                     (vector :move)))
                          sorted-uuids)
-        remove-ops (keep
-                    (fn [[_ remote-ops]]
-                      (some->> (:remove remote-ops) (vector :remove)))
-                    block-uuid->remote-ops)
+        remove-ops (merge-remove-remove-ops
+                    (keep
+                     (fn [[_ remote-ops]]
+                       (some->> (:remove remote-ops) (vector :remove)))
+                     block-uuid->remote-ops))
         update-ops (keep
                     (fn [[_ remote-ops]]
                       (some->> (:update remote-ops) (vector :update)))
@@ -872,6 +881,7 @@
                            (some->> (:remove-page remote-ops) (vector :remove-page)))
                          block-uuid->remote-ops)]
     (concat update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
+
 
 (defmulti handle-remote-genernal-exception
   "throw `ex-break-rtc-loop` when need to quit current rtc-loop"
