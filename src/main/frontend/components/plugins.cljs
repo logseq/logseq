@@ -1403,7 +1403,8 @@
   []
   (shui/dialog-open!
     (plugins-page)
-    {:label "plugins-dashboard"}))
+    {:label :plugins-dashboard
+     :side :start}))
 
 (defn open-waiting-updates-modal!
   []

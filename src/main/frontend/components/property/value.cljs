@@ -72,7 +72,7 @@
     (route-handler/redirect-to-page! (date/js-date->journal-title value))))
 
 (rum/defc date-picker
-  [value {:keys [on-change editing?]}]
+  [value {:keys [on-change editing? multiple-values?]}]
   (let [;; FIXME: Remove ignore when editing bug is fixed
         #_:clj-kondo/ignore
         [open? set-open!] (rum/use-state editing?)
@@ -92,6 +92,11 @@
         initial-month (when value'
                         (js/Date. (.getYear value') (.getMonth value')))]
     [:div.flex.flex-row.gap-1.items-center
+     (when page
+       (when-let [page-cp (state/get-component :block/page-cp)]
+         (page-cp {:disable-preview? true
+                   :hide-close-button? true} page)))
+
      (let [content-fn
            (fn [{:keys [id]}]
              (let [select-handler!
@@ -118,6 +123,7 @@
                                     (when (= "Enter" (.-key e))
                                       (select-handler! d)))
                  :on-select select-handler!})))]
+
        (shui/button
         {:class "jtrigger !p-1"
          :variant :text
@@ -129,12 +135,7 @@
                          (util/stop e)
                          (shui/popup-show! (.-target e) content-fn
                                            {:align "start" :auto-focus? true}))))}
-        (ui/icon "calendar" {:size 16})))
-
-     (when page
-       (when-let [page-cp (state/get-component :block/page-cp)]
-         (page-cp {:disable-preview? true
-                   :hide-close-button? true} page)))]))
+        (ui/icon (if multiple-values? "calendar-plus" "calendar") {:size 16})))]))
 
 
 (rum/defc property-value-date-picker
