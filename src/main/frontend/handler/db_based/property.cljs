@@ -235,6 +235,7 @@
                     (upsert-property! repo k-name (assoc property-schema :type property-type)
                                       {:property-uuid property-uuid})
                     (let [status? (= :logseq.task/status (:db/ident property))
+                          value (if (= value :property/empty-placeholder) [] value)
                           new-value (cond
                                       (and multiple-values? old-value
                                            (not= old-value :frontend.components.property/new-value-placeholder))
