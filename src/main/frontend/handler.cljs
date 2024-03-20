@@ -49,13 +49,13 @@
   (set! js/window.onerror
         (fn [message, _source, _lineno, _colno, error]
           (when-not (error/ignored? message)
+            (js/console.error message)
             (log/error :exception error)))))
             ;; (notification/show!
             ;;  (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
             ;;  :error
             ;;  ;; Don't auto-hide
             ;;  false)
-            
 
 
 (defn- watch-for-date!
