@@ -338,6 +338,7 @@
                     {:class (if _in-modal? "as-modal-picker" "")}
                     (for [color (concat [:logseq] colors/color-list [:none])
                           :let [active? (= color color-accent)
+                                logseq? (= color :logseq)
                                 none? (= color :none)]]
                       [:div.flex.items-center {:style {:height 28}}
                        (ui/tippy
@@ -348,7 +349,8 @@
                                   (str (name color) " color") )
                           :delay [1000, 100]}
                          (shui-ui/button
-                           {:class      "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"
+                           {:class     (if logseq? "w-5 h-5 px-1 square-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100"  
+                                           "w-5 h-5 px-1 rounded-full flex justify-center items-center transition ease-in duration-100 hover:cursor-pointer hover:opacity-100")
                             :auto-focus (and _in-modal? active?)
                             :style      {:background-color (colors/variable color :09)
                                          :outline-color    (colors/variable color (if active? :07 :06))
@@ -358,7 +360,7 @@
                             :variant    :text
                             :on-click   (fn [_e] (state/set-color-accent! color))}
                            [:strong
-                            {:class (if none? "h-0.5 w-full bg-red-700"
+                            {:class (if none? "h-0.5 w-full bg-red-700" 
                                               "w-2 h-2 rounded-full transition ease-in duration-100")
                              :style {:background-color (if-not none? (str "var(--rx-" (name color) "-07)") "")
                                      :opacity          (if (or none? active?) 1 0)}}]))
