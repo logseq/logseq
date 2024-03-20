@@ -4,13 +4,7 @@
 
 .cp__plugins {
   &-page {
-    margin: -2rem;
-    padding: 1.5rem 2rem;
-    outline: none;
-
-    @screen xl {
-      width: 1260px;
-    }
+    @apply outline-none px-2 py-0;
 
     > h1 {
       margin: 0;
@@ -189,7 +183,7 @@
     @apply w-full max-h-[56vh] overflow-y-auto;
 
     &-inner {
-      @apply grid grid-flow-row gap-3 px-6
+      @apply grid grid-flow-row gap-3 px-4
       grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
     }
   }
