@@ -77,6 +77,14 @@
                 .jtrigger-id {
                     @apply top-[4px];
                 }
+
+                &.empty-value {
+                    @apply -ml-1;
+
+                    .multi-values {
+                        @apply gap-0;
+                    }
+                }
             }
         }
     }
