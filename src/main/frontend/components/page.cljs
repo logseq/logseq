@@ -493,11 +493,11 @@
                      (route-handler/redirect-to-page! @*current-block-page))]
              (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
-       (when today?
-         (today-queries repo today? sidebar?))
-
-       (when today?
-         (scheduled/scheduled-and-deadlines page-name))
+       (when-not whiteboard?
+         (when today?
+           (today-queries repo today? sidebar?))
+         (when today?
+           (scheduled/scheduled-and-deadlines page-name)))
 
        (when-not block?
          (tagged-pages repo page-name))
