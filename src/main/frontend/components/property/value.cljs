@@ -795,11 +795,13 @@
           schema (:block/schema property)
           type (some-> schema (get :type :default))
           multiple-values? (= :many (:cardinality schema))
+          empty-value? (= :property/empty-placeholder v)
           editor-args {:block property
                        :parent-block block
                        :format :markdown}]
       [:div.property-value-inner.w-full
-       {:data-type type}
+       {:data-type type
+        :class (when empty-value? "empty-value")}
        (cond
          multiple-values?
          (multiple-values block property v opts schema)
