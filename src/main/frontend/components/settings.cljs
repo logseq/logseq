@@ -336,7 +336,7 @@
   (let [color-accent (state/sub :ui/radix-color)
         pick-theme [:div.cp__accent-colors-list-wrap
                     {:class (if _in-modal? "as-modal-picker" "")}
-                    (for [color (concat [:none :logseq] colors/color-list)
+                    (for [color (concat [:logseq] colors/color-list [:none])
                           :let [active? (= color color-accent)
                                 none? (= color :none)]]
                       [:div.flex.items-center {:style {:height 28}}
