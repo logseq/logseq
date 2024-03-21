@@ -187,11 +187,13 @@
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
   "graph: the target graph to switch to"
-  [graph _opts]
+  [graph opts]
   (p/do!
-    (repo-handler/restore-and-setup-repo! graph)
-    (graph-switch graph)
-    (state/set-state! :sync-graph/init? false)))
+   (repo-handler/restore-and-setup-repo! graph)
+   (graph-switch graph)
+   (state/set-state! :sync-graph/init? false)
+   (when (:rtc-download? opts)
+     (and (search-handler/rebuild-indices!) true))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (state/set-state! :db/async-queries #{})
