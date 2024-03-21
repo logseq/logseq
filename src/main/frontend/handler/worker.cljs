@@ -5,7 +5,6 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [promesa.core :as p]
-            [frontend.util :as util]
             [logseq.db :as ldb]))
 
 (defmulti handle identity)
@@ -28,7 +27,7 @@
 
 (defmethod handle :add-repo [_ _worker data]
   (state/add-repo! {:url (:repo data)})
-  (state/pub-event! [:graph/switch (:repo data) {}]))
+  (state/pub-event! [:graph/switch (:repo data) {:rtc-download? true}]))
 
 (defmethod handle :rtc-sync-state [_ _worker data]
   (let [state data]
