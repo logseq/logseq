@@ -10,6 +10,7 @@
 
                        :config {}
                        :git/current-repo nil
+                       :rtc/batch-processing? false
                        :rtc/remote-batch-txs nil
                        :rtc/downloading-graph? false}))
 
@@ -93,3 +94,24 @@
 (defn rtc-downloading-graph?
   []
   (:rtc/downloading-graph? @*state))
+
+(defn start-batch-tx-mode!
+  []
+  (swap! *state assoc :rtc/batch-processing? true))
+
+(defn rtc-batch-processing?
+  []
+  (:rtc/batch-processing? @*state))
+
+(defn get-batch-txs
+  []
+  (:rtc/remote-batch-txs @*state))
+
+(defn conj-batch-txs!
+  [tx-data]
+  (swap! *state update :rtc/remote-batch-txs (fn [data] (into data tx-data))))
+
+(defn exit-batch-tx-mode!
+  []
+  (swap! *state assoc :rtc/batch-processing? false)
+  (swap! *state assoc :rtc/remote-batch-txs nil))

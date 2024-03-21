@@ -203,14 +203,9 @@
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
-  [repo-url {:keys [tx-data tx-meta] :as tx} affected-keys]
-  (when repo-url
-    (if (get-in @state/state [:rtc/remote-batch-tx-state repo-url :in-transaction?])
-      (state/update-state! [:rtc/remote-batch-tx-state repo-url :txs]
-                           (fn [txs]
-                             (conj txs tx)))
-      (when (and (not (:skip-refresh? tx-meta)) (seq tx-data))
-        (refresh-affected-queries! repo-url affected-keys)))))
+  [repo-url affected-keys]
+  (when (and repo-url (seq affected-keys))
+    (refresh-affected-queries! repo-url affected-keys)))
 
 (defn set-key-value
   [repo-url key value]

@@ -5,7 +5,8 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.db.react :as react]))
 
 (defmulti handle identity)
 
@@ -35,6 +36,9 @@
 
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
+
+(defmethod handle :refresh-ui [_ _worker {:keys [affected-keys]}]
+  (react/refresh! (state/get-current-repo) affected-keys))
 
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))

@@ -18,6 +18,7 @@
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
+            [frontend.worker.react :as worker-react]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -393,7 +394,7 @@
                        (not= (:content op-value)
                              (:block/raw-content b-ent)))
                   (assoc :block/content
-                         (db-content/special-id-ref->page @conn (:content op-value)))
+                         (db-content/db-special-id-ref->page @conn (:content op-value)))
 
                   (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
                   (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
@@ -597,7 +598,7 @@
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
 
-          ;; (worker-state/start-batch-tx-mode!)
+          (worker-state/start-batch-tx-mode!)
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
@@ -605,9 +606,14 @@
           (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
           (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
           (js/console.groupEnd)
-          ;; (let [txs (worker-state/get-batch-txs)
-          ;;       affected-keys (worker-react/get-affected-queries-keys {:tx-data txs :db-after @conn})]
-          ;;   (worker-state/exit-batch-tx-mode!))
+          (let [txs (worker-state/get-batch-txs)]
+            (worker-state/exit-batch-tx-mode!)
+            (when (seq txs)
+              (let [affected-keys (worker-react/get-affected-queries-keys {:db-after @conn
+                                                                           :tx-data txs})]
+                (when (seq affected-keys)
+                  (worker-util/post-message :refresh-ui
+                                            {:affected-keys affected-keys})))))
 
           (op-mem-layer/update-local-tx! repo remote-t)
           (update-log state {:remote-update-map affected-blocks-map}))
