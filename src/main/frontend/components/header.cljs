@@ -69,8 +69,12 @@
                               (if (= :open (:rtc-state @(:rtc/state @state/state)))
                                 (rtc-handler/<rtc-get-users-info)
                                 (when @*interval (js/clearInterval @*interval))))
-                            5000)))
-                 state)}
+                            5000))
+                   (assoc state ::interval *interval)))
+   :will-unmount (fn [state]
+                   (when-let [interval @(::interval state)]
+                     (js/clearInterval interval))
+                   state)}
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
         online-users (->> (get (state/sub :rtc/users-info) (state/get-current-repo))
