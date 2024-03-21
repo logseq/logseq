@@ -3,6 +3,7 @@
             [cljs.reader]
             [logseq.sdk.core]
             [logseq.sdk.git]
+            [logseq.sdk.experiments]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.assets :as sdk-assets]

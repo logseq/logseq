@@ -18,6 +18,13 @@ export class LSPluginExperiments {
     return this.ensureHostScope().ReactDOM
   }
 
+  get Components() {
+    const exper = this.ensureHostScope().logseq.sdk.experiments
+    return {
+      Editor: exper.cp_page_editor as (props: { page: string }) => any
+    }
+  }
+
   get pluginLocal(): PluginLocal {
     return this.ensureHostScope().LSPluginCore.ensurePlugin(
       this.ctx.baseInfo.id
