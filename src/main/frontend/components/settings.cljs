@@ -1158,7 +1158,7 @@
                            (rtc-handler/<rtc-invite-email graph-uuid user-email)))))}
         "Invite")]]]))
 
-(rum/defcs settings
+(rum/defcs ^:large-vars/cleanup-todo settings
   < (rum/local DEFAULT-ACTIVE-TAB-STATE ::active)
   {:will-mount
    (fn [state]

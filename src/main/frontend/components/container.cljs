@@ -16,7 +16,6 @@
             [frontend.components.icon :as icon]
             [frontend.components.handbooks :as handbooks]
             [dommy.core :as d]
-            [frontend.components.page-menu :as page-menu]
             [frontend.components.content :as cp-content]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -732,16 +731,6 @@
        :style {:z-index 999
                :left (str (first position) "px")
                :top (str (second position) "px")}} links]]))
-
-(rum/defc page-title-custom-context-menu-content
-  [page]
-  (when-not (string/blank? page)
-    (let [page-menu-options (page-menu/page-menu page)]
-      [:.menu-links-wrapper
-       (for [{:keys [title options]} page-menu-options]
-         (rum/with-key
-           (ui/menu-link options title)
-           title))])))
 
 (rum/defc custom-context-menu < rum/reactive
   []
