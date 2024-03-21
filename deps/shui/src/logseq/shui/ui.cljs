@@ -12,7 +12,7 @@
 (def button base-core/button)
 (def link base-core/link)
 (def trigger-as base-core/trigger-as)
-(def tabler-icon icon-v2/root)
+(def ^:export tabler-icon icon-v2/root)
 
 (def alert (util/lsui-wrap "Alert"))
 (def alert-title (util/lsui-wrap "AlertTitle"))

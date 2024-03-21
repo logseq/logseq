@@ -340,10 +340,11 @@
   (when-let [pid (keyword pid)]
     (when-let [type (and key (keyword type))]
       (let [path [:plugin/installed-resources pid type]]
-        (when (contains? #{:error nil} (get-in @state/state (conj path key)))
-          (swap! state/state update-in path
-                 (fnil assoc {}) key (merge opts {:pid pid}))
-          true)))))
+        ;; TODO: conditions
+        ;; (when (contains? #{:error nil} (get-in @state/state (conj path key))))
+        (swap! state/state update-in path
+          (fnil assoc {}) key (merge opts {:pid pid}))
+        true))))
 
 (defn unregister-plugin-resources
   [pid]
@@ -380,39 +381,55 @@
   (when-let [hook (and uuid (str "hook:db:block_" (string/replace (str uuid) "-" "_")))]
     (boolean (seq (get (get-installed-hooks) hook)))))
 
+(defn- create-local-renderer-register
+  [type *providers]
+  (fn [pid key {:keys [subs render] :as _opts}]
+    (when-let [key (and key (keyword key))]
+      (register-plugin-resources pid type
+        (merge _opts {:key key :subs subs :render render}))
+      (swap! *providers conj pid)
+      #(swap! *providers disj pid))))
+
+(defn- create-local-renderer-getter
+  ([type *providers] (create-local-renderer-getter type *providers false))
+  ([type *providers many?]
+   (fn [key]
+     (when-let [key (or many? (and (seq @*providers) key (keyword key)))]
+       (when-let [rs (->> @*providers
+                       (map #(if many?
+                               (some-> (state/get-plugin-resources-with-type % type)
+                                 (vals))
+                               (state/get-plugin-resource % type key)))
+                       (remove nil?)
+                       (flatten)
+                       (seq))]
+         (if many? rs (first rs)))))))
+
 (defonce *fenced-code-providers (atom #{}))
-
-(defn register-fenced-code-renderer
-  [pid type {:keys [before subs render edit] :as _opts}]
-  (when-let [key (and type (keyword type))]
-    (register-plugin-resources pid :fenced-code-renderers
-                               {:key key :edit edit :before before :subs subs :render render})
-    (swap! *fenced-code-providers conj pid)
-    #(swap! *fenced-code-providers disj pid)))
-
-(defn hook-fenced-code-by-type
-  [type]
-  (when-let [key (and (seq @*fenced-code-providers) type (keyword type))]
-    (->> @*fenced-code-providers
-         (map #(state/get-plugin-resource % :fenced-code-renderers key))
-         (remove nil?)
-         (first))))
+(def register-fenced-code-renderer
+  ;; [pid key payload]
+  (create-local-renderer-register
+    :fenced-code-renderers *fenced-code-providers))
+(def hook-fenced-code-by-lang
+  ;; [key]
+  (create-local-renderer-getter
+    :fenced-code-renderers *fenced-code-providers))
 
 (def *extensions-enhancer-providers (atom #{}))
+(def register-extensions-enhancer
+  (create-local-renderer-register
+    :extensions-enhancers *extensions-enhancer-providers))
+(def hook-extensions-enhancer-by-key
+  (create-local-renderer-getter
+    :extensions-enhancers *extensions-enhancer-providers))
 
-(defn register-extensions-enhancer
-  [pid type {:keys [enhancer] :as _opts}]
-  (when-let [key (and type (keyword type))]
-    (register-plugin-resources pid :extensions-enhancers
-                               {:key key :enhancer enhancer})
-    (swap! *extensions-enhancer-providers conj pid)
-    #(swap! *extensions-enhancer-providers disj pid)))
-
-(defn hook-extensions-enhancer-by-type
-  [type]
-  (when-let [key (and type (keyword type))]
-    (map #(state/get-plugin-resource % :extensions-enhancers key)
-         @*extensions-enhancer-providers)))
+(def *route-renderer-providers (atom #{}))
+(def register-route-renderer
+  (create-local-renderer-register
+    :route-renderers *route-renderer-providers))
+(def hook-routes-renderer
+  (create-local-renderer-getter
+    :route-renderers *route-renderer-providers true))
 
 (defn select-a-plugin-theme
   [pid]
@@ -788,7 +805,8 @@
       (p/then
         (fn []
           (state/set-state! :plugin/indicator-text "END")
-          (callback)))
+          ;; wait for the plugin register async messages
+          (js/setTimeout #(callback) 64)))
       (p/catch
         (fn [^js e]
           (log/error :setup-plugin-system-error e)
