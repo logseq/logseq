@@ -629,7 +629,6 @@ button.tl-select-input-trigger {
   flex-direction: column;
   border-radius: 8px;
   overscroll-behavior: none;
-  margin-left: -40px;
 }
 
 .tl-quick-search-option {
