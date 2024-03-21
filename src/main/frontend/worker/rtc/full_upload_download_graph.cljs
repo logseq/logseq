@@ -68,7 +68,7 @@
   {:block-type/property     "property"
    :block-type/class        "class"
    :block-type/whiteboard   "whiteboard"
-   :block-type/macros       "macros"
+   :block-type/macro        "macro"
    :block-type/hidden       "hidden"
    :block-type/closed-value "closed value"})
 
@@ -116,7 +116,6 @@
 (defn- fill-block-fields
   [blocks]
   (let [groups (group-by #(boolean (:block/name %)) blocks)
-        ;; _page-blocks (get groups true)
         other-blocks (set (get groups false))
         id->block (into {} (map (juxt :db/id identity) blocks))
         block-id->page-id (into {} (map (fn [b] [(:db/id b) (:db/id (page-of-block id->block b))]) other-blocks))]
