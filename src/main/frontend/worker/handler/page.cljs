@@ -190,7 +190,7 @@
             {:msg "Page content deleted but unable to delete this page because blocks use this property"})
 
       (or (seq (:block/_refs page)) (contains? (:block/type page) "hidden"))
-      {:msg "Page content deleted but unable to delete this page because there're still references to it"})
+      {:msg "Page content deleted but unable to delete this page because there are still references to it"})
 
     (catch :default e
       (js/console.error e)

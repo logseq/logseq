@@ -20,7 +20,8 @@
             [logseq.graph-parser.text :as text]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]))
+            [frontend.handler.db-based.property.util :as db-pu]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; Util fns
 ;; ========
@@ -288,13 +289,23 @@
 (rum/defc result-table < rum/reactive
   [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text inline]
   (when current-block
-    (let [result' (if page? result (attach-clock-property result))
+    (let [db-graph? (config/db-based-graph? (state/get-current-repo))
+          result' (cond-> (if page? result (attach-clock-property result))
+                    db-graph?
+                    ((fn [res]
+                       (map #(if (:block/content %)
+                               (update % :block/content
+                                       db-content/special-id-ref->page-ref
+                                       ;; Lookup here instead of initial query as advanced queries
+                                       ;; won't usually have a ref's name
+                                       (map (fn [m] (db/entity (:db/id m))) (:block/refs %)))
+                               %)
+                            res))))
           columns (get-columns current-block result' {:page? page?})
-          db-graph? (config/db-based-graph? (state/get-current-repo))
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
           sort-state (get-sort-state current-block {:db-graph? db-graph?})
-          sort-result (sort-result result (assoc sort-state :page? page?))
+          sort-result (sort-result result' (assoc sort-state :page? page?))
           table-version (get-shui-component-version :table config)]
       (case table-version
         2 (let [v2-columns (mapv #(if (uuid? %) (db-pu/get-property-name %) %) columns)
