@@ -5,6 +5,7 @@
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
+            [frontend.components.plugins :as plugins]
             [frontend.page :as page]
             [frontend.routes :as routes]
             [frontend.spec]
@@ -19,7 +20,7 @@
 (defn set-router!
   []
   (rfe/start!
-   (rf/router routes/routes nil)
+   (rf/router (plugins/hook-custom-routes routes/routes) nil)
    (fn [route]
      (route-handler/set-route-match! route)
      (plugin-handler/hook-plugin-app
@@ -43,7 +44,7 @@
             \\/    /_____/     \\/     \\/   |__|
      "))
 
-(defn start []
+(defn ^:export start []
   (when config/dev?
     (md/start!))
   (when-let [node (.getElementById js/document "root")]
@@ -62,10 +63,14 @@
   (plugin-handler/setup!
    #(handler/start! start)))
 
-(defn stop []
+(defn ^:export stop []
   ;; stop is called before any code is reloaded
   ;; this is controlled by :before-load in the config
   (handler/stop!)
   (when config/dev?
     (sync/<sync-stop))
   (js/console.log "stop"))
+
+(defn ^:export delay-remount
+  [delay]
+  (js/setTimeout #(start) delay))

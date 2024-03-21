@@ -3536,7 +3536,7 @@
       (let [lang (util/safe-lower-case (:language options))]
         [:div.cp__fenced-code-block
          {:data-lang lang}
-         (if-let [opts (plugin-handler/hook-fenced-code-by-type lang)]
+         (if-let [opts (plugin-handler/hook-fenced-code-by-lang lang)]
            [:div.ui-fenced-code-wrap
             (src-cp config options html-export?)
             (plugins/hook-ui-fenced-code (:block config) (string/join "" (:lines options)) opts)]

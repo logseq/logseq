@@ -44,7 +44,7 @@ export class LSPluginExperiments {
   }
 
   registerFencedCodeRenderer(
-    type: string,
+    lang: string,
     opts: {
       edit?: boolean
       before?: () => Promise<void>
@@ -54,7 +54,23 @@ export class LSPluginExperiments {
   ) {
     return this.ensureHostScope().logseq.api.exper_register_fenced_code_renderer(
       this.ctx.baseInfo.id,
-      type,
+      lang,
+      opts
+    )
+  }
+
+  registerRouteRenderer(
+    key: string,
+    opts: {
+      name?: string,
+      path: string,
+      render: (props: { content: string }) => any
+      subs?: Array<string>
+    }
+  ) {
+    return this.ensureHostScope().logseq.api.exper_register_route_renderer(
+      this.ctx.baseInfo.id,
+      key,
       opts
     )
   }
@@ -83,7 +99,8 @@ export class LSPluginExperiments {
 
   ensureHostScope(): any {
     if (window === top) {
-      throw new Error('Can not access host scope!')
+      console.error('Can not access host scope!')
+      return {}
     }
 
     return top

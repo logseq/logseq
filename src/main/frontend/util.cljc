@@ -69,7 +69,12 @@
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
-   (def safe-re-find common-util/safe-re-find))
+   (do
+     (def safe-re-find common-util/safe-re-find)
+     (defn safe-keyword
+       [s]
+       (when (string? s)
+         (keyword (string/replace s " " "_"))))))
 
 #?(:cljs
    (do

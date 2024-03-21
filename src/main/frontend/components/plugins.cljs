@@ -12,6 +12,7 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
+            [frontend.config :as config]
             [logseq.shui.ui :as shui]
             [electron.ipc :as ipc]
             [promesa.core :as p]
@@ -1426,3 +1427,13 @@
        (focused-settings-content title)])
     {:label   "plugin-settings-modal"
      :id      "ls-focused-settings-modal"}))
+
+(defn hook-custom-routes
+  [routes]
+  (cond-> routes
+    config/lsp-enabled?
+    (concat (some->> (plugin-handler/hook-routes-renderer)
+              (mapv #(when-let [{:keys [name path render]} %]
+                       (when (not (string/blank? path))
+                         [path {:name name :view (fn [r] (render r %))}])))
+              (remove nil?)))))

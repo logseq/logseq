@@ -982,12 +982,25 @@
       (keyword pid) type (reduce #(assoc %1 %2 (aget opts (name %2))) {}
                                  [:edit :before :subs :render]))))
 
+(defn ^:export exper_register_route_renderer
+  [pid key ^js opts]
+  (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
+    (let [key (util/safe-keyword key)]
+      (plugin-handler/register-route-renderer
+        (keyword pid) key
+        (reduce (fn [r k]
+                  (assoc r k (cond-> (aget opts (name k))
+                               (= :name k)
+                               (#(if % (util/safe-keyword %) key)))))
+          {} [:v :name :path :subs :render])))))
+
 (defn ^:export exper_register_extensions_enhancer
   [pid type enhancer]
   (when-let [^js _pl (and (fn? enhancer) (plugin-handler/get-plugin-inst pid))]
     (plugin-handler/register-extensions-enhancer
       (keyword pid) type {:enhancer enhancer})))
 
+;; http request
 (defonce *request-k (volatile! 0))
 
 (defn ^:export exper_request
