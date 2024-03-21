@@ -83,7 +83,7 @@
               (when (seq new-datoms)
                 (state/set-state! :editor/new-created-block-id (last (map :v new-datoms))))))
 
-          (react/refresh! repo tx-report affected-keys)
+          (react/refresh! repo affected-keys)
 
           (when-let [state (:ui/restore-cursor-state @state/state)]
             (when (or undo? redo?)

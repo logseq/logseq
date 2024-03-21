@@ -6,6 +6,7 @@
             [frontend.worker.react :as worker-react]
             [frontend.worker.file :as file]
             [frontend.worker.util :as worker-util]
+            [frontend.worker.state :as worker-state]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.worker.db.fix :as db-fix]
@@ -118,8 +119,12 @@
               final-tx-report (assoc tx-report'
                                      :tx-data full-tx-data
                                      :db-before (:db-before tx-report))
-              affected-query-keys (when-not (:importing? context)
+              batch-processing? (worker-state/rtc-batch-processing?)
+              affected-query-keys (when-not (or (:importing? context)
+                                                batch-processing?)
                                     (worker-react/get-affected-queries-keys final-tx-report))]
+          (when batch-processing?
+            (worker-state/conj-batch-txs! full-tx-data))
           {:tx-report final-tx-report
            :affected-keys affected-query-keys
            :deleted-block-uuids deleted-block-uuids

@@ -259,7 +259,7 @@
   [repo conn date-formatter txs-state block m]
   (when (sqlite-util/db-based-graph? repo)
     (let [content (:block/content m)
-          block' (if (and content (not (re-find db-content/special-id-ref-pattern content))) ; not raw content
+          block' (if (and (string? content) (not (re-find db-content/special-id-ref-pattern content))) ; not raw content
                    (assoc block :block/content content)
                    block)
           refs' (rebuild-block-refs repo conn date-formatter block' (:block/properties block))
