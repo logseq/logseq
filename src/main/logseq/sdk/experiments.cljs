@@ -1,6 +1,5 @@
 (ns logseq.sdk.experiments
   (:require [frontend.state :as state]
-            [cljs-bean.core :as bean]
             [frontend.components.page :as page]))
 
 (defn ^:export cp_page_editor

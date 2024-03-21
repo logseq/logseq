@@ -8,8 +8,7 @@
             [frontend.db :as db]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [frontend.handler.notification :as notification]
-            [clojure.core.async :as async]))
+            [frontend.handler.notification :as notification]))
 
 (defn <rtc-create-graph!
   [repo]
