@@ -335,6 +335,8 @@
                       (clj->js {:keys ["name"]
                                 :shouldSort true
                                 :tokenize true
+                                :distance 1024
+                                :threshold 0.5 ;; search for 50% match from the start
                                 :minMatchCharLength 1}))]
     (swap! indices assoc-in [repo :pages] indice)
     indice))

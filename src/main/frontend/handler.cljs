@@ -50,6 +50,7 @@
     (set! js/window.onerror
           (fn [message, _source, _lineno, _colno, error]
             (when-not (error/ignored? message)
+              (js/console.error message)
               (log/error :exception error))))))
 
 (defn- watch-for-date!
