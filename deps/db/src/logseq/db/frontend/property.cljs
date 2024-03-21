@@ -188,7 +188,7 @@
 
 (defn name->db-ident
   "Converts a built-in property's keyword name to its :db/ident equivalent.
-  Legacy property names that had pseduo-namespacing are converted to their new
+  Legacy property names that had pseudo-namespacing are converted to their new
   format e.g. :logseq.table.headers -> :logseq.property.table/headers"
   [legacy-name]
   ;; Migrate legacy names that have logseq.* style names but no namespace

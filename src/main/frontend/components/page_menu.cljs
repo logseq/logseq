@@ -8,7 +8,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [frontend.util :as util]

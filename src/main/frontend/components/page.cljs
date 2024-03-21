@@ -426,7 +426,7 @@
     (get-page-name state)
     (state/get-current-page)))
 
-(defn- get-page-entity
+(defn get-page-entity
   [page-name]
   (if-let [block-id (parse-uuid page-name)]
     (let [entity (db/entity [:block/uuid block-id])]

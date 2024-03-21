@@ -383,10 +383,10 @@
 
 (defn- create-local-renderer-register
   [type *providers]
-  (fn [pid key {:keys [subs render] :as _opts}]
+  (fn [pid key {:keys [subs render] :as opts}]
     (when-let [key (and key (keyword key))]
       (register-plugin-resources pid type
-        (merge _opts {:key key :subs subs :render render}))
+        (merge opts {:key key :subs subs :render render}))
       (swap! *providers conj pid)
       #(swap! *providers disj pid))))
 

@@ -13,7 +13,6 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [frontend.config :as config]
-            [logseq.shui.ui :as shui]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
