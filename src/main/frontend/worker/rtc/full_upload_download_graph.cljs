@@ -164,8 +164,7 @@
                (.createOrOpenDB worker-obj repo {:close-other-db? false})
                (.exportDB worker-obj repo)
                (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
-               (transact-block-refs! repo)
-               (.closeDB worker-obj repo))]
+               (transact-block-refs! repo))]
      (<? (p->c work))
 
      (worker-util/post-message :add-repo {:repo repo})
@@ -187,7 +186,7 @@
            (op-mem-layer/init-empty-ops-store! repo)
            (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo graph-uuid))
            (op-mem-layer/update-graph-uuid! repo graph-uuid)
-           (prn ::download-graph repo (@@#'op-mem-layer/*ops-store repo))
+           ;; (prn ::download-graph repo (@@#'op-mem-layer/*ops-store repo))
            (<! (op-mem-layer/<sync-to-idb-layer! repo))
            (<! (p->c (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
            (worker-state/set-rtc-downloading-graph! false)))))))
