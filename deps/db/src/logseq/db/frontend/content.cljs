@@ -30,7 +30,7 @@
    refs))
 
 (defn special-id-ref->page
-  "Convert special id ref backs to page name."
+  "Convert special id ref backs to page name using refs."
   [content refs]
   (reduce
    (fn [content ref]
@@ -44,6 +44,20 @@
        content))
    content
    refs))
+
+(defn db-special-id-ref->page
+  "Convert special id ref backs to page name using `db`."
+  [db content]
+  (let [matches (distinct (re-seq special-id-ref-pattern content))]
+    (if (seq matches)
+      (reduce (fn [content [full-text id]]
+                (if-let [page (d/entity db [:block/uuid (uuid id)])]
+                  (string/replace content full-text
+                                  (str page-ref/left-brackets
+                                       (:block/original-name page)
+                                       page-ref/right-brackets))
+                  content)) content matches)
+      content)))
 
 (defn page-ref->special-id-ref
   "Convert page ref to special id refs e.g. `[[page name]] -> [[~^...]]"

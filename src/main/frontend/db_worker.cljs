@@ -173,8 +173,7 @@
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb! repo)]
-          (rtc-db-listener/listen-to-db-changes! repo conn))
-        nil))))
+          (rtc-db-listener/listen-to-db-changes! repo conn))))))
 
 (defn- iter->vec [iter]
   (when iter
