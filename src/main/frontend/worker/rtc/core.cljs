@@ -6,7 +6,6 @@
             [cljs.core.async :as async :refer [<! >! chan go]]
             [cljs.core.async.interop :include-macros true :refer [<p!]]
             [clojure.set :as set]
-            [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
@@ -21,7 +20,6 @@
             [frontend.worker.util :as worker-util]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
@@ -351,20 +349,6 @@
         (assert (some? shape) properties*)
         (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
 
-(defn- special-id-ref->page
-  "Convert special id ref backs to page name."
-  [db content]
-  (let [matches (distinct (re-seq db-content/special-id-ref-pattern content))]
-    (if (seq matches)
-      (reduce (fn [content [full-text id]]
-                (if-let [page (d/entity db [:block/uuid (uuid id)])]
-                  (string/replace content full-text
-                                  (str page-ref/left-brackets
-                                       (:block/original-name page)
-                                       page-ref/right-brackets))
-                  content)) content matches)
-      content)))
-
 (defn- need-update-block?
   [conn block-uuid op-value]
   (let [ent (d/entity @conn [:block/uuid block-uuid])]
@@ -409,7 +393,7 @@
                        (not= (:content op-value)
                              (:block/raw-content b-ent)))
                   (assoc :block/content
-                         (special-id-ref->page @conn (:content op-value)))
+                         (db-content/special-id-ref->page @conn (:content op-value)))
 
                   (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
                   (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))

@@ -12,7 +12,8 @@
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]
+            [datascript.impl.entity :as de]))
 
 (defn heading-block?
   [block]
@@ -825,8 +826,12 @@
           refs' (->> (concat page-refs block-refs)
                      (remove string/blank?)
                      distinct)]
-      (-> (map #(if (common-util/uuid-string? %)
+      (-> (map #(cond
+                  (de/entity? %)
+                  {:block/uuid (:block/uuid %)}
+                  (common-util/uuid-string? %)
                   {:block/uuid (uuid %)}
+                  :else
                   (page-name->map % true db true date-formatter))
                refs')
           set))))

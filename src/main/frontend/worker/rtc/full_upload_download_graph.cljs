@@ -13,7 +13,11 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.db.frontend.schema :as db-schema]
-            [promesa.core :as p]))
+            [logseq.outliner.core :as outliner-core]
+            [logseq.db.frontend.content :as db-content]
+            [promesa.core :as p]
+            [clojure.string :as string]
+            [logseq.common.util.page-ref :as page-ref]))
 
 (def transit-r (transit/reader :json))
 
@@ -126,6 +130,27 @@
                 b)))
           blocks)))
 
+(defn- transact-block-refs!
+  [repo]
+  (when-let [conn (worker-state/get-datascript-conn repo)]
+    (let [date-formatter (worker-state/get-date-formatter repo)
+          db @conn
+          ;; get all the block datoms
+          datoms (d/datoms db :avet :block/uuid)
+          refs-tx (keep
+                   (fn [d]
+                     (let [block (d/entity @conn (:e d))
+                           block' (let [content (:block/content block)]
+                                    (if (and content (string/includes? content (str page-ref/left-brackets db-content/page-ref-special-chars)))
+                                      (assoc block :block/content (db-content/db-special-id-ref->page db content))
+                                      block))
+                           refs (outliner-core/rebuild-block-refs repo conn date-formatter block' {})]
+                       (when (seq refs)
+                         {:db/id (:db/id block)
+                          :block/refs refs})))
+                   datoms)]
+      (d/transact! conn refs-tx {:outliner-op :rtc-download-rebuild-block-refs}))))
+
 (defn- <transact-remote-all-blocks-to-sqlite
   [all-blocks repo graph-uuid]
   (go-try
@@ -139,6 +164,7 @@
                (.createOrOpenDB worker-obj repo {:close-other-db? false})
                (.exportDB worker-obj repo)
                (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
+               (transact-block-refs! repo)
                (.closeDB worker-obj repo))]
      (<? (p->c work))
 
