@@ -313,7 +313,7 @@
                             db-graph?
                             (assoc-in [:block :properties]
                                       (db-pu/readable-properties (get-in config [:block :block/properties]))))
-                result-as-text (for [row result]
+                result-as-text (for [row result']
                                  (for [column columns]
                                    (build-column-text row column)))]
             (shui/table-v2 {:data (conj [[v2-columns]] result-as-text)}
