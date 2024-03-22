@@ -6,19 +6,20 @@
             [cljs.core.async :as async :refer [<! >! chan go]]
             [cljs.core.async.interop :include-macros true :refer [<p!]]
             [clojure.set :as set]
+            [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.react :as worker-react]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
-            [frontend.worker.react :as worker-react]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -483,6 +484,29 @@
                         :conn conn}}
        (outliner-core/move-blocks! repo conn blocks target-page-block false)))))
 
+(defn- empty-page?
+  "1. page has no child-block
+  2. page has child-blocks and all these blocks only have empty :block/content"
+  [page-entity]
+  (not
+   (when-let [children-blocks (and page-entity
+                                   (seq (map #(into {} %) (:block/_parent page-entity))))]
+     (not-any?
+      (fn [block]
+        (not= {:block/content ""}
+              (-> (apply dissoc block [:block/tx-id
+                                       :block/uuid
+                                       :block/updated-at
+                                       :block/left
+                                       :block/created-at
+                                       :block/format
+                                       :db/id
+                                       :block/parent
+                                       :block/page
+                                       :block/path-refs])
+                  (update :block/content string/trim))))
+      children-blocks))))
+
 (defn apply-remote-update-page-ops
   [repo conn date-formatter update-page-ops]
   (let [config (worker-state/get-config repo)]
@@ -492,11 +516,20 @@
             create-opts {:create-first-block? false
                          :uuid self :persist-op? false}]
         (cond
+          ;; same name but different uuid, and local-existed-page is empty(`empty-page?`)
+          ;; just remove local-existed-page
+          (and exist-page
+               (not= (:block/uuid exist-page) self)
+               (empty-page? exist-page))
+          (do (worker-page/delete! repo conn page-name {:persist-op? false})
+              (worker-page/create! repo conn config original-name create-opts))
+
           ;; same name but different uuid
           ;; remote page has same block/name as local's, but they don't have same block/uuid.
           ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
           ;; 2. create page, name=<origin-name>, uuid=remote-uuid
-          (and exist-page (not= (:block/uuid exist-page) self))
+          (and exist-page
+               (not= (:block/uuid exist-page) self))
           (let [conflict-page-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now)))]
             (worker-page-rename/rename! repo conn config original-name conflict-page-name {:persist-op? false})
             (worker-page/create! repo conn config original-name create-opts)
