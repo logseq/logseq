@@ -20,7 +20,7 @@
 
 (def closed-value-property-types
   "Valid schema :type for closed values"
-  #{:default :number :url :page})
+  #{:default :number :url :page :date})
 
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
