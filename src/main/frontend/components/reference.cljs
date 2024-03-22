@@ -124,7 +124,7 @@
 
 (rum/defc references-inner
   [page-name filters filtered-ref-blocks]
-  [:div.references-blocks
+  [:div.references-blocks.faster-fade-in
    (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                     {:id page-name
                                      :ref? true
@@ -265,10 +265,7 @@
    (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
                          "Linked References: Unexpected error."
                          "Linked References: Unexpected error. Please re-index your graph first."))
-   (ui/lazy-visible
-    (fn []
-      (references* page-name))
-    {:debug-id (str page-name " references")})))
+   (references* page-name)))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
@@ -299,7 +296,7 @@
   (let [n-ref (get state ::n-ref)]
     (when page-name
       (let [page-name (string/lower-case page-name)]
-        [:div.references.page-unlinked.mt-6.flex-1.flex-row
+        [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster-fade-in
          [:div.content.flex-1
           (ui/foldable
            [:h2.font-medium (t :unlinked-references/reference-count @n-ref)]
