@@ -267,17 +267,22 @@
    [:asset/uuid :uuid]
    [:asset/meta :map]])
 
-(def schema-version
-  [:map
-   [:db/ident :keyword]
+(def db-ident-keys
+  "Enumerates all possible keys db-ident key vals"
+  [[:db/type :string]
    [:schema/version :int]
-   [:block/tx-id {:optional true} :int]])
+   [:graph/uuid :string]
+   [:graph/local-tx :string]])
 
-(def db-ident
-  [:map
-   [:db/ident :keyword]
-   [:db/type {:optional true} :string]
-   [:block/tx-id {:optional true} :int]])
+(def db-ident-key-val
+  "A key-val map consists of a :db/ident and a specific key val"
+  (into [:or]
+        (map (fn [kv]
+               [:map
+                [:db/ident :keyword]
+                kv
+                [:block/tx-id {:optional true} :int]])
+             db-ident-keys)))
 
 (def macro
   [:map
@@ -298,8 +303,7 @@
     page
     block
     file-block
-    schema-version
-    db-ident
+    db-ident-key-val
     macro
     asset-block]])
 
@@ -326,7 +330,7 @@
 
 (let [malli-non-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (concat (rest file-block) (rest asset-block)
-                                       (rest db-ident) (rest schema-version) (rest class-page))
+                                       db-ident-keys (rest class-page))
                                (remove #(= (last %) [:set :int]))
                                (map first)
                                set)
