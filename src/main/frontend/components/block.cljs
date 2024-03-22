@@ -2333,7 +2333,8 @@
       
        (not (nil? tx-color))
        (merge (if (ui/built-in-color? tx-color)
-               {:data-logseq-property-text-color tx-color}
+               ; {:data-logseq-property-text-color tx-color}
+               {:style {:color (str "var(--rx-" tx-color "-11)")}}
                {:style {:color tx-color}})
                )
        )
