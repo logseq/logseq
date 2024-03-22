@@ -491,7 +491,7 @@
   (not
    (when-let [children-blocks (and page-entity
                                    (seq (map #(into {} %) (:block/_parent page-entity))))]
-     (not-any?
+     (some
       (fn [block]
         (not= {:block/content ""}
               (-> (apply dissoc block [:block/tx-id
