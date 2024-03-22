@@ -26,7 +26,7 @@
             tags (:block/tags e)]
         (or
          (when (string? result)
-           (db-content/special-id->page result (distinct (concat refs tags))))
+           (db-content/special-id-ref->page-ref result (distinct (concat refs tags))))
          default-value)))
 
      :else
