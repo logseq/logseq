@@ -2,12 +2,14 @@
   "Provides root component for both Logseq app and publishing build"
   (:require [rum.core :as rum]
             [frontend.state :as state]
+            [frontend.config :as config]
             [frontend.ui :as ui]
             [frontend.components.container :as container]
             [frontend.handler.search :as search-handler]
             [frontend.handler.notification :as notification]
             [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.handler.plugin :as plugin-handler]
+            [frontend.components.plugins :as plugin]
             [frontend.context.i18n :refer [t]]))
 
 (rum/defc route-view
@@ -102,27 +104,12 @@
     (let [route-name (get-in route-match [:data :name])]
       (when-let [view (:view (:data route-match))]
         (ui/catch-error-and-notify
-         (helpful-default-error-screen)
-         (if (= :draw route-name)
-           (view route-match)
-           (container/sidebar
-            route-match
-            (view route-match))))))))
-
-        ;; FIXME: disable for now
-        ;; (let [route-name (get-in route-match [:data :name])
-        ;;       no-animate? (contains? #{:repos :repo-add :file}
-        ;;                              route-name)]
-        ;;   (when-let [view (:view (:data route-match))]
-        ;;     (container/sidebar
-        ;;      route-match
-        ;;      (if no-animate?
-        ;;        (route-view view route-match)
-        ;;        (ui/transition-group
-        ;;         {:class-name "router-wrapper"}
-        ;;         (ui/css-transition
-        ;;          {:class-names "pageChange"
-        ;;           :key route-name
-        ;;           :timeout {:enter 300
-        ;;                     :exit 200}}
-        ;;          (route-view view route-match)))))))
+          (helpful-default-error-screen)
+          [:<>
+           (if (= :draw route-name)
+             (view route-match)
+             (container/sidebar
+               route-match
+               (view route-match)))
+           (when config/lsp-enabled?
+             (plugin/hook-daemon-renderers))])))))
