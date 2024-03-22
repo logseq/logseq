@@ -3654,57 +3654,53 @@
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (ui/lazy-visible
-           (fn []
-             (let [page (hidden-page->source-page page)
-                   alias? (:block/alias? page)
-                   page (db/entity (:db/id page))
-                   blocks (tree/non-consecutive-blocks->vec-tree blocks)
-                   parent-blocks (group-by :block/parent blocks)]
-               [:div.custom-query-page-result.color-level {:key (str "page-" (:db/id page))}
-                (ui/foldable
-                 [:div
-                  (page-cp config page)
-                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                 (let [{top-level-blocks true others false} (group-by
-                                                             (fn [b] (= (:db/id page) (:db/id (first b))))
-                                                             parent-blocks)
-                       sorted-parent-blocks (concat top-level-blocks others)]
-                   (for [[parent blocks] sorted-parent-blocks]
-                     (let [top-level? (= (:db/id parent) (:db/id page))]
-                       (rum/with-key
-                         (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
-                         (:db/id parent)))))
-                 {:debug-id page})])))))]
+          (let [page (hidden-page->source-page page)
+                alias? (:block/alias? page)
+                page (db/entity (:db/id page))
+                blocks (tree/non-consecutive-blocks->vec-tree blocks)
+                parent-blocks (group-by :block/parent blocks)]
+            [:div.custom-query-page-result.color-level {:key (str "page-" (:db/id page))}
+             (ui/foldable
+              [:div
+               (page-cp config page)
+               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+              (let [{top-level-blocks true others false} (group-by
+                                                          (fn [b] (= (:db/id page) (:db/id (first b))))
+                                                          parent-blocks)
+                    sorted-parent-blocks (concat top-level-blocks others)]
+                (for [[parent blocks] sorted-parent-blocks]
+                  (let [top-level? (= (:db/id parent) (:db/id page))]
+                    (rum/with-key
+                      (breadcrumb-with-container blocks (assoc config :top-level? top-level?))
+                      (:db/id parent)))))
+              {:debug-id page})])))]
 
      (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
      [:div.flex.flex-col.references-blocks-wrap
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page page-blocks] blocks]
-          (ui/lazy-visible
-           (fn []
-             (let [page (hidden-page->source-page page)
-                   alias? (:block/alias? page)
-                   page (db/entity (:db/id page))
+          (let [page (hidden-page->source-page page)
+                alias? (:block/alias? page)
+                page (db/entity (:db/id page))
                    ;; FIXME: parents need to be sorted
-                   parent-blocks (group-by :block/parent page-blocks)]
-               [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
-                (ui/foldable
-                 [:div
-                  (page-cp config page)
-                  (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                 (for [[parent blocks] parent-blocks]
-                   (let [blocks' (map (fn [b]
+                parent-blocks (group-by :block/parent page-blocks)]
+            [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
+             (ui/foldable
+              [:div
+               (page-cp config page)
+               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+              (for [[parent blocks] parent-blocks]
+                (let [blocks' (map (fn [b]
                                         ;; Block might be a datascript entity
-                                        (if (e/entity? b)
-                                          (db/pull (:db/id b))
-                                          (update b :block/children
-                                                  (fn [col]
-                                                    (tree/non-consecutive-blocks->vec-tree col))))) blocks)]
-                     (rum/with-key
-                       (breadcrumb-with-container blocks' config)
-                       (:db/id parent))))
-                 {:debug-id page})])))))]
+                                     (if (e/entity? b)
+                                       (db/pull (:db/id b))
+                                       (update b :block/children
+                                               (fn [col]
+                                                 (tree/non-consecutive-blocks->vec-tree col))))) blocks)]
+                  (rum/with-key
+                    (breadcrumb-with-container blocks' config)
+                    (:db/id parent))))
+              {:debug-id page})])))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))
