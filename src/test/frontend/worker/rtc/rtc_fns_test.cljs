@@ -464,10 +464,12 @@ server: ;; remove 2
      (outliner-core/insert-blocks!
       repo
       conn
-      [{:block/uuid uuid1-client :block/content "uuid1-client"
+      [{:block/uuid uuid1-client
+        :block/content "uuid1-client"
         :block/left [:block/uuid page1-uuid]
         :block/parent [:block/uuid page1-uuid]}
-       {:block/uuid uuid2-client :block/content "uuid2-client"
+       {:block/uuid uuid2-client
+        :block/content "uuid2-client"
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page1-uuid]}]
       (d/pull @conn '[*] [:block/name page-name])
