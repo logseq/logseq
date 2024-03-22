@@ -9,7 +9,6 @@
         "@playwright/test": "=1.31.0",
         "@tailwindcss/aspect-ratio": "0.4.2",
         "@tailwindcss/forms": "0.5.3",
-        "@tailwindcss/line-clamp": "0.4.2",
         "@tailwindcss/typography": "0.5.7",
         "@types/gulp": "^4.0.7",
         "autoprefixer": "^10.4.13",
@@ -18,7 +17,7 @@
         "del": "^6.0.0",
         "gulp": "^4.0.2",
         "gulp-clean-css": "^4.3.0",
-        "ip": "1.1.8",
+        "ip": "1.1.9",
         "npm-run-all": "^4.1.5",
         "playwright": "=1.31.0",
         "postcss": "8.4.17",
@@ -32,6 +31,7 @@
         "stylelint": "^13.8.0",
         "stylelint-config-standard": "^20.0.0",
         "tailwindcss": "3.3.5",
+        "tailwindcss-animate": "^1.0.7",
         "typescript": "^4.4.3"
     },
     "scripts": {
@@ -56,6 +56,7 @@
         "css:build": "postcss tailwind.all.css -o static/css/style.css --verbose --env production",
         "css:watch": "cross-env TAILWIND_MODE=watch postcss tailwind.all.css -o static/css/style.css --verbose --watch",
         "cljs:watch": "clojure -M:cljs watch app electron",
+        "cljs:watch-storybook": "clojure -M:cljs watch stories-dev",
         "cljs:app-watch": "clojure -M:cljs watch app",
         "cljs:electron-watch": "clojure -M:cljs watch app electron --config-merge \"{:asset-path \\\"./js\\\"}\"",
         "cljs:release": "clojure -M:cljs release app publishing electron",
@@ -77,6 +78,7 @@
         "postinstall": "yarn tldraw:build && yarn amplify:build "
     },
     "dependencies": {
+        "@capacitor/action-sheet": "^5.0.7",
         "@capacitor/android": "^5.0.0",
         "@capacitor/app": "^5.0.0",
         "@capacitor/camera": "^5.0.0",
@@ -94,7 +96,7 @@
         "@excalidraw/excalidraw": "0.16.1",
         "@highlightjs/cdn-assets": "10.4.1",
         "@isomorphic-git/lightning-fs": "^4.6.0",
-        "@logseq/capacitor-file-sync": "5.0.1",
+        "@logseq/capacitor-file-sync": "5.0.2",
         "@logseq/diff-merge": "0.2.2",
         "@logseq/react-tweet-embed": "1.3.1-1",
         "@radix-ui/colors": "^0.1.8",
@@ -152,14 +154,6 @@
         "yargs-parser": "20.2.4"
     },
     "resolutions": {
-        "**/postcss": "8.4.17",
-        "**/postcss-colormin": "5.3.0",
-        "**/postcss-convert-values": "5.1.2",
-        "**/postcss-js": "4.0.0",
-        "**/postcss-merge-longhand": "5.1.6",
-        "**/postcss-merge-rules": "5.1.2",
-        "**/postcss-minify-params": "5.1.3",
-        "**/postcss-reduce-initial": "5.1.0",
         "pixi-graph-fork/@pixi/app": "6.2.0",
         "pixi-graph-fork/@pixi/constants": "6.2.0",
         "pixi-graph-fork/@pixi/core": "6.2.0",

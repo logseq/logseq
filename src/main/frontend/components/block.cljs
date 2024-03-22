@@ -2,7 +2,6 @@
   (:refer-clojure :exclude [range])
   (:require-macros [hiccups.core])
   (:require ["/frontend/utils" :as utils]
-            ["@capacitor/share" :refer [^js Share]]
             [cljs-bean.core :as bean]
             [cljs.core.match :refer [match]]
             [cljs.reader :as reader]
@@ -48,6 +47,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
+            [frontend.mobile.intent :as mobile-intent]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
             [frontend.shui :refer [get-shui-component-version make-shui-context]]
@@ -395,8 +395,7 @@
                          (let [[rel-dir basename] (util/get-dir-and-basename href)
                                rel-dir (string/replace rel-dir #"^/+" "")
                                asset-url (path/path-join repo-dir rel-dir basename)]
-                           (.share Share (clj->js {:url asset-url
-                                                   :title "Open file with your favorite app"})))))]
+                           (mobile-intent/open-or-share-file asset-url))))]
 
         (cond
           (contains? config/audio-formats ext)
@@ -1353,7 +1352,10 @@
                   url)]
         (if (and (coll? src)
                  (= (first src) "youtube-player"))
-          (youtube/youtube-video (last src) nil)
+          (let [t (re-find #"&t=(\d+)" url)
+                opts (when (seq t)
+                       {:start (nth t 1)})]
+            (youtube/youtube-video (last src) opts))
           (when src
             (let [width (min (- (util/get-width) 96) 560)
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
@@ -1739,7 +1741,7 @@
    (every? #(= % ["Horizontal_Rule"]) body)))
 
 (rum/defcs block-control < rum/reactive
-  [state config block uuid block-id collapsed? *control-show? edit?]
+  [state config block uuid block-id collapsed? *control-show? edit? selected?]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
         ref?               (:ref? config)
@@ -1784,7 +1786,10 @@
                                    " hide-inner-bullet")
                                  (when order-list? " as-order-list typed-list"))}
 
-                    [:span.bullet {:blockid (str uuid)}
+                    [:span.bullet (cond->
+                                    {:blockid (str uuid)}
+                                    selected?
+                                    (assoc :class "selected"))
                      (when order-list?
                        [:label (str order-list-idx ".")])]]]]
        (cond
@@ -1796,14 +1801,14 @@
          bullet
 
          (or
-           (and empty-content?
-                (not edit?)
-                (not (:block.temp/top? block))
-                (not (:block.temp/bottom? block))
-                (not (util/react *control-show?)))
-           (and doc-mode?
-                (not collapsed?)
-                (not (util/react *control-show?))))
+          (and empty-content?
+               (not edit?)
+               (not (:block.temp/top? block))
+               (not (:block.temp/bottom? block))
+               (not (util/react *control-show?)))
+          (and doc-mode?
+               (not collapsed?)
+               (not (util/react *control-show?))))
          ;; hidden
          [:span.bullet-container]
 
@@ -1850,10 +1855,8 @@
     :on-change (fn [event]
                  (let [target (.-target event)
                        block (:block config)
-                       item-content (.. target -nextSibling -data)
-                       item-full-content (str (if checked? "[X]" "[ ]") " " item-content)
-                       new-item-full-content (str (if checked? "[ ]" "[X]") " " item-content)]
-                   (editor-handler/toggle-list-checkbox block item-full-content new-item-full-content)))}))
+                       item-content (.. target -nextSibling -data)]
+                   (editor-handler/toggle-list-checkbox block item-content)))}))
 
 (defn marker-switch
   [{:block/keys [marker] :as block}]
@@ -2156,56 +2159,66 @@
           shift? (gobj/get e "shiftKey")
           meta? (util/meta-key? e)
           forbidden-edit? (target-forbidden-edit? target)]
-      (when-not forbidden-edit? (.stopPropagation e))
-      (if (and meta?
-               (not (state/get-edit-input-id))
-               (not (dom/has-class? target "page-ref"))
-               (not= "A" (gobj/get target "tagName")))
-        (do
-          (util/stop e)
-          (state/conj-selection-block! (gdom/getElement block-id) :down)
-          (when block-id
-            (state/set-selection-start-block! block-id)))
-        (when (contains? #{1 0} button)
-          (when-not forbidden-edit?
-            (cond
-              (and shift? (state/get-selection-start-block-or-first))
-              (do
-                (util/stop e)
-                (util/clear-selection!)
-                (editor-handler/highlight-selection-area! block-id))
+      (when (and (not forbidden-edit?) (contains? #{1 0} button))
+        (util/stop-propagation e)
+        (let [selection-blocks (state/get-selection-blocks)
+              starting-block (state/get-selection-start-block-or-first)]
+          (cond
+            (and meta? shift?)
+            (when-not (empty? selection-blocks)
+              (util/stop e)
+              (editor-handler/highlight-selection-area! block-id true))
 
-              shift?
+            meta?
+            (do
+              (util/stop e)
+              (let [block-dom-element (gdom/getElement block-id)]
+                (if (some #(= block-dom-element %) selection-blocks)
+                  (state/drop-selection-block! block-dom-element)
+                  (state/conj-selection-block! block-dom-element :down)))
+              (if (empty? (state/get-selection-blocks))
+                (state/clear-selection!)
+                (state/set-selection-start-block! block-id)))
+
+            (and shift? starting-block)
+            (do
+              (util/stop e)
               (util/clear-selection!)
+              (editor-handler/highlight-selection-area! block-id))
 
-              :else
-              (do
-                (editor-handler/clear-selection!)
-                (editor-handler/unhighlight-blocks!)
-                (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
-                               cursor-range (some-> (gdom/getElement block-id)
-                                                    (dom/by-class "block-content-wrapper")
-                                                    first
-                                                    util/caret-range)
-                               {:block/keys [content format]} block
-                               content (->> content
-                                            (property/remove-built-in-properties format)
-                                            (drawer/remove-logbook))]
-                           ;; save current editing block
-                           (let [{:keys [value] :as state} (editor-handler/get-state)]
-                             (editor-handler/save-block! state value))
-                           (state/set-editing!
-                            edit-input-id
-                            content
-                            block
-                            cursor-range
-                            false))]
-                  ;; wait a while for the value of the caret range
-                  (if (util/ios?)
-                    (f)
-                    (js/setTimeout f 5))
+            shift?
+            (do
+              (util/clear-selection!)
+              (state/set-selection-start-block! block-id))
 
-                  (when block-id (state/set-selection-start-block! block-id)))))))))))
+            :else
+            (do
+              (editor-handler/clear-selection!)
+              (editor-handler/unhighlight-blocks!)
+              (let [f #(let [block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+                             cursor-range (some-> (gdom/getElement block-id)
+                                                  (dom/by-class "block-content-wrapper")
+                                                  first
+                                                  util/caret-range)
+                             {:block/keys [content format]} block
+                             content (->> content
+                                          (property/remove-built-in-properties format)
+                                          (drawer/remove-logbook))]
+                         ;; save current editing block
+                         (let [{:keys [value] :as state} (editor-handler/get-state)]
+                           (editor-handler/save-block! state value))
+                         (state/set-editing!
+                          edit-input-id
+                          content
+                          block
+                          cursor-range
+                          false))]
+                ;; wait a while for the value of the caret range
+                (if (util/ios?)
+                  (f)
+                  (js/setTimeout f 5))
+
+                (state/set-selection-start-block! block-id)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block block-id slide? top? block-content?]
@@ -2905,7 +2918,7 @@
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (not slide?)
-        (block-control config block uuid block-id collapsed? *control-show? edit?))
+        (block-control config block uuid block-id collapsed? *control-show? edit? selected?))
 
       (when @*show-left-menu?
         (block-left-menu config block))

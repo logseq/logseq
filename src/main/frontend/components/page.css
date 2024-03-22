@@ -1,7 +1,3 @@
-.page-references h2 {
-  color: var(--ls-title-text-color);
-}
-
 .cp__page {
   &-publish-actions {
     background-color: var(--ls-primary-background-color);
@@ -74,11 +70,7 @@
       }
 
       > span {
-        @apply text-sm;
-
-        color: or(--ls-all-pages-table-text, --lx-gray-11, rgb(115, 115, 115));
-
-        padding: 6px 8px;
+        @apply text-sm py-1.5 px-2;
       }
     }
 
@@ -101,14 +93,14 @@
 
   .actions {
     position: sticky;
-    background-color: or(--ls-all-pages-table, --lx-gray-01, --ls-primary-background-color);
+    background-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
     white-space: nowrap;
     top: -18px;
     padding-bottom: 10px;
     z-index: 1;
 
     .dark & {
-        background-color: or(--ls-all-pages-table, --lx-gray-02, --ls-primary-background-color);
+        background-color: var(--lx-gray-02, var(--ls-primary-background-color, var(--rx-gray-02)));
     }
 
     @screen md {
@@ -141,7 +133,6 @@
       @apply text-base space-x-2;
 
       a.button {
-        color: var(--ls-primary-text-color);
         margin-top: 1px;
         height: unset;
         padding: 4px;
@@ -150,7 +141,6 @@
 
         &.active {
           opacity: 1;
-          color: var(--ls-link-ref-text-color);
         }
       }
 
@@ -181,19 +171,18 @@
         outline: none;
         border: none;
         position: absolute;
+        padding-left: 8px;
       }
 
       .form-input {
-        padding: 3px;
-        padding-left: 30px;
-        padding-right: 8px;
+        padding: 3px 8px 3px 30px;
       }
 
       .cancel {
         opacity: .3;
         position: absolute;
-        right: 5px;
-        top: 2px;
+        right: 6px;
+        top: 6px;
 
         &:hover {
           opacity: .6;
@@ -250,11 +239,9 @@
   }
 
   .edit-input {
-    width: 100%;
-    border: none;
+    @apply w-full border-0 p-0 pr-1 bg-transparent outline-0;
+
     box-shadow: none;
-    padding: 0;
-    padding-right: 4px;
 
     &-wrapper {
       @apply rounded;

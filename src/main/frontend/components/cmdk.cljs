@@ -12,7 +12,6 @@
    [frontend.handler.whiteboard :as whiteboard-handler]
    [frontend.modules.shortcut.core :as shortcut]
    [frontend.search :as search]
-   [frontend.shui :refer [make-shui-context]]
    [frontend.state :as state]
    [frontend.ui :as ui]
    [frontend.util :as util]
@@ -20,17 +19,18 @@
    [goog.functions :as gfun]
    [goog.object :as gobj]
    [logseq.shui.core :as shui]
+   [logseq.shui.ui :as shui-ui]
    [promesa.core :as p]
    [rum.core :as rum]
    [frontend.mixins :as mixins]
    [logseq.graph-parser.util.block-ref :as block-ref]
    [logseq.graph-parser.util :as gp-util]
-   [logseq.shui.button.v2 :as button]
    [frontend.modules.shortcut.utils :as shortcut-utils]
    [frontend.config :as config]
    [logseq.common.path :as path]
    [electron.ipc :as ipc]
-   [frontend.util.text :as text-util]))
+   [frontend.util.text :as text-util]
+   [goog.userAgent]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -227,13 +227,10 @@
                                 source-page (model/get-alias-source-page repo page)]
                             (hash-map :icon (if whiteboard? "whiteboard" "page")
                                       :icon-theme :gray
-                                      :text (if source-page
-                                              [:div.flex.flex-row.items-center.gap-2
-                                               page
-                                               [:div.opacity-50.font-normal "alias of"]
-                                               (:block/original-name source-page)]
-                                              page)
-                                      :source-page page)))))]
+                                      :text page
+                                      :source-page (if source-page
+                                              (:block/original-name source-page)
+                                              page))))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
 (defmethod load-results :whiteboards [group state]
@@ -570,13 +567,12 @@
         can-show-less? (< GROUP-LIMIT (count visible-items))
         can-show-more? (< (count visible-items) (count items))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
-        show-more #(swap! (::results state) assoc-in [group :show] :more)
-        context (make-shui-context)]
+        show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:<>
      (mouse-active-effect! *mouse-active? [highlighted-item])
      [:div {:class         "border-b border-gray-06 pb-1 last:border-b-0"
             :on-mouse-move #(reset! *mouse-active? true)}
-      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02"}
+      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
        [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
               :on-click (fn [_e]
                           ;; change :less to :more or :more to :less
@@ -601,10 +597,10 @@
           (if (= show :more)
             [:div.flex.flex-row.gap-1.items-center
              "Show less"
-             (shui/shortcut "mod up" context)]
+             (shui/shortcut "mod up" nil)]
             [:div.flex.flex-row.gap-1.items-center
              "Show more"
-             (shui/shortcut "mod down" context)])])]
+             (shui/shortcut "mod down" nil)])])]
 
       [:div.search-results
        (for [item visible-items
@@ -631,7 +627,7 @@
                                                            (when (and ref (.-current ref)
                                                                       (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
                                                              (scroll-into-view-when-invisible state (.-current ref)))))
-                                    context)]
+                                    nil)]
            (if (= group :blocks)
              (ui/lazy-visible (fn [] item) {:trigger-once? true})
              item)))]]]))
@@ -774,51 +770,65 @@
        :value input}]]))
 
 (defn rand-tip
-  [context]
+  []
   (rand-nth
    [[:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
      [:div "Type"]
-     (shui/shortcut "/" context)
+     (shui/shortcut "/")
      [:div "to filter search results"]]
     [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
-     (shui/shortcut ["mod" "enter"] context)
+     (shui/shortcut ["mod" "enter"])
      [:div "to open search in the sidebar"]]]))
 
 (rum/defcs tip <
   {:init (fn [state]
-           (assoc state ::rand-tip (rand-tip (last (:rum/args state)))))}
-  [inner-state state context]
+           (assoc state ::rand-tip (rand-tip)))}
+  [inner-state state]
   (let [filter @(::filter state)]
     (cond
       filter
       [:div.flex.flex-row.gap-1.items-center.opacity-50.hover:opacity-100
        [:div "Type"]
-       (shui/shortcut "esc" context {:tiled false})
+       (shui/shortcut "esc" {:tiled false})
        [:div "to clear search filter"]]
 
       :else
       (::rand-tip inner-state))))
 
+(rum/defc hint-button
+  [text shortcut opts]
+  (shui-ui/button
+    (merge {:class "hint-button [&>span:first-child]:hover:opacity-100 opacity-40 hover:opacity-80"
+            :variant :ghost
+            :size  :sm}
+      opts)
+    [[:span.opacity-60 text]
+     ;; shortcut
+     (when (not-empty shortcut)
+       (for [key shortcut]
+         [:div.ui__button-shortcut-key
+          (case key
+            "cmd" [:div (if goog.userAgent/MAC "⌘" "Ctrl")]
+            "shift" [:div "⇧"]
+            "return" [:div "⏎"]
+            "esc" [:div.tracking-tightest {:style {:transform   "scaleX(0.8) scaleY(1.2) "
+                                                   :font-size   "0.5rem"
+                                                   :font-weight "500"}} "ESC"]
+            (cond-> key (string? key) .toUpperCase))]))]))
+
 (rum/defc hints
   [state]
-  (let [context (make-shui-context)
-        action (state->action state)
+  (let [action (state->action state)
         button-fn (fn [text shortcut & {:as opts}]
-                    (shui/button {:text text
-                                  :theme :text
-                                  :hover-theme :gray
-                                  :on-click #(handle-action action (assoc state :opts opts) %)
-                                  :shortcut shortcut
-                                  :muted true}
-                                 context))]
+                    (hint-button text shortcut
+                      {:on-click #(handle-action action (assoc state :opts opts) %)
+                       :muted    true}))]
     (when action
-      [:div {:class "flex w-full px-3 py-2 gap-2 justify-between"
-             :style {:background "var(--lx-gray-03)"
-                     :border-top "1px solid var(--lx-gray-07)"}}
+      [:div.hints
        [:div.text-sm.leading-6
         [:div.flex.flex-row.gap-1.items-center
          [:div.font-medium.text-gray-12 "Tip:"]
-         (tip state context)]]
+         (tip state)]]
 
        [:div.gap-2.hidden.md:flex {:style {:margin-right -6}}
         (case action
@@ -851,13 +861,13 @@
   [:div.flex.flex-row.gap-1.items-center
    [:div "Search only:"]
    [:div group-name]
-   (button/root {:icon "x"
-                 :theme :text
-                 :hover-theme :gray
-                 :size :sm
-                 :on-click (fn []
-                             (reset! (::filter state) nil))}
-                (make-shui-context))])
+   (shui-ui/button
+     {:variant  :ghost
+      :size     :icon
+      :class    "p-1 scale-75"
+      :on-click (fn []
+                  (reset! (::filter state) nil))}
+     (shui-ui/tabler-icon "x"))])
 
 (rum/defcs cmdk < rum/static
   rum/reactive

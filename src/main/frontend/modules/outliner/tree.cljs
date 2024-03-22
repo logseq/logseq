@@ -137,5 +137,7 @@
   [repo db-id]
   (when-let [root-block (db/pull db-id)]
     (let [blocks (db/get-block-and-children repo (:block/uuid root-block))
+          ; the root-block returned by db/pull misses :block/_refs therefore we use the one from db/get-block-and-children
+          root-block (first (filter (fn [b] (= (:db/id b) db-id)) blocks))
           blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)]
       (sort-blocks blocks-exclude-root root-block))))

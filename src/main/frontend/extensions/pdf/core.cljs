@@ -371,7 +371,7 @@
     (when-let [vw-bounding (get-in vw-hl [:position :bounding])]
       (let [{:keys [color]} (:properties hl)]
         [:div.extensions__pdf-hls-area-region
-         {:id              id
+         {:id              (str "hl_" id)
           :ref             *el
           :style           vw-bounding
           :data-color      color
@@ -415,7 +415,7 @@
                                     (when (and (not (.contains (.-classList target) "extensions__pdf-hls-area-region"))
                                                (.closest target ".page"))
                                       (and e (or (.-metaKey e)
-                                                 (and util/win32? (.-shiftKey e))
+                                                 (.-shiftKey e)
                                                  @*area-mode?)))))
 
         reset-coords!           #(do
@@ -808,8 +808,8 @@
 
     (let [^js viewer        (:viewer state)
           in-system-window? (some-> viewer (.-$inSystemWindow))]
-      [:div.extensions__pdf-viewer-cnt
-       [:div.extensions__pdf-viewer
+      [:div.extensions__pdf-viewer-cnt.visible-scrollbar
+       [:div.extensions__pdf-viewer.overflow-x-auto
         {:ref *el-ref :class (util/classnames [{:is-area-dashed area-dashed?}])}
         [:div.pdfViewer "viewer pdf"]
         [:div.pp-holder]

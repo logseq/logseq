@@ -28,7 +28,7 @@
   < {:key-fn #(identity "home-button")}
   []
   (ui/with-shortcut :go/home "left"
-    [:button.button.icon.inline
+    [:button.button.icon.inline.mx-1
      {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
@@ -47,7 +47,7 @@
                   logged?
                   (not sync-enabled?))
       [:span.flex.space-x-2
-       [:a.button.text-sm.font-medium.block
+       [:a.button.text-sm.font-medium.block.text-gray-11
         {:on-click #(state/pub-event! [:user/login])}
         [:span (t :login)]
         (when loading?
@@ -84,7 +84,8 @@
   [{:keys [current-repo t]}]
   (let [page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
-                           (concat page-menu [{:hr true}]))]
+                           (concat page-menu [{:hr true}]))
+        login? (and (state/sub :auth/id-token) (user-handler/logged-in?))]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon.toolbar-dots-btn
@@ -136,13 +137,18 @@
           :options {:on-click #(state/toggle-theme!)}
           :icon (ui/icon "bulb")})
 
-       (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
-         {:title (t :logout-user (user-handler/email))
-          :options {:on-click #(user-handler/logout)}
-          :icon  (ui/icon "logout")})]
-      (concat page-menu-and-hr)
-      (remove nil?))
-     {})))
+       (when login? {:hr true})
+       (when login?
+         {:item [:span.flex.flex-col.relative.group.pt-1
+                 [:b.leading-none (user-handler/username)]
+                 [:small.opacity-70 (user-handler/email)]
+                 [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
+                  {:class "right-1 top-3" :title (t :logout)}
+                  (ui/icon "logout")]]
+          :options {:on-click #(user-handler/logout)}})]
+       (concat page-menu-and-hr)
+       (remove nil?))
+      {})))
 
 (rum/defc back-and-forward
   < {:key-fn #(identity "nav-history-buttons")}

@@ -4,8 +4,7 @@ module.exports = {
   packagerConfig: {
     name: 'Logseq',
     icon: './icons/logseq_big_sur.icns',
-    buildVersion: 75,
-    asar: true,
+    buildVersion: 82,
     protocols: [
       {
         "protocol": "logseq",
@@ -70,13 +69,6 @@ module.exports = {
         },
         prerelease: true
       }
-    }
-  ],
-
-  plugins: [
-    {
-      name: '@electron-forge/plugin-auto-unpack-natives',
-      config: {}
     }
   ]
 }

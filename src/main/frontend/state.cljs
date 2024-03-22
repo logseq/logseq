@@ -7,7 +7,6 @@
             [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
-            [frontend.colors :as colors]
             [frontend.mobile.util :as mobile-util]
             [frontend.spec.storage :as storage-spec]
             [frontend.storage :as storage]
@@ -645,6 +644,10 @@ Similar to re-frame subscriptions"
   []
   (:graph/settings (sub-config)))
 
+(defn graph-forcesettings
+  []
+  (:graph/forcesettings (sub-config)))
+
 ;; Enable by default
 (defn show-brackets?
   []
@@ -991,8 +994,7 @@ Similar to re-frame subscriptions"
 
 (defn set-selection-start-block!
   [start-block]
-  (when-not (get-selection-start-block)
-    (swap! state assoc :selection/start-block start-block)))
+  (swap! state assoc :selection/start-block start-block))
 
 (defn set-selection-blocks!
   ([blocks]
@@ -1043,13 +1045,26 @@ Similar to re-frame subscriptions"
   (and (in-selection-mode?) (seq (get-selection-blocks))))
 
 (defn conj-selection-block!
-  [block direction]
+  [block-or-blocks direction]
+  (let [selection-blocks (get-selection-blocks)
+        blocks (-> (if (sequential? block-or-blocks)
+                     (apply conj selection-blocks block-or-blocks)
+                     (conj selection-blocks block-or-blocks))
+                   distinct
+                   util/sort-by-height
+                   vec)]
+    (swap! state assoc
+           :selection/mode true
+           :selection/blocks blocks
+           :selection/direction direction)))
+
+(defn drop-selection-block!
+  [block]
   (swap! state assoc
          :selection/mode true
-         :selection/blocks (-> (conj (vec (:selection/blocks @state)) block)
+         :selection/blocks (-> (remove #(= block %) (get-selection-blocks))
                                util/sort-by-height
-                               vec)
-         :selection/direction direction))
+                               vec)))
 
 (defn drop-last-selection-block!
   []
@@ -1374,14 +1389,15 @@ Similar to re-frame subscriptions"
            input (medley/filter-vals
                    #(not (nil? %1))
                    {:modal/id            id
-                    :modal/label         (or label (if center? "ls-modal-align-center" ""))
+                    :modal/label         (if label (name label) "")
+                    :modal/class         (if center? "as-center" "")
                     :modal/payload       payload
                     :modal/show?         (if (boolean? show?) show? true)
                     :modal/panel-content panel-content
                     :modal/close-btn?    close-btn?
                     :modal/close-backdrop? (if (boolean? close-backdrop?) close-backdrop? true)})]
        (swap! state update-in
-              [:modal/subsets (or idx (count modals))]
+         [:modal/subsets (or idx (count modals))]
               merge input)
        (:modal/subsets @state)))))
 
@@ -1417,7 +1433,8 @@ Similar to re-frame subscriptions"
          (<! (async/timeout 100)))
        (swap! state assoc
               :modal/id id
-              :modal/label (or label (if center? "ls-modal-align-center" ""))
+              :modal/label (if label (name label) "")
+              :modal/class (if center? "as-center" "")
               :modal/show? (boolean modal-panel-content)
               :modal/panel-content modal-panel-content
               :modal/payload payload
@@ -1918,6 +1935,10 @@ Similar to re-frame subscriptions"
   []
   (false? (sub [:electron/user-cfgs :git/disable-auto-commit?])))
 
+(defn get-git-commit-on-close-enabled?
+  []
+  (sub [:electron/user-cfgs :git/commit-on-close?]))
+
 (defn set-last-key-code!
   [key-code]
   (set-state! :editor/last-key-code key-code))
@@ -2206,23 +2227,12 @@ Similar to re-frame subscriptions"
 (defn set-color-accent! [color]
   (swap! state assoc :ui/radix-color color)
   (storage/set :ui/radix-color color)
-  (colors/set-radix color)
   (util/set-android-theme))
 
 (defn unset-color-accent! []
-  (swap! state assoc :ui/radix-color nil)
+  (swap! state assoc :ui/radix-color :logseq)
   (storage/remove :ui/radix-color)
-  (colors/unset-radix)
   (util/set-android-theme))
-
-(defn cycle-color! []
-  (let [current-color (get-color-accent)
-        next-color (->> (cons nil colors/color-list)
-                        (drop-while #(not= % current-color))
-                        (second))]
-    (if next-color
-      (set-color-accent! next-color)
-      (unset-color-accent!))))
 
 (defn handbook-open?
   []

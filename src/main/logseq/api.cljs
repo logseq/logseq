@@ -2,6 +2,7 @@
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
             [logseq.sdk.core]
+            [logseq.sdk.git]
             [logseq.sdk.utils :as sdk-utils]
             [logseq.sdk.ui :as sdk-ui]
             [logseq.sdk.assets :as sdk-assets]
@@ -349,7 +350,7 @@
   (fn [pid ^js cmd-action palette?]
     (when-let [[cmd action] (bean/->clj cmd-action)]
       (let [action      (assoc action 0 (keyword (first action)))
-            cmd         (assoc cmd :key (string/replace (:key cmd) ":" "-"))
+            cmd         (assoc cmd :key (-> (:key cmd) (string/trim) (string/replace ":" "-") (string/replace #"^([0-9])" "_$1")))
             key         (:key cmd)
             keybinding  (:keybinding cmd)
             palette-cmd (plugin-handler/simple-cmd->palette-cmd pid cmd action)
@@ -603,7 +604,7 @@
   (fn [block-uuid-or-page-name content ^js opts]
     (when (string/blank? block-uuid-or-page-name)
       (throw (js/Error. "Page title or block UUID shouldn't be empty.")))
-    (let [{:keys [before sibling focus customUUID properties]} (bean/->clj opts)
+    (let [{:keys [before sibling focus customUUID properties autoOrderedList]} (bean/->clj opts)
           [page-name block-uuid] (if (util/uuid-string? block-uuid-or-page-name)
                                    [nil (uuid block-uuid-or-page-name)]
                                    [block-uuid-or-page-name nil])
@@ -634,31 +635,34 @@
                                    before?)
           new-block              (editor-handler/api-insert-new-block!
                                    content
-                                   {:block-uuid  block-uuid'
-                                    :sibling?    sibling?
-                                    :before?     before?
-                                    :edit-block? edit-block?
-                                    :page        page-name
-                                    :custom-uuid custom-uuid
-                                    :properties  (merge properties
-                                                        (when custom-uuid {:id custom-uuid}))})]
+                                   {:block-uuid    block-uuid'
+                                    :sibling?      sibling?
+                                    :before?       before?
+                                    :edit-block?   edit-block?
+                                    :page          page-name
+                                    :custom-uuid   custom-uuid
+                                    :ordered-list? (if (boolean? autoOrderedList) autoOrderedList false)
+                                    :properties    (merge properties
+                                                     (when custom-uuid {:id custom-uuid}))})]
       (bean/->js (sdk-utils/normalize-keyword-for-json new-block)))))
 
 (def ^:export insert_batch_block
   (fn [block-uuid ^js batch-blocks ^js opts]
     (when-let [block (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [bb (bean/->clj batch-blocks)]
-        (let [bb         (if-not (vector? bb) (vector bb) bb)
-              {:keys [sibling keepUUID]} (bean/->clj opts)
+        (let [bb (if-not (vector? bb) (vector bb) bb)
+              {:keys [sibling keepUUID before]} (bean/->clj opts)
               keep-uuid? (or keepUUID false)
-              _          (when keep-uuid? (doseq
-                                            [block (outliner/tree-vec-flatten bb :children)]
-                                            (let [uuid (:id (:properties block))]
-                                              (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
-                                                (throw (js/Error.
-                                                         (util/format "Custom block UUID already exists (%s)." uuid)))))))
-              _          (editor-handler/insert-block-tree-after-target
-                           (:db/id block) sibling bb (:block/format block) keep-uuid?)]
+              _ (when keep-uuid? (doseq
+                                  [block (outliner/tree-vec-flatten bb :children)]
+                                   (let [uuid (:id (:properties block))]
+                                     (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
+                                       (throw (js/Error.
+                                                (util/format "Custom block UUID already exists (%s)." uuid)))))))
+              block (if (and before sibling)
+                      (db/pull (:db/id (:block/left block))) block)
+              _ (editor-handler/insert-block-tree-after-target
+                  (:db/id block) sibling bb (:block/format block) keep-uuid?)]
           nil)))))
 
 (def ^:export remove_block
@@ -907,6 +911,8 @@
 
 ;; ui
 (def ^:export show_msg sdk-ui/-show_msg)
+(def ^:export query_element_rect sdk-ui/query_element_rect)
+(def ^:export query_element_by_id sdk-ui/query_element_by_id)
 
 ;; assets
 (def ^:export make_asset_url sdk-assets/make_url)

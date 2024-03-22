@@ -2,7 +2,6 @@
   "Entry ns for publishing build. Provides frontend for publishing single page
   application"
   (:require [frontend.state :as state]
-            [frontend.colors :as colors]
             [datascript.core :as d]
             [frontend.db :as db]
             [logseq.db.schema :as db-schema]
@@ -95,8 +94,6 @@
   (i18n/start)
   (restore-from-transit-str!)
   (restore-state!)
-  (when-let [radix-color (state/get-color-accent)]
-    (colors/set-radix radix-color))
   (shortcut/refresh!)
   (events/run!)
   ;; actually, there's no persist for publishing

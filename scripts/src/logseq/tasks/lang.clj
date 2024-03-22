@@ -170,13 +170,16 @@
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
    :pl #{:port}
    :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
-            :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link}
+            :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link :settings-of-plugins :whiteboard
+            :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :right-side-bar/history-global
+            :right-side-bar/whiteboards :search-item/whiteboard :settings-page/enable-whiteboards :settings-page/plugin-system
+            :shortcut.category/whiteboard :command.whiteboard/zoom-in :command.whiteboard/zoom-out}
    :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
             :settings-page/enable-flashcards :settings-page/plugin-system}
    :nb-NO #{:port :type :whiteboard :right-side-bar/flashcards :right-side-bar/whiteboards
             :search-item/whiteboard :settings-page/enable-flashcards :settings-page/enable-whiteboards
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
-            :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global}
+            :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global :linked-references/filter-heading}
    :tr #{:help/awesome-logseq}
    :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}})
 

@@ -49,10 +49,8 @@
   top: 100px;
   left: 20px;
   padding: 10px;
-  margin-top: 1px;
   line-height: 16px;
   border-radius: 4px;
-  background: #efefef;
 }
 
 .datepicker table {
@@ -94,10 +92,7 @@
 
 .datepicker td.available:hover,
 .datepicker th.available:hover {
-  background: #357ebd;
-  cursor: pointer;
-  color: #fff;
-  border-radius: 4px;
+  @apply rounded bg-gray-07 cursor-pointer;
 }
 
 .datepicker td.in-range {
@@ -119,9 +114,7 @@
 
 .datepicker td.active,
 .datepicker td.active:hover {
-  background-color: #357ebd;
-  border-color: #3071a9;
-  color: #fff;
+  @apply bg-accent/90 border border-accent text-accent-foreground;
 }
 
 /* Introduced by Day8 from http://eternicode.github.io/bootstrap-datepicker */
@@ -141,8 +134,7 @@ label.day-enabled {
 }
 
 .datepicker th.selectable {
-  font-weight: normal;
-  color: #357ebd;
+  @apply font-normal text-accent;
 }
 
 .datepicker th.day-disabled {
@@ -199,21 +191,6 @@ label.day-enabled {
 .dark-theme .datepicker th.day-enabled,
 .dark-theme label.day-enabled {
   color: currentColor;
-}
-
-.dark-theme .datepicker td.active,
-.dark-theme .datepicker td.active:hover {
-  background-color: var(--ls-block-properties-background-color);
-  border-color: var(--ls-block-properties-background-color);
-}
-
-.dark-theme .datepicker th.selectable {
-  color: var(--ls-primary-text-color);
-}
-
-.dark-theme .datepicker td.available:hover,
-.dark-theme .datepicker th.available:hover {
-  background: var(--ls-block-properties-background-color);
 }
 
 .datepicker tr:nth-child(odd),

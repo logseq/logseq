@@ -79,7 +79,6 @@
  :content/copy-block-emebed "Kopier innebygging av blokk"
  :content/open-in-sidebar "Åpne i sidefeltet"
  :content/click-to-edit "Klikk for å redigere"
- :settings-page/git-confirm "Du må starte appen på nytt etter å ha oppdatert Git innstillingene."
  :settings-page/git-switcher-label "Skru på Git auto commit"
  :settings-page/git-commit-delay "Git auto commit sekunder"
  :settings-page/edit-config-edn "Rediger config.edn for nåværende repo"
@@ -616,7 +615,6 @@
  :window/restore "Gjenopprett"
 
  :loading "Laster..."
- :logout-user "Logg av ({1})"
  :new-page "Ny side:"
  :remove-orphaned-pages "Fjern foreldreløse sider?"
  :bug-report/inspector-page-btn-back "Gå tilbake"
@@ -789,4 +787,29 @@
  :settings-page/auto-chmod "Automatisk endre filtillatelser"
  :settings-page/auto-chmod-desc "Deaktiver for å tillate redigering av flere brukere med tillatelser gitt av gruppemedlemskap."
  :settings-page/tab-keymap "Tastatur"
- :whiteboard/toggle-pen-mode "Veksle pen-modus"}
+ :whiteboard/toggle-pen-mode "Veksle pen-modus"
+
+ :command.command-palette/toggle "Søk kommandoer"
+ :command.go/search-in-page "Søk blokker på side"
+ :command.whiteboard/clone-down "Klon ned"
+ :command.whiteboard/clone-left "Klon venstre"
+ :command.whiteboard/clone-right "Klon høyre"
+ :command.whiteboard/clone-up "Klon opp"
+ :handbook/close "Lukk"
+ :handbook/help-categories "Hjelp kategorier"
+ :handbook/home "Hjem"
+ :handbook/popular-topics "Populære emner"
+ :handbook/search "Søk"
+ :handbook/settings "Innstillinger"
+ :handbook/title "Hjelp"
+ :handbook/topics "Emner"
+ :help/search "Søk sider/blokker/kommandoer"
+ :linked-references/filter-directions "Klikk for å inkludere og shift-klikk for å ekskludere. Klikk igjen for å fjerne."
+ :linked-references/filter-excludes "Ekskluderer: "
+ :linked-references/filter-heading "Filter"
+ :linked-references/filter-includes "Inkluderer: "
+ :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " av ")) total (if (= total 1) " Lenket Referanse" " Lenkede Referanser")))
+ :linked-references/unexpected-error "Lenkede Referanser: Uventet feil. Vennligst re-indekser din graf først."
+ :pdf/auto-open-context-menu "Auto-åpne kontekstmeny for valg"
+ :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Ulenket Referanse" " Ulenkede Referanser")))
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Referanse" "Referanser"))}

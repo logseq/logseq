@@ -21,7 +21,13 @@
     }
 
     .cp__select .input-wrap input {
-        border: none;
+        @apply border-0 outline-0 text-popover-foreground/90;
+
+        box-shadow: none;
+    }
+
+    .item-results-wrap {
+        @apply py-1;
     }
 
     .cp__select-input {
@@ -51,5 +57,11 @@
 
     .query-clause-btn {
         border-color: var(--ls-border-color);
+    }
+
+    .query-builder-picker {
+       .form-input {
+           @apply focus:border-0;
+       }
     }
 }

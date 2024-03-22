@@ -1,6 +1,6 @@
 (ns logseq.shui.shortcut.v1
   (:require [clojure.string :as string]
-            [logseq.shui.button.v2 :as button]
+            [logseq.shui.ui :as ui]
             [rum.core :as rum]
             [goog.userAgent]))
 
@@ -62,28 +62,36 @@
                            %)))))))
 
 (rum/defc part
-  [context theme ks size]
-  (button/root {:theme theme
-                :interactive false
-                :tiled true
-                :tiles (map print-shortcut-key ks)
-                :size size
-                :mused true}
-               context))
+  [ks size {:keys [interactive?]}]
+  (let [tiles (map print-shortcut-key ks)
+        interactive? (true? interactive?)]
+    (ui/button {:variant (if interactive? :default :text)
+                :class   (str "bg-gray-03 text-gray-10 px-1.5 py-0 leading-4 h-5 rounded font-normal "
+                           (if interactive?
+                             "hover:bg-gray-04 active:bg-gray-03 hover:text-gray-12"
+                             "bg-transparent cursor-default active:bg-gray-03 hover:text-gray-11 opacity-80"))
+                :size    size}
+      (for [[index tile] (map-indexed vector tiles)]
+        [:<>
+         (when (< 0 index)
+           [:span.ui__button__tile-separator])
+         [:span.ui__button__tile tile]]))))
 
 (rum/defc root
-  [shortcut context & {:keys [size theme]
-                       :or {size :sm
-                            theme :gray}}]
+  [shortcut & {:keys [size theme interactive?]
+               :or   {size  :xs
+                      interactive? true
+                      theme :gray}}]
   (when (seq shortcut)
     (let [shortcuts (if (coll? shortcut)
                       [shortcut]
-                      (parse-shortcuts shortcut))]
+                      (parse-shortcuts shortcut))
+          opts {:interactive? interactive?}]
       (for [[index binding] (map-indexed vector shortcuts)]
         [:<>
          (when (< 0 index)
            [:div.text-gray-11.text-sm "|"])
          (if (coll? (first binding))   ; + included
            (for [ks binding]
-             (part context theme ks size))
-           (part context theme binding size))]))))
+             (part ks size opts))
+           (part binding size opts))]))))
