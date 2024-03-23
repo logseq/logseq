@@ -125,6 +125,10 @@
   &[data-logseq-property-text-color=purple] {
     color: var(--ls-text-color-purple);
   }
+
+  &[data-logseq-property-text-color=pink] {
+    color: var(--ls-text-color-pink);
+  }
 }
 
 .breadcrumb {
