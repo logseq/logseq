@@ -33,8 +33,8 @@
                    :file/content "{:foo :bar}"}]
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
-          conn (-> (sqlite-common-db/get-initial-data @conn*)
-                   (sqlite-common-db/restore-initial-data db-schema/schema-for-db-based-graph))]
+          {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
+          conn (sqlite-common-db/restore-initial-data initial-data schema)]
       (is (= blocks
              (->> @conn
                   (d/q '[:find (pull ?b [:block/uuid :file/path :file/content]) :where [?b :file/content]])
@@ -66,8 +66,8 @@
                    :block/updated-at created-at}]
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
-          conn (-> (sqlite-common-db/get-initial-data @conn*)
-                   (sqlite-common-db/restore-initial-data db-schema/schema-for-db-based-graph))]
+          {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
+          conn (sqlite-common-db/restore-initial-data initial-data schema)]
       (is (= (take 1 blocks)
              (->> (d/q '[:find (pull ?b [*])
                          :where [?b :block/created-at]]
