@@ -154,7 +154,7 @@
 (defn get-initial-data
   "Returns current database schema and initial data"
   [db]
-  (let [schema (d/schema db)
+  (let [schema (:schema db)
         idents (remove nil?
                        (let [e (d/entity db :graph/uuid)
                              id (:graph/uuid e)]
