@@ -18,14 +18,13 @@
   (p/let [start-time (t/now)
           data (persist-db/<fetch-init-data repo)
           _ (assert (some? data) "No data found when reloading db")
-          data' (dt/read-transit-str data)
-          db-schema (db-conn/get-schema repo)
-          conn (sqlite-common-db/restore-initial-data data' db-schema)
+          {:keys [schema initial-data]} (dt/read-transit-str data)
+          conn (sqlite-common-db/restore-initial-data initial-data schema)
           db-name (db-conn/datascript-db repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
 
-    (println ::restore-graph! "loads" (count data') "txs in" (t/in-millis (t/interval start-time end-time)) "ms")
+    (println ::restore-graph! "loads" (count initial-data) "txs in" (t/in-millis (t/interval start-time end-time)) "ms")
 
     (state/set-state! :graph/loading? false)
     (react/clear-query-state!)

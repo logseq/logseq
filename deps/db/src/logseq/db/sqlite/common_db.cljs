@@ -152,9 +152,10 @@
       (get-full-page-and-blocks db (common-util/page-name-sanity-lc home-page)))))
 
 (defn get-initial-data
-  "Returns initial data"
+  "Returns current database schema and initial data"
   [db]
-  (let [idents (remove nil?
+  (let [schema (d/schema db)
+        idents (remove nil?
                        (let [e (d/entity db :graph/uuid)
                              id (:graph/uuid e)]
                          (when id
@@ -166,7 +167,8 @@
         all-files (get-all-files db)
         home-page-data (get-home-page db all-files)
         structured-blocks (get-structured-blocks db)]
-    (concat idents favorites latest-journals all-files home-page-data structured-blocks)))
+    {:schema schema
+     :initial-data (concat idents favorites latest-journals all-files home-page-data structured-blocks)}))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
