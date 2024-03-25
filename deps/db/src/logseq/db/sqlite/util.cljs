@@ -76,7 +76,13 @@
      :block/original-name (name prop-name)
      :block/name (common-util/page-name-sanity-lc (name prop-name))}
      (and db-ident (keyword? db-ident))
-     (assoc :db/ident db-ident))))
+     (assoc :db/ident db-ident)
+     (= :many (:cardinality prop-schema))
+     (assoc :db/index true
+            :db/cardinality :db.cardinality/many)
+     (contains? #{:page :block} (:type prop-schema))
+     (assoc :db/index true
+            :db/valueType :db.type/ref))))
 
 
 (defn build-new-class
