@@ -18,11 +18,13 @@
    * :visible - Boolean to indicate user can see and use this property"
   {:alias {:original-name "Alias"
            :attribute :block/alias
+           :db-ident :block/alias
            :visible true
            :schema {:type :page
                     :cardinality :many}}
    :tags {:original-name "Tags"
           :attribute :block/tags
+          :db-ident :block/tags
           :visible true
           :schema {:type :page
                    :cardinality :many
