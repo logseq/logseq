@@ -3,11 +3,9 @@
   (:require [clojure.set :as set]))
 
 (defonce version 2)
-(defonce ast-version 1)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
   {:schema/version  {}
-   :ast/version     {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
 

@@ -142,7 +142,6 @@
     (login/open-login-modal!)))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
-  (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
