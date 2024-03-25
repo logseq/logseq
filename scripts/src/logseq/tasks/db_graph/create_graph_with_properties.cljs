@@ -187,7 +187,7 @@
         blocks-tx (create-graph/create-blocks-tx
                    @conn
                    (create-init-data)
-                   {:property-uuids {:icon (:block/uuid (d/entity @conn [:block/name "icon"]))}})]
+                   {:property-uuids {:icon (:block/uuid (d/entity @conn :logseq.property/icon))}})]
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
     (d/transact! conn blocks-tx)

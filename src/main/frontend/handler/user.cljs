@@ -288,9 +288,10 @@
   [repo]
   (= (get-user-type repo) "manager"))
 
-(defn member?
-  [repo]
-  (= (get-user-type repo) "member"))
+;; TODO: Remove if still unused
+#_(defn member?
+    [repo]
+    (= (get-user-type repo) "member"))
 
 (comment
   ;; We probably need this for some new features later
