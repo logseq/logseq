@@ -980,7 +980,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-whiteboard-id-nonces
   [repo page-name]
   (let [key (if (config/db-based-graph? repo)
-              (:block/uuid (db-utils/entity [:block/name "logseq.tldraw.shape"]))
+              (:block/uuid (db-utils/entity :logseq.property.tldraw/shape))
               :logseq.tldraw.shape)
         page (db-utils/entity [:block/name (util/page-name-sanity-lc page-name)])]
     (->> (:block/_page page)
