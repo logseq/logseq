@@ -55,7 +55,7 @@
     :settings "Préférences"
     :import "Importer"
     :download "Télécharger"
-    :language "Langage"
+    :language "Langue"
     :remove-background "Retirer l'arrière-plan"
     :all-graphs "Tous les graphes"
     :auto-heading "Titres automatiques"
