@@ -70,7 +70,7 @@
       (icon-component/icon-picker icon-value
                                   {:disabled? config/publishing?
                                    :on-chosen (fn [_e icon]
-                                                (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                (let [icon-property-id (db-pu/get-built-in-property-uuid :logseq.property/icon)]
                                                   (db-property-handler/<update-property!
                                                    (state/get-current-repo)
                                                    (:block/uuid page)
@@ -80,7 +80,7 @@
                                         (db-property-handler/remove-block-property!
                                          (state/get-current-repo)
                                          (:block/uuid page)
-                                         (db-pu/get-built-in-property-uuid :icon)))
+                                         (db-pu/get-built-in-property-uuid :logseq.property/icon)))
                             :title "Delete this icon"}
         (ui/icon "X")])])])
 

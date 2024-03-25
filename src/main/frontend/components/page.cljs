@@ -337,7 +337,7 @@
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
                                             {:on-chosen (fn [_e icon]
-                                                          (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                          (let [icon-property-id (db-pu/get-built-in-property-uuid :logseq.property/icon)]
                                                             (db-property-handler/<update-property!
                                                              repo
                                                              (:block/uuid page)

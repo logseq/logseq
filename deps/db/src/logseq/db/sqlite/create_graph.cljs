@@ -13,15 +13,7 @@
 (defn- build-initial-properties
   [db]
   (let [;; Some uuids need to be pre-defined since they are referenced by other properties
-        default-property-uuids {:icon (d/squuid)}
-        built-in-properties (->>
-                             (map (fn [[k v]]
-                                    (assert (keyword? k))
-                                    [k (assoc v
-                                              :db-ident
-                                              (get v :db-ident (db-property/name->db-ident k)))])
-                                  db-property/built-in-properties)
-                             (into {}))]
+        default-property-uuids {:icon (d/squuid)}]
     (mapcat
      (fn [[k-keyword {:keys [schema original-name closed-values db-ident]}]]
        (let [k-name (name k-keyword)
@@ -43,7 +35,7 @@
                         (get default-property-uuids k-keyword id)
                         {:db-ident db-ident})])]
          (update blocks 0 #(default-db/mark-block-as-built-in db %))))
-     built-in-properties)))
+     db-property/built-in-properties)))
 
 (defn kv
   "Creates a key-value pair tx with the key under the :db/ident namespace :logseq.kv.

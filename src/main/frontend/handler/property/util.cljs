@@ -35,11 +35,11 @@
   (:block/uuid (get-property property-name)))
 
 (defn get-pid
-  "Get a property's id (name or uuid) given its name. For file and db graphs"
-  [property-name]
+  "Get a built-in property's id (name or uuid) given its db-ident. For file and db graphs"
+  [db-ident]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-pid repo db property-name)))
+    (db-property/get-pid repo db db-ident)))
 
 (defn block->shape [block]
   (get-block-property-value block :logseq.tldraw.shape))

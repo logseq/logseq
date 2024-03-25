@@ -23,7 +23,7 @@
   (let [repo (state/get-current-repo)
         update-properties (fn [props]
                             (update-keys props #(if (contains? db-property/built-in-properties-keys %)
-                                                  (db-pu/get-built-in-property-uuid repo %)
+                                                  (db-pu/get-built-in-property-uuid repo (get-in db-property/built-in-properties [% :db-ident]))
                                                   %)))]
     (if (config/db-based-graph? repo)
      (->> blocks
