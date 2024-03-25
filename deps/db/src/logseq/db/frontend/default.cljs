@@ -1,8 +1,7 @@
 (ns logseq.db.frontend.default
   "Provides vars and fns for dealing with default/built-in? data"
   (:require [clojure.string :as string]
-            [clojure.set :as set]
-            [datascript.core :as d]))
+            [clojure.set :as set]))
 
 (defonce built-in-markers
   ["NOW" "LATER" "DOING" "DONE" "CANCELED" "CANCELLED" "IN-PROGRESS" "TODO" "WAIT" "WAITING"])
@@ -28,6 +27,5 @@
 
 (defn mark-block-as-built-in
   "Marks built-in blocks as built-in? including pages, classes, properties and closed values"
-  [db block]
-  (let [built-in-property-id (:block/uuid (d/entity db :logseq.property/built-in?))]
-    (update block :block/properties assoc built-in-property-id true)))
+  [block]
+  (assoc block :logseq.property/built-in? true))

@@ -231,7 +231,7 @@
 
                                              (uuid? v)
                                              (when-let [entity (d/entity db [:block/uuid v])]
-                                               (let [from-property? (get-in entity [:block/properties (:block/uuid (d/entity db :logseq.property/created-from-property))])]
+                                               (let [from-property? (:logseq.property/created-from-property entity)]
                                                  (if (and from-property? (not (contains? (:block/type entity) "closed value")))
                                                    ;; don't reference hidden block property values except closed values
                                                    []
@@ -300,7 +300,7 @@
   [conn m]
   (or
    (let [marker (:block/marker m)
-         property (d/entity @conn :logseq.task/status)
+         property (d/entity @conn :logseq.property/status)
          matched-status-id (when marker
                              (->> (get-in property [:block/schema :values])
                                  (some (fn [id]
@@ -367,7 +367,7 @@
     (let [parent-id (otree/-get-id this conn)]
       (get-by-parent-&-left @conn parent-id parent-id)))
 
-  (-save [this txs-state conn repo date-formatter {:keys [retract-attributes?]
+  (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
                                                    :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
@@ -406,10 +406,13 @@
 
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
-        (when (and retract-attributes? (:block/content m))
-          (let [retract-attributes (if db-based?
-                                     (conj db-schema/db-version-retract-attributes :block/tags)
-                                     db-schema/retract-attributes)]
+        (when (or (and retract-attributes? (:block/content m))
+                  (seq retract-attributes))
+          (let [retract-attributes (concat
+                                    (if db-based?
+                                      (conj db-schema/db-version-retract-attributes :block/tags)
+                                      db-schema/retract-attributes)
+                                    retract-attributes)]
             (swap! txs-state (fn [txs]
                                (vec
                                 (concat txs

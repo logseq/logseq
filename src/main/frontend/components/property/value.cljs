@@ -690,7 +690,7 @@
                           :default)
                  type (if (= :block type)
                         (let [v-block (db/entity [:block/uuid value])]
-                          (if (get-in v-block [:block/properties (:block/uuid (db/entity :logseq.property/created-from-template))])
+                          (if (:logseq.property/created-from-template v-block)
                             :template
                             type))
                         type)

@@ -29,7 +29,7 @@
   (let [after-db (:db-after tx-report)
         empty-property-parents (->> (keep (fn [child-id]
                                             (let [e (d/entity (:db-before tx-report) [:block/uuid child-id])]
-                                              (when (get-in (:block/parent e) [:block/properties (:block/uuid (d/entity after-db :logseq.property/created-from-property))])
+                                              (when (get (:block/parent e) :logseq.property/created-from-property)
                                                 (let [parent-now (d/entity after-db (:db/id (:block/parent e)))]
                                                   (when (empty? (:block/_parent parent-now))
                                                     parent-now))))) deleted-block-uuids)
@@ -37,14 +37,12 @@
     (when (seq empty-property-parents)
       (->>
        (mapcat (fn [b]
-                 (let [properties (:block/properties b)
-                       created-from-block (get properties (:block/uuid (d/entity after-db :logseq.property/created-from-block)))
-                       created-from-property (get properties (:block/uuid (d/entity after-db :logseq.property/created-from-property)))
-                       created-block (d/entity after-db [:block/uuid created-from-block])
-                       properties (assoc (:block/properties created-block) created-from-property "")]
+                 (let [created-from-block (get b :logseq.property/created-from-block)
+                       created-from-property (get b :logseq.property/created-from-property)
+                       created-block (d/entity after-db (:db/id created-from-block))]
                    (when (and created-block created-from-property)
                      [[:db/retractEntity (:db/id b)]
-                      [:db/add (:db/id created-block) :block/properties properties]])))
+                      [:db/add (:db/id created-block) (:db/id created-from-property) ""]])))
                empty-property-parents)
        (remove nil?)))))
 
