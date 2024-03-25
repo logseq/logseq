@@ -72,7 +72,7 @@
     :parsing-files "Analyse des fichiers"
     :loading-files "Chargement des fichiers"
     :download "Télécharger"
-    :language "Langage"
+    :language "Langue"
     :remove-background "Retirer l'arrière-plan"
     :file-sync/other-user-graph "Le graphe local actuel est lié à l'autre graphe à distance de l'utilisateur. Alors ne peut pas commencer à la synchroniser."
     :file-sync/graph-deleted "Le graphe distant actuel a été supprimé"
