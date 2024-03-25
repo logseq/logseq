@@ -106,12 +106,25 @@
     page-attrs
     page-or-block-attrs)))
 
+(def logseq-ident-namespaces
+  "Set of all namespaces Logseq uses for :db/ident. It's important to grow this
+  list purposefully and have it start with 'logseq' to allow for users and 3rd
+  party plugins to provide their own namespaces to core concepts."
+  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
+    "logseq.class" "logseq.task" "logseq.kv"})
+
+(def logseq-ident
+  [:and :keyword [:fn
+                  {:error/message "should be a valid :db/ident namespace"}
+                  (fn logseq-namespace? [k]
+                    (contains? logseq-ident-namespaces (namespace k)))]])
+
 (def class-page
   (vec
    (concat
     [:map
      [:block/namespace {:optional true} :int]
-     [:db/ident {:optional true} :keyword]
+     [:db/ident {:optional true} logseq-ident]
      [:block/schema
       {:optional true}
       [:map
@@ -139,7 +152,7 @@
   (vec
    (concat
     [:map
-     [:db/ident :keyword]
+     [:db/ident logseq-ident]
      [:block/schema
       (vec
        (concat
@@ -231,7 +244,7 @@
     [:map]
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
-     [:db/ident {:optional true} :keyword]
+     [:db/ident {:optional true} logseq-ident]
      [:block/schema {:optional true}
       [:map
        [:value [:or :string :double]]
@@ -279,7 +292,7 @@
   (into [:or]
         (map (fn [kv]
                [:map
-                [:db/ident :keyword]
+                [:db/ident logseq-ident]
                 kv
                 [:block/tx-id {:optional true} :int]])
              db-ident-keys)))
