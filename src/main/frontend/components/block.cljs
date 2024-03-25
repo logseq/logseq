@@ -645,7 +645,7 @@
              (util/stop e)
              (db-property-handler/delete-property-value! repo
                                                          block
-                                                         (db-pu/get-built-in-property-uuid repo :tags)
+                                                         (db-pu/get-built-in-property-uuid repo :logseq.property/tags)
                                                          (:block/uuid page-entity)))}
           (ui/icon "x" {:size 15})]))]))
 

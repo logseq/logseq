@@ -344,7 +344,7 @@
     (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
       (let [page-name (:block/name local-parent)
             properties* (transit/read transit-r properties)
-            shape-property-id (db-property/get-pid repo db :logseq.tldraw.shape)
+            shape-property-id (db-property/get-pid repo db :logseq.property.tldraw/shape)
             shape (and (map? properties*)
                        (get properties* shape-property-id))]
         (assert (some? page-name) local-parent)

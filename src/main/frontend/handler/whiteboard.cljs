@@ -61,10 +61,10 @@
     {:block/original-name page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
-     :block/properties {(pu/get-pid :ls-type)
+     :block/properties {(pu/get-pid :logseq.property/ls-type)
                         :whiteboard-page
 
-                        (pu/get-pid :logseq.tldraw.page)
+                        (pu/get-pid :logseq.property.tldraw/page)
                         {:id (get-k "id")
                          :name (get-k "name")
                          :bindings (js->clj-keywordize (get-k "bindings"))
@@ -180,8 +180,8 @@
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
-  (let [properties {(pu/get-pid :ls-type) :whiteboard-page,
-                    (pu/get-pid :logseq.tldraw.page)
+  (let [properties {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
+                    (pu/get-pid :logseq.property.tldraw/page)
                     {:id (str id),
                      :name page-name,
                      :ls-type :whiteboard-page,

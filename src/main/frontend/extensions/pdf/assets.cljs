@@ -195,16 +195,16 @@
            (let [text       (:text content)
                  wrap-props #(if-let [stamp (:image content)]
                                (assoc %
-                                      (pu/get-pid :hl-type) :area
-                                      (pu/get-pid :hl-stamp) stamp)
+                                      (pu/get-pid :logseq.property/hl-type) :area
+                                      (pu/get-pid :logseq.property/hl-stamp) stamp)
                                %)
                  props (cond->
-                        {(pu/get-pid :ls-type)  :annotation
-                         (pu/get-pid :hl-page)  page
-                         (pu/get-pid :hl-color) (:color properties)}
+                        {(pu/get-pid :logseq.property/ls-type)  :annotation
+                         (pu/get-pid :logseq.property/hl-page)  page
+                         (pu/get-pid :logseq.property/hl-color) (:color properties)}
                          (not (config/db-based-graph? (state/get-current-repo)))
                        ;; force custom uuid
-                         (assoc (pu/get-pid :id) (str id)))
+                         (assoc :id (str id)))
                  properties (->>
                              (wrap-props props)
                              (property-handler/replace-key-with-id (state/get-current-repo)))]

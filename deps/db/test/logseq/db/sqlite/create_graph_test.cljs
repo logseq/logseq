@@ -16,6 +16,9 @@
                                @conn)
                           (map first))
           default-idents (map :db/ident ident-ents)]
+      (is (> (count default-idents) 75)
+          "Approximate number of default idents is correct")
+
       (testing "namespaces"
         (is (= '() (remove namespace default-idents))
             "All default :db/ident's have namespaces")

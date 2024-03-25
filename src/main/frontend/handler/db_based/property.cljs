@@ -583,7 +583,7 @@
     (or
      (seq (:block/alias properties))
      (and (seq properties)
-          (not= (keys properties) [(db-pu/get-built-in-property-uuid :icon)])))))
+          (not= (keys properties) [(db-pu/get-built-in-property-uuid :logseq.property/icon)])))))
 
 (defn property-create-new-block
   [block property value parse-block]
@@ -736,7 +736,7 @@
 
           :else
           (let [block-id (or id (db/new-block-id))
-                icon-id (db-pu/get-built-in-property-uuid "icon")
+                icon-id (db-pu/get-built-in-property-uuid :logseq.property/icon)
                 icon (when-not (and (string? icon) (string/blank? icon)) icon)
                 description (string/trim description)
                 description (when-not (string/blank? description) description)

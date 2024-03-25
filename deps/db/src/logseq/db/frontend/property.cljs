@@ -8,14 +8,25 @@
 (def first-stage-properties
   #{:built-in? :created-from-property})
 
+(defn name->db-ident
+  "Converts a built-in property's keyword name to its :db/ident equivalent.
+  Legacy property names that had pseudo-namespacing are converted to their new
+  format e.g. :logseq.table.headers -> :logseq.property.table/headers"
+  [legacy-name]
+  ;; Migrate legacy names that have logseq.* style names but no namespace
+  (if-let [[_ additional-ns prop-name] (re-matches  #"logseq(.*)\.([^.]+)" (name legacy-name))]
+    (keyword (str "logseq.property" additional-ns) prop-name)
+    (keyword "logseq.property" (name legacy-name))))
+
 ;; FIXME: no support for built-in-extended-properties
-(def ^:large-vars/data-var built-in-properties
+(def ^:large-vars/data-var built-in-properties*
   "Map of built in properties for db graphs. Each property has a config map with
   the following keys:
    * :schema - Property's schema. Required key
    * :original-name - Property's :block/original-name
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
-   * :visible - Boolean to indicate user can see and use this property"
+   * :visible - Boolean to indicate user can see and use this property
+   * :db-ident - Keyword to set :db/ident and give property unique id in db"
   {:alias {:original-name "Alias"
            :attribute :block/alias
            :visible true
@@ -147,6 +158,27 @@
    :exclude-from-graph-view {:schema {:type :checkbox :hide? true}
                              :visible true}})
 
+(def built-in-properties
+  (->> built-in-properties*
+       (map (fn [[k v]]
+              (assert (keyword? k))
+              [k (assoc v
+                        :db-ident
+                        (get v :db-ident (name->db-ident k)))]))
+       (into {})))
+
+(def built-in-properties-by-ident
+  "built-in properties with keys being :db/ident
+   TODO: Replace built-in-properties with this var"
+  (->> built-in-properties
+       (map (fn [[k v]]
+              (assert (keyword? (:db-ident v)))
+              [(:db-ident v)
+               (-> v
+                   (dissoc :db-ident)
+                   (assoc :name k))]))
+       (into {})))
+
 (def visible-built-in-properties
   "These are built-in properties that users can see and use"
   (set (keep (fn [[k v]] (when (:visible v) k)) built-in-properties)))
@@ -186,22 +218,13 @@
       (when-let [properties (:block/properties block)]
         (lookup repo db properties key)))))
 
-(defn name->db-ident
-  "Converts a built-in property's keyword name to its :db/ident equivalent.
-  Legacy property names that had pseudo-namespacing are converted to their new
-  format e.g. :logseq.table.headers -> :logseq.property.table/headers"
-  [legacy-name]
-  ;; Migrate legacy names that have logseq.* style names but no namespace
-  (if-let [[_ additional-ns prop-name] (re-matches  #"logseq(.*)\.([^.]+)" (name legacy-name))]
-    (keyword (str "logseq.property" additional-ns) prop-name)
-    (keyword "logseq.property" (name legacy-name))))
-
 (defn get-pid
-  "Get a property's id (name or uuid) given its name. For file and db graphs"
-  [repo db property-name]
+  "Get a built-in property's id (name or uuid) given its db-ident. Use when it can be a file or db graph.
+   Use db-pu/get-built-in-property-uuid if just a db graph"
+  [repo db db-ident]
   (if (sqlite-util/db-based-graph? repo)
-    (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))]))
-    property-name))
+    (:block/uuid (d/entity db db-ident))
+    (get-in built-in-properties-by-ident [db-ident :name])))
 
 (defn get-property
   "Get a property given its unsanitized name"

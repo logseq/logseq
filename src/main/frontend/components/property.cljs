@@ -245,7 +245,7 @@
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
-                                                        (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                                                        (let [icon-property-id (db-pu/get-built-in-property-uuid :logseq.property/icon)]
                                                           (db-property-handler/<update-property!
                                                            (state/get-current-repo)
                                                            (:block/uuid property)
@@ -256,7 +256,7 @@
                                                 (db-property-handler/remove-block-property!
                                                  (state/get-current-repo)
                                                  (:block/uuid property)
-                                                 (db-pu/get-built-in-property-uuid :icon)))
+                                                 (db-pu/get-built-in-property-uuid :logseq.property/icon)))
                                     :title "Delete this icon"}
                  (ui/icon "X")])])]
 
@@ -573,7 +573,7 @@
                         (icon-component/icon-search
                          {:on-chosen
                           (fn [_e icon]
-                            (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
+                            (let [icon-property-id (db-pu/get-built-in-property-uuid :logseq.property/icon)]
                               (when icon
                                 (p/let [_ (db-property-handler/<update-property! repo
                                                                                  (:block/uuid property)
@@ -705,7 +705,7 @@
                      (sort-by first block-properties))
         alias (set (map :block/uuid (:block/alias block)))
         alias-properties (when (seq alias)
-                           [[(db-pu/get-built-in-property-uuid :alias) alias]])
+                           [[(db-pu/get-built-in-property-uuid :logseq.property/alias) alias]])
         remove-built-in-properties (fn [properties]
                                      (remove (fn [x]
                                                (let [id (if (uuid? x) x (first x))]
