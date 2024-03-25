@@ -346,9 +346,8 @@
                                        db-ident-keys (rest class-page))
                                (remove #(= (last %) [:set :int]))
                                (map first)
-                               set)
-      attrs-to-ignore #{:ast/version}]
-  (when-let [undeclared-attrs (seq (remove (some-fn malli-non-ref-attrs attrs-to-ignore) db-schema/db-non-ref-attributes))]
+                               set)]
+  (when-let [undeclared-attrs (seq (remove malli-non-ref-attrs db-schema/db-non-ref-attributes))]
     (throw (ex-info (str "The malli DB schema is missing the following non ref attributes from datascript's schema: "
                          (string/join ", " undeclared-attrs))
                     {}))))
