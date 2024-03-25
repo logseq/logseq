@@ -42,7 +42,7 @@
                         schema
                         (get default-property-uuids k-keyword id)
                         {:db-ident db-ident})])]
-         (update blocks 0 #(default-db/mark-block-as-built-in db %))))
+         (update blocks 0 default-db/mark-block-as-built-in)))
      built-in-properties)))
 
 (defn kv
@@ -74,7 +74,7 @@
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
         default-pages (->> (ldb/build-pages-tx (map default-db/page-title->block ["Contents"]))
-                           (map #(default-db/mark-block-as-built-in db %)))
+                           (map default-db/mark-block-as-built-in))
         default-properties (build-initial-properties db)
         name->properties (zipmap
                           (map :block/name default-properties)
@@ -83,7 +83,6 @@
                          (fn [[k-keyword {:keys [schema original-name]}]]
                            (let [k-name (name k-keyword)]
                              (default-db/mark-block-as-built-in
-                              db
                               (sqlite-util/build-new-class
                                (let [properties (mapv
                                                  (fn [property-name]

@@ -8,29 +8,29 @@
 (defonce hidden-page-name-prefix "$$$")
 
 (defn- closed-value-new-block
-  [db page-id block-id value property]
+  [page-id block-id value property]
   {:block/type #{"closed value"}
    :block/format :markdown
    :block/uuid block-id
    :block/page page-id
-   :block/properties {(:block/uuid (d/entity db :logseq.property/created-from-property)) (:block/uuid property)}
+   :logseq.property/created-from-property [:block/uuid (:block/uuid property)]
    :block/schema {:value value}
    :block/parent page-id})
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
-  [db block-uuid block-value page-id property {:keys [db-ident icon-id icon description]}]
+  [block-uuid block-value page-id property {:keys [db-ident icon description]}]
   (cond->
-   (closed-value-new-block db page-id (or block-uuid (d/squuid)) block-value property)
+   (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
     (and db-ident (keyword? db-ident))
     (assoc :db/ident db-ident)
 
     icon
-    (update :block/properties assoc icon-id icon)
+    (assoc :logseq.property/icon icon)
 
     ;; For now, only closed values with :db/ident are built-in?
     (and db-ident (keyword? db-ident))
-    ((fn [b] (default-db/mark-block-as-built-in db b)))
+    ((fn [b] (default-db/mark-block-as-built-in b)))
 
     description
     (update :block/schema assoc :description description)
@@ -67,7 +67,7 @@
         (if closed-value-page-uuids?
           (map translate-closed-page-value-fn (:closed-values property))
           (map (fn [{:keys [db-ident value icon description uuid]}]
-                 (build-closed-value-block db
+                 (build-closed-value-block
                   uuid value page-id property {:db-ident db-ident
                                                :icon-id icon-id
                                                :icon icon

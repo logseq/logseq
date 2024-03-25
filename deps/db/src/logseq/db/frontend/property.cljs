@@ -37,10 +37,10 @@
    :background-image {:schema {:type :default :hide? true}
                       :visible true}
    :heading {:schema {:type :any :hide? true}}      ; number (1-6) or boolean for auto heading
-   :created-from-block    {:schema {:type :uuid}}
-   :created-from-property {:schema {:type :uuid}}
-   :created-from-template {:schema {:type :uuid}}
-   :source-page-id        {:schema {:type :uuid}}
+   :created-from-block    {:schema {:type :ref}}
+   :created-from-property {:schema {:type :ref}}
+   :created-from-template {:schema {:type :ref}}
+   :source-page-id        {:schema {:type :ref}}
    :built-in?             {:schema {:type :checkbox}}
    :hide-properties?      {:schema {:type :checkbox}}
    :query-table {:schema {:type :checkbox}}
@@ -61,7 +61,7 @@
    :logseq.tldraw.shape {:schema {:type :map}}
 
    ;; Task props
-   :status {:db-ident :logseq.task/status
+   :status {:db-ident :logseq.property/status
             :original-name "Status"
             :schema
             {:type :default}
@@ -71,14 +71,14 @@
                      :value value
                      :uuid (random-uuid)
                      :icon {:type :tabler-icon :id icon :name icon}})
-                  [[:logseq.task/status.backlog "Backlog" "Backlog"]
-                   [:logseq.task/status.todo "Todo" "Todo"]
-                   [:logseq.task/status.doing "Doing" "InProgress50"]
-                   [:logseq.task/status.in-review "In Review" "InReview"]
-                   [:logseq.task/status.done "Done" "Done"]
-                   [:logseq.task/status.canceled "Canceled" "Cancelled"]])
+                  [[:logseq.property/status.backlog "Backlog" "Backlog"]
+                   [:logseq.property/status.todo "Todo" "Todo"]
+                   [:logseq.property/status.doing "Doing" "InProgress50"]
+                   [:logseq.property/status.in-review "In Review" "InReview"]
+                   [:logseq.property/status.done "Done" "Done"]
+                   [:logseq.property/status.canceled "Canceled" "Cancelled"]])
             :visible true}
-   :priority {:db-ident :logseq.task/priority
+   :priority {:db-ident :logseq.property/priority
               :original-name "Priority"
               :schema
               {:type :default}
@@ -87,16 +87,16 @@
                       {:db-ident db-ident
                        :value value
                        :uuid (random-uuid)})
-                    [[:logseq.task/priority.urgent "Urgent"]
-                     [:logseq.task/priority.high "High"]
-                     [:logseq.task/priority.medium "Medium"]
-                     [:logseq.task/priority.low "Low"]])
+                    [[:logseq.property/priority.urgent "Urgent"]
+                     [:logseq.property/priority.high "High"]
+                     [:logseq.property/priority.medium "Medium"]
+                     [:logseq.property/priority.low "Low"]])
               :visible true}
-   :scheduled {:db-ident :logseq.task/scheduled
+   :scheduled {:db-ident :logseq.property/scheduled
                :original-name "Scheduled"
                :schema {:type :date}
                :visible true}
-   :deadline {:db-ident :logseq.task/deadline
+   :deadline {:db-ident :logseq.property/deadline
               :original-name "Deadline"
               :schema {:type :date}
               :visible true}

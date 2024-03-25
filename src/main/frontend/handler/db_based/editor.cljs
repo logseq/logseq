@@ -12,7 +12,6 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.common.config-edn :as config-edn-common-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
@@ -124,7 +123,7 @@
 (defn- set-heading-aux!
   [block-id heading]
   (let [block (db/pull [:block/uuid block-id])
-        old-heading (pu/lookup (:block/properties block) :heading)]
+        old-heading (:logseq.property/heading block)]
     (cond
       ;; nothing changed for first two cases
       (or (and (nil? old-heading) (nil? heading))
