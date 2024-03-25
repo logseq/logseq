@@ -156,11 +156,11 @@
   [db]
   (let [schema (:schema db)
         idents (remove nil?
-                       (let [e (d/entity db :graph/uuid)
+                       (let [e (d/entity db :logseq.kv/graph-uuid)
                              id (:graph/uuid e)]
                          (when id
                            [{:db/id (:db/id e)
-                             :db/ident :graph/uuid
+                             :db/ident :logseq.kv/graph-uuid
                              :graph/uuid id}])))
         favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)

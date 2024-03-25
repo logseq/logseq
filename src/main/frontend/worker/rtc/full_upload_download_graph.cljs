@@ -57,8 +57,8 @@
           (ex-info "upload graph failed" r)
           (let [^js worker-obj (:worker/object @worker-state/*state)]
             (d/transact! conn
-                         [{:db/ident :graph/uuid :graph/uuid (:graph-uuid r)}
-                          {:db/ident :graph/local-tx :graph/local-tx (:graph-uuid r)}])
+                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid (:graph-uuid r)}
+                          {:db/ident :logseq.kv/graph-local-tx :graph/local-tx (:graph-uuid r)}])
             (<! (p->c
                  (p/do!
                   (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
@@ -158,7 +158,7 @@
          blocks* (replace-db-id-with-temp-id blocks)
          blocks-with-page-id (fill-block-fields blocks*)
          tx-data (concat blocks-with-page-id
-                       [{:db/ident :graph/uuid :graph/uuid graph-uuid}])
+                       [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
          ^js worker-obj (:worker/object @worker-state/*state)
          work (p/do!
                (.createOrOpenDB worker-obj repo {:close-other-db? false})

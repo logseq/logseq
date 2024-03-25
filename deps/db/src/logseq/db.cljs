@@ -587,7 +587,7 @@
 
 (defn get-graph-rtc-uuid
   [db]
-  (when db (:graph/uuid (d/entity db :graph/uuid))))
+  (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
 
 (comment
   (defn db-based-graph?
