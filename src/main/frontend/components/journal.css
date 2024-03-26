@@ -6,16 +6,10 @@
   }
 
   .journal-item {
-    border-top: 1px solid;
-    border-top-color: var(--lx-gray-07, var(--ls-border-color, var(--rx-gray-06)));
-    margin: 24px 0;
-    padding: 24px 0;
-    min-height: 250px;
+    @apply border-t mx-6 px-6 min-h-[250px];
 
     &:first-child {
-      padding-top: 0;
-      border-top: none;
-      min-height: 500px;
+      @apply pt-0 border-none min-h-[500px];
     }
   }
 }

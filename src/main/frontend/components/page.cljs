@@ -513,8 +513,7 @@
 
                   (cond
                     (and db-based? (not block?))
-                    [:div.pb-2
-                     (db-page/page-info page (::hover-title? state))]
+                    (db-page/page-info page (::hover-title? state))
 
                     (and (not db-based?) (not block?))
                     [:div.pb-2])

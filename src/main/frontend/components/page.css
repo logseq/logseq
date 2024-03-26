@@ -388,9 +388,23 @@ html.is-native-ios {
 }
 
 .page-info {
-  @apply min-h-[46px] ml-[-15px] mt-[-6px];
+  @apply ml-[-10px] mt-[-6px] mb-[14px] border rounded-md;
+
+  &-inner {
+    @apply py-2;
+  }
 
   &.is-collapsed {
+    @apply border-transparent -mb-[14px];
+
+    &:has(.select-item) {
+      @apply py-2 relative -left-1;
+    }
+
+    .page-info-inner {
+      @apply py-0 relative -top-[14px] -mb-[16px] min-h-[44px];
+    }
+
     .ls-new-property {
       @apply hidden;
     }
