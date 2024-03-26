@@ -280,9 +280,8 @@
 
 (defn get-user-type
   [repo]
-  (when-let [uuid (ldb/get-graph-rtc-uuid (db/get-db repo))]
-    (-> (some #(when (= uuid (:GraphUUID %)) %) (:rtc/graphs @state/state))
-        :graph<->user-user-type)))
+  (-> (some #(when (= repo (:url %)) %) (:rtc/graphs @state/state))
+      :graph<->user-user-type))
 
 (defn manager?
   [repo]

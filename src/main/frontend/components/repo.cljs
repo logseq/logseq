@@ -65,10 +65,9 @@
 
      [:div.controls
       [:div.flex.flex-row.items-center
-       (let [current-repo (state/get-current-repo)
-             db-graph? (config/db-based-graph? current-repo)
-             manager? (and db-graph? (user-handler/manager? current-repo))]
-         (when-not (and db-graph? only-cloud? (not manager?))
+       (let [db-graph? (config/db-based-graph? url)
+             manager? (and db-graph? (user-handler/manager? url))]
+         (when-not (and only-cloud? (not manager?))
            (ui/tippy {:html [:div.text-sm.max-w-xs
                              (cond
                                only-cloud?
@@ -92,7 +91,7 @@
                                                           "")
                                          unlink-or-remote-fn (fn []
                                                                (repo-handler/remove-repo! repo)
-                                                               (state/pub-event! [:graph/unlinked repo current-repo]))
+                                                               (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
                                          action-confirm-fn (if only-cloud?
                                                              (fn []
                                                                (when (or manager? (not db-graph?))
