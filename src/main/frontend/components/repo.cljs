@@ -261,9 +261,9 @@
                     (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos)
             links (repos-dropdown-links repos current-repo downloading-graph-id multiple-windows? opts)
             render-content (fn [{:keys [toggle-fn]}]
-                             (let [remote? (:remote? (first (filter #(= current-repo (:url %)) repos)))
-                                   repo-name (db/get-repo-name current-repo)
-                                   short-repo-name (if repo-name
+                             (let [remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
+                                   repo-name (when current-repo (db/get-repo-name current-repo))
+                                   short-repo-name (if current-repo
                                                      (db/get-short-repo-name repo-name)
                                                      "Select a Graph")]
                                [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
