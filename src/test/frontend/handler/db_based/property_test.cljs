@@ -214,7 +214,7 @@
       ;; set c2 as parent of c3
       (let [c3 (db/entity [:block/name "class3"])]
         (db/transact! [{:db/id (:db/id c3)
-                        :block/namespace (:db/id c2)}]))
+                        :class/parent (:db/id c2)}]))
       (db-property-handler/class-add-property! repo c2id "property-3")
       (db-property-handler/class-add-property! repo c2id "property-4")
       (is (= 3 (count (:classes-properties

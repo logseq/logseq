@@ -119,7 +119,8 @@
        [:<>
         (when (= mode :class)
           (class-component/configure page {:show-title? false}))
-        (when-not config/publishing? (tags-row page))
+        (when-not (or config/publishing? class?)
+          (tags-row page))
         (when-not config/publishing? (icon-row page))
         [:h2 "Properties: "]
         (page-properties page (assoc page-opts :mode mode))])]))
