@@ -10,6 +10,7 @@
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [frontend.handler.notification :as notification]))
 
+
 (defn <rtc-create-graph!
   [repo]
   (when-let [^js worker @state/*db-worker]
@@ -43,18 +44,29 @@
     (.rtc-stop worker)))
 
 (defn <rtc-start!
-  [repo]
+  [repo & {:keys [retry] :or {retry 0}}]
   (when-let [^js worker @state/*db-worker]
     (when (ldb/get-graph-rtc-uuid (db/get-db repo))
       (user-handler/<wrap-ensure-id&access-token
         ;; TODO: `<rtc-stop!` can return a chan so that we can remove timeout
        (<rtc-stop!)
        (let [token (state/get-auth-id-token)]
-         (-> (.rtc-start worker repo token
-                         (state/sub [:ui/developer-mode?]))
-             (p/then (fn [result]
-                       (when (= "rtc-not-closed-yet" result)
-                         (js/setTimeout #(<rtc-start! repo) 200))))))))))
+         (p/let [result (.rtc-start worker repo token (state/sub [:ui/developer-mode?]))
+                 _ (case result
+                     "rtc-not-closed-yet"
+                     (js/setTimeout #(<rtc-start! repo) 200)
+                     ":graph-not-ready"
+                     (when (< retry 3)
+                       (let [delay (* 2000 (inc retry))]
+                         (prn "graph still creating, retry rtc-start in " delay "ms")
+                         (p/do! (p/delay delay)
+                                (<rtc-start! repo :retry (inc retry)))))
+
+                     (":break-rtc-loop" ":stop-rtc-loop")
+                     nil
+                     ;; else
+                     nil)]
+           nil))))))
 
 (defn <get-remote-graphs
   []
