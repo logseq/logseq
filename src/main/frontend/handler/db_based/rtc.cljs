@@ -16,7 +16,7 @@
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)
            repo-name (sqlite-common-db/sanitize-db-name repo)]
-       (.rtc-upload-graph worker repo token repo-name)))))
+       (.rtc-async-upload-graph worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid]
