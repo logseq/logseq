@@ -136,49 +136,52 @@
                                     db-property-type/internal-built-in-property-types))
                           (map (fn [type]
                                  {:label (property-type-label type)
-                                  :disabled disabled?
-                                  :value type
-                                  :selected (= type (:type property-schema))})))]
+                                  :value type})))]
     [:div {:class (if in-block-container? "flex flex-1" "flex items-center col-span-2")}
      (shui/select
-      {:default-open (boolean default-open?)
-       :on-value-change
-       (fn [v]
-         (let [type (keyword (string/lower-case v))
-               update-schema-fn (apply comp
-                                       #(assoc % :type type)
+      (cond->
+       {:default-open (boolean default-open?)
+        :disabled disabled?
+        :on-value-change
+        (fn [v]
+          (let [type (keyword (string/lower-case v))
+                update-schema-fn (apply comp
+                                        #(assoc % :type type)
                                              ;; always delete previous closed values as they
                                              ;; are not valid for the new type
-                                       #(dissoc % :values)
-                                       (keep
-                                        (fn [attr]
-                                          (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
-                                            #(dissoc % attr)))
-                                        [:cardinality :classes :position]))]
-           (when *property-schema
-             (swap! *property-schema update-schema-fn))
-           (let [schema (or (and *property-schema @*property-schema)
-                            (update-schema-fn property-schema))
-                 repo (state/get-current-repo)]
-             (p/do!
-              (when block
-                (pv/exit-edit-property))
-              (when *show-new-property-config?
-                (reset! *show-new-property-config? false))
-              (components-pu/update-property! property property-name schema)
-              (when block
-                (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
-                  (state/set-state! :editor/editing-property-value-id
-                                    {id true}))
-                (property-handler/set-block-property! repo (:block/uuid block) property-name (if (= type :default) "" :property/empty-placeholder)))))))}
+                                        #(dissoc % :values)
+                                        (keep
+                                         (fn [attr]
+                                           (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
+                                             #(dissoc % attr)))
+                                         [:cardinality :classes :position]))]
+            (when *property-schema
+              (swap! *property-schema update-schema-fn))
+            (let [schema (or (and *property-schema @*property-schema)
+                             (update-schema-fn property-schema))
+                  repo (state/get-current-repo)]
+              (p/do!
+               (when block
+                 (pv/exit-edit-property))
+               (when *show-new-property-config?
+                 (reset! *show-new-property-config? false))
+               (components-pu/update-property! property property-name schema)
+               (when block
+                 (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
+                   (state/set-state! :editor/editing-property-value-id
+                                     {id true}))
+                 (property-handler/set-block-property! repo (:block/uuid block) property-name (if (= type :default) "" :property/empty-placeholder)))))))}
+
+        (:type property-schema)
+        (assoc :default-value (name (:type property-schema))))
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
         {:placeholder "Select a schema type"}))
       (shui/select-content
        (shui/select-group
-        (for [{:keys [label value disabled]} schema-types]
-          (shui/select-item {:value value :disabled disabled} label)))))
+        (for [{:keys [label value]} schema-types]
+          (shui/select-item {:value value} label)))))
 
      (when show-type-change-hints?
        (ui/tippy {:html        "Changing the property type clears some property configurations."
