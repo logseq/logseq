@@ -123,7 +123,7 @@
   (vec
    (concat
     [:map
-     [:block/namespace {:optional true} :int]
+     [:class/parent {:optional true} :int]
      [:db/ident {:optional true} logseq-ident]
      [:block/schema
       {:optional true}

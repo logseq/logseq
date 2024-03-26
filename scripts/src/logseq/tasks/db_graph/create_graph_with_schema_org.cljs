@@ -75,7 +75,7 @@
                            (class-m "rdfs:comment")
                            (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class
-      (assoc :block/namespace {:db/id (get-class-db-id class-db-ids parent-class)})
+      (assoc :class/parent {:db/id (get-class-db-id class-db-ids parent-class)})
       (seq properties)
       (assoc :block/schema {:properties (mapv property-uuids properties)}))))
 
@@ -252,7 +252,7 @@
         pages (mapv #(hash-map :page
                                (->class-page % class-db-ids class-uuids class-to-properties property-uuids options))
                     select-classes)]
-    (assert (= ["Thing"] (keep #(when-not (:block/namespace (:page %))
+    (assert (= ["Thing"] (keep #(when-not (:class/parent (:page %))
                                   (:block/original-name (:page %)))
                                pages))
             "Thing is the only class that doesn't have a parent class")
