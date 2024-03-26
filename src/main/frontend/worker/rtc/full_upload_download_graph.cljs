@@ -158,8 +158,9 @@
          blocks* (replace-db-id-with-temp-id blocks)
          blocks-with-page-id (fill-block-fields blocks*)
          tx-data (concat blocks-with-page-id
-                       [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
+                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
          ^js worker-obj (:worker/object @worker-state/*state)
+         _ (op-mem-layer/update-local-tx! repo t)
          work (p/do!
                (.createOrOpenDB worker-obj repo {:close-other-db? false})
                (.exportDB worker-obj repo)
@@ -167,8 +168,7 @@
                (transact-block-refs! repo))]
      (<? (p->c work))
 
-     (worker-util/post-message :add-repo {:repo repo})
-     (op-mem-layer/update-local-tx! repo t))))
+     (worker-util/post-message :add-repo {:repo repo}))))
 
 (defn <download-graph
   [state repo graph-uuid]
