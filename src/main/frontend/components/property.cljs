@@ -44,7 +44,7 @@
           (:block/uuid page))))))
 
 (rum/defc class-select
-  [*property-schema schema-classes {:keys [multiple-choices? save-property-fn]
+  [*property-schema schema-classes {:keys [multiple-choices? save-property-fn disabled?]
                                     :or {multiple-choices? true}}]
   [:div.flex.flex-1.col-span-3
    (let [content-fn
@@ -95,7 +95,9 @@
              (select/select opts)))]
 
     [:div.flex.flex-1.cursor-pointer
-     {:on-click #(shui/popup-show! (.-target %) content-fn)}
+     {:on-click (if disabled?
+                  (constantly nil)
+                  #(shui/popup-show! (.-target %) content-fn))}
      (if (seq schema-classes)
        [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
         (for [class schema-classes]
