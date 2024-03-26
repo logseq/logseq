@@ -405,7 +405,8 @@ server: ;; remove 2
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
-        [page1-uuid] (repeatedly random-uuid)]
+        [page1-uuid ;; page2-uuid page3-uuid page4-uuid
+         ] (repeatedly random-uuid)]
     (testing "apply-remote-update-page-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
@@ -434,6 +435,35 @@ server: ;; remove 2
         (rtc-core/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
         (is (= (str page1-uuid "-rename") (:block/name (d/entity @conn [:block/uuid page1-uuid]))))))
 
+    ;; TODO: add this test back when fixed
+    ;; (testing "apply-remote-update-page-ops-test3: create namespace-page"
+    ;;   (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
+    ;;                       :affected-blocks
+    ;;                       {page2-uuid {:op :update-page
+    ;;                                    :self page2-uuid
+    ;;                                    :page-name "aaa/bbb/ccc"
+    ;;                                    :original-name "aaa/bbb/ccc"}
+    ;;                        page3-uuid {:op :update-page
+    ;;                                    :self page3-uuid
+    ;;                                    :page-name "aaa/bbb"
+    ;;                                    :original-name "aaa/bbb"}
+    ;;                        page4-uuid {:op :update-page
+    ;;                                    :self page4-uuid
+    ;;                                    :page-name "aaa"
+    ;;                                    :original-name "aaa"}}}
+    ;;         update-page-ops (vals
+    ;;                          (:update-page-ops-map
+    ;;                           (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
+    ;;     (is (rtc-const/data-from-ws-validator data-from-ws))
+    ;;     (rtc-core/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
+    ;;     (prn ::x
+    ;;          (into {} (d/entity @conn [:block/uuid page2-uuid]))
+    ;;          (into {} (d/entity @conn [:block/uuid page3-uuid]))
+    ;;          (into {} (d/entity @conn [:block/uuid page4-uuid]))
+    ;;          (into {} (d/entity @conn [:block/name "aaa"]))
+    ;;          (into {} (d/entity @conn [:block/name "aaa/bbb"]))
+    ;;          (into {} (d/entity @conn [:block/name "aaa/bbb/ccc"])))
+    ;;     ))
     (testing "apply-remote-remove-page-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks

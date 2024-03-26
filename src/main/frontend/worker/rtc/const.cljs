@@ -169,6 +169,12 @@
       [:action :string]
       [:s3-key :string]
       [:graph-name :string]]]
+    ["upload-graph"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:s3-key :string]
+      [:graph-name :string]]]
     ["grant-access"
      [:map
       [:req-id :string]

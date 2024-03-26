@@ -28,7 +28,7 @@
 (goog-define TEST false)
 (def test? TEST)
 
-(goog-define ENABLE-FILE-SYNC-PRODUCTION false)
+(def ENABLE-FILE-SYNC-PRODUCTION false)
 
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
