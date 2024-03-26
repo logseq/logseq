@@ -7,17 +7,24 @@ export const getPdfjsLib = () => {
 
 export const viewportToScaled = (
   rect,
-  { width, height }
+  viewport,
+  textLayer
 ) => {
+  const computedStyle = window.getComputedStyle(textLayer.div);
+  const matrixString = computedStyle.transform || computedStyle.webkitTransform || computedStyle.mozTransform;
+  const domMatrix = new DOMMatrix(matrixString);
+  const transform = domMatrix.invertSelf();  
+  
+  const [vwTopLeft, vwBottomRight] = [new DOMPoint(rect.left, rect.top), new DOMPoint(rect.left + rect.width, rect.top + rect.height)]
+  const [scTopLeft, scBottomRight] = [vwTopLeft.matrixTransform(transform), vwBottomRight.matrixTransform(transform)]
+
   return {
-    x1: rect.left,
-    y1: rect.top,
-
-    x2: rect.left + rect.width,
-    y2: rect.top + rect.height,
-
-    width,
-    height,
+    x1: Math.min(scTopLeft.x, scBottomRight.x),
+    y1: Math.min(scTopLeft.y, scBottomRight.y),
+    x2: Math.max(scTopLeft.x, scBottomRight.x),
+    y2: Math.max(scTopLeft.y, scBottomRight.y),
+    width: viewport.width,
+    height: viewport.height
   }
 }
 
