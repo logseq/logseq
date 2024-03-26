@@ -90,6 +90,7 @@
    [:block/original-name :string]
    [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
+   [:block/namespace {:optional true} :int]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]])
@@ -101,8 +102,7 @@
      ;; Only for linked pages
      [:block/collapsed? {:optional true} :boolean]
      ;; journal-day is only set for journal pages
-     [:block/journal-day {:optional true} :int]
-     [:block/namespace {:optional true} :int]]
+     [:block/journal-day {:optional true} :int]]
     page-attrs
     page-or-block-attrs)))
 
