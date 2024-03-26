@@ -270,10 +270,11 @@
                  :transform-fn (fn [results input]
                                  (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
                                    (let [repo (state/get-current-repo)
-                                         class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) string-classes)
-                                         descendent-classes (->> class-names
-                                                                 (mapcat #(db/get-namespace-pages repo %))
-                                                                 (map :block/original-name))]
+                                         class-ents (map #(db/entity repo [:block/uuid %]) string-classes)
+                                         class-names (map :block/original-name class-ents)
+                                         descendent-classes (->> class-ents
+                                                                 (mapcat #(model/get-class-children repo (:db/id %)))
+                                                                 (map #(:block/original-name (db/entity repo %))))]
                                      (->> (concat class-names descendent-classes)
                                           (filter #(string/includes? % class-input))
                                           (mapv #(hash-map :value (str new-page "#" %)))))
