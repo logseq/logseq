@@ -13,9 +13,7 @@
             [frontend.state :as state]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
-            [goog.crypt.Sha256]
-            [logseq.db :as ldb]
-            [frontend.db :as db]))
+            [goog.crypt.Sha256]))
 
 (defn set-preferred-format!
   [format]

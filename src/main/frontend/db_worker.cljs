@@ -593,7 +593,24 @@
                                        [[:div
                                          [:p "upload graph failed"]]
                                         :error])
-             (prn ::download-graph-failed e)
+             (p/reject! d e)))))
+     d))
+
+  (rtc-async-upload-graph
+   [this repo token remote-graph-name]
+   (let [d (p/deferred)]
+     (when-let [conn (worker-state/get-datascript-conn repo)]
+       (async/go
+         (try
+           (let [state (<? (rtc-core/<init-state repo token false))]
+             (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))
+             (rtc-db-listener/listen-db-to-generate-ops repo conn)
+             (p/resolve! d :success))
+           (catch :default e
+             (worker-util/post-message :notification
+                                       [[:div
+                                         [:p "upload graph failed"]]
+                                        :error])
              (p/reject! d e)))))
      d))
 

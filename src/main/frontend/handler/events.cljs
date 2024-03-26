@@ -73,7 +73,6 @@
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.common.config :as common-config]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
