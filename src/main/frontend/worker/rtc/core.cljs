@@ -53,6 +53,7 @@
 ;;; exceptions ================================================================
 
 (def ex-break-rtc-loop (ex-info "break rtc loop" {:type ::break-rtc-loop}))
+(def ex-graph-not-ready (ex-info "graph still creating" {:type ::graph-not-ready}))
 
 ;;; exceptions (ends)
 
@@ -918,6 +919,11 @@
     (stop-rtc state)
     (throw ex-break-rtc-loop)))
 
+(defmethod handle-remote-genernal-exception :graph-not-ready [_ state]
+  (stop-rtc-helper state)
+  (stop-rtc state)
+  (throw ex-graph-not-ready))
+
 
 (defmethod handle-remote-genernal-exception nil [resp & _]
   (throw (ex-info "unknown exception from remote" {:resp resp})))
@@ -1005,7 +1011,8 @@
 (declare notify-main-thread)
 
 (defn <loop-for-rtc
-  ":loop-started-ch used to notify that rtc-loop started"
+  ":loop-started-ch used to notify that rtc-loop started.
+  return `:stop-rtc-loop`, `:break-rtc-loop`, `:graph-not-ready`"
   [state graph-uuid repo conn date-formatter & {:keys [loop-started-ch token]}]
   {:pre [(state-validator state)
          (some? graph-uuid)
@@ -1027,49 +1034,54 @@
       (reset! (:*graph-uuid state) graph-uuid)
       (let [resp (<? (ws/<send&receive state {:action "register-graph-updates"
                                               :graph-uuid graph-uuid}))]
+
         (try
-          (when (:ex-data resp) (handle-remote-genernal-exception resp state))
+          (when (:ex-data resp)
+            (handle-remote-genernal-exception resp state))
           (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
           (when loop-started-ch (async/close! loop-started-ch))
           (<?
            (go-try
-             (loop [push-client-ops-ch
-                    (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
-               (let [{:keys [push-data-from-ws client-op-update stop continue]}
-                     (async/alt!
-                       toggle-auto-push-client-ops-ch {:continue true}
-                       force-push-client-ops-ch {:client-op-update true}
-                       push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
-                                                 {:client-op-update true}
-                                                 {:continue true}))
-                       push-data-from-ws-ch ([v] {:push-data-from-ws v})
-                       stop-rtc-loop-chan {:stop true}
-                       :priority true)]
-                 (cond
-                   continue
-                   (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
+            (loop [push-client-ops-ch
+                   (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
+              (let [{:keys [push-data-from-ws client-op-update stop continue]}
+                    (async/alt!
+                      toggle-auto-push-client-ops-ch {:continue true}
+                      force-push-client-ops-ch {:client-op-update true}
+                      push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
+                                                {:client-op-update true}
+                                                {:continue true}))
+                      push-data-from-ws-ch ([v] {:push-data-from-ws v})
+                      stop-rtc-loop-chan {:stop true}
+                      :priority true)]
+                (cond
+                  continue
+                  (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
 
-                   push-data-from-ws
-                   (let [r (<! (<push-data-from-ws-handler state repo conn date-formatter push-data-from-ws))]
-                     (when (= r ::need-pull-remote-data)
+                  push-data-from-ws
+                  (let [r (<! (<push-data-from-ws-handler state repo conn date-formatter push-data-from-ws))]
+                    (when (= r ::need-pull-remote-data)
                        ;; trigger a force push, which can pull remote-diff-data from local-t to remote-t
-                       (async/put! force-push-client-ops-ch true))
-                     (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
+                      (async/put! force-push-client-ops-ch true))
+                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
-                   client-op-update
+                  client-op-update
                    ;; FIXME: access token expired
-                   (let [_ (<? (<client-op-update-handler state token))]
-                     (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
+                  (let [_ (<? (<client-op-update-handler state token))]
+                    (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
 
-                   stop
-                   (stop-rtc-helper state)
+                  stop
+                  (stop-rtc-helper state)
 
-                   :else
-                   nil)))))
+                  :else
+                  nil)))))
           (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch)
+          :stop-rtc-loop
           (catch :default e
             (case (:type (ex-data e))
-              ::break-rtc-loop (prn :break-rtc-loop)
+              ::break-rtc-loop
+              (do (prn :break-rtc-loop)
+                  :break-rtc-loop)
               ;; else
               (prn ::unknown-ex e))))))))
 
@@ -1189,9 +1201,10 @@
               _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
               config (worker-state/get-config repo)
               c1 (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config))
-              c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
-          (<! c1)
-          (<! c2)))
+              c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)
+              rtc-loop-result (<! c1)
+              _ (<! c2)]
+          (str rtc-loop-result)))
       (worker-util/post-message :notification
                                 [[:div
                                   [:p "RTC is not supported for this graph"]]

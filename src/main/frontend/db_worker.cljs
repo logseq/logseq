@@ -602,10 +602,10 @@
      (when-let [conn (worker-state/get-datascript-conn repo)]
        (async/go
          (try
-           (let [state (<? (rtc-core/<init-state repo token false))]
-             (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))
+           (let [state (<? (rtc-core/<init-state repo token false))
+                 r (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))]
              (rtc-db-listener/listen-db-to-generate-ops repo conn)
-             (p/resolve! d :success))
+             (p/resolve! d r))
            (catch :default e
              (worker-util/post-message :notification
                                        [[:div
