@@ -41,6 +41,7 @@
     ;; TODO: remove this in later releases
     :block/heading-level
     :block/file
+    :class/parent
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 

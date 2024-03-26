@@ -529,20 +529,20 @@
                   [[f (:db/id block) :block/collapsed-properties (:db/id property)]]
                   {:outliner-op :save-block})))
 
-(defn- get-namespace-parents
+(defn- get-class-parents
   [tags]
   (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
-        *namespaces (atom #{})]
+        *classes (atom #{})]
     (doseq [tag tags']
-      (when-let [ns (:block/namespace tag)]
-        (loop [current-ns ns]
+      (when-let [parent (:class/parent tag)]
+        (loop [current-parent parent]
           (when (and
-                 current-ns
-                 (contains? (:block/type ns) "class")
-                 (not (contains? @*namespaces (:db/id ns))))
-            (swap! *namespaces conj current-ns)
-            (recur (:block/namespace current-ns))))))
-    @*namespaces))
+                 current-parent
+                 (contains? (:block/type parent) "class")
+                 (not (contains? @*classes (:db/id parent))))
+            (swap! *classes conj current-parent)
+            (recur (:class/parent current-parent))))))
+    @*classes))
 
 (defn get-block-classes-properties
   [eid]
@@ -550,8 +550,8 @@
         classes (->> (:block/tags block)
                      (sort-by :block/name)
                      (filter (fn [tag] (contains? (:block/type tag) "class"))))
-        namespace-parents (get-namespace-parents classes)
-        all-classes (->> (concat classes namespace-parents)
+        class-parents (get-class-parents classes)
+        all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
                                    (seq (:properties (:block/schema class))))))
         all-properties (-> (mapcat (fn [class]

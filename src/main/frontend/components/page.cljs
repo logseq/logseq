@@ -11,6 +11,7 @@
             [frontend.components.scheduled-deadlines :as scheduled]
             [frontend.components.icon :as icon-component]
             [frontend.components.db-based.page :as db-page]
+            [frontend.components.class :as class-component]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
@@ -554,6 +555,9 @@
                     (rum/with-key
                       (reference/references route-page-name)
                       (str route-page-name "-refs"))]))
+
+               (when (contains? (:block/type page) "class")
+                 (class-component/class-children page))
 
                (when-not block-or-whiteboard?
                  (when (not journal?)
