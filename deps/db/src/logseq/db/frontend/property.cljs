@@ -37,9 +37,12 @@
    :background-image {:schema {:type :default :hide? true}
                       :visible true}
    :heading {:schema {:type :any :hide? true}}      ; number (1-6) or boolean for auto heading
-   :created-from-block    {:schema {:type :ref}}
-   :created-from-property {:schema {:type :ref}}
-   :created-from-template {:schema {:type :ref}}
+   :created-from-block    {:schema {:db-attr-type :ref
+                                    :type :number}}
+   :created-from-property {:schema {:db-attr-type :ref
+                                    :type :number}}
+   :created-from-template {:schema {:db-attr-type :ref
+                                    :type :number}}
    :source-page-id        {:schema {:type :ref}}
    :built-in?             {:schema {:type :checkbox}}
    :hide-properties?      {:schema {:type :checkbox}}
@@ -94,11 +97,13 @@
               :visible true}
    :scheduled {:db-ident :logseq.property/scheduled
                :original-name "Scheduled"
-               :schema {:type :date}
+               :schema {:db-attr-type :ref
+                        :type :date}
                :visible true}
    :deadline {:db-ident :logseq.property/deadline
               :original-name "Deadline"
-              :schema {:type :date}
+              :schema {:db-attr-type :ref
+                       :type :date}
               :visible true}
 
    ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
@@ -245,3 +250,7 @@
             (let [e (d/entity db [:block/uuid id])]
               (when (= (closed-value-name e) value-name)
                 e))) values)))
+
+(defn property?
+  [k]
+  (contains? #{:logseq.property :user.property} (keyword (namespace k))))

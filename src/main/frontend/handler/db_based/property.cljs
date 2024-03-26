@@ -511,14 +511,10 @@
    (let [schema (:block/schema (db/entity property-id))]
      (= (:position schema) "block-beginning"))))
 
-(defn property?
-  [k]
-  (contains? #{:logseq.property :user.property} (namespace k)))
-
 (defn get-block-other-position-properties
   [eid]
   (let [block (db/entity eid)
-        own-properties (filter property? (keys block))]
+        own-properties (filter db-property/property? (keys block))]
     (->> (:classes-properties (get-block-classes-properties eid))
          (concat own-properties)
          (filter (fn [id] (closed-value-other-position? id block)))
@@ -526,7 +522,7 @@
 
 (defn block-has-viewable-properties?
   [block-entity]
-  (let [properties (->> (keys block-entity) (filter property?))]
+  (let [properties (->> (keys block-entity) (filter db-property/property?))]
     (or
      (seq (:block/alias block-entity))
      (and (seq properties)

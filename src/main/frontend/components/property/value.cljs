@@ -76,8 +76,7 @@
   (let [;; FIXME: Remove ignore when editing bug is fixed
         #_:clj-kondo/ignore
         [open? set-open!] (rum/use-state editing?)
-        page (when (uuid? value)
-               (db/entity [:block/uuid value]))
+        page (db/entity value)
         title (when page (:block/original-name page))
         value (if title
                 (js/Date. (date/journal-title->long title))
@@ -148,7 +147,7 @@
                                       (let [repo (state/get-current-repo)]
                                         (property-handler/set-block-property! repo (:block/uuid block)
                                                                               (:block/name property)
-                                                                              (:block/uuid page))
+                                                                              (:db/id page))
                                         (exit-edit-property)))}))))
 
 (defn- <create-page-if-not-exists!
@@ -219,7 +218,7 @@
                                      (:block/tags block)
                                      (:block/alias block))
                                    (map (fn [e] (:block/original-name e))))
-                              (when-let [v (get-in block [:block/properties (:block/uuid property)])]
+                              (when-let [v (get-in block [:block/properties (:db/ident property)])]
                                 (if (coll? v)
                                   (map (fn [id]
                                          (:block/original-name (db/entity [:block/uuid id])))
@@ -439,7 +438,7 @@
                         (p/do!
                          (add-property-f (if (map? chosen) (:value chosen) chosen))
                          (when-let [f (:on-chosen select-opts)] (f))))
-            selected-choices' (get-in block [:block/properties (:block/uuid property)])
+            selected-choices' (get-in block [:block/properties (:db/ident property)])
             selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
         (select-aux block property
                     (cond->
@@ -578,7 +577,7 @@
     [:div.select-item
      (cond
        (contains? #{:page :date} type)
-       (when-let [page (db/entity [:block/uuid value])]
+       (when-let [page (db/entity value)]
          (page-cp {:disable-preview? true
                    :hide-close-button? true} page))
 
@@ -689,7 +688,7 @@
                           type
                           :default)
                  type (if (= :block type)
-                        (let [v-block (db/entity [:block/uuid value])]
+                        (let [v-block (db/entity value)]
                           (if (:logseq.property/created-from-template v-block)
                             :template
                             type))

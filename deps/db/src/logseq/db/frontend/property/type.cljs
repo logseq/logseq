@@ -60,17 +60,14 @@
   ;; TODO: Confirm that macro expanded value is url when it's easier to pass data into validations
   (macro-util/macro? s))
 
-(defn- logseq-page?
+(defn- logseq-block?
   [db id]
-  (and (uuid? id)
-       (when-let [e (d/entity db [:block/uuid id])]
-         (nil? (:block/page e)))))
+  (some? (d/entity db id)))
 
 ;; FIXME: template instance check
 (defn- logseq-template?
   [db id]
-  (and (uuid? id)
-       (some? (d/entity db [:block/uuid id]))))
+  (some? (d/entity db id)))
 
 (defn- existing-closed-value-valid?
   "Validates that the given existing closed value is valid"
@@ -109,14 +106,14 @@
               (some-fn number? uuid?)]
    :date     [:fn
               {:error/message "should be a journal date"}
-              logseq-page?]
+              logseq-block?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
               (some-fn url? uuid? macro-url?)]
    :page     [:fn
               {:error/message "should be a page"}
-              logseq-page?]
+              logseq-block?]
    :template [:fn
               {:error/message "should has #template"}
               logseq-template?]
