@@ -8,7 +8,8 @@
   (:require [cljs.core]
             #?(:org.babashka/nbb [datascript.db])
             [datascript.impl.entity :as entity :refer [Entity]]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]))
 
 (def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity
@@ -17,6 +18,13 @@
    (cond
      (= k :block/raw-content)
      (lookup-entity e :block/content default-value)
+
+     ;; Should we keep this?
+     (= k :block/properties)
+     (lookup-entity e :block/properties
+                    (->> (into {} e)
+                         (filter (fn [[k _]] (db-property/property? k)))
+                         (into {})))
 
      (= k :block/content)
      (or

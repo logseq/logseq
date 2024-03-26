@@ -245,18 +245,17 @@
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
-                                                        (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                          (db-property-handler/<update-property!
-                                                           (state/get-current-repo)
-                                                           (:block/uuid property)
-                                                           {:properties {icon-property-id icon}})))})
+                                                        (db-property-handler/<update-property!
+                                                         (state/get-current-repo)
+                                                         (:block/uuid property)
+                                                         {:properties {:logseq.property/icon icon}}))})
 
               (when icon-value
                 [:a.fade-link.flex {:on-click (fn [_e]
                                                 (db-property-handler/remove-block-property!
                                                  (state/get-current-repo)
                                                  (:block/uuid property)
-                                                 (db-pu/get-built-in-property-uuid :icon)))
+                                                 :logseq.property/icon))
                                     :title "Delete this icon"}
                  (ui/icon "X")])])]
 
@@ -573,20 +572,19 @@
                         (icon-component/icon-search
                          {:on-chosen
                           (fn [_e icon]
-                            (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                              (when icon
-                                (p/let [_ (db-property-handler/<update-property! repo
-                                                                                 (:block/uuid property)
-                                                                                 {:properties {icon-property-id icon}})]
-                                  (shui/popup-hide! id)))))}))]
+                            (when icon
+                              (p/let [_ (db-property-handler/<update-property! repo
+                                                                               (:block/uuid property)
+                                                                               {:properties {:logseq.property/icon icon}})]
+                                (shui/popup-hide! id))))}))]
        (shui/trigger-as :button
-         (-> (when-not config/publishing?
-               {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
-           (assoc :class "flex items-center"))
-         (if icon
-           (icon-component/icon icon)
-           [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
-            [:span.bullet]])))
+                        (-> (when-not config/publishing?
+                              {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
+                            (assoc :class "flex items-center"))
+                        (if icon
+                          (icon-component/icon icon)
+                          [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
+                           [:span.bullet]])))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger.pl-2
@@ -594,29 +592,29 @@
         (:block/original-name property)]
 
        (shui/trigger-as :a
-         {:tabIndex 0
-          :title (str "Configure property: " (:block/original-name property))
-          :class "property-k flex select-none jtrigger pl-2"
-          :on-pointer-down (fn [^js e]
-                             (when (util/meta-key? e)
-                               (route-handler/redirect-to-page! (:block/name property))
-                               (.preventDefault e)))
-          :on-click (fn [^js e]
-                      (shui/popup-show!
-                        (.-target e)
-                        (fn [_]
-                          [:div.p-2
-                           [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                           (property-config property
-                             {:inline-text inline-text
-                              :page-cp page-cp})])
-                        {:content-props {:class "property-configure-popup-content"
-                                         :collisionPadding {:bottom 10 :top 10}
-                                         :avoidCollisions true
-                                         :align "start"}
-                         :auto-side? true
-                         :auto-focus? true}))}
-         (:block/original-name property)))]))
+                        {:tabIndex 0
+                         :title (str "Configure property: " (:block/original-name property))
+                         :class "property-k flex select-none jtrigger pl-2"
+                         :on-pointer-down (fn [^js e]
+                                            (when (util/meta-key? e)
+                                              (route-handler/redirect-to-page! (:block/name property))
+                                              (.preventDefault e)))
+                         :on-click (fn [^js e]
+                                     (shui/popup-show!
+                                      (.-target e)
+                                      (fn [_]
+                                        [:div.p-2
+                                         [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                                         (property-config property
+                                                          {:inline-text inline-text
+                                                           :page-cp page-cp})])
+                                      {:content-props {:class "property-configure-popup-content"
+                                                       :collisionPadding {:bottom 10 :top 10}
+                                                       :avoidCollisions true
+                                                       :align "start"}
+                                       :auto-side? true
+                                       :auto-focus? true}))}
+                        (:block/original-name property)))]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
@@ -636,11 +634,11 @@
   rum/reactive
   db-mixins/query
   [block k v {:keys [inline-text page-cp] :as opts}]
-  (when (uuid? k)
-    (when-let [property (db/sub-block (:db/id (db/entity [:block/uuid k])))]
+  (when (keyword? k)
+    (when-let [property (db/sub-block (:db/id (db/entity k)))]
       (let [type (get-in property [:block/schema :type] :default)
             closed-values? (seq (get-in property [:block/schema :values]))
-            v-block (when (uuid? v) (db/entity [:block/uuid v]))
+            v-block (when (integer? v) (db/entity v))
             block? (and v-block
                         (not closed-values?)
                         (:block/page v-block)
@@ -723,8 +721,7 @@
         hide-with-property-id (fn [property-id]
                                 (if (or root-block? page? page-configure?)
                                   false
-                                  (let [eid (if (uuid? property-id) [:block/uuid property-id] property-id)]
-                                    (boolean (:hide? (:block/schema (db/entity eid)))))))
+                                  (boolean (:hide? (:block/schema (db/entity property-id))))))
         property-hide-f (cond
                           config/publishing?
                           ;; Publishing is read only so hide all blank properties as they
@@ -735,7 +732,7 @@
                           (:ui/hide-empty-properties? (state/get-config))
                           (fn [[property-id property-value]]
                             ;; User's selection takes precedence over config
-                            (if (contains? (:block/schema (db/entity [:block/uuid property-id])) :hide?)
+                            (if (contains? (:block/schema (db/entity property-id)) :hide?)
                               (hide-with-property-id property-id)
                               (nil? property-value)))
                           :else
@@ -776,7 +773,7 @@
          (update :class conj "select-none")
          true (assoc :tab-index 0
                      :on-key-up #(when-let [block (and (= "Escape" (.-key %))
-                                                    (.closest (.-target %) "[blockid]"))]
+                                                       (.closest (.-target %) "[blockid]"))]
                                    (state/set-selection-blocks! [block])
                                    (some-> js/document.activeElement (.blur)))))
        (properties-section block (if class-schema? properties own-properties) opts)
@@ -788,8 +785,8 @@
            [:div.parent-properties.flex.flex-1.flex-col.gap-1
             (for [[class class-properties] class->properties]
               (let [id-properties (->> class-properties
-                                    remove-built-in-properties
-                                    (map (fn [id] [id (get block-properties id)])))]
+                                       remove-built-in-properties
+                                       (map (fn [id] [id (get block-properties id)])))]
                 (when (seq id-properties)
                   [:div
                    (when page-cp

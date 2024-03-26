@@ -43,7 +43,7 @@
       (let [value (if (string/blank? @*value) nil @*value)]
         (property-value/date-picker value
           {:on-change (fn [page]
-                        (reset! *value (:block/uuid page)))}))
+                        (reset! *value (:db/id page)))}))
 
       (shui/input
         {:default-value @*value
@@ -127,8 +127,8 @@
          (property-value/date-picker (:block/original-name item)
                                     {:on-change (fn [page]
                                                   (db-property-handler/replace-closed-value property
-                                                                                            (:block/uuid page)
-                                                                                            (:block/uuid item)))})
+                                                                                            (:db/id page)
+                                                                                            (:db/id item)))})
          ((:page-cp parent-opts) {:preview? false} item)]
 
         (and page? (:page-cp parent-opts))
@@ -174,7 +174,7 @@
                     (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))))
               :update-icon
               (fn [icon]
-                (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
+                (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon icon)))
        parent-opts))))
 
 (rum/defc add-existing-values
@@ -185,7 +185,7 @@
    [:ol
     (for [value values]
       [:li (if (uuid? value)
-             (let [result (db/entity [:block/uuid value])]
+             (let [result (db/entity value)]
                (:block/original-name result))
              (str value))])]
    (ui/button
@@ -205,7 +205,7 @@
     [:div.closed-values.flex.flex-col
      (let [choices (doall
                     (keep (fn [id]
-                            (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid id])))]
+                            (when-let [block (db/sub-block (:db/id (db/entity id)))]
                               {:id (str id)
                                :value id
                                :content (choice-item-content property *property-schema block (merge opts dropdown-opts))}))
