@@ -163,7 +163,8 @@
              (p/do!
               (when block
                 (pv/exit-edit-property))
-              (reset! *show-new-property-config? false)
+              (when *show-new-property-config?
+                (reset! *show-new-property-config? false))
               (components-pu/update-property! property property-name schema)
               (when block
                 (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
@@ -212,7 +213,7 @@
                    (when-let [*show-property-config? (:*show-new-property-config? (last (:rum/args state)))]
                      (reset! *show-property-config? false))
                    state)}
-  [state property {:keys [inline-text add-new-property? _*show-new-property-config?] :as opts}]
+  [state property {:keys [inline-text add-new-property?] :as opts}]
   (let [values (rum/react (::values state))]
     (when-not (= :loading values)
       (let [*property-name (::property-name state)
@@ -433,7 +434,7 @@
                      (reset! *property-key nil))
                    state)}
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? _page-configure? in-block-container?]
+  [state entity *property-key *property-value {:keys [class-schema? in-block-container?]
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         entity-properties (->> (keys (:block/properties entity))
