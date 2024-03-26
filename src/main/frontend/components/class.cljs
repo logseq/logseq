@@ -103,25 +103,28 @@
                                class-ancestors))]])))])))
 
 (defn class-children-aux
-  [class]
+  [class {:keys [default-collapsed?] :as opts}]
   (let [children (:class/_parent class)]
     (when (seq children)
       [:ul
-       (for [child children]
+       (for [child (sort-by :block/original-name children)]
          (let [title [:li.ml-2 (block/page-reference false (:block/original-name child) {:show-brackets? false} nil)]]
            (if (seq (:class/_parent child))
              (ui/foldable
               title
-              (class-children-aux child)
-              {:default-collapsed? false})
+              (class-children-aux child opts)
+              {:default-collapsed? default-collapsed?})
              title)))])))
 
 (rum/defc class-children
   [class]
   (when (seq (:class/_parent class))
-    [:div.mt-4
-     (ui/foldable
-      [:h2.font-medium "Child classes"]
-      [:div.mt-2.ml-1 (class-children-aux class)]
-      {:default-collapsed? false
-       :title-trigger? true})]))
+    (let [children-pages (model/get-class-children (state/get-current-repo) (:db/id class))
+          ;; Expand children if there are about a pageful of total blocks to display
+          default-collapsed? (> (count children-pages) 30)]
+      [:div.mt-4
+       (ui/foldable
+        [:h2.font-medium "Child classes (" (count children-pages) ")"]
+        [:div.mt-2.ml-1 (class-children-aux class {:default-collapsed? default-collapsed?})]
+        {:default-collapsed? false
+         :title-trigger? true})])))
