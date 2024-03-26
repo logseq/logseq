@@ -192,7 +192,8 @@
    (graph-switch graph)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
-     (and (search-handler/rebuild-indices!) true))))
+     (and (search-handler/rebuild-indices!) true)
+     (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (state/set-state! :db/async-queries #{})
