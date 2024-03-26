@@ -89,9 +89,10 @@
   [graphs-dir db-name]
   (let [[db-sanitized-name db-full-path] (get-db-full-path graphs-dir db-name)
         db (new sqlite db-full-path nil)
-        schema (if (sqlite-util/db-based-graph? db-name)
-                 db-schema/schema-for-db-based-graph
-                 db-schema/schema)]
+        ;; For both desktop and CLI, only file graphs have db-name that indicate their db type
+        schema (if (sqlite-util/local-file-based-graph? db-name)
+                 db-schema/schema
+                 db-schema/schema-for-db-based-graph)]
     (sqlite-common-db/create-kvs-table! db)
     (swap! databases assoc db-sanitized-name db)
     (let [storage (new-sqlite-storage db)
