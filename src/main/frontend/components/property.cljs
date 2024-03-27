@@ -128,13 +128,13 @@
 
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
-  [property {:keys [*property-name *property-schema built-in-property? disabled?
+  [property {:keys [*property-name *property-schema built-in? disabled?
                     show-type-change-hints? in-block-container? block *show-new-property-config?
                     default-open?]}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
         schema-types (->> (concat db-property-type/user-built-in-property-types
-                                  (when built-in-property?
+                                  (when built-in?
                                     db-property-type/internal-built-in-property-types))
                           (map (fn [type]
                                  {:label (property-type-label type)
@@ -223,7 +223,6 @@
     (when-not (= :loading values)
       (let [*property-name (::property-name state)
             *property-schema (::property-schema state)
-            built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
             property (db/sub-block (:db/id property))
             built-in? (ldb/built-in? (db/get-db) property)
             disabled? (or built-in? config/publishing?)
@@ -279,7 +278,7 @@
                         (svg/help-circle))]
              (schema-type property {:*property-name *property-name
                                     :*property-schema *property-schema
-                                    :built-in-property? built-in-property?
+                                    :built-in? built-in?
                                     :disabled? disabled?
                                     :show-type-change-hints? true}))]
 
@@ -394,23 +393,24 @@
   [entity property-name {:keys [class-schema? page-configure?]}]
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
-    (if-let [_property (get-property-from-db property-name)]
-      (if (contains? db-property/hidden-built-in-properties (keyword property-name))
-        (do (notification/show! "This is a built-in property that can't be used." :error)
+    (if-let [property (get-property-from-db property-name)]
+      (if (and (not (get-in property [:block/schema :public?]))
+               (ldb/built-in? (db/get-db repo) property))
+        (do (notification/show! "This is a private built-in property that can't be used." :error)
             (pv/exit-edit-property))
         ;; Both conditions necessary so that a class can add its own page properties
         (when (and (contains? (:block/type entity) "class") class-schema?)
           (pv/<add-property! entity property-name "" {:class-schema? class-schema?
                                                      ;; Only enter property names from sub-modal as inputting
                                                      ;; property values is buggy in sub-modal
-                                                     :exit-edit? page-configure?})))
+                                                      :exit-edit? page-configure?})))
       ;; new property entered
       (if (db-property/valid-property-name? property-name)
         (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/<add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (p/do!
-            (db-property-handler/upsert-property! repo property-name {} {})
-            true))
+           (db-property-handler/upsert-property! repo property-name {} {})
+           true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
@@ -449,14 +449,10 @@
                                (map #(:block/original-name (db/entity [:block/uuid %])))
                                (remove nil?)
                                (set))
-        existing-tag-alias (reduce (fn [acc prop]
-                                     (if (seq (get entity (get-in db-property/built-in-properties [prop :attribute])))
-                                       (if-let [name (get-in db-property/built-in-properties [prop :original-name])]
-                                         (conj acc name)
-                                         acc)
-                                       acc))
-                                   #{}
-                                   [:tags :alias])
+        existing-tag-alias (->> [:logseq.property/tags :logseq.property/alias]
+                                (map db-property/built-in-properties)
+                                (keep #(when (get entity (:attribute %)) (:original-name %)))
+                                set)
         exclude-properties* (set/union entity-properties existing-tag-alias)
         exclude-properties (set/union exclude-properties* (set (map string/lower-case exclude-properties*)))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
@@ -720,11 +716,13 @@
         alias (set (map :block/uuid (:block/alias block)))
         alias-properties (when (seq alias)
                            [[(db-pu/get-built-in-property-uuid :logseq.property/alias) alias]])
+        db (db/get-db (state/get-current-repo))
         remove-built-in-properties (fn [properties]
                                      (remove (fn [x]
                                                (let [id (if (uuid? x) x (first x))]
-                                                 (when (uuid? id)
-                                                   (contains? db-property/hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid id])))))))
+                                                 (when-let [ent (and (uuid? id) (db/entity [:block/uuid id]))]
+                                                   (and (not (get-in ent [:block/schema :public?]))
+                                                        (ldb/built-in? db ent)))))
                                              properties))
         {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))

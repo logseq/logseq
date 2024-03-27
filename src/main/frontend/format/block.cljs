@@ -16,15 +16,24 @@
             [logseq.db.frontend.property :as db-property]
             [frontend.format.mldoc :as mldoc]))
 
+(def built-in-property-names-to-idents
+  "This maps built-in properties names to idents. Only use
+   with legacy internals where names are hardcoded"
+  (into {}
+        (map (fn [[k v]]
+               [(:name v) k])
+             db-property/built-in-properties)))
+
 (defn- update-extracted-block-properties
   "Updates DB graph blocks to ensure that built-in properties are using uuids
   for property ids"
   [blocks]
   (let [repo (state/get-current-repo)
         update-properties (fn [props]
-                            (update-keys props #(if (contains? db-property/built-in-properties-keys %)
-                                                  (db-pu/get-built-in-property-uuid repo (get-in db-property/built-in-properties [% :db-ident]))
-                                                  %)))]
+                            (update-keys props
+                                         #(if-let [ident (built-in-property-names-to-idents %)]
+                                            (db-pu/get-built-in-property-uuid repo ident)
+                                            %)))]
     (if (config/db-based-graph? repo)
      (->> blocks
           (map (fn [b]

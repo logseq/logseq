@@ -50,14 +50,19 @@
       (get templates name))))
 
 (defn- <db-based-get-all-properties
-  "Return seq of property names. :block/type could be one of [property, class]."
+  "Return seq of all property names except for private built-in properties."
   [graph]
   (p/let [result (<q graph
-                     '[:find [(pull ?e [:block/original-name]) ...]
+                     '[:find [(pull ?e [:block/original-name :block/schema :db/ident]) ...]
                        :where
                        [?e :block/type "property"]
                        [?e :block/original-name]])]
-    (map :block/original-name result)))
+    (->> result
+         ;; remove private built-in properties
+         (remove #(and (:db/ident %)
+                       (string/starts-with? (namespace (:db/ident %)) "logseq.")
+                       (not (get-in % [:block/schema :public?]))))
+         (map :block/original-name))))
 
 (defn <get-all-properties
   "Returns a seq of property name strings"
