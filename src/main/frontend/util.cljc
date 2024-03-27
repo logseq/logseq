@@ -1096,13 +1096,16 @@
         parts-2 (directories-f another-file-path)
         [parts-1 parts-2] (remove-common-preceding parts-1 parts-2)
         another-file-name (last (string/split another-file-path "/"))]
-    (->> (concat
-          (if (seq parts-1)
-            (repeat (count parts-1) "..")
-            ["."])
-          parts-2
-          [another-file-name])
-         string-join-path)))
+    (->>
+     (concat
+      ;; when another-file-path starts with "/", don't append any ".."
+      (when (not (= (first parts-2) ""))
+        (if (seq parts-1)
+          (repeat (count parts-1) "..")
+          ["."]))
+      parts-2
+      [another-file-name])
+     string-join-path)))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -1199,7 +1202,6 @@
                  (nil? e))
              (async/close! ch))))
        ch)))
-
 
 #?(:cljs
    (defn trace!

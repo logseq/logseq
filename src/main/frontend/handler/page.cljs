@@ -694,12 +694,6 @@
                      page)
         (let [journal? (date/valid-journal-title? page)
               ref-file-path (str
-                             (if (or (util/electron?) (mobile-util/native-platform?))
-                               (-> (config/get-repo-dir (state/get-current-repo))
-                                   js/decodeURI
-                                   (string/replace #"/+$" "")
-                                   (str "/"))
-                               "")
                              (get-directory journal?)
                              "/"
                              (get-file-name journal? page)
