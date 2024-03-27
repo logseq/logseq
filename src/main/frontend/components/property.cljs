@@ -368,18 +368,21 @@
                                     (swap! *property-schema assoc :hide? (not hide?))
                                     (save-property-fn))})])
 
-          [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-           [:label "Description:"]
-           [:div.col-span-3
-            (if (and disabled? inline-text)
-              (inline-text {} :markdown (:description @*property-schema))
-              [:div.mt-1
-               (shui/textarea
-                {:on-change     (fn [e]
-                                  (swap! *property-schema assoc :description (util/evalue e)))
-                 :on-blur       save-property-fn
-                 :disabled      disabled?
-                 :default-value (:description @*property-schema)})])]]]]))))
+          (let [description (:description @*property-schema)]
+            (when (or (not disabled?)
+                    (and disabled? (not (string/blank? description))))
+              [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+               [:label "Description:"]
+               [:div.col-span-3
+                (if (and disabled? inline-text)
+                  (inline-text {} :markdown description)
+                  [:div.mt-1
+                   (shui/textarea
+                     {:on-change (fn [e]
+                                   (swap! *property-schema assoc :description (util/evalue e)))
+                      :on-blur save-property-fn
+                      :disabled disabled?
+                      :default-value description})])]]))]]))))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
@@ -610,9 +613,14 @@
           :on-click (fn [^js e]
                       (shui/popup-show!
                         (.-target e)
-                        (fn [_]
+                        (fn [{:keys [id]}]
                           [:div.p-2
                            [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                           [:span.close.absolute.right-2.top-2
+                            (shui/button
+                              {:variant :ghost :size :sm :class "!w-4 !h-6"
+                               :on-click #(shui/popup-hide! id)}
+                              (shui/tabler-icon "x" {:size 16}))]
                            (property-config property
                              {:inline-text inline-text
                               :page-cp page-cp})])
