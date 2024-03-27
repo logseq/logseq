@@ -392,7 +392,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Save x64 artifacts
         run: |
@@ -469,7 +469,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Save arm64 artifacts
         run: |
