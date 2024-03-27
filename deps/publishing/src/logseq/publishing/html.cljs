@@ -2,9 +2,9 @@
   "This frontend only ns builds the publishing html including doing all the
 necessary db filtering"
   (:require [clojure.string :as string]
+            [datascript.transit :as dt]
             [goog.string :as gstring]
             [goog.string.format]
-            [datascript.transit :as dt]
             [logseq.publishing.db :as db]))
 
 ;; Copied from hiccup but tweaked for publish usage
@@ -22,26 +22,26 @@ necessary db filtering"
 ;; Copied from https://github.com/babashka/babashka/blob/8c1077af00c818ade9e646dfe1297bbe24b17f4d/examples/notes.clj#L21
 (defn- html [v]
   (cond (vector? v)
-    (let [tag (first v)
-          attrs (second v)
-          attrs (when (map? attrs) attrs)
-          elts (if attrs (nnext v) (next v))
-          tag-name (name tag)]
-      (gstring/format "<%s%s>%s</%s>\n" tag-name (html attrs) (html elts) tag-name))
-    (map? v)
-    (string/join ""
-                 (keep (fn [[k v]]
+        (let [tag (first v)
+              attrs (second v)
+              attrs (when (map? attrs) attrs)
+              elts (if attrs (nnext v) (next v))
+              tag-name (name tag)]
+          (gstring/format "<%s%s>%s</%s>\n" tag-name (html attrs) (html elts) tag-name))
+        (map? v)
+        (string/join ""
+                     (keep (fn [[k v]]
                          ;; Skip nil values because some html tags haven't been
                          ;; given values through html-options
-                         (when (some? v)
-                           (gstring/format " %s=\"%s\"" (name k) v))) v))
-    (seq? v)
-    (string/join " " (map html v))
-    :else (str v)))
+                             (when (some? v)
+                               (gstring/format " %s=\"%s\"" (name k) v))) v))
+        (seq? v)
+        (string/join " " (map html v))
+        :else (str v)))
 
 (defn- ^:large-vars/html publishing-html
   [transit-db app-state options]
-  (let [{:keys [icon name alias title description url]} options
+  (let [{:keys [icon name alias title description url scripts]} options
         icon (or icon "static/img/logo.png")
         project (or alias name)]
     (str "<!DOCTYPE html>\n"
@@ -120,7 +120,7 @@ necessary db filtering"
           }
         }
       }(window.location))"]
-            ;; TODO: should make this configurable
+            (map  #(identity [:script {:src %}]) scripts)
             [:script {:src "static/js/react.production.min.js"}]
             [:script {:src "static/js/react-dom.production.min.js"}]
             [:script {:src "static/js/ui.js"}]
