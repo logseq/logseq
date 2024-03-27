@@ -191,6 +191,7 @@
          {:on-mouse-over #(reset! *hover? true)
           :on-mouse-leave #(when-not (state/dropdown-opened?)
                              (reset! *hover? false))
+          :on-pointer-up #(reset! *hover? false)
           :on-click (if config/publishing?
                       (fn [_]
                         (when (seq (set/intersection #{"class" "property"} types))
@@ -222,6 +223,7 @@
                    [:span.opacity-80.flex.items-center
                     (ui/icon "adjustments-horizontal" {:size 16})]
                    (ui/icon "x")))])])]
+
         (when show-info?
           (if collapsed?
             (when (or (seq (:block/properties page))
