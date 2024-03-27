@@ -12,7 +12,6 @@
             [logseq.common.config :as common-config]
             [frontend.db.async :as db-async]
             [frontend.config :as config]
-            [logseq.db.frontend.property :as db-property]
             [frontend.handler.file-based.property.util :as property-util]
             [cljs-bean.core :as bean]
             [frontend.db :as db]
@@ -73,12 +72,11 @@
   []
   (when-let [repo (state/get-current-repo)]
     (let [hidden-props (if (config/db-based-graph? repo)
-                        (set (map #(or (get-in db-property/built-in-properties [% :original-name])
-                                       (name %))
-                                  db-property/hidden-built-in-properties))
-                        (set (map name (property-util/hidden-properties))))]
-     (p/let [properties (db-async/<get-all-properties)]
-       (remove hidden-props properties)))))
+                         ;; no-op since already removed
+                         (constantly false)
+                         (set (map name (property-util/hidden-properties))))]
+      (p/let [properties (db-async/<get-all-properties)]
+        (remove hidden-props properties)))))
 
 (defn property-search
   ([q]

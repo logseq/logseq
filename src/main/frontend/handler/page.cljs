@@ -26,7 +26,6 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.db.frontend.property :as db-property]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -228,14 +227,15 @@
 
 (defn get-all-pages
   [repo]
-  (->> (db/get-all-pages repo)
-       (remove (fn [p]
-                 (let [name (:block/name p)]
-                   (or (util/uuid-string? name)
-                       (common-config/draw? name)
-                       (db/built-in-pages-names (string/upper-case name))
-                       (db-property/built-in-properties-keys-str name)))))
-       (common-handler/fix-pages-timestamps)))
+  (let [db (conn/get-db repo)]
+    (->> (db/get-all-pages repo)
+        (remove (fn [p]
+                  (let [name (:block/name p)]
+                    (or (util/uuid-string? name)
+                        (common-config/draw? name)
+                        (db/built-in-pages-names (string/upper-case name))
+                        (and (contains? (set (:block/type p)) "property") (ldb/built-in? db p))))))
+        (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
   [page-name]
