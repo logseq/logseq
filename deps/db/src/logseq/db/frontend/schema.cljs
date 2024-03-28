@@ -83,8 +83,8 @@
    ;; whether blocks is a repeated block (usually a task)
    :block/repeated? {}
 
-   :block/created-at {}
-   :block/updated-at {}
+   :block/created-at {:db/index true}
+   :block/updated-at {:db/index true}
 
    ;; page additional attributes
    ;; page's name, lowercase
@@ -92,6 +92,11 @@
 
    ;; page's original name
    :block/original-name {:db/unique :db.unique/identity}
+
+   ;; class properties
+   :class/schema.properties {:db/valueType :db.type/ref
+                             :db/cardinality :db.cardinality/many}
+
    ;; whether page's is a journal
    :block/journal? {}
    :block/journal-day {}

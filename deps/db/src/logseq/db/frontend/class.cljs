@@ -4,7 +4,10 @@
 ;; TODO: disable name changes for those built-in page/class names and their properties names
 (def ^:large-vars/data-var built-in-classes
   {:task {:original-name "Task"
-          :schema {:properties ["status" "priority" "scheduled"  "deadline"]}}
+          :schema {:properties #{:logseq.property/status
+                                 :logseq.property/priority
+                                 :logseq.property/scheduled
+                                 :logseq.property/deadline}}}
    :card {:original-name "card"
           ;; :schema {:property []}
           }

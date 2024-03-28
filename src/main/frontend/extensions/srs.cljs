@@ -47,12 +47,12 @@
 
 (def card-hash-tag "card")
 
-(def card-last-interval-property        :card-last-interval)
-(def card-repeats-property              :card-repeats)
-(def card-last-reviewed-property        :card-last-reviewed)
-(def card-next-schedule-property        :card-next-schedule)
-(def card-last-easiness-factor-property :card-ease-factor)
-(def card-last-score-property           :card-last-score)
+(def card-last-interval-property        :logseq.property/card-last-interval)
+(def card-repeats-property              :logseq.property/card-repeats)
+(def card-last-reviewed-property        :logseq.property/card-last-reviewed)
+(def card-next-schedule-property        :logseq.property/card-next-schedule)
+(def card-last-easiness-factor-property :logseq.property/card-ease-factor)
+(def card-last-score-property           :logseq.property/card-last-score)
 
 (def default-card-properties-map {card-last-interval-property -1
                                   card-repeats-property 0

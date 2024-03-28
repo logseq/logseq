@@ -90,12 +90,12 @@
 (defn set-block-own-order-list-type!
   [block type]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/set-block-property! (state/get-current-repo) uuid :logseq.order-list-type (name type))))
+    (property-handler/set-block-property! (state/get-current-repo) uuid :logseq.property/order-list-type (name type))))
 
 (defn remove-block-own-order-list-type!
   [block]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/remove-block-property! (state/get-current-repo) uuid :logseq.order-list-type)))
+    (property-handler/remove-block-property! (state/get-current-repo) uuid :logseq.property/order-list-type)))
 
 (defn own-order-number-list?
   [block]

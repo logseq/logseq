@@ -163,9 +163,9 @@
                                           [:p (t :context-menu/template-exists-warning)]
                                           :error)
                                          (p/do!
-                                           (property-handler/set-block-property! repo block-id :template title)
+                                           (property-handler/set-block-property! repo block-id :logseq.property/template title)
                                            (when (false? template-including-parent?)
-                                             (property-handler/set-block-property! repo block-id :template-including-parent false))
+                                             (property-handler/set-block-property! repo block-id :logseq.property/template-including-parent false))
                                            (state/hide-custom-context-menu!))))))))]
          [:hr.menu-separator]])
       (ui/menu-link
@@ -185,8 +185,8 @@
             heading (or (pu/lookup properties :heading)
                         false)]
         [:.menu-links-wrapper
-         (ui/menu-background-color #(property-handler/set-block-property! repo block-id :background-color %)
-                                   #(property-handler/remove-block-property! repo block-id :background-color))
+         (ui/menu-background-color #(property-handler/set-block-property! repo block-id :logseq.property/background-color %)
+                                   #(property-handler/remove-block-property! repo block-id :logseq.property/background-color))
 
          (ui/menu-heading heading
                           #(editor-handler/set-heading! block-id %)

@@ -98,31 +98,21 @@
       (if (util/uuid-string? v-str) (uuid v-str) v-str))))
 
 (defn upsert-property!
-  [repo k-name schema {:keys [property-uuid]}]
-  (let [property (db/entity [:block/name (common-util/page-name-sanity-lc k-name)])
-        k-name (name k-name)
-        property-uuid (or (:block/uuid property) property-uuid (db/new-block-id))]
+  [repo k-name schema {}]
+  (let [db-ident (db-property/get-db-ident-from-name k-name)
+        property (db/entity db-ident)
+        k-name (name k-name)]
     (if property
-      (do
-        (db/transact! repo [(cond->
-                             (outliner-core/block-with-updated-at
-                              {:block/schema schema
-                               :block/uuid property-uuid
-                               :block/type "property"})
-                              (= :many (:cardinality schema))
-                              (assoc :db/cardinality :db.cardinality/many))]
-                      {:outliner-op :save-block})
-        (:db/ident property))
-      (let [db-ident (->
-                      (str "user.property/"
-                           (-> (string/lower-case k-name)
-                               (string/replace #"^:" "")
-                               (string/replace " " "_")
-                               (string/trim)))
-                      keyword)]
-        (db/transact! repo [(sqlite-util/build-new-property k-name schema property-uuid {:db-ident db-ident})]
-                      {:outliner-op :new-property})
-        db-ident))))
+      (db/transact! repo [(cond->
+                           (outliner-core/block-with-updated-at
+                            {:db/ident db-ident
+                             :block/schema schema})
+                            (= :many (:cardinality schema))
+                            (assoc :db/cardinality :db.cardinality/many))]
+                    {:outliner-op :save-block})
+      (db/transact! repo [(sqlite-util/build-new-property k-name schema {:db-ident db-ident})]
+                    {:outliner-op :new-property}))
+    db-ident))
 
 (defn validate-property-value
   [schema value]
@@ -132,7 +122,8 @@
   [repo block-id k-name values _opts]
   (let [block (db/entity repo [:block/uuid block-id])
         k-name (name k-name)
-        property (db/pull repo '[*] [:block/name (common-util/page-name-sanity-lc k-name)])
+        db-ident (db-property/get-db-ident-from-name k-name)
+        property (db/entity db-ident)
         values (remove nil? values)
         property-uuid (or (:block/uuid property) (db/new-block-id))
         property-schema (:block/schema property)
@@ -199,7 +190,7 @@
   [repo block-id k-name v {:keys [old-value] :as opts}]
   (let [block (db/entity repo [:block/uuid block-id])
         k-name (name k-name)
-        property (db/pull repo '[*] [:block/name (common-util/page-name-sanity-lc k-name)])
+        property (db/entity (db-property/get-db-ident-from-name k-name))
         property-uuid (or (:block/uuid property) (db/new-block-id))
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
@@ -282,8 +273,7 @@
                 (and (not (ldb/built-in? (db/get-db) property)) (empty? property-values)))
         (let [tx-data (cond-> (merge {:block/uuid property-uuid} properties)
                         property-name (merge
-                                       {:block/original-name property-name
-                                        :block/name (common-util/page-name-sanity-lc property-name)})
+                                       {:block/original-name property-name})
                         property-schema (assoc :block/schema
                                                  ;; a property must have a :type when making schema changes
                                                (merge {:type :default}
@@ -297,7 +287,8 @@
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
       (let [k-name (name k-name)
-            property (db/pull repo '[*] [:block/name (common-util/page-name-sanity-lc k-name)])
+            db-ident (db-property/get-db-ident-from-name k-name)
+            property (db/entity db-ident)
             property-uuid (or (:block/uuid property) (db/new-block-id))
             property-type (get-in property [:block/schema :type])
             {:keys [properties] :as class-schema} (:block/schema class)
@@ -423,20 +414,15 @@
     (when (not= property-id (:block/uuid block))
       (when-let [property (db/pull [:block/uuid property-id])]
         (let [schema (:block/schema property)
-              k-name (:block/name property)
+              db-ident (:db/ident property)
               property-id (:db/ident property)
-              tags-or-alias? (and (contains? #{"tags" "alias"} k-name)
+              tags-or-alias? (and (contains? #{:block/tags :block/alias} db-ident)
                                   (uuid? property-value))]
           (if tags-or-alias?
-            (let [property-value-id (:db/id (db/entity [:block/uuid property-value]))
-                  attribute (case k-name
-                              "alias"
-                              :block/alias
-                              "tags"
-                              :block/tags)]
+            (let [property-value-id (:db/id (db/entity [:block/uuid property-value]))]
               (when property-value-id
                 (db/transact! repo
-                              [[:db/retract (:db/id block) attribute property-value-id]]
+                              [[:db/retract (:db/id block) db-ident property-value-id]]
                               {:outliner-op :save-block})))
             (if (= :many (:cardinality schema))
               (db/transact! repo

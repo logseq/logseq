@@ -94,8 +94,8 @@
     [:th.whitespace-nowrap
      [:a {:on-click (fn []
                       (p/do!
-                       (property-handler/set-block-property! repo block-id :query-sort-by (if (uuid? column) column (name column)))
-                       (property-handler/set-block-property! repo block-id :query-sort-desc (not sort-desc?))))}
+                        (property-handler/set-block-property! repo block-id :logseq.property/query-sort-by (if (uuid? column) column (name column)))
+                        (property-handler/set-block-property! repo block-id :logseq.property/query-sort-desc (not sort-desc?))))}
       [:div.flex.items-center
        [:span.mr-1 title]
        (when (= sort-by-column column)
