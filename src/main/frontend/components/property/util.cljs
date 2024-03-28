@@ -7,6 +7,6 @@
   [property property-name property-schema]
   (db-property-handler/<update-property!
    (state/get-current-repo)
-   (:block/uuid property)
+   (:db/ident property)
    {:property-name property-name
     :property-schema property-schema}))

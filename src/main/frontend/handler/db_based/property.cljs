@@ -242,16 +242,16 @@
                     (db/transact! repo [block] {:outliner-op :save-block})))))))))))
 
 (defn <update-property!
-  [repo property-uuid {:keys [property-name property-schema properties]}]
-  {:pre [(uuid? property-uuid)]}
-  (when-let [property (db/entity [:block/uuid property-uuid])]
+  [repo property-id {:keys [property-name property-schema properties]}]
+  (assert (keyword? property-id) (str "property-id " property-id " is not a keyword"))
+  (when-let [property (db/entity property-id)]
     (p/let [type (get-in property [:block/schema :type])
             type-changed? (and type (:type property-schema) (not= type (:type property-schema)))
-            property-values (db-async/<get-block-property-values repo property-uuid)]
+            property-values (db-async/<get-block-property-values repo property-id)]
       (when (or (not type-changed?)
                 ;; only change type if property hasn't been used yet
                 (and (not (ldb/built-in? (db/get-db) property)) (empty? property-values)))
-        (let [tx-data (cond-> (merge {:block/uuid property-uuid} properties)
+        (let [tx-data (cond-> (merge {:db/ident property-id} properties)
                         property-name (merge
                                        {:block/original-name property-name})
                         property-schema (assoc :block/schema

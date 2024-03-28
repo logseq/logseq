@@ -3,7 +3,6 @@
   (:require [promesa.core :as p]
             [frontend.state :as state]
             [frontend.config :as config]
-            [clojure.string :as string]
             [frontend.util :as util]
             [frontend.db.utils :as db-utils]
             [frontend.db.async.util :as db-async-util]
@@ -16,9 +15,7 @@
             [frontend.date :as date]
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
-            [logseq.db :as ldb]
-            [frontend.handler.property.util :as pu]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db :as ldb]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -77,64 +74,20 @@
                          [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]])]
       (remove db-model/hidden-page? result))))
 
-(defn <get-db-based-property-values
-  [graph property]
-  (let [property-name (-> (if (keyword? property) (name property) property)
-                          util/page-name-sanity-lc)
-        property (pu/get-property property-name)
-        closed-values? (seq (get-in property [:block/schema :values]))]
-    (p/let [result (<q graph
-                       '[:find ?prop-type ?v
-                         :in $ ?prop-name
-                         :where
-                         [?b :block/properties ?bp]
-                         [?prop-b :block/name ?prop-name]
-                         [?prop-b :block/uuid ?prop-uuid]
-                         [?prop-b :block/schema ?prop-schema]
-                         [(get ?prop-schema :type) ?prop-type]
-                         [(get ?bp ?prop-uuid) ?v]
-                         [(not= ?v :property/empty-placeholder)]]
-                       property-name)]
-      (->> result
-           (map (fn [[prop-type v]] [prop-type (if (coll? v) v [v])]))
-           (mapcat (fn [[prop-type vals]]
-                     (let [result (if closed-values?
-                                    (map #(db-property/closed-value-name (db-utils/entity graph [:block/uuid %]))
-                                         vals)
-                                    (case prop-type
-                                      :default
-                                      ;; Remove multi-block properties as there isn't a supported approach to query them yet
-                                      (map str (remove uuid? vals))
-                                      (:page :date)
-                                      (map #(:block/original-name (db-utils/entity graph [:block/uuid %]))
-                                           vals)
-                                      :number
-                                      vals
-                                      ;; Checkboxes returned as strings as builder doesn't display boolean values correctly
-                                      (map str vals)))]
-                       result)))
-           ;; Remove blanks as they match on everything
-           (remove string/blank?)
-           (distinct)
-           (sort)))))
-
 (defn <get-property-values
   [graph property]
-  (if (config/db-based-graph? graph)
-    (<get-db-based-property-values graph property)
+  (when-not (config/db-based-graph? graph)
     (file-async/<get-file-based-property-values graph property)))
 
 (defn <get-block-property-values
-  [graph property-uuid]
+  [graph property-id]
   (<q graph
       '[:find ?b ?v
-        :in $ ?property-uuid
+        :in $ ?property-id
         :where
-        [?b :block/properties ?p]
-        [(get ?p ?property-uuid) ?v]
-        [(some? ?v)]
+        [?b ?property-id ?v]
         [(not= ?v :property/empty-placeholder)]]
-      property-uuid))
+      property-id))
 
 ;; TODO: batch queries for better performance and UX
 (defn <get-block
