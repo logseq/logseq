@@ -8,24 +8,26 @@ export const getPdfjsLib = () => {
 export const viewportToScaled = (
   rect,
   viewport,
-  textLayer
+  textlayer,
+  rotate
 ) => {
-  const computedStyle = window.getComputedStyle(textLayer.div);
-  const matrixString = computedStyle.transform || computedStyle.webkitTransform || computedStyle.mozTransform;
+  const computedStyle = window.getComputedStyle(textlayer.div);
+  const matrixString = rotate ? computedStyle.transform || computedStyle.webkitTransform || computedStyle.mozTransform : '';
   const domMatrix = new DOMMatrix(matrixString);
-  const transform = domMatrix.invertSelf();  
+  const transform = domMatrix.invertSelf();
   
   const [vwTopLeft, vwBottomRight] = [new DOMPoint(rect.left, rect.top), new DOMPoint(rect.left + rect.width, rect.top + rect.height)]
   const [scTopLeft, scBottomRight] = [vwTopLeft.matrixTransform(transform), vwBottomRight.matrixTransform(transform)]
 
-  return {
+  const scaled = {
     x1: Math.min(scTopLeft.x, scBottomRight.x),
     y1: Math.min(scTopLeft.y, scBottomRight.y),
     x2: Math.max(scTopLeft.x, scBottomRight.x),
     y2: Math.max(scTopLeft.y, scBottomRight.y),
     width: viewport.width,
     height: viewport.height
-  }
+  };
+  return scaled;
 }
 
 const pdfToViewport = (pdf, viewport) => {
@@ -48,30 +50,39 @@ const pdfToViewport = (pdf, viewport) => {
 export const scaledToViewport = (
   scaled,
   viewport,
-  usePdfCoordinates = false
+  textlayer,
+  rotate
 ) => {
-  const { width, height } = viewport
-
-  if (usePdfCoordinates) {
-    return pdfToViewport(scaled, viewport)
-  }
-
   if (scaled.x1 === undefined) {
     throw new Error('You are using old position format, please update')
   }
 
-  const x1 = (width * scaled.x1) / scaled.width
-  const y1 = (height * scaled.y1) / scaled.height
+  const domMatrix = (function () {
+    if (rotate) {
+      const computedStyle = window.getComputedStyle(textlayer.div);
+      const matrixString = computedStyle.transform || computedStyle.webkitTransform || computedStyle.mozTransform;
+      return new DOMMatrix(matrixString);
+    } else {
+      return new DOMMatrix();
+    }
+  })();
+  const transform = domMatrix.scale(viewport.width / scaled.width, viewport.height / scaled.height);
 
-  const x2 = (width * scaled.x2) / scaled.width
-  const y2 = (height * scaled.y2) / scaled.height
+  const [scTopLeft, scBottomRight] = [new DOMPoint(scaled.x1, scaled.y1), new DOMPoint(scaled.x2, scaled.y2)]
+  const [vwTopLeft, vwBottomRight] = [scTopLeft.matrixTransform(transform), scBottomRight.matrixTransform(transform)]
 
-  return {
+  const x1 = Math.min(vwTopLeft.x, vwBottomRight.x);
+  const y1 = Math.min(vwTopLeft.y, vwBottomRight.y);
+  const x2 = Math.max(vwTopLeft.x, vwBottomRight.x);
+  const y2 = Math.max(vwTopLeft.y, vwBottomRight.y);
+
+  const vwRect = {
     left: x1,
     top: y1,
     width: x2 - x1,
     height: y2 - y1,
-  }
+  };
+  return vwRect;
 }
 
 export const getBoundingRect = (clientRects) => {
