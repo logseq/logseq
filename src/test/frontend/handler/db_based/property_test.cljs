@@ -4,7 +4,6 @@
             [clojure.test :refer [deftest is testing are use-fixtures]]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [frontend.handler.property.util :as pu]
             [frontend.state :as state]
             [frontend.handler.page :as page-handler]
             [frontend.handler.editor :as editor-handler]))
@@ -153,9 +152,9 @@
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
-          (pu/get-block-property-value fb k)
+          (get (:block/properties fb) (:block/uuid (db/entity [:block/name k])))
           v
-          (pu/get-block-property-value sb k)
+          (get (:block/properties sb) (:block/uuid (db/entity [:block/name k])))
           v))))
 
   (testing "Batch remove properties"

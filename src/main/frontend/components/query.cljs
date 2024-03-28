@@ -158,7 +158,7 @@
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
         properties (:block/properties current-block)
-        query-table-property (pu/lookup properties :query-table)
+        query-table-property (pu/lookup properties :logseq.property/query-table)
         table? (or table-view?
                    query-table-property
                    (and (string? query) (string/ends-with? (string/trim query) "table")))

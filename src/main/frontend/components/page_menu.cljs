@@ -59,7 +59,7 @@
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           properties (:block/properties page)
-          public? (true? (pu/lookup properties :public))
+          public? (true? (pu/lookup properties :logseq.property/public))
           _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-name)
           developer-mode? (state/sub [:ui/developer-mode?])

@@ -591,7 +591,7 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)))}
      (when-not hide-icon?
-       (when-let [icon (pu/get-block-property-value page-entity :icon)]
+       (when-let [icon (pu/get-block-property-value page-entity :logseq.property/icon)]
          [:span.mr-1.inline-flex.items-center (icon/icon icon)]))
      [:span
       (if (and (coll? children) (seq children))
@@ -911,8 +911,8 @@
             db-id (:db/id block)
             block (when db-id (db/sub-block db-id))
             properties (:block/properties block)
-            block-type (keyword (pu/lookup properties :ls-type))
-            hl-type (pu/lookup properties :hl-type)
+            block-type (keyword (pu/lookup properties :logseq.property/ls-type))
+            hl-type (pu/lookup properties :logseq.property/hl-type)
             repo (state/get-current-repo)
             stop-inner-events? (= block-type :whiteboard-shape)]
         (if (and block (:block/content block))
@@ -1429,7 +1429,7 @@
                          (:db/id)
                          (db/entity)
                          :block/properties)
-          macros (pu/lookup properties :macros)
+          macros (pu/lookup-by-name properties :macros)
           macro-content (or
                          (get macros name)
                          (get (state/get-macros) name)
@@ -1969,7 +1969,7 @@
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
         block-type (or (keyword
-                        (pu/lookup properties :ls-type))
+                        (pu/lookup properties :logseq.property/ls-type))
                        :default)
         html-export? (:html-export? config)
         checkbox (when (and (not pre-block?)
@@ -1980,14 +1980,14 @@
                         (marker-switch t))
         marker-cp (marker-cp t)
         priority (priority-cp t)
-        bg-color (pu/lookup properties :background-color)
+        bg-color (pu/lookup properties :logseq.property/background-color)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
         heading (or
                  (and heading-level
                       (<= heading-level 6)
                       heading-level)
-                 (pu/lookup properties :heading))
+                 (pu/lookup properties :logseq.property/heading))
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
                (keyword (str "h" heading
@@ -1996,7 +1996,7 @@
     (->elem
      elem
      (merge
-      {:data-hl-type (pu/lookup properties :hl-type)}
+      {:data-hl-type (pu/lookup properties :logseq.property/hl-type)}
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
@@ -2010,7 +2010,7 @@
            :class "px-1 with-bg-color"})))
 
      ;; children
-     (let [area?  (= :area (keyword (pu/lookup properties :hl-type)))
+     (let [area?  (= :area (keyword (pu/lookup properties :logseq.property/hl-type)))
            hl-ref #(when (and (or config/publishing? (util/electron?))
                               (not (#{:default :whiteboard-shape} block-type)))
                      [:div.prefix-link
@@ -2030,12 +2030,12 @@
 
                       [:span.hl-page
                        [:strong.forbid-edit (str "P" (or
-                                                      (pu/lookup properties :hl-page)
+                                                      (pu/lookup properties :logseq.property/hl-page)
                                                       "?"))]
                        [:label.blank " "]]
 
                       (when (and area?
-                                 (pu/lookup properties :hl-stamp))
+                                 (pu/lookup properties :logseq.property/hl-stamp))
                         (pdf-assets/area-display t))])]
        (remove-nils
         (concat
@@ -2374,7 +2374,7 @@
         stop-events? (:stop-events? config)
         block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq title))
         block-type (or
-                    (pu/lookup properties :ls-type)
+                    (pu/lookup properties :logseq.property/ls-type)
                     :default)
         content (if (string? content) (string/trim content) "")
         mouse-down-key (if (util/ios?)
@@ -2387,9 +2387,9 @@
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
                 (not (string/blank?
-                      (pu/lookup properties :hl-color)))
+                      (pu/lookup properties :logseq.property/hl-color)))
                 (assoc :data-hl-color
-                       (pu/lookup properties :hl-color))
+                       (pu/lookup properties :logseq.property/hl-color))
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
@@ -3014,7 +3014,7 @@
         {:block/keys [uuid pre-block? content properties]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
-        heading? (pu/lookup properties :heading)
+        heading? (pu/lookup properties :logseq.property/heading)
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond

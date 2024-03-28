@@ -801,7 +801,7 @@
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
-        (pu/lookup (:block/properties block) key)))))
+        (pu/lookup-by-name (:block/properties block) key)))))
 
 (def ^:export get_block_properties
   (fn [block-uuid]
