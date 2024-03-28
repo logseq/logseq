@@ -39,35 +39,6 @@
                     {:db/id (:e (first datoms))}
                     datoms)))))))
 
-(defn <upload-graph
-  "Upload current repo to remote, return remote {:req-id xxx :graph-uuid <new-remote-graph-uuid>}"
-  [state repo conn remote-graph-name]
-  (go
-    (let [{:keys [url key all-blocks-str]}
-          (with-sub-data-from-ws state
-            (<? (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
-            (let [all-blocks (export-as-blocks @conn)
-                  all-blocks-str (transit/write (transit/writer :json) all-blocks)]
-              (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
-      (<! (http/put url {:body all-blocks-str}))
-      (let [r (<? (ws/<send&receive state {:action "full-upload-graph"
-                                           :s3-key key
-                                           :graph-name remote-graph-name}))]
-        (if-not (:graph-uuid r)
-          (ex-info "upload graph failed" r)
-          (let [^js worker-obj (:worker/object @worker-state/*state)]
-            (d/transact! conn
-                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid (:graph-uuid r)}
-                          {:db/ident :logseq.kv/graph-local-tx :graph/local-tx (:graph-uuid r)}])
-            (<! (p->c
-                 (p/do!
-                  (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
-            (op-mem-layer/init-empty-ops-store! repo)
-            (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
-            (op-mem-layer/update-local-tx! repo (:t r))
-            (<! (op-mem-layer/<sync-to-idb-layer! repo))
-            r))))))
-
 (defn <async-upload-graph
   [state repo conn remote-graph-name]
   (go
