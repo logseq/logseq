@@ -5,7 +5,7 @@
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [frontend.util :as util]
             [clojure.string :as string]
             [promesa.core :as p]
@@ -23,7 +23,7 @@
                      (cond
                        (:dsl-query? config)
                        (let [q (:query query)
-                             form (gp-util/safe-read-string q)]
+                             form (common-util/safe-read-string q)]
                          (cond
                            ;; Searches like 'foo' or 'foo bar' come back as symbols
                            ;; and are meant to go directly to full text search

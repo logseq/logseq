@@ -1,10 +1,10 @@
 (ns frontend.handler.repo-test
   (:require [cljs.test :refer [deftest use-fixtures testing is]]
-            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [logseq.graph-parser.cli :as gp-cli]
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [frontend.db.model :as model]
             [frontend.db.conn :as conn]
             [clojure.edn :as edn]
@@ -19,7 +19,7 @@
         repo-config (edn/read-string (str (fs/readFileSync (node-path/join graph-dir "logseq/config.edn"))))
         files (#'gp-cli/build-graph-files graph-dir repo-config)
         _ (test-helper/with-config repo-config
-            (repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
+            (file-repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
         db (conn/get-db test-helper/test-db)]
 
     (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))))

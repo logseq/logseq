@@ -1,8 +1,9 @@
 (ns frontend.components.query.builder
   "DSL query builder."
-  (:require [frontend.ui :as ui]
-            [frontend.date :as date]
+  (:require [frontend.date :as date]
+            [frontend.ui :as ui]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.handler.editor :as editor-handler]
@@ -12,15 +13,16 @@
             [frontend.util :as util]
             [frontend.search :as search]
             [frontend.mixins :as mixins]
-            [logseq.db.default :as db-default]
+            [logseq.db.frontend.default :as db-default]
             [rum.core :as rum]
             [clojure.string :as string]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [promesa.core :as p]))
 
 (rum/defc page-block-selector
   [*find]
-  [:div.filter-item {:on-mouse-down (fn [e] (util/stop-propagation e))}
+  [:div.filter-item {:on-pointer-down (fn [e] (util/stop-propagation e))}
    (ui/select [{:label "Blocks"
                 :value "block"
                 :selected (not= @*find :page)}
@@ -37,9 +39,8 @@
    (select items on-chosen {}))
   ([items on-chosen options]
    (component-select/select (merge
-                             {:items items
-                              :on-chosen on-chosen
-                              :extract-fn nil}
+                             {:items (map #(hash-map :value %) items)
+                              :on-chosen on-chosen}
                              options))))
 
 (defn append-tree!
@@ -105,7 +106,7 @@
   (rum/local nil ::start)
   (rum/local nil ::end)
   [state {:keys [tree loc] :as opts}]
-  [:div.between-date {:on-mouse-down (fn [e] (util/stop-propagation e))}
+  [:div.between-date {:on-pointer-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date" (merge opts {:auto-focus true}))
@@ -114,9 +115,39 @@
      :on-click (fn []
                  (let [{:keys [start end]} @*between-dates]
                    (when (and start end)
-                     (let [clause [:between start end]]
+                     (let [clause [:between [:page-ref start] [:page-ref end]]]
                        (append-tree! tree opts loc clause)
                        (reset! *between-dates {}))))))])
+
+(rum/defc property-select
+  [*mode *property]
+  (let [[properties set-properties!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [properties (search/get-all-properties)]
+         (set-properties! properties)))
+     [])
+    (select properties
+            (fn [{:keys [value]}]
+              (reset! *mode "property-value")
+              (reset! *property (keyword value))))))
+
+(rum/defc property-value-select
+  [repo *property *find *tree opts loc]
+  (let [[values set-values!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [result (db-async/<get-property-values repo @*property)]
+         (set-values! result)))
+     [@*property])
+    (let [values (cons "Select all" values)]
+      (select values
+              (fn [{:keys [value]}]
+                (let [x (if (= value "Select all")
+                          [(if (= @*find :page) :page-property :property) @*property]
+                          [(if (= @*find :page) :page-property :property) @*property value])]
+                  (reset! *property nil)
+                  (append-tree! *tree opts loc x)))))))
 
 (defn- query-filter-picker
   [state *find *tree loc clause opts]
@@ -128,7 +159,7 @@
        "namespace"
        (let [items (sort (db-model/get-all-namespace-parents repo))]
          (select items
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:namespace value]))))
 
        "tags"
@@ -136,29 +167,18 @@
                         (map second)
                         sort)]
          (select items
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page-tags value]))))
 
        "property"
-       (let [properties (search/get-all-properties)]
-         (select properties
-                 (fn [value]
-                   (reset! *mode "property-value")
-                   (reset! *property (keyword value)))))
+       (property-select *mode *property)
 
        "property-value"
-       (let [values (cons "Select all" (db-model/get-property-values @*property))]
-         (select values
-                 (fn [value]
-                   (let [x (if (= value "Select all")
-                             [(if (= @*find :page) :page-property :property) @*property]
-                             [(if (= @*find :page) :page-property :property) @*property value])]
-                     (reset! *property nil)
-                     (append-tree! *tree opts loc x)))))
+       (property-value-select repo *property *find *tree opts loc)
 
        "sample"
        (select (range 1 101)
-               (fn [value]
+               (fn [{:keys [value]}]
                  (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
 
        "task"
@@ -169,31 +189,33 @@
                {:multiple-choices? true
                 ;; Need the existing choices later to improve the UX
                 :selected-choices #{}
+                :extract-chosen-fn :value
                 :prompt-key :select/default-select-multiple
                 :close-modal? false
                 :on-apply (:toggle-fn opts)})
 
        "priority"
        (select db-default/built-in-priorities
-         (fn [value]
-           (when (seq value)
-             (append-tree! *tree opts loc (vec (cons :priority value)))))
-         {:multiple-choices? true
-          :selected-choices #{}
-          :prompt-key :select/default-select-multiple
-          :close-modal? false
-          :on-apply (:toggle-fn opts)})
+               (fn [value]
+                 (when (seq value)
+                   (append-tree! *tree opts loc (vec (cons :priority value)))))
+               {:multiple-choices? true
+                :selected-choices #{}
+                :extract-chosen-fn :value
+                :prompt-key :select/default-select-multiple
+                :close-modal? false
+                :on-apply (:toggle-fn opts)})
 
        "page"
        (let [pages (sort (db-model/get-all-page-original-names repo))]
          (select pages
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page value]))))
 
        "page reference"
        (let [pages (sort (db-model/get-all-page-original-names repo))]
          (select pages
-                 (fn [value]
+                 (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page-ref value]))
                  {}))
 
@@ -234,18 +256,19 @@
         (when-not @*find
           [:hr.m-0])
         (select
-          (map name filters-and-ops)
-          (fn [value]
-            (cond
-              (= value "all page tags")
-              (append-tree! *tree opts loc [:all-page-tags])
+         (map name filters-and-ops)
+         (fn [{:keys [value]}]
+           (cond
+             (= value "all page tags")
+             (append-tree! *tree opts loc [:all-page-tags])
 
-              (operator? value)
-              (append-tree! *tree opts loc [(keyword value)])
+             (operator? value)
+             (append-tree! *tree opts loc [(keyword value)])
 
-              :else
-              (reset! *mode value)))
-          {:input-default-placeholder "Add filter/operator"})])]))
+             :else
+             (do (reset! *mode value)
+                 ((:toggle-fn opts)))))
+         {:input-default-placeholder "Add filter/operator"})])]))
 
 (rum/defc add-filter
   [*find *tree loc clause]
@@ -422,7 +445,7 @@
   (rum/local nil ::find)
   {:init (fn [state]
            (let [q-str (first (:rum/args state))
-                 query (gp-util/safe-read-string
+                 query (common-util/safe-read-string
                         query-dsl/custom-readers
                         (query-dsl/pre-transform-query q-str))
                  query' (cond
@@ -455,8 +478,7 @@
              (assoc state ::tree *tree)))
    :will-mount (fn [state]
                  (let [q-str (first (:rum/args state))
-                       parsed-query (query-dsl/parse-query q-str)
-                       blocks-query? (:blocks? parsed-query)
+                       blocks-query? (:blocks? (query-dsl/parse-query q-str))
                        find-mode (cond
                                    blocks-query?
                                    :block

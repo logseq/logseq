@@ -31,12 +31,13 @@
   ([input] (get-caret-pos input (util/get-selection-start input)))
   ([input pos]
    (when input
-     (let [rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
+     (let [rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))
+           grapheme-pos (util/get-graphemes-pos (.-value input) pos)]
        (try
          (some-> (gdom/getElement "mock-text")
                  gdom/getChildren
                  array-seq
-                 (util/nth-safe pos)
+                 (util/nth-safe grapheme-pos)
                  mock-char-pos
                  (assoc :rect rect))
          (catch :default e
@@ -85,8 +86,7 @@
      (let [{:keys [pos]} (get-caret-pos input)
            pos (if (= n 1)
                  (util/safe-dec-current-pos-from-end (.-value input) pos)
-                 (- pos n))
-           pos (max 0 (or pos (dec pos)))]
+                 (- pos n))]
        (move-cursor-to input pos)))))
 
 (defn- get-input-content&pos

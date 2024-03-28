@@ -15,7 +15,6 @@
     [:journal/page-title-format :string]
     [:ui/enable-tooltip? :boolean]
     [:ui/show-brackets? :boolean]
-    [:feature/enable-block-timestamps? :boolean]
     [:feature/enable-search-remove-accents? :boolean]
     [:feature/enable-journals? :boolean]
     [:feature/enable-flashcards? :boolean]
@@ -62,7 +61,7 @@
               :string]]
     [:ref/default-open-blocks-level :int]
     [:ref/linked-references-collapsed-threshold :int]
-    [:graph/settings [:map-of :keyword :boolean]]
+    [:graph/settings [:map-of :keyword [:or :boolean :int :nil]]]
     [:graph/forcesettings [:map-of :keyword :int]]
     [:favorites [:vector :string]]
     ;; There isn't a :float yet

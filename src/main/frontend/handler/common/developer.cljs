@@ -6,12 +6,38 @@
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]))
+            [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.format.mldoc :as mldoc]
+            [frontend.config :as config]
+            [frontend.persist-db :as persist-db]
+            [promesa.core :as p]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
   [& pull-args]
-  (let [pull-data (with-out-str (pprint/pprint (apply db/pull pull-args)))]
+  (let [result* (apply db/pull pull-args)
+        ;; handles page uuids and closed values w/o knowing type
+        get-uuid-prop-value (fn [v]
+                              (or (db-pu/get-property-name v)
+                                  (get-in (db/entity [:block/uuid v]) [:block/schema :value])))
+        result (cond-> result*
+                 (and (seq (:block/properties result*)) (config/db-based-graph? (state/get-current-repo)))
+                 (assoc :block.debug/properties
+                        (->> (update-keys (:block/properties result*) db-pu/get-property-name)
+                             (map (fn [[k v]]
+                                    [k
+                                     (cond
+                                       (and (set? v) (uuid? (first v)))
+                                       (set (map get-uuid-prop-value v))
+                                       (uuid? v)
+                                       (get-uuid-prop-value v)
+                                       :else
+                                       v)]))
+                             (into {})))
+                 (seq (:block/refs result*))
+                 (assoc :block.debug/refs
+                        (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))
+        pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
      [:div
@@ -24,7 +50,7 @@
 
 (defn show-content-ast
   [content format]
-  (let [ast-data (-> (gp-mldoc/->edn content (gp-mldoc/default-config format))
+  (let [ast-data (-> (mldoc/->edn content format)
                      pprint/pprint
                      with-out-str)]
     (println ast-data)
@@ -56,8 +82,19 @@
     (notification/show! "No page found" :warning)))
 
 (defn ^:export show-page-ast []
-  (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
-                           (page-util/get-current-page-id))]
-    (if (get-in page-data [:block/file :file/content])
-      (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
-      (notification/show! "No page found" :warning))))
+  (if (config/db-based-graph? (state/get-current-repo))
+    (notification/show! "Command not available yet for DB graphs" :warning)
+    (let [page-data (db/pull '[:block/format {:block/file [:file/content]}]
+                             (page-util/get-current-page-id))]
+      (if (get-in page-data [:block/file :file/content])
+        (show-content-ast (get-in page-data [:block/file :file/content]) (:block/format page-data))
+        (notification/show! "No page found" :warning)))))
+
+(defn import-chosen-graph
+  [repo]
+  (p/let [_ (persist-db/<unsafe-delete repo)
+          _ (persist-db/<fetch-init-data repo)]
+    (notification/show! "Graph updated!" :success)))
+
+(defn ^:export replace-graph-with-db-file []
+  (state/set-state! :ui/open-select :db-graph-replace))

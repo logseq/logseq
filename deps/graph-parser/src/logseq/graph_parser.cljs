@@ -1,21 +1,21 @@
 (ns logseq.graph-parser
   "Main ns used by logseq app to parse graph from source files and then save to
   the given database connection"
-  (:require [datascript.core :as d]
-            [logseq.graph-parser.extract :as extract]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.date-time-util :as date-time-util]
-            [logseq.graph-parser.config :as gp-config]
-            [logseq.db.schema :as db-schema]
+  (:require [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.set :as set]))
+            [datascript.core :as d]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.graph-parser.extract :as extract]
+            [logseq.common.util :as common-util]
+            [logseq.common.config :as common-config]
+            [logseq.db :as ldb]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
   (mapcat (fn [{uuid :block/uuid eid :db/id}]
             (if (and uuid (contains? retain-uuids uuid))
               (map (fn [attr] [:db.fn/retractAttribute eid attr]) db-schema/retract-attributes)
-              [[:db.fn/retractEntity eid]]))
+              (when eid [[:db.fn/retractEntity eid]])))
           blocks))
 
 (defn- get-file-page
@@ -31,17 +31,6 @@
       [?page :block/original-name ?page-name]]
     db
     file-path)))
-
-(defn- get-page-blocks-no-cache
-  "Copy of db/get-page-blocks-no-cache. Too basic to couple to main app"
-  [db page {:keys [pull-keys]
-            :or {pull-keys '[*]}}]
-  (let [sanitized-page (gp-util/page-name-sanity-lc page)
-        page-id (:db/id (d/entity db [:block/name sanitized-page]))]
-    (when page-id
-      (let [datoms (d/datoms db :avet :block/page page-id)
-            block-eids (mapv :e datoms)]
-        (d/pull-many db pull-keys block-eids)))))
 
 (defn get-blocks-to-delete
   "Returns the transactional operations to retract blocks belonging to the
@@ -63,7 +52,7 @@
   (let [existing-file-page (get-file-page db file-path)
         pages-to-clear (distinct (filter some? [existing-file-page (:block/name file-page)]))
         blocks (mapcat (fn [page]
-                         (get-page-blocks-no-cache db page {:pull-keys [:db/id :block/uuid]}))
+                         (ldb/get-page-blocks db page {:pull-keys [:db/id :block/uuid]}))
                        pages-to-clear)
         retain-uuids (set (keep :block/uuid retain-uuid-blocks))]
     (retract-blocks-tx (distinct blocks) retain-uuids)))
@@ -84,26 +73,26 @@ Options available:
                             delete-blocks-fn (constantly [])
                             skip-db-transact? false}
                        :as options}]
-   (let [format (gp-util/get-format file)
+   (let [format (common-util/get-format file)
          file-content [{:file/path file}]
          {:keys [tx ast]}
-         (let [extract-options' (merge {:block-pattern (gp-config/get-block-pattern format)
+         (let [extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                         :date-formatter "MMM do, yyyy"
                                         :uri-encoded? false
                                         :filename-format :legacy}
                                        extract-options
                                        {:db @conn})
-               {:keys [pages blocks ast]
+               {:keys [pages blocks ast refs]
                 :or   {pages []
                        blocks []
                        ast []}}
-               (cond (contains? gp-config/mldoc-support-formats format)
-                 (extract/extract file content extract-options')
+               (cond (contains? common-config/mldoc-support-formats format)
+                     (extract/extract file content extract-options')
 
-                 (gp-config/whiteboard? file)
-                 (extract/extract-whiteboard-edn file content extract-options')
+                     (common-config/whiteboard? file)
+                     (extract/extract-whiteboard-edn file content extract-options')
 
-                 :else nil)
+                     :else nil)
                block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
                delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)
                block-refs-ids (->> (mapcat :block/refs blocks)
@@ -116,17 +105,16 @@ Options available:
                pages (extract/with-ref-pages pages blocks)
                pages-index (map #(select-keys % [:block/name]) pages)]
            ;; does order matter?
-           {:tx (concat file-content pages-index delete-blocks pages block-ids blocks)
+           {:tx (concat file-content refs pages-index delete-blocks pages block-ids blocks)
             :ast ast})
          tx (concat tx [(cond-> {:file/path file
                                  :file/content content}
-                                new?
+                          new?
                                 ;; TODO: use file system timestamp?
-                                (assoc :file/created-at (date-time-util/time-ms)))])
-         tx' (gp-util/fast-remove-nils tx)
+                          (assoc :file/created-at (common-util/time-ms)))])
          result (if skip-db-transact?
-                  tx'
-                  (d/transact! conn tx' (select-keys options [:new-graph? :from-disk?])))]
+                  tx
+                  (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?])))]
      {:tx result
       :ast ast})))
 
@@ -136,8 +124,8 @@ Options available:
   [files]
   (let [support-files (filter
                        (fn [file]
-                         (let [format (gp-util/get-format (:file/path file))]
-                           (contains? (set/union #{:edn :css} gp-config/mldoc-support-formats) format)))
+                         (let [format (common-util/get-format (:file/path file))]
+                           (contains? (set/union #{:edn :css} common-config/mldoc-support-formats) format)))
                        files)
         support-files (sort-by :file/path support-files)
         {journals true non-journals false} (group-by (fn [file] (string/includes? (:file/path file) "journals/")) support-files)

@@ -12,7 +12,11 @@
             [frontend.components.select :as select]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.dnd :as dnd-component]
+            [frontend.components.icon :as icon]
             [frontend.components.handbooks :as handbooks]
+            [dommy.core :as d]
+            [frontend.components.content :as cp-content]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -29,6 +33,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
+            [frontend.handler.recent :as recent-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -41,6 +46,7 @@
             [logseq.shui.ui :as shui]
             [logseq.shui.toaster.core :as shui-toaster]
             [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.popup.core :as shui-popup]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
@@ -66,17 +72,6 @@
        [:div.b (ui/icon "chevron-left" {:class "more" :size 14})]]
       (when child [:div.bd child])]]))
 
-(defn- delta-y
-  [e]
-  (when-let [target (.. e -target)]
-    (let [rect (.. target getBoundingClientRect)]
-      (- (.. e -pageY) (.. rect -top)))))
-
-(defn- move-up?
-  [e]
-  (let [delta (delta-y e)]
-    (< delta 14)))
-
 (rum/defc page-name
   [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)
@@ -93,124 +88,79 @@
                              (state/get-current-repo)
                              (:db/id page-entity)
                              :page))
-        x-menu-content (fn [type opts]
-                         (let [dropdown? (= type :dropdown)
-                               x-menu-content (if dropdown? shui/dropdown-menu-content shui/context-menu-content)
-                               x-menu-item (if dropdown? shui/dropdown-menu-item shui/context-menu-item)
-                               x-menu-shortcut (if dropdown? shui/dropdown-menu-shortcut shui/context-menu-shortcut)]
-                           (x-menu-content
-                             (merge {:class "w-60"} opts)
-                             (when-not recent?
+        x-menu-content (fn []
+                         (let [x-menu-item shui/dropdown-menu-item
+                               x-menu-shortcut shui/dropdown-menu-shortcut]
+                           [:<>
+                            (when-not recent?
+                              (x-menu-item
+                                {:on-click #(page-handler/<unfavorite-page! original-name)}
+                                (ctx-icon "star-off")
+                                (t :page/unfavorite)
+                                (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
+                                                   (some-> binding
+                                                     (first)
+                                                     (shortcut-utils/decorate-binding))))))
+                            (when-let [page-fpath (and (util/electron?) file-rpath
+                                                    (config/get-repo-fpath (state/get-current-repo) file-rpath))]
+                              [:<>
                                (x-menu-item
-                                 {:on-click #(page-handler/unfavorite-page! original-name)}
-                                 (ctx-icon "star-off")
-                                 (t :page/unfavorite)
-                                 (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
-                                                    (some-> binding
-                                                            (first)
-                                                            (shortcut-utils/decorate-binding))))))
-                             (when-let [page-fpath (and (util/electron?) file-rpath
-                                                     (config/get-repo-fpath (state/get-current-repo) file-rpath))]
-                               [:<>
-                                (x-menu-item
-                                  {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
-                                  (ctx-icon "folder")
-                                  (t :page/open-in-finder))
+                                 {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
+                                 (ctx-icon "folder")
+                                 (t :page/open-in-finder))
 
-                                (x-menu-item
-                                  {:on-click #(js/window.apis.openPath page-fpath)}
-                                  (ctx-icon "file")
-                                  (t :page/open-with-default-app))])
-
-                             (x-menu-item
-                               {:on-click open-in-sidebar}
-                               (ctx-icon "layout-sidebar-right")
-                               (t :content/open-in-sidebar)
-                               (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click"))))))]
+                               (x-menu-item
+                                 {:on-click #(js/window.apis.openPath page-fpath)}
+                                 (ctx-icon "file")
+                                 (t :page/open-with-default-app))])
+                            (x-menu-item
+                              {:on-click open-in-sidebar}
+                              (ctx-icon "layout-sidebar-right")
+                              (t :content/open-in-sidebar)
+                              (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
 
     ;; TODO: move to standalone component
-    (shui/context-menu
-      (shui/context-menu-trigger
-        [:a.flex.items-center.justify-between.relative.group
-         {:on-click
-          (fn [e]
-            (let [name (if (empty? source-page) name (:block/name source-page))]
-              (if (gobj/get e "shiftKey")
-                (open-in-sidebar)
-                (if whiteboard-page?
-                  (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
-                  (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-         [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-         [:span.page-title {:class (when untitled? "opacity-50")}
-          (if untitled? (t :untitled)
-                        (pdf-utils/fix-local-asset-pagename original-name))]
+    [:a.flex.items-center.justify-between.relative.group
+     {:on-click
+      (fn [e]
+        (let [name (if (empty? source-page) name (:block/name source-page))]
+          (if (gobj/get e "shiftKey")
+            (open-in-sidebar)
+            (if whiteboard-page?
+              (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
+              (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))
+      :on-context-menu (fn [^js e]
+                         (shui/popup-show! e (x-menu-content)
+                           {:as-dropdown? true
+                            :content-props {:on-click (fn [] (shui/popup-hide!))
+                                            :class "w-60"}})
+                         (util/stop e))}
+     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+     [:span.page-title {:class (when untitled? "opacity-50")}
+      (if untitled? (t :untitled)
+                    (pdf-utils/fix-local-asset-pagename original-name))]
 
-         ;; dots trigger
-         (shui/dropdown-menu
-           (shui/dropdown-menu-trigger
-             (shui/button
-               {:size     :sm
-                :variant  :ghost
-                :class    "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
-                :on-click #(util/stop %)}
-               [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")]))
-           ;; menu content
-           (x-menu-content :dropdown {:align "start"}))]
+     ;; dots trigger
+     (shui/button
+       {:size :sm
+        :variant :ghost
+        :class "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
+        :on-click #(do
+                     (shui/popup-show! (.-target %) (x-menu-content)
+                       {:as-dropdown? true
+                        :content-props {:on-click (fn [] (shui/popup-hide!))
+                                        :class "w-60"}})
+                     (util/stop %))}
+       [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")])]))
 
-        ;; menu content
-        (x-menu-content :context nil)))))
-
-(defn get-page-icon [page-entity]
-  (let [default-icon (ui/icon "page" {:extension? true})
-        from-properties (get-in (into {} page-entity) [:block/properties :icon])]
-    (or
-     (when (not= from-properties "") from-properties)
-     default-icon))) ;; Fall back to default if icon is undefined or empty
-
-(rum/defcs favorite-item <
-  (rum/local nil ::up?)
-  (rum/local nil ::dragging-over)
-  [state _t name icon]
-  (let [up? (get state ::up?)
-        dragging-over (get state ::dragging-over)
-        target (state/sub :favorites/dragging)]
-    [:li.favorite-item
-     {:key name
-      :title name
-      :data-ref name
-      :class (if (and target @dragging-over (not= target @dragging-over))
-               "dragging-target"
-               "")
-      :draggable true
-      :on-drag-start (fn [event]
-                       (editor-handler/block->data-transfer! name event)
-                       (state/set-state! :favorites/dragging name))
-      :on-drag-over (fn [e]
-                      (util/stop e)
-                      (reset! dragging-over name)
-                      (when-not (= name (get @state/state :favorites/dragging))
-                        (reset! up? (move-up? e))))
-      :on-drag-leave (fn [_e]
-                       (reset! dragging-over nil))
-      :on-drop (fn [e]
-                 (page-handler/reorder-favorites! {:to name
-                                                   :up? (move-up? e)})
-                 (reset! up? nil)
-                 (reset! dragging-over nil))}
-     (page-name name icon false)]))
+;; Fall back to default if icon is undefined or empty
 
 (rum/defc favorites < rum/reactive
   [t]
-  (let [favorites (->> (:favorites (state/sub-config))
-                       (remove string/blank?)
-                       (filter string?)
-                       (mapv util/safe-page-name-sanity-lc)
-                       (distinct))
-        favorite-entities (->> favorites
-                               (mapv #(db/entity [:block/name %]))
-                               (remove nil?))]
+  (let [_favorites-updated? (state/sub :favorites/updated?)
+        favorite-entities (page-handler/get-favorites)]
     (nav-content-item
-     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
       [:strong.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
@@ -221,20 +171,22 @@
         (rfe/push-state :page {:name "Favorites"})
         (util/stop e))}
      (when (seq favorite-entities)
-       [:ul.favorites.text-sm
-        (for [entity favorite-entities]
-          (let [icon (get-page-icon entity)]
-            (favorite-item t (:block/name entity) icon)))]))))
+       (let [favorites (map
+                        (fn [e]
+                          (let [name (:block/name e)
+                                icon (icon/get-page-icon e {})]
+                            {:id (str (:db/id e))
+                             :value name
+                             :content [:li.favorite-item (page-name name icon false)]}))
+                        favorite-entities)]
+         (dnd-component/items favorites
+                              {:on-drag-end (fn [favorites]
+                                              (page-handler/<reorder-favorites! favorites))
+                               :parent-node :ul.favorites.text-sm}))))))
 
 (rum/defc recent-pages < rum/reactive db-mixins/query
   [t]
-  (let [pages (->> (db/sub-key-value :recent/pages)
-                   (remove string/blank?)
-                   (filter string?)
-                   (map (fn [page] {:lowercase (util/safe-page-name-sanity-lc page)
-                                    :page page}))
-                   (util/distinct-by :lowercase)
-                   (map :page))]
+  (let [pages (recent-handler/get-recent-pages)]
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "history" {:size 16})
@@ -253,7 +205,7 @@
             :draggable true
             :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event))
             :data-ref name}
-           (page-name name (get-page-icon entity) true)]))])))
+           (page-name name (icon/get-page-icon entity {}) true)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -324,7 +276,7 @@
      {:title (t :left-side-bar/new-whiteboard)
       :class "new-whiteboard-link"
       :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/create-new-whiteboard-and-redirect!))
+                               (whiteboard-handler/<create-new-whiteboard-and-redirect!))
                 :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
       :icon (ui/type-icon {:name "new-whiteboard"
                            :class "highlight"
@@ -585,8 +537,8 @@
                (when-let [pos (some-> (state/get-input) cursor/pos)]
                  (state/set-editor-last-pos! pos)))
     :onStop (fn [_event]
-              (when-let [block (get-in @state/state [:editor/block :block/uuid])]
-                (editor-handler/edit-block! block :max (:block/uuid block))
+              (when-let [block (get @(get @state/state :editor/block) :block/uuid)]
+                (editor-handler/edit-block! block :max nil)
                 (when-let [input (state/get-input)]
                   (when-let [saved-cursor (state/get-editor-last-pos)]
                     (cursor/move-cursor-to input saved-cursor)))))}
@@ -596,7 +548,7 @@
 
 (rum/defc main <
   {:did-mount (fn [state]
-                (when-let [element (gdom/getElement "app-container")]
+                (when-let [element (gdom/getElement "main-content-container")]
                   (dnd/subscribe!
                    element
                    :upload-files
@@ -609,7 +561,7 @@
                     (set! (.. element -scrollTop) 0)))
                 state)
    :will-unmount (fn [state]
-                   (when-let [el (gdom/getElement "app-container")]
+                   (when-let [el (gdom/getElement "main-content-container")]
                      (dnd/unsubscribe! el :upload-files))
                    state)}
   [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
@@ -653,9 +605,15 @@
          nil
 
          db-restoring?
-         [:div.mt-20
-          [:div.ls-center
-           (ui/loading)]]
+         (if config/publishing?
+           [:div.space-y-2
+            (shui/skeleton {:class "h-8 w-1/3 mb-8 bg-gray-400"})
+            (shui/skeleton {:class "h-6 w-full bg-gray-400"})
+            (shui/skeleton {:class "h-6 w-full bg-gray-400"})]
+           [:div.space-y-2
+            (shui/skeleton {:class "h-8 w-1/3 mb-8"})
+            (shui/skeleton {:class "h-6 w-full"})
+            (shui/skeleton {:class "h-6 w-full"})])
 
          :else
          [:div
@@ -767,10 +725,11 @@
         (set! (.. el -style -transform)
               (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
     [:<>
-     [:div.menu-backdrop {:on-mouse-down (fn [e] (hide-context-menu-and-clear-selection e))}]
+     [:div.menu-backdrop {:on-pointer-down (fn [e] (hide-context-menu-and-clear-selection e))}]
      [:div#custom-context-menu
       {:ref ref
-       :style {:left (str (first position) "px")
+       :style {:z-index 999
+               :left (str (first position) "px")
                :top (str (second position) "px")}} links]]))
 
 (rum/defc custom-context-menu < rum/reactive
@@ -856,7 +815,7 @@
       [:div.inner
        {:title    (t :help-shortcut-title)
         :on-click #(state/toggle! :ui/help-open?)}
-       [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :viewbox "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
+       [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :view-box "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
         [:path {:stroke "none", :d "M0 0h24v24H0z", :fill "none"}]
         [:path {:d "M12 16v.01"}]
         [:path {:d "M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483"}]]]]
@@ -866,6 +825,58 @@
 
      (when handbooks-open?
        (handbooks/handbooks-popup))]))
+
+(rum/defc app-context-menu-observer
+  < rum/static
+    (mixins/event-mixin
+      (fn [state]
+        ;; fixme: this mixin will register global event listeners on window
+        ;; which might cause unexpected issues
+        (mixins/listen state js/window "contextmenu"
+          (fn [^js e]
+            (let [target (gobj/get e "target")
+                  block-el (.closest target ".bullet-container[blockid]")
+                  block-id (some-> block-el (.getAttribute "blockid"))
+                  {:keys [block block-ref]} (state/sub :block-ref/context)
+                  {:keys [page]} (state/sub :page-title/context)]
+
+              (let [show!
+                    (fn [content]
+                      (shui/popup-show! e
+                        (fn [{:keys [id]}]
+                          [:div {:on-click #(shui/popup-hide! id)} content])
+                        {:content-props {:class "w-[280px] ls-context-menu-content"}}))
+
+                    handled
+                    (cond
+                      page
+                      (do
+                        (show! (cp-content/page-title-custom-context-menu-content page))
+                        (state/set-state! :page-title/context nil))
+
+                      block-ref
+                      (do
+                        (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
+                        (state/set-state! :block-ref/context nil))
+
+                      ;; block selection
+                      (and (state/selection?) (not (d/has-class? target "bullet")))
+                      (show! (cp-content/custom-context-menu-content))
+
+                      ;; block bullet
+                      (and block-id (parse-uuid block-id))
+                      (let [block (.closest target ".ls-block")]
+                        (when block
+                          (state/clear-selection!)
+                          (state/conj-selection-block! block :down))
+                        (show! (cp-content/block-context-menu-content target (uuid block-id))))
+
+                      :else
+                      false)]
+                (when (not (false? handled))
+                  (util/stop e))))))))
+  []
+  nil)
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
@@ -881,7 +892,7 @@
                                   (and
                                    ;; FIXME: this does not work on CI tests
                                    util/node-test?
-                                   (:editor/editing? @state/state))))
+                                   state/*editor-editing-ref)))
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection e)))))))
   [state route-match main-content]
@@ -907,7 +918,7 @@
         home? (= :home route-name)
         native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
-        edit? (:editor/editing? @state/state)
+        edit? (some? @state/*editor-editing-ref)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/enable-fold-button-right?)
@@ -985,12 +996,17 @@
       (ui/sub-modal)
       (shui-toaster/install-toaster)
       (shui-dialog/install-modals)
+      (shui-popup/install-popups)
+
       (select/select-modal)
       (custom-context-menu)
-      (plugins/custom-js-installer {:t t
-                                    :current-repo current-repo
-                                    :nfs-granted? granted?
-                                    :db-restoring? db-restoring?})
+      (plugins/custom-js-installer
+        {:t t
+         :current-repo current-repo
+         :nfs-granted? granted?
+         :db-restoring? db-restoring?})
+      (app-context-menu-observer)
+
       [:a#download.hidden]
       (when (and (not config/mobile?)
                  (not config/publishing?))

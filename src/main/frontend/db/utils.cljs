@@ -2,27 +2,11 @@
   "Some utils are required by other namespace in frontend.db package."
   (:require [datascript.core :as d]
             [frontend.state :as state]
-            [datascript.transit :as dt]
             [frontend.db.conn :as conn]
             [frontend.config :as config]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
-
-(defn db->string [db]
-  (dt/write-transit-str db))
-
-(defn db->json [db]
-  (js/JSON.stringify
-   (into-array
-    (for [d (d/datoms db :eavt)]
-      #js [(:e d) (name (:a d)) (:v d)]))))
-
-(defn db->edn-str [db]
-  (pr-str db))
-
-(defn string->db [s]
-  (dt/read-transit-str s))
 
 (defn seq-flatten [col]
   (flatten (seq col)))
@@ -33,13 +17,6 @@
     (some->> blocks
              (group-by :block/page))
     blocks))
-
-(defn get-tx-id [tx-report]
-  (get-in tx-report [:tempids :db/current-tx]))
-
-(defn get-max-tx-id
-  [db]
-  (:max-tx db))
 
 (defn entity
   "This function will return nil if passed `id-or-lookup-ref` is an integer and
@@ -57,6 +34,13 @@
                    repo-or-db)]
      (d/entity db id-or-lookup-ref))))
 
+(defn update-block-content
+  "Replace `[[internal-id]]` with `[[page name]]`"
+  [item eid]
+  (let [repo (state/get-current-repo)
+        db (conn/get-db repo)]
+    (db-content/update-block-content repo db item eid)))
+
 (defn pull
   ([eid]
    (pull (state/get-current-repo) '[*] eid))
@@ -64,12 +48,8 @@
    (pull (state/get-current-repo) selector eid))
   ([repo selector eid]
    (when-let [db (conn/get-db repo)]
-     (try
-       (d/pull db
-               selector
-               eid)
-       (catch :default _e
-         nil)))))
+     (let [result (d/pull db selector eid)]
+       (update-block-content result eid)))))
 
 (defn pull-many
   ([eids]
@@ -78,10 +58,18 @@
    (pull-many (state/get-current-repo) selector eids))
   ([repo selector eids]
    (when-let [db (conn/get-db repo)]
-     (try
-       (d/pull-many db selector eids)
-       (catch :default e
-         (js/console.error e))))))
+     (let [selector (if (some #{:db/id} selector) selector (conj selector :db/id))]
+       (->> (d/pull-many db selector eids)
+            (map #(update-block-content % (:db/id %))))))))
+
+(if config/publishing?
+  (defn- transact!*
+    [repo-url tx-data tx-meta]
+    ;; :save-block is for query-table actions like sorting and choosing columns
+    (when (or (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
+              (:init-db? tx-meta))
+      (conn/transact! repo-url tx-data tx-meta)))
+  (def transact!* conn/transact!))
 
 (defn transact!
   ([tx-data]
@@ -89,13 +77,7 @@
   ([repo-url tx-data]
    (transact! repo-url tx-data nil))
   ([repo-url tx-data tx-meta]
-   (when-not config/publishing?
-     (let [tx-data (gp-util/fast-remove-nils tx-data)]
-       (when (seq tx-data)
-         (when-let [conn (conn/get-db repo-url false)]
-           (if tx-meta
-             (d/transact! conn (vec tx-data) tx-meta)
-             (d/transact! conn (vec tx-data)))))))))
+   (transact!* repo-url tx-data tx-meta)))
 
 (defn get-key-value
   ([key]

@@ -1,15 +1,12 @@
 (ns frontend.modules.editor.undo-redo
-  (:require [datascript.core :as d]
-            [frontend.db :as db]
-            [frontend.db.conn :as conn]
+  (:require [frontend.db :as db]
             [frontend.handler.notification :as notification]
-            [frontend.modules.datascript-report.core :as db-report]
             [frontend.util.page :as page-util]
             [frontend.state :as state]
             [clojure.set :as set]
             [medley.core :as medley]
-            [frontend.util.drawer :as drawer]
-            [frontend.util.property :as property]))
+            [frontend.handler.route :as route-handler]
+            [promesa.core :as p]))
 
 ;;;; APIs
 
@@ -39,22 +36,6 @@
   [txs]
   (let [undo-stack (get-undo-stack)]
     (swap! undo-stack conj txs)))
-
-(comment
-  (defn get-content-from-txs
-    "For test."
-    [txs]
-    (filterv (fn [[_ a & y]]
-               (= :block/content a))
-             txs))
-
-  (defn get-content-from-stack
-    "For test."
-    [stack]
-    (mapv #(get-content-from-txs (:txs %)) stack))
-
-  (debug/pprint "pop entity" (get-content-from-txs (:txs removed-e)))
-  (debug/pprint "undo-stack" (get-content-from-stack @undo-stack)))
 
 (defn pop-undo
   []
@@ -126,8 +107,7 @@
 
 (defn- transact!
   [txs tx-meta]
-  (let [conn (conn/get-db false)]
-    (d/transact! conn txs tx-meta)))
+  (db/transact! (state/get-current-repo) txs tx-meta))
 
 (defn- page-pop-undo
   [page-id]
@@ -155,57 +135,29 @@
       (pop-undo))
     (pop-undo)))
 
-(defn- set-editor-content!
-  "Prevent block auto-save during undo/redo."
+(defn pause-listener!
   []
-  (when-let [block (state/get-edit-block)]
-    (when-let [content (:block/content (db/entity (:db/id block)))]
-      (let [content' (-> (property/remove-built-in-properties (:block/format block) content)
-                         (drawer/remove-logbook))]
-        (state/set-edit-content! (state/get-edit-input-id) content')))))
+  (reset! *pause-listener true))
 
-(defn- get-next-tx-editor-cursor
-  [tx-id]
-  (let [result (->> (sort (keys (:history/tx->editor-cursor @state/state)))
-                    (split-with #(not= % tx-id))
-                    second)]
-    (when (> (count result) 1)
-      (when-let [next-tx-id (nth result 1)]
-        (get-in @state/state [:history/tx->editor-cursor next-tx-id])))))
-
-(defn- get-previous-tx-id
-  [tx-id]
-  (let [result (->> (sort (keys (:history/tx->editor-cursor @state/state)))
-                    (split-with #(not= % tx-id))
-                    first)]
-    (when (>= (count result) 1)
-      (last result))))
-
-(defn- get-previous-tx-editor-cursor
-  [tx-id]
-  (when-let [prev-tx-id (get-previous-tx-id tx-id)]
-    (get-in @state/state [:history/tx->editor-cursor prev-tx-id])))
+(defn resume-listener!
+  []
+  (reset! *pause-listener false))
 
 (defn undo
   []
   (when-let [e (smart-pop-undo)]
+    (pause-listener!)
+    (state/set-editor-op! :undo)
     (let [{:keys [txs tx-meta tx-id]} e
           new-txs (get-txs false txs)
-          current-editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])
-          save-block? (= (:outliner-op tx-meta) :save-block)
-          prev-editor-cursor (get-previous-tx-editor-cursor tx-id)
-          editor-cursor (if (and save-block?
-                                 (= (:block/uuid (:last-edit-block prev-editor-cursor))
-                                    (:block/uuid (state/get-edit-block))))
-                          prev-editor-cursor
-                          current-editor-cursor)]
+          editor-cursor (:before (get @(get @state/state :history/tx->editor-cursor) tx-id))]
       (push-redo e)
-      (transact! new-txs (merge {:undo? true}
-                                tx-meta
-                                (select-keys e [:pagination-blocks-range])))
-      (set-editor-content!)
-      (when (:whiteboard/transact? tx-meta)
-        (state/pub-event! [:whiteboard/undo e]))
+      (p/do!
+       (transact! new-txs (assoc tx-meta :undo? true))
+
+       (when (= :rename-page (:outliner-op tx-meta))
+         (when-let [old-page (:old-name (:data tx-meta))]
+           (route-handler/redirect-to-page! old-page))))
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))
@@ -213,18 +165,21 @@
 (defn redo
   []
   (when-let [{:keys [txs tx-meta tx-id] :as e} (smart-pop-redo)]
+    (pause-listener!)
+    (state/set-editor-op! :redo)
     (let [new-txs (get-txs true txs)
-          current-editor-cursor (get-in @state/state [:history/tx->editor-cursor tx-id])
-          editor-cursor (if (= (:outliner-op tx-meta) :save-block)
-                          current-editor-cursor
-                          (get-next-tx-editor-cursor tx-id))]
+          editor-cursor (let [s (get @(get @state/state :history/tx->editor-cursor) tx-id)]
+                          (if (= (:outliner-op tx-meta) :save-block)
+                            (:before s)
+                            (or (:after s) (:before s))))]
       (push-undo e)
-      (transact! new-txs (merge {:redo? true}
-                                tx-meta
-                                (select-keys e [:pagination-blocks-range])))
-      (set-editor-content!)
-      (when (:whiteboard/transact? tx-meta)
-        (state/pub-event! [:whiteboard/redo e]))
+      (p/do!
+       (transact! new-txs (assoc tx-meta :redo? true))
+
+       (when (= :rename-page (:outliner-op tx-meta))
+         (when-let [new-page (:new-name (:data tx-meta))]
+           (route-handler/redirect-to-page! new-page))))
+
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))
@@ -236,16 +191,9 @@
     (notification/show!
      [:p (str "Undo/redo mode: " mode)])))
 
-(defn pause-listener!
-  []
-  (reset! *pause-listener true))
-
-(defn resume-listener!
-  []
-  (reset! *pause-listener false))
 
 (defn listen-db-changes!
-  [{:keys [tx-data tx-meta] :as tx-report}]
+  [{:keys [tx-id tx-data tx-meta blocks pages]}]
   (when (and (seq tx-data)
              (not (or (:undo? tx-meta)
                       (:redo? tx-meta)))
@@ -255,18 +203,18 @@
                    #{:block/created-at :block/updated-at})))
     (reset-redo)
     (if (:replace? tx-meta)
-      (let [removed-e (pop-undo)
-            entity (update removed-e :txs concat tx-data)]
-        (push-undo entity))
-      (let [updated-blocks (db-report/get-blocks tx-report)
-            entity {:tx-id (get-in tx-report [:tempids :db/current-tx])
-                    :blocks updated-blocks
+      (when-let [removed-e (pop-undo)]
+        (let [entity (update removed-e :txs concat tx-data)]
+          (push-undo entity)))
+      (let [updated-blocks (concat blocks pages)
+            entity {:blocks updated-blocks
+                    :tx-id tx-id
                     :txs tx-data
                     :tx-meta tx-meta
-                    :pagination-blocks-range (get-in [:ui/pagination-blocks-range (get-in tx-report [:db-after :max-tx])] @state/state)
                     :app-state (select-keys @state/state
                                             [:route-match
                                              :ui/sidebar-open?
                                              :ui/sidebar-collapsed-blocks
                                              :sidebar/blocks])}]
-        (push-undo entity)))))
+        (push-undo entity))))
+  (resume-listener!))

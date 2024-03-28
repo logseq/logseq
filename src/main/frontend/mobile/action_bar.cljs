@@ -12,7 +12,7 @@
    [goog.dom :as gdom]
    [goog.object :as gobj]
    [rum.core :as rum]
-   [logseq.graph-parser.util.block-ref :as block-ref]
+   [logseq.common.util.block-ref :as block-ref]
    [frontend.mobile.util :as mobile-util]))
 
 (defn- action-command

@@ -1,9 +1,6 @@
 .block-content-wrapper {
-  /* 38px is the width of block-control */
-  width: calc(100% - 22px);
   user-select: text;
   @screen sm {
-    width: calc(100% - 33px);
     overflow-x: visible;
   }
 }
@@ -125,6 +122,10 @@
       }
     }
   }
+
+  .page-ref {
+    @apply inline-flex items-baseline;
+  }
 }
 
 .open-block-ref-link {
@@ -204,6 +205,10 @@
       margin-bottom: -5px;
     }
   }
+}
+
+.hidden-block .block-children {
+  border-left: 0px;
 }
 
 .block-control-wrap {
@@ -302,10 +307,15 @@
 }
 
 .page-ref {
+  @apply inline;
   color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
 
   &:hover {
     color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))));
+  }
+
+  .ui__icon.ti {
+    @apply relative left-[1px] top-[3px];
   }
 }
 
@@ -367,7 +377,7 @@
 
 .ls-block {
   position: relative;
-  min-height: 24px;
+  min-height: 30px;
   padding: 2px 0;
   border-bottom: 1px solid transparent;
   transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
@@ -375,14 +385,9 @@
   &.selected {
     border-radius: 2px;
   }
-
-  span.bullet-container:not(.as-order-list) .selected {
-    border: 3px solid;
-  }
 }
 
-.ls-block,
-.editor-wrapper {
+.ls-block {
   margin-right: auto;
   margin-left: auto;
 }

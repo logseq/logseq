@@ -22,7 +22,8 @@
             [frontend.modules.editor.undo-redo :as undo-redo]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]))
 
 (rum/defc toggle
   []
@@ -180,6 +181,9 @@
     :shortcut-settings
     [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
      (shortcut-settings)]
+    :rtc
+    [[:.flex.items-center (ui/icon "cloud" {:class "text-md mr-2"}) "(Dev) RTC"]
+     (rtc-debug-ui/rtc-debug-ui)]
 
     ["" [:span]]))
 
@@ -266,7 +270,7 @@
                                 (when drag-to (state/sidebar-move-block! idx drag-to))
                                 (reset! *drag-to nil)
                                 (reset! *drag-from nil))
-               :on-mouse-up   (fn [event]
+               :on-pointer-up   (fn [event]
                                 (when (= (.-which (.-nativeEvent event)) 2)
                                   (state/sidebar-remove-block! idx)))}
 
@@ -450,6 +454,12 @@
                                                                      (state/sidebar-add-block! repo "help" :help))}
           (t :right-side-bar/help)]]
 
+        (when (state/sub [:ui/developer-mode?])
+          [:div.text-sm
+           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+                                                                       (state/sidebar-add-block! repo "rtc" :rtc))}
+            "(Dev) RTC"]])
+
         (when (and config/dev? (state/sub [:ui/developer-mode?]))
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
@@ -459,9 +469,9 @@
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?
          (for [[idx [repo db-id block-type]] (medley/indexed blocks)]
-            (rum/with-key
-              (sidebar-item repo idx db-id block-type block-count)
-              (str "sidebar-block-" db-id)))
+           (rum/with-key
+             (sidebar-item repo idx db-id block-type block-count)
+             (str "sidebar-block-" db-id)))
          [:div.p-4
           [:span.font-medium.opacity-50 "Loading ..."]])]]]))
 

@@ -98,10 +98,8 @@ h1.title.whiteboard-dashboard-title {
   color: var(--ls-primary-text-color);
 }
 
-.single-block > :is(.block-content-wrapper, .editor-wrapper) {
-  width: 100% !important;
-  padding: 8px 12px;
-  border-radius: 8px;
+.single-block {
+  padding: 4px 8px;
 }
 
 .tl-logseq-cp-container > .page {
@@ -175,20 +173,16 @@ input.tl-text-input {
     overflow: hidden;
   }
 
-  .page-title-sizer-wrapper {
-    width: calc(100% - 20px);
-
-    > .title {
-      @apply whitespace-nowrap min-w-[100px];
-    }
+  .ls-page-title {
+     @apply p-0 m-0;
+     
+      .page-title {
+        font-size: 16px;
+      }
   }
 
   .edit-input {
-    width: 100%;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-    background-color: transparent;
+    @apply h-full w-full p-0 border-none shadow-none bg-transparent;
   }
 }
 

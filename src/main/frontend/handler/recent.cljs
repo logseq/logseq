@@ -1,27 +1,24 @@
 (ns frontend.handler.recent
   "Fns related to recent pages feature"
-  (:require [frontend.db :as db]
+  (:require [frontend.handler.db-based.recent :as db-based]
+            [frontend.handler.file-based.recent :as file-recent-handler]
+            [frontend.config :as config]
+            [frontend.state :as state]
             [frontend.db.model :as model]))
 
 (defn add-page-to-recent!
   [repo page-name-or-block-uuid click-from-recent?]
-  (let [pages (or (db/get-key-value repo :recent/pages)
-                  '())
-        page-name (if (uuid? page-name-or-block-uuid)
+  (let [page-name (if (uuid? page-name-or-block-uuid)
                     (when-let [block (model/get-block-by-uuid page-name-or-block-uuid)]
                       (get-in block [:block/page :block/original-name]))
                     page-name-or-block-uuid)]
+    (if (config/db-based-graph? repo)
+    (db-based/add-page-to-recent! page-name click-from-recent?)
+    (file-recent-handler/add-page-to-recent! repo page-name click-from-recent?))))
 
-    (when (or (and click-from-recent? (not ((set pages) page-name)))
-              (not click-from-recent?))
-      (let [new-pages (take 15 (distinct (cons page-name pages)))]
-        (db/set-key-value repo :recent/pages new-pages)))))
-
-(defn update-or-add-renamed-page [repo old-page-name new-page-name]
-  (let [pages (or (db/get-key-value repo :recent/pages)
-                  '())
-        updated-pages (replace {old-page-name new-page-name} pages)
-        updated-pages* (if (contains? (set updated-pages) new-page-name)
-                         updated-pages
-                         (cons new-page-name updated-pages))]
-    (db/set-key-value repo :recent/pages updated-pages*)))
+(defn get-recent-pages
+  []
+  (let [repo (state/get-current-repo)]
+    (if (config/db-based-graph? repo)
+      (db-based/get-recent-pages)
+      (file-recent-handler/get-recent-pages))))

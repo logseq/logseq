@@ -3,8 +3,12 @@
   (:require [clojure.walk :as walk]
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.state :as state]
             [goog.string :as gstring]
-            [goog.string.format]))
+            [goog.string.format]
+            [frontend.config :as config]))
 
 (defn- normalize-query-function
   [ast result]
@@ -41,10 +45,16 @@
            :updated-at
            :block/updated-at
 
-           (let [vals (map #(get-in % [:block/properties f]) result)
-                 int? (some integer? vals)]
+           (let [vals (map #(pu/lookup-by-name (:block/properties %) f) result)
+                 int? (some integer? vals)
+                 repo (state/get-current-repo)
+                 prop-key (if (config/db-based-graph? repo)
+                            (or (db-pu/get-user-property-uuid repo f)
+                                ;; Fall back to the keyword for queries that set named properties through :result-transform
+                                f)
+                            f)]
              `(~'fn [~'b]
-                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~f])
+                    (~'let [~'result-str (~'get-in ~'b [:block/properties ~prop-key])
                             ~'result-num (~'parseFloat ~'result-str)
                             ~'result (if (~'isNaN ~'result-num) ~'result-str ~'result-num)]
                            (~'or ~'result (~'when ~int? 0))))))

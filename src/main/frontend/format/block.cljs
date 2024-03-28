@@ -10,8 +10,47 @@
             [frontend.state :as state]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [lambdaisland.glogi :as log]))
+            [frontend.handler.db-based.property.util :as db-pu]
+            [lambdaisland.glogi :as log]
+            [datascript.core :as d]
+            [logseq.db.frontend.property :as db-property]
+            [frontend.format.mldoc :as mldoc]))
+
+(def built-in-property-names-to-idents
+  "This maps built-in properties names to idents. Only use
+   with legacy internals where names are hardcoded"
+  (into {}
+        (map (fn [[k v]]
+               [(:name v) k])
+             db-property/built-in-properties)))
+
+(defn- update-extracted-block-properties
+  "Updates DB graph blocks to ensure that built-in properties are using uuids
+  for property ids"
+  [blocks]
+  (let [repo (state/get-current-repo)
+        update-properties (fn [props]
+                            (update-keys props
+                                         #(if-let [ident (built-in-property-names-to-idents %)]
+                                            (db-pu/get-built-in-property-uuid repo ident)
+                                            %)))]
+    (if (config/db-based-graph? repo)
+     (->> blocks
+          (map (fn [b]
+                 (if (:block/properties b)
+                   (-> b
+                       (dissoc :block/properties-order)
+                       (update :block/properties update-properties))
+                   b)))
+          (map (fn [b]
+                 (if (:block/macros b)
+                   (update b :block/macros
+                           (fn [macros]
+                             (map #(-> %
+                                       (assoc :block/uuid (d/squuid))
+                                       (update :block/properties update-properties)) macros)))
+                   b))))
+     blocks)))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
@@ -19,12 +58,13 @@ and handles unexpected failure."
   [blocks content format {:keys [with-id? page-name]
                           :or {with-id? true}}]
   (try
-    (gp-block/extract-blocks blocks content with-id? format
-                             {:user-config (state/get-config)
-                              :block-pattern (config/get-block-pattern format)
-                              :db (db/get-db (state/get-current-repo))
-                              :date-formatter (state/get-date-formatter)
-                              :page-name page-name})
+    (update-extracted-block-properties
+     (gp-block/extract-blocks blocks content with-id? format
+                              {:user-config (state/get-config)
+                               :block-pattern (config/get-block-pattern format)
+                               :db (db/get-db (state/get-current-repo))
+                               :date-formatter (state/get-date-formatter)
+                               :page-name page-name}))
     (catch :default e
       (log/error :exception e)
       (state/pub-event! [:capture-error {:error e
@@ -70,14 +110,16 @@ and handles unexpected failure."
   ([block]
    (parse-block block nil))
   ([{:block/keys [uuid content format] :as block} {:keys [with-id?]
-                                                        :or {with-id? true}}]
+                                                   :or {with-id? true}}]
    (when-not (string/blank? content)
      (let [block (dissoc block :block/pre-block?)
-           ast (format/to-edn content format nil)
+           format (or format :markdown)
+           parse-config (mldoc/get-default-config format)
+           ast (format/to-edn content format parse-config)
            blocks (extract-blocks ast content format {:with-id? with-id?})
            new-block (first blocks)
            block (cond->
-                   (merge block new-block)
+                  (merge block new-block)
                    (> (count blocks) 1)
                    (assoc :block/warning :multiple-blocks))
            block (dissoc block :block/title :block/body :block/level)]
@@ -97,7 +139,8 @@ and handles unexpected failure."
                        (str (config/get-block-pattern format) " " (string/triml content)))]
        (if-let [result (state/get-block-ast block-uuid content)]
          result
-         (let [ast (->> (format/to-edn content format (gp-mldoc/default-config format))
+         (let [parse-config (mldoc/get-default-config format)
+               ast (->> (format/to-edn content format parse-config)
                         (map first))
                title (when (gp-block/heading-block? (first ast))
                        (:title (second (first ast))))
@@ -109,18 +152,6 @@ and handles unexpected failure."
                         (assoc :block/title title))]
            (state/add-block-ast-cache! block-uuid content result)
            result))))))
-
-(defn macro-subs
-  [macro-content arguments]
-  (loop [s macro-content
-         args arguments
-         n 1]
-    (if (seq args)
-      (recur
-       (string/replace s (str "$" n) (first args))
-       (rest args)
-       (inc n))
-      s)))
 
 (defn break-line-paragraph?
   [[typ break-lines]]

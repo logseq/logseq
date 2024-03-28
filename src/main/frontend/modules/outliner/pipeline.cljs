@@ -1,120 +1,117 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [frontend.modules.datascript-report.core :as ds-report]
-            [frontend.modules.outliner.file :as file]
-            [frontend.state :as state]
-            [frontend.util :as util]
-            [frontend.db.model :as db-model]
-            [frontend.db.react :as react]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
-            [clojure.set :as set]
-            [datascript.core :as d]))
+            [frontend.db.react :as react]
+            [frontend.state :as state]
+            [frontend.modules.editor.undo-redo :as undo-redo]
+            [datascript.core :as d]
+            [frontend.handler.ui :as ui-handler]
+            [frontend.handler.history :as history]
+            [frontend.util :as util]))
 
-(defn updated-page-hook
-  [tx-report page]
-  (when-not (get-in tx-report [:tx-meta :created-from-journal-template?])
-    (file/sync-to-file page (:outliner-op (:tx-meta tx-report)))))
+(defn store-undo-data!
+  [{:keys [tx-meta] :as opts}]
+  (when-not config/test?
+    (when (or (:outliner/transact? tx-meta)
+              (:outliner-op tx-meta)
+              (:whiteboard/transact? tx-meta))
+      (undo-redo/listen-db-changes! opts))))
 
-;; TODO: it'll be great if we can calculate the :block/path-refs before any
-;; outliner transaction, this way we can group together the real outliner tx
-;; and the new path-refs changes, which makes both undo/redo and
-;; react-query/refresh! easier.
+(defn- get-tx-id
+  [tx-report]
+  (get-in tx-report [:tempids :db/current-tx]))
 
-;; TODO: also need to consider whiteboard transactions
+(defn- update-current-tx-editor-cursor!
+  [tx-report]
+  (let [tx-id (get-tx-id tx-report)
+        editor-cursor @(:history/tx-before-editor-cursor @state/state)]
+    (state/update-state! :history/tx->editor-cursor
+                         (fn [m] (assoc-in m [tx-id :before] editor-cursor)))
+    (state/set-state! :history/tx-before-editor-cursor nil)))
 
-;; Steps:
-;; 1. For each changed block, new-refs = its page + :block/refs + parents :block/refs
-;; 2. Its children' block/path-refs might need to be updated too.
-(defn compute-block-path-refs
-  [{:keys [tx-meta db-before]} blocks]
-  (let [repo (state/get-current-repo)
-        blocks (remove :block/name blocks)]
-    (when (:outliner-op tx-meta)
-      (when (react/path-refs-need-recalculated? tx-meta)
-        (let [*computed-ids (atom #{})]
-          (mapcat (fn [block]
-                    (when (and (not (@*computed-ids (:block/uuid block))) ; not computed yet
-                               (not (:block/name block)))
-                      (let [parents (db-model/get-block-parents repo (:block/uuid block))
-                            parents-refs (->> (mapcat :block/path-refs parents)
-                                              (map :db/id))
-                            old-refs (if db-before
-                                       (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
-                                       #{})
-                            new-refs (set (util/concat-without-nil
-                                           [(:db/id (:block/page block))]
-                                           (map :db/id (:block/refs block))
-                                           parents-refs))
-                            refs-changed? (not= old-refs new-refs)
-                            children (db-model/get-block-children-ids repo (:block/uuid block))
-                            ;; Builds map of children ids to their parent id and :block/refs ids
-                            children-maps (into {}
-                                                (map (fn [id]
-                                                       (let [entity (db/entity [:block/uuid id])]
-                                                         [(:db/id entity)
-                                                          {:parent-id (get-in entity [:block/parent :db/id])
-                                                           :block-ref-ids (map :db/id (:block/refs entity))}]))
-                                                     children))
-                            children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
-                                                 {:db/id id
-                                                  ;; Recalculate :block/path-refs as db contains stale data for this attribute
-                                                  :block/path-refs
-                                                  (set/union
-                                                   ;; Refs from top-level parent
-                                                   new-refs
-                                                   ;; Refs from current block
-                                                   block-ref-ids
-                                                   ;; Refs from parents in between top-level
-                                                   ;; parent and current block
-                                                   (loop [parent-refs #{}
-                                                          parent-id (:parent-id child-map)]
-                                                     (if-let [parent (children-maps parent-id)]
-                                                       (recur (into parent-refs (:block-ref-ids parent))
-                                                              (:parent-id parent))
-                                                       ;; exits when top-level parent is reached
-                                                       parent-refs)))})
-                                               children-maps)]
-                        (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
-                        (util/concat-without-nil
-                         [(when (and (seq new-refs)
-                                     refs-changed?)
-                            {:db/id (:db/id block)
-                             :block/path-refs new-refs})]
-                         children-refs))))
-                  blocks))))))
+(defn restore-cursor-and-app-state!
+  [{:keys [editor-cursor app-state]} undo?]
+  (history/restore-cursor! editor-cursor undo?)
+  (history/restore-app-state! app-state))
 
 (defn invoke-hooks
-  [tx-report]
-  (let [tx-meta (:tx-meta tx-report)]
-    (when (and (not (:from-disk? tx-meta))
-               (not (:new-graph? tx-meta))
-               (not (:replace? tx-meta)))
-      (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-            repo (state/get-current-repo)
-            refs-tx (util/profile
-                     "Compute path refs: "
-                     (set (compute-block-path-refs tx-report blocks)))
-            truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)
-            tx (util/concat-without-nil truncate-refs-tx refs-tx)
-            tx-report' (if (seq tx)
-                         (let [refs-tx-data' (:tx-data (db/transact! repo tx {:outliner/transact? true
-                                                                              :replace? true}))]
-                           ;; merge
-                           (assoc tx-report :tx-data (concat (:tx-data tx-report) refs-tx-data')))
-                         tx-report)
-            importing? (:graph/importing @state/state)]
+  [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
+  ;; (prn :debug
+  ;;      :request-id request-id
+  ;;      :tx-meta tx-meta
+  ;;      :tx-data tx-data)
+  (let [{:keys [from-disk? new-graph? local-tx? undo? redo? initial-pages? end?]} tx-meta
+        repo (state/get-current-repo)
+        tx-report {:tx-meta tx-meta
+                   :tx-data tx-data}
+        conn (db/get-db repo false)]
+    (cond
+      initial-pages?
+      (do
+        (util/profile "transact initial-pages" (d/transact! conn tx-data tx-meta))
+        (when end?
+          (state/pub-event! [:init/commands])
+          (ui-handler/re-render-root!)))
 
-        (when-not importing?
-          (react/refresh! repo tx-report'))
+      (or from-disk? new-graph?)
+      (do
+        (d/transact! conn tx-data tx-meta)
+        (react/clear-query-state!)
+        (ui-handler/re-render-root!))
 
-        (when-not (:delete-files? tx-meta)
-          (doseq [p (seq pages)]
-            (updated-page-hook tx-report p)))
+      :else
+      (do
+        (let [tx-data' (if (= (:outliner-op tx-meta) :insert-blocks)
+                         (let [update-blocks-fully-loaded (keep (fn [datom] (when (= :block/uuid (:a datom))
+                                                                              {:db/id (:e datom)
+                                                                               :block.temp/fully-loaded? true})) tx-data)]
+                           (concat update-blocks-fully-loaded tx-data))
+                         tx-data)
+              tx-report (d/transact! conn tx-data' tx-meta)]
+          (when local-tx?
+            (let [tx-id (get-tx-id tx-report)]
+              (store-undo-data! (assoc opts :tx-id tx-id))))
+          (when-not (or undo? redo?)
+            (update-current-tx-editor-cursor! tx-report)))
 
-        (when (and state/lsp-enabled?
-                   (seq blocks)
-                   (not importing?)
-                   (<= (count blocks) 1000))
-          (state/pub-event! [:plugin/hook-db-tx
-                             {:blocks  blocks
-                              :tx-data (:tx-data tx-report)
-                              :tx-meta (:tx-meta tx-report)}]))))))
+        (when-not (:graph/importing @state/state)
+          (when (and (= (:outliner-op tx-meta) :insert-blocks) (:local-tx? tx-meta))
+            (let [new-datoms (filter (fn [datom]
+                                       (and
+                                        (= :block/uuid (:a datom))
+                                        (true? (:added datom)))) tx-data)]
+              (when (seq new-datoms)
+                (state/set-state! :editor/new-created-block-id (last (map :v new-datoms))))))
+
+          (react/refresh! repo affected-keys)
+
+          (when-let [state (:ui/restore-cursor-state @state/state)]
+            (when (or undo? redo?)
+              (restore-cursor-and-app-state! state undo?)
+              (state/set-state! :ui/restore-cursor-state nil)))
+
+          (state/set-state! :editor/start-pos nil)
+
+          (when (and state/lsp-enabled?
+                     (seq blocks)
+                     (<= (count blocks) 1000))
+            (state/pub-event! [:plugin/hook-db-tx
+                               {:blocks  blocks
+                                :deleted-block-uuids deleted-block-uuids
+                                :tx-data (:tx-data tx-report)
+                                :tx-meta (:tx-meta tx-report)}])))))
+
+    (when (= (:outliner-op tx-meta) :delete-page)
+      (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
+
+    (when (= (:outliner-op tx-meta) :rename-page)
+      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
+
+    (when-let [deleting-block-id (:ui/deleting-block @state/state)]
+      (when (some (fn [datom] (and
+                               (= :block/uuid (:a datom))
+                               (= (:v datom) deleting-block-id)
+                               (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
+        (state/set-state! :ui/deleting-block nil)))
+
+    (state/set-state! :editor/new-created-block-id nil)))

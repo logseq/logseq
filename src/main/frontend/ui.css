@@ -318,7 +318,7 @@ html.is-mobile {
   @apply block w-full pl-2 sm:text-sm sm:leading-5 rounded bg-background border border-gray-07;
 
   &:focus {
-    box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
+    box-shadow: 0 0 0 2px var(--tw-shadow-color, rgba(164, 202, 254, 0.45));
   }
 
   &.is-small {

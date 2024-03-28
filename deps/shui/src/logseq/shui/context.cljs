@@ -20,12 +20,10 @@
                 ;; TODO: document the following
                 :block (:block block-config)  ;; the db entity of the current block
                 :block? (:block? block-config)
-                :blocks-container-id (:blocks-container-id block-config)
                 :editor-box (:editor-box block-config)
                 :id (:id block-config)
                 :mode? (:mode? block-config)
                 :query-result (:query-result block-config)
                 :sidebar? (:sidebar? block-config)
-                :start-time (:start-time block-config)
                 :uuid (:uuid block-config)
                 :whiteboard? (:whiteboard? block-config)}))

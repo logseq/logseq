@@ -11,7 +11,7 @@
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [rum.core :as rum]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defonce default-timestamp-value {:time ""
                                   :repeater {}})
@@ -63,8 +63,7 @@
           {:label "m"}
           {:label "y"}])
         (fn [_e value]
-          (swap! *timestamp assoc-in [:repeater :duration] value))
-        nil)
+          (swap! *timestamp assoc-in [:repeater :duration] value)))
 
        [:a.ml-2.self-center {:on-click (fn []
                                          (reset! *show-repeater? false)
@@ -152,7 +151,7 @@
                                               (string/lower-case current-command)))
         date (state/sub :date-picker/date)]
     [:div#date-time-picker.flex.flex-col.sm:flex-row {:on-click (fn [e] (util/stop e))
-                                                      :on-mouse-down (fn [e] (.stopPropagation e))}
+                                                      :on-pointer-down (fn [e] (.stopPropagation e))}
      (ui/datepicker
       date
       {:deadline-or-schedule? deadline-or-schedule?

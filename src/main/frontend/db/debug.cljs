@@ -45,3 +45,10 @@
             (vector? x)
             (= :block/uuid (first x))
             (nil? (second x)))))))
+
+(defn get-all-blocks
+  []
+  (when-let [db (db/get-db)]
+    (->> (d/datoms db :avet :block/uuid)
+         (map :e)
+         db/pull-many)))

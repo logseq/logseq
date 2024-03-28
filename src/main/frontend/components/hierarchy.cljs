@@ -33,17 +33,19 @@
               page-namespace (util/get-page-original-name page-namespace)]
           (cond
             (seq pages)
-            pages
+            {:namespaces pages
+             :namespace-pages namespace-pages}
 
             page-namespace
-            [(string/split page-namespace "/")]
+            {:namespaces [(string/split page-namespace "/")]
+             :namespace-pages namespace-pages}
 
             :else
             nil))))))
 
 (rum/defc structures
   [page]
-  (let [namespaces (get-relation page)]
+  (let [{:keys [namespaces]} (get-relation page)]
     (when (seq namespaces)
       [:div.page-hierarchy.mt-6
        (ui/foldable

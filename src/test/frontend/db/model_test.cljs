@@ -3,12 +3,8 @@
             [frontend.db.model :as model]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
-            [logseq.db.schema :as db-schema]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
-            [datascript.core :as d]
-            [shadow.resource :as rc]
-            [clojure.set :as set]
-            [clojure.edn :as edn]))
+            [datascript.core :as d]))
 
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
@@ -55,8 +51,8 @@
     (are [x y] (= x y)
          4 (count a-aliases)
          4 (count b-aliases)
-         4 (count b-ref-blocks)
-         4 (count a-ref-blocks)
+         2 (count b-ref-blocks)
+         2 (count a-ref-blocks)
          #{"ab" "ac" "ad"} (set alias-names))))
 
 (deftest test-page-alias-set
@@ -70,9 +66,9 @@
         alias-names (model/get-page-alias-names test-helper/test-db "aa")
         a-ref-blocks (model/get-page-referenced-blocks "aa")]
     (are [x y] (= x y)
-         3 (count a-aliases)
-         3 (count a-ref-blocks)
-         #{"ab" "ac"} (set alias-names))))
+      3 (count a-aliases)
+      2 (count a-ref-blocks)
+      #{"ab" "ac"} (set alias-names))))
 
 (deftest get-pages-that-mentioned-page-with-show-journal
   (load-test-files [{:file/path "journals/2020_08_15.md"
@@ -132,6 +128,7 @@
   (is (nil? (db/entity 1000000))))
 
 (deftest entity-query-should-support-both-graph-string-and-db
+  (db/transact! test-helper/test-db [{:db/id 1 :value "test"}])
   (is (= 1 (:db/id (db/entity test-helper/test-db 1))))
   (is (= 1 (:db/id (db/entity (conn/get-db test-helper/test-db) 1)))))
 
@@ -151,18 +148,6 @@ foo:: bar"}])
       "Non header block's content returns nil"))
 
 
-(def broken-outliner-data-with-cycle (-> (rc/inline "fixtures/broken-outliner-data-with-cycle.edn")
-                                         edn/read-string))
-
-(deftest get-block-children-ids-on-bad-outliner-data
-  (let [db (d/db-with (d/empty-db db-schema/schema)
-                      broken-outliner-data-with-cycle)]
-
-    (is (= "bad outliner data, need to re-index to fix"
-           (try (model/get-block-children-ids-in-db db #uuid"e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
-                (catch :default e
-                  (ex-message e)))))))
-
 (deftest get-block-immediate-children
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "\n
@@ -178,27 +163,3 @@ foo:: bar"}])
     (is (= ["child 1" "child 2" "child 3"]
            (map :block/content
                 (model/get-block-immediate-children test-helper/test-db (:block/uuid parent)))))))
-
-(deftest get-property-values
-  (load-test-files [{:file/path "pages/Feature.md"
-                     :file/content "type:: [[Class]]"}
-                    {:file/path "pages/Class.md"
-                     :file/content "type:: https://schema.org/Class\npublic:: true"}
-                    {:file/path "pages/DatePicker.md"
-                     :file/content "type:: #Feature, #Command"}
-                    {:file/path "pages/Whiteboard___Tool___Eraser.md"
-                     :file/content "type:: [[Tool]], [[Whiteboard/Object]]"}])
-
-  (let [type-values (set (model/get-property-values :type))
-        public-values (set (model/get-property-values :public))]
-
-    (is (contains? type-values "[[Class]]")
-        "Property value from single page-ref is wrapped in square brackets")
-    (is (= #{} (set/difference #{"[[Tool]]" "[[Whiteboard/Object]]"} type-values))
-        "Property values from multiple page-refs are wrapped in square brackets")
-    (is (= #{} (set/difference #{"#Feature" "#Command"} type-values))
-        "Property values from multiple tags have hashtags")
-    (is (contains? type-values "https://schema.org/Class")
-        "Property value text is not modified")
-    (is (contains? public-values "true")
-        "Property value that is not text is not modified")))

@@ -20,7 +20,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [shadow.loader :as loader]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.db.async :as db-async]))
 
 (defonce tldraw-loaded? (atom false))
 (rum/defc tldraw-app < rum/reactive
@@ -35,18 +36,19 @@
     (when draw-component
       (draw-component name shape-id))))
 
-;; TODO: make it reactive to db changes
 (rum/defc tldraw-preview < rum/reactive
   {:init (fn [state]
            (p/let [_ (loader/load :tldraw)]
              (reset! tldraw-loaded? true))
+           (let [page-name (first (:rum/args state))]
+             (db-async/<get-block (state/get-current-repo) page-name))
            state)}
   [page-name]
   (let [loaded? (rum/react tldraw-loaded?)
         tldr (whiteboard-handler/page-name->tldr! page-name)
         generate-preview (when loaded?
                            (resolve 'frontend.extensions.tldraw/generate-preview))]
-    (when generate-preview
+    (when (and generate-preview (not (state/sub-async-query-loading page-name)))
       (generate-preview tldr))))
 
 ;; TODO: use frontend.ui instead of making a new one
@@ -137,7 +139,6 @@
   [page-name]
   (let [page-entity (model/get-page page-name)]
     (or
-     (get-in page-entity [:block/properties :title] nil)
      (:block/original-name page-entity)
      page-name)))
 
@@ -171,7 +172,7 @@
       {:tab-index -1
        :style {:visibility (when show-checked? "visible")}
        :on-click util/stop-propagation}
-      (ui/checkbox {:checked checked
+      (ui/checkbox {:value checked
                     :on-change (fn [] (on-checked-change (not checked)))})]]
     [:div.flex.w-full.opacity-50
      [:div (get-page-human-update-time page-name)]
@@ -187,8 +188,8 @@
    {:on-click
     (fn [e]
       (util/stop e)
-      (whiteboard-handler/create-new-whiteboard-and-redirect!))}
-   (ui/icon "plus" {:size 32})
+      (whiteboard-handler/<create-new-whiteboard-and-redirect!))}
+   (ui/icon "plus")
    [:span.dashboard-create-card-caption.select-none
     (t :whiteboard/dashboard-card-new-whiteboard)]])
 
@@ -271,12 +272,7 @@
                             e
                             (content/page-title-custom-context-menu-content page-name))
                            (state/set-state! :page-title/context nil))}
-       (page/page-title page-name
-                        [:span.text-lg
-                         (ui/icon "whiteboard" {:extension? true})]
-                        (get-page-display-name page-name)
-                        nil
-                        false)]
+       (page/page-title page-name {:*hover? (atom false)})]
 
       [:div.whiteboard-page-refs
        (references-count page-name
@@ -289,7 +285,7 @@
      (tldraw-app page-name block-id)]))
 
 (rum/defc whiteboard-route <
-(shortcut/mixin :shortcut.handler/whiteboard false)
+  (shortcut/mixin :shortcut.handler/whiteboard false)
   [route-match]
   (let [name (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]

@@ -1,6 +1,14 @@
 ;; API
-logseq.db/start-conn
+logseq.db.frontend.rules/query-dsl-rules
 ;; API
-logseq.db.rules/query-dsl-rules
+logseq.db.frontend.rules/db-query-dsl-rules
+;; API
+logseq.db.frontend.rules/extract-rules
+;; API
+logseq.db.frontend.property.type/type-or-closed-value?
+;; API
+logseq.db.frontend.property.type/infer-property-type-from-value
 ;; Internal API
-logseq.db.rules/rules
+logseq.db.frontend.rules/rules
+;; API
+logseq.db.frontend.inputs/resolve-input

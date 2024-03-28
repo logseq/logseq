@@ -100,7 +100,7 @@
     z-index: 1;
 
     .dark & {
-        background-color: var(--lx-gray-02, var(--ls-primary-background-color, var(--rx-gray-02)));
+      background-color: var(--lx-gray-02, var(--ls-primary-background-color, var(--rx-gray-02)));
     }
 
     @screen md {
@@ -231,7 +231,7 @@
 .ls-page-title {
   @apply rounded-sm;
 
-  padding: 5px 8px;
+  padding: 5px 8px 10px 8px;
   margin: 0 -6px;
 
   &.title {
@@ -249,6 +249,14 @@
       &.editing {
         background-color: var(--ls-secondary-background-color);
       }
+    }
+  }
+
+  .page-icon {
+    @apply font-[48px] leading-none;
+
+    .ui__button {
+      @apply !h-auto mb-[-3px];
     }
   }
 }
@@ -377,4 +385,58 @@ html.is-native-ios {
 
 .references {
   user-select: none;
+}
+
+.page-info {
+  @apply ml-[-10px] mt-[-6px] mb-[14px] border rounded-md;
+
+  &-inner {
+    @apply py-2;
+  }
+
+  .ls-page-properties {
+    @apply bg-gray-03 rounded-md px-3 gap-1;
+  }
+
+  .ls-new-property {
+    @apply mt-1;
+  }
+
+  &.is-collapsed {
+    @apply border-transparent -mb-[14px];
+
+    &:has(.select-item) {
+      @apply py-2 relative -left-1;
+    }
+
+    .page-info-inner {
+      @apply py-0 relative -top-[14px] -mb-[16px] min-h-[44px];
+
+      &:has(.ls-page-properties) {
+        @apply mb-4 opacity-90;
+      }
+    }
+
+    .ls-new-property {
+      @apply hidden;
+    }
+
+    .ls-page-properties {
+      &.no-properties {
+        @apply hidden;
+      }
+    }
+  }
+
+  .info-title {
+    @apply relative min-h-[28px] flex items-center pl-1;
+  }
+}
+
+.sidebar-item .page-info {
+  margin: 0 8px;
+}
+
+.page-info-title-placeholder {
+  min-height: 28px;
 }

@@ -10,9 +10,11 @@
             [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.assets :as assets-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.notification :as notification]
             [frontend.rum :as r]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -22,7 +24,8 @@
             [rum.core :as rum]
             [frontend.ui :as ui]
             [frontend.components.whiteboard :as whiteboard]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [frontend.db.async :as db-async]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -62,6 +65,7 @@
         repo (state/get-current-repo)
         limit 100]
     (p/let [blocks (when blocks? (search/block-search repo q {:limit limit}))
+            blocks (map (fn [b] (update b :block/uuid str)) blocks)
             pages (when pages? (search/page-search q))
             files (when files? (search/file-search q limit))]
       (clj->js {:pages pages :blocks blocks :files files}))))
@@ -105,7 +109,7 @@
    :search search-handler
    :queryBlockByUUID (fn [block-uuid]
                        (clj->js
-                        (model/query-block-by-uuid (parse-uuid block-uuid))))
+                        (model/query-block-by-uuid block-uuid)))
    :getBlockPageName #(let [block-id-str %]
                         (if (util/uuid-string? block-id-str)
                           (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
@@ -114,16 +118,17 @@
    :isWhiteboardPage model/whiteboard-page?
    :isMobile util/mobile?
    :saveAsset save-asset-handler
-   :makeAssetUrl editor-handler/make-asset-url
+   :makeAssetUrl assets-handler/make-asset-url
    :inflateAsset (fn [src] (clj->js (pdf-assets/inflate-asset src)))
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
    :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
    :addNewWhiteboard (fn [page-name]
-                       (whiteboard-handler/create-new-whiteboard-page! page-name))
+                       (whiteboard-handler/<create-new-whiteboard-page! page-name))
    :addNewBlock (fn [content]
-                  (str (whiteboard-handler/add-new-block! current-whiteboard-name content)))
+                  (p/let [new-block-id (whiteboard-handler/<add-new-block! current-whiteboard-name content)]
+                    (str new-block-id)))
    :sidebarAddBlock (fn [uuid type]
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
@@ -140,46 +145,95 @@
                            (route-handler/redirect-to-whiteboard! page-name {:block-id page-name-or-uuid})
                            (route-handler/redirect-to-page! (model/get-redirect-page-name page-name-or-uuid))))))})
 
+(defonce *transact-result (atom nil))
+
+(defn- on-persist
+  [page-name app info]
+  (->
+   (p/let [_ @*transact-result
+           result (p/do!
+                   (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
+                   (whiteboard-handler/<transact-tldr-delta! page-name app (.-replace info)))]
+     (reset! *transact-result result))
+   (p/catch (fn [^js error]
+              (js/console.error error)
+              (notification/show! [:div
+                                   (str "Save whiteboard failed, error:" (.-cause error))])))))
+
+(rum/defc tldraw-inner < rum/static
+  {:will-remount (fn [old-state new-state]
+                   (let [page-name (first (:rum/args old-state))
+                         old-data (nth (:rum/args old-state) 1)
+                         new-data (nth (:rum/args new-state) 1)
+                         old-shapes (let [shapes (some-> (gobj/get old-data "pages")
+                                                         first
+                                                         (gobj/get "shapes"))]
+                                      (zipmap (map #(gobj/get % "id") shapes)
+                                              shapes))
+                         new-shapes (some-> (gobj/get new-data "pages")
+                                            first
+                                            (gobj/get "shapes"))
+                         updated-shapes (filter (fn [shape]
+                                                  (when-let [old (get old-shapes (gobj/get shape "id"))]
+                                                    (not= (gobj/get shape "type") (gobj/get old "type"))))
+                                                new-shapes)]
+                     ;; FIXME: this should be handled by tldraw, any data changes should re-render the updated shapes
+                     (when (seq updated-shapes)
+                       (whiteboard-handler/update-shapes! updated-shapes))
+
+                     (whiteboard-handler/update-shapes-index! page-name))
+                   new-state)}
+  [page-name data populate-onboarding? loaded-app on-mount]
+  [:div.draw.tldraw.whiteboard.relative.w-full.h-full
+   {:style {:overscroll-behavior "none"}
+    :on-blur (fn [e]
+               (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
+                 (state/clear-edit!)))
+        ;; wheel -> overscroll may cause browser navigation
+    :on-wheel util/stop-propagation}
+
+   (when
+    (and populate-onboarding? (not loaded-app))
+     [:div.absolute.inset-0.flex.items-center.justify-center
+      {:style {:z-index 200}}
+      (ui/loading "Loading onboarding whiteboard ...")])
+
+   (tldraw {:renderers tldraw-renderers
+            :handlers (get-tldraw-handlers page-name)
+            :onMount on-mount
+            :readOnly config/publishing?
+            ;; :onPersist (debounce #(on-persist page-name %1 %2) 200)
+            :onPersist #(on-persist page-name %1 %2)
+            :model data})])
+
+(rum/defc tldraw-app-inner < rum/reactive
+  {:init (fn [state]
+           (let [page-name (first (:rum/args state))]
+             (db-async/<get-block (state/get-current-repo) page-name)
+             state))}
+  [page-name block-id loaded-app set-loaded-app]
+  (when-not (state/sub-async-query-loading page-name)
+    (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+          on-mount (fn [^js tln]
+                     (when tln
+                       (set! (.-appUndo tln) undo)
+                       (set! (.-appRedo tln) redo)
+                       (when-let [^js api (gobj/get tln "api")]
+                         (p/then (when populate-onboarding?
+                                   (whiteboard-handler/populate-onboarding-whiteboard api))
+                                 #(do (whiteboard-handler/cleanup! (.-currentPage tln))
+                                      (state/focus-whiteboard-shape tln block-id)
+                                      (set-loaded-app tln))))))
+          data (whiteboard-handler/page-name->tldr! page-name)]
+      (when data
+        (tldraw-inner page-name data populate-onboarding? loaded-app on-mount)))))
+
 (rum/defc tldraw-app
   [page-name block-id]
-  (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
-        data (whiteboard-handler/page-name->tldr! page-name)
-        [loaded-app set-loaded-app] (rum/use-state nil)
-        on-mount (fn [^js tln]
-                   (when tln
-                     (set! (.-appUndo tln) undo)
-                     (set! (.-appRedo tln) redo)
-                     (when-let [^js api (gobj/get tln "api")]
-                      (p/then (when populate-onboarding?
-                                (whiteboard-handler/populate-onboarding-whiteboard api))
-                              #(do (whiteboard-handler/cleanup! (.-currentPage tln))
-                                   (state/focus-whiteboard-shape tln block-id)
-                                   (set-loaded-app tln))))))]
+  (let [[loaded-app set-loaded-app] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when (and loaded-app block-id)
                          (state/focus-whiteboard-shape loaded-app block-id))
                        #())
                      [block-id loaded-app])
-    (when data
-      [:div.draw.tldraw.whiteboard.relative.w-full.h-full
-       {:style {:overscroll-behavior "none"}
-        :on-blur (fn [e]
-                   (when (#{"INPUT" "TEXTAREA"} (.-tagName (gobj/get e "target")))
-                     (state/clear-edit!)))
-        ;; wheel -> overscroll may cause browser navigation
-        :on-wheel util/stop-propagation}
-
-       (when
-        (and populate-onboarding? (not loaded-app))
-        [:div.absolute.inset-0.flex.items-center.justify-center
-         {:style {:z-index 200}}
-         (ui/loading "Loading onboarding whiteboard ...")])
-       (tldraw {:renderers tldraw-renderers
-                :handlers (get-tldraw-handlers page-name)
-                :onMount on-mount
-                :readOnly config/publishing?
-                :onPersist (fn [app info]
-                             (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
-                             (util/profile "tldraw persist"
-                                           (whiteboard-handler/transact-tldr-delta! page-name app (.-replace info))))
-                :model data})])))
+    (tldraw-app-inner page-name block-id loaded-app set-loaded-app)))

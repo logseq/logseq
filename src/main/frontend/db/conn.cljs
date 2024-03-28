@@ -8,17 +8,15 @@
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
             [logseq.db :as ldb]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce conns (atom {}))
 
 (defn get-repo-path
   [url]
-  (when url
-    (if (util/starts-with? url "http")
-      (->> (take-last 2 (string/split url #"/"))
-           util/string-join-path)
-      url)))
+  (assert (string? url) (str "url is not a string: " (type url)))
+  url)
 
 (defn get-repo-name
   [repo-url]
@@ -26,7 +24,7 @@
     (mobile-util/native-platform?)
     (text-util/get-graph-name-from-path repo-url)
 
-    (config/local-db? repo-url)
+    (config/local-file-based-graph? repo-url)
     (config/get-local-dir repo-url)
 
     :else
@@ -35,15 +33,18 @@
 (defn get-short-repo-name
   "repo-name: from get-repo-name. Dir/Name => Name"
   [repo-name]
-  (cond
-    (util/electron?)
-    (text/get-file-basename repo-name)
+  (let [repo-name' (cond
+                     (util/electron?)
+                     (text/get-file-basename repo-name)
 
-    (mobile-util/native-platform?)
-    (gp-util/safe-decode-uri-component (text/get-file-basename repo-name))
+                     (mobile-util/native-platform?)
+                     (common-util/safe-decode-uri-component (text/get-file-basename repo-name))
 
-    :else
-    repo-name))
+                     :else
+                     repo-name)]
+    (if (config/db-based-graph? repo-name')
+      (string/replace-first repo-name' config/db-version-prefix "")
+      repo-name')))
 
 (defn datascript-db
   [repo]
@@ -51,6 +52,8 @@
     (let [path (get-repo-path repo)]
       (str (if (util/electron?) "" config/idb-db-prefix)
            path))))
+
+(def get-schema sqlite-util/get-schema)
 
 (defn get-db
   ([]
@@ -66,19 +69,36 @@
          @conn
          conn)))))
 
-(defn reset-conn! [conn db]
-  (reset! conn db))
-
 (defn remove-conn!
   [repo]
   (swap! conns dissoc (datascript-db repo)))
 
+(defn kv
+  [key value & {:keys [id]}]
+  {:db/id (or id -1)
+   :db/ident key
+   key value})
+
+(if util/node-test?
+  (defn transact!
+    ([repo tx-data]
+     (transact! repo tx-data nil))
+    ([repo tx-data tx-meta]
+     (ldb/transact! (get-db repo false) tx-data tx-meta)))
+  (defn transact!
+    ([repo tx-data]
+     (transact! repo tx-data nil))
+    ([repo tx-data tx-meta]
+     (ldb/transact! repo tx-data tx-meta))))
+
 (defn start!
   ([repo]
    (start! repo {}))
-  ([repo {:keys [listen-handler]}]
+  ([repo {:keys [listen-handler create-default-pages?]
+          :or {create-default-pages? false}}]
    (let [db-name (datascript-db repo)
-         db-conn (ldb/start-conn)]
+         db-conn (ldb/start-conn :schema (get-schema repo)
+                                 :create-default-pages? create-default-pages?)]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
        (listen-handler repo)))))

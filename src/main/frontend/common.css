@@ -115,11 +115,14 @@ body {
     text-indent: 0;
     padding: 8px 20px;
     border-left: 4px solid;
-    border-left-color: var(--ls-page-blockquote-border-color, hsl(var(--primary)/.4));
-    background-color: var(--ls-page-blockquote-bg-color, hsl(var(--secondary)));
+    background-color: var(--ls-page-blockquote-bg-color, var(--lx-gray-04, hsl(var(--secondary))));
     color: var(--ls-page-blockquote-color, hsl(var(--secondary-foreground)));
     margin: 1rem 0;
     font-size: 1rem;
+  }
+
+  html blockquote {
+    border-left-color: var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha, hsl(var(--primary)/.4)));
   }
 
   summary {
@@ -336,7 +339,7 @@ i.ti {
 
 /* region FIXME: override elements (?) */
 h1.title, h1.title input {
-  @apply mb-4 font-medium;
+  @apply font-medium;
 
   color: var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))));
   font-size: var(--ls-page-title-size, 32px);
@@ -482,15 +485,9 @@ img.small {
 }
 
 a.tag {
-  font-size: 0.9em;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  cursor: pointer;
-  padding: 0 2px;
-  border-radius: 4px;
+  @apply text-sm inline-flex items-center text-center cursor-pointer rounded opacity-70;
+
   color: var(--lx-accent-11, var(--ls-tag-text-color, hsl(var(--primary))));
-  opacity: var(--ls-tag-text-opacity, 0.7);
 }
 
 a.tag:hover {

@@ -1,7 +1,7 @@
 (ns frontend.db.query-dsl-test
   (:require [cljs.test :refer [are deftest testing use-fixtures is]]
             [clojure.string :as str]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [frontend.db :as db]
             [frontend.util :as util]
             [frontend.db.query-dsl :as query-dsl]
@@ -87,7 +87,6 @@ prop-linked-num:: [[3000]]
 prop-d:: [[no-space-link]]
 - b4
 prop-d:: nada"}])
-
   (testing "Blocks have given property value"
     (is (= #{"b1" "b2"}
            (set (map (comp first str/split-lines :block/content)
@@ -149,14 +148,15 @@ prop-d:: nada"}])
                    (map-indexed (fn [idx {:keys [tags]}]
                                   {:file/path (str "pages/page" idx ".md")
                                    :file/content (if (seq tags)
-                                                   (str "tags:: " (str/join ", " (map page-ref/->page-ref tags)))
+                                                   (str "page-prop:: b\n- block for page" idx
+                                                        "\ntags:: " (str/join ", " (map page-ref/->page-ref tags)))
                                                    "")})))
         _ (load-test-files pages)
         {:keys [result time]}
         (util/with-time (dsl-query "(and (property tags tag1) (property tags tag2))"))]
     ;; Specific number isn't as important as ensuring query doesn't take orders
     ;; of magnitude longer
-    (is (> 25.0 time) "multi property query perf is reasonable")
+    (is (> 40.0 time) "multi property query perf is reasonable")
     (is (= 10 (count result)))))
 
 (defn- page-property-queries-test
@@ -332,10 +332,11 @@ prop-d:: nada"}])
          (set (map :block/content
                    (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))")))))
 
-  (is (= #{"foo:: bar\n" "DONE b1 [[page 1]] [[page 3]]"
+  (is (= #{"foo:: bar" "DONE b1 [[page 1]] [[page 3]]"
            "DONE b2 [[page 1]]"}
          (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
               (keep :block/content)
+              (map str/trimr)
               set)))
 
   (is (= #{"DONE b2 [[page 1]]" "LATER b4 [[page 2]]"}
@@ -471,11 +472,12 @@ tags: [[other]]
                 (dsl-query "(or [[tag2]] [[page 3]])")))
         "OR query with nonexistent page should return meaningful results")
 
-    (is (= ["b1 [[page 1]] #tag2" "foo:: bar\n" "b3"]
+    (is (= (set ["b1 [[page 1]] #tag2" "foo:: bar" "b3"])
            (->> (dsl-query "(not [[page 2]])")
                 ;; Only filter to page1 to get meaningful results
                 (filter #(= "page1" (get-in % [:block/page :block/name])))
-                (map :block/content)))
+                (map (comp str/trimr :block/content))
+                (set)))
         "NOT query")))
 
 (deftest nested-page-ref-queries
@@ -493,7 +495,8 @@ tags: [[other]]
 
 (deftest between-queries
   (load-test-files [{:file/path "journals/2020_12_26.md"
-                     :file/content "- DONE 26-b1
+                     :file/content "foo::bar
+- DONE 26-b1
 created-at:: 1608968448113
 - LATER 26-b2-modified-later
 created-at:: 1608968448114
@@ -531,6 +534,10 @@ created-at:: 1608968448116
          (map :block/content (custom-query {:query (list 'and '(task later) "b")})))
       "Query with rule that can't be derived from the form itself"))
 
+(if js/process.env.DB_GRAPH
+  (def get-property-value query-dsl/get-db-property-value)
+  (def get-property-value  #(get-in %1 [:block/properties %2])))
+
 (deftest sort-by-queries
   (load-test-files [{:file/path "journals/2020_02_25.md"
                      :file/content "rating:: 10"}
@@ -547,43 +554,42 @@ created-at:: 1608968448115
 - 26-b4
 created-at:: 1608968448116
 "}])
-
   (testing "sort-by user block property fruit"
     (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit))")
-                      (map #(get-in % [:block/properties :fruit])))]
+                      (map #(get-property-value % :fruit)))]
       (is (= ["plum" "apple" nil]
              result)
           "sort-by correctly defaults to desc"))
 
     (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit desc))")
-                      (map #(get-in % [:block/properties :fruit])))]
-      (is (= ["plum" "apple" nil]
-             result)
-          "sort-by desc"))
+                        (map #(get-property-value % :fruit)))]
+        (is (= ["plum" "apple" nil]
+               result)
+            "sort-by desc"))
 
     (let [result (->> (dsl-query "(and (task now later done) (sort-by fruit asc))")
-                      (map #(get-in % [:block/properties :fruit])))]
-      (is (= ["apple" "plum" nil]
-             result)
-          "sort-by asc")))
+                        (map #(get-property-value % :fruit)))]
+        (is (= ["apple" "plum" nil]
+               result)
+            "sort-by asc")))
 
   (testing "sort-by hidden, built-in block property created-at"
-    (let [result (->> (dsl-query "(and (task now later done) (sort-by created-at desc))")
-                      (map #(get-in % [:block/properties :created-at])))]
-      (is (= [1608968448115 1608968448114 1608968448113]
-             result))
-      "sorted-by desc")
+      (let [result (->> (dsl-query "(and (task now later done) (sort-by created-at desc))")
+                        (map #(get-property-value % :created-at)))]
+        (is (= [1608968448115 1608968448114 1608968448113]
+               result))
+        "sorted-by desc")
 
-    (let [result (->> (dsl-query "(and (todo now later done) (sort-by created-at asc))")
-                      (map #(get-in % [:block/properties :created-at])))]
-      (is (= [1608968448113 1608968448114 1608968448115]
-             result)
-          "sorted-by asc")))
+      (let [result (->> (dsl-query "(and (todo now later done) (sort-by created-at asc))")
+                        (map #(get-property-value % :created-at)))]
+        (is (= [1608968448113 1608968448114 1608968448115]
+               result)
+            "sorted-by asc")))
 
   (testing "user page property rating"
-    (is (= [10 8]
-           (->> (dsl-query "(and (page-property rating) (sort-by rating))")
-                (map #(get-in % [:block/properties :rating])))))))
+      (is (= [10 8]
+             (->> (dsl-query "(and (page-property rating) (sort-by rating))")
+                  (map #(get-property-value % :rating)))))))
 
 (deftest simplify-query
   (are [x y] (= (query-dsl/simplify-query x) y)

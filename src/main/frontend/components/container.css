@@ -197,6 +197,7 @@
       @apply pl-6 pr-4 py-1 flex justify-between items-center select-none sticky top-[-4px];
       @apply cursor-pointer z-[2] active:opacity-80;
 
+      background-color: var(--left-sidebar-bg-color);
 
       .ui__icon {
         @apply flex justify-center;
@@ -529,15 +530,22 @@
   }
 }
 
-.settings-modal {
-  @apply -m-8 rounded-lg;
-  /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
+.ui__dialog-content[label=app-settings] {
+  @apply w-auto md:max-w-4xl overflow-hidden;
+
+  .settings-modal {
+    @apply -mx-6 -mt-6 -mb-6 rounded-xl;
+  }
 }
 
 .cp__sidebar-main-content {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
+
+  .page {
+    @apply px-6;
+  }
 }
 
 .cp__sidebar-help {
@@ -787,7 +795,7 @@
   }
 }
 
-.favorites li.dragging-target {
+li.dragging-target {
   border-left: 5px solid green;
 }
 

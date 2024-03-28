@@ -12,8 +12,8 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
-            [logseq.shui.demo :as shui]
-            ))
+            [logseq.shui.demo2 :as shui]
+            [frontend.components.imports :as imports]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -71,15 +71,15 @@
 
    ["/import"
     {:name :import
-     :view setups/importer}]
+     :view imports/importer}]
 
    ["/bug-report"
     {:name :bug-report
      :view bug-report/bug-report}]
 
-    ["/bug-report-tool/:tool"
-     {:name :bug-report-tools
-      :view bug-report/bug-report-tool-route}]
+   ["/bug-report-tool/:tool"
+    {:name :bug-report-tools
+     :view bug-report/bug-report-tool-route}]
 
    ["/all-journals"
     {:name :all-journals

@@ -10,6 +10,17 @@
 }
 
 .repo-plus svg {
-    display: inline;
-    transform: scale(0.7);
+  display: inline;
+  transform: scale(0.7);
+}
+
+.ui__dropdown-menu-content {
+  &.repos-list {
+    @apply px-2;
+    @apply min-w-[260px] sm:max-w-[380px] max-h-[70vh];
+
+    .ui__dropdown-menu-item {
+      @apply overflow-hidden overflow-ellipsis;
+    }
+  }
 }

@@ -1,110 +1,118 @@
 (ns frontend.components.content
-  (:require [clojure.string :as string]
+  (:require [cljs-bean.core :as bean]
+            [cljs-time.coerce :as tc]
+            [cljs.pprint :as pp]
+            [clojure.string :as string]
+            [cognitect.transit :as transit]
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
-            [frontend.components.page-menu :as page-menu]
             [frontend.components.export :as export]
+            [frontend.components.page-menu :as page-menu]
+            [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.extensions.srs :as srs]
-            [frontend.handler.common :as common-handler]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
-            [frontend.handler.image :as image-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.common.developer :as dev-common-handler]
-            [frontend.mixins :as mixins]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.modules.shortcut.core :as shortcut]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.modules.shortcut.core :as shortcut]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.block-ref :as block-ref]
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
+            [promesa.core :as p]
             [rum.core :as rum]))
+
+(defonce transit-r (transit/reader :json))
 
 ;; TODO i18n support
 
 (rum/defc custom-context-menu-content
   []
-  [:.menu-links-wrapper
-   (ui/menu-background-color #(editor-property/batch-add-block-property! (state/get-selection-block-ids) :background-color %)
-                             #(editor-property/batch-remove-block-property! (state/get-selection-block-ids) :background-color))
+  (let [repo (state/get-current-repo)]
+    [:.menu-links-wrapper
+     (ui/menu-background-color #(property-handler/batch-set-block-property! repo (state/get-selection-block-ids) :background-color %)
+                               #(property-handler/batch-remove-block-property! repo (state/get-selection-block-ids) :background-color))
 
-   (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
-                    #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
-                    #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
+     (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
+                      #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
+                      #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
 
-   [:hr.menu-separator]
+     [:hr.menu-separator]
 
-   (ui/menu-link
-    {:key "cut"
-     :on-click #(editor-handler/cut-selection-blocks true)
-     :shortcut (ui/keyboard-shortcut-from-config :editor/cut)}
-    (t :editor/cut))
-   (ui/menu-link
-    {:key "delete"
-     :on-click #(do (editor-handler/delete-selection %)
-                    (state/hide-custom-context-menu!))
-     :shortcut (ui/keyboard-shortcut-from-config :editor/delete)}
-    (t :editor/delete-selection))
-   (ui/menu-link
-    {:key "copy"
-     :on-click editor-handler/copy-selection-blocks
-     :shortcut (ui/keyboard-shortcut-from-config :editor/copy)}
-    (t :editor/copy))
-   (ui/menu-link
-    {:key "copy as"
-     :on-click (fn [_]
-                 (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
-                   (state/set-modal!
-                    #(export/export-blocks block-uuids {:whiteboard? false}))))}
-    (t :content/copy-export-as))
-   (ui/menu-link
-    {:key "copy block refs"
-     :on-click editor-handler/copy-block-refs}
-    (t :content/copy-block-ref))
-   (ui/menu-link
-    {:key "copy block embeds"
-     :on-click editor-handler/copy-block-embeds}
-    (t :content/copy-block-emebed))
-
-   [:hr.menu-separator]
-
-   (when (state/enable-flashcards?)
      (ui/menu-link
-      {:key "Make a Card"
-       :on-click #(srs/batch-make-cards!)}
-      (t :context-menu/make-a-flashcard)))
+      {:key "cut"
+       :on-click #(editor-handler/cut-selection-blocks true)
+       :shortcut (ui/keyboard-shortcut-from-config :editor/cut)}
+      (t :editor/cut))
+     (ui/menu-link
+      {:key "delete"
+       :on-click #(do (editor-handler/delete-selection %)
+                      (state/hide-custom-context-menu!))
+       :shortcut (ui/keyboard-shortcut-from-config :editor/delete)}
+      (t :editor/delete-selection))
+     (ui/menu-link
+      {:key "copy"
+       :on-click editor-handler/copy-selection-blocks
+       :shortcut (ui/keyboard-shortcut-from-config :editor/copy)}
+      (t :editor/copy))
+     (ui/menu-link
+      {:key "copy as"
+       :on-click (fn [_]
+                   (let [block-uuids (editor-handler/get-selected-toplevel-block-uuids)]
+                     (state/set-modal!
+                      #(export/export-blocks block-uuids {:whiteboard? false}))))}
+      (t :content/copy-export-as))
+     (ui/menu-link
+      {:key "copy block refs"
+       :on-click editor-handler/copy-block-refs}
+      (t :content/copy-block-ref))
+     (ui/menu-link
+      {:key "copy block embeds"
+       :on-click editor-handler/copy-block-embeds}
+      (t :content/copy-block-emebed))
 
-   (ui/menu-link
-     {:key "Toggle number list"
-      :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
-     (t :context-menu/toggle-number-list))
+     [:hr.menu-separator]
 
-   (ui/menu-link
-    {:key "cycle todos"
-     :on-click editor-handler/cycle-todos!
-     :shortcut (ui/keyboard-shortcut-from-config :editor/cycle-todo)}
-    (t :editor/cycle-todo))
+     (when (state/enable-flashcards?)
+       (ui/menu-link
+        {:key "Make a Card"
+         :on-click #(srs/batch-make-cards!)}
+        (t :context-menu/make-a-flashcard)))
 
-   [:hr.menu-separator]
+     (ui/menu-link
+      {:key "Toggle number list"
+       :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
+      (t :context-menu/toggle-number-list))
 
-   (ui/menu-link
-    {:key "Expand all"
-     :on-click editor-handler/expand-all-selection!
-     :shortcut (ui/keyboard-shortcut-from-config :editor/expand-block-children)}
-    (t :editor/expand-block-children))
+     (ui/menu-link
+      {:key "cycle todos"
+       :on-click editor-handler/cycle-todos!
+       :shortcut (ui/keyboard-shortcut-from-config :editor/cycle-todo)}
+      (t :editor/cycle-todo))
 
-   (ui/menu-link
-    {:key "Collapse all"
-     :on-click editor-handler/collapse-all-selection!
-     :shortcut (ui/keyboard-shortcut-from-config :editor/collapse-block-children)}
-    (t :editor/collapse-block-children))])
+     [:hr.menu-separator]
+
+     (ui/menu-link
+      {:key "Expand all"
+       :on-click editor-handler/expand-all-selection!
+       :shortcut (ui/keyboard-shortcut-from-config :editor/expand-block-children)}
+      (t :editor/expand-block-children))
+
+     (ui/menu-link
+      {:key "Collapse all"
+       :on-click editor-handler/collapse-all-selection!
+       :shortcut (ui/keyboard-shortcut-from-config :editor/collapse-block-children)}
+      (t :editor/collapse-block-children))]))
 
 (defonce *template-including-parent? (atom nil))
 
@@ -128,7 +136,8 @@
         template-including-parent? (rum/react *template-including-parent?)
         block-id (if (string? block-id) (uuid block-id) block-id)
         block (db/entity [:block/uuid block-id])
-        has-children? (seq (:block/_parent block))]
+        has-children? (seq (:block/_parent block))
+        repo (state/get-current-repo)]
     (when (and (nil? template-including-parent?) has-children?)
       (reset! *template-including-parent? true))
 
@@ -148,15 +157,16 @@
                      :on-click (fn []
                                  (let [title (string/trim @input)]
                                    (when (not (string/blank? title))
-                                     (if (page-handler/template-exists? title)
-                                       (notification/show!
-                                        [:p (t :context-menu/template-exists-warning)]
-                                        :error)
-                                       (do
-                                         (editor-property/set-block-property! block-id :template title)
-                                         (when (false? template-including-parent?)
-                                           (editor-property/set-block-property! block-id :template-including-parent false))
-                                         (state/hide-custom-context-menu!)))))))]
+                                     (p/let [exists? (page-handler/<template-exists? title)]
+                                       (if exists?
+                                         (notification/show!
+                                          [:p (t :context-menu/template-exists-warning)]
+                                          :error)
+                                         (p/do!
+                                           (property-handler/set-block-property! repo block-id :template title)
+                                           (when (false? template-including-parent?)
+                                             (property-handler/set-block-property! repo block-id :template-including-parent false))
+                                           (state/hide-custom-context-menu!))))))))]
          [:hr.menu-separator]])
       (ui/menu-link
        {:key "Make a Template"
@@ -168,11 +178,15 @@
 (rum/defc ^:large-vars/cleanup-todo block-context-menu-content <
   shortcut/disable-all-shortcuts
   [_target block-id]
+  (let [repo (state/get-current-repo)
+        db? (config/db-based-graph? repo)]
     (when-let [block (db/entity [:block/uuid block-id])]
-      (let [heading (-> block :block/properties :heading (or false))]
+      (let [properties (:block/properties block)
+            heading (or (pu/lookup properties :logseq.property/heading)
+                        false)]
         [:.menu-links-wrapper
-         (ui/menu-background-color #(editor-property/set-block-property! block-id :background-color %)
-                                   #(editor-property/remove-block-property! block-id :background-color))
+         (ui/menu-background-color #(property-handler/set-block-property! repo block-id :background-color %)
+                                   #(property-handler/remove-block-property! repo block-id :background-color))
 
          (ui/menu-heading heading
                           #(editor-handler/set-heading! block-id %)
@@ -234,7 +248,8 @@
 
          [:hr.menu-separator]
 
-         (block-template block-id)
+         (when-not db?
+           (block-template block-id))
 
          (cond
            (srs/card-block? block)
@@ -251,9 +266,9 @@
            nil)
 
          (ui/menu-link
-           {:key "Toggle number list"
-            :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
-           (t :context-menu/toggle-number-list))
+          {:key "Toggle number list"
+           :on-click #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
+          (t :context-menu/toggle-number-list))
 
          [:hr.menu-separator]
 
@@ -293,7 +308,36 @@
              :on-click (fn []
                          (let [block (db/pull [:block/uuid block-id])]
                            (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
-            (t :dev/show-block-ast)))])))
+            (t :dev/show-block-ast)))
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key "(Dev) Show block content history"
+             :on-click
+             (fn []
+               (let [^object worker @db-browser/*worker]
+                 (p/let [result (.rtc-get-block-content-versions worker block-id)
+                         blocks-versions (bean/->clj result)]
+                   (prn :Dev-show-block-content-history)
+                   (doseq [[block-uuid versions] blocks-versions]
+                     (prn :block-uuid block-uuid)
+                     (pp/print-table [:content :created-at]
+                                     (map (fn [version]
+                                            {:created-at (tc/from-long (* (:created-at version) 1000))
+                                             :content (:value version)})
+                                          versions))))))}
+
+            "(Dev) Show block content history"))
+         (when (state/sub [:ui/developer-mode?])
+           (ui/menu-link
+            {:key "(Dev) Show block RTC log"
+             :on-click
+             (fn []
+               (let [^object worker @db-browser/*worker]
+                 (p/let [result (.rtc-get-block-update-log worker (str block-id))
+                         logs (transit/read transit-r result)]
+                   (prn :Dev-show-block-RTC-log block-id)
+                   (apply js/console.log logs))))}
+            "(Dev) Show block RTC log"))]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]
@@ -339,48 +383,6 @@
 ;; Also, keyboard bindings should only be activated after
 ;; blocks were already selected.
 (rum/defc hiccup-content < rum/static
-  (mixins/event-mixin
-   (fn [state]
-     ;; fixme: this mixin will register global event listeners on window
-     ;; which might cause unexpected issues
-     (mixins/listen state js/window "contextmenu"
-                    (fn [e]
-                      (let [target (gobj/get e "target")
-                            block-el (.closest target ".bullet-container[blockid]")
-                            block-id (some-> block-el (.getAttribute "blockid"))
-                            {:keys [block block-ref]} (state/sub :block-ref/context)
-                            {:keys [page]} (state/sub :page-title/context)]
-                        (cond
-                          page
-                          (do
-                            (common-handler/show-custom-context-menu!
-                             e
-                             (page-title-custom-context-menu-content page))
-                            (state/set-state! :page-title/context nil))
-
-                          block-ref
-                          (do
-                            (common-handler/show-custom-context-menu!
-                             e
-                             (block-ref-custom-context-menu-content block block-ref))
-                            (state/set-state! :block-ref/context nil))
-
-                          (and (state/selection?) (not (d/has-class? target "bullet")))
-                          (common-handler/show-custom-context-menu!
-                           e
-                           (custom-context-menu-content))
-
-                          (and block-id (parse-uuid block-id))
-                          (let [block (.closest target ".ls-block")]
-                            (when block
-                              (state/clear-selection!)
-                              (state/conj-selection-block! block :down))
-                            (common-handler/show-custom-context-menu!
-                             e
-                             (block-context-menu-content target (uuid block-id))))
-
-                          :else
-                          nil))))))
   [id {:keys [hiccup]}]
   [:div {:id id}
    (if hiccup
@@ -389,7 +391,7 @@
 
 (rum/defc non-hiccup-content < rum/reactive
   [id content on-click on-hide config format]
-  (let [edit? (state/sub [:editor/editing? id])]
+  (let [edit? (state/sub-editing? id)]
     (if edit?
       (editor/box {:on-hide on-hide
                    :format format}
@@ -400,7 +402,6 @@
                          (util/stop e)
                          (editor-handler/reset-cursor-range! (gdom/getElement (str id)))
                          (state/set-edit-content! id content)
-                         (state/set-edit-input-id! id)
                          (when on-click
                            (on-click e))))]
         [:pre.cursor.content.pre-white-space
@@ -425,11 +426,9 @@
 (rum/defcs content < rum/reactive
   {:did-mount (fn [state]
                 (set-draw-iframe-style!)
-                (image-handler/render-local-images!)
                 state)
    :did-update (fn [state]
                  (set-draw-iframe-style!)
-                 (image-handler/render-local-images!)
                  state)}
   [state id {:keys [format
                     config
@@ -441,5 +440,6 @@
   (if hiccup
     [:div
      (hiccup-content id option)]
-    (let [format (gp-util/normalize-format format)]
+    ;; TODO: remove this
+    (let [format (common-util/normalize-format format)]
       (non-hiccup-content id content on-click on-hide config format))))

@@ -119,7 +119,7 @@
 (defn- whiteboard-dicts
   []
   (->> (shell {:out :string}
-              "grep -E -oh" "\\bt\\('[^ ']+" "-r" "tldraw/apps/tldraw-logseq/src/components")
+              "grep -E -oh" "\\bt\\('[^ ']+" "-r" "packages/tldraw/apps/tldraw-logseq/src/components")
        :out
        string/split-lines
        (map #(keyword (subs % 3)))))
@@ -139,6 +139,8 @@
                           (map #(keyword (subs % 4)))
                           (concat (mapcat val manual-ui-dicts))
                           (concat (whiteboard-dicts))
+                          ;; Temporarily unused as they will be brought back soon
+                          (concat [:download])
                           set)
         expected-dicts (set (remove #(re-find #"^(command|shortcut)\." (str (namespace %)))
                                     (keys (:en (get-dicts)))))

@@ -34,9 +34,6 @@
  ;; Enable showing the body of blocks when referencing them.
  :ui/show-full-blocks? false
 
- ;; Enable Block timestamp
- :feature/enable-block-timestamps? false
-
  ;; Enable remove accents when searching.
  ;; After toggle this option, please remember to rebuild your search index by press (cmd+c cmd+s).
  :feature/enable-search-remove-accents? true
@@ -344,5 +341,3 @@
 
  ;; specify the format of the filename for journal files
  ;; :journal/file-name-format "yyyy_MM_dd"
-
- 

@@ -1,18 +1,12 @@
 (ns electron.state
-  (:require [clojure.core.async :as async]
-            [electron.configs :as config]
+  (:require [electron.configs :as config]
             [medley.core :as medley]))
-
-(defonce persistent-dbs-chan (async/chan 1))
 
 (defonce state
   (atom {:config (config/get-config)
 
          ;; window -> current graph
          :window/graph {}
-
-         ;; job to do when persistGraph is done on renderer
-         :window/once-persist-done nil
 
          ;; job to do when graph is loaded on renderer
          :window/once-graph-ready nil}))
@@ -46,15 +40,15 @@
   []
   (set (vals (:window/graph @state))))
 
-(defn get-active-window-graph-path
-  "Get the path of the graph of the currently focused window (might be `nil`)"
-  []
-  (let [windows (:window/graph @state)
-        active-windows-pairs (filter #(.isFocused (first %)) windows)
-        active-window-pair (first active-windows-pairs)
-        path (second active-window-pair)]
-    path)
-  )
+;; Disabled until FIXME in electron.core is addressed
+#_(defn get-active-window-graph-path
+    "Get the path of the graph of the currently focused window (might be `nil`)"
+    []
+    (let [windows (:window/graph @state)
+          active-windows-pairs (filter #(.isFocused (first %)) windows)
+          active-window-pair (first active-windows-pairs)
+          path (second active-window-pair)]
+      path))
 
 (defn close-window!
   [window]

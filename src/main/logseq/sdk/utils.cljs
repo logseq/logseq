@@ -1,7 +1,8 @@
 (ns logseq.sdk.utils
   (:require [clojure.walk :as walk]
             [camel-snake-kebab.core :as csk]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [cljs-bean.core :as bean]))
 
 (defn normalize-keyword-for-json
   ([input] (normalize-keyword-for-json input true))
@@ -29,3 +30,7 @@
 
     :else
     (throw (js/Error. (str s " is not a valid UUID string.")))))
+
+(def ^:export to-clj bean/->clj)
+(def ^:export to-keyword keyword)
+(def ^:export to-symbol symbol)

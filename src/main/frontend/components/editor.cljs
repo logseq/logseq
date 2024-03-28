@@ -1,8 +1,7 @@
 (ns frontend.components.editor
   (:require [clojure.string :as string]
             [frontend.commands :as commands
-             :refer [*first-command-group *matched-block-commands *matched-commands]]
-            [frontend.components.block :as block]
+             :refer [*matched-block-commands *matched-commands]]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.svg :as svg]
             [frontend.components.search :as search]
@@ -14,10 +13,10 @@
             [frontend.handler.editor.lifecycle :as lifecycle]
             [frontend.handler.page :as page-handler]
             [frontend.handler.paste :as paste-handler]
+            [frontend.handler.property.util :as pu]
             [frontend.handler.search :as search-handler]
             [frontend.search :refer [fuzzy-search]]
             [frontend.mixins :as mixins]
-            [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -26,10 +25,11 @@
             [goog.dom :as gdom]
             [goog.string :as gstring]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [react-draggable]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.config :as config]))
 
 (rum/defc commands < rum/reactive
   [id format]
@@ -39,7 +39,7 @@
        matched
        {:get-group-name
         (fn [item]
-          (get *first-command-group (first item)))
+          (when (= (count item) 4) (last item)))
 
         :item-render
         (fn [item]
@@ -99,74 +99,102 @@
                                                       :command :block-commands}))
         :class     "black"}))))
 
-(defn- in-sidebar? [el]
-  (not (.contains (.getElementById js/document "left-container") el)))
+(defn- page-on-chosen-handler
+  [embed? input id q pos format]
+  (if embed?
+    (fn [chosen-item _e]
+      (let [value (.-value input)
+            value' (str (common-util/safe-subs value 0 q)
+                        (common-util/safe-subs value (+ (count q) 4 pos)))]
+        (state/set-edit-content! (.-id input) value')
+        (state/clear-editor-action!)
+        (p/let [page-name (util/page-name-sanity-lc chosen-item)
+                page (db/entity [:block/name page-name])
+                _ (when-not page (page-handler/<create! chosen-item {:redirect? false
+                                                                     :create-first-block? false}))
+                current-block (state/get-edit-block)]
+          (editor-handler/api-insert-new-block! chosen-item
+                                                {:block-uuid (:block/uuid current-block)
+                                                 :sibling? true
+                                                 :replace-empty-target? true
+                                                 :other-attrs {:block/link (:db/id (db/entity [:block/name page-name]))}}))))
+    (page-handler/on-chosen-handler input id q pos format)))
+
+(rum/defc page-search-aux
+  [id format embed? db-tag? q current-pos input pos]
+  (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
+    (rum/use-effect! (fn []
+                       (when-not (string/blank? q)
+                         (p/let [result (editor-handler/<get-matched-pages q)]
+                           (set-matched-pages! result))))
+                     [q])
+    (let [matched-pages (cond
+                          (contains? (set (map util/page-name-sanity-lc matched-pages))
+                                     (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
+                          (sort-by (fn [m]
+                                     [(count m) m])
+                                   matched-pages)
+
+                          (string/blank? q)
+                          nil
+
+                          (empty? matched-pages)
+                          (when-not (db/page-exists? q)
+                            (if db-tag?
+                              (concat [(str (t :new-class) " " q)]
+                                      matched-pages)
+                              (cons q matched-pages)))
+
+                                ;; reorder, shortest and starts-with first.
+                          :else
+                          (let [matched-pages (remove nil? matched-pages)
+                                matched-pages (sort-by
+                                               (fn [m]
+                                                 [(not (gstring/caseInsensitiveStartsWith m q)) (count m) m])
+                                               matched-pages)]
+                            (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                              (cons (first matched-pages)
+                                    (cons q (rest matched-pages)))
+                              (cons q matched-pages))))]
+      (ui/auto-complete
+       matched-pages
+       {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
+        :on-enter    (fn []
+                       (page-handler/page-not-exists-handler input id q current-pos))
+        :item-render (fn [page-name _chosen?]
+                       [:div.flex
+                        (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
+                        (search-handler/highlight-exact-query page-name q)])
+        :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
+                                                                   "Search for a page or a class"
+                                                                   "Search for a page")]
+        :class       "black"}))))
 
 (rum/defc page-search < rum/reactive
-  "Embedded page searching popup"
+  {:will-unmount (fn [state]
+                   (reset! commands/*current-command nil)
+                   state)}
+  "Page or tag searching popup"
   [id format]
-  (let [action (state/sub :editor/action)]
+  (let [action (state/sub :editor/action)
+        db? (config/db-based-graph? (state/get-current-repo))
+        embed? (and db? (= @commands/*current-command "Page embed"))
+        tag? (= action :page-search-hashtag)
+        db-tag? (and db? tag?)]
     (when (contains? #{:page-search :page-search-hashtag} action)
       (let [pos (state/get-editor-last-pos)
             input (gdom/getElement id)]
         (when input
           (let [current-pos (cursor/pos input)
-                edit-content (or (state/sub [:editor/content id]) "")
-                sidebar? (in-sidebar? input)
+                edit-content (state/sub-edit-content)
                 q (or
                    (editor-handler/get-selected-text)
                    (when (= action :page-search-hashtag)
-                     (gp-util/safe-subs edit-content pos current-pos))
+                     (common-util/safe-subs edit-content pos current-pos))
                    (when (> (count edit-content) current-pos)
-                     (gp-util/safe-subs edit-content pos current-pos))
-                   "")
-                matched-pages (when-not (string/blank? q)
-                                (editor-handler/get-matched-pages q))
-                matched-pages (cond
-                                (contains? (set (map util/page-name-sanity-lc matched-pages))
-                                           (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
-                                (sort-by (fn [m]
-                                           [(count m) m])
-                                         matched-pages)
-
-                                (string/blank? q)
-                                nil
-
-                                (empty? matched-pages)
-                                (cons q matched-pages)
-
-                               ;; reorder, shortest and starts-with first.
-                                :else
-                                (let [matched-pages (remove nil? matched-pages)
-                                      matched-pages (sort-by
-                                                     (fn [m]
-                                                       [(not (gstring/caseInsensitiveStartsWith m q)) (count m) m])
-                                                     matched-pages)]
-                                  (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
-                                    (cons (first matched-pages)
-                                          (cons q (rest matched-pages)))
-                                    (cons q matched-pages))))]
-            (ui/auto-complete
-             matched-pages
-             {:on-chosen   (page-handler/on-chosen-handler input id q pos format)
-              :on-enter    #(page-handler/page-not-exists-handler input id q current-pos)
-              :item-render (fn [page-name chosen?]
-                             [:div.preview-trigger-wrapper
-                              (block/page-preview-trigger
-                               {:children
-                                [:div.flex
-                                 (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                                 [:div.flex.space-x-1
-                                  [:div (when-not (db/page-exists? page-name) (t :new-page))]
-                                  (search-handler/highlight-exact-query page-name q)]]
-                                :open?           chosen?
-                                :manual?         true
-                                :fixed-position? true
-                                :tippy-distance  24
-                                :tippy-position  (if sidebar? "left" "right")}
-                               page-name)])
-              :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 "Search for a page"]
-              :class       "black"})))))))
+                     (common-util/safe-subs edit-content pos current-pos))
+                   "")]
+            (page-search-aux id format embed? db-tag? q current-pos input pos)))))))
 
 (defn- search-blocks!
   [state result]
@@ -175,6 +203,29 @@
                              (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
       (reset! result matched-blocks))))
 
+(defn- block-on-chosen-handler
+  [embed? input id q format selected-text]
+  (if embed?
+    (fn [chosen-item]
+      (let [pos (state/get-editor-last-pos)
+            value (.-value input)
+            value' (str (common-util/safe-subs value 0 q)
+                        (common-util/safe-subs value (+ (count q) 4 pos)))]
+        (state/set-edit-content! (.-id input) value')
+        (state/clear-editor-action!)
+        (let [current-block (state/get-edit-block)
+              id (:block/uuid chosen-item)
+              id (if (string? id) (uuid id) id)]
+          (p/do!
+           (editor-handler/api-insert-new-block! ""
+                                                 {:block-uuid (:block/uuid current-block)
+                                                  :sibling? true
+                                                  :replace-empty-target? true
+                                                  :other-attrs {:block/link (:db/id (db/entity [:block/uuid id]))}})
+           (state/clear-edit!)))))
+    (editor-handler/block-on-chosen-handler id q format selected-text)))
+
+;; TODO: use rum/use-effect instead
 (rum/defcs block-search-auto-complete < rum/reactive
   {:init (fn [state]
            (let [result (atom nil)]
@@ -186,7 +237,9 @@
   [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
                     (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
-        chosen-handler (editor-handler/block-on-chosen-handler id q format selected-text)
+        db? (config/db-based-graph? (state/get-current-repo))
+        embed? (and db? (= @commands/*current-command "Block embed"))
+        chosen-handler (block-on-chosen-handler embed? input id q format selected-text)
         non-exist-block-handler (editor-handler/block-non-exist-handler input)]
     (ui/auto-complete
      result
@@ -206,6 +259,7 @@
 
 (rum/defcs block-search < rum/reactive
   {:will-unmount (fn [state]
+                   (reset! commands/*current-command nil)
                    (state/clear-search-result!)
                    state)}
   [state id _format]
@@ -214,7 +268,7 @@
           input (gdom/getElement id)
           [id format] (:rum/args state)
           current-pos (cursor/pos input)
-          edit-content (state/sub [:editor/content id])
+          edit-content (state/sub-edit-content)
           edit-block (state/get-edit-block)
           selected-text (editor-handler/get-selected-text)
           q (or
@@ -224,47 +278,76 @@
       (when input
         (block-search-auto-complete edit-block input id q format selected-text)))))
 
+(rum/defc template-search-aux
+  [id q]
+  (let [[matched-templates set-matched-templates!] (rum/use-state nil)]
+    (rum/use-effect! (fn []
+                       (p/let [result (editor-handler/<get-matched-templates q)]
+                         (set-matched-templates! result)))
+                     [q])
+    (ui/auto-complete
+     matched-templates
+     {:on-chosen   (editor-handler/template-on-chosen-handler id)
+      :on-enter    (fn [_state] (state/clear-editor-action!))
+      :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
+      :item-render (fn [[template _block-db-id]]
+                     template)
+      :class       "black"})))
+
 (rum/defc template-search < rum/reactive
   [id _format]
   (let [pos (state/get-editor-last-pos)
         input (gdom/getElement id)]
     (when input
       (let [current-pos (cursor/pos input)
-            edit-content (state/sub [:editor/content id])
+            edit-content (state/sub-edit-content)
             q (or
                (when (>= (count edit-content) current-pos)
                  (subs edit-content pos current-pos))
-               "")
-            matched-templates (editor-handler/get-matched-templates q)
-            non-exist-handler (fn [_state]
-                                (state/clear-editor-action!))]
-        (ui/auto-complete
-         matched-templates
-         {:on-chosen   (editor-handler/template-on-chosen-handler id)
-          :on-enter    non-exist-handler
-          :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm "Search for a template"]
-          :item-render (fn [[template _block-db-id]]
-                         template)
-          :class       "black"})))))
+               "")]
+        (template-search-aux id q)))))
 
-(rum/defc property-search < rum/reactive
+(rum/defc property-search
   [id]
-  (let [input (gdom/getElement id)]
+  (let [input (gdom/getElement id)
+        [matched-properties set-matched-properties!] (rum/use-state nil)]
     (when input
       (let [q (or (:searching-property (editor-handler/get-searching-property input))
-                  "")
-            matched-properties (editor-handler/get-matched-properties q)
-            q-property (string/replace (string/lower-case q) #"\s+" "-")
-            non-exist-handler (fn [_state]
-                                ((editor-handler/property-on-chosen-handler id q-property) nil))]
-        (ui/auto-complete
-         matched-properties
-         {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
-          :on-enter non-exist-handler
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
-          :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
-          :item-render (fn [property] property)
-          :class       "black"})))))
+                  "")]
+        (rum/use-effect!
+         (fn []
+           (p/let [matched-properties (editor-handler/<get-matched-properties q)]
+             (set-matched-properties! matched-properties)))
+         [q])
+        (let [q-property (string/replace (string/lower-case q) #"\s+" "-")
+              non-exist-handler (fn [_state]
+                                  ((editor-handler/property-on-chosen-handler id q-property) nil))]
+          (ui/auto-complete
+           matched-properties
+           {:on-chosen (editor-handler/property-on-chosen-handler id q-property)
+            :on-enter non-exist-handler
+            :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property: " q-property)]
+            :header [:div.px-4.py-2.text-sm.font-medium "Matched properties: "]
+            :item-render (fn [property] property)
+            :class       "black"}))))))
+
+(rum/defc property-value-search-aux
+  [id property q]
+  (let [[values set-values!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [result (editor-handler/get-matched-property-values property q)]
+         (set-values! result)))
+     [property q])
+    (ui/auto-complete
+         values
+         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
+          :on-enter (fn [_state]
+                      ((editor-handler/property-value-on-chosen-handler id q) nil))
+          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
+          :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
+          :item-render (fn [property-value] property-value)
+          :class       "black"})))
 
 (rum/defc property-value-search < rum/reactive
   [id]
@@ -273,25 +356,15 @@
     (when (and input
                (not (string/blank? property)))
       (let [current-pos (cursor/pos input)
-            edit-content (state/sub [:editor/content id])
+            edit-content (state/sub-edit-content)
             start-idx (string/last-index-of (subs edit-content 0 current-pos)
                                             gp-property/colons)
             q (or
                (when (>= current-pos (+ start-idx 2))
                  (subs edit-content (+ start-idx 2) current-pos))
                "")
-            q (string/triml q)
-            matched-values (editor-handler/get-matched-property-values property q)
-            non-exist-handler (fn [_state]
-                                ((editor-handler/property-value-on-chosen-handler id q) nil))]
-        (ui/auto-complete
-         matched-values
-         {:on-chosen (editor-handler/property-value-on-chosen-handler id q)
-          :on-enter non-exist-handler
-          :empty-placeholder [:div.px-4.py-2.text-sm (str "Create a new property value: " q)]
-          :header [:div.px-4.py-2.text-sm.font-medium "Matched property values: "]
-          :item-render (fn [property-value] property-value)
-          :class       "black"})))))
+            q (string/triml q)]
+        (property-value-search-aux id property q)))))
 
 (rum/defc code-block-mode-keyup-listener
   [_q _edit-content last-pos current-pos]
@@ -308,9 +381,9 @@
     (when-let [input (gdom/getElement id)]
       (let [pos          (state/get-editor-last-pos)
             current-pos  (cursor/pos input)
-            edit-content (or (state/sub [:editor/content id]) "")
+            edit-content (or (state/sub-edit-content) "")
             q            (or (editor-handler/get-selected-text)
-                             (gp-util/safe-subs edit-content pos current-pos)
+                             (common-util/safe-subs edit-content pos current-pos)
                              "")
             matched      (seq (fuzzy-search modes q))
             matched      (or matched (if (string/blank? q) modes [q]))]
@@ -322,7 +395,7 @@
                                            (let [prefix (str "```" chosen)
                                                  last-pattern (str "```" q)]
                                              (editor-handler/insert-command! id
-                                               prefix format {:last-pattern last-pattern})
+                                                                             prefix format {:last-pattern last-pattern})
                                              (commands/handle-step [:codemirror/focus])))
                             :on-enter    (fn []
                                            (state/clear-editor-action!)
@@ -407,10 +480,10 @@
                                     max-height))
                                 max-height)
 
-                              (= modal-name "commands")
-                              (min 500))
+                        (= modal-name "commands")
+                        (min 500))
         right-sidebar? (:ui/sidebar-open? @state/state)
-        editing-key    (first (keys (:editor/editing? @state/state)))
+        editing-key    (state/get-edit-input-id)
         *el (rum/use-ref nil)
         y-overflow-vh? (or (< to-max-height Y-BOUNDARY-HEIGHT)
                            (> (- max-height' to-max-height) Y-BOUNDARY-HEIGHT))
@@ -448,7 +521,7 @@
      {:ref             *el
       :data-modal-name modal-name
       :class           (if y-overflow-vh? "is-overflow-vh-y" "")
-      :on-mouse-down   (fn [e]
+      :on-pointer-down   (fn [e]
                          (.stopPropagation e))
       :style           style}
      cp]))
@@ -510,7 +583,8 @@
   "Get textarea css class according to it's content"
   [block content format]
   (let [content (if content (str content) "")
-        heading (-> block :block/properties :heading)
+        properties (:block/properties block)
+        heading (pu/lookup properties :logseq.property/heading)
         heading (if (true? heading)
                   (min (inc (:block/level block)) 6)
                   heading)]
@@ -552,7 +626,7 @@
   rum/static
   {:did-update
    (fn [state]
-     (when-not (:editor/on-paste? @state/state)
+     (when-not @(:editor/on-paste? @state/state)
        (try (editor-handler/handle-last-input)
             (catch :default _e
               nil)))
@@ -566,10 +640,10 @@
             :visibility "hidden"
             :top 0
             :left 0}}
-   (let [content (str content "0")]
-     (for [[idx c] (map-indexed
-                    vector
-                    (string/split content ""))]
+   (let [content (str content "0")
+         graphemes (util/split-graphemes content)
+         graphemes-char-index (reductions #(+ %1 (count %2)) 0 graphemes)]
+     (for [[idx c] (into (sorted-map) (zipmap graphemes-char-index graphemes))]
        (if (= c "\n")
          [:span {:id (str "mock-text_" idx)
                  :key idx} "0" [:br]]
@@ -640,31 +714,64 @@
       :else
       nil)))
 
+(defn- editor-on-blur
+  [_e]
+  (cond
+    (contains?
+     #{:commands :block-commands
+       :page-search :page-search-hashtag :block-search :template-search
+       :property-search :property-value-search
+       :datepicker}
+     (state/get-editor-action))
+    (state/clear-editor-action!) ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
+
+         ;; editor/input component handles Escape directly, so just prevent handling it here
+    (= :input (state/get-editor-action))
+    nil
+
+    :else
+    (let [{:keys [on-hide value]} (editor-handler/get-state)]
+      (when on-hide
+        (on-hide value nil)))))
+
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state
-                  ::id (str (random-uuid))))
+           (assoc state ::id (str (random-uuid))))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}
   (mixins/event-mixin setup-key-listener!)
-  (shortcut/mixin :shortcut.handler/block-editing-only)
   lifecycle/lifecycle
-  [state {:keys [format block]} id _config]
-  (let [content (state/sub-edit-content id)
-        heading-class (get-editor-style-class block content format)]
-    [:div.editor-inner {:class (if block "block-editor" "non-block-editor")}
+  [state {:keys [format block parent-block on-hide]} id config]
+  (let [content (state/sub-edit-content (:block/uuid block))
+        heading-class (get-editor-style-class block content format)
+        opts (cond->
+              {:id                id
+               :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
+               :default-value     (or content "")
+               :minRows           (if (state/enable-grammarly?) 2 1)
+               :on-click          (editor-handler/editor-on-click! id)
+               :on-change         (editor-handler/editor-on-change! block id search-timeout)
+               :on-paste          (paste-handler/editor-on-paste! id)
+               :on-blur           (fn [e]
+                                    (if-let [on-blur (:on-blur config)]
+                                      (on-blur e)
+                                      (editor-on-blur e)))
+               :on-key-down       (fn [e]
+                                    (if-let [on-key-down (:on-key-down config)]
+                                      (on-key-down e)
+                                      (when (and (= (util/ekey e) "Escape") on-hide)
+                                        (on-hide content :esc))))
+               :auto-focus        true
+               :class             heading-class}
+               (some? parent-block)
+               (assoc :parentblockid (str (:block/uuid parent-block)))
 
-     (ui/ls-textarea
-      {:id                id
-       :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
-       :default-value     (or content "")
-       :minRows           (if (state/enable-grammarly?) 2 1)
-       :on-click          (editor-handler/editor-on-click! id)
-       :on-change         (editor-handler/editor-on-change! block id search-timeout)
-       :on-paste          (paste-handler/editor-on-paste! id)
-       :auto-focus        false
-       :class             heading-class})
+               true
+               (merge (:editor-opts config)))]
+    [:div.editor-inner.flex.flex-1 {:class (if block "block-editor" "non-block-editor")}
+
+     (ui/ls-textarea opts)
 
      (mock-textarea content)
      (modals id format)

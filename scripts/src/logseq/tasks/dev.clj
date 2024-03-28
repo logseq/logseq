@@ -3,21 +3,25 @@
   namespaces"
   (:require [babashka.process :refer [shell]]
             [babashka.fs :as fs]
+            [babashka.cli :as cli]
             [logseq.tasks.util :as task-util]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
-            [clojure.edn :as edn]))
+            [clojure.edn :as edn]
+            [clojure.data :as data]))
 
 (defn lint
   "Run all lint tasks
   - clj-kondo lint
   - carve lint for unused vars
   - lint for vars that are too large
-  - lint invalid translation entries"
+  - lint invalid translation entries
+  - lint to ensure file and db graph remain separate"
   []
   (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src --cache false"
                "bb lint:carve"
                "bb lint:large-vars"
+               "bb lint:db-and-file-graphs-separate"
                "bb lang:validate-translations"
                "bb lint:ns-docstrings"]]
     (println cmd)
@@ -37,6 +41,22 @@
     (let [config (with-out-str
                    (pp/pprint (edn/read-string (:out (shell {:out :string} "node ./static/gen-malli-kondo-config.js")))))]
       (spit config-edn config))))
+
+(defn diff-datoms
+  "Runs data/diff on two edn files written by dev:db-datoms"
+  [file1 file2 & args]
+  (let [spec {:ignored-attributes
+              ;; Ignores some attributes by default that are expected to change often
+              {:alias :i :coerce #{:keyword} :default #{:block/tx-id :block/left :block/updated-at}}}
+        {{:keys [ignored-attributes]} :opts} (cli/parse-args args {:spec spec})
+        datom-filter (fn [[e a _ _ _]] (contains? ignored-attributes a))
+        data-diff* (apply data/diff (map (fn [x] (->> x slurp edn/read-string (remove datom-filter))) [file1 file2]))
+        data-diff (->> data-diff*
+                       ;; Drop common as we're only interested in differences
+                       drop-last
+                       ;; Remove nils as we're only interested in diffs
+                       (mapv #(vec (remove nil? %))))]
+    (pp/pprint data-diff)))
 
 (defn build-publishing-frontend
   "Builds frontend release publishing asset when files have changed"

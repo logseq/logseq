@@ -11,8 +11,7 @@
             [frontend.util :as util]
             [goog.events :as events]
             [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
-            [lambdaisland.glogi :as log]
-            [goog.functions :refer [debounce]])
+            [lambdaisland.glogi :as log])
   (:import [goog.events KeyCodes KeyNames]
            [goog.ui KeyboardShortcutHandler]))
 
@@ -158,7 +157,8 @@
            [:shortcut.handler/misc
             :shortcut.handler/editor-global
             :shortcut.handler/global-non-editing-only
-            :shortcut.handler/global-prevent-default])
+            :shortcut.handler/global-prevent-default
+            :shortcut.handler/block-editing-only])
        (map #(install-shortcut-handler! % {}))
        doall))
 
@@ -238,7 +238,7 @@
      (listen-all!)
      state)})
 
-(defn refresh-internal!
+(defn refresh!
   "Always use this function to refresh shortcuts"
   []
   (when-not (:ui/shortcut-handler-refreshing? @state/state)
@@ -251,8 +251,6 @@
       (install-shortcuts! nil))
     (state/pub-event! [:shortcut-handler-refreshed])
     (state/set-state! :ui/shortcut-handler-refreshing? false)))
-
-(def refresh! (debounce refresh-internal! 1000))
 
 (defn- name-with-meta [e]
   (let [ctrl (.-ctrlKey e)

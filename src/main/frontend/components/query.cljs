@@ -1,20 +1,20 @@
 (ns frontend.components.query
-  (:require [rum.core :as rum]
-            [frontend.ui :as ui]
-            [frontend.context.i18n :refer [t]]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.db :as db]
-            [frontend.db-mixins :as db-mixins]
-            [clojure.string :as string]
-            [frontend.db.query-dsl :as query-dsl]
+  (:require [clojure.string :as string]
             [frontend.components.query-table :as query-table]
             [frontend.components.query.result :as query-result]
-            [lambdaisland.glogi :as log]
+            [frontend.context.i18n :refer [t]]
+            [frontend.db :as db]
+            [frontend.db-mixins :as db-mixins]
+            [frontend.db.query-dsl :as query-dsl]
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
-            [logseq.graph-parser.util :as gp-util]))
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.util :as pu]
+            [frontend.state :as state]
+            [frontend.ui :as ui]
+            [frontend.util :as util]
+            [lambdaisland.glogi :as log]
+            [rum.core :as rum]))
 
 (defn built-in-custom-query?
   [title]
@@ -23,7 +23,7 @@
       (boolean (some #(= % title) (map :title queries))))))
 
 (rum/defc query-refresh-button
-  [query-time {:keys [on-mouse-down full-text-search?]}]
+  [query-time {:keys [on-pointer-down full-text-search?]}]
   (ui/tippy
    {:html  [:div
             [:p
@@ -38,7 +38,7 @@
                                    :boundariesElement "viewport"}}}
     :arrow true}
    [:a.fade-link.flex
-    {:on-mouse-down on-mouse-down}
+    {:on-pointer-down on-pointer-down}
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs custom-query-inner < rum/reactive
@@ -157,17 +157,19 @@
                        collapsed?
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
+        properties (:block/properties current-block)
+        query-table-property (pu/lookup properties :logseq.property/query-table)
         table? (or table-view?
-                   (get-in current-block [:block/properties :query-table])
+                   query-table-property
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         dsl-page-query? (and dsl-query?
                              (false? (:blocks? (query-dsl/parse-query query))))
-        ;; FIXME: This isn't getting set for full-text searches
         full-text-search? (and dsl-query?
                                (util/electron?)
-                               (symbol? (gp-util/safe-read-string query)))
+                               (string? query)
+                               (re-matches #"\".*\"" query))
         result (when (or built-in-collapsed? (not collapsed?'))
                  (query-result/get-query-result config q *query-error current-block-uuid {:table? table?}))
         query-time (:query-time (meta result))
@@ -189,6 +191,7 @@
         [:div.custom-query (get config :attr {})
          (when-not built-in?
            [:div.th
+            {:title (str "Query: " query)}
             (if dsl-query?
               [:div.flex.flex-1.flex-row
                (ui/icon "search" {:size 14})
@@ -198,7 +201,7 @@
             (when (or (not dsl-query?) (not collapsed?'))
               [:div.flex.flex-row.items-center.fade-in
                (when (> (count result) 0)
-                 [:span.results-count
+                 [:span.results-count.pl-2
                   (let [result-count (if (and (not table?) (map? result))
                                        (apply + (map (comp count val) result))
                                        (count result))]
@@ -207,12 +210,12 @@
                (when (and current-block (not view-f) (nil? table-view?) (not page-list?))
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
-                                            :on-click (fn [] (editor-property/set-block-property! current-block-uuid
+                                            :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
                                                                                                   "query-table"
                                                                                                   false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
-                                            :on-click (fn [] (editor-property/set-block-property! current-block-uuid
+                                            :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
                                                                                                   "query-table"
                                                                                                   true))}
                     (ui/icon "table" {:style {:font-size 20}})]))
@@ -220,7 +223,7 @@
                [:a.flex.ml-1.fade-link
                 {:title "Setting properties"
                  :on-click (fn []
-                             (let [all-keys (query-table/get-keys result page-list?)]
+                             (let [all-keys (query-table/get-all-columns-for-result result page-list?)]
                                (state/pub-event! [:modal/set-query-properties current-block all-keys])))}
                 (ui/icon "settings" {:style {:font-size 20}})]
 
@@ -228,7 +231,7 @@
                 (when (or full-text-search?
                           (and query-time (> query-time 50)))
                   (query-refresh-button query-time {:full-text-search? full-text-search?
-                                                    :on-mouse-down (fn [e]
+                                                    :on-pointer-down (fn [e]
                                                                      (util/stop e)
                                                                      (query-result/trigger-custom-query! config q *query-error))}))]])])
 

@@ -4,6 +4,7 @@
             [cljs-bean.core :as bean]
             [frontend.context.i18n :refer [t]]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
@@ -11,6 +12,7 @@
             [frontend.search :as search]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
+            [frontend.config :as config]
             [electron.ipc :as ipc]
             [promesa.core :as p]
             [frontend.components.svg :as svg]
@@ -233,14 +235,11 @@
       [:li {:on-click #(plugin-handler/open-plugin-settings! id false)} (t :plugin/open-settings)]
       [:li {:on-click #(js/apis.openPath url)} (t :plugin/open-package)]
       [:li {:on-click
-            #(let [confirm-fn
-                   (ui/make-confirm-modal
-                     {:title      (t :plugin/delete-alert name)
-                      :on-confirm (fn [_ {:keys [close-fn]}]
-                                    (close-fn)
-                                    (plugin-common-handler/unregister-plugin id)
-                                    (plugin-config-handler/remove-plugin id))})]
-               (state/set-sub-modal! confirm-fn {:center? true}))}
+            #(-> (shui/dialog-confirm!
+                   [:b (t :plugin/delete-alert name)])
+               (p/then (fn []
+                         (plugin-common-handler/unregister-plugin id)
+                         (plugin-config-handler/remove-plugin id))))}
        (t :plugin/uninstall)]]]
 
     (when (seq sponsors)
@@ -465,7 +464,7 @@
   (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))
         text (t :plugin/auto-check-for-updates)]
 
-    [:div.flex.items-center.justify-between.px-4.py-2
+    [:div.flex.items-center.justify-between.px-3.py-2
      {:on-click (fn []
                   (let [t (not enabled)]
                     (set-enabled! t)
@@ -902,11 +901,12 @@
 
            [:label.flex-1
             {:for k}
-            (ui/checkbox {:id        k
-                          :checked   c?
-                          :on-change (fn [^js e]
-                                       (when-not downloading?
-                                         (state/set-unchecked-update (:id it) (not (util/echecked? e)))))})
+            (shui/checkbox
+              {:id k
+               :default-checked c?
+               :on-checked-change (fn [checked?]
+                                    (when-not downloading?
+                                      (state/set-unchecked-update (:id it) (not checked?))))})
             [:strong.px-3 (:title it)
              [:sup (str (:version it) " 👉 " (:latest-version it))]]]
 
@@ -997,7 +997,7 @@
      [:div.lsp-hook-ui-slot
       (merge opts {:id            id
                    :ref           *el-ref
-                   :on-mouse-down (fn [e] (util/stop-propagation e))})])))
+                   :on-pointer-down (fn [e] (util/stop-propagation e))})])))
 
 (rum/defc hook-block-slot < rum/static
   [type block]
@@ -1027,54 +1027,71 @@
 (rum/defc toolbar-plugins-manager-list
   [updates-coming items]
   (let [badge-updates? (and (not (plugin-handler/get-auto-checking?))
-                            (seq (state/all-available-coming-updates updates-coming)))]
-    (ui/dropdown-with-links
-      (fn [{:keys [toggle-fn]}]
-        [:div.toolbar-plugins-manager
-         {:on-click toggle-fn}
-         [:a.button.relative
-          (ui/icon "puzzle" {:size 20})
-          (when badge-updates?
-            (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]])
+                         (seq (state/all-available-coming-updates updates-coming)))
+        items (fn []
+                (->> (concat
+                       (for [[_ {:keys [key pinned?] :as opts} pid] items
+                             :let [pkey (str (name pid) ":" key)]]
+                         {:title key
+                          :item [:div.flex.items-center.item-wrap
+                                 (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
+                                 [:span {:style {:padding-left "2px"}} key]
+                                 [:span.pin.flex.items-center.opacity-60
+                                  {:class (util/classnames [{:pinned pinned?}])}
+                                  (ui/icon (if pinned? "pinned" "pin"))]]
+                          :options {:on-click (fn [^js e]
+                                                (let [^js target (.-target e)
+                                                      user-btn? (boolean (.closest target "div[data-injected-ui]"))]
+                                                  (when-not user-btn?
+                                                    (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add)))
+                                                  true))}})
+                       [{:hr true}
+                        {:title (t :plugins)
+                         :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
+                                   :class "extra-item mt-2"}
+                         :icon (ui/icon "apps")}
+                        {:title (t :settings)
+                         :options {:on-click #(plugin-handler/goto-plugins-settings!)
+                                   :class "extra-item"}
+                         :icon (ui/icon "adjustments")}
 
-      ;; items
-      (concat
-        (for [[_ {:keys [key pinned?] :as opts} pid] items
-              :let [pkey (str (name pid) ":" key)]]
-          {:title   key
-           :item    [:div.flex.items-center.item-wrap
-                     (ui-item-renderer pid :toolbar (assoc opts :prefix "pl-" :key (str "pl-" key)))
-                     [:span {:style {:padding-left "2px"}} key]
-                     [:span.pin.flex.items-center.opacity-60
-                      {:class (util/classnames [{:pinned pinned?}])}
-                      (ui/icon (if pinned? "pinned" "pin"))]]
-           :options {:on-click (fn [^js e]
-                                 (let [^js target (.-target e)
-                                       user-btn?  (boolean (.closest target "div[data-injected-ui]"))]
-                                   (when-not user-btn?
-                                     (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
-                                 false)}})
-        [{:hr true}
-         {:title   (t :plugins)
-          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
-                    :class    "extra-item mt-2"}
-          :icon    (ui/icon "apps")}
-         {:title   (t :settings)
-          :options {:on-click #(plugin-handler/goto-plugins-settings!)
-                    :class    "extra-item"}
-          :icon    (ui/icon "adjustments")}
+                        (when badge-updates?
+                          {:title [:div.flex.items-center.space-x-5.leading-none
+                                   [:span (t :plugin/found-updates)] (ui/point "bg-red-700" 5 {:style {:margin-top 2}})]
+                           :options {:on-click #(open-waiting-updates-modal!)
+                                     :class "extra-item"}
+                           :icon (ui/icon "download")})]
 
-         (when badge-updates?
-           {:title   [:div.flex.items-center.space-x-5.leading-none
-                      [:span (t :plugin/found-updates)] (ui/point "bg-red-700" 5 {:style {:margin-top 2}})]
-            :options {:on-click #(open-waiting-updates-modal!)
-                      :class    "extra-item"}
-            :icon    (ui/icon "download")})]
+                       [{:hr true :key "dropdown-more"}
+                        {:title (auto-check-for-updates-control)
+                         :options {:no-padding? true}}])
+                  (remove nil?)))]
 
-        [{:hr true :key "dropdown-more"}
-         {:title (auto-check-for-updates-control)
-          :options {:no-padding? true}}])
-      {:trigger-class "toolbar-plugins-manager-trigger"})))
+    [:div.toolbar-plugins-manager
+     {:on-click (fn [^js e]
+                  (shui/popup-show! (.-target e)
+                    (fn [{:keys [id]}]
+                      (for [{:keys [hr item title options icon]} (items)]
+                        (let [on-click' (:on-click options)]
+                          (if hr
+                            (shui/dropdown-menu-separator)
+                            (shui/dropdown-menu-item
+                              (assoc options
+                                :on-click (fn [^js e]
+                                            (when on-click'
+                                              (when-not (false? (on-click' e))
+                                                (shui/popup-hide! id)))))
+                              (or item
+                                [:span.flex.items-center.gap-1.w-full
+                                 icon [:div title]]))))))
+                    {:as-dropdown? true
+                     :content-props {:class "toolbar-plugins-manager-content"}}))}
+
+     [:a.button.relative.toolbar-plugins-manager-trigger
+      (ui/icon "puzzle" {:size 20})
+      (when badge-updates?
+        (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]]
+    ))
 
 (rum/defc header-ui-items-list-wrap
   [children]
@@ -1085,9 +1102,9 @@
       (fn []
         (when-let [^js wrap-el (rum/deref *wrap-el)]
           (when-let [^js header-el (.closest wrap-el ".cp__header")]
-            (let [^js header-l        (.querySelector header-el "* > .l")
-                  ^js header-r        (.querySelector header-el "* > .r")
-                  set-max-width!      #(when (number? %) (set! (.-maxWidth (.-style wrap-el)) (str % "px")))
+            (let [^js header-l (.querySelector header-el "* > .l")
+                  ^js header-r (.querySelector header-el "* > .r")
+                  set-max-width! #(when (number? %) (set! (.-maxWidth (.-style wrap-el)) (str % "px")))
                   calc-wrap-max-width #(let [width-l  (.-offsetWidth header-l)
                                              width-t  (-> (js/document.querySelector "#main-content-container") (.-offsetWidth))
                                              children (to-array (.-children header-r))
@@ -1185,12 +1202,12 @@
       [])
 
     [:div.ui-fenced-code-result
-     {:on-mouse-down (fn [e] (when (false? edit) (util/stop e)))
+     {:on-pointer-down (fn [e] (when (false? edit) (util/stop e)))
       :class         (util/classnames [{:not-edit (false? edit)}])
       :ref           *el}
      [:<>
       [:span.actions
-       {:on-mouse-down #(util/stop %)}
+       {:on-pointer-down #(util/stop %)}
        (ui/button (ui/icon "square-toggle-horizontal" {:size 14})
                   :on-click #(set-editor-active! (not editor-active?)))
        (ui/button (ui/icon "source-code" {:size 14})
@@ -1381,15 +1398,15 @@
 
 (defn open-plugins-modal!
   []
-  (state/set-modal!
-    (fn [_close!]
-      (plugins-page))
-    {:label "plugins-dashboard"}))
+  (shui/dialog-open!
+    (plugins-page)
+    {:label :plugins-dashboard
+     :side :center}))
 
 (defn open-waiting-updates-modal!
   []
-  (state/set-sub-modal!
-    (fn [_close!]
+  (shui/dialog-open!
+    (fn []
       (waiting-coming-updates))
     {:center? true}))
 
@@ -1403,10 +1420,27 @@
 
 (defn open-focused-settings-modal!
   [title]
-  (state/set-sub-modal!
-    (fn [_close!]
+  (shui/dialog-open!
+    (fn []
       [:div.settings-modal.of-plugins
        (focused-settings-content title)])
-    {:center? false
-     :label   "plugin-settings-modal"
+    {:label   "plugin-settings-modal"
      :id      "ls-focused-settings-modal"}))
+
+(defn hook-custom-routes
+  [routes]
+  (cond-> routes
+    config/lsp-enabled?
+    (concat (some->> (plugin-handler/get-route-renderers)
+              (mapv #(when-let [{:keys [name path render]} %]
+                       (when (not (string/blank? path))
+                         [path {:name name :view (fn [r] (render r %))}])))
+              (remove nil?)))))
+
+(defn hook-daemon-renderers
+  []
+  (when-let [rs (seq (plugin-handler/get-daemon-renderers))]
+    [:div.lsp-daemon-container.fixed.z-10
+     (for [{:keys [key _pid render]} rs]
+       (when (fn? render)
+         [:div.lsp-daemon-container-card {:data-key key} (render)]))]))

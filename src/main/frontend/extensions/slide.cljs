@@ -10,7 +10,8 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db :as db]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -23,7 +24,9 @@
              (update-keys
               properties
               (fn [k]
-                (-> (str "data-" (name k))
+                (-> (str "data-" (if (config/db-based-graph? (state/get-current-repo))
+                                   (db-pu/get-property-name k)
+                                   (name k)))
                     (string/replace "data-data-" "data-")))))
       m)))
 
@@ -90,8 +93,7 @@
         page (db/entity [:block/name page-name])
         journal? (:journal? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-paginated-blocks repo (:db/id page)
-                                            {:limit 1000})
+        blocks (-> (db/get-page-blocks-no-cache repo page-name)
                    (outliner-tree/blocks->vec-tree page-name))
         blocks (if journal?
                  (rest blocks)

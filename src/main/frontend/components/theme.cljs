@@ -7,6 +7,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.components.settings :as settings]
@@ -120,9 +121,12 @@
      [system-theme?])
 
     (rum/use-effect!
-     #(state/set-modal!
-       (when settings-open?
-         (fn [] [:div.settings-modal (settings/settings settings-open?)])))
+     #(if settings-open?
+        (shui/dialog-open!
+          (fn [] [:div.settings-modal (settings/settings settings-open?)])
+          {:label "app-settings"
+           :id :app-settings})
+        (shui/dialog-close! :app-settings))
      [settings-open?])
 
     (rum/use-effect!

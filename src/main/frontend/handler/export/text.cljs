@@ -11,9 +11,10 @@
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
             [goog.dom :as gdom]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [frontend.format.mldoc :as mldoc]
             [malli.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 ;;; block-ast, inline-ast -> simple-ast
 
@@ -473,7 +474,7 @@
                                :remove-properties? (contains? remove-options :property)
                                :keep-only-level<=N (:keep-only-level<=N other-options)
                                :newline-after-block (:newline-after-block other-options)}})]
-      (let [ast (gp-mldoc/->edn content (gp-mldoc/default-config format))
+      (let [ast (mldoc/->edn content format)
             ast (mapv common/remove-block-ast-pos ast)
             ast (removev common/Properties-block-ast? ast)
             ast* (common/replace-block&page-reference&embed ast)
@@ -526,22 +527,25 @@
   "options see also `export-blocks-as-markdown`"
   [files options]
   (mapv
-   (fn [{:keys [path content names format]}]
-     (when (first names)
-       (util/profile (print-str :export-files-as-markdown path)
-                     [path (export-helper content format options)])))
+   (fn [{:keys [path title content]}]
+     (util/profile (print-str :export-files-as-markdown title)
+                   [(or path title) (export-helper content :markdown options)]))
    files))
 
 (defn export-repo-as-markdown!
   "TODO: indent-style and remove-options"
   [repo]
-  (when-let [files (util/profile :get-file-content (common/get-file-contents-with-suffix repo))]
-    (let [files (export-files-as-markdown files nil)
-          zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
-      (p/let [zipfile (zip/make-zip zip-file-name files repo)]
-        (when-let [anchor (gdom/getElement "export-as-markdown")]
-          (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
-          (.setAttribute anchor "download" (.-name zipfile))
-          (.click anchor))))))
+  (p/let [files (util/profile :get-file-content (common/<get-file-contents repo "md"))]
+    (when (seq files)
+      (let [files (export-files-as-markdown files nil)
+            repo (-> repo
+                     (string/replace config/db-version-prefix "")
+                     (string/replace config/local-db-prefix ""))
+            zip-file-name (str repo "_markdown_" (quot (util/time-ms) 1000))]
+        (p/let [zipfile (zip/make-zip zip-file-name files repo)]
+          (when-let [anchor (gdom/getElement "export-as-markdown")]
+            (.setAttribute anchor "href" (js/window.URL.createObjectURL zipfile))
+            (.setAttribute anchor "download" (.-name zipfile))
+            (.click anchor)))))))
 
 ;;; export fns (ends)

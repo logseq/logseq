@@ -3,6 +3,7 @@
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.commands :as commands]
             [frontend.components.block :as component-block]
             [frontend.components.editor :as editor]
@@ -17,18 +18,18 @@
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.file :as property-file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.block-content :as content]
+            [frontend.format.mldoc :as mldoc]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
-            [frontend.util.property :as property]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -93,6 +94,7 @@
 ;;; ================================================================
 ;;; utils
 
+;; FIXME: All uses of properties in this namespace for db
 (defn- get-block-card-properties
   [block]
   (when-let [properties (:block/properties block)]
@@ -109,7 +111,8 @@
   [block props]
   (editor-handler/save-block-if-changed!
    block
-   (property/insert-properties (:block/format block) (:block/content block) props)
+   (property-file/insert-properties-when-file-based
+    (state/get-current-repo) (:block/format block) (:block/content block) props)
    {:force? true}))
 
 (defn- reset-block-card-properties!
@@ -225,14 +228,13 @@
   ICardShow
   (show-cycle [_this phase]
     (let [block-id (:db/id block)
-          blocks (-> (db/get-paginated-blocks (state/get-current-repo) block-id
-                                              {:scoped-block-id block-id})
+          blocks (-> [(db/entity block-id)]
                      clear-collapsed-property)
           cloze? (has-cloze? blocks)]
       (case phase
         1
         (let [blocks-count (count blocks)]
-          {:value [(first blocks)] :next-phase (if (or (> blocks-count 1) (nil? cloze?)) 2 3)})
+          {:value [(first blocks)] :next-phase (if (or (> blocks-count 1) cloze?) 2 3)})
         2
         {:value blocks :next-phase (if cloze? 3 1)}
         3
@@ -241,7 +243,7 @@
   (show-cycle-config [_this phase]
     (case phase
       1
-      {}
+      {:hide-children? true}
       2
       {}
       3
@@ -270,7 +272,7 @@
                                                    (string/starts-with? query-string "["))
                                          (page-ref/->page-ref (string/trim query-string))
                                          query-string)
-                          {:keys [query sort-by rules]} (query-dsl/parse query-string)
+                          {:keys [query sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})
                           query* (util/concat-without-nil
                                   [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
                                   (if (coll? (first query)) query [query]))]
@@ -420,7 +422,7 @@
    :id id
    :class (str id " " class)
    :background background
-   :on-mouse-down (fn [e] (util/stop-propagation e))
+   :on-pointer-down (fn [e] (util/stop-propagation e))
    :on-click (fn [_e]
                (js/setTimeout #(on-click) 10))))
 
@@ -486,7 +488,7 @@
                                    :on-click   (fn []
                                                  (score-and-next-card 1 card card-index finished? phase review-records cb)
                                                  (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                                   (editor-property/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
+                                                   (property-handler/set-block-property! (state/get-current-repo) root-block-id card-next-schedule-property tomorrow)))})
 
                (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" (t :flashcards/modal-btn-recall))
                                    :shortcut "t"
@@ -524,8 +526,7 @@
 
 (rum/defc preview-cp < rum/reactive db-mixins/query
   [block-id]
-  (let [blocks (db/get-paginated-blocks (state/get-current-repo) block-id
-                                        {:scoped-block-id block-id})]
+  (let [blocks [(db/entity block-id)]]
     (view-modal blocks {:preview? true} (atom 0))))
 
 (defn preview
@@ -626,7 +627,7 @@
            (ui/dropdown
             (fn [{:keys [toggle-fn]}]
               [:div.ml-1.text-sm.font-medium.cursor
-               {:on-mouse-down (fn [e]
+               {:on-pointer-down (fn [e]
                                  (util/stop e)
                                  (toggle-fn))}
                [:span.flex (if (string/blank? query-string) (t :flashcards/modal-select-all) query-string)
@@ -783,9 +784,10 @@
   [block]
     (when-let [content (:block/content block)]
       (let [format (:block/format block)
-            content (-> (property/remove-built-in-properties format content)
+            content (-> (property-file/remove-built-in-properties-when-file-based
+                         (state/get-current-repo) (:block/format block) content)
                         (drawer/remove-logbook))
-            [title body] (content/get-title&body content format)]
+            [title body] (mldoc/get-title&body content format)]
         [block (str title " #" card-hash-tag "\n" body)])))
 
 (defn make-block-a-card!

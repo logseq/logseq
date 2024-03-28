@@ -155,3 +155,12 @@
          #(js/document.removeEventListener event listener capture?)))
      [ref])
     set-ref))
+
+(defonce *key->atom (atom {}))
+(defn cached-derived-atom
+  "Make sure to return the same atom if `key` is the same."
+  [ref key f]
+  (or (get @*key->atom key)
+      (let [a (rum/derived-atom [ref] key f)]
+        (swap! *key->atom assoc key a)
+        a)))

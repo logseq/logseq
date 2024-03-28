@@ -17,7 +17,7 @@
 
 (defn highlight-query* [app-config query text]
   (cond
-    (vector? text)                    ; hiccup
+    (or (vector? text) (object? text))                                     ; hiccup
     text
 
     (string/blank? query)

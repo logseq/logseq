@@ -1,9 +1,8 @@
 (ns ^:no-doc frontend.util.drawer
   (:require [clojure.string :as string]
             [frontend.util :as util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.property :as gp-property]
-            [frontend.format.mldoc :as mldoc]))
+            [frontend.format.mldoc :as mldoc]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn drawer-start
   [typ]
@@ -23,7 +22,7 @@
 
 (defn get-drawer-ast
   [format content typ]
-  (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
+  (let [ast (mldoc/->edn content format)
         typ-drawer (ffirst (filter (fn [x]
                                      (mldoc/typ-drawer? x typ)) ast))]
     typ-drawer))
@@ -32,7 +31,7 @@
   [format content typ value]
   (when (string? content)
     (try
-      (let [ast (mldoc/->edn content (gp-mldoc/default-config format))
+      (let [ast (mldoc/->edn content format)
             has-properties? (some (fn [x] (mldoc/properties? x)) ast)
             has-typ-drawer? (some (fn [x] (mldoc/typ-drawer? x typ)) ast)
             lines (string/split-lines content)

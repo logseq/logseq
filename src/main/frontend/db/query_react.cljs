@@ -7,27 +7,26 @@
             [frontend.db.model :as model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.debug :as debug]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
-            [logseq.graph-parser.util.db :as db-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.db.frontend.inputs :as db-inputs]
+            [logseq.common.util.page-ref :as page-ref]
             [frontend.util :as util]
             [frontend.date :as date]
             [lambdaisland.glogi :as log]))
 
 (defn resolve-input
-  "Wrapper around db-util/resolve-input which provides editor-specific state"
+  "Wrapper around db-inputs/resolve-input which provides editor-specific state"
   ([db input]
    (resolve-input db input {}))
   ([db input opts]
-   (db-util/resolve-input db
-                          input
-                          (merge {:current-page-fn (fn []
-                                                     (or (state/get-current-page)
-                                                         (:page (state/get-default-home))
-                                                         (date/today)))}
-                                 opts))))
+   (db-inputs/resolve-input db
+                            input
+                            (merge {:current-page-fn (fn []
+                                                       (or (state/get-current-page)
+                                                           (:page (state/get-default-home))
+                                                           (date/today)))}
+                                   opts))))
 
 (defn custom-query-result-transform
   [query-result remove-blocks q]
@@ -91,8 +90,9 @@
 
 (defn react-query
   [repo {:keys [query inputs rules] :as query'} query-opts]
-  (let [pprint (if config/dev? debug/pprint (fn [_] nil))
+  (let [pprint (if config/dev? #(when (state/developer-mode?) (apply prn %&)) (fn [_] nil))
         start-time (.now js/performance)]
+    (when config/dev? (js/console.groupCollapsed "react-query logs:"))
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
@@ -108,4 +108,5 @@
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
+      (when config/dev? (js/console.groupEnd))
       (apply react/q repo k query-opts query inputs))))
