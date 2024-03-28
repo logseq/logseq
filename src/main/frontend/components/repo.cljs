@@ -191,7 +191,7 @@
                                               GraphName)
                             downloading? (and downloading-graph-id (= GraphUUID downloading-graph-id))]
                         (when short-repo-name
-                          {:title        [:span.flex.items-center.whitespace-nowrap short-repo-name
+                          {:title        [:span.flex.items-center.title-wrap short-repo-name
                                           (when remote? [:span.pl-1.flex.items-center
                                                          {:title (str "<" GraphName "> #" GraphUUID)}
                                                          (ui/icon "cloud" {:size 18})
@@ -258,68 +258,93 @@
             downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
             repos (if (and (or (seq remotes) (seq rtc-graphs)) login?)
                     (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos)
-            links (repos-dropdown-links repos current-repo downloading-graph-id multiple-windows? opts)
-            render-content (fn [{:keys [toggle-fn]}]
-                             (let [remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
-                                   repo-name (when current-repo (db/get-repo-name current-repo))
-                                   short-repo-name (if current-repo
-                                                     (db/get-short-repo-name repo-name)
-                                                     "Select a Graph")]
-                               [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
+            items-fn #(repos-dropdown-links repos current-repo downloading-graph-id multiple-windows? opts)
+            header-fn #(when (> (count repos) 1)            ; show switch to if there are multiple repos
+                         [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
+                          [:div (t :left-side-bar/switch)]
 
-                                {:on-click (fn [_e]
-                                             (check-multiple-windows? state)
-                                             (toggle-fn))
-                                 :title    repo-name}       ;; show full path on hover
-                                [:div.flex.flex-row.items-center
-                                 [:div.flex.relative.graph-icon.rounded
-                                  (let [icon "database"
-                                        opts {:size 14}]
-                                    (ui/icon icon opts))]
-
-                                 [:div.graphs
-                                  [:span#repo-switch.block.pr-2.whitespace-nowrap
-                                   [:span [:span#repo-name.font-medium
-                                           [:span.overflow-hidden.text-ellipsis (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
-                                           (when remote? [:span.pl-1 (ui/icon "cloud")])]]
-                                   [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]]))
-            links-header (cond->
-                          {:z-index 1000
-                           :modal-class (util/hiccup->class
-                                         "origin-top-right.absolute.left-0.mt-2.rounded-md.shadow-lg")}
-                           (> (count repos) 1)              ; show switch to if there are multiple repos
-                           (assoc :links-header [:div.font-medium.text-sm.opacity-70.px-4.pt-2.pb-1.flex.flex-row.justify-between.items-center
-                                                 [:div (t :left-side-bar/switch)]
-                                                 (when (and (file-sync/enable-sync?) login?)
-                                                   (if remotes-loading?
-                                                     (ui/loading "")
-                                                     [:a.flex {:title "Refresh remote graphs"
-                                                               :on-click (fn []
-                                                                           (file-sync/load-session-graphs)
-                                                                           (rtc-handler/<get-remote-graphs))}
-                                                      (ui/icon "refresh")]))]))]
+                          (when (and (file-sync/enable-sync?) login?)
+                            (if remotes-loading?
+                              (ui/loading "")
+                              (shui/button
+                                {:variant :ghost
+                                 :size :sm
+                                 :title "Refresh remote graphs"
+                                 :class "!h-6 !px-1 relative right-[-4px]"
+                                 :on-click (fn []
+                                             (file-sync/load-session-graphs)
+                                             (rtc-handler/<get-remote-graphs))}
+                                (ui/icon "refresh" {:size 15}))))])]
         (when (seq repos)
-          (ui/dropdown-with-links render-content links links-header))))))
+          (let [remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
+                repo-name (when current-repo (db/get-repo-name current-repo))
+                short-repo-name (if current-repo
+                                  (db/get-short-repo-name repo-name)
+                                  "Select a Graph")]
+            [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
+             {:on-click (fn [^js e]
+                          (check-multiple-windows? state)
+                          (some-> (.-target e)
+                            (.closest "a.item")
+                            (shui/popup-show!
+                              (fn [{:keys [id]}]
+                                [:<>
+                                 (header-fn)
+                                 (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
+                                   (let [on-click' (:on-click options)
+                                         href' (:href options)]
+                                     (if hr
+                                       (shui/dropdown-menu-separator)
+                                       (shui/dropdown-menu-item
+                                         (assoc options
+                                           :title hover-detail
+                                           :on-click (fn [^js e]
+                                                       (when on-click'
+                                                         (when-not (false? (on-click' e))
+                                                           (shui/popup-hide! id)))))
+                                         (or item
+                                           (if href'
+                                             [:a.flex.items-center.w-full
+                                              {:href href' :on-click #(shui/popup-hide! id)
+                                               :style {:color "inherit"}} title]
+                                             [:span.flex.items-center.gap-1.w-full
+                                              icon [:div title]]))))))])
+                              {:as-dropdown? true
+                               :align "start"
+                               :content-props {:class "repos-list"}})))
+              :title repo-name} ;; show full path on hover
+             [:div.flex.flex-row.items-center
+              [:div.flex.relative.graph-icon.rounded
+               (let [icon "database"
+                     opts {:size 14}]
+                 (ui/icon icon opts))]
+
+              [:div.graphs
+               [:span#repo-switch.block.pr-2.whitespace-nowrap
+                [:span [:span#repo-name.font-medium
+                        [:span.overflow-hidden.text-ellipsis (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
+                        (when remote? [:span.pl-1 (ui/icon "cloud")])]]
+                [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]]))))))
 
 (defn invalid-graph-name-warning
   []
   (notification/show!
-   [:div
-    [:p "Graph name can't contain following reserved characters:"]
-    [:ul
-     [:li "< (less than)"]
-     [:li "> (greater than)"]
-     [:li ": (colon)"]
-     [:li "\" (double quote)"]
-     [:li "/ (forward slash)"]
-     [:li "\\ (backslash)"]
-     [:li "| (vertical bar or pipe)"]
-     [:li "? (question mark)"]
-     [:li "* (asterisk)"]
-     [:li "# (hash)"]
-     ;; `+` is used to encode path that includes `:` or `/`
-     [:li "+ (plus)"]]]
-   :warning false))
+    [:div
+     [:p "Graph name can't contain following reserved characters:"]
+     [:ul
+      [:li "< (less than)"]
+      [:li "> (greater than)"]
+      [:li ": (colon)"]
+      [:li "\" (double quote)"]
+      [:li "/ (forward slash)"]
+      [:li "\\ (backslash)"]
+      [:li "| (vertical bar or pipe)"]
+      [:li "? (question mark)"]
+      [:li "* (asterisk)"]
+      [:li "# (hash)"]
+      ;; `+` is used to encode path that includes `:` or `/`
+      [:li "+ (plus)"]]]
+    :warning false))
 
 (defn invalid-graph-name?
   "Returns boolean indicating if DB graph name is invalid. Must be kept in sync with invalid-graph-name-warning"
