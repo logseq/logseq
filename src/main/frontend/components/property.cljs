@@ -447,7 +447,7 @@
                      (reset! *property-key nil))
                    state)}
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? in-block-container?]
+  [state entity *property-key *property-value {:keys [class-schema? in-block-container? page?]
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         entity-properties (->> (keys (:block/properties entity))
@@ -461,8 +461,9 @@
         exclude-property-names (set/union entity-properties existing-tag-alias)
         exclude-properties (fn [m]
                              (or (contains? exclude-property-names (:block/original-name m))
-                                 ;; Filters out built-in properties from being in wrong :view-context
-                                 (and in-block-container? (= :page (get-in m [:block/schema :view-context])))))]
+                                 ;; Filters out properties from being in wrong :view-context
+                                 (and in-block-container? (= :page (get-in m [:block/schema :view-context])))
+                                 (and page? (= :block (get-in m [:block/schema :view-context])))))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      (if in-block-container? {:style {:padding-left 22}} {})
      (if @*property-key

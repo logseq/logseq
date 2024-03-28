@@ -16,8 +16,9 @@
      * :cardinality - property cardinality. Default to one/single cardinality if not set
      * :hide? - Boolean which hides property when set on a block
      * :public? - Boolean which allows property to be used by user e.g. add and remove property to blocks/pages
-     * :view-context - Keyword which indicates which view contexts a property can be in. Valid values are :page.
-       Property can be viewed in any context if not set
+     * :view-context - Keyword to indicate which view contexts a property can be
+       seen in when :public? is set. Valid values are :page and :block. Property can
+       be viewed in any context if not set
    * :original-name - Property's :block/original-name
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
@@ -42,7 +43,11 @@
                                        :view-context :page
                                        :cardinality :many}}
    :logseq.property/background-color {:schema {:type :default :hide? true}}
-   :logseq.property/background-image {:schema {:type :default :hide? true :public? true}}
+   :logseq.property/background-image {:schema
+                                      {:type :default
+                                       :hide? true
+                                       :view-context :block
+                                       :public? true}}
    ;; number (1-6) or boolean for auto heading
    :logseq.property/heading {:schema {:type :any :hide? true}}
    :logseq.property/created-from-block    {:schema {:type :uuid}}
@@ -129,13 +134,13 @@
           ["tomato" "red" "crimson" "pink" "plum" "purple" "violet" "indigo" "blue" "cyan" "teal" "green" "grass" "orange" "brown"])}
    ;; table-v2 props
    :logseq.property.table/version {:name :logseq.table.version
-                                   :schema {:type :number :hide? true :public? true}}
+                                   :schema {:type :number :hide? true :public? true :view-context :block}}
    :logseq.property.table/compact {:name :logseq.table.compact
-                                   :schema {:type :checkbox :hide? true :public? true}}
+                                   :schema {:type :checkbox :hide? true :public? true :view-context :block}}
    :logseq.property.table/headers
    {:name :logseq.table.headers
     :schema
-    {:type :default :hide? true :public? true}
+    {:type :default :hide? true :public? true :view-context :block}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "headers." %))
                      :value %
@@ -144,18 +149,18 @@
    :logseq.property.table/hover
    {:name :logseq.table.hover
     :schema
-    {:type :default :hide? true :public? true}
+    {:type :default :hide? true :public? true :view-context :block}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "hover." %))
                      :value %
                      :uuid (random-uuid))
           ["row" "col" "both" "none"])}
    :logseq.property.table/borders {:name :logseq.table.borders
-                                   :schema {:type :checkbox :hide? true :public? true}}
+                                   :schema {:type :checkbox :hide? true :public? true :view-context :block}}
    :logseq.property.table/stripes {:name :logseq.table.stripes
-                                   :schema {:type :checkbox :hide? true :public? true}}
+                                   :schema {:type :checkbox :hide? true :public? true :view-context :block}}
    :logseq.property.table/max-width {:name :logseq.table.max-width
-                                     :schema {:type :number :hide? true :public? true}}
+                                     :schema {:type :number :hide? true :public? true :view-context :block}}
 
    :logseq.property/icon {:original-name "Icon"
                           :schema {:type :map}}
