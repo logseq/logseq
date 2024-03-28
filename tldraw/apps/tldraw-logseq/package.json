@@ -33,7 +33,7 @@
     "mobx-react-lite": "^3.4.0",
     "perfect-freehand": "^1.2.0",
     "polished": "^4.0.0",
-    "postcss": "^8.4.19",
+    "postcss": "^8.4.31",
     "react": "^17.0.0",
     "react-dom": "^17.0.0",
     "react-virtuoso": "^3.1.3",
