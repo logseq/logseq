@@ -37,11 +37,11 @@
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class}}}
-   :logseq.property/pagetags {:original-name "pageTags"
-                              :schema {:type :page
-                                       :public? true
-                                       :view-context :page
-                                       :cardinality :many}}
+   :logseq.property/page-tags {:original-name "pageTags"
+                               :schema {:type :page
+                                        :public? true
+                                        :view-context :page
+                                        :cardinality :many}}
    :logseq.property/background-color {:schema {:type :default :hide? true}}
    :logseq.property/background-image {:schema
                                       {:type :default
