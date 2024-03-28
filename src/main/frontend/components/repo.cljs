@@ -89,10 +89,10 @@
                                                           (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
                                                           :else
                                                           "")
-                                         unlink-or-remote-fn (fn []
+                                         unlink-or-remote-fn! (fn []
                                                                (repo-handler/remove-repo! repo)
                                                                (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
-                                         action-confirm-fn (if only-cloud?
+                                         action-confirm-fn! (if only-cloud?
                                                              (fn []
                                                                (when (or manager? (not db-graph?))
                                                                  (let [delete-graph (if db-graph?
@@ -103,21 +103,18 @@
                                                                        (state/delete-repo! repo)
                                                                        (state/delete-remote-graph! repo)
                                                                        (state/set-state! [:file-sync/remote-graphs :loading] false)))))
-                                                             unlink-or-remote-fn)
-                                         confirm-fn
+                                                             unlink-or-remote-fn!)
+                                         confirm-fn!
                                          (fn []
-                                           (ui/make-confirm-modal
-                                            {:title      [:div
-                                                          {:style {:max-width 700}}
-                                                          prompt-str]
-                                             :sub-title   [:div.small.mt-1
-                                                           "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
-                                             :on-confirm (fn [_ {:keys [close-fn]}]
-                                                           (close-fn)
-                                                           (action-confirm-fn))}))]
+                                           (-> (shui/dialog-confirm!
+                                                 [:p.font-medium.-my-4 prompt-str
+                                                  [:span.mt-1.flex.font-normal.opacity-40
+                                                   [:small "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
+                                             (p/then #(action-confirm-fn!))))]
+
                                      (if has-prompt?
-                                       (state/set-modal! (confirm-fn))
-                                       (unlink-or-remote-fn))))}
+                                       (confirm-fn!)
+                                       (unlink-or-remote-fn!))))}
                       (if only-cloud? "Remove (server)" "Unlink (local)")])))]]]))
 
 (rum/defc repos < rum/reactive
@@ -126,8 +123,8 @@
         repos (state/sub [:me :repos])
         repos (util/distinct-by :url repos)
         remotes (concat
-                 (state/sub :rtc/graphs)
-                 (state/sub [:file-sync/remote-graphs :graphs]))
+                  (state/sub :rtc/graphs)
+                  (state/sub [:file-sync/remote-graphs :graphs]))
         remotes-loading? (state/sub [:file-sync/remote-graphs :loading])
         repos (if (and login? (seq remotes))
                 (repo-handler/combine-local-&-remote-graphs repos remotes) repos)
@@ -146,11 +143,11 @@
 
          [:div.flex.flex-row.my-4
           (when (or (nfs-handler/supported?)
-                    (mobile-util/native-platform?))
+                  (mobile-util/native-platform?))
             [:div.mr-8
              (ui/button
-              (t :open-a-directory)
-              :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
+               (t :open-a-directory)
+               :on-click #(state/pub-event! [:graph/setup-a-repo]))])]]
 
         (when (and (file-sync/enable-sync?) login?)
           [:div
@@ -159,13 +156,13 @@
             [:h2.text-lg.font-medium.my-4 (t :graph/remote-graphs)]
             [:div
              (ui/button
-              [:span.flex.items-center "Refresh"
-               (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
-              :background "gray"
-              :disabled remotes-loading?
-              :on-click (fn []
-                          (file-sync/load-session-graphs)
-                          (rtc-handler/<get-remote-graphs)))]]
+               [:span.flex.items-center "Refresh"
+                (when remotes-loading? [:small.pl-2 (ui/loading nil)])]
+               :background "gray"
+               :disabled remotes-loading?
+               :on-click (fn []
+                           (file-sync/load-session-graphs)
+                           (rtc-handler/<get-remote-graphs)))]]
            (repos-inner remote-graphs)])]]
       (widgets/add-graph))))
 
@@ -179,12 +176,12 @@
   (let [switch-repos (if-not (nil? current-repo)
                        (remove (fn [repo] (= current-repo (:url repo))) repos) repos) ; exclude current repo
         repo-links (mapv
-                    (fn [{:keys [url remote? rtc-graph? GraphName GraphUUID] :as graph}]
-                      (let [local? (config/local-file-based-graph? url)
-                            db-only? (config/db-based-graph? url)
-                            repo-url (cond
-                                       local? (db/get-repo-name url)
-                                       db-only? url
+                     (fn [{:keys [url remote? rtc-graph? GraphName GraphUUID] :as graph}]
+                       (let [local? (config/local-file-based-graph? url)
+                             db-only? (config/db-based-graph? url)
+                             repo-url (cond
+                                        local? (db/get-repo-name url)
+                                        db-only? url
                                        :else GraphName)
                             short-repo-name (if (or local? db-only?)
                                               (text-util/get-graph-name-from-path repo-url)
