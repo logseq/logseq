@@ -171,7 +171,9 @@
                 (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
                   (state/set-state! :editor/editing-property-value-id
                                     {id true}))
-                (property-handler/set-block-property! repo (:block/uuid block) property-name (if (= type :default) "" :property/empty-placeholder)))))))}
+                (property-handler/set-block-property! repo (:block/uuid block)
+                                                      property-name
+                                                      (if (= type :default) "" :property/empty-placeholder)))))))}
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
@@ -378,7 +380,7 @@
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
-    (db/entity [:block/name (util/page-name-sanity-lc name)])))
+    (db/entity (db-property/get-db-ident-from-name name))))
 
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.

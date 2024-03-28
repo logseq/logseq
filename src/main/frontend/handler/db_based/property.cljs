@@ -105,8 +105,7 @@
                             (assoc :db/cardinality :db.cardinality/many))]
                     {:outliner-op :save-block})
       (db/transact! repo [(sqlite-util/build-new-property k-name schema {:db-ident db-ident})]
-                    {:outliner-op :new-property}))
-    db-ident))
+                    {:outliner-op :new-property}))))
 
 (defn validate-property-value
   [schema value]
@@ -175,7 +174,11 @@
 
 (defn set-block-property!
   [repo block-eid property-id v {:keys [old-value] :as opts}]
-  (let [block (db/entity repo block-eid)
+  (let [property-id (if (string? property-id)
+                      (db-property/get-db-ident-from-name property-id)
+                      property-id)
+        _ (assert (keyword? property-id) "property-id should be a keyword")
+        block (db/entity repo block-eid)
         property (db/entity property-id)
         k-name (:block/original-name property)
         property-schema (:block/schema property)
@@ -209,7 +212,7 @@
                 (if-let [msg (when-not (= v* :property/empty-placeholder) (validate-property-value schema v*))]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
-                  (let [db-ident (upsert-property! repo property-id (assoc property-schema :type property-type) {})
+                  (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {})
                         status? (= :logseq.property/status (:db/ident property))
                         value (if (= value :property/empty-placeholder) [] value)
                         new-value (cond
@@ -236,7 +239,7 @@
                                     new-value)
                         block (cond->
                                {:block/uuid (:block/uuid block)
-                                db-ident new-value}
+                                property-id new-value}
                                 status?
                                 (assoc :block/tags [:logseq.class/task]))]
                     (db/transact! repo [block] {:outliner-op :save-block})))))))))))
