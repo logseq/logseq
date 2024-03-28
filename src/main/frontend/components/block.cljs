@@ -591,7 +591,7 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)))}
      (when-not hide-icon?
-       (when-let [icon (pu/get-block-property-value page-entity :icon)]
+       (when-let [icon (:logseq.property/icon page-entity)]
          [:span.mr-1.inline-flex.items-center (icon/icon icon)]))
      [:span
       (if (and (coll? children) (seq children))

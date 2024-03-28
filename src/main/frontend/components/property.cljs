@@ -14,7 +14,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
@@ -117,12 +116,15 @@
   (let [class? (or class? (some-> block :block/type (contains? "class")))]
     (when (or (not (and class? class-schema?))
             ;; Only ask for confirmation on class schema properties
-            (js/confirm "Are you sure you want to delete this property?"))
+              (js/confirm "Are you sure you want to delete this property?"))
       (let [repo (state/get-current-repo)
             f (if (and class? class-schema?)
                 db-property-handler/class-remove-property!
-                property-handler/remove-block-property!)]
-        (f repo (:block/uuid block) (:block/uuid property))))))
+                property-handler/remove-block-property!)
+            property-id (if (config/db-based-graph? repo)
+                          (:db/ident property)
+                          (:block/uuid property))]
+        (f repo (:block/uuid block) property-id)))))
 
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
@@ -241,7 +243,7 @@
 
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "Icon:"]
-           (let [icon-value (pu/get-block-property-value property :icon)]
+           (let [icon-value (:logseq.property/icon property)]
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
@@ -384,23 +386,23 @@
   [entity property-name {:keys [class-schema? page-configure?]}]
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
-    (if-let [_property (get-property-from-db property-name)]
+    (if-let [property (get-property-from-db property-name)]
       (if (contains? db-property/hidden-built-in-properties (keyword property-name))
         (do (notification/show! "This is a built-in property that can't be used." :error)
             (pv/exit-edit-property))
         ;; Both conditions necessary so that a class can add its own page properties
         (when (and (contains? (:block/type entity) "class") class-schema?)
-          (pv/<add-property! entity property-name "" {:class-schema? class-schema?
-                                                     ;; Only enter property names from sub-modal as inputting
-                                                     ;; property values is buggy in sub-modal
-                                                     :exit-edit? page-configure?})))
+          (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
+                                                             ;; Only enter property names from sub-modal as inputting
+                                                             ;; property values is buggy in sub-modal
+                                                             :exit-edit? page-configure?})))
       ;; new property entered
       (if (db-property/valid-property-name? property-name)
         (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/<add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (p/do!
-            (db-property-handler/upsert-property! repo property-name {} {})
-            true))
+           (db-property-handler/upsert-property! repo nil {} {:property-name property-name})
+           true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
 
@@ -532,7 +534,7 @@
   [state block property {:keys [class-schema? block? collapsed? page-cp inline-text]}]
   (let [*hover? (::hover? state)
         repo (state/get-current-repo)
-        icon (pu/get-block-property-value property :icon)
+        icon (:logseq.property/icon property)
         property-name (:block/original-name property)]
     [:div.flex.flex-row.items-center
      {:on-mouse-over   #(reset! *hover? true)
@@ -701,14 +703,12 @@
                      (let [properties (:properties (:block/schema block))]
                        (map (fn [k] [k nil]) properties))
                      (sort-by first block-properties))
-        alias (set (map :block/uuid (:block/alias block)))
+        alias (set (map :db/id (:block/alias block)))
         alias-properties (when (seq alias)
-                           [[(db-pu/get-built-in-property-uuid :alias) alias]])
+                           [[:block/alias alias]])
         remove-built-in-properties (fn [properties]
-                                     (remove (fn [x]
-                                               (let [id (if (uuid? x) x (first x))]
-                                                 (when (uuid? id)
-                                                   (contains? db-property/hidden-built-in-properties (keyword (:block/name (db/entity [:block/uuid id])))))))
+                                     (remove (fn [property-id]
+                                               (contains? db-property/hidden-built-in-properties property-id))
                                              properties))
         {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))

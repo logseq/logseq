@@ -23,13 +23,14 @@
     (mapcat
      (fn [[k-keyword {:keys [schema original-name closed-values db-ident]}]]
        (let [k-name (name k-keyword)
+             name (or original-name k-name)
              blocks (if closed-values
                       (db-property-util/build-closed-values
-                       (or original-name k-name)
+                       name
                        {:block/schema schema :closed-values closed-values}
                        {:db-ident db-ident})
                       [(sqlite-util/build-new-property
-                        (or original-name k-name)
+                        name
                         schema
                         {:db-ident db-ident})])]
          (update blocks 0 default-db/mark-block-as-built-in)))
@@ -66,7 +67,7 @@
                               default-properties)
         default-classes (map
                          (fn [[k-keyword {:keys [schema original-name]}]]
-                           (let [k-name (name k-keyword)]
+                           (let [db-ident (name k-keyword)]
                              (default-db/mark-block-as-built-in
                               (sqlite-util/build-new-class
                                (let [properties (mapv
@@ -76,9 +77,9 @@
                                                      db-ident))
                                                  (:properties schema))]
                                  (cond->
-                                  {:block/original-name (or original-name k-name)
-                                   :block/name (common-util/page-name-sanity-lc k-name)
-                                   :db/ident (keyword "logseq.class" k-name)
+                                  {:block/original-name (or original-name db-ident)
+                                   :block/name (common-util/page-name-sanity-lc db-ident)
+                                   :db/ident (keyword "logseq.class" db-ident)
                                    :block/uuid (d/squuid)}
                                    (seq properties)
                                    (assoc :class/schema.properties properties)))))))

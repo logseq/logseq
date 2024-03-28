@@ -313,7 +313,7 @@
           page (db/sub-block (:db/id page))
           title (:block/original-name page)]
       (when title
-        (let [icon (pu/lookup (:block/properties page) :icon)
+        (let [icon (:logseq.property/icon page)
               *title-value (get state ::title-value)
               *edit? (get state ::edit?)
               *input-value (get state ::input-value)
@@ -337,18 +337,17 @@
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
                                             {:on-chosen (fn [_e icon]
-                                                          (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                            (db-property-handler/<update-property!
-                                                             repo
-                                                             (:block/uuid page)
-                                                             {:properties {icon-property-id icon}})))
+                                                          (db-property-handler/<update-property!
+                                                           repo
+                                                           (:block/uuid page)
+                                                           {:properties {:logseq.property/icon icon}}))
                                              :icon-props {:size 38}})
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
              :on-pointer-down (fn [e]
-                              (when (util/right-click? e)
-                                (state/set-state! :page-title/context {:page page-name})))
+                                (when (util/right-click? e)
+                                  (state/set-state! :page-title/context {:page page-name})))
              :on-click (fn [e]
                          (when-not (= (.-nodeName (.-target e)) "INPUT")
                            (.preventDefault e)
@@ -1319,7 +1318,7 @@
                   {:on-change (fn []
                                 (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
-                (when-let [icon (pu/get-block-property-value page :icon)]
+                (when-let [icon (:logseq.property/icon page)]
                   icon)]
                [:td.name [:a {:on-click (fn [e]
                                           (.preventDefault e)

@@ -9,10 +9,10 @@
             [frontend.db :as db]))
 
 (defn remove-block-property!
-  [repo block-id key]
+  [repo block-id property-id-or-key]
   (if (config/db-based-graph? repo)
-    (db-property-handler/remove-block-property! repo block-id key)
-    (file-property-handler/remove-block-property! block-id key)))
+    (db-property-handler/remove-block-property! repo block-id property-id-or-key)
+    (file-property-handler/remove-block-property! block-id property-id-or-key)))
 
 (defn set-block-property!
   [repo block-id key v & opts]

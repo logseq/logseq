@@ -193,7 +193,7 @@
              (if (or (and (not multiple-choices?) (= chosen clear-value))
                      (and multiple-choices? (= chosen [clear-value])))
                (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block)
-                                                        (:block/original-name property))
+                                                        (:db/ident property))
                (f chosen)))]
     (select/select (assoc opts
                           :selected-choices selected-choices
@@ -314,7 +314,7 @@
                      :input-opts input-opts
                      :on-chosen (fn [values]
                                   (p/do!
-                                   (<add-property! block (:block/original-name property) values)
+                                   (<add-property! block (:db/ident property) values)
                                    (when on-chosen (on-chosen)))))]
     (select-page property opts')))
 
@@ -360,7 +360,7 @@
   (let [repo (state/get-current-repo)
         {:keys [page blocks]} (db-property-handler/property-create-new-block-from-template block property template)]
     (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-            _ (<add-property! block (:block/original-name property) (:block/uuid (last blocks)))]
+            _ (<add-property! block (:db/ident property) (:block/uuid (last blocks)))]
       (last blocks))))
 
 (defn- new-text-editor-opts
@@ -413,7 +413,7 @@
             items (if closed-values?
                     (keep (fn [id]
                             (when-let [block (when id (db/entity [:block/uuid id]))]
-                              (let [icon (pu/get-block-property-value block :icon)
+                              (let [icon (:logseq.property/icon block)
                                     value (db-property/closed-value-name block)]
                                 {:label (if icon
                                           [:div.flex.flex-row.gap-2
@@ -433,7 +433,7 @@
                                           (assoc m :label label)))) items)
                          items)
                        (remove nil?))
-            add-property-f #(<add-property! block (:block/original-name property) %)
+            add-property-f #(<add-property! block (:db/ident property) %)
             on-chosen (fn [chosen]
                         (p/do!
                          (add-property-f (if (map? chosen) (:value chosen) chosen))
@@ -551,7 +551,7 @@
       [:div.text-sm.opacity-70 "loading"]
       (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [value' (get-in block [:block/schema :value])
-              icon (pu/get-block-property-value block :icon)]
+              icon (:logseq.property/icon block)]
           (cond
             (:block/name block)
             (page-cp {:disable-preview? true
@@ -658,7 +658,7 @@
 
         :checkbox
         (let [add-property! (fn []
-                              (<add-property! block (:block/original-name property) (boolean (not value))))]
+                              (<add-property! block (:db/ident property) (boolean (not value))))]
           (shui/checkbox {:class "jtrigger flex flex-row items-center"
                           :checked value
                           :auto-focus editing?
