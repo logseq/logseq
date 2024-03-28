@@ -812,7 +812,7 @@
       (page-handler/ls-dir-files! st/refresh! opts'))))
 
 (defmethod handle :graph/new-db-graph [[_ _opts]]
-  (state/set-modal!
+  (shui/dialog-open!
     repo/new-db-graph
     {:id :new-db-graph
      :label "graph-setup"}))
