@@ -173,7 +173,8 @@
                                      {id true}))
                  (property-handler/set-block-property! repo (:block/uuid block) property-name (if (= type :default) "" :property/empty-placeholder)))))))}
 
-        (:type property-schema)
+        ;; only set when in property configure modal
+        (and *property-name (:type property-schema))
         (assoc :default-value (name (:type property-schema))))
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
