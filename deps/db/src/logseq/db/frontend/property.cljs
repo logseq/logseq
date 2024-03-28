@@ -16,6 +16,8 @@
      * :cardinality - property cardinality. Default to one/single cardinality if not set
      * :hide? - Boolean which hides property when set on a block
      * :public? - Boolean which allows property to be used by user e.g. add and remove property to blocks/pages
+     * :view-context - Keyword which indicates which view contexts a property can be in. Valid values are :page.
+       Property can be viewed in any context if not set
    * :original-name - Property's :block/original-name
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
@@ -26,6 +28,7 @@
                            :attribute :block/alias
                            :schema {:type :page
                                     :cardinality :many
+                                    :view-context :page
                                     :public? true}}
    :logseq.property/tags {:original-name "Tags"
                           :attribute :block/tags
@@ -36,6 +39,7 @@
    :logseq.property/pagetags {:original-name "pageTags"
                               :schema {:type :page
                                        :public? true
+                                       :view-context :page
                                        :cardinality :many}}
    :logseq.property/background-color {:schema {:type :default :hide? true}}
    :logseq.property/background-image {:schema {:type :default :hide? true :public? true}}
@@ -155,9 +159,17 @@
 
    :logseq.property/icon {:original-name "Icon"
                           :schema {:type :map}}
-   :logseq.property/public {:schema {:type :checkbox :hide? true}}
+   :logseq.property/public {:schema
+                            {:type :checkbox
+                             :hide? true
+                             :view-context :page
+                             :public? true}}
    :logseq.property/filters {:schema {:type :map}}
-   :logseq.property/exclude-from-graph-view {:schema {:type :checkbox :hide? true :public? true}}})
+   :logseq.property/exclude-from-graph-view {:schema
+                                             {:type :checkbox
+                                              :hide? true
+                                              :view-context :page
+                                              :public? true}}})
 
 (def built-in-properties
   (->> built-in-properties*

@@ -49,7 +49,7 @@
     (p/let [templates (<get-all-templates repo)]
       (get templates name))))
 
-(defn- <db-based-get-all-properties
+(defn <db-based-get-all-properties
   "Return seq of all property names except for private built-in properties."
   [graph]
   (p/let [result (<q graph
@@ -61,15 +61,15 @@
          ;; remove private built-in properties
          (remove #(and (:db/ident %)
                        (string/starts-with? (namespace (:db/ident %)) "logseq.")
-                       (not (get-in % [:block/schema :public?]))))
-         (map :block/original-name))))
+                       (not (get-in % [:block/schema :public?])))))))
 
-(defn <get-all-properties
+(defn <get-all-property-names
   "Returns a seq of property name strings"
   []
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (<db-based-get-all-properties graph)
+      (p/let [properties (<db-based-get-all-properties graph)]
+        (map :block/original-name properties))
       (file-async/<file-based-get-all-properties graph))))
 
 (comment

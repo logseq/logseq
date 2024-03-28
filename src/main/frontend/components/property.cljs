@@ -17,7 +17,6 @@
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -416,11 +415,17 @@
 
 (rum/defc property-select
   [exclude-properties on-chosen input-opts]
-  (let [[properties set-properties!] (rum/use-state nil)]
+  (let [[properties set-properties!] (rum/use-state nil)
+        [excluded-properties set-excluded-properties!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
-       (p/let [properties (search/get-all-properties)]
-         (set-properties! (remove exclude-properties properties))))
+       (p/let [properties (db-async/<db-based-get-all-properties (state/get-current-repo))]
+         (set-properties! (map :block/original-name (remove exclude-properties properties)))
+         (set-excluded-properties! (->> properties
+                                        (filter exclude-properties)
+                                        ;; lower case b/c of case insensitive name lookups
+                                        (map (comp string/lower-case :block/original-name))
+                                        set))))
      [])
     [:div.ls-property-add.flex.flex-row.items-center
     [:span.bullet-container.cursor [:span.bullet]]
@@ -430,7 +435,7 @@
                      :dropdown? true
                      :close-modal? false
                      :show-new-when-not-exact-match? true
-                     :exact-match-exclude-items exclude-properties
+                     :exact-match-exclude-items (fn [s] (contains? excluded-properties (string/lower-case s)))
                      :input-default-placeholder "Add property"
                      :on-chosen on-chosen
                      :input-opts input-opts})]]))
@@ -453,8 +458,11 @@
                                 (map db-property/built-in-properties)
                                 (keep #(when (get entity (:attribute %)) (:original-name %)))
                                 set)
-        exclude-properties* (set/union entity-properties existing-tag-alias)
-        exclude-properties (set/union exclude-properties* (set (map string/lower-case exclude-properties*)))]
+        exclude-property-names (set/union entity-properties existing-tag-alias)
+        exclude-properties (fn [m]
+                             (or (contains? exclude-property-names (:block/original-name m))
+                                 ;; Filters out built-in properties from being in wrong :view-context
+                                 (and in-block-container? (= :page (get-in m [:block/schema :view-context])))))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      (if in-block-container? {:style {:padding-left 22}} {})
      (if @*property-key

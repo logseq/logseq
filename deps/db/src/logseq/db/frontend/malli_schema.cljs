@@ -159,7 +159,8 @@
         [:map
          [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
                                           db-property-type/user-built-in-property-types))]
-        [:public? {:optional true} :boolean]]
+         [:public? {:optional true} :boolean]
+         [:view-context {:optional true} [:enum :page]]]
         property-common-schema-attrs
         property-type-schema-attrs))]]
     page-attrs

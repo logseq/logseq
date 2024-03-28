@@ -75,7 +75,7 @@
                          ;; no-op since already removed
                          (constantly false)
                          (set (map name (property-util/hidden-properties))))]
-      (p/let [properties (db-async/<get-all-properties)]
+      (p/let [properties (db-async/<get-all-property-names)]
         (remove hidden-props properties)))))
 
 (defn property-search
