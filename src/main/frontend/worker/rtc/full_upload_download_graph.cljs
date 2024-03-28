@@ -3,7 +3,7 @@
   - download remote graph"
   (:require-macros [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [<! go]]
+            [cljs.core.async :as async :refer [<! go go-loop]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [cognitect.transit :as transit]
@@ -189,3 +189,69 @@
            (<! (op-mem-layer/<sync-to-idb-layer! repo))
            (<! (p->c (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
            (worker-state/set-rtc-downloading-graph! false)))))))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; async download-graph ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn <request-download-graph
+  [state graph-uuid]
+  (go-try
+   (let [{:keys [download-info-uuid]}
+         (<? (ws/<send&receive state {:action "download-graph"
+                                      :graph-uuid graph-uuid}))]
+     download-info-uuid)))
+
+
+(defn <wait-download-info-ready
+  [state download-info-uuid graph-uuid timeout-ms]
+  (let [init-interval 1000
+        interval      3000
+        timeout-ch    (async/timeout timeout-ms)]
+    (go-loop [interval-ch (async/timeout init-interval)]
+      (let [{:keys [timeout retry]}
+            (async/alt!
+              timeout-ch {:timeout true}
+              interval-ch {:retry true}
+              :priority true)]
+        (cond
+          timeout :timeout
+          retry
+          (let [{:keys [download-info-list]}
+                (<? (ws/<send&receive state {:action     "download-info-list"
+                                             :graph-uuid graph-uuid}))
+                finished-download-info
+                (some
+                 (fn [download-info]
+                   (when (and (= download-info-uuid (:download-info-uuid download-info))
+                              (:download-info-s3-url download-info))
+                     download-info))
+                 download-info-list)]
+            (if finished-download-info
+              finished-download-info
+              (recur (async/timeout interval)))))))))
+
+(defn <download-graph-from-s3
+  [graph-uuid graph-name s3-url]
+  (let [^js worker-obj              (:worker/object @worker-state/*state)]
+    (go-try
+     (let [{:keys [status body] :as r} (<! (http/get s3-url))
+           repo                        (str "logseq_db_" graph-name)]
+       (if (not= 200 status)
+         (ex-info "<download-graph failed" r)
+         (let [all-blocks (transit/read transit-r body)]
+           (worker-state/set-rtc-downloading-graph! true)
+           (op-mem-layer/init-empty-ops-store! repo)
+           (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo graph-uuid))
+           (op-mem-layer/update-graph-uuid! repo graph-uuid)
+           (<! (op-mem-layer/<sync-to-idb-layer! repo))
+           (<! (p->c (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
+           (worker-state/set-rtc-downloading-graph! false)))))))
+
+(defn <download-info-list
+  [state graph-uuid]
+  (go-try
+    (<? (ws/<send&receive state {:action "download-info-list"
+                                 :graph-uuid graph-uuid}))))
