@@ -178,13 +178,14 @@
 
                    (when login? {:hr true})
                    (when login?
-                     {:item [:span.flex.flex-col.relative.group.pt-1
+                     {:item [:span.flex.flex-col.relative.group.pt-1.w-full
                              [:b.leading-none (user-handler/username)]
                              [:small.opacity-70 (user-handler/email)]
                              [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
                               {:class "right-1 top-3" :title (t :logout)}
                               (ui/icon "logout")]]
-                      :options {:on-click #(user-handler/logout)}})]
+                      :options {:on-click #(user-handler/logout)
+                                :class "w-full"}})]
                   (concat page-menu-and-hr)
                   (remove nil?)))]
     [:button.button.icon.toolbar-dots-btn

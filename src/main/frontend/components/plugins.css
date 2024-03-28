@@ -451,21 +451,16 @@
   }
 
   &-waiting-updates {
-    margin: -15px;
-
     > ul {
       li {
-        user-select: none;
-        justify-content: space-between;
-        opacity: .9;
+        @apply select-none justify-between opacity-90;
 
         sup {
-          padding-left: 8px;
-          font-weight: 400;
+          @apply pl-2 font-medium;
         }
 
         &:hover, &.checked {
-          opacity: 1;
+          @apply opacity-100;
         }
       }
     }

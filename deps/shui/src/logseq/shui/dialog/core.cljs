@@ -122,9 +122,10 @@
                              (on-open-change {:value v :set-open! set-open!})
                              (set-open! v))))}
       (dialog-content props
-        (dialog-header
-          (when title (dialog-title title))
-          (when description (dialog-description description)))
+        (when title
+          (dialog-header
+            (when title (dialog-title title))
+            (when description (dialog-description description))))
         (when content
           [:div.ui__dialog-main-content content])
         (when footer
