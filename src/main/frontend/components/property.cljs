@@ -256,7 +256,7 @@
                 [:a.fade-link.flex {:on-click (fn [_e]
                                                 (db-property-handler/remove-block-property!
                                                  (state/get-current-repo)
-                                                 (:block/uuid property)
+                                                 (:db/ident property)
                                                  :logseq.property/icon))
                                     :title "Delete this icon"}
                  (ui/icon "X")])])]

@@ -9,8 +9,6 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [rum.core :as rum]
@@ -72,7 +70,7 @@
                                    :on-chosen (fn [_e icon]
                                                 (db-property-handler/set-block-property!
                                                  (state/get-current-repo)
-                                                 (:block/uuid page)
+                                                 (:db/id page)
                                                  :logseq.property/icon
                                                  icon
                                                  {}))})
@@ -80,7 +78,7 @@
         [:a.fade-link.flex {:on-click (fn [_e]
                                         (db-property-handler/remove-block-property!
                                          (state/get-current-repo)
-                                         (:block/uuid page)
+                                         (:db/id page)
                                          :logseq.property/icon))
                             :title "Delete this icon"}
          (ui/icon "X")])])])

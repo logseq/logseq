@@ -339,7 +339,7 @@
                                             {:on-chosen (fn [_e icon]
                                                           (db-property-handler/set-block-property!
                                                            repo
-                                                           (:block/uuid page)
+                                                           (:db/id page)
                                                            :logseq.property/icon
                                                            icon
                                                            {}))
