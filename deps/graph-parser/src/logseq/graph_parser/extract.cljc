@@ -110,7 +110,7 @@
                                   properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
                                                      (map second properties-ast))]
                               (:title properties)))
-            first-block-name (let [title (last (first (:title first-block)))]
+            first-blocdb-ident (let [title (last (first (:title first-block)))]
                                (and first-block
                                     (string? title)
                                     title))
@@ -120,7 +120,7 @@
                           result))]
         (or property-name
             file-name
-            first-block-name)))))
+            first-blocdb-ident)))))
 
 (defn- extract-page-alias-and-tags
   [page-m page page-name properties]

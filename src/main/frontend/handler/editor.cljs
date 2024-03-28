@@ -111,7 +111,7 @@
   (when (seq blocks)
     (let [has-ordered?    (some own-order-number-list? blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop :logseq.order-list-type
+          order-list-prop :logseq.property/order-list-type
           repo (state/get-current-repo)]
       (if has-ordered?
         (property-handler/batch-remove-block-property! repo blocks-uuids order-list-prop)
@@ -914,7 +914,7 @@
                                               (if db-based?
                                                 query-properties
                                                 (str query-properties)))
-        (property-handler/remove-block-property! repo block-id :query-properties)))))
+        (property-handler/remove-block-property! repo block-id :logseq.property/query-properties)))))
 
 (defn set-block-timestamp!
   [block-id key value]

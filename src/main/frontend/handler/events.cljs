@@ -303,7 +303,7 @@
        :on-click
        (fn []
          (reset! *query-properties {})
-         (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) :query-properties))}
+         (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/query-properties))}
       (ui/icon "refresh")]
      (for [property all-properties]
        (let [property-value (get query-properties property)

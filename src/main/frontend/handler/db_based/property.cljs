@@ -72,12 +72,6 @@
     (catch :default _e
       :default)))
 
-(defn- rebuild-block-refs
-  [repo block new-properties]
-  (let [conn (db/get-db repo false)
-        date-formatter (state/get-date-formatter)]
-    (outliner-core/rebuild-block-refs repo conn date-formatter block new-properties)))
-
 (defn convert-property-input-string
   [schema-type v-str]
   (if (and (not (string? v-str)) (not (object? v-str)))
@@ -98,10 +92,10 @@
       (if (util/uuid-string? v-str) (uuid v-str) v-str))))
 
 (defn upsert-property!
-  [repo k-name schema {}]
-  (let [db-ident (db-property/get-db-ident-from-name k-name)
+  [repo property-id schema {:keys [property-name]}]
+  (let [db-ident (or property-id (db-property/get-db-ident-from-name property-name))
         property (db/entity db-ident)
-        k-name (name k-name)]
+        k-name (or (:block/original-name property) (name property-name))]
     (if property
       (db/transact! repo [(cond->
                            (outliner-core/block-with-updated-at
@@ -119,13 +113,11 @@
   (me/humanize (mu/explain-data schema value)))
 
 (defn- reset-block-property-multiple-values!
-  [repo block-id k-name values _opts]
+  [repo block-id property-id values _opts]
   (let [block (db/entity repo [:block/uuid block-id])
-        k-name (name k-name)
-        db-ident (db-property/get-db-ident-from-name k-name)
-        property (db/entity db-ident)
+        property (db/entity property-id)
+        property-name (:block/original-name property)
         values (remove nil? values)
-        property-uuid (or (:block/uuid property) (db/new-block-id))
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
         multiple-values? (= cardinality :many)]
@@ -138,32 +130,27 @@
                       (catch :default e
                         (notification/show! (str e) :error false)
                         nil))
-            tags-or-alias? (and (contains? #{"tags" "alias"} (string/lower-case k-name)) (uuid? (first values')))
-            attribute (when tags-or-alias? (case (string/lower-case k-name)
-                                             "alias"
-                                             :block/alias
-                                             "tags"
-                                             :block/tags))
+            tags-or-alias? (contains? #{:block/tags :block/alias} property-id)
             old-values (if tags-or-alias?
-                         (->> (get block attribute)
+                         (->> (get block property-id)
                               (map (fn [e] (:block/uuid e))))
                          (get block (:db/ident property)))]
         (when (not= old-values values')
           (if tags-or-alias?
             (let [property-value-ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) values')]
               (db/transact! repo
-                            [[:db/retract (:db/id block) attribute]
+                            [[:db/retract (:db/id block) property-id]
                              {:block/uuid block-id
-                              attribute property-value-ids}]
+                              property-id property-value-ids}]
                             {:outliner-op :save-block}))
             (if-let [msg (some #(validate-property-value schema %) values')]
-              (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
+              (let [msg' (str "\"" property-name "\"" " " (if (coll? msg) (first msg) msg))]
                 (notification/show! msg' :warning))
-              (let [property-id (upsert-property! repo k-name (assoc property-schema :type property-type)
-                                                  {:property-uuid property-uuid})
-                    block {:block/uuid (:block/uuid block)
-                           property-id values'}]
-                (db/transact! repo [block] {:outliner-op :save-block})))))))))
+              (do
+                (upsert-property! repo property-id (assoc property-schema :type property-type) {})
+                (let [block {:block/uuid (:block/uuid block)
+                             property-id values'}]
+                  (db/transact! repo [block] {:outliner-op :save-block}))))))))))
 
 (defn- resolve-tag
   "Change `v` to a tag's UUID if v is a string tag, e.g. `#book`"
@@ -187,17 +174,16 @@
           (:block/uuid e'))))))
 
 (defn set-block-property!
-  [repo block-id k-name v {:keys [old-value] :as opts}]
+  [repo block-id property-id v {:keys [old-value] :as opts}]
   (let [block (db/entity repo [:block/uuid block-id])
-        k-name (name k-name)
-        property (db/entity (db-property/get-db-ident-from-name k-name))
-        property-uuid (or (:block/uuid property) (db/new-block-id))
+        property (db/entity property-id)
+        k-name (:block/original-name property)
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
         multiple-values? (= cardinality :many)
         v (or (resolve-tag v) v)]
     (if (and multiple-values? (coll? v))
-      (reset-block-property-multiple-values! repo block-id k-name v opts)
+      (reset-block-property-multiple-values! repo block-id property-id v opts)
       (let [v (if property v (or v ""))]
         (when (some? v)
           (let [infer-schema (when-not type (infer-schema-from-input-string v))
@@ -213,23 +199,17 @@
                          (js/console.error e)
                          (notification/show! (str e) :error false)
                          nil)))
-                tags-or-alias? (and (contains? #{"tags" "alias"} (string/lower-case k-name)) (uuid? v*))]
+                tags-or-alias? (and (contains? #{:block/tags :block/alias} property-id) (uuid? v*))]
             (if tags-or-alias?
-              (let [property-value-id (:db/id (db/entity [:block/uuid v*]))
-                    attribute (case (string/lower-case k-name)
-                                "alias"
-                                :block/alias
-                                "tags"
-                                :block/tags)]
+              (let [property-value-id (:db/id (db/entity [:block/uuid v*]))]
                 (db/transact! repo
-                              [[:db/add (:db/id block) attribute property-value-id]]
+                              [[:db/add (:db/id block) property-id property-value-id]]
                               {:outliner-op :save-block}))
               (when-not (contains? (if (set? value) value #{value}) v*)
                 (if-let [msg (when-not (= v* :property/empty-placeholder) (validate-property-value schema v*))]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
-                  (let [db-ident (upsert-property! repo k-name (assoc property-schema :type property-type)
-                                                   {:property-uuid property-uuid})
+                  (let [db-ident (upsert-property! repo property-id (assoc property-schema :type property-type) {})
                         status? (= :logseq.property/status (:db/ident property))
                         value (if (= value :property/empty-placeholder) [] value)
                         new-value (cond
@@ -283,25 +263,18 @@
                         {:outliner-op :save-block}))))))
 
 (defn class-add-property!
-  [repo class-uuid k-name]
+  [repo class-uuid property-id]
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
-      (let [k-name (name k-name)
-            db-ident (db-property/get-db-ident-from-name k-name)
-            property (db/entity db-ident)
-            property-uuid (or (:block/uuid property) (db/new-block-id))
+      (let [property (db/entity property-id)
             property-type (get-in property [:block/schema :type])
-            {:keys [properties] :as class-schema} (:block/schema class)
-            _ (upsert-property! repo k-name
+            _ (upsert-property! repo property-id
                                 (cond-> (:block/schema property)
                                   (some? property-type)
                                   (assoc :type property-type))
-                                {:property-uuid property-uuid})
-            new-properties (vec (distinct (conj properties property-uuid)))
-            class-new-schema (assoc class-schema :properties new-properties)]
+                                {})]
         (db/transact! repo
-                      [{:db/id (:db/id class)
-                        :block/schema class-new-schema}]
+                      [[:db/add (:db/id class) :class/schema.properties property-id]]
                       {:outliner-op :save-block})))))
 
 (defn class-remove-property!
@@ -328,17 +301,12 @@
 
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
-  [repo block-ids k-name v]
-  (let [property (db-property/get-by-ident-or-name (db/get-db repo) k-name)
-        property-uuid (or (:block/uuid property) (db/new-block-id))
+  [repo block-ids property-id v]
+  (assert property-id "property-id is nil")
+  (let [property (db/entity property-id)
         type (:type (:block/schema property))
         infer-schema (when-not type (infer-schema-from-input-string v))
         property-type (or type infer-schema :default)
-        property-id (or
-                     (:db/ident property)
-                     (when (nil? property)
-                       (upsert-property! repo (name k-name) (assoc (:block/schema property) :type property-type)
-                                         {:property-uuid property-uuid})))
         {:keys [cardinality]} (:block/schema property)
         status? (= :logseq.property/status (:db/ident property))
         txs (mapcat
@@ -359,53 +327,41 @@
       (db/transact! repo txs {:outliner-op :save-block}))))
 
 (defn batch-remove-property!
-  [repo block-ids key]
-  (when-let [property-uuid (if (uuid? key)
-                             key
-                             (db-pu/get-user-property-uuid repo key))]
-    (when-let [property (db/entity [:block/uuid property-uuid])]
-      (let [property-id (:db/ident property)
-            txs (mapcat
-                 (fn [id]
-                   (when-let [block (db/entity [:block/uuid id])]
-                     (when (get block property-id)
-                       (let [value (get block property-id)
-                             block-value? (and (= :default (get-in property [:block/schema :type] :default))
-                                               (uuid? value))
-                             property-block (when block-value? (db/entity [:block/uuid value]))
-                             retract-blocks-tx (when (and property-block
-                                                          (some? (get property-block :logseq.property/created-from-block))
-                                                          (some? (get property-block :logseq.property/created-from-property)))
-                                                 (let [txs-state (atom [])]
-                                                   (outliner-core/delete-block repo
-                                                                               (db/get-db false)
-                                                                               txs-state
-                                                                               (outliner-core/->Block property-block)
-                                                                               {:children? true})
-                                                   @txs-state))]
-                         (concat
-                          [[:db/retract (:db/id block) property-id]]
-                          retract-blocks-tx)))))
-                 block-ids)]
-        (when (seq txs)
-          (db/transact! repo txs {:outliner-op :save-block}))))))
+  [repo block-ids property-id]
+  (when-let [property (db/entity property-id)]
+    (let [txs (mapcat
+               (fn [id]
+                 (when-let [block (db/entity [:block/uuid id])]
+                   (when (get block property-id)
+                     (let [value (get block property-id)
+                           block-value? (and (= :default (get-in property [:block/schema :type] :default))
+                                             (uuid? value))
+                           property-block (when block-value? (db/entity [:block/uuid value]))
+                           retract-blocks-tx (when (and property-block
+                                                        (some? (get property-block :logseq.property/created-from-block))
+                                                        (some? (get property-block :logseq.property/created-from-property)))
+                                               (let [txs-state (atom [])]
+                                                 (outliner-core/delete-block repo
+                                                                             (db/get-db false)
+                                                                             txs-state
+                                                                             (outliner-core/->Block property-block)
+                                                                             {:children? true})
+                                                 @txs-state))]
+                       (concat
+                        [[:db/retract (:db/id block) property-id]]
+                        retract-blocks-tx)))))
+               block-ids)]
+      (when (seq txs)
+        (db/transact! repo txs {:outliner-op :save-block})))))
 
 (defn remove-block-property!
-  [repo block-id key]
-  (let [k-name (if (uuid? key)
-                 (:block/original-name (db/entity [:block/uuid key]))
-                 (string/lower-case (name key)))]
-    (if (contains? #{"alias" "tags"} k-name)
-      (let [attribute (case k-name
-                        "alias"
-                        :block/alias
-                        "tags"
-                        :block/tags)
-            block (db/entity [:block/uuid block-id])]
-        (db/transact! repo
-                      [[:db/retract (:db/id block) attribute]]
-                      {:outliner-op :save-block}))
-      (batch-remove-property! repo [block-id] key))))
+  [repo block-id property-id]
+  (if (contains? #{:block/alias :block/tags} property-id)
+    (when-let [block (db/entity [:block/uuid block-id])]
+      (db/transact! repo
+                    [[:db/retract (:db/id block) property-id]]
+                    {:outliner-op :save-block}))
+    (batch-remove-property! repo [block-id] property-id)))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"

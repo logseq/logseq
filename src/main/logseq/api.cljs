@@ -1020,7 +1020,7 @@
             repo (state/get-current-repo)]
       (if (or (not block) (true? overwrite))
         (do (when-let [old-target block]
-              (property-handler/remove-block-property! repo (:block/uuid old-target) :template))
+              (property-handler/remove-block-property! repo (:block/uuid old-target) :logseq.property/template))
             (property-handler/set-block-property! repo target-uuid :logseq.property/template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
@@ -1030,7 +1030,7 @@
     (when block
       (property-handler/remove-block-property!
        (state/get-current-repo)
-       (:block/uuid block) :template))))
+       (:block/uuid block) :logseq.property/template))))
 
 ;; search
 (defn ^:export search

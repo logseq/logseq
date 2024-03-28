@@ -57,7 +57,7 @@
   {:init (fn [state]
            (let [block (second (:rum/args state))
                  value (or (str (get-in block [:block/schema :value])) "")
-                 icon (when block (pu/get-block-property-value block :icon))
+                 icon (:logseq.property/icon block)
                  description (or (get-in block [:block/schema :description]) "")]
              (assoc state
                     ::value (atom value)
@@ -118,17 +118,17 @@
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (icon-component/icon-picker (pu/get-block-property-value item :icon)
+      (icon-component/icon-picker (:logseq.property/icon item)
                                   {:on-chosen (fn [_e icon]
                                                 (update-icon icon))})
       (cond
         date?
         [:div.flex.flex-row.items-center.gap-1
          (property-value/date-picker (:block/original-name item)
-                                    {:on-change (fn [page]
-                                                  (db-property-handler/replace-closed-value property
-                                                                                            (:db/id page)
-                                                                                            (:db/id item)))})
+                                     {:on-change (fn [page]
+                                                   (db-property-handler/replace-closed-value property
+                                                                                             (:db/id page)
+                                                                                             (:db/id item)))})
          ((:page-cp parent-opts) {:preview? false} item)]
 
         (and page? (:page-cp parent-opts))

@@ -65,30 +65,29 @@
   [page]
   [:div.grid.grid-cols-5.gap-1.items-center
    [:label.col-span-2 "Icon:"]
-   (let [icon-value (pu/get-block-property-value page :icon)]
+   (let [icon-value (:logseq.property/icon page)]
      [:div.col-span-3.flex.flex-row.items-center.gap-2
       (icon-component/icon-picker icon-value
                                   {:disabled? config/publishing?
                                    :on-chosen (fn [_e icon]
-                                                (let [icon-property-id (db-pu/get-built-in-property-uuid :icon)]
-                                                  (db-property-handler/<update-property!
-                                                   (state/get-current-repo)
-                                                   (:block/uuid page)
-                                                   {:properties {icon-property-id icon}})))})
+                                                (db-property-handler/<update-property!
+                                                 (state/get-current-repo)
+                                                 (:block/uuid page)
+                                                 {:properties {:logseq.property/icon icon}}))})
       (when (and icon-value (not config/publishing?))
         [:a.fade-link.flex {:on-click (fn [_e]
                                         (db-property-handler/remove-block-property!
                                          (state/get-current-repo)
                                          (:block/uuid page)
-                                         (db-pu/get-built-in-property-uuid :icon)))
+                                         :logseq.property/icon))
                             :title "Delete this icon"}
-        (ui/icon "X")])])])
+         (ui/icon "X")])])])
 
 (rum/defc tags
   [page]
   (let [tags-property (db/entity :block/tags)]
     (pv/property-value page tags-property
-                       (map :block/uuid (:block/tags page))
+                       (map :db/id (:block/tags page))
                        {:page-cp (fn [config page]
                                    (component-block/page-cp (assoc config :tag? true) page))
                         :inline-text component-block/inline-text})))
