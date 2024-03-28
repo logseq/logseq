@@ -297,7 +297,9 @@
   ;; Already imported via a datascript attribute i.e. have :attribute on property config
   [:tags :alias :collapsed
    ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
-   :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting])
+   :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting
+   ;; deprecated in db graphs
+   :macros :logseq.query/nlp-date])
 
 (defn- pre-update-properties
   "Updates page and block properties before their property types are inferred"

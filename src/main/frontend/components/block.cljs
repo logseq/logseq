@@ -1424,16 +1424,18 @@
   [name config arguments]
   (if-let [block-uuid (:block/uuid config)]
     (let [format (get-in config [:block :block/format] :markdown)
-          properties (-> (db/entity [:block/uuid block-uuid])
-                         (:block/page)
-                         (:db/id)
-                         (db/entity)
-                         :block/properties)
-          macros (pu/lookup-by-name properties :macros)
-          macro-content (or
-                         (get macros name)
-                         (get (state/get-macros) name)
-                         (get (state/get-macros) (keyword name)))
+          ;; :macros is deprecated for db graphs
+          macros-from-property (when (config/local-file-based-graph? (state/get-current-repo))
+                                 (-> (db/entity [:block/uuid block-uuid])
+                                     (:block/page)
+                                     (:db/id)
+                                     (db/entity)
+                                     :block/properties
+                                     :macros
+                                     (get name)))
+          macro-content (or macros-from-property
+                            (get (state/get-macros) name)
+                            (get (state/get-macros) (keyword name)))
           macro-content (cond
                           (= (str name) "img")
                           (case (count arguments)
