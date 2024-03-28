@@ -38,6 +38,27 @@
           (fn []
             (state/set-state! :rtc/downloading-graph-uuid nil))))))))
 
+(defn <rtc-download-graph2!
+  [graph-name graph-uuid timeout-ms]
+  (when-let [^js worker @state/*db-worker]
+    (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
+    (user-handler/<wrap-ensure-id&access-token
+     (p/let [token (state/get-auth-id-token)
+             download-info-uuid (.rtc-request-download-graph worker nil token graph-uuid)
+             result (.rtc-wait-download-graph-info-ready worker nil token download-info-uuid graph-uuid timeout-ms)
+             {:keys [_download-info-uuid
+                     download-info-s3-url
+                     _download-info-tx-instant
+                     _download-info-t
+                     _download-info-created-at]
+              :as result} (ldb/read-transit-str result)]
+       (->
+        (when (not= result :timeout)
+          (assert (some? download-info-s3-url) result)
+          (.rtc-download-graph-from-s3 worker graph-uuid graph-name download-info-s3-url))
+        (p/finally
+          #(state/set-state! :rtc/downloading-graph-uuid nil)))))))
+
 (defn <rtc-stop!
   []
   (when-let [^js worker @state/*db-worker]

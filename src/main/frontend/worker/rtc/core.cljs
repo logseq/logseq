@@ -60,18 +60,18 @@
 
 (def state-schema
   "
-  | :*graph-uuid                      | atom of graph-uuid syncing now                           |
-  | :*repo                            | atom of repo name syncing now                            |
-  | :data-from-ws-chan                | channel for receive messages from server websocket       |
-  | :data-from-ws-pub                 | pub of :data-from-ws-chan, dispatch by :req-id           |
-  | :*stop-rtc-loop-chan              | atom of chan to stop <loop-for-rtc                       |
-  | :*ws                              | atom of websocket                                        |
-  | :*rtc-state                       | atom of state of current rtc progress                    |
-  | :toggle-auto-push-client-ops-chan | channel to toggle pushing client ops automatically       |
-  | :*auto-push-client-ops?           | atom to show if it's push client-ops automatically       |
-  | :force-push-client-ops-chan       | chan used to force push client-ops                       |
-  | :dev-mode?                        | when not nil, will update :block-update-log              |
-  | :block-update-log                 | map of block-uuid-> coll of local-op and remote-updates  |
+  | :*graph-uuid                      | atom of graph-uuid syncing now                          |
+  | :*repo                            | atom of repo name syncing now                           |
+  | :data-from-ws-chan                | channel for receive messages from server websocket      |
+  | :data-from-ws-pub                 | pub of :data-from-ws-chan, dispatch by :req-id          |
+  | :*stop-rtc-loop-chan              | atom of chan to stop <loop-for-rtc                      |
+  | :*ws                              | atom of websocket                                       |
+  | :*rtc-state                       | atom of state of current rtc progress                   |
+  | :toggle-auto-push-client-ops-chan | channel to toggle pushing client ops automatically      |
+  | :*auto-push-client-ops?           | atom to show if it's push client-ops automatically      |
+  | :force-push-client-ops-chan       | chan used to force push client-ops                      |
+  | :dev-mode?                        | when not nil, will update :block-update-log             |
+  | :block-update-log                 | map of block-uuid-> coll of local-op and remote-updates |
 "
   [:map {:closed true}
    [:*graph-uuid :any]
@@ -1174,6 +1174,8 @@
 
 
 ;; FIXME: token might be expired
+;;; TODO: `repo` shouldn't be required when init-state.
+;;;       state isn't related to one repo, e.g. `<get-graphs` is user-scope api, not repo-scope
 (defn <init-state
   [repo token reset-*state? & {:keys [dev-mode?]
                                :or {dev-mode? false}}]
