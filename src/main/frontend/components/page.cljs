@@ -337,10 +337,12 @@
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
                                             {:on-chosen (fn [_e icon]
-                                                          (db-property-handler/<update-property!
+                                                          (db-property-handler/set-block-property!
                                                            repo
                                                            (:block/uuid page)
-                                                           {:properties {:logseq.property/icon icon}}))
+                                                           :logseq.property/icon
+                                                           icon
+                                                           {}))
                                              :icon-props {:size 38}})
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1

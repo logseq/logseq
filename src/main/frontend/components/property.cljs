@@ -249,7 +249,7 @@
                                           {:on-chosen (fn [_e icon]
                                                         (db-property-handler/<update-property!
                                                          (state/get-current-repo)
-                                                         (:block/uuid property)
+                                                         (:db/ident property)
                                                          {:properties {:logseq.property/icon icon}}))})
 
               (when icon-value
@@ -576,7 +576,7 @@
                           (fn [_e icon]
                             (when icon
                               (p/let [_ (db-property-handler/<update-property! repo
-                                                                               (:block/uuid property)
+                                                                               (:db/ident property)
                                                                                {:properties {:logseq.property/icon icon}})]
                                 (shui/popup-hide! id))))}))]
        (shui/trigger-as :button

@@ -70,10 +70,12 @@
       (icon-component/icon-picker icon-value
                                   {:disabled? config/publishing?
                                    :on-chosen (fn [_e icon]
-                                                (db-property-handler/<update-property!
+                                                (db-property-handler/set-block-property!
                                                  (state/get-current-repo)
                                                  (:block/uuid page)
-                                                 {:properties {:logseq.property/icon icon}}))})
+                                                 :logseq.property/icon
+                                                 icon
+                                                 {}))})
       (when (and icon-value (not config/publishing?))
         [:a.fade-link.flex {:on-click (fn [_e]
                                         (db-property-handler/remove-block-property!
