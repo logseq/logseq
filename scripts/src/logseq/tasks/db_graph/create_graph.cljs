@@ -34,7 +34,7 @@
           (string/replace-first #"(:file/name-format :triple-lowbar)"
                                 (str "$1 "
                                      (string/replace-first (str additional-config) #"^\{(.*)\}$" "$1"))))]
-    (d/transact! conn (sqlite-create-graph/build-db-initial-data @conn config-content))))
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data config-content))))
 
 (defn init-conn
   "Create sqlite DB, initialize datascript connection and sync listener and then
@@ -172,7 +172,6 @@
                             (fn [[prop-name uuid]]
                               (if (get-in properties [prop-name :closed-values])
                                 (db-property-util/build-closed-values
-                                 db
                                  prop-name
                                  (assoc (get properties prop-name) :block/uuid uuid)
                                  {:icon-id

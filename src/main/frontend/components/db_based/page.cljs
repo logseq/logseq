@@ -86,7 +86,7 @@
 
 (rum/defc tags
   [page]
-  (let [tags-property (pu/get-property :tags)]
+  (let [tags-property (db/entity :block/tags)]
     (pv/property-value page tags-property
                        (map :block/uuid (:block/tags page))
                        {:page-cp (fn [config page]

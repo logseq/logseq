@@ -3,7 +3,8 @@
   (:require [clojure.set :as set]
             [logseq.db.sqlite.util :as sqlite-util]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [clojure.string :as string]))
 
 (def first-stage-properties
   #{:built-in? :created-from-property})
@@ -254,3 +255,14 @@
 (defn property?
   [k]
   (contains? #{:logseq.property :user.property} (keyword (namespace k))))
+
+(defn get-db-ident-from-name
+  [property-name]
+  (let [n (-> (string/lower-case property-name)
+              (string/replace #"^:" "")
+              (string/replace " " "_")
+              (string/trim))]
+    (when-not (string/blank? n)
+      (->
+       (str "user.property/" n)
+       keyword))))

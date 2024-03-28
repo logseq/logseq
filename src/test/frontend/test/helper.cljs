@@ -244,7 +244,6 @@ This can be called in synchronous contexts as no async fns should be invoked"
     (start-test-db! start-opts)
     (when db-graph?
       (let [built-in-data (sqlite-create-graph/build-db-initial-data
-                           (db/get-db repo)
                            config/config-default-content)]
         (db/transact! repo built-in-data)))
     (when-let [init-f (:init-data start-opts)]

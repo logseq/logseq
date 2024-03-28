@@ -1021,7 +1021,7 @@
       (if (or (not block) (true? overwrite))
         (do (when-let [old-target block]
               (property-handler/remove-block-property! repo (:block/uuid old-target) :template))
-            (property-handler/set-block-property! repo target-uuid :template template-name))
+            (property-handler/set-block-property! repo target-uuid :logseq.property/template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
 (defn ^:export remove_template

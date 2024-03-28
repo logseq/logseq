@@ -65,22 +65,20 @@
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"
-  [prop-name prop-schema prop-uuid & {:keys [db-ident]}]
+  [prop-name prop-schema & {:keys [db-ident]}]
   (block-with-timestamps
    (cond->
     {:block/type "property"
-     :block/journal? false
-     :block/format :markdown
-     :block/uuid prop-uuid
      :block/schema (merge {:type :default} prop-schema)
-     :block/original-name (name prop-name)
-     :block/name (common-util/page-name-sanity-lc (name prop-name))}
+     :block/original-name (name prop-name)}
      (and db-ident (keyword? db-ident))
      (assoc :db/ident db-ident)
      (= :many (:cardinality prop-schema))
      (assoc :db/index true
             :db/cardinality :db.cardinality/many)
-     (contains? #{:page :block} (:type prop-schema))
+     (not= :many (:cardinality prop-schema))
+     (assoc :db/cardinality :db.cardinality/one)
+     (contains? #{:page :block :date :object} (:type prop-schema))
      (assoc :db/index true
             :db/valueType :db.type/ref))))
 

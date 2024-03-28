@@ -146,7 +146,7 @@
                          :on-change (fn [page]
                                       (let [repo (state/get-current-repo)]
                                         (property-handler/set-block-property! repo (:block/uuid block)
-                                                                              (:block/name property)
+                                                                              (:db/ident property)
                                                                               (:db/id page))
                                         (exit-edit-property)))}))))
 
@@ -339,7 +339,7 @@
       (p/do!
        (when (not= new-value value)
          (property-handler/set-block-property! repo (:block/uuid block)
-                                               (:block/original-name property)
+                                               (:db/ident property)
                                                (string/trim new-value)))
        (exit-edit-property)))))
 

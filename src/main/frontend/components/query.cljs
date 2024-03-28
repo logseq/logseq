@@ -157,10 +157,9 @@
                        collapsed?
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
-        properties (:block/properties current-block)
-        query-table-property (pu/lookup properties :query-table)
+        query-table? (:logseq.property/query-table current-block)
         table? (or table-view?
-                   query-table-property
+                   query-table?
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
@@ -211,13 +210,13 @@
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                  "query-table"
-                                                                                                  false))}
+                                                                                                   :logseq.property/query-table
+                                                                                                   false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                  "query-table"
-                                                                                                  true))}
+                                                                                                   :logseq.property/query-table
+                                                                                                   true))}
                     (ui/icon "table" {:style {:font-size 20}})]))
 
                [:a.flex.ml-1.fade-link
@@ -232,8 +231,8 @@
                           (and query-time (> query-time 50)))
                   (query-refresh-button query-time {:full-text-search? full-text-search?
                                                     :on-pointer-down (fn [e]
-                                                                     (util/stop e)
-                                                                     (query-result/trigger-custom-query! config q *query-error))}))]])])
+                                                                       (util/stop e)
+                                                                       (query-result/trigger-custom-query! config q *query-error))}))]])])
 
          (when dsl-query? builder)
 

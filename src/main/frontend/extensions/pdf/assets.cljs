@@ -129,10 +129,10 @@
 (defn update-hl-block!
   [highlight]
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
-    (doseq [[k v] {:hl-stamp (if (area-highlight? highlight)
-                               (get-in highlight [:content :image])
-                               (js/Date.now))
-                   :hl-color (get-in highlight [:properties :color])}]
+    (doseq [[k v] {:logseq.property/hl-stamp (if (area-highlight? highlight)
+                                               (get-in highlight [:content :image])
+                                               (js/Date.now))
+                   :logseq.property/hl-color (get-in highlight [:properties :color])}]
       (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k v))))
 
 (defn unlink-hl-area-image$
