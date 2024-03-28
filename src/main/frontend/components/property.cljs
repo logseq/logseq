@@ -522,7 +522,7 @@
                          (reset! *new-property? true))}
             [:div.flex.flex-row.items-center {:style {:padding-left 1}}
              (ui/icon "plus" {:size 15})
-             [:div.ml-1.text-sm {:style {:padding-left 2}} "Add property"]]]
+             [:div.ml-1 {:style {:padding-left 2}} "Add property"]]]
 
            :else
            [:div {:style {:height 28}}]))])))
