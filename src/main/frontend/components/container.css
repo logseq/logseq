@@ -542,6 +542,10 @@
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
+
+  .page {
+    @apply px-6;
+  }
 }
 
 .cp__sidebar-help {

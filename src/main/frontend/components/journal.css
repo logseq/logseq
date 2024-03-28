@@ -6,7 +6,7 @@
   }
 
   .journal-item {
-    @apply border-t mx-6 px-6 min-h-[250px];
+    @apply border-t min-h-[250px];
 
     &:first-child {
       @apply pt-0 border-none min-h-[500px];

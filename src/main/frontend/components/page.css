@@ -394,6 +394,14 @@ html.is-native-ios {
     @apply py-2;
   }
 
+  .ls-page-properties {
+    @apply bg-gray-03 rounded-md px-3 gap-1;
+  }
+
+  .ls-new-property {
+    @apply mt-1;
+  }
+
   &.is-collapsed {
     @apply border-transparent -mb-[14px];
 
@@ -403,6 +411,10 @@ html.is-native-ios {
 
     .page-info-inner {
       @apply py-0 relative -top-[14px] -mb-[16px] min-h-[44px];
+
+      &:has(.ls-page-properties) {
+        @apply mb-4 opacity-90;
+      }
     }
 
     .ls-new-property {
