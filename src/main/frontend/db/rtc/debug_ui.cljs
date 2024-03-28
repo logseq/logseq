@@ -38,35 +38,35 @@
                     (js/setTimeout #(.removeAttribute btn "disabled") 2000)))}
      [:div.flex.gap-2.flex-wrap.items-center.pb-3
       (shui/button
-        {:size :sm
-         :on-click (fn [_]
-                     (let [repo (state/get-current-repo)
-                           ^object worker @db-browser/*worker]
-                       (p/let [result (.rtc-get-debug-state worker repo)
-                               new-state (ldb/read-transit-str result)]
-                         (swap! debug-state (fn [old] (merge old new-state))))))}
-        (shui/tabler-icon "refresh") "local-state")
+       {:size :sm
+        :on-click (fn [_]
+                    (let [repo (state/get-current-repo)
+                          ^object worker @db-browser/*worker]
+                      (p/let [result (.rtc-get-debug-state worker repo)
+                              new-state (ldb/read-transit-str result)]
+                        (swap! debug-state (fn [old] (merge old new-state))))))}
+       (shui/tabler-icon "refresh") "local-state")
 
       (shui/button
-        {:size :sm
-         :on-click
-         (fn [_]
-           (let [repo (state/get-current-repo)
-                 token (state/get-auth-id-token)
-                 ^object worker @db-browser/*worker]
-             (p/let [result (.rtc-get-graphs worker repo token)
-                     graph-list (bean/->clj result)]
-               (swap! debug-state assoc
-                 :remote-graphs
-                 (map
-                   #(into {}
-                      (filter second
-                        (select-keys % [:graph-uuid :graph-name
-                                        :graph-status
-                                        :graph<->user-user-type
-                                        :graph<->user-grant-by-user])))
-                   graph-list)))))}
-        (shui/tabler-icon "download") "graph-list")
+       {:size :sm
+        :on-click
+        (fn [_]
+          (let [repo (state/get-current-repo)
+                token (state/get-auth-id-token)
+                ^object worker @db-browser/*worker]
+            (p/let [result (.rtc-get-graphs worker repo token)
+                    graph-list (bean/->clj result)]
+              (swap! debug-state assoc
+                     :remote-graphs
+                     (map
+                      #(into {}
+                             (filter second
+                                     (select-keys % [:graph-uuid :graph-name
+                                                     :graph-status
+                                                     :graph<->user-user-type
+                                                     :graph<->user-grant-by-user])))
+                      graph-list)))))}
+       (shui/tabler-icon "download") "graph-list")
 
       (shui/button
        {:size :sm
@@ -90,20 +90,20 @@
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
                             (count (:block/_page (db/entity [:block/name (util/page-name-sanity-lc page)]))))}
-         (fipp/pprint {:width 20})
-         with-out-str)]]
+           (fipp/pprint {:width 20})
+           with-out-str)]]
 
      (if (or (nil? rtc-state)
              (= :closed rtc-state))
        (shui/button
-         {:variant :outline
-          :class "text-green-rx-09 border-green-rx-10 hover:text-green-rx-10"
-          :on-click (fn []
-                      (let [token (state/get-auth-id-token)
-                            ^object worker @db-browser/*worker]
-                        (.rtc-start worker (state/get-current-repo) token
-                          (state/sub [:ui/developer-mode?]))))}
-         (shui/tabler-icon "player-play") "start")
+        {:variant :outline
+         :class "text-green-rx-09 border-green-rx-10 hover:text-green-rx-10"
+         :on-click (fn []
+                     (let [token (state/get-auth-id-token)
+                           ^object worker @db-browser/*worker]
+                       (.rtc-start worker (state/get-current-repo) token
+                                   (state/sub [:ui/developer-mode?]))))}
+        (shui/tabler-icon "player-play") "start")
 
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "send pending ops")
@@ -118,11 +118,11 @@
                                    (p/let [result (.rtc-toggle-sync worker (state/get-current-repo))]
                                      (swap! debug-state assoc :auto-push-updates? result))))})]
         [:div (shui/button
-                {:variant :outline
-                 :class "text-red-rx-09 border-red-rx-08 hover:text-red-rx-10"
-                 :size :sm
-                 :on-click (fn [] (stop))}
-                (shui/tabler-icon "player-stop") "stop")]])
+               {:variant :outline
+                :class "text-red-rx-09 border-red-rx-08 hover:text-red-rx-10"
+                :size :sm
+                :on-click (fn [] (stop))}
+               (shui/tabler-icon "player-stop") "stop")]])
 
      (when (some? state)
        [:hr]
@@ -153,12 +153,23 @@
                  {:icon "download"
                   :class "mr-2"
                   :on-click (fn []
-                              (when-let [repo (:download-graph-to-repo state)]
+                              (when-let [graph-name (:download-graph-to-repo state)]
                                 (when-let [graph-uuid (:graph-uuid-to-download state)]
-                                  (prn :download-graph graph-uuid :to repo)
-                                  (let [token (state/get-auth-id-token)
-                                        ^object worker @db-browser/*worker]
-                                    (.rtc-download-graph worker repo token graph-uuid)))))})
+                                  (prn :download-graph graph-uuid :to graph-name)
+                                  (p/let [token (state/get-auth-id-token)
+                                          ^object worker @db-browser/*worker
+                                          download-info-uuid (.rtc-request-download-graph worker nil token graph-uuid)
+                                          result (.rtc-wait-download-graph-info-ready
+                                                  worker nil token download-info-uuid graph-uuid 60000)
+                                          {:keys [_download-info-uuid
+                                                  download-info-s3-url
+                                                  _download-info-tx-instant
+                                                  _download-info-t
+                                                  _download-info-created-at]
+                                           :as result} (ldb/read-transit-str result)]
+                                    (when (not= result :timeout)
+                                      (assert (some? download-info-s3-url) result)
+                                      (.rtc-download-graph-from-s3 worker graph-uuid graph-name download-info-s3-url))))))})
 
       [:b "➡"]
       [:div.flex.flex-row.items-center.gap-2
@@ -206,20 +217,20 @@
                  {:icon "trash"
                   :on-click (fn []
                               (-> (shui/dialog-confirm!
-                                    {:title [:p.flex.flex-col.gap-1
-                                             [:b "Are you sure delete current graph?"]
-                                             [:small.line-through.opacity-80 (state/get-current-repo)]]})
-                                (p/then #((when-let [graph-uuid (:graph-uuid-to-delete state)]
-                                            (let [token (state/get-auth-id-token)
-                                                  ^object worker @db-browser/*worker]
-                                              (prn ::delete-graph graph-uuid)
-                                              (.rtc-delete-graph worker token graph-uuid)))))))})
+                                   {:title [:p.flex.flex-col.gap-1
+                                            [:b "Are you sure delete current graph?"]
+                                            [:small.line-through.opacity-80 (state/get-current-repo)]]})
+                                  (p/then #((when-let [graph-uuid (:graph-uuid-to-delete state)]
+                                              (let [token (state/get-auth-id-token)
+                                                    ^object worker @db-browser/*worker]
+                                                (prn ::delete-graph graph-uuid)
+                                                (.rtc-delete-graph worker token graph-uuid)))))))})
 
       (shui/select
-        {:on-value-change (fn [v]
-                            (some->> (parse-uuid v)
-                              str
-                              (swap! debug-state assoc :graph-uuid-to-delete)))}
+       {:on-value-change (fn [v]
+                           (some->> (parse-uuid v)
+                                    str
+                                    (swap! debug-state assoc :graph-uuid-to-delete)))}
        (shui/select-trigger
         {:class "!px-2 !py-0 !h-8"}
         (shui/select-value
