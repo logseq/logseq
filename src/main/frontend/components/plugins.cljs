@@ -1405,8 +1405,8 @@
 
 (defn open-waiting-updates-modal!
   []
-  (state/set-sub-modal!
-    (fn [_close!]
+  (shui/dialog-open!
+    (fn []
       (waiting-coming-updates))
     {:center? true}))
 
