@@ -241,7 +241,7 @@
   [page-name]
   (let [properties (db/get-page-properties page-name)]
     (if (config/db-based-graph? (state/get-current-repo))
-      (pu/lookup properties :filters)
+      (pu/lookup properties :logseq.property/filters)
       (let [properties-str (or (:filters properties) "{}")]
         (try (reader/read-string properties-str)
              (catch :default e

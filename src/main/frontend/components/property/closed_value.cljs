@@ -57,7 +57,7 @@
   {:init (fn [state]
            (let [block (second (:rum/args state))
                  value (or (str (get-in block [:block/schema :value])) "")
-                 icon (when block (pu/get-block-property-value block :icon))
+                 icon (when block (pu/get-block-property-value block :logseq.property/icon))
                  description (or (get-in block [:block/schema :description]) "")]
              (assoc state
                     ::value (atom value)
@@ -118,7 +118,7 @@
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (icon-component/icon-picker (pu/get-block-property-value item :icon)
+      (icon-component/icon-picker (pu/get-block-property-value item :logseq.property/icon)
                                   {:on-chosen (fn [_e icon]
                                                 (update-icon icon))})
       (cond

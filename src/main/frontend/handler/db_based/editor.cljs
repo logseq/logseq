@@ -124,7 +124,7 @@
 (defn- set-heading-aux!
   [block-id heading]
   (let [block (db/pull [:block/uuid block-id])
-        old-heading (pu/lookup (:block/properties block) :heading)]
+        old-heading (pu/lookup (:block/properties block) :logseq.property/heading)]
     (cond
       ;; nothing changed for first two cases
       (or (and (nil? old-heading) (nil? heading))

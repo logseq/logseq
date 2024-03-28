@@ -176,42 +176,30 @@
   ;; Disallow tags or page refs as they would create unreferenceable page names
   (not (re-find #"^(#|\[\[)" s)))
 
-(defn lookup
-  "Get the value of coll's (a map) `key`. For file and db graphs"
-  [repo db coll key]
-  (when db
-    (let [property-name (if (keyword? key)
-                          (name key)
-                          key)]
-      (if (sqlite-util/db-based-graph? repo)
-        (when-let [property (d/entity db [:block/name (common-util/page-name-sanity-lc property-name)])]
-          (get coll (:block/uuid property)))
-        (get coll key)))))
-
-(defn get-block-property-value
-  "Get the value of block's property `key`"
-  [repo db block key]
-  (when db
-    (let [block (or (d/entity db (:db/id block)) block)]
-      (when-let [properties (:block/properties block)]
-        (lookup repo db properties key)))))
-
 (defn get-pid
-  "Get a built-in property's id (name or uuid) given its db-ident. Use when it can be a file or db graph.
-   Use db-pu/get-built-in-property-uuid if just a db graph"
+  "Get a built-in property's id (keyword name for file graph and uuid for db graph)
+  given its db-ident. Use this fn on a file or db graph. Use
+  db-pu/get-built-in-property-uuid if only in a db graph context"
   [repo db db-ident]
   (if (sqlite-util/db-based-graph? repo)
     (:block/uuid (d/entity db db-ident))
     (get-in built-in-properties [db-ident :name])))
 
-(defn get-property
-  "Get a property given its unsanitized name"
-  [db property-name]
-  (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))]))
+(defn lookup
+  "Get the value of coll by db-ident. For file and db graphs"
+  [repo db coll db-ident]
+  (get coll (get-pid repo db db-ident)))
+
+(defn get-block-property-value
+  "Get the value of built-in block's property by its db-ident"
+  [repo db block db-ident]
+  (when db
+    (let [block' (or (d/entity db (:db/id block)) block)]
+      (get (:block/properties block') (get-pid repo db db-ident)))))
 
 (defn shape-block?
   [repo db block]
-  (= :whiteboard-shape (get-block-property-value repo db block :ls-type)))
+  (= :whiteboard-shape (get-block-property-value repo db block :logseq.property/ls-type)))
 
 (defn get-built-in
   "Gets a built-in page/class/property/X by its :db/ident"
@@ -219,7 +207,7 @@
   (d/entity db db-ident))
 
 (defn get-by-ident-or-name
-  "Gets a property by ident or name"
+  "Gets a property by db-ident or name if it's a user property"
   [db ident-or-name]
   (if (and (keyword? ident-or-name) (namespace ident-or-name))
     (get-built-in db ident-or-name)

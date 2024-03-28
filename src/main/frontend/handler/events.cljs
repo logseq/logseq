@@ -329,7 +329,7 @@
 
 (defmethod handle :modal/set-query-properties [[_ block all-properties]]
   (let [properties (:block/properties block)
-        query-properties (pu/lookup properties :query-properties)
+        query-properties (pu/lookup properties :logseq.property/query-properties)
         block-properties (if (config/db-based-graph? (state/get-current-repo))
                            query-properties
                            (some-> query-properties

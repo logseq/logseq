@@ -246,7 +246,7 @@
 
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "Icon:"]
-           (let [icon-value (pu/get-block-property-value property :icon)]
+           (let [icon-value (pu/get-block-property-value property :logseq.property/icon)]
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
@@ -538,7 +538,7 @@
   [state block property {:keys [class-schema? block? collapsed? page-cp inline-text]}]
   (let [*hover? (::hover? state)
         repo (state/get-current-repo)
-        icon (pu/get-block-property-value property :icon)
+        icon (pu/get-block-property-value property :logseq.property/icon)
         property-name (:block/original-name property)]
     [:div.flex.flex-row.items-center
      {:on-mouse-over   #(reset! *hover? true)

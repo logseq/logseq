@@ -85,7 +85,7 @@
 (defn get-block-own-order-list-type
   [block]
   (let [properties (:block/properties block)]
-    (pu/lookup properties :logseq.order-list-type)))
+    (pu/lookup properties :logseq.property/order-list-type)))
 
 (defn set-block-own-order-list-type!
   [block type]
@@ -894,7 +894,7 @@
   [block-id all-properties key add?]
   (when-let [block (db/entity [:block/uuid block-id])]
     (let [properties (:block/properties block)
-          query-properties (pu/lookup properties :query-properties)
+          query-properties (pu/lookup properties :logseq.property/query-properties)
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
           query-properties (if db-based?
@@ -3417,8 +3417,8 @@
   (->> (:block/macros (db/entity (:db/id block)))
        (some (fn [macro]
                (let [properties (:block/properties macro)
-                     macro-name (pu/lookup properties :logseq.macro-name)
-                     macro-arguments (pu/lookup properties :logseq.macro-arguments)]
+                     macro-name (pu/lookup properties :logseq.property/macro-name)
+                     macro-arguments (pu/lookup properties :logseq.property/macro-arguments)]
                  (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
                    (seq (:query
                          (try

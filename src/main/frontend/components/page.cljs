@@ -314,7 +314,7 @@
           page (db/sub-block (:db/id page))
           title (:block/original-name page)]
       (when title
-        (let [icon (pu/lookup (:block/properties page) :icon)
+        (let [icon (pu/lookup (:block/properties page) :logseq.property/icon)
               *title-value (get state ::title-value)
               *edit? (get state ::edit?)
               *input-value (get state ::input-value)
@@ -1322,7 +1322,7 @@
                   {:on-change (fn []
                                 (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
-                (when-let [icon (pu/get-block-property-value page :icon)]
+                (when-let [icon (pu/get-block-property-value page :logseq.property/icon)]
                   icon)]
                [:td.name [:a {:on-click (fn [e]
                                           (.preventDefault e)
