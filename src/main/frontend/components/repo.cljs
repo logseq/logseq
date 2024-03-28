@@ -383,15 +383,17 @@
                                          (prn :debug :create-db-failed)
                                          (js/console.error error)))))
                            (reset! *creating-db? false)
-                           (state/close-modal! {:force? true}))))))]
+                           (shui/dialog-close!))))))]
     [:div.new-graph.flex.flex-col.p-4.gap-4
      [:h1.title.mb-4 "Create new graph: "]
-     [:input.form-input {:value @*graph-name
-                         :auto-focus true
-                         :on-change #(reset! *graph-name (util/evalue %))
-                         :on-key-down (fn [^js e]
-                                        (when (= (gobj/get e "key") "Enter")
-                                          (new-db-f)))}]
+     (shui/input
+       {:value @*graph-name
+        :disabled @*creating-db?
+        :auto-focus true
+        :on-change #(reset! *graph-name (util/evalue %))
+        :on-key-down (fn [^js e]
+                       (when (= (gobj/get e "key") "Enter")
+                         (new-db-f)))})
      (when (user-handler/logged-in?)
        [:div.flex.flex-row.items-center.gap-1
         (shui/checkbox
