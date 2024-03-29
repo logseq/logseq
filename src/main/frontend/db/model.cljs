@@ -81,9 +81,10 @@
   [repo]
   (let [db (conn/get-db repo)]
     (->>
-     (d/datoms db :avet :block/original-name)
-         (map :v)
-         (remove hidden-page?))))
+     (d/datoms db :avet :block/name)
+     (map #(:block/original-name (d/entity db (:e %))))
+     (remove hidden-page?)
+     (remove nil?))))
 
 (defn get-pages-with-file
   "Return full file entity for calling file renaming"
