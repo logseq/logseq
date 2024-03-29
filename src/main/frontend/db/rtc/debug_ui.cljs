@@ -51,10 +51,9 @@
        {:size :sm
         :on-click
         (fn [_]
-          (let [repo (state/get-current-repo)
-                token (state/get-auth-id-token)
+          (let [token (state/get-auth-id-token)
                 ^object worker @db-browser/*worker]
-            (p/let [result (.rtc-get-graphs worker repo token)
+            (p/let [result (.rtc-get-graphs worker token)
                     graph-list (bean/->clj result)]
               (swap! debug-state assoc
                      :remote-graphs

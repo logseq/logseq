@@ -81,10 +81,9 @@
   []
   (let [^js worker @state/*db-worker]
     (user-handler/<wrap-ensure-id&access-token
-     (let [repo (state/get-current-repo)
-           token (state/get-auth-id-token)]
+     (let [token (state/get-auth-id-token)]
        (when worker
-         (p/let [result (.rtc-get-graphs worker repo token)
+         (p/let [result (.rtc-get-graphs worker token)
                  graphs (bean/->clj result)
                  result (->> graphs
                              (remove (fn [graph] (= (:graph-status graph) "deleting")))
