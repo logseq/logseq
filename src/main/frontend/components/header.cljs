@@ -190,7 +190,7 @@
                   (remove nil?)))]
     [:button.button.icon.toolbar-dots-btn
      {:title (t :header/more)
-      :on-click (fn [^js e]
+      :on-pointer-down (fn [^js e]
                   (shui/popup-show! (.-target e)
                     (fn [{:keys [id]}]
                       (for [{:keys [hr item title options icon]} (items)]
@@ -238,8 +238,8 @@
   [t]
   (let [[downloaded, set-downloaded] (rum/use-state nil)
         _ (rum/use-effect!
-           (fn []
-             (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
+            (fn []
+              (when-let [channel (and (util/electron?) "auto-updater-downloaded")]
                (let [callback (fn [_ args]
                                 (js/console.debug "[new-version downloaded] args:" args)
                                 (let [args (bean/->clj args)]
