@@ -159,12 +159,6 @@
   [db id]
   (d/pull db '[*] id))
 
-(def get-by-parent-id
-  '[:find (pull ?a [*])
-    :in $ ?id
-    :where
-    [?a :block/parent ?id]])
-
 (defn hidden-page?
   [page]
   (when page
@@ -424,12 +418,6 @@
       ;; only return the first result for idiot-proof
     (when (seq pages)
       (first pages))))
-
-(defn get-page-file
-  [db page-name]
-  (some-> (or (d/entity db [:block/name page-name])
-              (d/entity db [:block/original-name page-name]))
-          :block/file))
 
 (defn get-namespace-pages
   "Accepts both sanitized and unsanitized namespaces"

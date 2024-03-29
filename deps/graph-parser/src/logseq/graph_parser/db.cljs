@@ -53,3 +53,9 @@
   (let [db-conn (d/create-conn db-schema/schema)]
     (create-default-pages! db-conn)
     db-conn))
+
+(defn get-page-file
+  [db page-name]
+  (some-> (or (d/entity db [:block/name page-name])
+              (d/entity db [:block/original-name page-name]))
+          :block/file))

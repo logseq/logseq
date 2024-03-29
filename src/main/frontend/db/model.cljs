@@ -529,7 +529,7 @@ independent of format as format specific heading characters are stripped"
    (get-page-file (state/get-current-repo) page-name))
   ([repo page-name]
    (when-let [db (conn/get-db repo)]
-     (ldb/get-page-file db page-name))))
+     (gp-db/get-page-file db page-name))))
 
 (defn get-block-file-path
   [block]
