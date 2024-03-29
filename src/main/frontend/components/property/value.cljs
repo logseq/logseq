@@ -567,6 +567,9 @@
   (let [closed-values? (seq (get-in property [:block/schema :values]))]
     [:div.select-item
      (cond
+       (= value :property/empty-placeholder)
+       (shui/button {:class "empty-btn" :variant :text} "Empty")
+
        (contains? #{:page :date} type)
        (when value
          (page-cp {:disable-preview? true
