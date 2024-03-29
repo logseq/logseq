@@ -701,8 +701,8 @@
         block (resolve-linked-block-if-exists target-block)
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
-                     (let [properties (:class/schema.properties block)]
-                       (map (fn [p] [(:db/ident p) nil]) properties))
+                     (->> (db-property/get-class-ordered-properties block)
+                          (map #(vector % %)))
                      (sort-by first block-properties))
         alias (set (map :db/id (:block/alias block)))
         alias-properties (when (seq alias)
@@ -751,7 +751,7 @@
                                  properties #{}
                                  result []]
                             (if-let [class (first classes)]
-                              (let [cur-properties (->> (:class/schema.properties class)
+                              (let [cur-properties (->> (db-property/get-class-ordered-properties class)
                                                         (remove properties)
                                                         (remove hide-with-property-id))]
                                 (recur (rest classes)
