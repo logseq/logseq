@@ -1,6 +1,7 @@
 (ns frontend.worker.handler.page
   "Page operations"
   (:require [logseq.db :as ldb]
+            [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -221,7 +222,7 @@
                            {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
             (error-handler msg)
             false)
-          (let [file (ldb/get-page-file @conn page-name)
+          (let [file (gp-db/get-page-file @conn page-name)
                 file-path (:file/path file)
                 delete-file-tx (when file
                                  [[:db.fn/retractEntity [:file/path file-path]]])
