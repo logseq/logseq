@@ -1,7 +1,6 @@
 (ns logseq.db.frontend.property.util
   "Util fns for building core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.util :as common-util]
             [logseq.db.frontend.default :as default-db]
             [datascript.core :as d]))
 
@@ -38,20 +37,11 @@
     true
     sqlite-util/block-with-timestamps))
 
-(defn- build-new-page
-  "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
-  [page-name]
-  (sqlite-util/block-with-timestamps
-   {:block/name (common-util/page-name-sanity-lc page-name)
-    :block/original-name page-name
-    :block/journal? false
-    :block/uuid (d/squuid)}))
-
 (defn build-property-hidden-page
   "Builds a hidden property page for closed values to be transacted"
   [property]
   (let [page-name (str hidden-page-name-prefix (:block/uuid property))]
-    (-> (build-new-page page-name)
+    (-> (sqlite-util/build-new-page page-name)
         (assoc :block/type #{"hidden"}
                :block/format :markdown))))
 

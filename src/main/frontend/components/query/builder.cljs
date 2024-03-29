@@ -13,7 +13,7 @@
             [frontend.util :as util]
             [frontend.search :as search]
             [frontend.mixins :as mixins]
-            [logseq.db.frontend.default :as db-default]
+            [logseq.graph-parser.db :as gp-db]
             [rum.core :as rum]
             [clojure.string :as string]
             [logseq.common.util :as common-util]
@@ -182,7 +182,7 @@
                  (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
 
        "task"
-       (select db-default/built-in-markers
+       (select gp-db/built-in-markers
                (fn [value]
                  (when (seq value)
                    (append-tree! *tree opts loc (vec (cons :task value)))))
@@ -195,7 +195,7 @@
                 :on-apply (:toggle-fn opts)})
 
        "priority"
-       (select db-default/built-in-priorities
+       (select gp-db/built-in-priorities
                (fn [value]
                  (when (seq value)
                    (append-tree! *tree opts loc (vec (cons :priority value)))))

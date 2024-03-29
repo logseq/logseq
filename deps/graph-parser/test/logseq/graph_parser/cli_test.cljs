@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [logseq.db.sqlite.db :as sqlite-db]
-            [logseq.db :as ldb]
+            [logseq.graph-parser.db :as gp-db]
             [clojure.set :as set]
             ["fs" :as fs]
             ["process" :as process]
@@ -129,7 +129,7 @@
   (let [conn (sqlite-db/open-db! dir db-name)
         frontend-blocks (create-frontend-blocks pages-to-blocks)
         _ (d/transact! conn frontend-blocks)]
-    (ldb/create-default-pages! conn {:db-graph? true})
+    (gp-db/create-default-pages! conn)
     @conn))
 
 (defn- datoms->entity-maps

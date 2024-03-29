@@ -148,6 +148,7 @@
              logseq.db.sqlite.util sqlite-util
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
+             logseq.graph-parser.db gp-db
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.property gp-property
