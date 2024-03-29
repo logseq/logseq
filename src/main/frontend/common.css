@@ -31,6 +31,7 @@ body {
   line-height: 1.5;
   min-height: 100%;
   word-break: break-word; /* compatible for overflow-wrap: anywhere */
+  overflow-y: overlay;
 }
 
 @layer base {
