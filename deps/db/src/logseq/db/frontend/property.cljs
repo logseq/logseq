@@ -211,11 +211,6 @@
     (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))]))
     property-name))
 
-(defn get-property
-  "Get a property given its unsanitized name"
-  [db property-name]
-  (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))]))
-
 (defn shape-block?
   [repo db block]
   (= :whiteboard-shape (get-block-property-value repo db block :ls-type)))
