@@ -92,8 +92,7 @@
    [:block/journal? :boolean]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
-   [:block/path-refs {:optional true} [:set :int]]
-   [:class/schema.properties {:optional true} [:set :int]]])
+   [:block/path-refs {:optional true} [:set :int]]])
 
 (def normal-page
   (vec
@@ -107,17 +106,20 @@
     page-attrs
     page-or-block-attrs)))
 
+(def class-attrs
+  [[:db/ident {:optional true} :keyword]
+   [:class/schema.properties {:optional true} [:set :int]]])
+
 (def class-page
   (vec
    (concat
     [:map
      [:block/namespace {:optional true} :int]
-     [:db/ident {:optional true} :keyword]
-     [:class/schema.properties {:optional true} [:set :int]]
      [:block/schema
       {:optional true}
       [:map
-       [:properties {:optional true} [:vector :int]]]]]
+       [:properties {:optional true} [:vector :uuid]]]]]
+    class-attrs
     page-attrs
     page-or-block-attrs)))
 
@@ -311,7 +313,7 @@
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
-(let [malli-many-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs)
+(let [malli-many-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs)
                                 (filter #(= (last %) [:set :int]))
                                 (map first)
                                 set)]
