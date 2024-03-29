@@ -208,7 +208,7 @@
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {})
-                        status? (= :logseq.property/status (:db/ident property))
+                        status? (= :logseq.task/status (:db/ident property))
                         value (if (= value :property/empty-placeholder) [] value)
                         new-value (cond
                                     (and multiple-values? old-value
@@ -306,7 +306,7 @@
         infer-schema (when-not type (infer-schema-from-input-string v))
         property-type (or type infer-schema :default)
         {:keys [cardinality]} (:block/schema property)
-        status? (= :logseq.property/status (:db/ident property))
+        status? (= :logseq.task/status (:db/ident property))
         txs (mapcat
              (fn [eid]
                (when-let [block (db/entity eid)]
@@ -554,7 +554,7 @@
 (defn re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
   [property]
-  (when (contains? #{:logseq.property/status :logseq.property/priority} (:db/ident property))
+  (when (contains? #{:logseq.task/status :logseq.task/priority} (:db/ident property))
     (state/pub-event! [:init/commands])))
 
 (defn replace-closed-value
