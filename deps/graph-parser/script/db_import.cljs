@@ -89,7 +89,11 @@
            :desc "Additional files to import"}
    :property-classes {:alias :p
                       :coerce []
-                      :desc "List of properties whose values convert to classes"}})
+                      :desc "List of properties whose values convert to classes"}
+   :property-parent-classes
+   {:alias :P
+    :coerce []
+    :desc "List of properties whose values convert to a parent class"}})
 
 (defn -main [args]
   (let [[file-graph db-graph-dir] args
