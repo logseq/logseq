@@ -73,6 +73,7 @@
                                  content-tx
                                  (when (not= (seq properties) (seq properties'))
                                    {:db/id (:db/id ref)
+                                    ;; FIXME: properties
                                     :block/properties properties'}))]
                          (concat
                           [[:db/add (:db/id ref) :block/refs (:db/id to-page)]

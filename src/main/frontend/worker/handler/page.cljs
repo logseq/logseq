@@ -168,6 +168,7 @@
                                           content-tx
                                           (when (not= (seq properties) (seq properties'))
                                             {:db/id (:db/id ref)
+                                             ;; FIXME: properties
                                              :block/properties properties'}))]
                                   (concat
                                    [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
