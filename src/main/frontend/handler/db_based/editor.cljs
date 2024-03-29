@@ -163,4 +163,4 @@
    {:outliner-op :save-block}
    (doseq [block (keep #(set-heading-aux! % heading) block-ids)]
      (outliner-op/save-block! block))
-   (property-handler/batch-set-block-property! repo block-ids :heading heading)))
+   (property-handler/batch-set-block-property! repo block-ids :logseq.property/heading heading)))
