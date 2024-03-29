@@ -309,6 +309,7 @@
                                               [:span.flex.items-center.gap-1.w-full
                                                icon [:div title]]))))))])
                                {:as-dropdown? true
+                                :auto-focus? false
                                 :align "start"
                                 :content-props {:class "repos-list"}})))
                :title repo-name}                            ;; show full path on hover
@@ -352,10 +353,17 @@
   (rum/local "" ::graph-name)
   (rum/local false ::cloud?)
   (rum/local false ::creating-db?)
+  (rum/local (rum/create-ref) ::input-ref)
+  {:did-mount (fn [s]
+                (when-let [^js input (some-> @(::input-ref s)
+                                       (rum/deref))]
+                  (js/setTimeout #(.focus input) 32))
+                s)}
   [state]
   (let [*creating-db? (::creating-db? state)
         *graph-name (::graph-name state)
         *cloud? (::cloud? state)
+        input-ref @(::input-ref state)
         new-db-f (fn []
                    (when-not (or (string/blank? @*graph-name)
                                  @*creating-db?)
@@ -381,10 +389,11 @@
                            (reset! *creating-db? false)
                            (shui/dialog-close!))))))]
     [:div.new-graph.flex.flex-col.p-4.gap-4
-     [:h1.title.mb-4 "Create new graph: "]
      (shui/input
        {:value @*graph-name
         :disabled @*creating-db?
+        :ref input-ref
+        :placeholder "your graph name"
         :auto-focus true
         :on-change #(reset! *graph-name (util/evalue %))
         :on-key-down (fn [^js e]
