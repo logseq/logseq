@@ -82,21 +82,12 @@
     (assoc block :block/updated-at updated-at)))
 
 (defn- remove-orphaned-page-refs!
-  [db {db-id :db/id :as block-entity} txs-state *old-refs new-refs {:keys [db-graph?]}]
+  [db {db-id :db/id} txs-state *old-refs new-refs {:keys [db-graph?]}]
   (let [old-refs (if db-graph?
                    ;; remove class and property related refs because this fn is only meant
                    ;; to cleanup refs in content
-                   (let [prop-value-ref-uuids (->> (:block/properties block-entity)
-                                                   (mapcat (fn [[_k v]]
-                                                             (cond
-                                                               (and (set? v) (uuid? (first v)))
-                                                               v
-                                                               (uuid? v)
-                                                               [v])))
-                                                   set)]
-                     (remove #(or (some #{"class" "property"} (:block/type %))
-                                  (contains? prop-value-ref-uuids (:block/uuid %)))
-                             *old-refs))
+                   (remove #(some #{"class" "property"} (:block/type %))
+                           *old-refs)
                    *old-refs)]
     (when (not= old-refs new-refs)
       (let [new-refs (set (map (fn [ref]
@@ -262,7 +253,7 @@
           block' (if (and (string? content) (not (re-find db-content/special-id-ref-pattern content))) ; not raw content
                    (assoc block :block/content content)
                    block)
-          refs' (rebuild-block-refs repo conn date-formatter block' (:block/properties block))
+          refs' (rebuild-block-refs repo conn date-formatter block' {})
           refs (->> refs'
                     (concat (:block/refs m))
                     (remove nil?))
@@ -372,9 +363,13 @@
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data (:data this)
-          data' (if (de/entity? data)
-                  (assoc (.-kv ^js data) :db/id (:db/id data))
-                  data)
+          db-based? (sqlite-util/db-based-graph? repo)
+          data' (cond->
+                 (if (de/entity? data)
+                   (assoc (.-kv ^js data) :db/id (:db/id data))
+                   data)
+                  db-based?
+                  (dissoc :block/properties))
           m (-> data'
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
                         :block/title :block/body :block/level :block.temp/fully-loaded?)
@@ -382,7 +377,6 @@
                 block-with-updated-at
                 fix-tag-ids)
           db @conn
-          db-based? (sqlite-util/db-based-graph? repo)
           db-id (:db/id (:data this))
           block-uuid (:block/uuid (:data this))
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
@@ -642,17 +636,22 @@
         tb (when target-block (block db target-block))
         target-block (if sibling? target-block (when tb (:block (otree/-get-down tb conn))))
         list-type-fn (fn [block] (db-property/get-block-property-value repo db block :logseq.property/order-list-type))
-        k (db-property/get-pid repo db :logseq.property/order-list-type)]
+        k (db-property/get-pid repo db :logseq.property/order-list-type)
+        db-based? (sqlite-util/db-based-graph? repo)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
        (fn [{:block/keys [content format] :as block}]
-         (cond-> block
-           (and (some? (:block/uuid block))
-                (nil? (list-type-fn block)))
-           (update :block/properties assoc k list-type)
+         (let [list? (and (some? (:block/uuid block))
+                          (nil? (list-type-fn block)))]
+           (cond-> block
+             (and db-based? list?)
+             (assoc k list-type)
 
-           (not (sqlite-util/db-based-graph? repo))
-           (assoc :block/content (gp-property/insert-property repo format content :logseq.order-list-type list-type))))
+             list?
+             (update :block/properties assoc k list-type)
+
+             (not db-based?)
+             (assoc :block/content (gp-property/insert-property repo format content :logseq.order-list-type list-type)))))
        blocks)
       blocks)))
 
