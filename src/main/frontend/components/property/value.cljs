@@ -1,6 +1,5 @@
 (ns frontend.components.property.value
-  (:require [cljs-time.coerce :as tc]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [frontend.components.select :as select]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
@@ -24,7 +23,8 @@
             [frontend.db.async :as db-async]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [datascript.impl.entity :as de]))
 
 (defn- select-type?
   [property type]
@@ -213,10 +213,8 @@
                                    (map (fn [e] (:block/original-name e))))
                               (when-let [v (get block (:db/ident property))]
                                 (if (coll? v)
-                                  (map (fn [id]
-                                         (:block/original-name (db/entity id)))
-                                       v)
-                                  [(:block/original-name (db/entity v))])))
+                                  (map :block/original-name v)
+                                  [(:block/original-name v)])))
                             (remove nil?)))
         closed-values (seq (get-in property [:block/schema :values]))
         pages (->>
@@ -570,9 +568,9 @@
     [:div.select-item
      (cond
        (contains? #{:page :date} type)
-       (when-let [page (db/entity value)]
+       (when value
          (page-cp {:disable-preview? true
-                   :hide-close-button? true} page))
+                   :hide-close-button? true} value))
 
        closed-values?
        (closed-value-item value opts)
@@ -637,7 +635,9 @@
         select-type? (select-type? property type)
         closed-values? (seq (:values schema))
         select-opts {:on-chosen on-chosen}
-        value (if (= value :property/empty-placeholder) nil value)]
+        value (if (and (de/entity? value) (= (:db/ident value) :property/empty-placeholder))
+                nil
+                value)]
     (if (and select-type?
              (not (and (not closed-values?) (= type :date))))
       (single-value-select block property value
