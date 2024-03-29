@@ -107,26 +107,24 @@
 (defn upsert-property!
   [repo property-id schema {:keys [property-name properties]}]
   (let [db-ident (or property-id (db-property/get-db-ident-from-name property-name))
-        property (db/entity db-ident)
-        type (get-in property [:block/schema :type])
-        type-changed? (and type (:type schema) (not= type (:type schema)))]
-    (when-not type-changed?
-      (cond
-        property
-        (let [tx-data (->>
-                       (conj
-                        [(merge
-                          (outliner-core/block-with-updated-at
-                           {:db/ident db-ident
-                            :block/schema schema})
-                          properties)]
-                        (update-schema property schema))
-                       (remove nil?))]
-          (db/transact! repo tx-data {:outliner-op :save-block}))
-        :else
-        (let [k-name (or (:block/original-name property) (and property-name (name property-name)))]
-          (db/transact! repo [(sqlite-util/build-new-property k-name schema {:db-ident db-ident})]
-                        {:outliner-op :new-property}))))))
+        property (db/entity db-ident)]
+    (cond
+      property
+      (let [tx-data (->>
+                     (conj
+                      [(merge
+                        (outliner-core/block-with-updated-at
+                         {:db/ident db-ident
+                          :block/schema schema})
+                        properties)]
+                      (update-schema property schema))
+                     (remove nil?))]
+        (db/transact! repo tx-data {:outliner-op :save-block}))
+
+      :else
+      (let [k-name (or (:block/original-name property) (and property-name (name property-name)))]
+        (db/transact! repo [(sqlite-util/build-new-property k-name schema {:db-ident db-ident})]
+                      {:outliner-op :new-property})))))
 
 (defn validate-property-value
   [schema value]
