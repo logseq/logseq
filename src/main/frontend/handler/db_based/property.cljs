@@ -112,8 +112,8 @@
   (me/humanize (mu/explain-data schema value)))
 
 (defn- reset-block-property-multiple-values!
-  [repo block-id property-id values _opts]
-  (let [block (db/entity repo [:block/uuid block-id])
+  [repo block-eid property-id values _opts]
+  (let [block (db/entity repo block-eid)
         property (db/entity property-id)
         property-name (:block/original-name property)
         values (remove nil? values)
@@ -135,20 +135,16 @@
                               (map (fn [e] (:db/id e))))
                          (get block (:db/ident property)))]
         (when (not= old-values values')
-          (if tags-or-alias?
-            (db/transact! repo
-                          [[:db/retract (:db/id block) property-id]
-                           {:block/uuid block-id
-                            property-id values'}]
-                          {:outliner-op :save-block})
-            (if-let [msg (some #(validate-property-value schema %) values')]
-              (let [msg' (str "\"" property-name "\"" " " (if (coll? msg) (first msg) msg))]
-                (notification/show! msg' :warning))
-              (do
-                (upsert-property! repo property-id (assoc property-schema :type property-type) {})
-                (let [block {:block/uuid (:block/uuid block)
-                             property-id values'}]
-                  (db/transact! repo [block] {:outliner-op :save-block}))))))))))
+          (if-let [msg (some #(validate-property-value schema %) values')]
+            (let [msg' (str "\"" property-name "\"" " " (if (coll? msg) (first msg) msg))]
+              (notification/show! msg' :warning))
+            (do
+              (when-not tags-or-alias? (upsert-property! repo property-id (assoc property-schema :type property-type) {}))
+              (db/transact! repo
+                            [[:db/retract (:db/id block) property-id]
+                             {:db/id block-eid
+                              property-id values'}]
+                            {:outliner-op :save-block}))))))))
 
 (defn- resolve-tag
   "Change `v` to a tag's db id if v is a string tag, e.g. `#book`"

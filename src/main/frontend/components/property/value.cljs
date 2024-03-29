@@ -217,12 +217,12 @@
                                      (:block/tags block)
                                      (:block/alias block))
                                    (map (fn [e] (:block/original-name e))))
-                              (when-let [v (get-in block [:block/properties (:db/ident property)])]
+                              (when-let [v (get block (:db/ident property))]
                                 (if (coll? v)
                                   (map (fn [id]
-                                         (:block/original-name (db/entity [:block/uuid id])))
+                                         (:block/original-name (db/entity id)))
                                        v)
-                                  [(:block/original-name (db/entity [:block/uuid v]))])))
+                                  [(:block/original-name (db/entity (:db/ident property)))])))
                             (remove nil?)))
         closed-values (seq (get-in property [:block/schema :values]))
         pages (->>
