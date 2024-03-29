@@ -2,7 +2,6 @@
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [frontend.db :as db]
             [frontend.handler.block :as block-handler]
@@ -14,14 +13,9 @@
         content (state/get-edit-content)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
-    ;; FIXME: remove ugly :editor/property-triggered-by-click?
-    (if (get-in @state/state [:editor/property-triggered-by-click? id])
-      (do
-        (when-let [input (gdom/getElement (str id))]
-          (cursor/move-cursor-to-end input))
-        (state/set-state! :editor/property-triggered-by-click? {}))
-      (when content
-        (editor-handler/restore-cursor-pos! id content)))
+
+    (when content
+      (editor-handler/restore-cursor-pos! id content))
 
     (when-let [element (gdom/getElement id)]
       ;; TODO: check whether editor is visible, do less work
