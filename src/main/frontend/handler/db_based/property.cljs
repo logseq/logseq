@@ -487,7 +487,7 @@
                     :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
                     :logseq.property/created-from-block [:block/uuid (:block/uuid block)]
-                    :logseq.property/created-from-property [:block/uuid (:block/uuid property)]}
+                    :logseq.property/created-from-property (:db/id property)}
                    sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -539,7 +539,7 @@
                        :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                        page-id)
                        :logseq.property/created-from-block [:block/uuid (:block/uuid block)]
-                       :logseq.property/created-from-property [:block/uuid (:block/uuid property)]
+                       :logseq.property/created-from-property (:db/id property)
                        :logseq.property/created-from-template [:block/uuid (:block/uuid template)]}
                       sqlite-util/block-with-timestamps)]
     {:page page-tx
@@ -547,7 +547,7 @@
 
 (defn- get-property-hidden-page
   [property]
-  (let [page-name (str db-property-util/hidden-page-name-prefix (:block/uuid property))]
+  (let [page-name (str db-property-util/hidden-page-name-prefix (:db/ident property))]
     (or (db/entity [:block/name page-name])
         (db-property-util/build-property-hidden-page property))))
 

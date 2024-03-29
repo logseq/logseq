@@ -83,5 +83,10 @@
                                    :block/uuid (d/squuid)}
                                    (seq properties)
                                    (assoc :class/schema.properties properties)))))))
-                         db-class/built-in-classes)]
-    (vec (concat initial-data initial-files default-properties default-pages default-classes))))
+                         db-class/built-in-classes)
+        db-idents (keep (fn [x] (when-let [ident (:db/ident x)]
+                                  {:db/ident ident}))
+                        (concat default-properties default-classes))]
+    (vec (concat db-idents
+                 default-properties default-classes
+                 initial-data initial-files default-pages))))

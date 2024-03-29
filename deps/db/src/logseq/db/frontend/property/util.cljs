@@ -13,7 +13,7 @@
    :block/format :markdown
    :block/uuid block-id
    :block/page page-id
-   :logseq.property/created-from-property [:block/uuid (:block/uuid property)]
+   :logseq.property/created-from-property (:db/ident property)
    :block/schema {:value value}
    :block/parent page-id})
 
@@ -50,7 +50,7 @@
 (defn build-property-hidden-page
   "Builds a hidden property page for closed values to be transacted"
   [property]
-  (let [page-name (str hidden-page-name-prefix (:block/uuid property))]
+  (let [page-name (str hidden-page-name-prefix (:db/ident property))]
     (-> (build-new-page page-name)
         (assoc :block/type #{"hidden"}
                :block/format :markdown))))
