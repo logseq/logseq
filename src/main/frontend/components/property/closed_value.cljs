@@ -123,7 +123,7 @@
       (cond
         date?
         [:div.flex.flex-row.items-center.gap-1
-         (property-value/date-picker (:block/original-name item)
+         (property-value/date-picker item
                                      {:on-change (fn [page]
                                                    (db-property-handler/replace-closed-value property
                                                                                              (:db/id page)
