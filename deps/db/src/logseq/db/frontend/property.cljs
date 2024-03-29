@@ -256,9 +256,10 @@
 (defn property?
   [k]
   (let [k-name (namespace k)]
-    (or (string/starts-with? k-name "logseq.property")
-        (string/starts-with? k-name "logseq.task")
-        (string/starts-with? k-name "user.property"))))
+    (and k-name
+         (or (string/starts-with? k-name "logseq.property")
+             (string/starts-with? k-name "logseq.task")
+             (string/starts-with? k-name "user.property")))))
 
 ;; TODO: db ident should obey clojure's rules for keywords
 (defn get-db-ident-from-name
