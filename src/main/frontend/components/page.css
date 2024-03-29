@@ -229,13 +229,10 @@
 }
 
 .ls-page-title {
-  @apply rounded-sm;
-
-  padding: 5px 8px 10px 8px;
-  margin: 0 -6px;
+  @apply rounded-sm -mx-1.5 px-2 pt-1.5;
 
   &.title {
-    margin-bottom: 12px;
+    @apply mb-3;
   }
 
   .edit-input {
@@ -318,8 +315,24 @@ html.is-native-iphone-without-notch {
   }
 }
 
-.cp__right-sidebar .add-button-link {
-  margin-left: 21px;
+.cp__right-sidebar  {
+  .add-button-link {
+    margin-left: 21px;
+  }
+
+  .page-info {
+    @apply mx-2;
+
+    .ls-page-properties {}
+
+    &.is-collapsed {
+      @apply !py-0 -mb-1.5;
+
+      &:not(:has(.select-item)) {
+        @apply hidden;
+      }
+    }
+  }
 }
 
 html.is-native-android,
@@ -388,7 +401,7 @@ html.is-native-ios {
 }
 
 .page-info {
-  @apply ml-[-10px] mt-[-6px] mb-[14px] border rounded-md;
+  @apply ml-[-10px] mb-[12px] border rounded-md;
 
   &-inner {
     @apply py-2;
@@ -398,19 +411,27 @@ html.is-native-ios {
     @apply bg-gray-03 rounded-md px-3 gap-1;
   }
 
+  .configure-wrap {
+    @apply px-2;
+  }
+
   .ls-new-property {
     @apply mt-1;
   }
 
   &.is-collapsed {
-    @apply border-transparent -mb-[14px];
+    @apply border-transparent mt-[-4px] -mb-[14px];
 
     &:has(.select-item) {
       @apply py-2 relative -left-1;
+
+      .info-title {
+        @apply relative -top-1;
+      }
     }
 
     .page-info-inner {
-      @apply py-0 relative -top-[14px] -mb-[16px] min-h-[44px];
+      @apply py-0 relative -top-1.5 min-h-[26px];
 
       &:has(.ls-page-properties) {
         @apply mb-3 opacity-90;
@@ -431,10 +452,6 @@ html.is-native-ios {
   .info-title {
     @apply relative min-h-[28px] flex items-center pl-1;
   }
-}
-
-.sidebar-item .page-info {
-  margin: 0 8px;
 }
 
 .page-info-title-placeholder {

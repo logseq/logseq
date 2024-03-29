@@ -815,6 +815,7 @@
   (shui/dialog-open!
     repo/new-db-graph
     {:id :new-db-graph
+     :title [:h2 "Create a new graph"]
      :label "graph-setup"}))
 
 (defmethod handle :search/transact-data [[_ repo data]]
