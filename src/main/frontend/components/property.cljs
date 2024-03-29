@@ -725,10 +725,10 @@
         alias-properties (when (seq alias)
                            [[:block/alias alias]])
         remove-built-in-properties (fn [properties]
-                                     (remove (fn [id]
+                                     (remove (fn [[id _]]
                                                (when-let [ent (db/entity id)]
-                                                   (and (not (get-in ent [:block/schema :public?]))
-                                                        (ldb/built-in? ent))))
+                                                 (and (not (get-in ent [:block/schema :public?]))
+                                                      (ldb/built-in? ent))))
                                              properties))
         {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))

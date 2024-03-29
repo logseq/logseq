@@ -643,22 +643,22 @@
 (defn db-based-cycle-todo!
   [block]
   (let [task (db/entity :logseq.class/task)
-        status-value-id (:logseq.property/status block)
+        status-value-id (:logseq.task/status block)
         status-value (when status-value-id (db/entity [:block/uuid status-value-id]))
         next-status (case (:db/ident status-value)
-                      :logseq.property/status.todo
-                      :logseq.property/status.doing
-                      :logseq.property/status.doing
-                      :logseq.property/status.done
-                      :logseq.property/status.done
+                      :logseq.task/status.todo
+                      :logseq.task/status.doing
+                      :logseq.task/status.doing
+                      :logseq.task/status.done
+                      :logseq.task/status.done
                       nil
-                      :logseq.property/status.todo)]
+                      :logseq.task/status.todo)]
     (if next-status
       (outliner-op/save-block! {:db/id (:db/id block)
-                                :logseq.property/status (:block/uuid (db/entity next-status))
+                                :logseq.task/status (:block/uuid (db/entity next-status))
                                 :block/tags #{{:db/id (:db/id task)}}})
       (db/transact! (state/get-current-repo)
-        [[:db/retract (:db/id block) :logseq.property/status]]
+        [[:db/retract (:db/id block) :logseq.task/status]]
         {:outliner-op :save-block}))))
 
 (defn cycle-todos!
