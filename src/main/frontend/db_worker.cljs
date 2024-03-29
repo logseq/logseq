@@ -581,7 +581,7 @@
      (when-let [conn (worker-state/get-datascript-conn repo)]
        (async/go
          (try
-           (let [state (<? (rtc-core/<init-state repo token false))
+           (let [state (<? (rtc-core/<init-state token false))
                  r (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))]
              (rtc-db-listener/listen-db-to-generate-ops repo conn)
              (p/resolve! d r))
@@ -598,7 +598,7 @@
    (async-util/c->p
     (async/go
       (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state repo token false)))]
+                      (<! (rtc-core/<init-state token false)))]
         (<? (rtc-updown/<request-download-graph state graph-uuid))))))
 
   (rtc-wait-download-graph-info-ready
@@ -606,7 +606,7 @@
    (async-util/c->p
     (async/go
       (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state repo token false)))]
+                      (<! (rtc-core/<init-state token false)))]
         (ldb/write-transit-str
          (<? (rtc-updown/<wait-download-info-ready state download-info-uuid graph-uuid timeout-ms)))))))
 
@@ -621,7 +621,7 @@
    (async-util/c->p
     (async/go
       (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state repo token false)))]
+                      (<! (rtc-core/<init-state token false)))]
         (<? (rtc-updown/<download-info-list state graph-uuid))))))
 
   (rtc-push-pending-ops
@@ -629,9 +629,9 @@
    (async/put! (:force-push-client-ops-chan @rtc-core/*state) true))
 
   (rtc-get-graphs
-   [_this repo token]
+   [_this token]
    (async-util/c->p
-    (rtc-core/<get-graphs repo token)))
+    (rtc-core/<get-graphs token)))
 
   (rtc-delete-graph
    [_this token graph-uuid]
