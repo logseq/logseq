@@ -1068,24 +1068,25 @@
                   (remove nil?)))]
 
     [:div.toolbar-plugins-manager
-     {:on-click (fn [^js e]
-                  (shui/popup-show! (.-target e)
-                    (fn [{:keys [id]}]
-                      (for [{:keys [hr item title options icon]} (items)]
-                        (let [on-click' (:on-click options)]
-                          (if hr
-                            (shui/dropdown-menu-separator)
-                            (shui/dropdown-menu-item
-                              (assoc options
-                                :on-click (fn [^js e]
-                                            (when on-click'
-                                              (when-not (false? (on-click' e))
-                                                (shui/popup-hide! id)))))
-                              (or item
-                                [:span.flex.items-center.gap-1.w-full
-                                 icon [:div title]]))))))
-                    {:as-dropdown? true
-                     :content-props {:class "toolbar-plugins-manager-content"}}))}
+     {:on-pointer-down
+      (fn [^js e]
+        (shui/popup-show! (.-target e)
+          (fn [{:keys [id]}]
+            (for [{:keys [hr item title options icon]} (items)]
+              (let [on-click' (:on-click options)]
+                (if hr
+                  (shui/dropdown-menu-separator)
+                  (shui/dropdown-menu-item
+                    (assoc options
+                           :on-click (fn [^js e]
+                                       (when on-click'
+                                         (when-not (false? (on-click' e))
+                                           (shui/popup-hide! id)))))
+                    (or item
+                      [:span.flex.items-center.gap-1.w-full
+                       icon [:div title]]))))))
+          {:as-dropdown? true
+           :content-props {:class "toolbar-plugins-manager-content"}}))}
 
      [:a.button.relative.toolbar-plugins-manager-trigger
       (ui/icon "puzzle" {:size 20})
