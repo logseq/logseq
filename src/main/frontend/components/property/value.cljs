@@ -216,7 +216,7 @@
                                   (map (fn [id]
                                          (:block/original-name (db/entity id)))
                                        v)
-                                  [(:block/original-name (db/entity (:db/ident property)))])))
+                                  [(:block/original-name (db/entity v))])))
                             (remove nil?)))
         closed-values (seq (get-in property [:block/schema :values]))
         pages (->>
