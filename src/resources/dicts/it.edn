@@ -789,4 +789,20 @@
  :window/exit-fullscreen "Esci da schermo intero"
  :window/maximize "Massimizza"
  :window/minimize "Minimizza"
- :window/restore "Ripristina"}
+ :window/restore "Ripristina"
+ :command.editor/toggle-block-children "Espandi/Comprimi"
+ :command.ui/accent-color-reset "Reimposta colore principale"
+ :command.ui/accent-colors-picker "Seleziona colore principale"
+ :command.whiteboard/clone-down "Clona sotto"
+ :command.whiteboard/clone-left "Clona a sinistra"
+ :command.whiteboard/clone-right "Clona a destra"
+ :command.whiteboard/clone-up "Clone sopra"
+ :linked-references/filter-directions "Click per includere e Shift-Click per escludere. Clicca di nuovo per rimuovere."
+ :linked-references/filter-excludes "Esclude: "
+ :linked-references/filter-heading "Filtro"
+ :linked-references/filter-includes "Include: "
+ :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " di ")) total (if (= total 1) " Riferimento Collegato" " Riferimenti Collegati")))
+ :linked-references/unexpected-error "Riferimenti Collegati: Errore inatteso. Per favore, re-indicizza prima il grafo."
+ :settings-page/git-commit-on-close "Esegui commit Git alla chiusura della finestra"
+ :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Riferimento Scollegato" " Riferimenti Scollegati")))
+ :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Riferimento" "Riferimenti"))}
