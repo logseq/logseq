@@ -365,7 +365,7 @@
 
           (let [description (:description @*property-schema)]
             (when (or (not disabled?)
-                    (and disabled? (not (string/blank? description))))
+                      (and disabled? (not (string/blank? description))))
               [:div.grid.grid-cols-4.gap-1.items-start.leading-8
                [:label "Description:"]
                [:div.col-span-3
@@ -373,11 +373,11 @@
                   (inline-text {} :markdown description)
                   [:div.mt-1
                    (shui/textarea
-                     {:on-change (fn [e]
-                                   (swap! *property-schema assoc :description (util/evalue e)))
-                      :on-blur save-property-fn
-                      :disabled disabled?
-                      :default-value description})])]]))]]))))
+                    {:on-change (fn [e]
+                                  (swap! *property-schema assoc :description (util/evalue e)))
+                     :on-blur save-property-fn
+                     :disabled disabled?
+                     :default-value description})])]]))]]))))
 
 (defn- get-property-from-db [name]
   (when-not (string/blank? name)
