@@ -4,34 +4,50 @@
   compatible with file graphs"
   (:require [frontend.state :as state]
             [frontend.db :as db]
+            [datascript.core :as d]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property :as db-property]))
 
 (defn lookup
-  "Get the value of coll's (a map) `key`. For file and db graphs"
+  "Get the value of coll's (a map) by db-ident. For file and db graphs"
   [coll key]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
     (db-property/lookup repo db coll key)))
 
+(defn lookup-by-name
+  "Get the value of coll's (a map) by name. Only use this
+   for file graphs or for db graphs when user properties are involved"
+  [coll key]
+  (let [repo (state/get-current-repo)
+        db (db/get-db repo)
+        property-name (if (keyword? key)
+                        (name key)
+                        key)]
+    (if (sqlite-util/db-based-graph? repo)
+      (when-let [property (d/entity db (db-property/get-db-ident-from-name property-name))]
+        (get coll (:block/uuid property)))
+      (get coll key))))
+
 (defn get-block-property-value
-  "Get the value of block's property `key`"
-  [block key]
+  "Get the value of a built-in block's property by its db-ident"
+  [block db-ident]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-block-property-value repo db block key)))
+    (db-property/get-block-property-value repo db block db-ident)))
 
 (defn get-pid
-  "Get a property's id (name or uuid) given its name. For file and db graphs"
-  [property-name]
+  "Get a built-in property's id (db-ident or name) given its db-ident. For file and db graphs"
+  [db-ident]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-pid repo db property-name)))
+    (db-property/get-pid repo db db-ident)))
 
 (defn block->shape [block]
-  (get-block-property-value block :logseq.tldraw.shape))
+  (get-block-property-value block :logseq.property.tldraw/shape))
 
 (defn page-block->tldr-page [block]
-  (get-block-property-value block :logseq.tldraw.page))
+  (get-block-property-value block :logseq.property.tldraw/page))
 
 (defn shape-block?
   [block]

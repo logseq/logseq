@@ -13,9 +13,7 @@
             [frontend.state :as state]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
-            [goog.crypt.Sha256]
-            [logseq.db :as ldb]
-            [frontend.db :as db]))
+            [goog.crypt.Sha256]))
 
 (defn set-preferred-format!
   [format]
@@ -280,17 +278,17 @@
 
 (defn get-user-type
   [repo]
-  (when-let [uuid (ldb/get-graph-rtc-uuid (db/get-db repo))]
-    (-> (some #(when (= uuid (:GraphUUID %)) %) (:rtc/graphs @state/state))
-        :graph<->user-user-type)))
+  (-> (some #(when (= repo (:url %)) %) (:rtc/graphs @state/state))
+      :graph<->user-user-type))
 
 (defn manager?
   [repo]
   (= (get-user-type repo) "manager"))
 
-(defn member?
-  [repo]
-  (= (get-user-type repo) "member"))
+;; TODO: Remove if still unused
+#_(defn member?
+    [repo]
+    (= (get-user-type repo) "member"))
 
 (comment
   ;; We probably need this for some new features later

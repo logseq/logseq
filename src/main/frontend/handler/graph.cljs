@@ -107,7 +107,7 @@
               (not journal?)
               (remove :block/journal?)
               (not excluded-pages?)
-              (remove (fn [p] (true? (pu/get-block-property-value p :exclude-from-graph-view)))))
+              (remove (fn [p] (true? (pu/get-block-property-value p :logseq.property/exclude-from-graph-view)))))
             links (concat (seq relation)
                           (seq tagged-pages)
                           (seq namespaces))

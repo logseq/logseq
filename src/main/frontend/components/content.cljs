@@ -186,7 +186,7 @@
         db? (config/db-based-graph? repo)]
     (when-let [block (db/entity [:block/uuid block-id])]
       (let [properties (:block/properties block)
-            heading (or (pu/lookup properties :heading)
+            heading (or (pu/lookup properties :logseq.property/heading)
                         false)]
         [:.menu-links-wrapper
          (ui/menu-background-color #(property-handler/set-block-property! repo block-id :logseq.property/background-color %)

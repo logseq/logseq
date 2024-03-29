@@ -31,7 +31,7 @@
 
 (defn- build-shapes
   [page-block blocks]
-  (let [page-metadata (pu/get-block-property-value page-block :logseq.tldraw.page)
+  (let [page-metadata (pu/get-block-property-value page-block :logseq.property.tldraw/page)
         shapes-index (:shapes-index page-metadata)
         shape-id->index (zipmap shapes-index (range 0 (count shapes-index)))]
     (->> blocks
@@ -61,10 +61,10 @@
     {:block/original-name page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
-     :block/properties {(pu/get-pid :ls-type)
+     :block/properties {(pu/get-pid :logseq.property/ls-type)
                         :whiteboard-page
 
-                        (pu/get-pid :logseq.tldraw.page)
+                        (pu/get-pid :logseq.property.tldraw/page)
                         {:id (get-k "id")
                          :name (get-k "name")
                          :bindings (js->clj-keywordize (get-k "bindings"))
@@ -98,7 +98,7 @@
         repo (state/get-current-repo)
         deleted-shapes (when (seq deleted-ids)
                          (->> (db/pull-many repo '[*] (mapv (fn [id] [:block/uuid (uuid id)]) deleted-ids))
-                              (mapv (fn [b] (pu/get-block-property-value b :logseq.tldraw.shape)))
+                              (mapv (fn [b] (pu/get-block-property-value b :logseq.property.tldraw/shape)))
                               (remove nil?)))
         deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
         upserted-blocks (->> (map #(shape->block % page-name) upsert-shapes)
@@ -106,11 +106,11 @@
                                        (= (:nonce
                                            (pu/get-block-property-value
                                             (db/entity [:block/uuid (:block/uuid b)])
-                                            :logseq.tldraw.shape))
+                                            :logseq.property.tldraw/shape))
                                           (:nonce
                                            (pu/get-block-property-value
                                             b
-                                            :logseq.tldraw.shape))))))
+                                            :logseq.property.tldraw/shape))))))
         page-entity (model/get-page page-name)
         page-block (build-page-block page-entity page-name tl-page assets shapes-index)]
     (when (or (seq upserted-blocks)
@@ -133,7 +133,7 @@
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
         page-block (model/get-page page-name)
-        prev-page-metadata (pu/get-block-property-value page-block :logseq.tldraw.page)
+        prev-page-metadata (pu/get-block-property-value page-block :logseq.property.tldraw/page)
         prev-shapes-index (:shapes-index prev-page-metadata)
         shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
         new-id-nonces (set (map-indexed (fn [idx shape]
@@ -180,8 +180,8 @@
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
-  (let [properties {(pu/get-pid :ls-type) :whiteboard-page,
-                    (pu/get-pid :logseq.tldraw.page)
+  (let [properties {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
+                    (pu/get-pid :logseq.property.tldraw/page)
                     {:id (str id),
                      :name page-name,
                      :ls-type :whiteboard-page,
@@ -318,7 +318,7 @@
     (let [tl-page ^js (second (first (.-pages app)))]
       (when tl-page
         (when-let [page (db/entity [:block/name page-name])]
-         (let [page-metadata (pu/get-block-property-value page :logseq.tldraw.page)
+         (let [page-metadata (pu/get-block-property-value page :logseq.property.tldraw/page)
                shapes-index (:shapes-index page-metadata)]
            (when (seq shapes-index)
              (.updateShapesIndex tl-page (bean/->js shapes-index)))))))))

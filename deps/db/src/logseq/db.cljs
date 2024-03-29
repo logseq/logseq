@@ -41,6 +41,7 @@
     ;; TODO: remove this in later releases
     :block/heading-level
     :block/file
+    :class/parent
     {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
     {:block/_parent ...}])
 
@@ -599,7 +600,7 @@
 
 (defn get-graph-rtc-uuid
   [db]
-  (when db (:graph/uuid (d/entity db :graph/uuid))))
+  (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
 
 (comment
   (defn db-based-graph?

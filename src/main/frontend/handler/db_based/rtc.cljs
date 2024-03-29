@@ -10,13 +10,14 @@
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [frontend.handler.notification :as notification]))
 
+
 (defn <rtc-create-graph!
   [repo]
   (when-let [^js worker @state/*db-worker]
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)
            repo-name (sqlite-common-db/sanitize-db-name repo)]
-       (.rtc-upload-graph worker repo token repo-name)))))
+       (.rtc-async-upload-graph worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid]
@@ -26,16 +27,25 @@
        (.rtc-delete-graph worker token graph-uuid)))))
 
 (defn <rtc-download-graph!
-  [repo graph-uuid]
+  [graph-name graph-uuid timeout-ms]
   (when-let [^js worker @state/*db-worker]
     (state/set-state! :rtc/downloading-graph-uuid graph-uuid)
     (user-handler/<wrap-ensure-id&access-token
-     (let [token (state/get-auth-id-token)]
+     (p/let [token (state/get-auth-id-token)
+             download-info-uuid (.rtc-request-download-graph worker nil token graph-uuid)
+             result (.rtc-wait-download-graph-info-ready worker nil token download-info-uuid graph-uuid timeout-ms)
+             {:keys [_download-info-uuid
+                     download-info-s3-url
+                     _download-info-tx-instant
+                     _download-info-t
+                     _download-info-created-at]
+              :as result} (ldb/read-transit-str result)]
        (->
-        (.rtc-download-graph worker repo token graph-uuid)
+        (when (not= result :timeout)
+          (assert (some? download-info-s3-url) result)
+          (.rtc-download-graph-from-s3 worker graph-uuid graph-name download-info-s3-url))
         (p/finally
-          (fn []
-            (state/set-state! :rtc/downloading-graph-uuid nil))))))))
+          #(state/set-state! :rtc/downloading-graph-uuid nil)))))))
 
 (defn <rtc-stop!
   []
@@ -43,18 +53,29 @@
     (.rtc-stop worker)))
 
 (defn <rtc-start!
-  [repo]
+  [repo & {:keys [retry] :or {retry 0}}]
   (when-let [^js worker @state/*db-worker]
     (when (ldb/get-graph-rtc-uuid (db/get-db repo))
       (user-handler/<wrap-ensure-id&access-token
         ;; TODO: `<rtc-stop!` can return a chan so that we can remove timeout
        (<rtc-stop!)
        (let [token (state/get-auth-id-token)]
-         (-> (.rtc-start worker repo token
-                         (state/sub [:ui/developer-mode?]))
-             (p/then (fn [result]
-                       (when (= "rtc-not-closed-yet" result)
-                         (js/setTimeout #(<rtc-start! repo) 200))))))))))
+         (p/let [result (.rtc-start worker repo token (state/sub [:ui/developer-mode?]))
+                 _ (case result
+                     "rtc-not-closed-yet"
+                     (js/setTimeout #(<rtc-start! repo) 200)
+                     ":graph-not-ready"
+                     (when (< retry 3)
+                       (let [delay (* 2000 (inc retry))]
+                         (prn "graph still creating, retry rtc-start in " delay "ms")
+                         (p/do! (p/delay delay)
+                                (<rtc-start! repo :retry (inc retry)))))
+
+                     (":break-rtc-loop" ":stop-rtc-loop")
+                     nil
+                     ;; else
+                     nil)]
+           nil))))))
 
 (defn <get-remote-graphs
   []

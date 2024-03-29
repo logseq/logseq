@@ -11,13 +11,14 @@
     [logseq.shui.context :refer [make-context]]))
 
 
-(def default-versions {:logseq.table.version 1})
+(def default-versions {:logseq.property.table/version 1})
 
 (defn get-shui-component-version
   "Returns the version of the shui component, checking first
   the block properties, then the global config, then the defaults."
   [component-name block-config]
-  (let [version-key (keyword (str "logseq." (name component-name) ".version"))]
+  (let [version-key (keyword (str "logseq.property." (name component-name))
+                             "version")]
     (js/parseFloat
       (or (pu/lookup (get-in block-config [:block :block/properties]) version-key)
           (get-in (state/get-config) [version-key])

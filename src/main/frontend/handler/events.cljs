@@ -73,7 +73,6 @@
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.common.config :as common-config]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
@@ -142,7 +141,6 @@
     (login/open-login-modal!)))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
-  (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
@@ -193,7 +191,8 @@
    (graph-switch graph)
    (state/set-state! :sync-graph/init? false)
    (when (:rtc-download? opts)
-     (and (search-handler/rebuild-indices!) true))))
+     (and (search-handler/rebuild-indices!) true)
+     (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
   (state/set-state! :db/async-queries #{})
@@ -330,7 +329,7 @@
 
 (defmethod handle :modal/set-query-properties [[_ block all-properties]]
   (let [properties (:block/properties block)
-        query-properties (pu/lookup properties :query-properties)
+        query-properties (pu/lookup properties :logseq.property/query-properties)
         block-properties (if (config/db-based-graph? (state/get-current-repo))
                            query-properties
                            (some-> query-properties
@@ -813,9 +812,10 @@
       (page-handler/ls-dir-files! st/refresh! opts'))))
 
 (defmethod handle :graph/new-db-graph [[_ _opts]]
-  (state/set-modal!
+  (shui/dialog-open!
     repo/new-db-graph
     {:id :new-db-graph
+     :title [:h2 "Create a new graph"]
      :label "graph-setup"}))
 
 (defmethod handle :search/transact-data [[_ repo data]]
@@ -977,7 +977,7 @@
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid]]
   (->
    (p/do!
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid))
+    (rtc-handler/<rtc-download-graph! graph-name graph-uuid 60000))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
               (js/console.error e)))))

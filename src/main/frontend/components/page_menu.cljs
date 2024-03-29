@@ -18,8 +18,7 @@
             [frontend.config :as config]
             [frontend.handler.user :as user-handler]
             [frontend.handler.file-sync :as file-sync-handler]
-            [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]))
+            [logseq.common.path :as path]))
 
 (defn- delete-page!
   [page-name]
@@ -57,7 +56,7 @@
           whiteboard? (contains? (set (:block/type page)) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
-          public? (true? (pu/lookup (:block/properties page) :public))
+          public? (:logseq.property/public page)
           _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-name)
           developer-mode? (state/sub [:ui/developer-mode?])

@@ -4,7 +4,6 @@
             ["path" :as node-path]
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.sqlite.db :as sqlite-db]
             [clojure.string :as string]))

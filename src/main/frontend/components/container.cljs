@@ -367,7 +367,7 @@
         {:aria-label "Navigation menu"}
         (repo/repos-dropdown)
 
-        [:div.nav-header.flex.flex-col.mt-2
+        [:div.nav-header.flex.flex-col.mt-1
          (let [page (:page default-home)]
            (if (and page (not (state/enable-journals? (state/get-current-repo))))
              (sidebar-item
@@ -955,7 +955,7 @@
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))
         :on-key-up (fn [e]
-                     (when (= (.-key e) "Enter")
+                     (when (= "Enter" (.-key e))
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
       [:div.#app-container

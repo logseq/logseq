@@ -55,7 +55,7 @@
     (let [block (when (uuid? page-name-or-block-uuid)
                   (model/get-block-by-uuid page-name-or-block-uuid))
           properties (:block/properties block)]
-      (if (pu/lookup properties :heading)
+      (if (pu/lookup properties :logseq.property/heading)
         {:to :page-block
          :path-params {:name (get-in block [:block/page :block/name])
                        :block-route-name (model/heading-content->route-name (:block/content block))}}

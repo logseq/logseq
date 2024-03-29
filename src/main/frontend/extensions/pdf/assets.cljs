@@ -195,16 +195,16 @@
            (let [text       (:text content)
                  wrap-props #(if-let [stamp (:image content)]
                                (assoc %
-                                      (pu/get-pid :hl-type) :area
-                                      (pu/get-pid :hl-stamp) stamp)
+                                      (pu/get-pid :logseq.property/hl-type) :area
+                                      (pu/get-pid :logseq.property/hl-stamp) stamp)
                                %)
                  props (cond->
-                        {(pu/get-pid :ls-type)  :annotation
-                         (pu/get-pid :hl-page)  page
-                         (pu/get-pid :hl-color) (:color properties)}
+                        {(pu/get-pid :logseq.property/ls-type)  :annotation
+                         (pu/get-pid :logseq.property/hl-page)  page
+                         (pu/get-pid :logseq.property/hl-color) (:color properties)}
                          (not (config/db-based-graph? (state/get-current-repo)))
                        ;; force custom uuid
-                         (assoc (pu/get-pid :id) (str id)))
+                         (assoc :id (str id)))
                  properties (->>
                              (wrap-props props)
                              (property-handler/replace-key-with-id (state/get-current-repo)))]
@@ -237,7 +237,7 @@
         page-name (:block/original-name page)
         ;; FIXME: file-path property for db version
         file-path (:file-path (:block/properties page))
-        hl-page   (pu/get-block-property-value block :hl-page)]
+        hl-page   (pu/get-block-property-value block :logseq.property/hl-page)]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))]

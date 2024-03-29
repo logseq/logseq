@@ -72,12 +72,12 @@
   done"
   [current-block {:keys [db-graph?]}]
   (let [properties (:block/properties current-block)
-        p-desc? (pu/lookup properties :query-sort-desc)
+        p-desc? (pu/lookup properties :logseq.property/query-sort-desc)
         desc? (if (some? p-desc?) p-desc? true)
         properties (:block/properties current-block)
-        query-sort-by (pu/lookup properties :query-sort-by)
+        query-sort-by (pu/lookup properties :logseq.property/query-sort-by)
         ;; Starting with #6105, we started putting properties under namespaces.
-        nlp-date? (and (not db-graph?) (pu/lookup properties :logseq.query/nlp-date))
+        nlp-date? (and (not db-graph?) (pu/lookup-by-name properties :logseq.query/nlp-date))
         sort-by-column (or (if (uuid? query-sort-by) query-sort-by (keyword query-sort-by))
                            (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                              nil
@@ -113,7 +113,7 @@
                             ;; TODO: Support additional hidden properties e.g. from user config
                             ;; or gp-property/built-in-extended properties
                             (set (map #(db-pu/get-built-in-property-uuid repo %)
-                                      db-property/built-in-properties-keys-str))
+                                      (keys db-property/built-in-properties)))
                             (conj (file-property-handler/built-in-properties) :template))
         prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
                         (remove hidden-properties))
@@ -124,7 +124,7 @@
 
 (defn get-columns [current-block result {:keys [page?]}]
   (let [properties (:block/properties current-block)
-        query-properties (pu/lookup properties :query-properties)
+        query-properties (pu/lookup properties :logseq.property/query-properties)
         query-properties (if (config/db-based-graph? (state/get-current-repo))
                            query-properties
                            (some-> query-properties

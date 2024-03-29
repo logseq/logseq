@@ -11,6 +11,13 @@
       [?t :block/namespace ?p]
       (namespace ?t ?c)]]
 
+   :class-parent
+   '[[(class-parent ?p ?c)
+      [?c :class/parent ?p]]
+     [(class-parent ?p ?c)
+      [?t :class/parent ?p]
+      (class-parent ?t ?c)]]
+
    :alias
    '[[(alias ?e2 ?e1)
       [?e2 :block/alias ?e1]]

@@ -45,7 +45,7 @@
            :updated-at
            :block/updated-at
 
-           (let [vals (map #(pu/lookup (:block/properties %) f) result)
+           (let [vals (map #(pu/lookup-by-name (:block/properties %) f) result)
                  int? (some integer? vals)
                  repo (state/get-current-repo)
                  prop-key (if (config/db-based-graph? repo)
