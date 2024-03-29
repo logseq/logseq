@@ -241,7 +241,7 @@
 
 (defn property?
   [k]
-  (let [k-name (name k)]
+  (let [k-name (namespace k)]
     (or (string/starts-with? k-name "logseq.property")
         (string/starts-with? k-name "user.property"))))
 
@@ -256,3 +256,9 @@
       (->
        (str "user.property/" n)
        keyword))))
+
+(defn get-class-ordered-properties
+  [class-entity]
+  (let [properties (map :db/ident (:class/schema.properties class-entity))
+        ordered (get-in class-entity [:block/schema :properties])]
+    (concat ordered (remove (set ordered) properties))))
