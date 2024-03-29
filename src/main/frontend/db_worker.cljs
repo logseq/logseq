@@ -593,23 +593,6 @@
              (p/reject! d e)))))
      d))
 
-  (rtc-download-graph
-   [this repo token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (<! (rtc-core/<init-state repo token false))]
-        (try
-          (<? (rtc-updown/<download-graph state repo graph-uuid))
-          (worker-util/post-message :notification
-                                    [[:div
-                                      [:p "download graph successfully"]]])
-          (catch :default e
-            (worker-util/post-message :notification
-                                      [[:div
-                                        [:p "download graph failed"]]
-                                       :error])
-            (prn ::download-graph-failed e)))))))
-
   (rtc-request-download-graph
    [this repo token graph-uuid]
    (async-util/c->p
