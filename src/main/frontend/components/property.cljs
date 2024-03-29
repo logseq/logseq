@@ -247,9 +247,10 @@
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
-                                                        (db-property-handler/<update-property!
+                                                        (db-property-handler/upsert-property!
                                                          (state/get-current-repo)
                                                          (:db/ident property)
+                                                         (:block/schema property)
                                                          {:properties {:logseq.property/icon icon}}))})
 
               (when icon-value
@@ -585,9 +586,10 @@
                          {:on-chosen
                           (fn [_e icon]
                             (when icon
-                              (p/let [_ (db-property-handler/<update-property! repo
-                                                                               (:db/ident property)
-                                                                               {:properties {:logseq.property/icon icon}})]
+                              (p/let [_ (db-property-handler/upsert-property! repo
+                                                                              (:db/ident property)
+                                                                              (:block/schema property)
+                                                                              {:properties {:logseq.property/icon icon}})]
                                 (shui/popup-hide! id))))}))]
 
        (shui/trigger-as :button
@@ -605,34 +607,34 @@
         (:block/original-name property)]
 
        (shui/trigger-as :a
-         {:tabIndex 0
-          :title (str "Configure property: " (:block/original-name property))
-          :class "property-k flex select-none jtrigger pl-2"
-          :on-pointer-down (fn [^js e]
-                             (when (util/meta-key? e)
-                               (route-handler/redirect-to-page! (:block/name property))
-                               (.preventDefault e)))
-          :on-click (fn [^js e]
-                      (shui/popup-show!
-                        (.-target e)
-                        (fn [{:keys [id]}]
-                          [:div.p-2
-                           [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                           [:span.close.absolute.right-2.top-2
-                            (shui/button
-                              {:variant :ghost :size :sm :class "!w-4 !h-6"
-                               :on-click #(shui/popup-hide! id)}
-                              (shui/tabler-icon "x" {:size 16}))]
-                           (property-config property
-                             {:inline-text inline-text
-                              :page-cp page-cp})])
-                        {:content-props {:class "property-configure-popup-content"
-                                         :collisionPadding {:bottom 10 :top 10}
-                                         :avoidCollisions true
-                                         :align "start"}
-                         :auto-side? true
-                         :auto-focus? true}))}
-         (:block/original-name property)))]))
+                        {:tabIndex 0
+                         :title (str "Configure property: " (:block/original-name property))
+                         :class "property-k flex select-none jtrigger pl-2"
+                         :on-pointer-down (fn [^js e]
+                                            (when (util/meta-key? e)
+                                              (route-handler/redirect-to-page! (:block/name property))
+                                              (.preventDefault e)))
+                         :on-click (fn [^js e]
+                                     (shui/popup-show!
+                                      (.-target e)
+                                      (fn [{:keys [id]}]
+                                        [:div.p-2
+                                         [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                                         [:span.close.absolute.right-2.top-2
+                                          (shui/button
+                                           {:variant :ghost :size :sm :class "!w-4 !h-6"
+                                            :on-click #(shui/popup-hide! id)}
+                                           (shui/tabler-icon "x" {:size 16}))]
+                                         (property-config property
+                                                          {:inline-text inline-text
+                                                           :page-cp page-cp})])
+                                      {:content-props {:class "property-configure-popup-content"
+                                                       :collisionPadding {:bottom 10 :top 10}
+                                                       :avoidCollisions true
+                                                       :align "start"}
+                                       :auto-side? true
+                                       :auto-focus? true}))}
+                        (:block/original-name property)))]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
