@@ -225,9 +225,7 @@
              (shui/popup-show! (.-target e)
                                (fn [{:keys [id]}]
                                  (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
-                                       values' (->> (if (= :many (get-in property [:block/schema :cardinality]))
-                                                      (mapcat second values)
-                                                      (map second values))
+                                       values' (->> (map second values)
                                                     (remove string/blank?)
                                                     (remove (set (get-in property [:block/schema :values])))
                                                     distinct)]
