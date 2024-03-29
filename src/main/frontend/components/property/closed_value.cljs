@@ -204,7 +204,7 @@
     [:div.closed-values.flex.flex-col
      (let [choices (doall
                     (keep (fn [id]
-                            (when-let [block (db/sub-block (:db/id (db/entity id)))]
+                            (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid id])))]
                               {:id (str id)
                                :value id
                                :content (choice-item-content property *property-schema block (merge opts dropdown-opts))}))

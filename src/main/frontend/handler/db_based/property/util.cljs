@@ -11,12 +11,14 @@
   [id]
   (:block/original-name (db-utils/entity id)))
 
+;; FIXME: property no long has `:block/name` attribute
 (defn get-built-in-property-uuid
   "Get a built-in property's uuid given its name"
   ([property-name] (get-built-in-property-uuid (state/get-current-repo) property-name))
   ([repo property-name]
    (:block/uuid (db-utils/entity repo [:block/name (name property-name)]))))
 
+;; FIXME: property no long has `:block/name` attribute
 (defn get-user-property-uuid
   "Get a user property's uuid given its unsanitized name"
   ([property-name] (get-user-property-uuid (state/get-current-repo) property-name))
@@ -29,6 +31,7 @@
   (every? (fn [id]
             (:hide? (:block/schema (db/entity id)))) properties))
 
+;; FIXME: property no long has `:block/name` attribute
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
   property names and property values dereferenced where possible. A property's
