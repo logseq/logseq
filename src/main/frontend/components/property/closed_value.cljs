@@ -16,7 +16,6 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
-            [frontend.handler.property.util :as pu]
             [promesa.core :as p]
             [logseq.db.frontend.property :as db-property]))
 
@@ -222,7 +221,7 @@
          :size :sm
          :on-click
          (fn [e]
-           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))]
+           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))]
              (shui/popup-show! (.-target e)
                                (fn [{:keys [id]}]
                                  (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}

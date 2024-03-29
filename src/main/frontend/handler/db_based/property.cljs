@@ -132,16 +132,15 @@
             tags-or-alias? (contains? #{:block/tags :block/alias} property-id)
             old-values (if tags-or-alias?
                          (->> (get block property-id)
-                              (map (fn [e] (:block/uuid e))))
+                              (map (fn [e] (:db/id e))))
                          (get block (:db/ident property)))]
         (when (not= old-values values')
           (if tags-or-alias?
-            (let [property-value-ids (map (fn [id] (:db/id (db/entity [:block/uuid id]))) values')]
-              (db/transact! repo
-                            [[:db/retract (:db/id block) property-id]
-                             {:block/uuid block-id
-                              property-id property-value-ids}]
-                            {:outliner-op :save-block}))
+            (db/transact! repo
+                          [[:db/retract (:db/id block) property-id]
+                           {:block/uuid block-id
+                            property-id values'}]
+                          {:outliner-op :save-block})
             (if-let [msg (some #(validate-property-value schema %) values')]
               (let [msg' (str "\"" property-name "\"" " " (if (coll? msg) (first msg) msg))]
                 (notification/show! msg' :warning))
@@ -152,7 +151,7 @@
                   (db/transact! repo [block] {:outliner-op :save-block}))))))))))
 
 (defn- resolve-tag
-  "Change `v` to a tag's UUID if v is a string tag, e.g. `#book`"
+  "Change `v` to a tag's db id if v is a string tag, e.g. `#book`"
   [v]
   (when (and (string? v)
              (util/tag? (string/trim v)))
@@ -170,7 +169,7 @@
                                   :block/type #{"class"})]
                      (db/transact! [m])
                      m))]
-          (:block/uuid e'))))))
+          (:db/id e'))))))
 
 (defn set-block-property!
   [repo block-eid property-id v {:keys [old-value] :as opts}]
@@ -204,7 +203,7 @@
                          nil)))
                 tags-or-alias? (and (contains? #{:block/tags :block/alias} property-id) (uuid? v*))]
             (if tags-or-alias?
-              (let [property-value-id (:db/id (db/entity [:block/uuid v*]))]
+              (let [property-value-id v*]
                 (db/transact! repo
                               [[:db/add (:db/id block) property-id property-value-id]]
                               {:outliner-op :save-block}))
@@ -281,18 +280,13 @@
                       {:outliner-op :save-block})))))
 
 (defn class-remove-property!
-  [repo class-uuid k-uuid]
+  [repo class-uuid property-id]
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
-      (when-let [property (db/entity repo [:block/uuid k-uuid])]
+      (when-let [property (db/entity repo property-id)]
         (when-not (ldb/built-in-class-property? (db/get-db) class property)
-          (let [property-uuid (:block/uuid property)
-                {:keys [properties] :as class-schema} (:block/schema class)
-                new-properties (vec (distinct (remove #{property-uuid} properties)))
-                class-new-schema (assoc class-schema :properties new-properties)]
-            (db/transact! repo [{:db/id (:db/id class)
-                                 :block/schema class-new-schema}]
-                          {:outliner-op :save-block})))))))
+          (db/transact! repo [[:db/retract (:db/id class) :class/schema.properties property-id]]
+            {:outliner-op :save-block}))))))
 
 (defn class-set-schema!
   [repo class-uuid schema]
@@ -376,20 +370,16 @@
 (defn delete-property-value!
   "Delete value if a property has multiple values"
   [repo block property-id property-value]
-  (when (and block (uuid? property-id))
-    (when (not= property-id (:block/uuid block))
-      (when-let [property (db/pull [:block/uuid property-id])]
+  (when block
+    (when (not= property-id (:db/ident block))
+      (when-let [property (db/entity property-id)]
         (let [schema (:block/schema property)
               db-ident (:db/ident property)
-              property-id (:db/ident property)
-              tags-or-alias? (and (contains? #{:block/tags :block/alias} db-ident)
-                                  (uuid? property-value))]
+              tags-or-alias? (contains? #{:block/tags :block/alias} db-ident)]
           (if tags-or-alias?
-            (let [property-value-id (:db/id (db/entity [:block/uuid property-value]))]
-              (when property-value-id
-                (db/transact! repo
-                              [[:db/retract (:db/id block) db-ident property-value-id]]
-                              {:outliner-op :save-block})))
+            (db/transact! repo
+                          [[:db/retract (:db/id block) db-ident property-value]]
+                          {:outliner-op :save-block})
             (if (= :many (:cardinality schema))
               (db/transact! repo
                             [[:db/retract (:db/id block) property-id]]
@@ -688,7 +678,7 @@
                 new-value-ids (mapv :block/uuid closed-value-blocks)
                 property-tx {:db/id (:db/id property)
                              :block/schema (assoc property-schema :values new-value-ids)}
-                property-values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))
+                property-values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
                 block-values (->> property-values
                                   (remove #(uuid? (first %))))
                 tx-data (concat

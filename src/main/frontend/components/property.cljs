@@ -14,7 +14,6 @@
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -202,7 +201,7 @@
   {:init (fn [state]
            (let [*values (atom :loading)]
              (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                 (:block/uuid (first (:rum/args state))))]
+                                                                 (:db/ident (first (:rum/args state))))]
                (reset! *values result))
              (assoc state ::values *values)))
    :will-mount (fn [state]

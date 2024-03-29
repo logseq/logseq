@@ -6,9 +6,6 @@
             [logseq.common.util :as common-util]
             [clojure.string :as string]))
 
-(def first-stage-properties
-  #{:built-in? :created-from-property})
-
 ;; FIXME: no support for built-in-extended-properties
 (def ^:large-vars/data-var built-in-properties
   "Map of built in properties for db graphs. Each property has a config map with
@@ -251,6 +248,7 @@
   [k]
   (contains? #{:logseq.property :user.property} (keyword (namespace k))))
 
+;; TODO: db ident should obey clojure's rules for keywords
 (defn get-db-ident-from-name
   [property-name]
   (let [n (-> (string/lower-case property-name)
