@@ -5,19 +5,23 @@ export const getPdfjsLib = () => {
   return window.pdfjsLib
 }
 
+const getTransformMatrix = (element) => {
+  const computedStyle = window.getComputedStyle(element);
+  const matrixString = computedStyle.transform || computedStyle.webkitTransform || computedStyle.mozTransform;
+  return new DOMMatrix(matrixString);
+}
+
 export const viewportToScaled = (
   rect,
   viewport,
   textlayer,
   rotate
 ) => {
-  const computedStyle = window.getComputedStyle(textlayer.div);
-  const matrixString = rotate ? computedStyle.transform || computedStyle.webkitTransform || computedStyle.mozTransform : '';
-  const domMatrix = new DOMMatrix(matrixString);
-  const transform = domMatrix.invertSelf();
+  const rotateMatrix = rotate ? getTransformMatrix(textlayer.div) : new DOMMatrix();
+  const transformMatrix = rotateMatrix.invertSelf();
   
   const [vwTopLeft, vwBottomRight] = [new DOMPoint(rect.left, rect.top), new DOMPoint(rect.left + rect.width, rect.top + rect.height)]
-  const [scTopLeft, scBottomRight] = [vwTopLeft.matrixTransform(transform), vwBottomRight.matrixTransform(transform)]
+  const [scTopLeft, scBottomRight] = [vwTopLeft.matrixTransform(transformMatrix), vwBottomRight.matrixTransform(transformMatrix)]
 
   const scaled = {
     x1: Math.min(scTopLeft.x, scBottomRight.x),
@@ -30,23 +34,6 @@ export const viewportToScaled = (
   return scaled;
 }
 
-const pdfToViewport = (pdf, viewport) => {
-  const [x1, y1, x2, y2] = viewport.convertToViewportRectangle([
-    pdf.x1,
-    pdf.y1,
-    pdf.x2,
-    pdf.y2,
-  ])
-
-  return {
-    left: x1,
-    top: y1,
-
-    width: x2 - x1,
-    height: y1 - y2,
-  }
-}
-
 export const scaledToViewport = (
   scaled,
   viewport,
@@ -57,19 +44,11 @@ export const scaledToViewport = (
     throw new Error('You are using old position format, please update')
   }
 
-  const domMatrix = (function () {
-    if (rotate) {
-      const computedStyle = window.getComputedStyle(textlayer.div);
-      const matrixString = computedStyle.transform || computedStyle.webkitTransform || computedStyle.mozTransform;
-      return new DOMMatrix(matrixString);
-    } else {
-      return new DOMMatrix();
-    }
-  })();
-  const transform = domMatrix.scale(viewport.width / scaled.width, viewport.height / scaled.height);
+  const rotateMatrix = rotate ? getTransformMatrix(textlayer.div) : new DOMMatrix();
+  const transformMatrix = rotateMatrix.scale(viewport.width / scaled.width, viewport.height / scaled.height);
 
   const [scTopLeft, scBottomRight] = [new DOMPoint(scaled.x1, scaled.y1), new DOMPoint(scaled.x2, scaled.y2)]
-  const [vwTopLeft, vwBottomRight] = [scTopLeft.matrixTransform(transform), scBottomRight.matrixTransform(transform)]
+  const [vwTopLeft, vwBottomRight] = [scTopLeft.matrixTransform(transformMatrix), scBottomRight.matrixTransform(transformMatrix)]
 
   const x1 = Math.min(vwTopLeft.x, vwBottomRight.x);
   const y1 = Math.min(vwTopLeft.y, vwBottomRight.y);
