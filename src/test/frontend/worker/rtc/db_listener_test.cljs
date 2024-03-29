@@ -15,8 +15,8 @@
           _create-whiteboard-page-block
           (d/transact! conn [{:block/uuid block-uuid
                               :block/type "whiteboard"
-                              :block/name "blocdb-ident"
-                              :block/original-name "BLOCDB-IDENT"}])
+                              :block/name "block-name"
+                              :block/original-name "BLOCK-NAME"}])
           remove-whiteboard-page-block
           (d/transact! conn [[:db/retractEntity [:block/uuid block-uuid]]])]
       (is (= [["remove-page" {:block-uuid (str block-uuid)}]]
