@@ -778,7 +778,7 @@
 
 /* Workaround for Linux Intel GPU text rendering issue GH#7233 */
 .is-electron.is-linux .cp__menubar-repos {
-  #repo-switch, .nav-header .flex-1 {
+  .repo-switch, .nav-header .flex-1 {
     position: relative;
   }
 }

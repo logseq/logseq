@@ -24,3 +24,9 @@
     }
   }
 }
+
+.cp__repos-select {
+  &-trigger {
+    @apply flex items-center p-2 text-sm font-medium rounded-md;
+  }
+}
