@@ -117,12 +117,10 @@
 
 (defn get-structured-blocks
   [db]
-  (let [special-pages (map #(d/pull db '[*] %) #{:block/tags})
-        structured-blocks (->> (d/datoms db :avet :block/type)
-                               (keep (fn [e]
-                                       (when (contains? #{"closed value" "property" "class"} (:v e))
-                                         (d/pull db '[*] (:e e))))))]
-    (concat special-pages structured-blocks)))
+  (->> (d/datoms db :avet :block/type)
+       (keep (fn [e]
+               (when (contains? #{"closed value" "property" "class"} (:v e))
+                 (d/pull db '[*] (:e e)))))))
 
 (defn get-favorites
   "Favorites page and its blocks"
@@ -154,7 +152,12 @@
 (defn get-initial-data
   "Returns current database schema and initial data"
   [db]
-  (let [schema (:schema db)
+  (let [schema (->> (:schema db)
+                    (remove (fn [[k _v]]
+                              (or (integer? k)
+                                  (and (keyword? k)
+                                       (string/starts-with? (namespace k) "logseq.")))))
+                    (into {}))
         idents (remove nil?
                        (let [e (d/entity db :logseq.kv/graph-uuid)
                              id (:graph/uuid e)]
@@ -166,9 +169,10 @@
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
         home-page-data (get-home-page db all-files)
-        structured-blocks (get-structured-blocks db)]
+        structured-blocks (get-structured-blocks db)
+        data (concat idents favorites latest-journals all-files home-page-data structured-blocks)]
     {:schema schema
-     :initial-data (concat idents favorites latest-journals all-files home-page-data structured-blocks)}))
+     :initial-data data}))
 
 (defn restore-initial-data
   "Given initial sqlite data and schema, returns a datascript connection"
