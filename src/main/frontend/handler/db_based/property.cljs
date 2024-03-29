@@ -353,7 +353,6 @@
 
 (defn remove-block-property!
   [repo eid property-id]
-  (prn :debug :eid eid :property-id property-id)
   (if (contains? #{:block/alias :block/tags} property-id)
     (when-let [block (db/entity eid)]
       (db/transact! repo
@@ -367,23 +366,17 @@
   (when block
     (when (not= property-id (:db/ident block))
       (when-let [property (db/entity property-id)]
-        (let [schema (:block/schema property)
-              db-ident (:db/ident property)
-              tags-or-alias? (contains? #{:block/tags :block/alias} db-ident)]
-          (if tags-or-alias?
+        (let [schema (:block/schema property)]
+          (if (= :many (:cardinality schema))
             (db/transact! repo
-                          [[:db/retract (:db/id block) db-ident property-value]]
+                          [[:db/retract (:db/id block) property-id property-value]]
                           {:outliner-op :save-block})
-            (if (= :many (:cardinality schema))
-              (db/transact! repo
-                            [[:db/retract (:db/id block) property-id]]
-                            {:outliner-op :save-block})
-              (if (= :default (get-in property [:block/schema :type]))
-                (set-block-property! repo (:db/id block)
-                                     (:db/ident property)
-                                     ""
-                                     {})
-                (remove-block-property! repo (:db/id block) property-id)))))))))
+            (if (= :default (get-in property [:block/schema :type]))
+              (set-block-property! repo (:db/id block)
+                                   (:db/ident property)
+                                   ""
+                                   {})
+              (remove-block-property! repo (:db/id block) property-id))))))))
 
 (defn replace-key-with-id
   "Notice: properties need to be created first"
