@@ -211,7 +211,7 @@
                                      [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
                                    blocks)
           db-based? (sqlite-util/db-based-graph? repo)]
-      (if (ldb/built-in? @conn page)
+      (if (ldb/built-in? page)
         (do
           (error-handler {:msg "Built-in page cannot be deleted"})
           false)

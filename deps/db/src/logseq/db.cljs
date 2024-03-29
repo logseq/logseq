@@ -562,16 +562,17 @@
 
 (defn built-in?
   "Built-in page or block"
-  [db entity]
-  (get (:block/properties entity) (:block/uuid (d/entity db :logseq.property/built-in?))))
+  [entity]
+  (:logseq.property/built-in? entity))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
-  [db class-entity property-entity]
-  (and (built-in? db class-entity)
+  [class-entity property-entity]
+  (and (built-in? class-entity)
        (contains? (:block/type class-entity) "class")
-       (built-in? db property-entity)
-       (contains? (set (get-in class-entity [:block/schema :properties])) (:block/uuid property-entity))))
+       (built-in? property-entity)
+       (contains? (set (map :db/ident (:class/schema.properties class-entity)))
+                  (:db/ident property-entity))))
 
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)

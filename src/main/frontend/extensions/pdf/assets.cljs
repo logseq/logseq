@@ -179,7 +179,7 @@
 
         ;; try to update file path
         (do
-          (property-handler/add-page-property! page-name :file-path url)
+          (property-handler/add-page-property! page-name :logseq.property/file-path url)
           page)))))
 
 (defn ensure-ref-block!

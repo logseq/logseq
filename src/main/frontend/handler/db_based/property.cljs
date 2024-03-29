@@ -252,7 +252,7 @@
             property-values (db-async/<get-block-property-values repo property-id)]
       (when (or (not type-changed?)
                 ;; only change type if property hasn't been used yet
-                (and (not (ldb/built-in? (db/get-db) property)) (empty? property-values)))
+                (and (not (ldb/built-in? property)) (empty? property-values)))
         (let [tx-data (cond-> (merge {:db/ident property-id} properties)
                         property-name (merge
                                        {:block/original-name property-name})
@@ -284,7 +284,7 @@
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
       (when-let [property (db/entity repo property-id)]
-        (when-not (ldb/built-in-class-property? (db/get-db) class property)
+        (when-not (ldb/built-in-class-property? class property)
           (db/transact! repo [[:db/retract (:db/id class) :class/schema.properties property-id]]
             {:outliner-op :save-block}))))))
 
@@ -438,9 +438,9 @@
         namespace-parents (get-namespace-parents classes)
         all-classes (->> (concat classes namespace-parents)
                          (filter (fn [class]
-                                   (seq (:properties (:block/schema class))))))
+                                   (seq (:class/schema.properties class)))))
         all-properties (-> (mapcat (fn [class]
-                                     (seq (:properties (:block/schema class)))) all-classes)
+                                     (map :db/ident (:class/schema.properties class))) all-classes)
                            distinct)]
     {:classes classes
      :all-classes all-classes           ; block own classes + parent classes
@@ -700,7 +700,7 @@
   "Returns true when deleted or if not deleted displays warning and returns false"
   [db property value-block]
   (cond
-    (ldb/built-in? db value-block)
+    (ldb/built-in? value-block)
     (do (notification/show! "The choice can't be deleted because it's built-in." :warning)
         false)
 

@@ -893,8 +893,7 @@
 (defn set-block-query-properties!
   [block-id all-properties key add?]
   (when-let [block (db/entity [:block/uuid block-id])]
-    (let [properties (:block/properties block)
-          query-properties (pu/lookup properties :query-properties)
+    (let [query-properties (:query-properties (:block/properties block))
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
           query-properties (if db-based?
@@ -910,7 +909,7 @@
           query-properties (vec query-properties)]
       (if (seq query-properties)
         (property-handler/set-block-property! repo block-id
-                                              :query-properties
+                                              :logseq.property/query-properties
                                               (if db-based?
                                                 query-properties
                                                 (str query-properties)))
@@ -3456,7 +3455,7 @@
                     (not (db-pu/all-hidden-properties? (keys (:block/properties block)))))
                (and db-based? (seq tags)
                     (some (fn [t]
-                            (let [properties (:properties (:block/schema t))]
+                            (let [properties (map :db/ident (:class/schema.properties (:block/schema t)))]
                               (and (seq properties)
                                    (not (db-pu/all-hidden-properties? properties))))) tags))
                (and

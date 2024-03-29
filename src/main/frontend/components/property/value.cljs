@@ -523,11 +523,11 @@
                 (:block/page v-block)
                 (property-normal-block-value v-block block-cp editor-box)
 
-                (and class? (seq (:properties (:block/schema v-block))))
+                (and class? (seq (:class/schema.properties v-block)))
                 (if template-instance
                   (property-template-value {:editor-id editor-id}
-                                          (:block/uuid template-instance)
-                                          opts)
+                                           (:block/uuid template-instance)
+                                           opts)
                   (create-template-block! block property v-block *template-instance))
 
               ;; page/class/etc.

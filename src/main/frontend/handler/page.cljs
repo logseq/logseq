@@ -170,7 +170,7 @@
 
 (defn update-public-attribute!
   [page-name value]
-  (property-handler/add-page-property! page-name :public value))
+  (property-handler/add-page-property! page-name :logseq.property/public value))
 
 (defn get-page-ref-text
   [page]
@@ -249,7 +249,7 @@
 
 (defn save-filter!
   [page-name filter-state]
-  (property-handler/add-page-property! page-name :filters filter-state))
+  (property-handler/add-page-property! page-name :logseq.property/filters filter-state))
 
 ;; Editor
 (defn page-not-exists-handler
