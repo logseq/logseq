@@ -25,7 +25,7 @@
         has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
         has-class-properties? (seq (:class/schema.properties page))
         has-tags? (seq (:block/tags page))
-        hide-properties? (get-in page [:block/properties (:block/uuid (db/entity :logseq.property/hide-properties?))])]
+        hide-properties? (:logseq.property/hide-properties? page)]
     (when (or configure?
               (and
                (not hide-properties?)
