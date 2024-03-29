@@ -645,8 +645,8 @@
              (util/stop e)
              (db-property-handler/delete-property-value! repo
                                                          block
-                                                         (db-pu/get-built-in-property-uuid repo :tags)
-                                                         (:block/uuid page-entity)))}
+                                                         :block/tags
+                                                         (:db/id page-entity)))}
           (ui/icon "x" {:size 15})]))]))
 
 (rum/defc page-preview-trigger

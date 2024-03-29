@@ -20,7 +20,6 @@
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
-            [frontend.handler.property.util :as pu]
             [promesa.core :as p]
             [frontend.db.async :as db-async]
             [logseq.common.util.macro :as macro-util]
@@ -398,7 +397,7 @@
   {:init (fn [state]
            (let [*values (atom :loading)]
              (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                 (:block/uuid (nth (:rum/args state) 1)))]
+                                                                 (:db/ident (nth (:rum/args state) 1)))]
                (reset! *values result))
              (assoc state ::values *values)))}
   [state block property
