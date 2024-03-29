@@ -278,50 +278,49 @@
                 short-repo-name (if current-repo
                                   (db/get-short-repo-name repo-name)
                                   "Select a Graph")]
-            [:a.item.group.flex.items-center.p-2.text-sm.font-medium.rounded-md
-             {:on-click (fn [^js e]
-                          (check-multiple-windows? state)
-                          (some-> (.-target e)
-                            (.closest "a.item")
-                            (shui/popup-show!
-                              (fn [{:keys [id]}]
-                                [:<>
-                                 (header-fn)
-                                 (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
-                                   (let [on-click' (:on-click options)
-                                         href' (:href options)]
-                                     (if hr
-                                       (shui/dropdown-menu-separator)
-                                       (shui/dropdown-menu-item
-                                         (assoc options
-                                           :title hover-detail
-                                           :on-click (fn [^js e]
-                                                       (when on-click'
-                                                         (when-not (false? (on-click' e))
-                                                           (shui/popup-hide! id)))))
-                                         (or item
-                                           (if href'
-                                             [:a.flex.items-center.w-full
-                                              {:href href' :on-click #(shui/popup-hide! id)
-                                               :style {:color "inherit"}} title]
-                                             [:span.flex.items-center.gap-1.w-full
-                                              icon [:div title]]))))))])
-                              {:as-dropdown? true
-                               :align "start"
-                               :content-props {:class "repos-list"}})))
-              :title repo-name} ;; show full path on hover
-             [:div.flex.flex-row.items-center
-              [:div.flex.relative.graph-icon.rounded
-               (let [icon "database"
-                     opts {:size 14}]
-                 (ui/icon icon opts))]
+            (shui/trigger-as :a
+              {:tab-index 0
+               :class "item cp__repos-select-trigger"
+               :on-click (fn [^js e]
+                           (check-multiple-windows? state)
+                           (some-> (.-target e)
+                             (.closest "a.item")
+                             (shui/popup-show!
+                               (fn [{:keys [id]}]
+                                 [:<>
+                                  (header-fn)
+                                  (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
+                                    (let [on-click' (:on-click options)
+                                          href' (:href options)]
+                                      (if hr
+                                        (shui/dropdown-menu-separator)
+                                        (shui/dropdown-menu-item
+                                          (assoc options
+                                            :title hover-detail
+                                            :on-click (fn [^js e]
+                                                        (when on-click'
+                                                          (when-not (false? (on-click' e))
+                                                            (shui/popup-hide! id)))))
+                                          (or item
+                                            (if href'
+                                              [:a.flex.items-center.w-full
+                                               {:href href' :on-click #(shui/popup-hide! id)
+                                                :style {:color "inherit"}} title]
+                                              [:span.flex.items-center.gap-1.w-full
+                                               icon [:div title]]))))))])
+                               {:as-dropdown? true
+                                :align "start"
+                                :content-props {:class "repos-list"}})))
+               :title repo-name}                            ;; show full path on hover
+              [:div.flex.flex-row.items-center
+               [:div.flex.relative.graph-icon.rounded
+                (shui/tabler-icon "database" {:size 15})]
 
-              [:div.graphs
-               [:span#repo-switch.block.pr-2.whitespace-nowrap
-                [:span [:span#repo-name.font-medium
-                        [:span.overflow-hidden.text-ellipsis (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
-                        (when remote? [:span.pl-1 (ui/icon "cloud")])]]
-                [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]]]]))))))
+               [:div.repo-switch.block.pr-2.whitespace-nowrap
+                [:span.repo-name.font-medium
+                 [:span.overflow-hidden.text-ellipsis (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
+                 (when remote? [:span.pl-1 (ui/icon "cloud")])]
+                [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]])))))))
 
 (defn invalid-graph-name-warning
   []

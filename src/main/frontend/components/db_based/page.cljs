@@ -228,7 +228,7 @@
           (if collapsed?
             (when (or (seq (:block/properties page))
                       (and class? (seq (:properties (:block/schema page)))))
-              [:div.px-4
+              [:div.pl-4
                (page-properties page {:mode (if class? :class :page)})])
-            [:div.pt-2.px-4
+            [:div.pt-2.pl-4
              (page-configure page *mode)]))]])))

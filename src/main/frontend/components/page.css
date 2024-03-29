@@ -413,7 +413,7 @@ html.is-native-ios {
       @apply py-0 relative -top-[14px] -mb-[16px] min-h-[44px];
 
       &:has(.ls-page-properties) {
-        @apply mb-4 opacity-90;
+        @apply mb-3 opacity-90;
       }
     }
 
