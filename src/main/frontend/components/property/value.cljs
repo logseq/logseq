@@ -459,10 +459,11 @@
   (let [children (model/sort-by-left
                   (:block/_parent (db/entity (:db/id parent)))
                   parent)]
-    (when (seq children)
+    (if (seq children)
       [:div.property-block-container.w-full
        (block-cp children {:id (str (:block/uuid parent))
-                           :editor-box editor-box})])))
+                           :editor-box editor-box})]
+      [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])))
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
@@ -497,7 +498,7 @@
     (when value
       (if (state/sub-async-query-loading value)
         [:div.text-sm.opacity-70 "loading"]
-        (when-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+        (if-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
           (let [class? (contains? (:block/type v-block) "class")
                 invalid-warning [:div.warning.text-sm
                                  "Invalid block value, please delete the current property."]]
@@ -520,7 +521,8 @@
                           :tag? class?} v-block)
                 :else
                 invalid-warning)
-              invalid-warning)))))))
+              invalid-warning))
+          [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])))))
 
 (rum/defc closed-value-item < rum/reactive
   {:init (fn [state]
@@ -687,8 +689,14 @@
                :class class
                :style {:min-height 24}
                :on-click (fn []
-                           (when (and (= type :default) (not (uuid? value)))
-                             (set-editing! (assoc property :block/uuid (random-uuid)) editor-id dom-id value {:ref @*ref})))}
+                           (let [property-block (when (and (= type :block) (uuid? value))
+                                                  (db/entity [:block/uuid value]))
+                                 invalid-block? (and (= type :block) (uuid? value)
+                                                     (or (nil? property-block)
+                                                         (nil? (:block/_parent property-block))))
+                                 value (if invalid-block? "" value)]
+                             (when (or (= type :default) invalid-block?)
+                               (set-editing! (assoc property :block/uuid (random-uuid)) editor-id dom-id value {:ref @*ref}))))}
               (if (string/blank? value)
                 (if template?
                   (let [id (first (:classes schema))
@@ -700,15 +708,16 @@
                                     (<create-new-block-from-template! block property template))}
                        (str "Use template #" (:block/original-name template))]))
                   [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])
-                (case type
-                  :template
+                (cond
+                  (= type :template)
                   (property-template-value {:editor-id editor-id}
                                            value
                                            opts)
 
-                  :block
+                  (and (= type :block) (uuid? value))
                   (property-block-value value block property block-cp editor-box opts page-cp editor-id)
 
+                  :else
                   (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))]))))
 
 (rum/defc multiple-values
