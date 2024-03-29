@@ -75,20 +75,12 @@
   (let [;; FIXME: Remove ignore when editing bug is fixed
         #_:clj-kondo/ignore
         [open? set-open!] (rum/use-state editing?)
-        page (db/entity value)
-        title (when page (:block/original-name page))
-        value (if title
-                (js/Date. (date/journal-title->long title))
-                value)
-        value' (when-not (string/blank? value)
-                 (when-not (uuid? value)
-                   (try
-                     (tc/to-local-date value)
-                     (catch :default e
-                       (js/console.error e)))))
+        title (when value (:block/original-name value))
+        page value
+        value' (when title (js/Date. (date/journal-title->long title)))
         initial-day (some-> value' (.getTime) (js/Date.))
         initial-month (when value'
-                        (js/Date. (.getYear value') (.getMonth value')))]
+                        (js/Date. (.getFullYear value') (.getMonth value')))]
     [:div.flex.flex-row.gap-1.items-center
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
@@ -104,23 +96,25 @@
                        (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
                          (let [journal (date/js-date->journal-title gd)]
                            (p/do!
+                            (shui/popup-hide! id)
                             (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
                               (page-handler/<create! journal {:redirect? false
                                                               :create-first-block? false}))
                             (when (fn? on-change)
                               (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
-                            (shui/popup-hide! id)
                             (exit-edit-property))))))]
                (shui/calendar
-                {:mode "single"
-                 :initial-focus true
-                 :selected initial-day
-                 :default-month initial-month
-                 :class-names {:months ""}
-                 :on-day-key-down (fn [^js d _ ^js e]
-                                    (when (= "Enter" (.-key e))
-                                      (select-handler! d)))
-                 :on-select select-handler!})))]
+                (cond->
+                 {:mode "single"
+                  :initial-focus true
+                  :selected initial-day
+                  :class-names {:months ""}
+                  :on-day-key-down (fn [^js d _ ^js e]
+                                     (when (= "Enter" (.-key e))
+                                       (select-handler! d)))
+                  :on-select select-handler!}
+                  initial-month
+                  (assoc :default-month initial-month)))))]
 
        (shui/button
         {:class "jtrigger !p-1"
