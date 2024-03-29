@@ -1,8 +1,7 @@
 (ns logseq.db
-  "Main namespace for public db fns"
-  (:require [logseq.db.frontend.default :as default-db]
-            [logseq.db.frontend.schema :as db-schema]
-            [datascript.core :as d]
+  "Main namespace for public db fns. For DB and file graphs.
+   For shared file graph only fns, use logseq.graph-parser.db"
+  (:require [datascript.core :as d]
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
@@ -66,39 +65,6 @@
 
        (let [f (or @*transact-fn d/transact!)]
          (f repo-or-conn tx-data tx-meta))))))
-
-(defn build-pages-tx
-  [pages]
-  (let [time (common-util/time-ms)]
-    (map
-     (fn [m]
-       (-> m
-           (assoc :block/created-at time)
-           (assoc :block/updated-at time)
-           (assoc :block/format :markdown)))
-      pages)))
-
-(defn build-default-pages-tx
-  []
-  (build-pages-tx default-db/built-in-pages))
-
-(defn create-default-pages!
-  "Creates default pages if one of the default pages does not exist. This
-   fn is idempotent"
-  [db-conn _opts]
-  (when-not (d/entity @db-conn [:block/name "card"])
-    (let [built-in-pages (build-default-pages-tx)]
-      (transact! db-conn built-in-pages))))
-
-(defn start-conn
-  "Create datascript conn with schema and default data"
-  [& {:keys [create-default-pages? schema]
-      :or {create-default-pages? true
-           schema db-schema/schema}}]
-  (let [db-conn (d/create-conn schema)]
-    (when create-default-pages?
-      (create-default-pages! db-conn {}))
-    db-conn))
 
 (defn sort-by-left
   [blocks parent]
@@ -236,11 +202,12 @@
     (nil? (:block/_left page))))
 
 (defn get-orphaned-pages
-  [db {:keys [pages empty-ref-f]
-       :or {empty-ref-f (fn [page] (zero? (count (:block/_refs page))))}}]
+  [db {:keys [pages empty-ref-f built-in-pages-names]
+       :or {empty-ref-f (fn [page] (zero? (count (:block/_refs page))))
+            built-in-pages-names #{}}}]
   (let [pages (->> (or pages (get-pages db))
                    (remove nil?))
-        built-in-pages (set (map string/lower-case default-db/built-in-pages-names))
+        built-in-pages (set (map string/lower-case built-in-pages-names))
         orphaned-pages (->>
                         (map
                          (fn [page]

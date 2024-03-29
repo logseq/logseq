@@ -14,7 +14,9 @@
             [frontend.util :as util :refer [react]]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.db :as gp-db]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [frontend.config :as config]
@@ -935,7 +937,12 @@ independent of format as format specific heading characters are stripped"
 (defn get-orphaned-pages
   [opts]
   (let [db (conn/get-db)]
-    (ldb/get-orphaned-pages db opts)))
+    (ldb/get-orphaned-pages db
+                            (merge opts
+                                   {:built-in-pages-names
+                                    (if (config/db-based-graph? (state/get-current-repo))
+                                      sqlite-create-graph/built-in-pages-names
+                                      gp-db/built-in-pages-names)}))))
 
 ;; FIXME: replace :logseq.macro-name with id
 (defn get-macro-blocks

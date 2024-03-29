@@ -28,8 +28,7 @@
                   test-db-name-db-version
                   test-db-name)]
     (state/set-current-repo! test-db)
-    (conn/start! test-db (assoc opts :create-default-pages?
-                                (get :create-default-pages? opts true)))))
+    (conn/start! test-db opts)))
 
 (defn destroy-test-db!
   []

@@ -2,8 +2,7 @@
   (:require [cljs.test :refer [deftest testing is are]]
             [clojure.string :as string]
             [logseq.graph-parser :as graph-parser]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.default :as default-db]
+            [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]))
@@ -56,7 +55,7 @@
 
 (deftest parse-file
   (testing "id properties"
-    (let [conn (ldb/start-conn)]
+    (let [conn (gp-db/start-conn)]
       (graph-parser/parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098" {})
       (is (= [{:id "628953c1-8d75-49fe-a648-f4c612109098"}]
              (->> (d/q '[:find (pull ?b [*])
@@ -68,7 +67,7 @@
           "id as text has correct :block/properties")))
 
   (testing "unexpected failure during block extraction"
-    (let [conn (ldb/start-conn)
+    (let [conn (gp-db/start-conn)
           deleted-page (atom nil)]
       (with-redefs [gp-block/with-pre-block-if-exists (fn stub-failure [& _args]
                                                         (throw (js/Error "Testing unexpected failure")))]
@@ -81,7 +80,7 @@
           "Page should not be deleted when there is unexpected failure")))
 
   (testing "parsing whiteboard page"
-    (let [conn (ldb/start-conn)]
+    (let [conn (gp-db/start-conn)]
       (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
       (let [blocks (d/q '[:find (pull ?b [* {:block/page
                                              [:block/name
@@ -101,7 +100,7 @@
             "parsed block in the whiteboard page has correct parent page"))))
 
   (testing "Loading whiteboard pages that same block/uuid should throw an error."
-    (let [conn (ldb/start-conn)]
+    (let [conn (gp-db/start-conn)]
       (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
       (is (thrown-with-msg?
            js/Error
@@ -109,7 +108,7 @@
            (graph-parser/parse-file conn "/whiteboards/foo-conflict.edn" (pr-str foo-conflict-edn) {})))))
 
   (testing "Loading whiteboard pages should ignore the :block/name property inside :block/parent."
-    (let [conn (ldb/start-conn)]
+    (let [conn (gp-db/start-conn)]
       (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
       (graph-parser/parse-file conn "/whiteboards/bar.edn" (pr-str bar-edn) {})
       (let [pages (d/q '[:find ?name
@@ -121,7 +120,7 @@
         (is (= pages #{["foo"] ["bar"]}))))))
 
 (defn- test-property-order [num-properties]
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         properties (mapv #(keyword (str "p" %)) (range 0 num-properties))
         text (->> properties
                   (map #(str (name %) ":: " (name %) "-value"))
@@ -147,7 +146,7 @@
     (test-property-order 10)))
 
 (deftest quoted-property-values
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         _ (graph-parser/parse-file conn
                                    "foo.md"
                                    "- desc:: \"#foo is not a ref\""
@@ -166,7 +165,7 @@
         "No refs from property value")))
 
 (deftest non-string-property-values
-  (let [conn (ldb/start-conn)]
+  (let [conn (gp-db/start-conn)]
     (graph-parser/parse-file conn
                              "lythe-of-heaven.md"
                              "rating:: 8\nrecommend:: true\narchive:: false"
@@ -180,7 +179,7 @@
                 first)))))
 
 (deftest linkable-built-in-properties
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         _ (graph-parser/parse-file conn
                                    "lol.md"
                                    (str "alias:: 233\ntags:: fun, facts"
@@ -219,7 +218,7 @@
   "Runs tests on page properties and block properties. file-properties is what is
   visible in a file and db-properties is what is pulled out from the db"
   [file-properties db-properties user-config]
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         page-content (gp-property/->block-content file-properties)
         ;; Create Block properties from given page ones
         block-property-transform (fn [m] (update-keys m #(keyword (str "block-" (name %)))))
@@ -292,7 +291,7 @@
      {})))
 
 (deftest invalid-properties
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         properties {"foo" "valid"
                     "[[foo]]" "invalid"
                     "some,prop" "invalid"
@@ -326,8 +325,8 @@
 
 (deftest correct-page-names-created-from-title
   (testing "from title"
-    (let [conn (ldb/start-conn)
-          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+    (let [conn (gp-db/start-conn)
+          built-in-pages (set (map string/lower-case gp-db/built-in-pages-names))]
       (graph-parser/parse-file conn
                                "foo.md"
                                "title:: core.async"
@@ -342,8 +341,8 @@
                   set)))))
 
   (testing "from cased org title"
-    (let [conn (ldb/start-conn)
-          built-in-pages (set default-db/built-in-pages-names)]
+    (let [conn (gp-db/start-conn)
+          built-in-pages (set gp-db/built-in-pages-names)]
       (graph-parser/parse-file conn
                                "foo.org"
                                ":PROPERTIES:
@@ -362,8 +361,8 @@
 
 (deftest correct-page-names-created-from-page-refs
   (testing "for file, mailto, web and other uris in markdown"
-    (let [conn (ldb/start-conn)
-          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+    (let [conn (gp-db/start-conn)
+          built-in-pages (set (map string/lower-case gp-db/built-in-pages-names))]
       (graph-parser/parse-file conn
                                "foo.md"
                                (str "- [title]([[bar]])\n"
@@ -384,8 +383,8 @@
                   set)))))
 
 (testing "for web and page uris in org"
-    (let [conn (ldb/start-conn)
-          built-in-pages (set (map string/lower-case default-db/built-in-pages-names))]
+    (let [conn (gp-db/start-conn)
+          built-in-pages (set (map string/lower-case gp-db/built-in-pages-names))]
       (graph-parser/parse-file conn
                                "foo.org"
                                (str "* [[bar][title]]\n"
@@ -403,7 +402,7 @@
 
 (deftest duplicated-ids
   (testing "duplicated block ids in same file"
-    (let [conn (ldb/start-conn)
+    (let [conn (gp-db/start-conn)
           extract-block-ids (atom #{})
           parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
           block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]
@@ -420,7 +419,7 @@ id:: 63f199bc-c737-459f-983d-84acfcda14fe
         (is (= 1 (count (filter #(= (:block/uuid %) block-id) blocks)))))))
 
   (testing "duplicated block ids in multiple files"
-    (let [conn (ldb/start-conn)
+    (let [conn (gp-db/start-conn)
           extract-block-ids (atom #{})
           parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
           block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]

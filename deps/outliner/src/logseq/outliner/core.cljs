@@ -14,11 +14,13 @@
             [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
+            [logseq.graph-parser.db :as gp-db]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]
             [logseq.common.marker :as common-marker]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -110,6 +112,10 @@
                            (remove nil?))
             orphaned-pages (when (seq old-pages)
                              (ldb/get-orphaned-pages db {:pages old-pages
+                                                         :built-in-pages-names
+                                                         (if db-graph?
+                                                           sqlite-create-graph/built-in-pages-names
+                                                           gp-db/built-in-pages-names)
                                                          :empty-ref-f (fn [page]
                                                                         (let [refs (:block/_refs page)]
                                                                           (and (or (zero? (count refs))
