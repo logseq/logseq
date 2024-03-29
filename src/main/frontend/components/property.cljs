@@ -222,7 +222,7 @@
             *property-schema (::property-schema state)
             built-in-property? (contains? db-property/built-in-properties-keys-str (:block/original-name property))
             property (db/sub-block (:db/id property))
-            built-in? (ldb/built-in? (db/get-db) property)
+            built-in? (ldb/built-in? property)
             disabled? (or built-in? config/publishing?)
             property-type (get-in property [:block/schema :type])
             save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
@@ -264,7 +264,7 @@
 
           [:div.grid.grid-cols-4.gap-1.items-center.leading-8
            [:label.col-span-1 "Schema type:"]
-           (if (or (ldb/built-in? (db/get-db) property)
+           (if (or (ldb/built-in? property)
                    (and property-type (seq values)))
              [:div.flex.items-center.col-span-2
               (property-type-label property-type)
@@ -439,7 +439,7 @@
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         entity-properties (->> (keys (:block/properties entity))
-                               (map #(:block/original-name (db/entity [:block/uuid %])))
+                               (map #(:block/original-name (db/entity %)))
                                (remove nil?)
                                (set))
         existing-tag-alias (reduce (fn [acc prop]
@@ -549,7 +549,7 @@
                                                             (components-pu/update-property! property property-name (assoc schema :hide? true))
                                                             (shui/popup-hide!)))}
                                              "Hide property")
-                                            (when-not (ldb/built-in-class-property? (db/get-db) block property)
+                                            (when-not (ldb/built-in-class-property? block property)
                                               (shui/dropdown-menu-item
                                                {:on-click (fn []
                                                             (handle-delete-property! block property {:class-schema? class-schema?})
@@ -701,8 +701,8 @@
         block (resolve-linked-block-if-exists target-block)
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
-                     (let [properties (:properties (:block/schema block))]
-                       (map (fn [k] [k nil]) properties))
+                     (let [properties (:class/schema.properties block)]
+                       (map (fn [p] [(:db/ident p) nil]) properties))
                      (sort-by first block-properties))
         alias (set (map :db/id (:block/alias block)))
         alias-properties (when (seq alias)
@@ -751,7 +751,7 @@
                                  properties #{}
                                  result []]
                             (if-let [class (first classes)]
-                              (let [cur-properties (->> (:properties (:block/schema class))
+                              (let [cur-properties (->> (:class/schema.properties class)
                                                         (remove properties)
                                                         (remove hide-with-property-id))]
                                 (recur (rest classes)

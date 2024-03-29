@@ -7,9 +7,9 @@
             [logseq.db.frontend.property :as db-property]))
 
 (defn get-property-name
-  "Get a property's name given its uuid"
-  [uuid]
-  (:block/original-name (db-utils/entity [:block/uuid uuid])))
+  "Get a property's name given its id"
+  [id]
+  (:block/original-name (db-utils/entity id)))
 
 (defn get-built-in-property-uuid
   "Get a built-in property's uuid given its name"
@@ -27,7 +27,7 @@
   "Checks if the given properties are all hidden properties"
   [properties]
   (every? (fn [id]
-            (:hide? (:block/schema (db/entity [:block/uuid id])))) properties))
+            (:hide? (:block/schema (db/entity id)))) properties))
 
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
@@ -36,7 +36,7 @@
   [properties]
   (->> properties
        (map (fn [[k v]]
-              (let [prop-ent (db-utils/entity [:block/uuid k])
+              (let [prop-ent (db-utils/entity k)
                     readable-property-val
                     #(if (seq (get-in prop-ent [:block/schema :values])) ; closed values
                        (when-let [block (db-utils/entity [:block/uuid %])]

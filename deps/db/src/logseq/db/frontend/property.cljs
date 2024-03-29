@@ -212,16 +212,11 @@
   [repo db block]
   (= :whiteboard-shape (get-block-property-value repo db block :ls-type)))
 
-(defn get-built-in
-  "Gets a built-in page/class/property/X by its :db/ident"
-  [db db-ident]
-  (d/entity db db-ident))
-
 (defn get-by-ident-or-name
   "Gets a property by ident or name"
   [db ident-or-name]
   (if (and (keyword? ident-or-name) (namespace ident-or-name))
-    (get-built-in db ident-or-name)
+    (d/entity db ident-or-name)
     (d/entity db [:block/name (common-util/page-name-sanity-lc (name ident-or-name))])))
 
 (defn get-closed-property-values
@@ -246,7 +241,9 @@
 
 (defn property?
   [k]
-  (contains? #{:logseq.property :user.property} (keyword (namespace k))))
+  (let [k-name (name k)]
+    (or (string/starts-with? k-name "logseq.property")
+        (string/starts-with? k-name "user.property"))))
 
 ;; TODO: db ident should obey clojure's rules for keywords
 (defn get-db-ident-from-name

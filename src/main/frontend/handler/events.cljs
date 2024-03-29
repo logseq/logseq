@@ -311,7 +311,7 @@
                       (contains? shown-properties property)
                       property-value)]
          [:div.flex.flex-row.m-2.justify-between.align-items
-          [:div (if (uuid? property) (db-pu/get-property-name property) (name property))]
+          [:div (if (keyword? property) (db-pu/get-property-name property) (name property))]
           [:div.mt-1 (ui/toggle shown?
                        (fn []
                          (let [value (not shown?)]

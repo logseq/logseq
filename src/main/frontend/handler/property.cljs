@@ -29,7 +29,7 @@
   [page-name key value]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
-      (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page-name)])]
+      (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
        (set-block-property! repo (:block/uuid page) key value))
       (file-page-property/add-property! page-name key value))))
 

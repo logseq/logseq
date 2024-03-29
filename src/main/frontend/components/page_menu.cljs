@@ -19,8 +19,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]
-            [logseq.db.frontend.property :as db-property]))
+            [frontend.handler.property.util :as pu]))
 
 (defn- delete-page!
   [page-name]
@@ -48,9 +47,9 @@
 (defn ^:large-vars/cleanup-todo page-menu
   [page-name]
   (when-let [page-name (or
-                         page-name
-                         (state/get-current-page)
-                         (state/get-current-whiteboard))]
+                        page-name
+                        (state/get-current-page)
+                        (state/get-current-whiteboard))]
     (let [page-name (util/page-name-sanity-lc page-name)
           repo (state/sub :git/current-repo)
           page (db/entity repo [:block/name page-name])
@@ -58,8 +57,7 @@
           whiteboard? (contains? (set (:block/type page)) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
-          properties (:block/properties page)
-          public? (true? (pu/lookup properties :public))
+          public? (true? (pu/lookup (:block/properties page) :public))
           _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-name)
           developer-mode? (state/sub [:ui/developer-mode?])
@@ -70,8 +68,6 @@
                                     ;; FIXME: Sync state is not cleared when switching to a new graph
                                     (file-sync-handler/current-graph-sync-on?)
                                     (file-sync-handler/get-current-graph-uuid))
-          built-in-property? (and (contains? (:block/type page) "property")
-                                  (contains? db-property/built-in-properties-keys-str page-name))
           db-based? (config/db-based-graph? repo)]
       (when (and page (not block?))
         (->>
@@ -106,14 +102,12 @@
              :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
           (when-not (or contents?
-                        config/publishing?
-                        (and db-based?
-                             built-in-property?))
+                        config/publishing?)
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page-name)}})
 
           (when (and (not (mobile-util/native-platform?))
-                  (state/get-current-page))
+                     (state/get-current-page))
             {:title (t :page/slide-view)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!
@@ -138,7 +132,7 @@
              :options {:on-click #(shui/dialog-open!
                                    (fn []
                                      (export/export-blocks (:block/name page) {:whiteboard? whiteboard?}))
-                                    {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
+                                   {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
 
           (when (util/electron?)
             {:title   (t (if public? :page/make-private :page/make-public))

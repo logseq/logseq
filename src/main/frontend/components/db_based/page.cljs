@@ -26,7 +26,7 @@
         configure-opts {:selected? false
                         :page-configure? true}
         has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
-        has-class-properties? (seq (:properties (:block/schema page)))
+        has-class-properties? (seq (:class/schema.properties page))
         has-tags? (seq (:block/tags page))
         hide-properties? (get-in page [:block/properties (:block/uuid (db/entity :logseq.property/hide-properties?))])]
     (when (or configure?
@@ -217,15 +217,15 @@
             (when (or @*hover? (not collapsed?))
               [:div.px-1.absolute.right-0.top-0
                (shui/button
-                 {:variant :ghost :size :sm}
-                 (if collapsed?
-                   [:span.opacity-80.flex.items-center
-                    (ui/icon "adjustments-horizontal" {:size 16})]
-                   (ui/icon "x")))])])]
+                {:variant :ghost :size :sm}
+                (if collapsed?
+                  [:span.opacity-80.flex.items-center
+                   (ui/icon "adjustments-horizontal" {:size 16})]
+                  (ui/icon "x")))])])]
         (when show-info?
           (if collapsed?
             (when (or (seq (:block/properties page))
-                      (and class? (seq (:properties (:block/schema page)))))
+                      (and class? (seq (:class/schema.properties page))))
               [:div.px-4
                (page-properties page {:mode (if class? :class :page)})])
             [:div.pt-2.px-4
