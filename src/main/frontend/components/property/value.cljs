@@ -309,19 +309,6 @@
                                    (when on-chosen (on-chosen)))))]
     (select-page property opts')))
 
-;; (defn- move-cursor
-;;   [up? opts]
-;;   (let [f (if up? dec inc)
-;;         id (str (:parent-dom-id opts) "-" (f (:idx opts)))
-;;         editor-id (str (:parent-dom-id opts) "-editor" "-" (f (:idx opts)))
-;;         sibling (gdom/getElement id)
-;;         editor (gdom/getElement editor-id)]
-;;     (when sibling
-;;       (.click sibling)
-;;       (state/set-state! :editor/property-triggered-by-click? {editor-id true}))
-;;     (when editor
-;;       (.focus editor))))
-
 (defn- save-text!
   [repo block property value _editor-id e]
   (let [new-value (util/evalue e)]
@@ -701,7 +688,7 @@
                :style {:min-height 24}
                :on-click (fn []
                            (when (and (= type :default) (not (uuid? value)))
-                             (set-editing! property editor-id dom-id value {:ref @*ref})))}
+                             (set-editing! (assoc property :block/uuid (random-uuid)) editor-id dom-id value {:ref @*ref})))}
               (if (string/blank? value)
                 (if template?
                   (let [id (first (:classes schema))
