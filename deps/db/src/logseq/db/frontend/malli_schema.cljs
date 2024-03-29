@@ -92,7 +92,8 @@
    [:block/journal? :boolean]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
-   [:block/path-refs {:optional true} [:set :int]]])
+   [:block/path-refs {:optional true} [:set :int]]
+   [:class/schema.properties {:optional true} [:set :int]]])
 
 (def normal-page
   (vec
@@ -112,10 +113,11 @@
     [:map
      [:block/namespace {:optional true} :int]
      [:db/ident {:optional true} :keyword]
+     [:class/schema.properties {:optional true} [:set :int]]
      [:block/schema
       {:optional true}
       [:map
-       [:properties {:optional true} [:vector :uuid]]]]]
+       [:properties {:optional true} [:vector :int]]]]]
     page-attrs
     page-or-block-attrs)))
 
