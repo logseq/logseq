@@ -180,7 +180,7 @@
                           key)]
       (if (sqlite-util/db-based-graph? repo)
         (when-let [property (d/entity db [:block/name (common-util/page-name-sanity-lc property-name)])]
-          (get coll (:block/uuid property)))
+          (get coll (:db/ident property)))
         (get coll key)))))
 
 (defn get-block-property-value

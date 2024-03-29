@@ -310,7 +310,7 @@
                                              id))))))]
      (cond-> m
        matched-status-id
-       (update :block/properties assoc (:block/uuid property) matched-status-id)
+       (assoc (:db/ident property) matched-status-id)
 
        matched-status-id
        (update :block/content (fn [content]
