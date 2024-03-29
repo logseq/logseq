@@ -74,13 +74,13 @@
      (and db-ident (keyword? db-ident))
      (assoc :db/ident db-ident)
      (= :many (:cardinality prop-schema))
-     (assoc :db/index true
-            :db/cardinality :db.cardinality/many)
+     (assoc :db/cardinality :db.cardinality/many)
      (not= :many (:cardinality prop-schema))
      (assoc :db/cardinality :db.cardinality/one)
      (contains? #{:page :block :date :object} (:type prop-schema))
-     (assoc :db/index true
-            :db/valueType :db.type/ref))))
+     (assoc :db/valueType :db.type/ref)
+     true
+     (assoc :db/index true))))
 
 
 (defn build-new-class

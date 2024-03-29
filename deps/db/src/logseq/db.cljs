@@ -495,6 +495,17 @@
                      '[:db/id :block/name :block/original-name]
                      ids)))))
 
+(defn get-page
+  "Get a page given its unsanitized name"
+  [db page-name]
+  (d/entity db [:block/name (common-util/page-name-sanity-lc (name page-name))]))
+
+(defn get-page-uuid
+  "Get a user page's uuid given its unsanitized name"
+  ;; Get a page's uuid given its unsanitized name
+  [db page-name]
+  (:block/uuid (get-page db page-name)))
+
 (defn get-page-alias
   [db page-id]
   (->>

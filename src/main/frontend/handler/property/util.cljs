@@ -20,20 +20,6 @@
         db (db/get-db repo)]
     (db-property/get-block-property-value repo db block key)))
 
-(defn get-property
-  "Get a property given its unsanitized name"
-  [property-name]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (db-property/get-property db property-name)))
-
-;; TODO: move this to another ns
-(defn get-page-uuid
-  "Get a user property's uuid given its unsanitized name"
-  ;; Get a page's uuid given its unsanitized name
-  [property-name]
-  (:block/uuid (get-property property-name)))
-
 (defn get-pid
   "Get a property's id (name or uuid) given its name. For file and db graphs"
   [property-name]

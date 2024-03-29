@@ -3,7 +3,6 @@
   (:require [frontend.db :as db]
             [frontend.state :as state]
             [clojure.string :as string]
-            [frontend.handler.property.util :as pu]
             [logseq.db :as ldb]))
 
 (defn add-page-to-recent!
@@ -11,7 +10,7 @@
   (when-not (:db/restoring? @state/state)
     (when-let [page-uuid (if (uuid? page)
                            nil
-                           (pu/get-page-uuid page))]
+                           (ldb/get-page-uuid (db/get-db) page))]
       (when-let [page (db/entity [:block/uuid page-uuid])]
         (when-not (ldb/hidden-page? page)
           (let [pages (state/get-recent-pages)]
