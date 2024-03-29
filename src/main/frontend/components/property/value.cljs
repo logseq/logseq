@@ -429,11 +429,11 @@
                         (p/do!
                          (add-property-f (if (map? chosen) (:value chosen) chosen))
                          (when-let [f (:on-chosen select-opts)] (f))))
-            selected-choices' (->> (get block (:db/ident property))
-                                   (map (fn [x] (if (= :date type) (:db/id x) x)))
-                                   (remove nil?))
+            selected-choices' (get block (:db/ident property))
             selected-choices (if (coll? selected-choices')
-                               selected-choices'
+                               (->> selected-choices'
+                                    (map (fn [x] (if (= :date type) (:db/id x) x)))
+                                    (remove nil?))
                                [selected-choices'])]
         (select-aux block property
                     (cond->
