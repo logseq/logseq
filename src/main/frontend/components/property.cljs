@@ -141,14 +141,13 @@
                                   :value type})))]
     [:div {:class (if in-block-container? "flex flex-1" "flex items-center col-span-2")}
      (shui/select
-      (cond->
-       {:default-open (boolean default-open?)
-        :disabled disabled?
-        :on-value-change
-        (fn [v]
-          (let [type (keyword (string/lower-case v))
-                update-schema-fn (apply comp
-                                        #(assoc % :type type)
+      {:default-open (boolean default-open?)
+       :disabled disabled?
+       :on-value-change
+       (fn [v]
+         (let [type (keyword (string/lower-case v))
+               update-schema-fn (apply comp
+                                       #(assoc % :type type)
                                              ;; always delete previous closed values as they
                                              ;; are not valid for the new type
                                        #(dissoc % :values)
@@ -181,15 +180,14 @@
         {:placeholder "Select a schema type"}))
       (shui/select-content
        (shui/select-group
-        (for [{:keys [label value]} schema-types]
-          (shui/select-item {:value value} label)))))
-
+        (for [{:keys [label value disabled]} schema-types]
+          (shui/select-item {:value value :disabled disabled} label)))))
      (when show-type-change-hints?
        (ui/tippy {:html        "Changing the property type clears some property configurations."
                   :class       "tippy-hover ml-2"
                   :interactive true
                   :disabled    false}
-                 (svg/info))))]))
+                 (svg/info)))]))
 
 (rum/defcs ^:large-vars/cleanup-todo property-config
   "All changes to a property must update the db and the *property-schema. Failure to do
