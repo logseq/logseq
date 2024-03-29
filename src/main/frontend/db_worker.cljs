@@ -575,25 +575,21 @@
          :target-user-uuids target-user-uuids
          :target-user-emails target-user-emails)))))
 
-  (rtc-upload-graph
+  (rtc-async-upload-graph
    [this repo token remote-graph-name]
    (let [d (p/deferred)]
      (when-let [conn (worker-state/get-datascript-conn repo)]
        (async/go
          (try
-           (let [state (<? (rtc-core/<init-state repo token false))]
-             (<? (rtc-updown/<upload-graph state repo conn remote-graph-name))
+           (let [state (<? (rtc-core/<init-state repo token false))
+                 r (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))]
              (rtc-db-listener/listen-db-to-generate-ops repo conn)
-             (p/resolve! d :success))
-           (worker-util/post-message :notification
-                                     [[:div
-                                       [:p "Upload graph successfully"]]])
+             (p/resolve! d r))
            (catch :default e
              (worker-util/post-message :notification
                                        [[:div
                                          [:p "upload graph failed"]]
                                         :error])
-             (prn ::download-graph-failed e)
              (p/reject! d e)))))
      d))
 
@@ -613,6 +609,37 @@
                                         [:p "download graph failed"]]
                                        :error])
             (prn ::download-graph-failed e)))))))
+
+  (rtc-request-download-graph
+   [this repo token graph-uuid]
+   (async-util/c->p
+    (async/go
+      (let [state (or @rtc-core/*state
+                      (<! (rtc-core/<init-state repo token false)))]
+        (<? (rtc-updown/<request-download-graph state graph-uuid))))))
+
+  (rtc-wait-download-graph-info-ready
+   [this repo token download-info-uuid graph-uuid timeout-ms]
+   (async-util/c->p
+    (async/go
+      (let [state (or @rtc-core/*state
+                      (<! (rtc-core/<init-state repo token false)))]
+        (ldb/write-transit-str
+         (<? (rtc-updown/<wait-download-info-ready state download-info-uuid graph-uuid timeout-ms)))))))
+
+  (rtc-download-graph-from-s3
+   [this graph-uuid graph-name s3-url]
+   (async-util/c->p
+    (async/go
+      (rtc-updown/<download-graph-from-s3 graph-uuid graph-name s3-url))))
+
+  (rtc-download-info-list
+   [this repo token graph-uuid]
+   (async-util/c->p
+    (async/go
+      (let [state (or @rtc-core/*state
+                      (<! (rtc-core/<init-state repo token false)))]
+        (<? (rtc-updown/<download-info-list state graph-uuid))))))
 
   (rtc-push-pending-ops
    [_this]

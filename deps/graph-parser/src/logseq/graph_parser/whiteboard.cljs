@@ -88,8 +88,8 @@
            {:block/page default-page-ref})))
 
 (defn shape->block [repo db shape page-name]
-  (let [properties {(db-property/get-pid repo db :ls-type) :whiteboard-shape
-                    (db-property/get-pid repo db :logseq.tldraw.shape) shape}
+  (let [properties {(db-property/get-pid repo db :logseq.property/ls-type) :whiteboard-shape
+                    (db-property/get-pid repo db :logseq.property.tldraw/shape) shape}
         page-name (common-util/page-name-sanity-lc page-name)
         block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
                :block/page {:block/name page-name}

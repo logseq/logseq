@@ -17,7 +17,7 @@
   (and filename (string? filename) (string/starts-with? filename "hls__")))
 
 (def get-area-block-asset-url
-  #(publish-db/get-area-block-asset-url %1 %2 {:prop-lookup-fn pu/lookup}))
+  #(publish-db/get-area-block-asset-url %1 %2 {:prop-lookup-fn pu/lookup-by-name}))
 
 (defn get-bounding-rect
   [rects]

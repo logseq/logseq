@@ -534,7 +534,7 @@
   @apply w-auto md:max-w-4xl overflow-hidden;
 
   .settings-modal {
-    @apply -mx-6 -mt-10 -mb-6 rounded-xl;
+    @apply -mx-6 -mt-6 -mb-6 rounded-xl;
   }
 }
 
@@ -542,6 +542,10 @@
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
+
+  .page {
+    @apply px-6;
+  }
 }
 
 .cp__sidebar-help {
@@ -774,7 +778,7 @@
 
 /* Workaround for Linux Intel GPU text rendering issue GH#7233 */
 .is-electron.is-linux .cp__menubar-repos {
-  #repo-switch, .nav-header .flex-1 {
+  .repo-switch, .nav-header .flex-1 {
     position: relative;
   }
 }

@@ -15,15 +15,12 @@
   (let [built-in-properties (->>
                              (map (fn [[k v]]
                                     (assert (keyword? k))
-                                    [k (assoc v
-                                              :db-ident
-                                              (get v :db-ident (db-property/name->db-ident k)))])
+                                    [k v])
                                   db-property/built-in-properties)
                              (into {}))]
     (mapcat
-     (fn [[k-keyword {:keys [schema original-name closed-values db-ident]}]]
-       (let [k-name (name k-keyword)
-             name (or original-name k-name)
+     (fn [[db-ident {:keys [schema original-name closed-values]}]]
+       (let [name (or original-name (name db-ident))
              blocks (if closed-values
                       (db-property-util/build-closed-values
                        name
@@ -36,11 +33,12 @@
          (update blocks 0 default-db/mark-block-as-built-in)))
      built-in-properties)))
 
+
 (defn kv
   "Creates a key-value pair tx with the key under the :db/ident namespace :logseq.kv.
    For example, the :db/type key is stored under an entity with ident :logseq.kv.db/type"
   [key value]
-  {:db/ident (keyword (str "logseq.kv." (namespace key)) (name key))
+  {:db/ident (keyword "logseq.kv" (str (namespace key) "-" (name key)))
    key value})
 
 (defn build-db-initial-data
@@ -66,23 +64,23 @@
                               (map :db/ident default-properties)
                               default-properties)
         default-classes (map
-                         (fn [[k-keyword {:keys [schema original-name]}]]
-                           (let [db-ident (name k-keyword)]
+                         (fn [[db-ident {:keys [schema original-name]}]]
+                           (let [original-name' (or original-name (name db-ident))]
                              (default-db/mark-block-as-built-in
-                              (sqlite-util/build-new-class
-                               (let [properties (mapv
-                                                 (fn [db-ident]
-                                                   (let [property (get db-ident->properties db-ident)]
-                                                     (assert property (str "Built-in property " db-ident " is not defined yet"))
-                                                     db-ident))
-                                                 (:properties schema))]
-                                 (cond->
-                                  {:block/original-name (or original-name db-ident)
-                                   :block/name (common-util/page-name-sanity-lc db-ident)
-                                   :db/ident (keyword "logseq.class" db-ident)
-                                   :block/uuid (d/squuid)}
-                                   (seq properties)
-                                   (assoc :class/schema.properties properties)))))))
+                             (sqlite-util/build-new-class
+                              (let [properties (mapv
+                                                (fn [db-ident]
+                                                  (let [property (get db-ident->properties db-ident)]
+                                                    (assert property (str "Built-in property " db-ident " is not defined yet"))
+                                                    db-ident))
+                                                (:properties schema))]
+                                (cond->
+                                 {:block/original-name original-name'
+                                  :block/name (common-util/page-name-sanity-lc original-name')
+                                  :db/ident db-ident
+                                  :block/uuid (d/squuid)}
+                                  (seq properties)
+                                  (assoc :class/schema.properties properties)))))))
                          db-class/built-in-classes)
         db-idents (keep (fn [x] (when-let [ident (:db/ident x)]
                                   {:db/ident ident}))

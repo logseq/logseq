@@ -90,6 +90,7 @@
    [:block/original-name :string]
    [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
+   [:block/namespace {:optional true} :int]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]])
@@ -101,20 +102,31 @@
      ;; Only for linked pages
      [:block/collapsed? {:optional true} :boolean]
      ;; journal-day is only set for journal pages
-     [:block/journal-day {:optional true} :int]
-     [:block/namespace {:optional true} :int]]
+     [:block/journal-day {:optional true} :int]]
     page-attrs
     page-or-block-attrs)))
 
 (def class-attrs
   [[:db/ident {:optional true} :keyword]
+   [:class/parent {:optional true} :int]
    [:class/schema.properties {:optional true} [:set :int]]])
 
+(def logseq-ident-namespaces
+  "Set of all namespaces Logseq uses for :db/ident. It's important to grow this
+  list purposefully and have it start with 'logseq' to allow for users and 3rd
+  party plugins to provide their own namespaces to core concepts."
+  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
+    "logseq.class" "logseq.task" "logseq.kv"})
+
+(def logseq-ident
+  [:and :keyword [:fn
+                  {:error/message "should be a valid :db/ident namespace"}
+                  (fn logseq-namespace? [k]
+                    (contains? logseq-ident-namespaces (namespace k)))]])
 (def class-page
   (vec
    (concat
     [:map
-     [:block/namespace {:optional true} :int]
      [:block/schema
       {:optional true}
       [:map
@@ -143,13 +155,15 @@
   (vec
    (concat
     [:map
-     [:db/ident :keyword]
+     [:db/ident logseq-ident]
      [:block/schema
       (vec
        (concat
         [:map
          [:type (apply vector :enum (into db-property-type/internal-built-in-property-types
-                                          db-property-type/user-built-in-property-types))]]
+                                          db-property-type/user-built-in-property-types))]
+         [:public? {:optional true} :boolean]
+         [:view-context {:optional true} [:enum :page :block]]]
         property-common-schema-attrs
         property-type-schema-attrs))]]
     page-attrs
@@ -235,7 +249,7 @@
     [:map]
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
-     [:db/ident {:optional true} :keyword]
+     [:db/ident {:optional true} logseq-ident]
      [:block/schema {:optional true}
       [:map
        [:value [:or :string :double]]
@@ -283,7 +297,7 @@
   (into [:or]
         (map (fn [kv]
                [:map
-                [:db/ident :keyword]
+                [:db/ident logseq-ident]
                 kv
                 [:block/tx-id {:optional true} :int]])
              db-ident-keys)))
@@ -337,9 +351,8 @@
                                        db-ident-keys (rest class-page))
                                (remove #(= (last %) [:set :int]))
                                (map first)
-                               set)
-      attrs-to-ignore #{:ast/version}]
-  (when-let [undeclared-attrs (seq (remove (some-fn malli-non-ref-attrs attrs-to-ignore) db-schema/db-non-ref-attributes))]
+                               set)]
+  (when-let [undeclared-attrs (seq (remove malli-non-ref-attrs db-schema/db-non-ref-attributes))]
     (throw (ex-info (str "The malli DB schema is missing the following non ref attributes from datascript's schema: "
                          (string/join ", " undeclared-attrs))
                     {}))))

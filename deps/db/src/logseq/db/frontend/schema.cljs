@@ -3,11 +3,9 @@
   (:require [clojure.set :as set]))
 
 (defonce version 2)
-(defonce ast-version 1)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
   {:schema/version  {}
-   :ast/version     {}
    :db/type         {}
    :db/ident        {:db/unique :db.unique/identity}
 
@@ -128,8 +126,10 @@
    (dissoc schema
            :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
            :block/properties-order)
-   {:file/last-modified-at {}}
-   {:asset/uuid {:db/unique :db.unique/identity}
+   {:class/parent {:db/valueType :db.type/ref
+                   :db/index true}
+    :file/last-modified-at {}
+    :asset/uuid {:db/unique :db.unique/identity}
     :asset/meta {}}))
 
 (def retract-attributes

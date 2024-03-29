@@ -13,10 +13,9 @@
 
 ;; FIXME: property no long has `:block/name` attribute
 (defn get-built-in-property-uuid
-  "Get a built-in property's uuid given its name"
-  ([property-name] (get-built-in-property-uuid (state/get-current-repo) property-name))
-  ([repo property-name]
-   (:block/uuid (db-utils/entity repo [:block/name (name property-name)]))))
+  "Get a built-in property's uuid given its db-ident"
+  ([db-ident] (get-built-in-property-uuid (state/get-current-repo) db-ident))
+  ([repo db-ident] (:block/uuid (db-utils/entity repo db-ident))))
 
 ;; FIXME: property no long has `:block/name` attribute
 (defn get-user-property-uuid
