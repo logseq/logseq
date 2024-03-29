@@ -63,6 +63,8 @@
                 (assoc :block/created-at updated-at))]
     block))
 
+(def property-ref-types #{:page :block :date :object})
+
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"
   [prop-name prop-schema & {:keys [db-ident]}]
@@ -77,7 +79,7 @@
      (assoc :db/cardinality :db.cardinality/many)
      (not= :many (:cardinality prop-schema))
      (assoc :db/cardinality :db.cardinality/one)
-     (contains? #{:page :block :date :object} (:type prop-schema))
+     (contains? property-ref-types (:type prop-schema))
      (assoc :db/valueType :db.type/ref)
      true
      (assoc :db/index true))))

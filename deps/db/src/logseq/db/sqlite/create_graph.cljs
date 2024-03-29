@@ -44,7 +44,9 @@
 (defn build-db-initial-data
   [config-content]
   (let [initial-data [(kv :db/type "db")
-                      (kv :schema/version db-schema/version)]
+                      (kv :schema/version db-schema/version)
+                      ;; empty property value
+                      {:db/ident :property/empty-placeholder}]
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content

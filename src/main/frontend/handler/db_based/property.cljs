@@ -91,19 +91,33 @@
       ;; :default
       (if (util/uuid-string? v-str) (uuid v-str) v-str))))
 
+(defn update-schema
+  [property {:keys [type cardinality]}]
+  (let [ident (:db/ident property)
+        cardinality (if (= cardinality :many) :db.cardinality/many
+                        (get property :db/cardinality :db.cardinality/one))
+        type-data (when (and type (sqlite-util/property-ref-types type)) ; type changes
+                    {:db/ident ident
+                     :db/valueType :db.type/ref
+                     :db/cardinality cardinality})]
+    (or type-data
+        {:db/ident ident
+         :db/cardinality cardinality})))
+
 (defn upsert-property!
   [repo property-id schema {:keys [property-name]}]
   (let [db-ident (or property-id (db-property/get-db-ident-from-name property-name))
         property (db/entity db-ident)
         k-name (or (:block/original-name property) (name property-name))]
     (if property
-      (db/transact! repo [(cond->
-                           (outliner-core/block-with-updated-at
-                            {:db/ident db-ident
-                             :block/schema schema})
-                            (= :many (:cardinality schema))
-                            (assoc :db/cardinality :db.cardinality/many))]
-                    {:outliner-op :save-block})
+      (let [tx-data (->>
+                     (conj
+                      [(outliner-core/block-with-updated-at
+                        {:db/ident db-ident
+                         :block/schema schema})]
+                      (update-schema property schema))
+                     (remove nil?))]
+        (db/transact! repo tx-data {:outliner-op :save-block}))
       (db/transact! repo [(sqlite-util/build-new-property k-name schema {:db-ident db-ident})]
                     {:outliner-op :new-property}))))
 
