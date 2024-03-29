@@ -3636,10 +3636,7 @@
 (defn hidden-page->source-page
   [page]
   (or
-   (when-let [page-uuid (get-in (db/entity (:db/id page))
-                                [:block/properties (:block/uuid (db/entity :logseq.property/source-page-id))])]
-     (db/entity [:block/uuid page-uuid]))
-
+   (:logseq.property/source-page-id page)
    ;; FIXME: what if the source page has been deleted?
    page))
 
