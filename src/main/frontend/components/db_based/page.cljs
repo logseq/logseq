@@ -3,7 +3,6 @@
   (:require [frontend.components.block :as component-block]
             [frontend.components.editor :as editor]
             [frontend.components.class :as class-component]
-            [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
@@ -19,9 +18,7 @@
 
 (rum/defc page-properties < rum/reactive
   [page {:keys [mode configure?]}]
-  (let [types (:block/type page)
-        class? (= mode :class)
-        property? (contains? types "property")
+  (let [class? (= mode :class)
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
                         :page-configure? true}
@@ -34,7 +31,6 @@
                (not hide-properties?)
                (or has-viewable-properties?
                    has-class-properties?
-                   property?
                    has-tags?)))
       [:div.ls-page-properties
        {:class (util/classnames [{:no-mode (nil? mode)
@@ -105,23 +101,19 @@
         mode (rum/react *mode)
         types (:block/type page)
         class? (contains? types "class")
-        property? (contains? types "property")
         page-opts {:configure? true}]
     (when (nil? mode)
       (reset! *mode (cond
-                      property? :property
                       class? :class
                       :else :page)))
     [:div.flex.flex-col.gap-1
-     (if (= mode :property)
-       (property-component/property-config page {:inline-text component-block/inline-text})
-       [:<>
-        (when (= mode :class)
-          (class-component/configure page {:show-title? false}))
-        (when-not config/publishing? (tags-row page))
-        (when-not config/publishing? (icon-row page))
-        [:h2 "Properties: "]
-        (page-properties page (assoc page-opts :mode mode))])]))
+     [:<>
+      (when (= mode :class)
+        (class-component/configure page {:show-title? false}))
+      (when-not config/publishing? (tags-row page))
+      (when-not config/publishing? (icon-row page))
+      [:h2 "Properties: "]
+      (page-properties page (assoc page-opts :mode mode))]]))
 
 (rum/defc page-properties-react < rum/reactive
   [page* page-opts]
@@ -134,14 +126,9 @@
 (rum/defc mode-switch < rum/reactive
   [types *mode]
   (let [current-mode (rum/react *mode)
-        property? (contains? types "property")
         class? (contains? types "class")
         modes (->
                (cond
-                 (and property? class?)
-                 ["Property" "Class"]
-                 property?
-                 ["Property"]
                  class?
                  ["Class"]
                  :else
