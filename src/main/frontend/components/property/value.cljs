@@ -419,7 +419,7 @@
                                      [{:value value}])))
                          (distinct)))
             items (->> (if (= :date type)
-                         (map (fn [m] (let [label (:block/original-name (db/entity [:block/uuid (:value m)]))]
+                         (map (fn [m] (let [label (:block/original-name (db/entity (:value m)))]
                                         (when label
                                           (assoc m :label label)))) items)
                          items)
@@ -429,8 +429,12 @@
                         (p/do!
                          (add-property-f (if (map? chosen) (:value chosen) chosen))
                          (when-let [f (:on-chosen select-opts)] (f))))
-            selected-choices' (get-in block [:block/properties (:db/ident property)])
-            selected-choices (if (coll? selected-choices') selected-choices' [selected-choices'])]
+            selected-choices' (->> (get block (:db/ident property))
+                                   (map (fn [x] (if (= :date type) (:db/id x) x)))
+                                   (remove nil?))
+            selected-choices (if (coll? selected-choices')
+                               selected-choices'
+                               [selected-choices'])]
         (select-aux block property
                     (cond->
                      {:multiple-choices? multiple-choices?
