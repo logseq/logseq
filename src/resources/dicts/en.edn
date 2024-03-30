@@ -628,6 +628,8 @@
  :plugin/marketplace "Marketplace"
  :plugin/downloads "Downloads"
  :plugin/stars "Stars"
+ :plugin/author "Author"
+ :plugin/sponsor "Sponsor"
  :plugin/title "Title ({1})"
  :plugin/all "All"
  :plugin/unpacked "Unpacked"

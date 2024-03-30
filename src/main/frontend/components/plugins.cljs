@@ -249,9 +249,9 @@
        [:ul.menu-list
         (for [link sponsors]
           [:li {:key link}
-           [:a {:href link :target "_blank"}
-            [:span.flex.items-center link (ui/icon "external-link")]]])
-        ]])]
+           [:a {:href link :target "_blank" :title (t :plugin/sponsor)}
+            [:span.flex.items-center link (ui/icon "external-link")]]])]])]
+        
 
    [:div.r.flex.items-center
     (when (and unpacked? (not disabled?))
@@ -303,7 +303,8 @@
                  :has-new-version new-version}])}
 
      [:div.l.link-block.cursor-pointer
-      {:on-click (get-open-plugin-readme-handler url item repo)}
+      {:on-click (get-open-plugin-readme-handler url item repo)
+       :title "README"}
       (if (and icon (not (string/blank? icon)))
         [:img.icon {:src (if market? (plugin-handler/pkg-asset id icon) icon)}]
         svg/folder)
@@ -315,21 +316,23 @@
       [:h3.head.text-xl.font-bold.pt-1.5
 
        [:span.l.link-block.cursor-pointer
-        {:on-click (get-open-plugin-readme-handler url item repo)}
+        {:on-click (get-open-plugin-readme-handler url item repo)
+         :title "README"}
         name]
        (when (not market?) [:sup.inline-block.px-1.text-xs.opacity-50 version])]
 
       [:div.desc.text-xs.opacity-70
-       [:p description]
+       [:p description]]
        ;;[:small (js/JSON.stringify (bean/->js settings))]
        ]
 
       ;; Author & Identity
       [:div.flag
        [:p.text-xs.pr-2.flex.justify-between
-        [:small {:on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
+        [:small {:title (t :plugin/author)
+                 :on-click #(when-let [^js el (js/document.querySelector ".cp__plugins-page .search-ctls input")]
                               (reset! *search-key (str "@" author))
-                              (.select el))} author]
+                              (.select el))} (str "@" author)]
         [:small {:on-click #(do
                               (notification/show! "Copied!" :success)
                               (util/copy-to-clipboard! id))}
@@ -339,7 +342,8 @@
       [:div.flag.is-top.opacity-50
        (when repo
          [:a.flex {:target "_blank"
-                   :href   (plugin-handler/gh-repo-url repo)}
+                   :href   (plugin-handler/gh-repo-url repo)
+                   :title "GitHub"}
           (svg/github {:width 16 :height 16})])]
 
       (if market?
@@ -570,7 +574,7 @@
              :options {:on-click #(reset! *sort-by :downloads)}
              :icon    (ui/icon (aim-icon :downloads))}
 
-            {:title   (t :plugin/stars)
+            {:title   (str "GitHub " (t :plugin/stars))
              :options {:on-click #(reset! *sort-by :stars)}
              :icon    (ui/icon (aim-icon :stars))}
 
