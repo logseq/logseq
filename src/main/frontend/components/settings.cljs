@@ -343,8 +343,8 @@
                        (ui/tippy
                          {:html (case color
                                   :none [:p {:style {:max-width "300px"}}
-                                         "Cancel accent color. This is currently in beta stage and mainly used for compatibility with custom themes."]
-                                  :logseq "Logseq classical color"
+                                         (str (t :settings-page/accent-color-cancel) " This is currently in beta stage and mainly used for compatibility with custom themes.")]
+                                  :logseq (t :settings-page/accent-color-classic)
                                   (str (name color) " color") )
                           :delay [1000, 100]}
                          (shui-ui/button
@@ -365,8 +365,8 @@
                        ])]]
 
     [:<>
-     (row-with-button-action {:left-label  "Accent color"
-                              :description "Choosing an accent color may override any theme you have selected."
+     (row-with-button-action {:left-label  (t :settings-page/accent-color)
+                              :description (t :settings-page/accent-color-desc)
                               :-for        "toggle_radix_theme"
                               :desc        (when-not _in-modal?
                                              [:span.pl-6 (ui/render-keyboard-shortcut

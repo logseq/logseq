@@ -348,6 +348,10 @@
  :settings-page/update-available "新しいリリースがみつかりました "
  :settings-page/update-error-1 "⚠️ なにか問題が発生しました"
  :settings-page/update-error-2 "次のリンクをご確認ください："
+ :settings-page/accent-color "アクセントカラー"
+ :settings-page/accent-color-desc "アクセントカラーを選択すると、選択したテーマが上書きされる場合があります。" 
+ :settings-page/accent-color-cancel "アクセントカラーをキャンセル"
+ :settings-page/accent-color-classic "Logseq クラシックテーマ"
  :settings-permission/start-granting "認証"
 
  :settings-page/auto-chmod "ファイルの権限を自動で変更する"

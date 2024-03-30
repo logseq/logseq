@@ -369,6 +369,10 @@
  :settings-page/update-error-1 "⚠️ Oops, Something Went Wrong!"
  :settings-page/update-error-2 " Please check out the "
  :settings-permission/start-granting "Grant"
+ :settings-page/accent-color "Accent color"
+ :settings-page/accent-color-desc "Choosing an accent color may override any theme you have selected." 
+ :settings-page/accent-color-cancel "Cancel accent color."
+ :settings-page/accent-color-classic "Logseq classical color"
 
  :settings-page/zotero-profile "Choose a profile" 
  :settings-page/zotero-profile-new "New profile" 
