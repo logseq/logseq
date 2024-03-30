@@ -99,11 +99,6 @@
           :icon (ui/icon "settings")})
 
        (when config/lsp-enabled?
-         {:title (t :plugins)
-          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
-          :icon (ui/icon "apps")})
-
-       (when config/lsp-enabled?
          {:title (t :themes)
           :options {:on-click #(plugins/open-select-theme!)}
           :icon (ui/icon "palette")})
