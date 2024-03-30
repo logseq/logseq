@@ -28,7 +28,7 @@
     "chokidar": "^3.5.1",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
-    "dugite": "2.5.0",
+    "dugite": "2.5.1",
     "electron-deeplink": "1.0.10",
     "electron-dl": "3.3.0",
     "electron-log": "4.3.1",

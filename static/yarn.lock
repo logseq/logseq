@@ -1851,10 +1851,10 @@ ds-store@^0.1.5:
     macos-alias "~0.2.5"
     tn1150 "^0.1.0"
 
-dugite@2.5.0:
-  version "2.5.0"
-  resolved "https://registry.yarnpkg.com/dugite/-/dugite-2.5.0.tgz#8b235564fdf8692688283c714149a59d9da79865"
-  integrity sha512-sYsSOqV7NidthDtMUPgKCvqMGqswKkcyAxOMhwEswlcGZ+kHadT2SEDFUJOy0AVR/yTJL6wBF7q1OiySfU0gGA==
+dugite@2.5.1:
+  version "2.5.1"
+  resolved "https://registry.yarnpkg.com/dugite/-/dugite-2.5.1.tgz#6ab808ebf321809edf42d974e62eea9c9e256722"
+  integrity sha512-9OjUguynzq8v3GSmp01kbVcMmErc65ZZ0OssO/0PM2RyhD8Dzb8cCuy3z72+IxLwPwNi754jZ0FtMLAFA3D0qA==
   dependencies:
     progress "^2.0.3"
     tar "^6.1.11"
