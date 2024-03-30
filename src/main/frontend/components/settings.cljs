@@ -221,6 +221,93 @@
      [:div {:style {:text-align "right"}}
       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
 
+(defn wide-mode-row [wide-mode?]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "wide_mode"}
+    (t :command.ui/toggle-wide-mode)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/toggle wide-mode?
+                ui-handler/toggle-wide-mode!
+                true)]]
+   (when (not (or (util/mobile?) (mobile-util/native-platform?)))
+     [:div {:style {:text-align "right"}}
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-wide-mode))])])
+
+(defn document-mode-row []
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "document_mode"}
+    (t :command.ui/toggle-document-mode)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/button (t :command.ui/toggle-document-mode) ;; TODO: When using a toggle, it takes a long time to reflect. So use a button for now.
+                :on-click state/toggle-document-mode!)]] 
+   [:div {:style {:text-align "right"}}
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-document-mode))]])
+
+(defn switch-theme-row []
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "switch_theme"}
+    (t :command.ui/toggle-theme)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/button (t :command.ui/select-theme-color)
+      :on-click plugin-handler/show-themes-modal!)]]
+   [:div {:style {:text-align "right"}}
+    (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/select-theme-color))]])
+
+(defn marketplace-themes-row []
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "marketplace_themes"}
+    (t :settings-page/get-theme)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/button (t :plugin/marketplace)
+                :on-click plugin-handler/goto-plugins-dashboard!)]] ;; TODO: direct open for themes
+   [:div {:style {:text-align "right"}}
+    (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/goto-plugins))]])
+
+(defn marketplace-row []
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "marketplace"}
+    (t :plugins) "/" (t :themes)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/button (t :plugin/marketplace)
+                :on-click plugin-handler/goto-plugins-dashboard!)]]
+   [:div {:style {:text-align "right"}}
+    (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/goto-plugins))]])
+
+(defn plugin-settings-row []
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "plugins_settings"}
+    (t :plugins)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/button (t :plugin/open-settings)
+                :on-click #(plugin-handler/goto-plugins-settings!))]]])
+
+(rum/defc auto-check-for-updates-control
+  []
+  (let [[enabled, set-enabled!] (rum/use-state (plugin-handler/get-enabled-auto-check-for-updates?))]
+
+    [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+     [:label.block.text-sm.font-medium.leading-5.opacity-70 
+      (t :plugin/auto-check-for-updates)]
+     [:div
+      [:div.rounded-md.sm:max-w-xs 
+     {:on-click (fn []
+                  (let [boolean (not enabled)]
+                    (set-enabled! boolean)
+                    (plugin-handler/set-enabled-auto-check-for-updates boolean)))}
+     (ui/toggle enabled #() true)]]]))
+
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
@@ -698,7 +785,22 @@
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
-        theme (state/sub :ui/theme)
+        enable-all-pages-public? (state/all-pages-public?) 
+        plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))]
+    [:div.panel-wrap.is-general
+     (version-row version) 
+     (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row))
+     (language-row preferred-language)
+     (when current-repo (edit-config-edn))
+     (when (config/global-config-enabled?) (edit-global-config-edn))
+     (enable-all-pages-public-row enable-all-pages-public?) 
+     (when plugins-of-settings (marketplace-row))
+     (when plugins-of-settings (plugin-settings-row))
+     (when plugins-of-settings (auto-check-for-updates-control))]))
+
+(rum/defcs settings-style < rum/reactive
+  [current-repo]
+  (let [theme (state/sub :ui/theme)
         dark? (= "dark" theme)
         show-radix-themes? true
         system-theme? (state/sub :ui/system-theme?)
@@ -711,8 +813,12 @@
      (when show-radix-themes? (accent-color-row false))
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
+     (switch-theme-row)
+     (marketplace-themes-row)
      (when current-repo (edit-custom-css))
      (when current-repo (edit-export-css))]))
+     (wide-mode-row (state/get-wide-mode?))
+     (document-mode-row)]))
 
 (rum/defcs settings-editor < rum/reactive
   [_state current-repo]
