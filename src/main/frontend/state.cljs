@@ -1269,6 +1269,10 @@ Similar to re-frame subscriptions"
   []
   (use-theme-mode! (toggle-theme (:ui/theme @state))))
 
+(defn toggle-help!
+  []
+  (set-state! :ui/help-open? true))
+
 (defn set-custom-theme!
   ([custom-theme]
    (set-custom-theme! nil custom-theme))

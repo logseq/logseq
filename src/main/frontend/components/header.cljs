@@ -118,24 +118,31 @@
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
 
-       (when-not config/publishing?
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :join-community)]]
-          :options {:href "https://discuss.logseq.com"
-                    :title (t :discourse-title)
-                    :target "_blank"}
-          :icon (ui/icon "brand-discord")})
-
-       (when-not config/publishing?
-         {:title [:div.flex-row.flex.justify-between.items-center
-                  [:span (t :help/bug)]]
-          :options {:href (rfe/href :bug-report)}
-          :icon (ui/icon "bug")})
-
        (when config/publishing?
          {:title (t :toggle-theme)
           :options {:on-click #(state/toggle-theme!)}
           :icon (ui/icon "bulb")})
+       {:title (t :help/shortcuts)
+          :options {:on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)} ;; :on-click #(state/pub-event! [:modal/keymap])
+          :icon (ui/icon "keyboard")}
+
+      ;;  (when-not config/publishing?
+      ;;    {:title [:div.flex-row.flex.justify-between.items-center
+      ;;             [:span (t :join-community)]]
+      ;;     :options {:href "https://discuss.logseq.com"
+      ;;               :title (t :discourse-title)
+      ;;               :target "_blank"}
+      ;;     :icon (ui/icon "brand-discord")})
+
+      ;;  (when-not config/publishing?
+      ;;    {:title [:div.flex-row.flex.justify-between.items-center
+      ;;             [:span (t :help/bug)]]
+      ;;     :options {:href (rfe/href :bug-report)}
+      ;;     :icon (ui/icon "bug")})     
+      
+       {:title (t :handbook/title)
+        :options {:on-click #(state/toggle-help!)}
+        :icon (ui/icon "bulb")}
 
        (when login? {:hr true})
        (when login?
