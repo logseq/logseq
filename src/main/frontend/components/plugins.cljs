@@ -1037,7 +1037,7 @@
       (fn [{:keys [toggle-fn]}]
         [:div.toolbar-plugins-manager
          {:on-click toggle-fn}
-         [:a.button.relative
+         [:a.button.relative {:title (t :plugins)}
           (ui/icon "apps" {:size 20})
           (when badge-updates?
             (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]])
