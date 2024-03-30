@@ -255,6 +255,8 @@
       (when sync-enabled?
         (login))
 
+      (when (util/electron?)
+        (back-and-forward))
       (when config/lsp-enabled?
         [:<>
          (plugins/hook-ui-items :toolbar)
@@ -262,9 +264,6 @@
 
       (when (state/feature-http-server-enabled?)
         (server/server-indicator (state/sub :electron/server)))
-
-      (when (util/electron?)
-        (back-and-forward))
 
       (when-not (mobile-util/native-platform?)
         (new-block-mode))
