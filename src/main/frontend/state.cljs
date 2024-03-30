@@ -430,12 +430,6 @@ should be done through this fn in order to get global config and config defaults
     (when-not (string/blank? template)
       (string/trim template))))
 
-(defn all-pages-public?
-  []
-  (let [value (:publishing/all-pages-public? (get-config))
-        value (if (some? value) value (:all-pages-public? (get-config)))]
-    (true? value)))
-
 (defn get-default-home
   []
   (:default-home (get-config)))
@@ -587,6 +581,10 @@ Similar to re-frame subscriptions"
      (merge-configs default-config
                     (get config ::global-config)
                     (get config repo)))))
+
+(defn all-pages-public?
+  []
+  (not (false? (:publishing/all-pages-public? (sub-config)))))
 
 (defn enable-grammarly?
   []
