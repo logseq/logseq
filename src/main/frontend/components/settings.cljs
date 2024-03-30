@@ -387,9 +387,11 @@
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
             (t :settings-page/auto-updater)
-            enabled?
-            #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
-              (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
+            enabled? 
+            (fn [] 
+              (state/set-state! [:electron/user-cfgs :auto-update] (not enabled?)) 
+              (ipc/ipc :userAppCfgs :auto-update (not enabled?))
+              ))))
 
 (defn language-row [preferred-language]
   (let [on-change (fn [e]
