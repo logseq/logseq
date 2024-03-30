@@ -1061,6 +1061,7 @@
        (http-server-switcher-row))
      (flashcards-switcher-row enable-flashcards?)
      (zotero-settings-row)
+       (switch-git-auto-commit-row))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
         [:hr]
@@ -1162,10 +1163,6 @@
                [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
-
-               (when (util/electron?)
-                 [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
-
                ;; (when (util/electron?)
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
 
@@ -1174,6 +1171,9 @@
 
                (when plugins-of-settings
                  [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
+               (when (and (util/electron?) (state/get-git-auto-commit-enabled?))
+                 [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
+               ]]
 
           (when label
             [:li.settings-menu-item

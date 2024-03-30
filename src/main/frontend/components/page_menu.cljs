@@ -90,7 +90,7 @@
                            (page-handler/unfavorite-page! page-original-name)
                            (page-handler/favorite-page! page-original-name)))}})
 
-          (when (or (util/electron?) file-sync-graph-uuid)
+          (when (and (or (util/electron?) file-sync-graph-uuid) (state/get-git-auto-commit-enabled?))
             {:title   (t :page/version-history)
              :options {:on-click
                        (fn []
