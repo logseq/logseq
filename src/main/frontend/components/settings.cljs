@@ -650,6 +650,13 @@
          (state/close-settings!)
          (route-handler/redirect! {:to :zotero-setting})))]]])
 
+;; (defn usage-diagnostics-row [instrument-disabled?]
+;;   (toggle "usage-diagnostics"
+;;           (t :settings-page/disable-sentry)
+;;           (not instrument-disabled?)
+;;           (fn [] (instrument/disable-instrument
+;;                    (not instrument-disabled?)))
+;;           [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
 
 (defn clear-cache-row []
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
