@@ -650,14 +650,6 @@
          (state/close-settings!)
          (route-handler/redirect! {:to :zotero-setting})))]]])
 
-(defn auto-push-row [_t current-repo enable-git-auto-push?]
-  (when (and current-repo (string/starts-with? current-repo "https://"))
-    (toggle "enable_git_auto_push"
-            "Enable Git auto push"
-            enable-git-auto-push?
-            (fn []
-              (let [value (not enable-git-auto-push?)]
-                (config-handler/set-config! :git-auto-push value))))))
 
 (defn clear-cache-row []
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
@@ -836,7 +828,6 @@
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
-        enable-git-auto-push? (state/enable-git-auto-push? current-repo)]
 
     [:div.panel-wrap.is-editor
      (file-format-row t preferred-format)
