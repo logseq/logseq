@@ -1175,6 +1175,7 @@
 
 ;; FIXME: token might be expired
 (defn <init-state
+  ":dev-mode? will log local-ops and remote-ops for debug"
   [token reset-*state? & {:keys [dev-mode?]
                           :or {dev-mode? false}}]
   (go

@@ -157,7 +157,7 @@
                                   (prn :download-graph graph-uuid :to graph-name)
                                   (p/let [token (state/get-auth-id-token)
                                           ^object worker @db-browser/*worker
-                                          download-info-uuid (.rtc-request-download-graph worker nil token graph-uuid)
+                                          download-info-uuid (.rtc-request-download-graph worker token graph-uuid)
                                           result (.rtc-wait-download-graph-info-ready
                                                   worker nil token download-info-uuid graph-uuid 60000)
                                           {:keys [_download-info-uuid
