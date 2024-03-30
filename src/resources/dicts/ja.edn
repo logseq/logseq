@@ -814,4 +814,41 @@
  :command.dev/show-block-ast "(開発) ブロックの抽象構文木の表示"
  :command.dev/show-page-data "(開発) ページのデータを表示"
  :command.dev/show-page-ast "(開発) ページの抽象構文木の表示"
- :command.window/close "ウィンドウを閉じる"}
+ :command.window/close "ウィンドウを閉じる"
+ :settings-page/zotero-profile "プロファイルを選択"
+ :settings-page/zotero-profile-new "新しいプロファイル"
+ :settings-page/zotero-profile-delete "プロファイルを削除"
+ :settings-page/zotero-import-all "全てのアイテムをインポート"
+ :settings-page/zotero-profile-name-dialog "プロファイル名を入力してください" ; Please enter your profile name
+ :settings-page/zotero-import-all-confirm (fn [total] (str "これにより、すべてのZoteroアイテムがインポートされ、合計 " total " ページが追加されます。続行しますか？")) ; This will import all your zotero items and add total number of [total] pages. Do you wish to continue?
+ :settings-page/zotero-import-all-success "すべてのアイテムが正常に追加されました！" ; Successfully added all items!
+ :settings-page/zotero-import-all-warning "Zoteroに多くのアイテムがある場合、すべてを追加するとLogseqの動作が遅くなる可能性があります。必要な場合は、/zoteroを入力して特定のアイテムをオンデマンドでインポートできます。" ; If you have a lot of items in Zotero, adding them all can slow down Logseq. You can type /zotero to import specific item on demand instead.
+ :settings-page/zotero-import-all-importing "Zoteroからアイテムをインポート中....お待ちください..." ; Importing items from Zotero....Please wait...
+ :settings-page/zotero-import-all-fetching "取得中.." ; Fetching..
+ :settings-page/zotero-import-all-add-all :import ; Add all items
+ :settings-page/zotero-data-directory "Zoteroデータディレクトリ" ; Zotero data directory
+ :settings-page/zotero-data-directory-a-title "LogseqでPDF添付ファイルを開くために、Zoteroデータディレクトリを設定します。クリックして詳細を確認してください。" ; Set Zotero data directory to open pdf attachment in Logseq. Click to learn more.
+ :settings-page/zotero-imported-file-warning "これはZoteroからインポートされたファイルです。Zoteroデータディレクトリを設定すると、Logseqでファイルを開くことができます。" ; This is a zotero imported file, setting Zotero data directory would allow you to open the file in Logseq
+ :settings-page/zotero-linked-file-warning "これはZoteroへのリンクされたファイルです。Zoteroリンク添付ファイルのベースディレクトリを設定すると、Logseqでファイルを開くことができます。" ; This is a zotero linked file, setting Zotero linked attachment base directory would allow you to open the file in Logseq
+ :settings-page/zotero-extra-tags-title "すべてのインポートページに追加する追加タグ。カンマで区切るか、空のままにしてください。" ; Extra tags to add for every imported page. Separate by comma, or leave it empty.
+ :settings-page/zotero-page-prefix-setting "プレフィックスを付けたページ名を挿入：" ; Insert page name with prefix:
+ :settings-page/zotero-extra-tags "追加タグ：" ; Extra tags to add:
+ :settings-page/zotero-notes-setting-include-notes "ノートを含めますか？" ; Include notes?
+ :settings-page/zotero-notes-setting-notes-under-block-of "ブロックの下にノートを表示：" ; Notes under block of:
+ :settings-page/zotero-api-key-set-placeholder "Zotero APIキーを入力してください" ; Please enter your Zotero API key
+ :settings-page/zotero-api-key-set "Zotero APIキー" ; Zotero API key
+ :settings-page/zotero-prefer-citekey "ページタイトルとしてcitekeyを使用しますか？" ; Use citekey as your page title?
+ :settings-page/zotero-prefer-citekey-title "Better BibTeXをインストールし、アイテムをピン留めしてください" ; Make sure to install Better BibTeX and pin your item first
+ :settings-page/zotero-attachment-base-directory "Zoteroリンク添付ファイルのベースディレクトリ" ; Zotero linked attachment base directory
+ :settings-page/zotero-attachment-base-directory-a-title "添付ファイルをZoteroに保存している場合は、デフォルトの設定のままです。これはリンクされたファイルにのみ適用されます。ZotFileプラグインを使用してリンクファイルのワークフローをサポートしている場合は、構成してリンクファイルを構成したベースディレクトリに保存する必要があります。クリックして詳細を確認してください。" ; If you store attached files in Zotero — the default — this setting does not affect you. It only applies to linked files. If you're using the ZotFile plugin to help with a linked-file workflow, you should configure it to store linked files within the base directory you've configured. Click to learn more.
+ :settings-page/zotero-attachment-under-block-of "ブロックの下に添付ファイルを表示：" ; Attachment under block of:
+ :settings-page/zotero-attachment-include-links "添付ファイルリンクを含めますか？" ; Include attachment links?
+ :settings-page/zotero-overwrite-mode "既存のアイテムページを上書きしますか？" ; Overwrite existing item page?
+ :settings-page/zotero-overwrite-warning "危険です！これにより、Zoteroの既存のページが削除され、再作成されます。問題が発生した場合に備えて、まずノートをバックアップしてください。以前のZoteroページに個人的なアイテムを入れないようにし、ページを上書きしても問題ないことを確認してください！" ; Dangerous! This will delete and recreate Zotero existing page! Make sure to backup your notes first in case something goes wrong. Make sure you don't put any personal item in previous Zotero page and it's OK to overwrite the page!
+ :settings-page/zotero-type-id-warning (fn [] "ユーザーIDはユーザー名とは異なり、" [:a {:href "https://www.zotero.org/settings/keys" :target "_blank"} "https://www.zotero.org/settings/keys"] " ページで見つけることができます。数桁の数字です") ; User ID is different from username and can be found on the [https://www.zotero.org/settings/keys](https://www.zotero.org/settings/keys) page, it's a number of digits
+ :settings-page/zotero-search-error "検索エラー" ; Search error
+ :settings-page/zotero-search-placeholder "Zoteroの記事を検索（タイトル、著者、テキストなど）" ; Search for your Zotero articles (title, author, text, anything)
+ :settings-page/zotero-setup-notification "最初にZotero APIキーとユーザー/グループIDを設定してください！" ; Please setup Zotero API key and user/group id first!
+ :settings-page/zotero-user-or-group "Zoteroのユーザーまたはグループ？" ; Zotero user or group?
+ :settings-page/zotero-userId "ZoteroユーザーID" ; Zotero user ID
+ }
