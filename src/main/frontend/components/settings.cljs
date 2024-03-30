@@ -89,7 +89,7 @@
                                            config/revision]]
                                          :info
                                          false))}
-        version]
+        (str "Logseq " version)]
 
        [:a.text-sm.fade-link.underline.inline
         {:target "_blank"
@@ -145,7 +145,8 @@
      (t :settings-page/auto-expand-block-refs-tip)]
     [:img {:src    "https://user-images.githubusercontent.com/28241963/225818326-118deda9-9d1e-477d-b0ce-771ca0bcd976.gif"
            :width  500
-           :height 500}]]])
+           :height 500
+           :title "GitHub"}]]])
 
 (defn row-with-button-action
   [{:keys [left-label description action button-label href on-click desc -for stretch center?]

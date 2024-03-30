@@ -152,6 +152,7 @@
      :intent "link"
      :on-click #(on-action :plugins)
      :class (if (= category :plugins) "active" ""))
+   [:span.opacity-50 "/"]
    (ui/button
      [:span.flex.items-center
       (ui/icon "palette")
@@ -1037,7 +1038,7 @@
         [:div.toolbar-plugins-manager
          {:on-click toggle-fn}
          [:a.button.relative
-          (ui/icon "puzzle" {:size 20})
+          (ui/icon "apps" {:size 20})
           (when badge-updates?
             (ui/point "bg-red-600.top-1.right-1.absolute" 4 {:style {:margin-right 2 :margin-top 2}}))]])
 
@@ -1065,11 +1066,11 @@
                                      (plugin-handler/op-pinned-toolbar-item! pkey (if pinned? :remove :add))))
                                  false)}})
         [{:hr true}
-         {:title   (t :plugins)
+         {:title   (str (t :plugins) "/" (t :plugin/marketplace))
           :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
                     :class    "extra-item mt-2"}
           :icon    (ui/icon "apps")}
-         {:title   (t :settings)
+         {:title   (t :plugin/open-settings)
           :options {:on-click #(plugin-handler/goto-plugins-settings!)
                     :class    "extra-item"}
           :icon    (ui/icon "adjustments")}
@@ -1235,7 +1236,7 @@
 
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center
-       (ui/button [:span.it (t :plugin/installed)]
+       (ui/button [:span.it (ui/icon "adjustments") (t :plugin/installed)]
                   :on-click #(set-active! :installed)
                   :intent (if-not market? "" "link"))
 
