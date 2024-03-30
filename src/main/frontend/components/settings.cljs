@@ -1161,9 +1161,6 @@
 
                [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
                [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
-
-               (when plugins-of-settings
-                 [:plugins-setting "plugins" (t :settings-of-plugins) (ui/icon "puzzle")])]]
                (when (and (util/electron?) (state/get-git-auto-commit-enabled?))
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
                ]]
@@ -1182,12 +1179,6 @@
         [:h1.cp__settings-category-title (t (keyword (str "settings-page/tab-" (name (first @*active)))))]]
 
        (case (first @*active)
-
-         :plugins-setting
-         (let [label (second @*active)]
-           (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
-           (reset! *active [label label])
-           nil)
 
          :account
          (settings-account)
