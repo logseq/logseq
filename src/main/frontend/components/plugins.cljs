@@ -1250,7 +1250,7 @@
         (installed-plugins))] 
      [:hr.my-4]
      (security-warning)
-     (if market?
+     (when market?
        [:div
       [:p.text-sm
        (t :plugin/marketplace-notice)]])]))

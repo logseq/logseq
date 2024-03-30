@@ -731,12 +731,12 @@
 (defn plugin-system-switcher-row []
   (row-with-button-action
    {:left-label (t :settings-page/plugin-system)
-    :action (plugin-enabled-switcher t)}))
+    :action (plugin-enabled-switcher)}))
 
 (defn http-server-switcher-row []
   (row-with-button-action
    {:left-label "HTTP APIs server"
-    :action (http-server-enabled-switcher t)}))
+    :action (http-server-enabled-switcher)}))
 
 (defn flashcards-switcher-row [enable-flashcards?]
   (row-with-button-action
@@ -1237,8 +1237,6 @@
   (let [;;git-current-repo (state/sub :git/current-repo) ;; git
         current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
-        _installed-plugins (state/sub :plugin/installed-plugins)
-        plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
         *active (::active state)]
 
     [:div#settings.cp__settings-main
@@ -1282,13 +1280,13 @@
          (settings-account)
 
          :general
-         (settings-general current-repo)
+         (settings-general)
 
          :style 
-         (settings-style current-repo)
+         (settings-style)
 
          :editor
-         (settings-editor current-repo)
+         (settings-editor)
 
          :keymap
          (shortcut/shortcut-keymap-x)
