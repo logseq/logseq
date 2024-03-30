@@ -207,7 +207,7 @@
     :on-click     ui-handler/toggle-settings-modal!
     :-for         "export_css"}))
 
-(defn show-brackets-row [t show-brackets?]
+(defn show-brackets-row [show-brackets?]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "show_brackets"}
@@ -309,7 +309,7 @@
      (ui/toggle enabled #() true)]]]))
 
 (rum/defcs switch-spell-check-row < rum/reactive
-  [state t]
+  []
   (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -326,7 +326,7 @@
          true)]]]))
 
 (rum/defcs switch-git-auto-commit-row < rum/reactive
-  [state t]
+  []
   (let [enabled? (state/get-git-auto-commit-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -343,7 +343,7 @@
          true)]]]))
 
 (rum/defcs switch-git-commit-on-close-row < rum/reactive
-  [state t]
+  []
   (let [enabled? (state/get-git-commit-on-close-enabled?)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -358,7 +358,7 @@
          true)]]]))
 
 (rum/defcs git-auto-commit-seconds < rum/reactive
-  [state t]
+  []
   (let [secs (or (state/sub [:electron/user-cfgs :git/auto-commit-seconds]) 60)]
     [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
      [:label.block.text-sm.font-medium.leading-5.opacity-70
@@ -382,7 +382,7 @@
                                  :warning true)
                                 (gobj/set elem "value" secs)))))}]]]]))
 
-(rum/defc app-auto-update-row < rum/reactive [t]
+(rum/defc app-auto-update-row < rum/reactive []
   (let [enabled? (state/sub [:electron/user-cfgs :auto-update])
         enabled? (if (nil? enabled?) true enabled?)]
     (toggle "usage-diagnostics"
@@ -391,7 +391,7 @@
             #((state/set-state! [:electron/user-cfgs :auto-update] (not enabled?))
               (ipc/ipc :userAppCfgs :auto-update (not enabled?))))))
 
-(defn language-row [t preferred-language]
+(defn language-row [preferred-language]
   (let [on-change (fn [e]
                     (let [lang-code (util/evalue e)]
                       (state/set-preferred-language! lang-code)
@@ -406,7 +406,7 @@
                              :-for       "preferred_language"
                              :action     action})))
 
-(defn theme-modes-row [t switch-theme system-theme? dark?]
+(defn theme-modes-row [switch-theme system-theme? dark?]
   (let [color-accent (state/sub :ui/radix-color)
         pick-theme [:ul.theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
@@ -467,7 +467,7 @@
   [:div.cp__settings-accent-colors-modal-inner
    (accent-color-row true)])
 
-(defn file-format-row [t preferred-format]
+(defn file-format-row [preferred-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_format"}
@@ -484,7 +484,7 @@
       (for [format (map name [:org :markdown])]
         [:option {:key format :value format} (string/capitalize format)])]]]])
 
-(defn date-format-row [t preferred-date-format]
+(defn date-format-row [preferred-date-format]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "custom_date_format"}
@@ -510,7 +510,7 @@
       (for [format (sort (date/journal-title-formatters))]
         [:option {:key format} format])]]]])
 
-(defn workflow-row [t preferred-workflow]
+(defn workflow-row [preferred-workflow]
   [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
    [:label.block.text-sm.font-medium.leading-5.opacity-70
     {:for "preferred_workflow"}
@@ -529,7 +529,7 @@
         [:option {:key (name workflow) :value (name workflow)}
          (if (= workflow :now) "NOW/LATER" "TODO/DOING")])]]]])
 
-(defn outdenting-row [t logical-outdenting?]
+(defn outdenting-row [logical-outdenting?]
   (toggle "preferred_outdenting"
           [(t :settings-page/preferred-outdenting)
            (ui/tippy {:html        (outdenting-hint)
@@ -540,13 +540,13 @@
           logical-outdenting?
           config-handler/toggle-logical-outdenting!))
 
-(defn showing-full-blocks [t show-full-blocks?]
+(defn showing-full-blocks [show-full-blocks?]
   (toggle "show_full_blocks"
           (t :settings-page/show-full-blocks)
           show-full-blocks?
           config-handler/toggle-show-full-blocks!))
 
-(defn preferred-pasting-file [t preferred-pasting-file?]
+(defn preferred-pasting-file [preferred-pasting-file?]
   (toggle "preferred_pasting_file"
           [(t :settings-page/preferred-pasting-file)
            (ui/tippy {:html        (t :settings-page/preferred-pasting-file-hint)
@@ -557,7 +557,7 @@
           preferred-pasting-file?
           config-handler/toggle-preferred-pasting-file!))
 
-(defn auto-expand-row [t auto-expand-block-refs?]
+(defn auto-expand-row [auto-expand-block-refs?]
   (toggle "auto_expand_block_refs"
           [(t :settings-page/auto-expand-block-refs)
            (ui/tippy {:html        (auto-expand-hint)
@@ -568,21 +568,21 @@
           auto-expand-block-refs?
           config-handler/toggle-auto-expand-block-refs!))
 
-(defn tooltip-row [t enable-tooltip?]
+(defn tooltip-row [enable-tooltip?]
   (toggle "enable_tooltip"
           (t :settings-page/enable-tooltip)
           enable-tooltip?
           (fn []
             (config-handler/toggle-ui-enable-tooltip!))))
 
-(defn shortcut-tooltip-row [t enable-shortcut-tooltip?]
+(defn shortcut-tooltip-row [enable-shortcut-tooltip?]
   (toggle "enable_tooltip"
           (t :settings-page/enable-shortcut-tooltip)
           enable-shortcut-tooltip?
           (fn []
             (state/toggle-shortcut-tooltip!))))
 
-(defn timetracking-row [t enable-timetracking?]
+(defn timetracking-row [enable-timetracking?]
   (toggle "enable_timetracking"
           (t :settings-page/enable-timetracking)
           enable-timetracking?
@@ -616,7 +616,7 @@
             (let [value (not enable-journals?)]
               (config-handler/set-config! :feature/enable-journals? value)))))
 
-(defn enable-all-pages-public-row [t enable-all-pages-public?]
+(defn enable-all-pages-public-row [enable-all-pages-public?]
   (toggle "all pages public"
           (t :settings-page/enable-all-pages-public)
           enable-all-pages-public?
@@ -624,7 +624,7 @@
             (let [value (not enable-all-pages-public?)]
               (config-handler/set-config! :publishing/all-pages-public? value)))))
 
-;; (defn enable-block-timestamps-row [t enable-block-timestamps?]
+;; (defn enable-block-timestamps-row [enable-block-timestamps?]
 ;;   (toggle "block timestamps"
 ;;           (t :settings-page/enable-block-time)
 ;;           enable-block-timestamps?
@@ -657,18 +657,18 @@
               (let [value (not enable-git-auto-push?)]
                 (config-handler/set-config! :git-auto-push value))))))
 
-(defn clear-cache-row [t]
+(defn clear-cache-row []
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
                            :button-label (t :settings-page/clear)
                            :on-click     #(state/pub-event! [:graph/clear-cache!])
                            :-for         "clear_cache"}))
 
-(defn version-row [t version]
+(defn version-row [version]
   (row-with-button-action {:left-label (t :settings-page/current-version)
                            :action     (app-updater version)
                            :-for       "current-version"}))
 
-(defn developer-mode-row [t developer-mode?]
+(defn developer-mode-row [developer-mode?]
   (toggle "developer_mode"
           (t :settings-page/developer-mode)
           developer-mode?
@@ -678,7 +678,7 @@
           [:div.text-sm.opacity-50 (t :settings-page/developer-mode-desc)]))
 
 (rum/defc plugin-enabled-switcher
-  [t]
+  []
   (let [value (state/lsp-enabled?-or-theme)
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
@@ -692,7 +692,7 @@
                   :small? true :intent "logseq"))]))
 
 (rum/defc http-server-enabled-switcher
-  [t]
+  []
   (let [[value _] (rum/use-state (boolean (storage/get ::storage-spec/http-server-enabled)))
         [on? set-on?] (rum/use-state value)
         on-toggle #(let [v (not on?)]
@@ -748,7 +748,7 @@
     :action (user-proxy-settings agent-opts)}))
 
 (rum/defcs auto-chmod-row < rum/reactive
-  [state t]
+  []
   (let [enabled? (if (= nil (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))
                    true
                    (state/sub [:electron/user-cfgs :feature/enable-automatic-chmod?]))]
@@ -770,7 +770,7 @@
                 {:id :filename-format-panel :center? true})}))
 
 (rum/defcs native-titlebar-row < rum/reactive
-  [state t]
+  []
   (let [enabled? (state/sub [:electron/user-cfgs :window/native-titlebar?])]
     (toggle
      "native-titlebar"
@@ -783,7 +783,7 @@
      [:span.text-sm.opacity-50 (t :settings-page/native-titlebar-desc)])))
 
 (rum/defcs settings-general < rum/reactive
-  [_state current-repo]
+  [current-repo]
   (let [preferred-language (state/sub [:preferred-language])
         enable-all-pages-public? (state/all-pages-public?) 
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))]
@@ -821,7 +821,7 @@
      (document-mode-row)]))
 
 (rum/defcs settings-editor < rum/reactive
-  [_state current-repo]
+  [current-repo]
   (let [preferred-format (state/get-preferred-format)
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
@@ -873,9 +873,9 @@
     [:span.text-sm.opacity-50.my-4
      (t :settings-page/git-desc-3)]]
    [:br]
-   (switch-git-auto-commit-row t)
-   (switch-git-commit-on-close-row t)
-   (git-auto-commit-seconds t)])
+   (switch-git-auto-commit-row)
+   (switch-git-commit-on-close-row)
+   (git-auto-commit-seconds)])
 
 (rum/defc settings-advanced < rum/reactive
   [current-repo]
@@ -887,9 +887,9 @@
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      ;;(usage-diagnostics-row instrument-disabled?)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
-     (when (util/electron?) (auto-chmod-row t))
+     (when (util/electron?) (auto-chmod-row))
      (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
-     (clear-cache-row t)
+     (clear-cache-row)
 
      (ui/admonition
        :warning
