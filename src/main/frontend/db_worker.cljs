@@ -19,6 +19,7 @@
             [frontend.worker.rtc.db-listener :as rtc-db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.snapshot :as rtc-snapshot]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
@@ -594,7 +595,7 @@
      d))
 
   (rtc-request-download-graph
-   [this repo token graph-uuid]
+   [this token graph-uuid]
    (async-util/c->p
     (async/go
       (let [state (or @rtc-core/*state
@@ -617,12 +618,28 @@
       (rtc-updown/<download-graph-from-s3 graph-uuid graph-name s3-url))))
 
   (rtc-download-info-list
-   [this repo token graph-uuid]
+   [this token graph-uuid]
    (async-util/c->p
     (async/go
       (let [state (or @rtc-core/*state
                       (<! (rtc-core/<init-state token false)))]
         (<? (rtc-updown/<download-info-list state graph-uuid))))))
+
+  (rtc-snapshot-graph
+   [this token graph-uuid]
+   (async-util/c->p
+    (async/go
+      (let [state (or @rtc-core/*state
+                      (<! (rtc-core/<init-state token false)))]
+        (<? (rtc-snapshot/<snapshot-graph state graph-uuid))))))
+
+  (rtc-snapshot-list
+   [this token graph-uuid]
+   (async-util/c->p
+    (async/go
+      (let [state (or @rtc-core/*state
+                      (<! (rtc-core/<init-state token false)))]
+        (<? (rtc-snapshot/<snapshot-list state graph-uuid))))))
 
   (rtc-push-pending-ops
    [_this]

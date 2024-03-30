@@ -231,5 +231,6 @@
 (defn <download-info-list
   [state graph-uuid]
   (go-try
+   (:download-info-list
     (<? (ws/<send&receive state {:action "download-info-list"
-                                 :graph-uuid graph-uuid}))))
+                                 :graph-uuid graph-uuid})))))
