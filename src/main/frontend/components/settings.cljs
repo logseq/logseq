@@ -806,18 +806,15 @@
         show-radix-themes? true
         system-theme? (state/sub :ui/system-theme?)
         switch-theme (if dark? "light" "dark")]
-    [:div.panel-wrap.is-general
-     (version-row t version)
-     (language-row t preferred-language)
-     (theme-modes-row t switch-theme system-theme? dark?)
-     (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
-     (when show-radix-themes? (accent-color-row false))
-     (when (config/global-config-enabled?) (edit-global-config-edn))
-     (when current-repo (edit-config-edn))
+    [:div.panel-wrap
+     (theme-modes-row switch-theme system-theme? dark?) 
+     (when show-radix-themes? (accent-color-row false)) 
      (switch-theme-row)
      (marketplace-themes-row)
      (when current-repo (edit-custom-css))
-     (when current-repo (edit-export-css))]))
+     (when current-repo (edit-export-css))
+     (when (and (util/electron?) (not util/mac?)) (native-titlebar-row))
+     (show-brackets-row (state/show-brackets?))
      (wide-mode-row (state/get-wide-mode?))
      (document-mode-row)]))
 
@@ -826,35 +823,29 @@
   (let [preferred-format (state/get-preferred-format)
         preferred-date-format (state/get-date-formatter)
         preferred-workflow (state/get-preferred-workflow)
-        enable-timetracking? (state/enable-timetracking?)
-        enable-all-pages-public? (state/all-pages-public?)
+        enable-timetracking? (state/enable-timetracking?) 
         logical-outdenting? (state/logical-outdenting?)
         show-full-blocks? (state/show-full-blocks?)
         preferred-pasting-file? (state/preferred-pasting-file?)
         auto-expand-block-refs? (state/auto-expand-block-refs?)
         enable-tooltip? (state/enable-tooltip?)
-        enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
-        show-brackets? (state/show-brackets?)
-
+        enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)]
     [:div.panel-wrap.is-editor
-     (file-format-row t preferred-format)
-     (date-format-row t preferred-date-format)
-     (workflow-row t preferred-workflow)
-     ;; (enable-block-timestamps-row t enable-block-timestamps?)
-     (show-brackets-row t show-brackets?)
-
-     (when (util/electron?) (switch-spell-check-row t))
-     (outdenting-row t logical-outdenting?)
-     (showing-full-blocks t show-full-blocks?)
-     (preferred-pasting-file t preferred-pasting-file?)
-     (auto-expand-row t auto-expand-block-refs?)
+     (file-format-row preferred-format)
+     (date-format-row preferred-date-format)
+     (workflow-row preferred-workflow)
+     ;; (enable-block-timestamps-row enable-block-timestamps?) 
+     (when (util/electron?) (switch-spell-check-row))
+     (outdenting-row logical-outdenting?)
+     (showing-full-blocks show-full-blocks?)
+     (preferred-pasting-file preferred-pasting-file?)
+     (auto-expand-row auto-expand-block-refs?)  
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
-       (shortcut-tooltip-row t enable-shortcut-tooltip?))
+       (tooltip-row enable-tooltip?))
      (when-not (or (util/mobile?) (mobile-util/native-platform?))
-       (tooltip-row t enable-tooltip?))
-     (timetracking-row t enable-timetracking?)
-     (enable-all-pages-public-row t enable-all-pages-public?)
-     (auto-push-row t current-repo enable-git-auto-push?)]))
+       (shortcut-tooltip-row enable-shortcut-tooltip?))
+     (timetracking-row enable-timetracking?) 
+     ]))
 
 (rum/defc settings-git
   []
@@ -883,9 +874,8 @@
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
-     (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
-     (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
      ;;(usage-diagnostics-row instrument-disabled?)
+     (when-not (mobile-util/native-platform?) (developer-mode-row developer-mode?))
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row))
      (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
@@ -1130,9 +1120,8 @@
              [:li "Upcoming cloud-based features, including Logseq Publish"]]]]]])]]))
 
 (rum/defc settings-features < rum/reactive
-  []
-  (let [current-repo (state/get-current-repo)
-        enable-journals? (state/enable-journals? current-repo)
+  [current-repo]
+  (let [enable-journals? (state/enable-journals? current-repo)
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
         enable-sync-diff-merge? (state/enable-sync-diff-merge?)
@@ -1156,10 +1145,12 @@
      (whiteboards-switcher-row enable-whiteboards?)
      (when (and (util/electron?) config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
+     (flashcards-switcher-row enable-flashcards?)
+     (when (util/electron?) 
+       (zotero-settings-row))
      (when (util/electron?)
        (http-server-switcher-row))
-     (flashcards-switcher-row enable-flashcards?)
-     (zotero-settings-row)
+     (when (util/electron?)
        (switch-git-auto-commit-row))
      (when-not web-platform?
        [:div.mt-1.sm:mt-0.sm:col-span-2
@@ -1243,7 +1234,8 @@
        state)}
     rum/reactive
   [state _active-tab]
-  (let [current-repo (state/sub :git/current-repo)
+  (let [;;git-current-repo (state/sub :git/current-repo) ;; git
+        current-repo (state/sub :git/current-repo)
         ;; enable-block-timestamps? (state/enable-block-timestamps?)
         _installed-plugins (state/sub :plugin/installed-plugins)
         plugins-of-settings (and config/lsp-enabled? (seq (plugin-handler/get-enabled-plugins-if-setting-schema)))
@@ -1259,14 +1251,14 @@
         (for [[label id text icon]
               [(when config/ENABLE-SETTINGS-ACCOUNT-TAB
                 [:account "account" (t :settings-page/tab-account) (ui/icon "user-circle")])
-               [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")]
+               [:general "general" (t :settings-page/tab-general) (ui/icon "adjustments")] 
+               [:style "style" (t :settings-page/tab-style) (ui/icon "palette")]
                [:editor "editor" (t :settings-page/tab-editor) (ui/icon "writing")]
                [:keymap "keymap" (t :settings-page/tab-keymap) (ui/icon "keyboard")]
+               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
                ;; (when (util/electron?)
                ;;   [:assets "assets" (t :settings-page/tab-assets) (ui/icon "box")])
-
-               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")]
-               [:features "features" (t :settings-page/tab-features) (ui/icon "app-feature")]
+               [:advanced "advanced" (t :settings-page/tab-advanced) (ui/icon "bulb")] 
                (when (and (util/electron?) (state/get-git-auto-commit-enabled?))
                  [:version-control "git" (t :settings-page/tab-version-control) (ui/icon "history")])
                ]]
@@ -1292,6 +1284,9 @@
          :general
          (settings-general current-repo)
 
+         :style 
+         (settings-style current-repo)
+
          :editor
          (settings-editor current-repo)
 
@@ -1308,6 +1303,6 @@
          (settings-advanced current-repo)
 
          :features
-         (settings-features)
+         (settings-features current-repo)
 
          nil)]]]))
