@@ -1360,10 +1360,8 @@
   [pid name url]
   [:div
    [:span.block.whitespace-normal
-    "This plugin "
     [:strong.text-error "#" name]
-    " takes too long to load, affecting the application startup time and
-     potentially causing other plugins to fail to load."]
+    [t :plugin/too-long-to-load]]
 
    [:path.opacity-50
     [:small [:span.pr-1 (ui/icon "folder")] url]]
