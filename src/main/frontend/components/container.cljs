@@ -799,18 +799,18 @@
                "D"])))
 
 (def help-menu-items
-  [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
-   {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
-   {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
+  [{:title (t :help/handbook) :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
+   {:title (t :help/shortcuts) :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
+   {:title (t :help/docs) :icon "help" :href "https://docs.logseq.com/"}
    :hr
-   {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
-   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feature-requests/"}
-   {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
+   {:title (t :help/bug) :icon "bug" :on-click #(rfe/push-state :bug-report)}
+   ;;{:title t(t :help/feature) :icon "git-pull-request" :href "https://discuss.logseq.com/c/feature-requests/"} Removed from discuss forum
+   {:title (t :help/feedback) :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
    :hr
-   {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
-   {:title "Support forum" :icon "message" :href "https://discuss.logseq.com/"}
+   {:title (t :help/title-community) :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
+   {:title (t :help/forum-community) :icon "message" :href "https://discuss.logseq.com/"}
    :hr
-   {:title "Release notes" :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
+   {:title (t :help/changelog) :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
 
 (rum/defc help-menu-popup
   []

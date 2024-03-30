@@ -99,6 +99,8 @@
  :help/about "About Logseq"
  :help/roadmap "Roadmap"
  :help/bug "Bug report"
+ :help/feedback "Submit feedback"
+ :help/handbook "Handbook"
  :help/feature "Feature request"
  :help/changelog "Changelog"
  :help/blog "Logseq blog"
