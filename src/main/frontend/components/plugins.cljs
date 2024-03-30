@@ -89,7 +89,7 @@
         *themes (::themes state)]
     [:div.cp__themes-installed
      {:tab-index -1}
-     [:h1.mb-4.text-2xl.p-1 (t :themes)]
+     [:h1.mb-4.text-2xl.p-1 (t :command.ui/select-theme-color)]
      (map-indexed
        (fn [idx opt]
          (let [current-selected? (:selected opt)

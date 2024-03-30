@@ -99,9 +99,13 @@
           :icon (ui/icon "settings")})
 
        (when config/lsp-enabled?
-         {:title (t :themes)
+         {:title (t :toggle-theme)
           :options {:on-click #(plugins/open-select-theme!)}
           :icon (ui/icon "palette")})
+
+       {:title (t :right-side-bar/switch-theme)
+        :options {:on-click #(state/toggle-theme!)}
+        :icon (ui/icon "bulb")}
 
        (when current-repo
          {:title (t :export-graph)
@@ -113,10 +117,6 @@
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
 
-       (when config/publishing?
-         {:title (t :toggle-theme)
-          :options {:on-click #(state/toggle-theme!)}
-          :icon (ui/icon "bulb")})
        {:title (t :help/shortcuts)
           :options {:on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)} ;; :on-click #(state/pub-event! [:modal/keymap])
           :icon (ui/icon "keyboard")}
