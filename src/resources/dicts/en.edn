@@ -716,6 +716,11 @@
  :header/go-back                     "Go back"
  :header/go-forward                  "Go forward"
 
+ :document-mode-enabled "Document mode enabled"
+ :document-mode/tippy-new-block "to create new block"
+ :document-mode/tippy-toggle1 "Click `D` or type" 
+ :document-mode/tippy-toggle2 "to toggle document mode"
+
  ;; Commands are nested for now to stay in sync with the shortcuts system.
  ;; Other languages should not nest keys under :commands
  :commands

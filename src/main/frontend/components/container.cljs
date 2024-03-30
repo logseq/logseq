@@ -785,15 +785,15 @@
   []
   (when (state/sub [:document/mode?])
     (ui/tippy {:html [:div.p-2
-                      [:p.mb-2 [:b "Document mode"]]
+                      [:p.mb-2 [:b (t :document-mode-enabled)]]
                       [:ul
                        [:li
                         [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :editor/new-line))]
-                        [:p.inline-block  "to create new block"]]
-                       [:li
-                        [:p.inline-block.mr-1 "Click `D` or type"]
+                        [:p.inline-block (t :document-mode/tippy-new-block)]]
+                       [:li.text-sm
+                        [:p.inline-block.mr-1 (t :document-mode/tippy-toggle1)]
                         [:div.inline-block.mr-1 (ui/render-keyboard-shortcut (shortcut-dh/gen-shortcut-seq :ui/toggle-document-mode))]
-                        [:p.inline-block "to toggle document mode"]]]]}
+                        [:p.inline-block (t :document-mode/tippy-toggle2)]]]]}
               [:a.block.px-1.text-sm.font-medium.bg-base-2.rounded-md.mx-2
                {:on-click state/toggle-document-mode!}
                "D"])))
