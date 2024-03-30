@@ -1231,8 +1231,12 @@
 
        (ui/button [:span.mk (svg/apps 16) (t :plugin/marketplace)]
                   :on-click #(set-active! :marketplace)
-                  :intent (if market? "" "link"))]]
+                  :intent (if market? "" "link"))
 
+       (ui/button [:span.text-sm.opacity-70 (ui/icon "puzzle") (t :settings-of-plugins)]
+                  :on-click #(plugin-handler/goto-plugins-settings!)
+                  :intent "link")]]
+     
      [:div.panels
       (if market?
         (marketplace-plugins)
