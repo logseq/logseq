@@ -67,6 +67,7 @@
  :on-boarding/section-phone "phone"
  :on-boarding/section-app "APP Internal"
  :on-boarding/section-config "Config File"
+ :on-boarding/click-here-to-edit-block "Click here to edit..."
  :query/config-property-settings "Properties settings for this query:"
  :bug-report/main-title "Bug report"
  :bug-report/clipboard-inspector-title "Clipboard data inspector"

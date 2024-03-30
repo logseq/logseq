@@ -146,7 +146,7 @@
                          :on-drop drop-handler-fn
                          :on-drag-leave #(set-hover! false)}
        [:span.opacity-70
-        "Click here to edit..."]]]]))
+        (t :on-boarding/click-here-to-edit-block)]]]]))
 
 (rum/defc add-button
   [args]

@@ -67,6 +67,7 @@
  :on-boarding/section-phone "スマートフォン"
  :on-boarding/section-app "内部アプリ"
  :on-boarding/section-config "設定ファイル"
+ :on-boarding/click-here-to-edit-block "クリックして編集..."
  :query/config-property-settings "このクエリにおけるプロパティの設定："
  :bug-report/main-title "バグ報告"
  :bug-report/clipboard-inspector-title "クリップボードのデータを調査"
