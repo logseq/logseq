@@ -144,7 +144,7 @@
 (rum/defc category-tabs
   [t total-nums category on-action]
 
-  [:div.secondary-tabs.categories.flex
+  [:div.secondary-tabs.categories.flex.text-md
    (ui/button
      [:span.flex.items-center
       (ui/icon "puzzle")
@@ -192,7 +192,7 @@
   []
   (ui/admonition
     :warning
-    [:p.text-md
+    [:p.text-sm
      (t :plugin/security-warning)]))
 
 (rum/defc card-ctls-of-market < rum/static
@@ -325,7 +325,7 @@
       [:div.desc.text-xs.opacity-70
        [:p description]]
        ;;[:small (js/JSON.stringify (bean/->js settings))]
-       ]
+       
 
       ;; Author & Identity
       [:div.flag
@@ -1084,7 +1084,8 @@
 
         [{:hr true :key "dropdown-more"}
          {:title (auto-check-for-updates-control)
-          :options {:no-padding? true}}])
+          :options {:no-padding? true 
+                    :on-click (fn [^js e] (.preventDefault e) false)}}])
       {:trigger-class "toolbar-plugins-manager-trigger"})))
 
 (rum/defc header-ui-items-list-wrap
@@ -1229,11 +1230,6 @@
     [:div.cp__plugins-page
      {:ref       *el-ref
       :tab-index "-1"}
-     [:h1 (t :plugins)]
-     (security-warning)
-
-     [:hr.my-4]
-
      [:div.tabs.flex.items-center.justify-center
       [:div.tabs-inner.flex.items-center
        (ui/button [:span.it (ui/icon "adjustments") (t :plugin/installed)]
@@ -1251,7 +1247,13 @@
      [:div.panels
       (if market?
         (marketplace-plugins)
-        (installed-plugins))]]))
+        (installed-plugins))] 
+     [:hr.my-4]
+     (security-warning)
+     (if market?
+       [:div
+      [:p.text-sm
+       (t :plugin/marketplace-notice)]])]))
 
 (def *updates-sub-content-timer (atom nil))
 (def *updates-sub-content (atom nil))

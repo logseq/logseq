@@ -648,6 +648,7 @@
        They can also cause data corruption or loss. We're working on proper access rules for your graphs.
        Meanwhile, make sure you have regular backups of your graphs and only install the plugins when you can read and
        understand the source code."
+ :plugin/marketplace-notice "Stars are the number of stars on the GitHub repository. Downloads are the number of times the plugin has been installed."
  :plugin/too-long-to-load "This plugin takes too long to load, affecting the application startup time and potentially causing other plugins to fail to load."
  :plugin/search-plugin "Search plugins"
  :plugin/open-preferences "Open Preferences"
