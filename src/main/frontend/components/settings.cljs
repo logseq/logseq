@@ -22,7 +22,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
             [frontend.mobile.util :as mobile-util]
-            [frontend.modules.instrumentation.core :as instrument]
+            ;;[frontend.modules.instrumentation.core :as instrument]
             [frontend.modules.shortcut.data-helper :as shortcut-helper]
             [frontend.components.shortcut :as shortcut]
             [frontend.spec.storage :as storage-spec]
@@ -569,14 +569,6 @@
               (let [value (not enable-git-auto-push?)]
                 (config-handler/set-config! :git-auto-push value))))))
 
-(defn usage-diagnostics-row [t instrument-disabled?]
-  (toggle "usage-diagnostics"
-          (t :settings-page/disable-sentry)
-          (not instrument-disabled?)
-          (fn [] (instrument/disable-instrument
-                   (not instrument-disabled?)))
-          [:span.text-sm.opacity-50 (t :settings-page/disable-sentry-desc)]))
-
 (defn clear-cache-row [t]
   (row-with-button-action {:left-label   (t :settings-page/clear-cache)
                            :button-label (t :settings-page/clear)
@@ -780,13 +772,13 @@
 
 (rum/defc settings-advanced < rum/reactive
   [current-repo]
-  (let [instrument-disabled? (state/sub :instrument/disabled?)
+  (let [;;instrument-disabled? (state/sub :instrument/disabled?)
         developer-mode? (state/sub [:ui/developer-mode?])
         https-agent-opts (state/sub [:electron/user-cfgs :settings/agent])]
     [:div.panel-wrap.is-advanced
      (when (and (or util/mac? util/win32?) (util/electron?)) (app-auto-update-row t))
-     (usage-diagnostics-row t instrument-disabled?)
      (when-not (mobile-util/native-platform?) (developer-mode-row t developer-mode?))
+     ;;(usage-diagnostics-row instrument-disabled?)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
      (when (and (util/electron?) (not (config/demo-graph? current-repo))) (filename-format-row))
