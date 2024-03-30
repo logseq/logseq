@@ -632,6 +632,7 @@
  :plugin/author "Author"
  :plugin/sponsor "Sponsor"
  :plugin/title "Title ({1})"
+ :plugin/toolbar-badge-toggle "Toggle toolbar badge"
  :plugin/all "All"
  :plugin/unpacked "Unpacked"
  :plugin/delete-alert "Are you sure you want to uninstall the plugin [{1}]?"

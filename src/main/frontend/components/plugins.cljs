@@ -1043,6 +1043,12 @@
 
       ;; items
       (concat
+       (when items
+       [{:item [:span.text-sm.opacity-70
+                {:style {:cursor "default"}}
+                (str (t :plugin/toolbar-badge-toggle)" (" (t :plugins) ")")]
+         :options {:on-click( fn [^js e] (.preventDefault e) false)}}])
+         
         (for [[_ {:keys [key pinned?] :as opts} pid] items
               :let [pkey (str (name pid) ":" key)]]
           {:title   key
