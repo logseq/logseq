@@ -11,7 +11,7 @@
             [frontend.handler :as handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as fs-sync]
-            [frontend.handler.plugin :as plugin-handler]
+            ;;[frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.web.nfs :as nfs]
