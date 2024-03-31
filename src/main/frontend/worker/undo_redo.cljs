@@ -49,7 +49,8 @@
                                       :block/properties
                                       {:block/tags [:block/uuid]}
                                       :block/content
-                                      {:block/page [:block/uuid]}])}]
+                                      {:block/page [:block/uuid]}]
+                                  [:block/uuid block-uuid])}]
 
       :move-block
       (let [b (d/entity db [:block/uuid block-uuid])]
