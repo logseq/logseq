@@ -458,6 +458,12 @@
           show-full-blocks?
           config-handler/toggle-show-full-blocks!))
 
+(defn journal-template-user-submit [enabled?]
+  (toggle "journal_template_user_submit"
+          (t :settings-page/journal-template-user-submit)
+          enabled?
+          config-handler/toggle-journal-template-user-submit!))
+
 (defn preferred-pasting-file [t preferred-pasting-file?]
   (toggle "preferred_pasting_file"
           [(t :settings-page/preferred-pasting-file)
@@ -719,7 +725,9 @@
      (when (config/global-config-enabled?) (edit-global-config-edn))
      (when current-repo (edit-config-edn))
      (when current-repo (edit-custom-css))
-     (when current-repo (edit-export-css))]))
+     (when current-repo (edit-export-css))
+     (when (and current-repo (util/electron?)) (journal-template-user-submit (state/journal-template-user-submit?)))
+     ]))
 
 (rum/defcs settings-editor < rum/reactive
   [_state current-repo]

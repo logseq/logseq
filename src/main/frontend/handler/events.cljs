@@ -720,15 +720,16 @@
                   opts))
    {:center? true :close-btn? false :close-backdrop? false}))
 
-(defmethod handle :journal/insert-template [[_ page-name]]
+(defmethod handle :journal/insert-template [[_ page-name user-submit]]
   (let [page-name (util/page-name-sanity-lc page-name)]
     (when-let [page (db/pull [:block/name page-name])]
       (when (db/page-empty? (state/get-current-repo) page-name)
         (when-let [template (state/get-default-journal-template)]
-          (editor-handler/insert-template!
-           nil
-           template
-           {:target page}))))))
+            (when (or (not (state/journal-template-user-submit?)) user-submit)
+                (editor-handler/insert-template!
+                 nil
+                 template
+                 {:target page})))))))
 
 (defmethod handle :editor/set-org-mode-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]

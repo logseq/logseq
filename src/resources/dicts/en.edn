@@ -67,6 +67,7 @@
  :on-boarding/section-phone "phone"
  :on-boarding/section-app "APP Internal"
  :on-boarding/section-config "Config File"
+ :on-boarding/insert-today-journal "Insert journal template?"
  :on-boarding/click-here-to-edit-block "Click here to edit..."
  :query/config-property-settings "Properties settings for this query:"
  :bug-report/main-title "Bug report"
@@ -368,7 +369,7 @@
  :settings-page/update-error-1 "⚠️ Oops, Something Went Wrong!"
  :settings-page/update-error-2 " Please check out the "
  :settings-permission/start-granting "Grant"
-
+ :settings-page/journal-template-user-submit "Enable user confirmation before inserting a journal template"
  :settings-page/auto-chmod "Automatically change file permissions"
  :settings-page/auto-chmod-desc "Disable to allow editing by multiple users with permissions granted by group membership."
  :yes "Yes"

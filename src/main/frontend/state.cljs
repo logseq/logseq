@@ -303,7 +303,9 @@
      :whiteboard/pending-tx-data            {}
      :history/page-only-mode?               false
      ;; db tx-id -> editor cursor
-     :history/tx->editor-cursor             {}})))
+     :history/tx->editor-cursor             {}
+     
+     })))
 
 ;; Block ast state
 ;; ===============
@@ -702,6 +704,10 @@ Similar to re-frame subscriptions"
 (defn show-full-blocks?
   []
   (:ui/show-full-blocks? (sub-config)))
+
+(defn journal-template-user-submit?
+  []
+  (:journal-template/user-submit? (sub-config)))
 
 (defn preferred-pasting-file?
   []

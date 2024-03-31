@@ -42,6 +42,10 @@
   (let [show-full-blocks? (state/show-full-blocks?)]
     (set-config! :ui/show-full-blocks? (not show-full-blocks?))))
 
+(defn toggle-journal-template-user-submit! []
+  (let [enabled? (state/journal-template-user-submit?)]
+    (set-config! :journal-template/user-submit? (not enabled?))))
+
 (defn toggle-auto-expand-block-refs! []
   (let [auto-expand-block-refs? (state/auto-expand-block-refs?)]
     (set-config! :ui/auto-expand-block-refs? (not auto-expand-block-refs?))))
