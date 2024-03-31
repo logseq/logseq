@@ -630,9 +630,9 @@ Similar to re-frame subscriptions"
   ([repo]
    (not (false? (:feature/enable-whiteboards? (sub-config repo))))))
 
-(defn enable-git-auto-push?
-  [repo]
-  (not (false? (:git-auto-push (sub-config repo)))))
+;; (defn enable-git-auto-push?
+;;   [repo]
+;;   (not (false? (:git-auto-push (sub-config repo)))))
 
 (defn enable-block-timestamps?
   []

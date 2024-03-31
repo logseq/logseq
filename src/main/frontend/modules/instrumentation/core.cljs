@@ -2,7 +2,8 @@
   (:require [frontend.modules.instrumentation.posthog :as posthog]
             [frontend.modules.instrumentation.sentry :as sentry]
             [frontend.state :as state]
-            [frontend.storage :as storage]))
+            ;; [frontend.storage :as storage]
+            ))
 
 (defn init
   []
@@ -10,9 +11,9 @@
     (posthog/init)
     (sentry/init)))
 
-(defn disable-instrument [disable?]
-  (state/set-state! :instrument/disabled? disable?)
-  (storage/set "instrument-disabled" disable?)
-  (posthog/opt-out disable?)
-  (when-not disable?
-    (sentry/init)))
+;; (defn disable-instrument [disable?]
+;;   (state/set-state! :instrument/disabled? disable?)
+;;   (storage/set "instrument-disabled" disable?)
+;;   (posthog/opt-out disable?)
+;;   (when-not disable?
+;;     (sentry/init)))
