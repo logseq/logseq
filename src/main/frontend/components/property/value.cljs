@@ -72,15 +72,21 @@
 
 (rum/defc date-picker
   [value {:keys [on-change editing? multiple-values?]}]
-  (let [;; FIXME: Remove ignore when editing bug is fixed
-        #_:clj-kondo/ignore
-        [open? set-open!] (rum/use-state editing?)
-        title (when value (:block/original-name value))
+  (let [*trigger-ref (rum/use-ref nil)
         page value
-        value' (when title (js/Date. (date/journal-title->long title)))
+        title (when page (:block/original-name page))
+        value' (when title
+                 (js/Date. (date/journal-title->long title)))
         initial-day (some-> value' (.getTime) (js/Date.))
         initial-month (when value'
                         (js/Date. (.getFullYear value') (.getMonth value')))]
+
+    (rum/use-effect!
+     (fn []
+       (when editing?
+         (some-> (rum/deref *trigger-ref)
+                 (.focus))))
+     [])
     [:div.flex.flex-row.gap-1.items-center
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
@@ -118,6 +124,7 @@
 
        (shui/button
         {:class "jtrigger !p-1"
+         :ref *trigger-ref
          :variant :text
          :size :sm
          :on-click (fn [e]
