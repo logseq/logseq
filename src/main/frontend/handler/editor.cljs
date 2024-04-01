@@ -3409,17 +3409,7 @@
 (defn- valid-dsl-query-block?
   "Whether block has a valid dsl query."
   [block]
-  (->> (:block/macros (db/entity (:db/id block)))
-       (some (fn [macro]
-               (let [properties (:block/properties macro)
-                     macro-name (pu/lookup properties :logseq.property/macro-name)
-                     macro-arguments (pu/lookup properties :logseq.property/macro-arguments)]
-                 (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
-                   (seq (:query
-                         (try
-                           (query-dsl/parse-query query-body)
-                           (catch :default _e
-                             nil))))))))))
+  (string/includes? block "{{query "))
 
 (defn- valid-custom-query-block?
   "Whether block has a valid custom query."

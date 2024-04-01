@@ -219,7 +219,6 @@
    ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
-   [:block/macros {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
     ;; other
    [:block/marker {:optional true} :string]
