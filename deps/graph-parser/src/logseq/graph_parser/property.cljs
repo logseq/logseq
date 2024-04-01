@@ -76,7 +76,7 @@
      :id :background-color :heading :collapsed
      :created-at :updated-at :last-modified-at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
-     :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
+     :hl-type :hl-page :hl-stamp :hl-color
      :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
      ; task markers
      :todo :doing :now :later :done}

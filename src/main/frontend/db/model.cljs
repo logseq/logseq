@@ -939,20 +939,6 @@ independent of format as format specific heading characters are stripped"
   (let [db (conn/get-db)]
     (ldb/get-orphaned-pages db opts)))
 
-;; FIXME: replace :logseq.macro-name with id
-(defn get-macro-blocks
-  [repo macro-name]
-  (d/q
-   '[:find [(pull ?b [*]) ...]
-     :in $ ?macro-name
-     :where
-     [?b :block/type "macro"]
-     [?b :block/properties ?properties]
-     [(get ?properties :logseq.macro-name) ?name]
-     [(= ?name ?macro-name)]]
-   (conn/get-db repo)
-   macro-name))
-
 (defn- block-or-page
   [page-name-or-uuid]
   (let [entity (get-page (str page-name-or-uuid))]
