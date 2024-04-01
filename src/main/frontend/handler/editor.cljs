@@ -3409,7 +3409,8 @@
 (defn- valid-dsl-query-block?
   "Whether block has a valid dsl query."
   [block]
-  (string/includes? block "{{query "))
+  (some-> (:block/content block)
+          (string/includes? "{{query ")))
 
 (defn- valid-custom-query-block?
   "Whether block has a valid custom query."

@@ -190,15 +190,15 @@
   "Get a built-in property's id (keyword name for file graph and uuid for db graph)
   given its db-ident. Use this fn on a file or db graph. Use
   db-pu/get-built-in-property-uuid if only in a db graph context"
-  [repo db db-ident]
+  [repo db-ident]
   (if (sqlite-util/db-based-graph? repo)
     db-ident
     (get-in built-in-properties [db-ident :name])))
 
 (defn lookup
   "Get the value of coll by db-ident. For file and db graphs"
-  [repo db coll db-ident]
-  (get coll (get-pid repo db db-ident)))
+  [repo coll db-ident]
+  (get coll (get-pid repo db-ident)))
 
 (defn get-block-property-value
   "Get the value of built-in block's property by its db-ident"
@@ -206,17 +206,7 @@
   (when db
     (let [block (or (d/entity db (:db/id block)) block)]
       (when-let [properties (:block/properties block)]
-        (lookup repo db properties db-ident)))))
-
-(defn name->db-ident
-  "Converts a built-in property's keyword name to its :db/ident equivalent.
-  Legacy property names that had pseudo-namespacing are converted to their new
-  format e.g. :logseq.table.headers -> :logseq.property.table/headers"
-  [legacy-name]
-  ;; Migrate legacy names that have logseq.* style names but no namespace
-  (if-let [[_ additional-ns prop-name] (re-matches  #"logseq(.*)\.([^.]+)" (name legacy-name))]
-    (keyword (str "logseq.property" additional-ns) prop-name)
-    (keyword "logseq.property" (name legacy-name))))
+        (lookup repo properties db-ident)))))
 
 (defn shape-block?
   [repo db block]
@@ -261,13 +251,13 @@
 (defn get-db-ident-from-name
   [property-name]
   (let [n (-> (string/lower-case property-name)
-              (string/replace #"^:" "")
-              (string/replace " " "_")
+              (string/replace #"^:\s*" "")
+              (string/replace #"\s*:\s*$" "")
+              (string/replace " " "-")
+              (string/replace "#" "")
               (string/trim))]
     (when-not (string/blank? n)
-      (->
-       (str "user.property/" n)
-       keyword))))
+      (keyword "user.property" n))))
 
 (defn get-class-ordered-properties
   [class-entity]
