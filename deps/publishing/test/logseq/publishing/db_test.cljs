@@ -4,10 +4,10 @@
             [logseq.publishing.db :as publish-db]
             [logseq.graph-parser :as graph-parser]
             [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.graph-parser.db :as gp-db]))
 
 (deftest clean-export!
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         _ (graph-parser/parse-file conn "page1.md" "public:: false\n- b11\n- b12\n- ![awesome.png](../assets/awesome_1648822509908_0.png)")
         _ (graph-parser/parse-file conn "page2.md" "- b21\n- ![thumb-on-fire.PNG](../assets/thumb-on-fire_1648822523866_0.PNG)")
         _ (graph-parser/parse-file conn "page3.md" "- b31")
@@ -34,7 +34,7 @@
         "Only exports assets from public pages")))
 
 (deftest filter-only-public-pages-and-blocks
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         _ (graph-parser/parse-file conn "page1.md" "- b11\n- b12\n- ![awesome.png](../assets/awesome_1648822509908_0.png)")
         _ (graph-parser/parse-file conn "page2.md" "alias:: page2-alias\npublic:: true\n- b21\n- ![thumb-on-fire.PNG](../assets/thumb-on-fire_1648822523866_0.PNG)")
         _ (graph-parser/parse-file conn "page3.md" "public:: true\n- b31")

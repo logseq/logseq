@@ -7,9 +7,11 @@
             [frontend.config :as config]
             [frontend.util.text :as text-util]
             [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.db :as gp-db]
+            [datascript.core :as d]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defonce conns (atom {}))
 
@@ -53,8 +55,6 @@
       (str (if (util/electron?) "" config/idb-db-prefix)
            path))))
 
-(def get-schema sqlite-util/get-schema)
-
 (defn get-db
   ([]
    (get-db (state/get-current-repo) true))
@@ -94,11 +94,11 @@
 (defn start!
   ([repo]
    (start! repo {}))
-  ([repo {:keys [listen-handler create-default-pages?]
-          :or {create-default-pages? false}}]
+  ([repo {:keys [listen-handler]}]
    (let [db-name (datascript-db repo)
-         db-conn (ldb/start-conn :schema (get-schema repo)
-                                 :create-default-pages? create-default-pages?)]
+         db-conn (if (config/db-based-graph? repo)
+                   (d/create-conn db-schema/schema-for-db-based-graph)
+                   (gp-db/start-conn))]
      (swap! conns assoc db-name db-conn)
      (when listen-handler
        (listen-handler repo)))))

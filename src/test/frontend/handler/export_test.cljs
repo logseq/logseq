@@ -145,7 +145,7 @@
                       edn-output (edn/read-string result)]
           (is (= #{:version :blocks} (set (keys edn-output)))
                       "Correct top-level keys")
-              (is (= (sort (concat (map :block/original-name default-db/built-in-pages)
+              (is (= (sort (concat (map :block/original-name gp-db/built-in-pages)
                                                             ["page1" "page2"]))
                                 (sort (map :block/page-name (:blocks edn-output))))
                           "Correct pages")))

@@ -37,21 +37,13 @@ frontend.fs/readdir
 ;; Referenced in TODO
 frontend.handler.metadata/update-properties!
 ;; Referenced in comment
-frontend.handler.route/toggle-between-page-and-file!
-;; Referenced in comment
-frontend.handler.shell/run-pandoc-command!
-;; Referenced in comment
 frontend.image/get-orientation
 ;; For debugging
 frontend.mixins/perf-measure-mixin
 ;; Previously useful fn
 frontend.mobile.util/get-idevice-statusbar-height
-;; Referenced in comment
-frontend.page/route-view
 ;; placeholder fn
 frontend.publishing/stop
-;; Referenced in comment
-frontend.state/set-db-persisted!
 ;; Future use
 frontend.storage/get-transit
 ;; repl fn

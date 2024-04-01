@@ -7,7 +7,7 @@
             [logseq.common.config :as common-config]
             [logseq.graph-parser :as graph-parser]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.graph-parser.db :as gp-db]))
 
 (defn- slurp
   "Return file contents like clojure.core/slurp"
@@ -74,7 +74,7 @@
   ([dir options]
    (let [config (read-config dir)
          files (or (:files options) (build-graph-files dir config))
-         conn (or (:conn options) (ldb/start-conn))
+         conn (or (:conn options) (gp-db/start-conn))
          _ (when-not (:files options) (println "Parsing" (count files) "files..."))
          asts (parse-files conn files (merge options {:config config}))]
      {:conn conn

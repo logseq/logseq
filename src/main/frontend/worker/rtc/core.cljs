@@ -1122,12 +1122,12 @@
 ;;                                    :block-uuids [page-block-uuid]})))))
 
 (defn init-state
-  [ws data-from-ws-chan repo token user-uuid dev-mode?]
+  [ws data-from-ws-chan token user-uuid dev-mode?]
   ;; {:post [(m/validate state-schema %)]}
   {:*rtc-state (atom :closed :validator rtc-state-validator)
    :*graph-uuid (atom nil)
    :user-uuid user-uuid
-   :*repo (atom repo)
+   :*repo (atom nil)
    :*db-conn (atom nil)
    :*token (atom token)
    :*date-formatter (atom nil)
@@ -1173,17 +1173,16 @@
 
 
 ;; FIXME: token might be expired
-;;; TODO: `repo` shouldn't be required when init-state.
-;;;       state isn't related to one repo, e.g. `<get-graphs` is user-scope api, not repo-scope
 (defn <init-state
-  [repo token reset-*state? & {:keys [dev-mode?]
-                               :or {dev-mode? false}}]
+  ":dev-mode? will log local-ops and remote-ops for debug"
+  [token reset-*state? & {:keys [dev-mode?]
+                          :or {dev-mode? false}}]
   (go
     (let [data-from-ws-chan (chan (async/sliding-buffer 100))
           ws-opened-ch (chan)
           ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
       (<! ws-opened-ch)
-      (let [state (init-state ws data-from-ws-chan repo token
+      (let [state (init-state ws data-from-ws-chan token
                               (:sub (worker-util/parse-jwt token))
                               dev-mode?)]
         (when reset-*state?
@@ -1197,7 +1196,7 @@
     (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
       (if (and @*state (not= :closed (some-> @*state :*rtc-state deref)))
         "rtc-not-closed-yet"
-        (let [state (<! (<init-state repo token true {:dev-mode? dev-mode?}))
+        (let [state (<! (<init-state token true {:dev-mode? dev-mode?}))
               state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
               _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
               config (worker-state/get-config repo)
@@ -1229,9 +1228,9 @@
     (<toggle-auto-push-client-ops state)))
 
 (defn <get-graphs
-  [repo token]
+  [token]
   (go
-    (let [state (or @*state (<! (<init-state repo token false)))
+    (let [state (or @*state (<! (<init-state token false)))
           graph-list (:graphs (<? (ws/<send&receive state {:action "list-graphs"})))]
       (bean/->js graph-list))))
 
@@ -1239,7 +1238,7 @@
 (defn <delete-graph
   [token graph-uuid]
   (go
-    (let [state (or @*state (<! (<init-state nil token true)))
+    (let [state (or @*state (<! (<init-state token true)))
           {:keys [ex-data]} (<? (ws/<send&receive state {:action "delete-graph"
                                                          :graph-uuid graph-uuid}))]
       (if ex-data

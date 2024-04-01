@@ -185,6 +185,16 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :string]]]
+    ["snapshot-list"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]]]
+    ["snapshot-graph"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]]]
     ["grant-access"
      [:map
       [:req-id :string]

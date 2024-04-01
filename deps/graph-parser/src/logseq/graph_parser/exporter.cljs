@@ -303,13 +303,13 @@
 
 (defn- pre-update-properties
   "Updates page and block properties before their property types are inferred"
-  [properties property-classes]
+  [properties class-related-properties]
   (let [dissoced-props (concat ignored-built-in-properties
                                ;; TODO: Add import support for these dissoced built-in properties
                                [:title :id :created-at :updated-at
                                 :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
                                 :card-ease-factor :card-last-score]
-                               property-classes)]
+                               class-related-properties)]
     (->> (apply dissoc properties dissoced-props)
          (keep (fn [[prop val]]
                  (if (not (contains? built-in-property-names prop))
@@ -324,19 +324,19 @@
                    [prop val])))
          (into {}))))
 
-(defn- handle-page-properties
+(defn- handle-page-and-block-properties
   "Handles modifying :block/properties, updating classes from property-classes
   and removing any deprecated property related attributes. Before updating most
   :block/properties, their property schemas are inferred as that can affect how
   a property is updated. Only infers property schemas on user properties as
   built-in ones must not change"
   [{:block/keys [properties] :as block} db page-names-to-uuids refs
-   {:keys [import-state macros property-classes] :as options}]
+   {:keys [import-state macros property-classes property-parent-classes] :as options}]
   (-> (if (seq properties)
         (let [classes-from-properties (->> (select-keys properties property-classes)
                                            (mapcat (fn [[_k v]] (if (coll? v) v [v])))
                                            distinct)
-              properties' (pre-update-properties properties property-classes)
+              properties' (pre-update-properties properties (into property-classes property-parent-classes))
               properties-to-infer (if (:template properties')
                                     ;; Ignore template properties as they don't consistently have representative property values
                                     {}
@@ -364,10 +364,32 @@
         block)
       (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
+(defn- handle-page-properties
+  [{:block/keys [properties] :as block} db page-names-to-uuids refs
+   {:keys [property-parent-classes log-fn] :as options}]
+  (-> (if (seq properties)
+        (let [parent-classes-from-properties (->> (select-keys properties property-parent-classes)
+                                                  (mapcat (fn [[_k v]] (if (coll? v) v [v])))
+                                                  distinct)]
+          (cond-> block
+            (seq parent-classes-from-properties)
+            (assoc :block/type "class")
+            (seq parent-classes-from-properties)
+            (assoc :class/parent
+                   (let [new-class (first parent-classes-from-properties)]
+                     (when (> (count parent-classes-from-properties) 1)
+                       (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
+                     (sqlite-util/build-new-class
+                      {:block/original-name new-class
+                       :block/uuid (or (get-pid db new-class) (d/squuid))
+                       :block/name (common-util/page-name-sanity-lc new-class)})))))
+        block)
+      (handle-page-and-block-properties db page-names-to-uuids refs options)))
+
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
   [block db page-names-to-uuids refs {:keys [property-classes] :as options}]
-  (cond-> (handle-page-properties block db page-names-to-uuids refs options)
+  (cond-> (handle-page-and-block-properties block db page-names-to-uuids refs options)
     (and (seq property-classes) (seq (:block/refs block)))
     ;; remove unused, nonexistent property page
     (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))
@@ -450,10 +472,11 @@
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
-  [conn pages blocks {:keys [page-tags-uuid import-state tag-classes property-classes notify-user] :as options}]
+  [conn pages blocks {:keys [page-tags-uuid import-state tag-classes property-classes property-parent-classes notify-user]
+                      :as options}]
   (let [all-pages (->> (extract/with-ref-pages pages blocks)
                        ;; remove unused property pages unless the page has content
-                       (remove #(and (contains? property-classes (keyword (:block/name %)))
+                       (remove #(and (contains? (into property-classes property-parent-classes) (keyword (:block/name %)))
                                      (not (:block/file %))))
                        ;; remove file path relative
                        (map #(dissoc % :block/file)))
@@ -472,8 +495,8 @@
                                 ;; These attributes are not allowed to be transacted because they must not change across files
                                 ;; block/uuid was particularly bad as it actually changed the page's identity across files
                                 disallowed-attributes [:block/name :block/uuid :block/format :block/journal? :block/original-name :block/journal-day
-                                                       :block/type :block/created-at :block/updated-at]
-                                allowed-attributes [:block/properties :block/tags :block/alias :block/namespace]
+                                                       :block/created-at :block/updated-at]
+                                allowed-attributes [:block/properties :block/tags :block/alias :block/namespace :class/parent :block/type]
                                 block-changes (select-keys % allowed-attributes)]
                             (when-let [ignored-attrs (not-empty (apply dissoc % (into disallowed-attributes allowed-attributes)))]
                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/original-name %)) ": "
@@ -557,7 +580,10 @@
     :tag-classes (set (map string/lower-case (:tag-classes user-options)))
     :property-classes (set/difference
                        (set (map (comp keyword string/lower-case) (:property-classes user-options)))
-                       built-in-property-names)}))
+                       built-in-property-names)
+    :property-parent-classes (set/difference
+                              (set (map (comp keyword string/lower-case) (:property-parent-classes user-options)))
+                              built-in-property-names)}))
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
@@ -801,15 +827,15 @@
 (defn build-doc-options
   "Builds options for use with export-doc-files"
   [conn config options]
-(-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
-                       :user-config config
-                       :filename-format (or (:file/name-format config) :legacy)
-                       :verbose (:verbose options)}
-     :user-options (select-keys options [:tag-classes :property-classes])
-     :page-tags-uuid (:block/uuid (d/entity @conn :logseq.property/page-tags))
-     :import-state (new-import-state)
-     :macros (or (:macros options) (:macros config))}
-    (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
+  (-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
+                         :user-config config
+                         :filename-format (or (:file/name-format config) :legacy)
+                         :verbose (:verbose options)}
+       :user-options (select-keys options [:tag-classes :property-classes :property-parent-classes])
+       :page-tags-uuid (:block/uuid (d/entity @conn :logseq.property/page-tags))
+       :import-state (new-import-state)
+       :macros (or (:macros options) (:macros config))}
+      (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
 
 (defn export-file-graph
   "Main fn which exports a file graph given its files and imports them
@@ -829,8 +855,8 @@
 
    Note: See export-doc-files for additional options that are only for it"
   [repo-or-conn conn config-file *files {:keys [<read-file <copy-asset rpath-key log-fn]
-                                 :or {rpath-key :path log-fn println}
-                                 :as options}]
+                                         :or {rpath-key :path log-fn println}
+                                         :as options}]
   (p/let [config (export-config-file
                   repo-or-conn config-file <read-file
                   (-> (select-keys options [:notify-user :default-config :<save-config-file])

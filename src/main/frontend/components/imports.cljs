@@ -164,10 +164,12 @@
   (let [[graph-input set-graph-input!] (rum/use-state initial-name)
         [tag-classes-input set-tag-classes-input!] (rum/use-state "")
         [property-classes-input set-property-classes-input!] (rum/use-state "")
+        [property-parent-classes-input set-property-parent-classes-input!] (rum/use-state "")
         on-submit #(do (on-graph-name-confirmed
                         {:graph-name graph-input
                          :tag-classes tag-classes-input
-                         :property-classes property-classes-input})
+                         :property-classes property-classes-input
+                         :property-parent-classes property-parent-classes-input})
                        (state/close-modal!))]
     [:div.container
      [:div.sm:flex.sm:items-start
@@ -210,6 +212,21 @@
        :default-value property-classes-input
        :on-change (fn [e]
                     (set-property-classes-input! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))})
+     
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "(Optional) Properties whose values are imported as parent classes e.g. 'parent':"]
+       [:span.text-xs
+        "Properties are case insensitive and separated by commas"]]]
+     (shui/input
+      {:class "my-2 mb-4"
+       :default-value property-parent-classes-input
+       :on-change (fn [e]
+                    (set-property-parent-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))})
@@ -281,7 +298,7 @@
                    (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
 
 (defn- import-file-graph
-  [*files {:keys [graph-name tag-classes property-classes]} config-file]
+  [*files {:keys [graph-name tag-classes property-classes property-parent-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
   (state/set-state! [:graph/importing-state :current-page] "Config files")
   (p/let [start-time (t/now)
@@ -291,6 +308,7 @@
           options {;; user options
                    :tag-classes (set (string/split tag-classes #",\s*"))
                    :property-classes (set (string/split property-classes #",\s*"))
+                   :property-parent-classes (set (string/split property-parent-classes #",\s*"))
                    ;; common options
                    :notify-user show-notification
                    :set-ui-state state/set-state!

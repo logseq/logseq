@@ -218,7 +218,8 @@ html[data-theme=dark] {
 }
 
 .ui__dialog-overlay, .ui__alert-dialog-overlay,
-.ui__dialog-content, .ui__alert-dialog-content{
+.ui__dialog-content, .ui__alert-dialog-content,
+.ui__dropdown-menu-content {
   &.z-50 {
     @apply z-[999];
   }

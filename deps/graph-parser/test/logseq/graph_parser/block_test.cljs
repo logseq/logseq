@@ -2,7 +2,7 @@
   (:require [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser :as graph-parser]
-            [logseq.db :as ldb]
+            [logseq.graph-parser.db :as gp-db]
             [logseq.common.util.block-ref :as block-ref]
             [datascript.core :as d]
             [cljs.test :refer [deftest are testing is]]))
@@ -121,7 +121,7 @@
        first))
 
 (deftest refs-from-block-refs
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         id "63f528da-284a-45d1-ac9c-5d6a7435f6b4"
         block (str "A block\nid:: " id)
         block-ref-via-content (str "Link to " (block-ref/->block-ref id))
@@ -148,7 +148,7 @@
             "Block that links to a block via page properties has correct block ref")))))
 
 (deftest timestamp-blocks
-  (let [conn (ldb/start-conn)
+  (let [conn (gp-db/start-conn)
         deadline-block "do something\nDEADLINE: <2023-02-21 Tue>"
         scheduled-block "do something else\nSCHEDULED: <2023-02-20 Mon>"
         body (str "- " deadline-block "\n- " scheduled-block)]

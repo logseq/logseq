@@ -47,7 +47,7 @@
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)]
-    (is (= ["card" "Task" "class1" "class2"] (map first (model/get-all-classes repo))))))
+    (is (= ["Task" "card" "class1" "class2"] (sort (map first (model/get-all-classes repo)))))))
 
 (deftest get-class-objects-test
     (let [opts {:redirect? false :create-first-block? false :class? true}
