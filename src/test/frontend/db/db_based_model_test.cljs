@@ -78,7 +78,7 @@
     (db-property-handler/class-add-property! repo (:block/uuid class1) :user.property/property-1)
     (db-property-handler/class-add-property! repo (:block/uuid class2) :user.property/property-1)
     (let [property (db/entity :user.property/property-1)
-          classes (model/get-classes-with-property (:block/uuid property))]
+          classes (model/get-classes-with-property (:db/ident property))]
       (is (= (set (map :db/id classes))
              #{(:db/id class1) (:db/id class2)})))))
 
@@ -96,7 +96,7 @@
   (let [opts {:redirect? false :create-first-block? false}
         _ (page-handler/create! "page 1" opts)]
     (is (false? (model/hidden-page? (db/entity [:block/name "page 1"]))))
-    (is (false? (model/hidden-page? "$$$test")))
+    (is (true? (model/hidden-page? "$$$test")))
     (is (true? (model/hidden-page? (str "$$$" (random-uuid)))))))
 
 (deftest get-class-children-test
