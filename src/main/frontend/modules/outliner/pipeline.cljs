@@ -51,6 +51,7 @@
         (util/profile "transact initial-pages" (d/transact! conn tx-data tx-meta))
         (when end?
           (state/pub-event! [:init/commands])
+          (react/clear-query-state!)
           (ui-handler/re-render-root!)))
 
       (or from-disk? new-graph?)
