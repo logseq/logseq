@@ -34,10 +34,10 @@
 ;; update-property!
 (deftest ^:large-vars/cleanup-todo block-property-test
   (testing "Add a property to a block"
-    (db-property-handler/set-block-property! repo fbid "property-1" "value" {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
-          property (db/entity [:block/name "property-1"])]
+          property (db/entity [:block/name :user.property/property-1])]
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
@@ -54,10 +54,10 @@
         "value")))
 
   (testing "Add another property"
-    (db-property-handler/set-block-property! repo fbid "property-2" "1" {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-2 "1" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
-          property (db/entity [:block/name "property-2"])]
+          property (db/entity [:block/name :user.property/property-2])]
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
@@ -74,7 +74,7 @@
         1)))
 
   (testing "Update property value"
-    (db-property-handler/set-block-property! repo fbid "property-2" 2 {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-2 2 {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -85,7 +85,7 @@
         2)))
 
   (testing "Wrong type property value shouldn't transacted"
-    (db-property-handler/set-block-property! repo fbid "property-2" "Not a number" {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-2 "Not a number" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -191,14 +191,14 @@
         #{"class"}))
 
     (testing "Class add property"
-      (db-property-handler/class-add-property! repo c1id "property-1")
-      (db-property-handler/class-add-property! repo c1id "property-2")
+      (db-property-handler/class-add-property! repo c1id :user.property/property-1)
+      (db-property-handler/class-add-property! repo c1id :user.property/property-2)
       ;; repeated adding property-2
-      (db-property-handler/class-add-property! repo c1id "property-2")
+      (db-property-handler/class-add-property! repo c1id :user.property/property-2)
       (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
 
     (testing "Class remove property"
-      (db-property-handler/class-remove-property! repo c1id (:block/uuid (db/entity [:block/name "property-1"])))
+      (db-property-handler/class-remove-property! repo c1id (:block/uuid (db/entity [:block/name :user.property/property-1])))
       (is (= 1 (count (:class/schema.properties (db/entity (:db/id c1)))))))
     (testing "Add classes to a block"
       (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
@@ -226,7 +226,7 @@
   (testing "Add property and create a block value"
     (let [repo (state/get-current-repo)
           fb (db/entity [:block/uuid fbid])
-          k "property-1"]
+          k :user.property/property-1]
       ;; add property
       (db-property-handler/upsert-property! repo k {:type :default} {})
       (let [property (db/entity [:block/name k])
@@ -250,23 +250,12 @@
         [:any test-uuid] test-uuid
         [nil test-uuid] test-uuid))))
 
-;; replace-key-with-id
-(deftest replace-key-with-id-test
-  (db-property-handler/upsert-property! repo "property 1" {:type :default} {})
-  (db-property-handler/upsert-property! repo "property 2" {:type :default} {})
-  (testing "Replace property key with its uuid"
-    (let [result (db-property-handler/replace-key-with-id {"property 1" "value 1"
-                                                           "property 2" "value 2"})]
-      (is (every? uuid? (keys result)))))
-  (testing "Throw an error if a property doesn't exists"
-    (is (thrown? js/Error (db-property-handler/replace-key-with-id {"property not exists yet" "value 1"})))))
-
 ;; collapse-expand-property!
 (deftest collapse-expand-property-test
   (testing "Collapse and expand property"
     (let [repo (state/get-current-repo)
           fb (db/entity [:block/uuid fbid])
-          k "property-1"]
+          k :user.property/property-1]
       ;; add property
       (db-property-handler/upsert-property! repo k {:type :default} {})
       (let [property (db/entity [:block/name k])]

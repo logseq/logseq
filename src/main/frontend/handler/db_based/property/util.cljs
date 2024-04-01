@@ -1,8 +1,6 @@
 (ns frontend.handler.db-based.property.util
   "DB-graph only utility fns for properties"
   (:require [frontend.db.utils :as db-utils]
-            [frontend.state :as state]
-            [logseq.common.util :as common-util]
             [frontend.db :as db]
             [logseq.db.frontend.property :as db-property]))
 
@@ -10,19 +8,6 @@
   "Get a property's name given its id"
   [id]
   (:block/original-name (db-utils/entity id)))
-
-;; FIXME: property no long has `:block/name` attribute
-(defn get-built-in-property-uuid
-  "Get a built-in property's uuid given its db-ident"
-  ([db-ident] (get-built-in-property-uuid (state/get-current-repo) db-ident))
-  ([repo db-ident] (:block/uuid (db-utils/entity repo db-ident))))
-
-;; FIXME: property no long has `:block/name` attribute
-(defn get-user-property-uuid
-  "Get a user property's uuid given its unsanitized name"
-  ([property-name] (get-user-property-uuid (state/get-current-repo) property-name))
-  ([repo property-name]
-   (:block/uuid (db-utils/entity repo [:block/name (common-util/page-name-sanity-lc (name property-name))]))))
 
 (defn all-hidden-properties?
   "Checks if the given properties are all hidden properties"

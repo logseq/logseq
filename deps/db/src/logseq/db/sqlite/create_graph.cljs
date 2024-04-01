@@ -27,9 +27,9 @@
                        {:block/schema schema :closed-values closed-values}
                        {:db-ident db-ident})
                       [(sqlite-util/build-new-property
+                        db-ident
                         name
-                        schema
-                        {:db-ident db-ident})])]
+                        schema)])]
          (update blocks 0 default-db/mark-block-as-built-in)))
      built-in-properties)))
 

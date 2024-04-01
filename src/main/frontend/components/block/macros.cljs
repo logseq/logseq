@@ -45,14 +45,7 @@
            :updated-at
            :block/updated-at
 
-           (let [vals (map #(pu/lookup-by-name (:block/properties %) f) result)
-                 int? (some integer? vals)
-                 repo (state/get-current-repo)
-                 prop-key (if (config/db-based-graph? repo)
-                            (or (db-pu/get-user-property-uuid repo f)
-                                ;; Fall back to the keyword for queries that set named properties through :result-transform
-                                f)
-                            f)]
+           (let [prop-key f]
              `(~'fn [~'b]
                     (~'let [~'result-str (~'get-in ~'b [:block/properties ~prop-key])
                             ~'result-num (~'parseFloat ~'result-str)

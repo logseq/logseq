@@ -824,13 +824,14 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-block-property-values
   "Get blocks which have this property."
-  [property-uuid]
-  (ldb/get-block-property-values (conn/get-db) property-uuid))
+  [property-id]
+  (let [db (conn/get-db)]
+    (map :v (d/datoms db :avet property-id))))
 
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
-  [property-uuid]
-  (ldb/get-classes-with-property (conn/get-db) property-uuid))
+  [property-id]
+  (ldb/get-classes-with-property (conn/get-db) property-id))
 
 (defn get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."

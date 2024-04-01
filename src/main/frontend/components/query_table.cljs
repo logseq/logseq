@@ -112,8 +112,7 @@
         hidden-properties (if db-graph?
                             ;; TODO: Support additional hidden properties e.g. from user config
                             ;; or gp-property/built-in-extended properties
-                            (set (map #(db-pu/get-built-in-property-uuid repo %)
-                                      (keys db-property/built-in-properties)))
+                            (set (keys db-property/built-in-properties))
                             (conj (file-property-handler/built-in-properties) :template))
         prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
                         (remove hidden-properties))

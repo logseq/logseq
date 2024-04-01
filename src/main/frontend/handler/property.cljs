@@ -68,9 +68,3 @@
       (db-property-handler/batch-remove-property! repo block-ids key)
       (db-property-handler/batch-set-property! repo block-ids key value))
     (file-property-handler/batch-set-block-property! block-ids key value)))
-
-(defn replace-key-with-id
-  [repo m]
-  (if (config/db-based-graph? repo)
-    (db-property-handler/replace-key-with-id m)
-    m))
