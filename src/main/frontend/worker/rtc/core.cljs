@@ -24,7 +24,6 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
@@ -345,12 +344,12 @@
     (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
       (let [page-name (:block/name local-parent)
             properties* (transit/read transit-r properties)
-            shape-property-id (db-property/get-pid repo db :logseq.property.tldraw/shape)
+            shape-property-id :logseq.property.tldraw/shape
             shape (and (map? properties*)
                        (get properties* shape-property-id))]
         (assert (some? page-name) local-parent)
         (assert (some? shape) properties*)
-        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
+        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-name)])))))
 
 (defn- need-update-block?
   [conn block-uuid op-value]

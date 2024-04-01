@@ -25,9 +25,8 @@
   (js->clj obj :keywordize-keys true))
 
 (defn shape->block [shape page-name]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (gp-whiteboard/shape->block repo db shape page-name)))
+  (let [repo (state/get-current-repo)]
+    (gp-whiteboard/shape->block repo shape page-name)))
 
 (defn- build-shapes
   [page-block blocks]

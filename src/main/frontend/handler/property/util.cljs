@@ -11,9 +11,8 @@
 (defn lookup
   "Get the value of coll's (a map) by db-ident. For file and db graphs"
   [coll key]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (db-property/lookup repo db coll key)))
+  (let [repo (state/get-current-repo)]
+    (db-property/lookup repo coll key)))
 
 (defn lookup-by-name
   "Get the value of coll's (a map) by name. Only use this
@@ -39,9 +38,8 @@
 (defn get-pid
   "Get a built-in property's id (db-ident or name) given its db-ident. For file and db graphs"
   [db-ident]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (db-property/get-pid repo db db-ident)))
+  (let [repo (state/get-current-repo)]
+    (db-property/get-pid repo db-ident)))
 
 (defn block->shape [block]
   (get-block-property-value block :logseq.property.tldraw/shape))

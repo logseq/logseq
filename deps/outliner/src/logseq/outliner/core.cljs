@@ -636,7 +636,7 @@
         tb (when target-block (block db target-block))
         target-block (if sibling? target-block (when tb (:block (otree/-get-down tb conn))))
         list-type-fn (fn [block] (db-property/get-block-property-value repo db block :logseq.property/order-list-type))
-        k (db-property/get-pid repo db :logseq.property/order-list-type)
+        k (db-property/get-pid repo :logseq.property/order-list-type)
         db-based? (sqlite-util/db-based-graph? repo)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
