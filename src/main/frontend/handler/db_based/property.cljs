@@ -111,11 +111,14 @@
       property
       (let [tx-data (->>
                      (conj
-                      [(merge
-                        (outliner-core/block-with-updated-at
-                         {:db/ident db-ident
-                          :block/schema schema})
-                        properties)]
+                      [(cond->
+                        (merge
+                         (outliner-core/block-with-updated-at
+                          {:db/ident db-ident
+                           :block/schema schema})
+                         properties)
+                         property-name
+                         (assoc :block/original-name property-name))]
                       (update-schema property schema))
                      (remove nil?))]
         (db/transact! repo tx-data {:outliner-op :save-block}))
