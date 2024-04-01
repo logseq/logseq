@@ -94,8 +94,7 @@
 (defn update-schema
   [property {:keys [type cardinality]}]
   (let [ident (:db/ident property)
-        cardinality (if (= cardinality :many) :db.cardinality/many
-                        (get property :db/cardinality :db.cardinality/one))
+        cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
         type-data (when (and type (sqlite-util/property-ref-types type)) ; type changes
                     {:db/ident ident
                      :db/valueType :db.type/ref
