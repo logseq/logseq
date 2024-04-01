@@ -73,9 +73,7 @@
 
 (rum/defc date-picker
   [value {:keys [on-change editing? multiple-values?]}]
-  (let [;; FIXME: Remove ignore when editing bug is fixed
-        #_:clj-kondo/ignore
-        [open? set-open!] (rum/use-state editing?)
+  (let [*trigger-ref (rum/use-ref nil)
         page (when (uuid? value)
                (db/entity [:block/uuid value]))
         title (when page (:block/original-name page))
@@ -91,6 +89,14 @@
         initial-day (some-> value' (.getTime) (js/Date.))
         initial-month (when value'
                         (js/Date. (.getYear value') (.getMonth value')))]
+
+    (rum/use-effect!
+      (fn []
+        (when editing?
+          (some-> (rum/deref *trigger-ref)
+            (.focus))))
+      [])
+
     [:div.flex.flex-row.gap-1.items-center
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
@@ -126,6 +132,7 @@
 
        (shui/button
         {:class "jtrigger !p-1"
+         :ref *trigger-ref
          :variant :text
          :size :sm
          :on-click (fn [e]
