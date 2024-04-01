@@ -83,7 +83,7 @@
   [page]
   (let [tags-property (db/entity :block/tags)]
     (pv/property-value page tags-property
-                       (map :db/id (:block/tags page))
+                       (:block/tags page)
                        {:page-cp (fn [config page]
                                    (component-block/page-cp (assoc config :tag? true) page))
                         :inline-text component-block/inline-text})))
