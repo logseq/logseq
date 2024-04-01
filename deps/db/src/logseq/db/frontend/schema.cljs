@@ -100,9 +100,7 @@
    :block/journal-day {}
    ;; page's namespace
    :block/namespace {:db/valueType :db.type/ref}
-   ;; macros in block
-   :block/macros {:db/valueType :db.type/ref
-                  :db/cardinality :db.cardinality/many}
+
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
 
@@ -146,7 +144,6 @@
     :block/properties
     :block/properties-order
     :block/properties-text-values
-    :block/macros
     :block/invalid-properties
     :block/warning
     }
@@ -155,7 +152,6 @@
 ;; If only block/content changes
 (def db-version-retract-attributes
   #{:block/refs
-    :block/macros
     :block/warning})
 
 

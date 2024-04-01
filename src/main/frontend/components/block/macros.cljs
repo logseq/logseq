@@ -4,11 +4,8 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.state :as state]
             [goog.string :as gstring]
-            [goog.string.format]
-            [frontend.config :as config]))
+            [goog.string.format]))
 
 (defn- normalize-query-function
   [ast result]
@@ -45,7 +42,9 @@
            :updated-at
            :block/updated-at
 
-           (let [prop-key f]
+           (let [vals (map #(pu/lookup-by-name (:block/properties %) f) result)
+                 int? (some integer? vals)
+                 prop-key f]
              `(~'fn [~'b]
                     (~'let [~'result-str (~'get-in ~'b [:block/properties ~prop-key])
                             ~'result-num (~'parseFloat ~'result-str)
