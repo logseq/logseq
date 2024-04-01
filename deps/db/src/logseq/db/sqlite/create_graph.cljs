@@ -22,9 +22,10 @@
        (let [name (or original-name (name db-ident))
              blocks (if closed-values
                       (db-property-util/build-closed-values
+                       db-ident
                        name
-                       {:block/schema schema :closed-values closed-values}
-                       {:db-ident db-ident})
+                       {:db/ident db-ident :block/schema schema :closed-values closed-values}
+                       {})
                       [(sqlite-util/build-new-property
                         db-ident
                         name

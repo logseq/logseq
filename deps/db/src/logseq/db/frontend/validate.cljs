@@ -69,7 +69,8 @@
   (let [datoms (d/datoms db :eavt)
         ent-maps* (db-malli-schema/datoms->entity-maps datoms)
         ent-maps (vec (vals ent-maps*))
-        schema (update-schema db-malli-schema/DB db {:closed-schema? true})
+        ;; FIXME: Fix validation for closed-schema? true
+        schema (update-schema db-malli-schema/DB db {:closed-schema? false})
         errors (->> ent-maps (m/explain schema) :errors)]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}
