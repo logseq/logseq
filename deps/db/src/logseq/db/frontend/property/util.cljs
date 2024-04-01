@@ -2,7 +2,8 @@
   "Util fns for building core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.default :as default-db]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [clojure.string :as string]))
 
 (defonce hidden-page-name-prefix "$$$")
 
@@ -29,7 +30,7 @@
 
     ;; For now, only closed values with :db/ident are built-in?
     (and db-ident (keyword? db-ident))
-    ((fn [b] (default-db/mark-block-as-built-in b)))
+    default-db/mark-block-as-built-in
 
     description
     (update :block/schema assoc :description description)
@@ -48,8 +49,8 @@
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
-  [prop-name property {:keys [db-ident translate-closed-page-value-fn property-attributes]
-                       :or {translate-closed-page-value-fn identity}}]
+  [db-ident prop-name property {:keys [translate-closed-page-value-fn property-attributes]
+                                :or {translate-closed-page-value-fn identity}}]
   (let [page-tx (build-property-hidden-page property)
         page-id [:block/uuid (:block/uuid page-tx)]
         closed-value-page-uuids? (contains? #{:page :date} (get-in property [:block/schema :type]))
