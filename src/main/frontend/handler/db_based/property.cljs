@@ -21,8 +21,7 @@
             [frontend.handler.property.util :as pu]
             [promesa.core :as p]
             [frontend.db.async :as db-async]
-            [logseq.db :as ldb]
-            [datascript.impl.entity :as de]))
+            [logseq.db :as ldb]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -482,7 +481,7 @@
 
 (defn create-property-text-block!
   [block property value parse-block {:keys [class-schema?]}]
-  (assert (de/entity? property))
+  (assert (e/entity? property))
   (let [repo (state/get-current-repo)
         {:keys [page blocks]} (property-create-new-block block property value parse-block)
         first-block (first blocks)
@@ -625,6 +624,7 @@
 (defn <add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids"
   [property values]
+  (assert (e/entity? property))
   (when (seq values)
     (let [values' (remove string/blank? values)
           property-schema (:block/schema property)]

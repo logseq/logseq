@@ -26,8 +26,8 @@
    :after test-helper/destroy-test-db!})
 
 (defn- get-value-ids
-  [property-name]
-  (:values (:block/schema (db/entity [:block/name property-name]))))
+  [k]
+  (:values (:block/schema (db/entity k))))
 
 (defn- get-closed-values
   "Get value from block ids"
@@ -85,4 +85,4 @@
             (db-property-handler/delete-closed-value! property (db/entity [:block/uuid block-id]))
             (testing "Delete closed value"
               (is (nil? (db/entity [:block/uuid block-id])))
-              (is (= 2 (count (:values (:block/schema (db/entity [:block/name k]))))))))))))))
+              (is (= 2 (count (:values (:block/schema (db/entity k))))))))))))))
