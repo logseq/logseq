@@ -795,11 +795,11 @@
                       :parent-block block
                       :format :markdown}
          v (cond
-             (and multiple-values? (coll? v))
+             (and multiple-values? (set? v))
              v
              multiple-values?
-             [v]
-             (coll? v)
+             #{v}
+             (set? v)
              (first v)
              :else
              v)]
