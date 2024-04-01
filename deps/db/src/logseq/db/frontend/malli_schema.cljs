@@ -83,6 +83,12 @@
   party plugins to provide their own namespaces to core concepts."
   #{"user.property"})
 
+(def db-attribute
+  [:and :keyword [:fn
+                  {:error/message "should be a valid db attribute"}
+                  (fn db-attribute? [k]
+                    (contains? #{"block"} (namespace k)))]])
+
 (def logseq-ident
   [:and :keyword [:fn
                   {:error/message "should be a valid :db/ident namespace"}
@@ -154,7 +160,7 @@
   (vec
    (concat
     [:map
-     [:db/ident logseq-ident]
+     [:db/ident [:or logseq-ident db-attribute]]
      [:block/schema
       (vec
        (concat
@@ -193,7 +199,8 @@
 
 (def property-page
   [:multi {:dispatch (fn [m]
-                       (string/starts-with? (namespace (m :db/ident)) "logseq."))}
+                       (or (string/starts-with? (namespace (m :db/ident)) "logseq.")
+                           (= "block" (namespace (m :db/ident)))))}
    [true internal-property]
    [:malli.core/default user-property]])
 
@@ -300,13 +307,9 @@
                 [:block/tx-id {:optional true} :int]])
              db-ident-keys)))
 
-(def macro
+(def property-value-placeholder
   [:map
-   [:db/ident :string]
-   [:block/uuid :uuid]
-   [:block/type [:= #{"macro"}]]
-   ;; Should this be removed?
-   [:block/tx-id {:optional true} :int]])
+   [:db/ident [:= :property/empty-placeholder]]])
 
 (def DB
   "Malli schema for entities from schema/schema-for-db-based-graph. In order to
@@ -319,8 +322,8 @@
     block
     file-block
     db-ident-key-val
-    macro
-    asset-block]])
+    asset-block
+    property-value-placeholder]])
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
