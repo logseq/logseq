@@ -10,7 +10,6 @@
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.db.async :as db-async]
-            [frontend.db.query-dsl :as query-dsl]
             [frontend.diff :as diff]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
@@ -66,7 +65,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [logseq.db :as ldb]))
 
