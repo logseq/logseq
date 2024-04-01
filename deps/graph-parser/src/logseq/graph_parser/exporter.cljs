@@ -110,6 +110,39 @@
                     (keep #(convert-tag-to-class % tag-classes) tags)))))
     block))
 
+(defn- update-block-marker
+  "If a block has a marker, convert it to a task object"
+  [block db {:keys [log-fn]}]
+  (if-let [marker (:block/marker block)]
+    (let [old-to-new {"TODO" :logseq.task/status.todo
+                      "LATER" :logseq.task/status.todo
+                      "IN-PROGRESS" :logseq.task/status.doing
+                      "NOW" :logseq.task/status.doing
+                      "DOING" :logseq.task/status.doing
+                      "DONE" :logseq.task/status.done
+                      "WAIT" :logseq.task/status.backlog
+                      "WAITING" :logseq.task/status.backlog
+                      "CANCELED" :logseq.task/status.canceled
+                      "CANCELLED" :logseq.task/status.canceled}
+          status-prop (:block/uuid (d/entity db :logseq.task/status))
+          status-ident (or (old-to-new marker)
+                           (do
+                             (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
+                             :logseq.task/status.todo))
+          status-value (:block/uuid (d/entity db status-ident))]
+      (-> block
+          (update :block/properties assoc status-prop status-value)
+          (update :block/content string/replace-first (re-pattern (str marker "\\s*")) "")
+          (update :block/tags (fnil conj []) :logseq.class/task)
+          (update :block/refs (fn [refs]
+                                (into (remove #(= marker (:block/original-name %)) refs)
+                                      [:logseq.class/task :logseq.task/status status-ident])))
+          (update :block/path-refs (fn [refs]
+                                     (into (remove #(= marker (:block/original-name %)) refs)
+                                           [:logseq.class/task :logseq.task/status status-ident])))
+          (dissoc :block/marker)))
+    block))
+
 (defn- text-with-refs?
   "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
   instead of `#Logseq #awesome`. If so the property type is :default instead of :page"
@@ -463,6 +496,7 @@
         (handle-block-properties db page-names-to-uuids (:block/refs block) options)
         (update-block-refs page-names-to-uuids old-property-schemas options)
         (update-block-tags tag-classes page-names-to-uuids)
+        (update-block-marker db options)
         add-missing-timestamps
         ;; ((fn [x] (prn :block-out x) x))
         ;; TODO: org-mode content needs to be handled
