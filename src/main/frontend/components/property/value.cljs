@@ -612,19 +612,91 @@
          :page
          (property-value-select-page block property select-opts' opts))]))))
 
+(defn- property-editing
+  [block property value schema editor-box editor-args editor-id]
+  (let [repo (state/get-current-repo)
+        multiple-values? (= :many (:cardinality schema))]
+    [:div.flex.flex-1
+    (case type
+      :template
+      (let [id (first (:classes schema))
+            template (when id (db/entity [:block/uuid id]))]
+        (when template
+          (<create-new-block-from-template! block property template)))
+
+      (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
+        [:div
+         (editor-box editor-args editor-id (cond-> config
+                                             multiple-values?
+                                             (assoc :property-value value)))]))]))
+
+(defn- property-value-inner
+  [block property value *ref {:keys [inline-text block-cp page-cp
+                                     editor-id dom-id row?
+                                     editor-box]
+                              :as opts}]
+  (let [schema (:block/schema property)
+        multiple-values? (= :many (:cardinality schema))
+        class (str (when-not row? "flex flex-1 ")
+                   (when multiple-values? "property-value-content"))
+        type (or (when (and (= type :default) (uuid? value)) :block)
+                 type
+                 :default)
+        type (if (= :block type)
+               (let [v-block (db/entity value)]
+                 (if (:logseq.property/created-from-template v-block)
+                   :template
+                   type))
+               type)
+        template? (= :template type)]
+    [:div.cursor-text.jtrigger
+     {:id (or dom-id (random-uuid))
+      :tabIndex 0
+      :class class
+      :style {:min-height 24}
+      :on-click (fn []
+                  (let [property-block (when (and (= type :block) (uuid? value))
+                                         (db/entity [:block/uuid value]))
+                        invalid-block? (and (= type :block) (uuid? value)
+                                            (or (nil? property-block)
+                                                (nil? (:block/_parent property-block))))
+                        value (if invalid-block? "" value)]
+                    (when (or (= type :default) invalid-block?)
+                      (set-editing! (assoc property :block/uuid (random-uuid)) editor-id dom-id value {:ref @*ref}))))}
+     (if (string/blank? value)
+       (if template?
+         (let [id (first (:classes schema))
+               template (when id (db/entity [:block/uuid id]))]
+           (when template
+             [:a.fade-link.pointer.text-sm.jtrigger
+              {:on-click (fn [e]
+                           (util/stop e)
+                           (<create-new-block-from-template! block property template))}
+              (str "Use template #" (:block/original-name template))]))
+         [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])
+       (cond
+         (= type :template)
+         (property-template-value {:editor-id editor-id}
+                                  value
+                                  opts)
+
+         (and (= type :block) (uuid? value))
+         (property-block-value value block property block-cp editor-box opts page-cp editor-id)
+
+         :else
+         (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
+
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query
   (rum/local nil ::ref)
-  [state block property value {:keys [inline-text block-cp page-cp
-                                      editor-id dom-id row?
-                                      editor-box editor-args editing?
+  [state block property value {:keys [editor-id editor-box editor-args editing?
                                       on-chosen]
                                :as opts}]
   (let [*ref (::ref state)
         property (model/sub-block (:db/id property))
-        repo (state/get-current-repo)
+
         schema (:block/schema property)
         type (get schema :type :default)
-        multiple-values? (= :many (:cardinality schema))
+
         editing? (or editing?
                      (state/sub-property-value-editing? editor-id)
                      (and @*ref (state/sub-editing? @*ref)))
@@ -657,68 +729,9 @@
                                            (add-property!)))}))
         ;; :others
         [:div.flex.flex-1 {:ref #(when-not @*ref (reset! *ref %))}
-         (if editing?
-           [:div.flex.flex-1
-            (case type
-              :template
-              (let [id (first (:classes schema))
-                    template (when id (db/entity [:block/uuid id]))]
-                (when template
-                  (<create-new-block-from-template! block property template)))
-
-              (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
-                [:div
-                 (editor-box editor-args editor-id (cond-> config
-                                                     multiple-values?
-                                                     (assoc :property-value value)))]))]
-           (let [class (str (when-not row? "flex flex-1 ")
-                            (when multiple-values? "property-value-content"))
-                 type (or (when (and (= type :default) (uuid? value)) :block)
-                          type
-                          :default)
-                 type (if (= :block type)
-                        (let [v-block (db/entity value)]
-                          (if (:logseq.property/created-from-template v-block)
-                            :template
-                            type))
-                        type)
-                 template? (= :template type)]
-             [:div.cursor-text.jtrigger
-              {:id (or dom-id (random-uuid))
-               :tabIndex 0
-               :class class
-               :style {:min-height 24}
-               :on-click (fn []
-                           (let [property-block (when (and (= type :block) (uuid? value))
-                                                  (db/entity [:block/uuid value]))
-                                 invalid-block? (and (= type :block) (uuid? value)
-                                                     (or (nil? property-block)
-                                                         (nil? (:block/_parent property-block))))
-                                 value (if invalid-block? "" value)]
-                             (when (or (= type :default) invalid-block?)
-                               (set-editing! (assoc property :block/uuid (random-uuid)) editor-id dom-id value {:ref @*ref}))))}
-              (if (string/blank? value)
-                (if template?
-                  (let [id (first (:classes schema))
-                        template (when id (db/entity [:block/uuid id]))]
-                    (when template
-                      [:a.fade-link.pointer.text-sm.jtrigger
-                       {:on-click (fn [e]
-                                    (util/stop e)
-                                    (<create-new-block-from-template! block property template))}
-                       (str "Use template #" (:block/original-name template))]))
-                  [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])
-                (cond
-                  (= type :template)
-                  (property-template-value {:editor-id editor-id}
-                                           value
-                                           opts)
-
-                  (and (= type :block) (uuid? value))
-                  (property-block-value value block property block-cp editor-box opts page-cp editor-id)
-
-                  :else
-                  (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))]))))
+   (if editing?
+     (property-editing  block property value schema editor-box editor-args editor-id)
+     (property-value-inner block property value *ref opts))]))))
 
 (rum/defc multiple-values
   [block property v {:keys [on-chosen dropdown? editing?]

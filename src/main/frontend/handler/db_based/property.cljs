@@ -687,7 +687,7 @@
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"
-  [db property value-block]
+  [property value-block]
   (cond
     (ldb/built-in? value-block)
     (do (notification/show! "The choice can't be deleted because it's built-in." :warning)

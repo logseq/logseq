@@ -168,7 +168,7 @@
        (assoc opts
               :delete-choice
               (fn []
-                (p/let [success? (db-property-handler/delete-closed-value! (db/get-db) property block)]
+                (p/let [success? (db-property-handler/delete-closed-value! property block)]
                   (when success?
                     (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))))
               :update-icon

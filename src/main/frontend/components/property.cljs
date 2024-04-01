@@ -121,9 +121,7 @@
             f (if (and class? class-schema?)
                 db-property-handler/class-remove-property!
                 property-handler/remove-block-property!)
-            property-id (if (config/db-based-graph? repo)
-                          (:db/ident property)
-                          (:block/uuid property))]
+            property-id (:db/ident property)]
         (f repo (:block/uuid block) property-id)))))
 
 (rum/defc schema-type <

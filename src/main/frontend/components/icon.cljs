@@ -13,8 +13,7 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]
-            [frontend.config :as config]
-            [frontend.handler.property.util :as pu]))
+            [frontend.config :as config]))
 
 (defn icon
   [icon & [opts]]

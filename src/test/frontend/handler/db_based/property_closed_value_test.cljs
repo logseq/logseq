@@ -82,7 +82,7 @@
                  (is (contains? (:block/type b) "closed value")))))
 
            (p/do!
-            (db-property-handler/delete-closed-value! (db/get-db) property (db/entity [:block/uuid block-id]))
+            (db-property-handler/delete-closed-value! property (db/entity [:block/uuid block-id]))
             (testing "Delete closed value"
               (is (nil? (db/entity [:block/uuid block-id])))
               (is (= 2 (count (:values (:block/schema (db/entity [:block/name k]))))))))))))))
