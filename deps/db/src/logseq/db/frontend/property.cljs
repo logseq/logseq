@@ -64,10 +64,6 @@
    :logseq.property/hl-page {:schema {:type :number}}
    :logseq.property/hl-stamp {:schema {:type :number}}
    :logseq.property/hl-color {:schema {:type :default}}
-   :logseq.property/macro-name {:name :logseq.macro-name
-                                :schema {:type :default}}
-   :logseq.property/macro-arguments {:name :logseq.macro-arguments
-                                     :schema {:type :coll}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page

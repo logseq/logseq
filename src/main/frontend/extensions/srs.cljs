@@ -588,12 +588,10 @@
 
 (declare cards)
 
+;; TODO: FIXME: macros have been deleted
 (rum/defc cards-select
   [{:keys [on-chosen]}]
-  (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
-        items (->> (map (comp :logseq.macro-arguments :block/properties) cards)
-                   (map (fn [col] (string/join " " col))))
-        items (concat items [(t :flashcards/modal-select-all)])]
+  (let [items [(t :flashcards/modal-select-all)]]
     (component-select/select {:items items
                               :on-chosen on-chosen
                               :close-modal? false
