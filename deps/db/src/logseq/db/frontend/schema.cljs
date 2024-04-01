@@ -124,7 +124,7 @@
 (def schema-for-db-based-graph
   (merge
    (dissoc schema
-           :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
+           :block/properties :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
            :block/properties-order)
    {:class/parent {:db/valueType :db.type/ref
                    :db/index true}

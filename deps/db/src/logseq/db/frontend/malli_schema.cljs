@@ -2,7 +2,6 @@
   "Malli schemas and fns for logseq.db.frontend.*"
   (:require [clojure.walk :as walk]
             [clojure.string :as string]
-            [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property.type :as db-property-type]))
 
@@ -34,14 +33,6 @@
                        e)))
                  db-schema))
 
-(defn update-properties-in-ents
-  "Prepares entities to be validated by DB schema"
-  [ents]
-  (map #(if (:block/properties %)
-          (update % :block/properties (fn [x] (mapv identity x)))
-          %)
-       ents))
-
 (defn datoms->entity-maps
   "Returns entity maps for given :eavt datoms"
   [datoms]
@@ -55,30 +46,14 @@
 ;; Malli schemas
 ;; =============
 ;; These schemas should be data vars to remain as simple and reusable as possible
-(def property-tuple
-  "Represents a tuple of a property and its property value. This schema
-   has 2 metadata hooks which are used to inject a datascript db later"
-  (into
-   [:multi {:dispatch ^:add-db (fn [db property-tuple]
-                                 (get-in (d/entity db [:block/uuid (first property-tuple)])
-                                         [:block/schema :type]))}]
-   (map (fn [[prop-type value-schema]]
-          ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
-        db-property-type/built-in-validation-schemas)))
 
-(def block-properties
-  "Validates a slightly modified version of :block/properties. Properties are
-  expected to be a vector of tuples instead of a map in order to validate each
-  property with its property value that is valid for its type"
-  [:sequential property-tuple])
-
+;; FIXME: validate properties
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
    [:block/format [:enum :markdown]]
-   [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/collapsed-properties {:optional true} [:set :int]]
@@ -88,12 +63,48 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/original-name :string]
-   [:block/type {:optional true} [:enum #{"property"} #{"class"} #{"whiteboard"} #{"hidden"}]]
+   [:block/type {:optional true} [:enum #{"class"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
    [:block/namespace {:optional true} :int]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]])
+
+(def logseq-ident-namespaces
+  "Set of all namespaces Logseq uses for :db/ident. It's important to grow this
+  list purposefully and have it start with 'logseq' to allow for users and 3rd
+  party plugins to provide their own namespaces to core concepts."
+  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
+    "logseq.class" "logseq.task" "logseq.kv"})
+
+(def user-ident-namespaces
+  "Set of all namespaces Logseq uses for :db/ident. It's important to grow this
+  list purposefully and have it start with 'logseq' to allow for users and 3rd
+  party plugins to provide their own namespaces to core concepts."
+  #{"user.property"})
+
+(def logseq-ident
+  [:and :keyword [:fn
+                  {:error/message "should be a valid :db/ident namespace"}
+                  (fn logseq-namespace? [k]
+                    (contains? logseq-ident-namespaces (namespace k)))]])
+
+(def user-ident
+  [:and :keyword [:fn
+                  {:error/message "should be a valid :db/ident namespace"}
+                  (fn user-namespace? [k]
+                    (contains? user-ident-namespaces (namespace k)))]])
+
+(def property-attrs
+  "Common attributes for properties"
+  [[:db/index {:optional true} :boolean]
+   [:db/valueType {:optional true} [:enum :db.type/ref]]
+   [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
+   [:block/original-name :string]
+   [:block/type {:optional true} [:enum #{"property"}]]
+   [:block/created-at :int]
+   [:block/updated-at :int]
+   [:block/tx-id {:optional true} :int]])
 
 (def normal-page
   (vec
@@ -111,18 +122,6 @@
    [:class/parent {:optional true} :int]
    [:class/schema.properties {:optional true} [:set :int]]])
 
-(def logseq-ident-namespaces
-  "Set of all namespaces Logseq uses for :db/ident. It's important to grow this
-  list purposefully and have it start with 'logseq' to allow for users and 3rd
-  party plugins to provide their own namespaces to core concepts."
-  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
-    "logseq.class" "logseq.task" "logseq.kv"})
-
-(def logseq-ident
-  [:and :keyword [:fn
-                  {:error/message "should be a valid :db/ident namespace"}
-                  (fn logseq-namespace? [k]
-                    (contains? logseq-ident-namespaces (namespace k)))]])
 (def class-page
   (vec
    (concat
@@ -166,8 +165,7 @@
          [:view-context {:optional true} [:enum :page :block]]]
         property-common-schema-attrs
         property-type-schema-attrs))]]
-    page-attrs
-    page-or-block-attrs)))
+    property-attrs)))
 
 (def user-property-schema
   (into
@@ -189,12 +187,13 @@
   (vec
    (concat
     [:map
+     [:db/ident user-ident]
      [:block/schema {:optional true} user-property-schema]]
-    page-attrs
-    page-or-block-attrs)))
+    property-attrs)))
 
 (def property-page
-  [:multi {:dispatch (fn [m] (contains? m :db/ident))}
+  [:multi {:dispatch (fn [m]
+                       (string/starts-with? (namespace (m :db/ident)) "logseq."))}
    [true internal-property]
    [:malli.core/default user-property]])
 
@@ -307,7 +306,6 @@
    [:db/ident :string]
    [:block/uuid :uuid]
    [:block/type [:= #{"macro"}]]
-   [:block/properties block-properties]
    ;; Should this be removed?
    [:block/tx-id {:optional true} :int]])
 
