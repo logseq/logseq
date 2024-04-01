@@ -40,10 +40,10 @@
 ;; delete-closed-value
 (deftest-async closed-values-test
   (testing "Create properties and closed values"
-    (db-property-handler/set-block-property! repo fbid "property-1" "1" {})
-    (db-property-handler/set-block-property! repo sbid "property-1" "2" {})
-    (let [k "property-1"
-          property (db/entity [:block/name k])]
+    (db-property-handler/set-block-property! repo fbid :user.property/property-1 "1" {})
+    (db-property-handler/set-block-property! repo sbid :user.property/property-1 "2" {})
+    (let [k :user.property/property-1
+          property (db/entity k)]
       (p/do!
        (db-property-handler/<add-existing-values-to-closed-values! property [1 2])
        (testing "Add existing values to closed values"

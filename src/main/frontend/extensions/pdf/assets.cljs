@@ -195,19 +195,17 @@
            (let [text       (:text content)
                  wrap-props #(if-let [stamp (:image content)]
                                (assoc %
-                                      (pu/get-pid :logseq.property/hl-type) :area
-                                      (pu/get-pid :logseq.property/hl-stamp) stamp)
+                                      :logseq.property/hl-type :area
+                                      :logseq.property/hl-stamp stamp)
                                %)
                  props (cond->
-                        {(pu/get-pid :logseq.property/ls-type)  :annotation
-                         (pu/get-pid :logseq.property/hl-page)  page
-                         (pu/get-pid :logseq.property/hl-color) (:color properties)}
+                        {:logseq.property/ls-type  :annotation
+                         :logseq.property/hl-page  page
+                         :logseq.property/hl-color (:color properties)}
                          (not (config/db-based-graph? (state/get-current-repo)))
-                       ;; force custom uuid
+                          ;; force custom uuid
                          (assoc :id (str id)))
-                 properties (->>
-                             (wrap-props props)
-                             (property-handler/replace-key-with-id (state/get-current-repo)))]
+                 properties (wrap-props props)]
              (when (string? text)
                (editor-handler/api-insert-new-block!
                 text (merge {:page        (:block/name ref-page)

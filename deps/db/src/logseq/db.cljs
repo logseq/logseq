@@ -417,17 +417,8 @@
 
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
-  [db property-uuid]
-  (d/q
-   '[:find [?b ...]
-     :in $ ?property-uuid
-     :where
-     [?b :block/schema ?schema]
-     [(get ?schema :properties) ?schema-properties*]
-     [(set ?schema-properties*) ?schema-properties]
-     [(contains? ?schema-properties ?property-uuid)]]
-   db
-   property-uuid))
+  [db property-id]
+  (:class/_schema.properties (d/entity db property-id)))
 
 (defn get-block-property-values
   "Get blocks which have this property."

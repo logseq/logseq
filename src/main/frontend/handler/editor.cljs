@@ -518,9 +518,6 @@
               new-block (-> new-block
                             (wrap-parse-block)
                             (assoc :block/uuid (or custom-uuid (db/new-block-id))))
-              new-block (if (and db-based? (seq properties))
-                          (assoc new-block :block/properties (db-property-handler/replace-key-with-id properties))
-                          new-block)
               new-block (merge new-block other-attrs)
               [block-m sibling?] (cond
                                    before?

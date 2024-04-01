@@ -67,22 +67,26 @@
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"
-  [prop-name prop-schema & {:keys [db-ident]}]
-  (block-with-timestamps
-   (cond->
-    {:block/type "property"
-     :block/schema (merge {:type :default} prop-schema)
-     :block/original-name (name prop-name)}
-     (and db-ident (keyword? db-ident))
-     (assoc :db/ident db-ident)
-     (= :many (:cardinality prop-schema))
-     (assoc :db/cardinality :db.cardinality/many)
-     (not= :many (:cardinality prop-schema))
-     (assoc :db/cardinality :db.cardinality/one)
-     (contains? property-ref-types (:type prop-schema))
-     (assoc :db/valueType :db.type/ref)
-     true
-     (assoc :db/index true))))
+  [db-ident prop-name prop-schema]
+  (assert (keyword? db-ident))
+  (let [db-ident' (if (or (= "user.property" (namespace db-ident))
+                          (string/starts-with? (namespace db-ident) "logseq."))
+                    db-ident
+                    (keyword "user.property" (name db-ident)))]
+    (block-with-timestamps
+     (cond->
+      {:db/ident db-ident'
+       :block/type "property"
+       :block/schema (merge {:type :default} prop-schema)
+       :block/original-name (name prop-name)}
+       (= :many (:cardinality prop-schema))
+       (assoc :db/cardinality :db.cardinality/many)
+       (not= :many (:cardinality prop-schema))
+       (assoc :db/cardinality :db.cardinality/one)
+       (contains? property-ref-types (:type prop-schema))
+       (assoc :db/valueType :db.type/ref)
+       true
+       (assoc :db/index true)))))
 
 
 (defn build-new-class

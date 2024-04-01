@@ -124,8 +124,12 @@
         (db/transact! repo tx-data {:outliner-op :save-block}))
 
       :else
-      (let [k-name (or (:block/original-name property) (and property-name (name property-name)))]
-        (db/transact! repo [(sqlite-util/build-new-property k-name schema {:db-ident db-ident})]
+      (let [k-name (or (:block/original-name property)
+                       (and property-name (name property-name))
+                       (name property-id))]
+        (assert (some? k-name)
+                (prn "property-id: " property-id ", property-name: " property-name))
+        (db/transact! repo [(sqlite-util/build-new-property db-ident k-name schema)]
                       {:outliner-op :new-property})))))
 
 (defn validate-property-value
@@ -190,7 +194,10 @@
 
 (defn set-block-property!
   [repo block-eid property-id v {:keys [old-value] :as opts}]
-  (let [property-id (if (string? property-id)
+  (let [block-eid (if (uuid? block-eid)
+                    [:block/uuid block-eid]
+                    block-eid)
+        property-id (if (string? property-id)
                       (db-property/get-db-ident-from-name property-id)
                       property-id)
         _ (assert (keyword? property-id) "property-id should be a keyword")
@@ -379,21 +386,6 @@
                                    ""
                                    {})
               (remove-block-property! repo (:db/id block) property-id))))))))
-
-(defn replace-key-with-id
-  "Notice: properties need to be created first"
-  [m]
-  (zipmap
-   (map (fn [k]
-          (if (uuid? k)
-            k
-            (let [property-id (db-pu/get-user-property-uuid k)]
-              (when-not property-id
-                (throw (ex-info "Property not exists yet"
-                                {:key k})))
-              property-id)))
-        (keys m))
-   (vals m)))
 
 (defn collapse-expand-property!
   "Notice this works only if the value itself if a block (property type should be either :default or :template)"

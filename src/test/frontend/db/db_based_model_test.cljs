@@ -22,16 +22,15 @@
 (use-fixtures :each start-and-destroy-db)
 
 (deftest get-block-property-values-test
-  (db-property-handler/set-block-property! repo fbid "property-1" "value 1" {})
-  (db-property-handler/set-block-property! repo sbid "property-1" "value 2" {})
-  (let [property (db/entity [:block/name "property-1"])]
-    (is (= (map second (model/get-block-property-values (:block/uuid property)))
-           ["value 1" "value 2"]))))
+  (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value 1" {})
+  (db-property-handler/set-block-property! repo sbid :user.property/property-1 "value 2" {})
+  (is (= (model/get-block-property-values :user.property/property-1)
+         ["value 1" "value 2"])))
 
-;; (deftest get-db-property-values-test
-;;   (db-property-handler/set-block-property! repo fbid "property-1" "1" {})
-;;   (db-property-handler/set-block-property! repo sbid "property-1" "2" {})
-;;   (is (= [1 2] (model/get-db-property-values repo "property-1"))))
+(deftest get-db-property-values-test
+  (db-property-handler/set-block-property! repo fbid :user.property/property-1 "1" {})
+  (db-property-handler/set-block-property! repo sbid :user.property/property-1 "2" {})
+  (is (= [1 2] (model/get-block-property-values :user.property/property-1))))
 
 ;; (deftest get-db-property-values-test-with-pages
 ;;   (let [opts {:redirect? false :create-first-block? false}
@@ -75,12 +74,13 @@
         _ (page-handler/create! "class2" opts)
         class1 (db/entity [:block/name "class1"])
         class2 (db/entity [:block/name "class2"])]
-    (db-property-handler/upsert-property! repo "property-1" {:type :page} {})
-    (db-property-handler/class-add-property! repo (:block/uuid class1) "property-1")
-    (db-property-handler/class-add-property! repo (:block/uuid class2) "property-1")
-    (let [property (db/entity [:block/name "property-1"])
-          class-ids (model/get-classes-with-property (:block/uuid property))]
-      (is (= class-ids [(:db/id class1) (:db/id class2)])))))
+    (db-property-handler/upsert-property! repo :user.property/property-1 {:type :page} {})
+    (db-property-handler/class-add-property! repo (:block/uuid class1) :user.property/property-1)
+    (db-property-handler/class-add-property! repo (:block/uuid class2) :user.property/property-1)
+    (let [property (db/entity :user.property/property-1)
+          classes (model/get-classes-with-property (:block/uuid property))]
+      (is (= (set (map :db/id classes))
+             #{(:db/id class1) (:db/id class2)})))))
 
 (deftest get-tag-blocks-test
   (let [opts {:redirect? false :create-first-block? false :class? true}

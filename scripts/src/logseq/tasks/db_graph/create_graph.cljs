@@ -181,13 +181,14 @@
                                   :property-attributes
                                   {:db/id (or (property-db-ids (name prop-name))
                                               (throw (ex-info "No :db/id for property" {:property prop-name})))}})
-                                [(merge
-                                  (sqlite-util/build-new-property prop-name (get-in properties [prop-name :block/schema]) uuid)
-                                  {:db/id (or (property-db-ids (name prop-name))
-                                                      (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                                  (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                            {:block/properties (->block-properties-tx props uuid-maps)
-                                             :block/refs (build-property-refs props property-db-ids)}))]))
+                                [(let [db-ident (keyword "user.property" (name prop-name))]
+                                   (merge
+                                    (sqlite-util/build-new-property db-ident prop-name (get-in properties [prop-name :block/schema]))
+                                    {:db/id (or (property-db-ids (name prop-name))
+                                                (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                                    (when-let [props (not-empty (get-in properties [prop-name :properties]))]
+                                      {:block/properties (->block-properties-tx props uuid-maps)
+                                       :block/refs (build-property-refs props property-db-ids)})))]))
                             property-uuids))
         pages-and-blocks-tx
         (vec
