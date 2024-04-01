@@ -9,7 +9,6 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
