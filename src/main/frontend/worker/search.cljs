@@ -300,20 +300,11 @@
      :name (:block/name p)
      :original-name (:block/original-name p)}))
 
-(defn- safe-subs
-  ([s start]
-   (let [c (count s)]
-     (safe-subs s start c)))
-  ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
-
 (defn- hidden-page?
   [page]
   (when page
     (if (string? page)
-      (and (string/starts-with? page "$$$")
-           (common-util/uuid-string? (safe-subs page 3)))
+      (string/starts-with? page "$$$")
       (contains? (set (:block/type page)) "hidden"))))
 
 (defn get-all-pages

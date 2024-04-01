@@ -203,8 +203,7 @@
   [page]
   (when page
     (if (string? page)
-      (or (and (string/starts-with? page "$$$")
-               (common-util/uuid-string? (common-util/safe-subs page 3)))
+      (or (string/starts-with? page "$$$")
           (= common-config/favorites-page-name page))
       (contains? (set (:block/type page)) "hidden"))))
 
