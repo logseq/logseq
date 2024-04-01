@@ -2357,8 +2357,8 @@
     (when (seq closed-values-properties)
       [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-full
        (for [pid closed-values-properties]
-         (when-let [property (db/entity [:block/uuid pid])]
-           (pv/property-value block property (get (:block/properties block) pid)
+         (when-let [property (db/entity pid)]
+           (pv/property-value block property (get block pid)
                               {:icon? true
                                :page-cp page-cp
                                :inline-text inline-text})))])))
