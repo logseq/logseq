@@ -169,28 +169,6 @@
 
      (worker-util/post-message :add-repo {:repo repo}))))
 
-(defn <download-graph
-  [state repo graph-uuid]
-  (let [^js worker-obj (:worker/object @worker-state/*state)]
-    (go-try
-     (let [{:keys [url]}
-           (<? (ws/<send&receive state {:action "full-download-graph"
-                                        :graph-uuid graph-uuid}))
-           {:keys [status body] :as r} (<! (http/get url))
-           repo (str "logseq_db_" repo)]
-       (if (not= 200 status)
-         (ex-info "<download-graph failed" r)
-         (let [all-blocks (transit/read transit-r body)]
-           (worker-state/set-rtc-downloading-graph! true)
-           (op-mem-layer/init-empty-ops-store! repo)
-           (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo graph-uuid))
-           (op-mem-layer/update-graph-uuid! repo graph-uuid)
-           ;; (prn ::download-graph repo (@@#'op-mem-layer/*ops-store repo))
-           (<! (op-mem-layer/<sync-to-idb-layer! repo))
-           (<! (p->c (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
-           (worker-state/set-rtc-downloading-graph! false)))))))
-
-
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; async download-graph ;;
@@ -253,5 +231,6 @@
 (defn <download-info-list
   [state graph-uuid]
   (go-try
+   (:download-info-list
     (<? (ws/<send&receive state {:action "download-info-list"
-                                 :graph-uuid graph-uuid}))))
+                                 :graph-uuid graph-uuid})))))

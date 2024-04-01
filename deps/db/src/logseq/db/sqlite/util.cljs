@@ -6,6 +6,7 @@
             [cognitect.transit :as transit]
             [datascript.transit :as dt]
             [datascript.impl.entity :as de]
+            [datascript.core :as d]
             [cljs-bean.transit]))
 
 (defonce db-version-prefix "logseq_db_")
@@ -98,3 +99,12 @@
            :block/journal? false
            :block/format :markdown}
           block)))
+
+(defn build-new-page
+  "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"
+  [page-name]
+  (block-with-timestamps
+   {:block/name (common-util/page-name-sanity-lc page-name)
+    :block/original-name page-name
+    :block/journal? false
+    :block/uuid (d/squuid)}))

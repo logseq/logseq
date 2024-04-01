@@ -12,10 +12,6 @@
             [frontend.components.plugins :as plugin]
             [frontend.context.i18n :refer [t]]))
 
-(rum/defc route-view
-  [view route-match]
-  (view route-match))
-
 (defn- setup-fns!
   []
   (try

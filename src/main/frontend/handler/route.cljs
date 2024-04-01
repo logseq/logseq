@@ -1,7 +1,6 @@
 (ns frontend.handler.route
   "Provides fns used for routing throughout the app"
-  (:require [clojure.string :as string]
-            [frontend.config :as config]
+  (:require [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as model]
@@ -212,33 +211,3 @@
                 :home)]
     (redirect! {:to route}))
   (util/scroll-to-top))
-
-(defn- redirect-to-file!
-  [page]
-  (when-let [path (-> (db/get-page-file (string/lower-case page))
-                      :db/id
-                      (db/entity)
-                      :file/path)]
-    (redirect! {:to :file
-                :path-params {:path path}})))
-
-(defn toggle-between-page-and-file!
-  [_e]
-  (let [current-route (state/get-current-route)]
-    (case current-route
-      :home
-      (redirect-to-file! (date/today))
-
-      :all-journals
-      (redirect-to-file! (date/today))
-
-      :page
-      (when-let [page-name (get-in (state/get-route-match) [:path-params :name])]
-        (redirect-to-file! page-name))
-
-      :file
-      (when-let [path (get-in (state/get-route-match) [:path-params :path])]
-        (when-let [page (db/get-file-page path)]
-          (redirect-to-page! page)))
-
-      nil)))

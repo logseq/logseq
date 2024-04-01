@@ -39,6 +39,7 @@
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [logseq.db :as ldb]
+            [logseq.graph-parser.db :as gp-db]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]))
 
@@ -227,14 +228,18 @@
 
 (defn get-all-pages
   [repo]
-  (->> (db/get-all-pages repo)
-       (remove (fn [p]
-                 (let [name (:block/name p)]
-                   (or (util/uuid-string? name)
-                       (common-config/draw? name)
-                       (db/built-in-pages-names (string/upper-case name))
-                       (and (contains? (set (:block/type p)) "property") (ldb/built-in? p))))))
-       (common-handler/fix-pages-timestamps)))
+  (let [graph-specific-hidden?
+        (if (config/db-based-graph? repo)
+          (fn [_p] false)
+          (fn [p]
+            (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
+    (->> (db/get-all-pages repo)
+        (remove (fn [p]
+                  (let [name (:block/name p)]
+                    (or (util/uuid-string? name)
+                        (common-config/draw? name)
+                        (graph-specific-hidden? p)))))
+        (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
   [page-name]

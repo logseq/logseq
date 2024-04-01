@@ -8,7 +8,6 @@
             [frontend.db.transact :as db-transact]
             [frontend.db.utils]
             [frontend.namespaces :refer [import-vars]]
-            [logseq.db.frontend.default :as default-db]
             [logseq.db :as ldb]))
 
 (import-vars
@@ -53,9 +52,7 @@
   custom-query]
 
  [frontend.db.query-react
-  react-query custom-query-result-transform]
-
- [logseq.db.frontend.default built-in-pages-names built-in-pages page-title->block])
+  react-query custom-query-result-transform])
 
 (defn start-db-conn!
   ([repo]

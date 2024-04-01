@@ -7,7 +7,6 @@
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.common.util :as common-util]
             [datascript.core :as d]
-            [logseq.db :as ldb]
             [logseq.db.frontend.default :as default-db]))
 
 (defn- build-initial-properties
@@ -41,6 +40,9 @@
   {:db/ident (keyword "logseq.kv" (str (namespace key) "-" (name key)))
    key value})
 
+(def built-in-pages-names
+  #{"Contents"})
+
 (defn build-db-initial-data
   [config-content]
   (let [initial-data [(kv :db/type "db")
@@ -59,9 +61,10 @@
                         :file/path (str "logseq/" "custom.js")
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
+        default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
+                           (map #(assoc % :block/format :markdown))
+                           (map #(default-db/mark-block-as-built-in %)))
         default-properties (build-initial-properties)
-        default-pages (->> (ldb/build-pages-tx (map default-db/page-title->block ["Contents"]))
-                           (map default-db/mark-block-as-built-in))
         db-ident->properties (zipmap
                               (map :db/ident default-properties)
                               default-properties)

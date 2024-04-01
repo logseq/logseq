@@ -99,9 +99,13 @@
                           (assoc :align (name align)))}))))
 
 (defn hide!
-  ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id)))
-  ([id]
-   (update-popup! id :open? false)))
+  ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
+  ([id] (hide! id 0))
+  ([id delay]
+   (let [f #(update-popup! id :open? false)]
+     (if (and (number? delay) (> delay 0))
+       (js/setTimeout f delay)
+       (f)))))
 
 (defn hide-all!
   []
