@@ -154,7 +154,7 @@
    {:class (if center? "sm:items-center" "sm:items-start")}
    ;; left column
    [:div.flex.flex-col
-    [:label.block.text-sm.font-medium.leading-5.opacity-70
+    [:label.block.text-sm.font-medium.leading-5.opacity-70.pt-2
      {:for -for}
      left-label]
     (when description
