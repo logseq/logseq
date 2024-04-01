@@ -169,12 +169,13 @@
                              (into {}))
         new-properties-tx (vec
                            (mapcat
-                            (fn [[prop-name uuid]]
+                            (fn [[prop-name]]
                               (if (get-in properties [prop-name :closed-values])
                                 (db-property-util/build-closed-values
                                  prop-name
-                                 (assoc (get properties prop-name) :block/uuid uuid)
-                                 {:icon-id
+                                 (get properties prop-name)
+                                 {:db-ident (keyword "user.property" (name prop-name))
+                                  :icon-id
                                   (get-in options [:property-uuids :icon])
                                   :translate-closed-page-value-fn
                                   #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))

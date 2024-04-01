@@ -21,7 +21,8 @@
             [frontend.handler.property.util :as pu]
             [promesa.core :as p]
             [frontend.db.async :as db-async]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [datascript.impl.entity :as de]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -192,11 +193,13 @@
                      m))]
           (:db/id e'))))))
 
+(defn- ->eid
+  [id]
+  (if (uuid? id) [:block/uuid id] id))
+
 (defn set-block-property!
-  [repo block-eid property-id v {:keys [old-value] :as opts}]
-  (let [block-eid (if (uuid? block-eid)
-                    [:block/uuid block-eid]
-                    block-eid)
+  [repo block-eid property-id v {:keys [property-name] :as opts}]
+  (let [block-eid (->eid block-eid)
         property-id (if (string? property-id)
                       (db-property/get-db-ident-from-name property-id)
                       property-id)
@@ -235,19 +238,10 @@
                 (if-let [msg (when-not (= v* :property/empty-placeholder) (validate-property-value schema v*))]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
-                  (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {})
+                  (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {:property-name property-name})
                         status? (= :logseq.task/status (:db/ident property))
                         value (if (= value :property/empty-placeholder) [] value)
                         new-value (cond
-                                    (and multiple-values? old-value
-                                         (not= old-value :frontend.components.property/new-value-placeholder))
-                                    (if (coll? v*)
-                                      (vec (distinct (concat value v*)))
-                                      (let [v (mapv (fn [x] (if (= x old-value) v* x)) value)]
-                                        (if (contains? (set v) v*)
-                                          v
-                                          (conj v v*))))
-
                                     multiple-values?
                                     (let [f (if (coll? v*) concat conj)]
                                       (f value v*))
@@ -299,37 +293,36 @@
                            :block/schema schema}]
                     {:outliner-op :save-block}))))
 
-(defn- ->eid
-  [id]
-  (if (uuid? id) [:block/uuid id] id))
-
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
   [repo block-ids property-id v]
   (assert property-id "property-id is nil")
   (let [block-eids (map ->eid block-ids)
-        property (db/entity property-id)
-        type (:type (:block/schema property))
-        infer-schema (when-not type (infer-schema-from-input-string v))
-        property-type (or type infer-schema :default)
-        {:keys [cardinality]} (:block/schema property)
-        status? (= :logseq.task/status (:db/ident property))
-        txs (mapcat
-             (fn [eid]
-               (when-let [block (db/entity eid)]
-                 (when (and (some? v) (not= cardinality :many))
-                   (when-let [v* (try
-                                   (convert-property-input-string property-type v)
-                                   (catch :default e
-                                     (notification/show! (str e) :error false)
-                                     nil))]
-                     [{:block/uuid (:block/uuid block)
-                       property-id v*}
-                      (when status?
-                        [:db/add (:db/id block) :block/tags :logseq.class/task])]))))
-             block-eids)]
-    (when (seq txs)
-      (db/transact! repo txs {:outliner-op :save-block}))))
+        property (db/entity property-id)]
+    (when property
+      (let [type (:type (:block/schema property))
+            infer-schema (when-not type (infer-schema-from-input-string v))
+            property-type (or type infer-schema :default)
+            {:keys [cardinality]} (:block/schema property)
+            status? (= :logseq.task/status (:db/ident property))
+            txs (->>
+                 (mapcat
+                  (fn [eid]
+                    (when-let [block (db/entity eid)]
+                      (when (and (some? v) (not= cardinality :many))
+                        (when-let [v* (try
+                                        (convert-property-input-string property-type v)
+                                        (catch :default e
+                                          (notification/show! (str e) :error false)
+                                          nil))]
+                          [{:block/uuid (:block/uuid block)
+                            property-id v*}
+                           (when status?
+                             [:db/add (:db/id block) :block/tags :logseq.class/task])]))))
+                  block-eids)
+                 (remove nil?))]
+        (when (seq txs)
+          (db/transact! repo txs {:outliner-op :save-block}))))))
 
 (defn batch-remove-property!
   [repo block-ids property-id]
@@ -362,12 +355,13 @@
 
 (defn remove-block-property!
   [repo eid property-id]
-  (if (contains? #{:block/alias :block/tags} property-id)
-    (when-let [block (db/entity eid)]
-      (db/transact! repo
-                    [[:db/retract (:db/id block) property-id]]
-                    {:outliner-op :save-block}))
-    (batch-remove-property! repo [eid] property-id)))
+  (let [eid (->eid eid)]
+    (if (contains? #{:block/alias :block/tags} property-id)
+     (when-let [block (db/entity eid)]
+       (db/transact! repo
+                     [[:db/retract (:db/id block) property-id]]
+                     {:outliner-op :save-block}))
+     (batch-remove-property! repo [eid] property-id))))
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
@@ -471,8 +465,8 @@
                     :block/parent page-id
                     :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
-                    :logseq.property/created-from-block [:block/uuid (:block/uuid block)]
-                    :logseq.property/created-from-property (:db/id property)}
+                    :logseq.property/created-from-block block
+                    :logseq.property/created-from-property property}
                    sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -488,6 +482,7 @@
 
 (defn create-property-text-block!
   [block property value parse-block {:keys [class-schema?]}]
+  (assert (de/entity? property))
   (let [repo (state/get-current-repo)
         {:keys [page blocks]} (property-create-new-block block property value parse-block)
         first-block (first blocks)
