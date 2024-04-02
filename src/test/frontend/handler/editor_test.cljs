@@ -295,7 +295,9 @@
 -"}])
     (let [conn (db/get-db test-helper/test-db false)
           block (->> (d/q '[:find (pull ?b [*])
-                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
+                            :where [?b :block/content ""]
+                                   [?p :block/name "page1"]
+                                   [?b :block/page ?p]]
                           @conn)
                      ffirst)
           _ (delete-block @conn block {})
@@ -316,7 +318,9 @@
 -"}])
     (let [conn (db/get-db test-helper/test-db false)
           block (->> (d/q '[:find (pull ?b [*])
-                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
+                            :where [?b :block/content ""]
+                                   [?p :block/name "page1"]
+                                   [?b :block/page ?p]]
                           @conn)
                      ffirst)
           _ (delete-block @conn block {:embed? true})

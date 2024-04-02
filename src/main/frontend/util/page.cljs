@@ -15,13 +15,12 @@
   "Fetches the current page id. Looks up page based on latest route and if
   nothing is found, gets page of last edited block"
   []
-  (let [page-name (some-> (or (state/get-current-page) (state/get-current-whiteboard))
-                          util/page-name-sanity-lc)]
-    (or (and page-name (:db/id (db/entity [:block/name page-name])))
+  (let [page-name (or (state/get-current-page) (state/get-current-whiteboard))]
+    (or (and page-name (db/get-page page-name))
         (get-in (first (state/get-editor-args)) [:block :block/page :db/id]))))
 
 (defn get-editing-page-id
-  "Fetch the editing page id. If there is an edit-input-id set, we are probably still 
+  "Fetch the editing page id. If there is an edit-input-id set, we are probably still
    on editing mode"
   []
   (if (or (state/editing?) (state/get-edit-input-id))
@@ -36,4 +35,4 @@ Returns nil if no file path is found or no page is detected or given"
      (get-in (db/entity page-id) [:block/file :file/path])))
   ([page-name]
    (when-let [page-name' (some-> page-name util/page-name-sanity-lc)]
-     (get-in (db/entity [:block/name page-name']) [:block/file :file/path]))))
+     (get-in (db/get-page page-name') [:block/file :file/path]))))

@@ -178,7 +178,7 @@
     (let [tag-without-hash (common-util/safe-subs (string/trim v) 1)
           tag (or (page-ref/get-page-name tag-without-hash) tag-without-hash)]
       (when-not (string/blank? tag)
-        (let [e (db/entity [:block/name (util/page-name-sanity-lc tag)])
+        (let [e (db/get-page tag)
               e' (if e
                    (do
                      (when-not (contains? (:block/type e) "tag")
@@ -453,7 +453,7 @@
   [block property value parse-block]
   (let [current-page-id (:block/uuid (or (:block/page block) block))
         page-name (str "$$$" current-page-id)
-        page-entity (db/entity [:block/name page-name])
+        page-entity (db/get-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
@@ -505,7 +505,7 @@
   [block property template]
   (let [current-page-id (:block/uuid (or (:block/page block) block))
         page-name (str "$$$" current-page-id)
-        page-entity (db/entity [:block/name page-name])
+        page-entity (db/get-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
@@ -532,7 +532,7 @@
 (defn- get-property-hidden-page
   [property]
   (let [page-name (str db-property-util/hidden-page-name-prefix (:block/uuid property))]
-    (or (db/entity [:block/name page-name])
+    (or (db/get-page page-name)
         (db-property-util/build-property-hidden-page property))))
 
 (defn re-init-commands!

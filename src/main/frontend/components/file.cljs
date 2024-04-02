@@ -127,7 +127,7 @@
                                 :href (rfe/href :page {:name original-name})
                                 :on-click (fn [e]
                                             (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/entity [:block/name (util/page-name-sanity-lc original-name)])]
+                                              (when-let [page (db/get-page original-name)]
                                                 (state/sidebar-add-block!
                                                  (state/get-current-repo)
                                                  (:db/id page)

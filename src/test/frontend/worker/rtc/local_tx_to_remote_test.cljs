@@ -54,7 +54,7 @@
          {:block/uuid uuid2 :block/content "uuid2-client"
           :block/left [:block/uuid uuid1]
           :block/parent [:block/uuid page1-uuid]}]
-        (d/pull @conn '[*] [:block/name page1-name])
+        (ldb/get-page @conn page1-name)
         {:sibling? true :keep-uuid? true}))
       (let [ops (gen-ops-fn)]
         (is (= #{[:move uuid1 page1-uuid]

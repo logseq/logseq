@@ -103,11 +103,11 @@
                          (let [journal (date/js-date->journal-title gd)]
                            (p/do!
                             (shui/popup-hide! id)
-                            (when-not (db/entity [:block/name (util/page-name-sanity-lc journal)])
+                            (when-not (db/get-page journal)
                               (page-handler/<create! journal {:redirect? false
                                                               :create-first-block? false}))
                             (when (fn? on-change)
-                              (on-change (db/entity [:block/name (util/page-name-sanity-lc journal)])))
+                              (on-change (db/get-page journal)))
                             (exit-edit-property))))))]
                (shui/calendar
                 (cond->

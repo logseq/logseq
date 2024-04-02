@@ -5,7 +5,8 @@
             [logseq.graph-parser.db :as gp-db]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.db :as ldb]))
 
 (def foo-edn
   "Example exported whiteboard page as an edn exportable."
@@ -414,7 +415,7 @@ id:: 63f199bc-c737-459f-983d-84acfcda14fe
 id:: 63f199bc-c737-459f-983d-84acfcda14fe
 "
                                parse-opts)
-      (let [blocks (:block/_parent (d/entity @conn [:block/name "foo"]))]
+      (let [blocks (:block/_parent (ldb/get-page @conn "foo"))]
         (is (= 2 (count blocks)))
         (is (= 1 (count (filter #(= (:block/uuid %) block-id) blocks)))))))
 
@@ -442,6 +443,6 @@ bar
              (-> (d/entity @conn [:block/uuid block-id])
                  :block/page
                  :block/name)))
-      (let [bar-block (first (:block/_parent (d/entity @conn [:block/name "bar"])))]
+      (let [bar-block (first (:block/_parent (ldb/get-page @conn "bar")))]
         (is (some? (:block/uuid bar-block)))
         (is (not= (:block/uuid bar-block) block-id))))))

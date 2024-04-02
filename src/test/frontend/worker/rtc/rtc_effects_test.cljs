@@ -15,6 +15,7 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
+            [logseq.db :as ldb]
             [spy.core :as spy]))
 
 (use-fixtures :each
@@ -48,7 +49,7 @@
           conn (conn/get-db repo false)]
       (page-handler/create! "gen-local-ops-test-2--create-page&insert-blocks"
                             {:redirect? false :create-first-block? false})
-      (let [page-block (d/pull @conn '[*] [:block/name "gen-local-ops-test-2--create-page&insert-blocks"])
+      (let [page-block (ldb/get-page @conn "gen-local-ops-test-2--create-page&insert-blocks")
             [block-uuid1 block-uuid2] (repeatedly random-uuid)]
         (outliner-tx/transact!
          {:transact-opts {:repo repo
@@ -97,7 +98,7 @@
          (<! (timeout 500))
          (is (= {:block/uuid #uuid "26c4b513-e251-4ce9-a421-364b774eb736"
                  :block/original-name "Push-Data-From-Ws-Test-1"}
-                (select-keys (d/pull @conn '[*] [:block/name "push-data-from-ws-test-1"])
+                (select-keys (ldb/get-page @conn "push-data-from-ws-test-1")
                              [:block/uuid :block/original-name])))
          (reset)
          (done))))))

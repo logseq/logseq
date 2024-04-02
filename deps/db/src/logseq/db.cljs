@@ -114,7 +114,7 @@
 
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
-   page - name / title of the page"
+   page-id - eid"
   [db page-id {:keys [pull-keys]
             :or {pull-keys '[*]}}]
   (when page-id
@@ -164,18 +164,20 @@
        (map first)
        (remove hidden-page?)))
 
+(def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
+
 (defn page-exists?
   "Whether a page exists."
   [db page-name]
   (when page-name
-    (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)])))
+    (some? (get-first-page-by-name db page-name))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
   `page-id` could be either a string or a db/id."
   [db page-id]
   (let [page-id (if (string? page-id)
-                  [:block/name (common-util/page-name-sanity-lc page-id)]
+                  (get-first-page-by-name db page-id)
                   page-id)
         page (d/entity db page-id)]
     (nil? (:block/_left page))))
@@ -190,8 +192,8 @@
         orphaned-pages (->>
                         (map
                          (fn [page]
-                           (let [name (common-util/page-name-sanity-lc page)]
-                             (when-let [page (d/entity db [:block/name name])]
+                           (when-let [page (d/entity db (get-first-page-by-name db page))]
+                             (let [name (:block/name page)]
                                (and
                                 (empty-ref-f page)
                                 (or
@@ -397,14 +399,11 @@
 
 (defn get-page
   "Get a page given its unsanitized name"
-  [db page-name]
-  (d/entity db [:block/name (common-util/page-name-sanity-lc (name page-name))]))
-
-(defn get-page-uuid
-  "Get a user page's uuid given its unsanitized name"
-  ;; Get a page's uuid given its unsanitized name
-  [db page-name]
-  (:block/uuid (get-page db page-name)))
+  [db page-name-or-uuid]
+  (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
+                  (parse-uuid page-name-or-uuid))]
+    (d/entity db [:block/uuid id])
+    (d/entity db (get-first-page-by-name db (name page-name-or-uuid)))))
 
 (defn get-page-alias
   [db page-id]
@@ -500,8 +499,6 @@
 (defn get-graph-rtc-uuid
   [db]
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
-
-(def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
 
 (defn page?
   [block]

@@ -88,10 +88,10 @@
                        (reset! *loading? false)
                        (render!)))))
                 state)}
-  [page-name]
-  (let [loading? (rum/react *loading?)
-        page (db/entity [:block/name page-name])
-        journal? (:journal? page)
+  [page]
+  (let [page-name (:block/original-name page)
+        loading? (rum/react *loading?)
+        journal? (:block/journal? page)
         repo (state/get-current-repo)
         blocks (-> (db/get-page-blocks-no-cache repo (:db/id page))
                    (outliner-tree/blocks->vec-tree (:db/id page)))

@@ -530,11 +530,8 @@ independent of format as format specific heading characters are stripped"
        first))))
 
 (defn get-page
-  [page-name]
-  (if-let [id (if (uuid? page-name) page-name
-                  (parse-uuid page-name))]
-    (db-utils/entity [:block/uuid id])
-    (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) (str page-name)))))
+  [page-name-or-uuid]
+  (ldb/get-page (conn/get-db) page-name-or-uuid))
 
 ;; FIXME: should pass page's db id
 (defn get-redirect-page-name

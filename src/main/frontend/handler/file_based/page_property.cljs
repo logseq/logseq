@@ -50,39 +50,38 @@
    content kvs))
 
 (defn add-property!
-  [page-name key value]
-  (let [repo (state/get-current-repo)]
-    (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page-name)])]
-      (let [key (keyword key)
-            pre-block (db/get-pre-block repo (:db/id page))
-            format (state/get-preferred-format)
-            page-id {:db/id (:db/id page)}
-            org? (= format :org)
-            value (if (contains? #{:filters} key) (pr-str value) value)]
-        (if pre-block
-          (let [properties (:block/properties pre-block)
-                new-properties (assoc properties key value)
-                content (:block/content pre-block)
-                new-content (insert-property format content key value)
-                block {:db/id (:db/id pre-block)
-                       :block/properties new-properties
-                       :block/content new-content
-                       :block/page page-id}
-                tx [(assoc page-id :block/properties new-properties)
-                    block]]
-            (db/transact! tx))
-          (let [block {:block/uuid (db/new-block-id)
-                       :block/left page-id
-                       :block/parent page-id
-                       :block/page page-id
-                       :block/content (if org?
-                                        (str "#+" (string/upper-case (name key)) ": " value)
-                                        (str (name key) ":: " value))
-                       :block/format format
-                       :block/properties {key value}
-                       :block/pre-block? true}
-                page-properties-tx [(assoc page-id :block/properties {key value})]]
-            (ui-outliner-tx/transact!
-             {:outliner-op :insert-blocks
-              :additional-tx page-properties-tx}
-             (outliner-op/insert-blocks! block page {:sibling? false}))))))))
+  [page key value]
+  (let [repo (state/get-current-repo)
+        key (keyword key)
+        pre-block (db/get-pre-block repo (:db/id page))
+        format (state/get-preferred-format)
+        page-id {:db/id (:db/id page)}
+        org? (= format :org)
+        value (if (contains? #{:filters} key) (pr-str value) value)]
+    (if pre-block
+      (let [properties (:block/properties pre-block)
+            new-properties (assoc properties key value)
+            content (:block/content pre-block)
+            new-content (insert-property format content key value)
+            block {:db/id (:db/id pre-block)
+                   :block/properties new-properties
+                   :block/content new-content
+                   :block/page page-id}
+            tx [(assoc page-id :block/properties new-properties)
+                block]]
+        (db/transact! tx))
+      (let [block {:block/uuid (db/new-block-id)
+                   :block/left page-id
+                   :block/parent page-id
+                   :block/page page-id
+                   :block/content (if org?
+                                    (str "#+" (string/upper-case (name key)) ": " value)
+                                    (str (name key) ":: " value))
+                   :block/format format
+                   :block/properties {key value}
+                   :block/pre-block? true}
+            page-properties-tx [(assoc page-id :block/properties {key value})]]
+        (ui-outliner-tx/transact!
+         {:outliner-op :insert-blocks
+          :additional-tx page-properties-tx}
+         (outliner-op/insert-blocks! block page {:sibling? false}))))))

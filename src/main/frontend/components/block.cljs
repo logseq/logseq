@@ -711,7 +711,7 @@
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (common-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
-          page-entity (db/entity [:block/name page-name])
+          page-entity (db/get-page page-name)
           whiteboard-page? (model/whiteboard-page? page-name)
           inner (page-inner config
                             page-name-in-block
@@ -719,7 +719,7 @@
                             page-entity contents-page? children html-export? label whiteboard-page?)
           modal? (:modal/show? @state/state)]
       (if (and (not (util/mobile?))
-               (not= (util/page-name-sanity-lc page-name-in-block) (:id config))
+               (not= page-name (:id config))
                (not (false? preview?))
                (not disable-preview?)
                (not modal?))
@@ -885,7 +885,7 @@
 (defn- get-page
   [label]
   (when-let [label-text (get-label-text label)]
-    (db/entity [:block/name (util/page-name-sanity-lc label-text)])))
+    (db/get-page label-text)))
 
 (defn- macro->text
   [name arguments]

@@ -129,7 +129,7 @@
 
 (defn card-block?
   [block]
-  (let [card-entity (db/entity [:block/name card-hash-tag])
+  (let [card-entity (db/get-page card-hash-tag)
         refs (into #{} (:block/refs block))]
     (contains? refs card-entity)))
 
@@ -264,7 +264,7 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [result (if (string/blank? query-string)
-                    (:block/_refs (db/entity [:block/name card-hash-tag]))
+                    (:block/_refs (db/get-page card-hash-tag))
                     (let [query-string (template/resolve-dynamic-template! query-string)
                           query-string (if-not (or (string/blank? query-string)
                                                    (string/starts-with? query-string "(")

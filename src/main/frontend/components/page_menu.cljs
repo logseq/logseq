@@ -136,7 +136,7 @@
              :options {:on-click
                        (fn []
                          (page-handler/update-public-attribute!
-                          page-name
+                          page
                           (if public? false true))
                          (state/close-modal!))}})
 

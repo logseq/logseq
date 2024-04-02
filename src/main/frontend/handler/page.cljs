@@ -51,9 +51,8 @@
   (p/do!
    (let [repo (state/get-current-repo)]
      (if (config/db-based-graph? repo)
-       (let [db (conn/get-db)]
-         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-           (page-common-handler/<unfavorite-page!-v2 page-block-uuid)))
+       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+         (page-common-handler/<unfavorite-page!-v2 page-block-uuid))
        (page-common-handler/unfavorite-page! page-name)))
    (state/update-favorites-updated!)))
 
@@ -62,9 +61,8 @@
   (p/do!
    (let [repo (state/get-current-repo)]
      (if (config/db-based-graph? repo)
-       (let [db (conn/get-db)]
-         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-           (page-common-handler/<favorite-page!-v2 page-block-uuid)))
+       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+         (page-common-handler/<favorite-page!-v2 page-block-uuid))
        (page-common-handler/favorite-page! page-name)))
    (state/update-favorites-updated!)))
 
@@ -72,10 +70,9 @@
   [page-name]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
-      (when-let [db (conn/get-db)]
-        (boolean
-         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-           (page-common-handler/favorited?-v2 page-block-uuid))))
+      (boolean
+       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+         (page-common-handler/favorited?-v2 page-block-uuid)))
       (page-common-handler/favorited? page-name))))
 
 
@@ -98,7 +95,7 @@
                               (filter string?)
                               (mapv util/safe-page-name-sanity-lc)
                               (distinct))]
-          (keep (fn [page-name] (d/entity db [:block/name page-name])) page-names))))))
+          (keep (fn [page-name] (db/get-page page-name)) page-names))))))
 
 
 ;; FIXME: add whiteboard
@@ -151,12 +148,11 @@
   [favorites]
   (let [conn (conn/get-db false)
         db @conn]
-    (when-let [page-id (ldb/get-first-page-by-name db common-config/favorites-page-name)]
+    (when-let [page-id (db/get-page common-config/favorites-page-name)]
       (let [favorites-page-entity (d/entity db page-id)
             favorite-page-block-db-id-coll
             (keep (fn [page-name]
-                    (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
-                            :db/id))
+                    (:db/id (db/get-page page-name)))
                   favorites)
             current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn common-config/favorites-page-name {})
                                              favorites-page-entity)]
@@ -179,8 +175,8 @@
     (state/set-journals-length! (+ (:journals-length @state/state) 7))))
 
 (defn update-public-attribute!
-  [page-name value]
-  (property-handler/add-page-property! page-name :logseq.property/public value))
+  [page value]
+  (property-handler/add-page-property! page :logseq.property/public value))
 
 (defn get-page-ref-text
   [page]
@@ -262,8 +258,8 @@
              (log/error :syntax/filters e))))))
 
 (defn save-filter!
-  [page-name filter-state]
-  (property-handler/add-page-property! page-name :logseq.property/filters filter-state))
+  [page filter-state]
+  (property-handler/add-page-property! page :logseq.property/filters filter-state))
 
 ;; Editor
 (defn page-not-exists-handler
@@ -286,7 +282,7 @@
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
 (defn add-tag [repo block-id tag & {:keys [tag-entity]}]
-  (let [tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
+  (let [tag-entity (or tag-entity (db/get-page tag))
         tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
                  [:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
                  ;; TODO: Should classes counted as refs
@@ -330,12 +326,12 @@
              (let [tag (string/trim chosen)
                    edit-block (state/get-edit-block)]
                (when (and (not (string/blank? tag)) (:block/uuid edit-block))
-                 (p/let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])
+                 (p/let [tag-entity (db/get-page tag)
                          _ (when-not tag-entity
                              (<create! tag {:redirect? false
                                             :create-first-block? false
                                             :class? class?}))
-                         tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
+                         tag-entity (db/get-page tag)]
                    (when class?
                      (add-tag (state/get-current-repo) (:block/uuid edit-block) tag {:tag-entity tag-entity}))))))
            (editor-handler/insert-command! id
@@ -404,7 +400,7 @@
 
 (defn open-today-in-sidebar
   []
-  (when-let [page (db/entity [:block/name (util/page-name-sanity-lc (date/today))])]
+  (when-let [page (db/get-page (date/today))]
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)

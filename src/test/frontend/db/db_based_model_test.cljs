@@ -36,8 +36,8 @@
 ;;   (let [opts {:redirect? false :create-first-block? false}
 ;;         _ (page-handler/create! "page1" opts)
 ;;         _ (page-handler/create! "page2" opts)
-;;         p1id (:block/uuid (db/entity [:block/name "page1"]))
-;;         p2id (:block/uuid (db/entity [:block/name "page2"]))]
+;;         p1id (:block/uuid (db/get-page "page1"))
+;;         p2id (:block/uuid (db/get-page "page2"))]
 ;;     (db-property-handler/upsert-property! repo "property-1" {:type :page} {})
 ;;     (db-property-handler/set-block-property! repo fbid "property-1" p1id {})
 ;;     (db-property-handler/set-block-property! repo sbid "property-1" p2id {})
@@ -50,30 +50,30 @@
     (is (= ["Task" "card" "class1" "class2"] (sort (map first (model/get-all-classes repo)))))))
 
 (deftest get-class-objects-test
-    (let [opts {:redirect? false :create-first-block? false :class? true}
-          _ (page-handler/create! "class1" opts)
-          class (db/entity [:block/name "class1"])
-          _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]
-      (is (= (model/get-class-objects repo (:db/id class))
-             [(:db/id (db/entity [:block/uuid fbid]))]))
+  (let [opts {:redirect? false :create-first-block? false :class? true}
+        _ (page-handler/create! "class1" opts)
+        class (db/get-page "class1")
+        _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]
+    (is (= (model/get-class-objects repo (:db/id class))
+           [(:db/id (db/entity [:block/uuid fbid]))]))
 
-      (testing "classes parent"
-        (page-handler/create! "class2" opts)
+    (testing "classes parent"
+      (page-handler/create! "class2" opts)
       ;; set class2's parent to class1
-        (let [class2 (db/entity [:block/name "class2"])]
-          (db/transact! [{:db/id (:db/id class2)
-                          :class/parent (:db/id class)}]))
-        (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
-        (is (= (model/get-class-objects repo (:db/id class))
-               [(:db/id (db/entity [:block/uuid fbid]))
-                (:db/id (db/entity [:block/uuid sbid]))])))))
+      (let [class2 (db/get-page "class2")]
+        (db/transact! [{:db/id (:db/id class2)
+                        :class/parent (:db/id class)}]))
+      (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
+      (is (= (model/get-class-objects repo (:db/id class))
+             [(:db/id (db/entity [:block/uuid fbid]))
+              (:db/id (db/entity [:block/uuid sbid]))])))))
 
 (deftest get-classes-with-property-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)
-        class1 (db/entity [:block/name "class1"])
-        class2 (db/entity [:block/name "class2"])]
+        class1 (db/get-page "class1")
+        class2 (db/get-page "class2")]
     (db-property-handler/upsert-property! repo :user.property/property-1 {:type :page} {})
     (db-property-handler/class-add-property! repo (:block/uuid class1) :user.property/property-1)
     (db-property-handler/class-add-property! repo (:block/uuid class2) :user.property/property-1)
@@ -95,7 +95,7 @@
 (deftest hidden-page-test
   (let [opts {:redirect? false :create-first-block? false}
         _ (page-handler/create! "page 1" opts)]
-    (is (false? (model/hidden-page? (db/entity [:block/name "page 1"]))))
+    (is (false? (model/hidden-page? (db/get-page "page 1"))))
     (is (true? (model/hidden-page? "$$$test")))
     (is (true? (model/hidden-page? (str "$$$" (random-uuid)))))))
 
@@ -104,13 +104,13 @@
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)
         _ (page-handler/create! "class3" opts)
-        class1 (db/entity [:block/name "class1"])
-        class2 (db/entity [:block/name "class2"])
-        class3 (db/entity [:block/name "class3"])
+        class1 (db/get-page "class1")
+        class2 (db/get-page "class2")
+        class3 (db/get-page "class3")
         _ (db/transact! [{:db/id (:db/id class2)
                           :class/parent (:db/id class1)}
                          {:db/id (:db/id class3)
                           :class/parent (:db/id class2)}])]
     (is
-     (= (model/get-class-children repo (:db/id (db/entity [:block/name "class1"])))
+     (= (model/get-class-children repo (:db/id (db/get-page "class1")))
         [(:db/id class2) (:db/id class3)]))))

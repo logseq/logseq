@@ -26,25 +26,25 @@
 
 (deftest rename-test
   (testing "Case change"
-    (let [page (db/entity [:block/name "test"])]
+    (let [page (db/get-page "test")]
       (page-rename "test" "Test")
-      (let [entity (db/entity [:block/name "test"])]
+      (let [entity (db/get-page "test")]
         (is (= "Test" (:block/original-name entity)))
         ;; db id not changed
         (is (= (:db/id page) (:db/id entity))))))
 
   (testing "Name changed"
-    (let [page (db/entity [:block/name "test"])]
+    (let [page (db/get-page "test")]
       (page-rename "Test" "New name")
-      (let [entity (db/entity [:block/name "new name"])]
+      (let [entity (db/get-page "new name")]
         (is (= "New name" (:block/original-name entity)))
         (is (= (:db/id page) (:db/id entity))))))
 
   ;; (testing "Merge existing page"
   ;;   (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
   ;;   (page-rename "New name" "Existing page")
-  ;;   (let [e1 (db/entity [:block/name "new name"])
-  ;;         e2 (db/entity [:block/name "existing page"])]
+  ;;   (let [e1 (db/get-page "new name")
+  ;;         e2 (db/get-page "existing page")]
   ;;     ;; Old page deleted
   ;;     (is (nil? e1))
   ;;     ;; Blocks from both pages have been merged
@@ -56,8 +56,8 @@
 ;; (deftest merge-with-empty-page
 ;;   (page-handler/create! "Existing page" {:redirect? false :create-first-block? false})
 ;;   (page-rename "Test" "Existing page")
-;;   (let [e1 (db/entity [:block/name "test"])
-;;         e2 (db/entity [:block/name "existing page"])]
+;;   (let [e1 (db/get-page "test")
+;;         e2 (db/get-page "existing page")]
 ;;       ;; Old page deleted
 ;;     (is (nil? e1))
 ;;       ;; Blocks from both pages have been merged
@@ -70,8 +70,8 @@
 ;;     (editor-handler/save-block! repo fbid "Block 1 [[Test]]")
 ;;     (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
 ;;     (page-rename "Test" "Existing page")
-;;     (let [e1 (db/entity [:block/name "test"])
-;;           e2 (db/entity [:block/name "existing page"])]
+;;     (let [e1 (db/get-page "test")
+;;           e2 (db/get-page "existing page")]
 ;;       ;; Old page deleted
 ;;       (is (nil? e1))
 ;;       ;; Blocks from both pages have been merged
