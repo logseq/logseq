@@ -22,6 +22,7 @@
             [frontend.worker.rtc.snapshot :as rtc-snapshot]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -174,7 +175,9 @@
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb! repo)]
-          (rtc-db-listener/listen-to-db-changes! repo conn))))))
+          (rtc-db-listener/listen-to-db-changes! repo conn))
+        (undo-redo/listen-to-db-changes! repo conn)
+        ))))
 
 (defn- iter->vec [iter]
   (when iter
