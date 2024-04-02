@@ -15,14 +15,17 @@
     (is (= 0 (util/safe-dec-current-pos-from-end "😀" 2)))
     (is (= 0 (util/safe-dec-current-pos-from-end "a" 1)))
     (is (= 4 (util/safe-dec-current-pos-from-end "abcde" 5)))
-    (is (= 1 (util/safe-dec-current-pos-from-end "中文" 2))))
+    (is (= 1 (util/safe-dec-current-pos-from-end "中文" 2)))
+    (is (= 0 (util/safe-dec-current-pos-from-end "中" 1)))
+    (is (= 0 (util/safe-dec-current-pos-from-end "a" 1))))
 
   (testing "safe current position from start for emoji"
     (is (= 5 (util/safe-inc-current-pos-from-start "abc😀d" 3)))
-    (is (= 2 (util/safe-inc-current-pos-from-start "😀" 0)))
     (is (= 2 (util/safe-inc-current-pos-from-start "abcde" 1)))
-    (is (= 1 (util/safe-inc-current-pos-from-start "a" 0)))
-    (is (= 1 (util/safe-inc-current-pos-from-start "中文" 0)))))
+    (is (= 1 (util/safe-inc-current-pos-from-start "中文" 0)))
+    (is (= 2 (util/safe-inc-current-pos-from-start "😀" 0)))
+    (is (= 1 (util/safe-inc-current-pos-from-start "中" 0)))
+    (is (= 1 (util/safe-inc-current-pos-from-start "a" 0)))))
 
 (deftest test-get-line-pos
   (testing "get-line-pos"
