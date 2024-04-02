@@ -19,20 +19,21 @@
     blocks))
 
 (defn entity
-  "This function will return nil if passed `id-or-lookup-ref` is an integer and
+  "This function will return nil if passed `eid` is an integer and
   the entity doesn't exist in db.
   `repo-or-db`: a repo string or a db,
-  `id-or-lookup-ref`: same as d/entity."
-  ([id-or-lookup-ref]
-   (entity (state/get-current-repo) id-or-lookup-ref))
-  ([repo-or-db id-or-lookup-ref]
-   (when-let [db (if (string? repo-or-db)
+  `eid`: same as d/entity."
+  ([eid]
+   (entity (state/get-current-repo) eid))
+  ([repo-or-db eid]
+   (when eid
+     (when-let [db (if (string? repo-or-db)
                    ;; repo
-                   (let [repo (or repo-or-db (state/get-current-repo))]
-                     (conn/get-db repo))
+                     (let [repo (or repo-or-db (state/get-current-repo))]
+                       (conn/get-db repo))
                    ;; db
-                   repo-or-db)]
-     (d/entity db id-or-lookup-ref))))
+                     repo-or-db)]
+       (d/entity db eid)))))
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"

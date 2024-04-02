@@ -1703,6 +1703,7 @@
       (editor-handler/highlight-block! uuid)))
 
   (editor-handler/block->data-transfer! uuid event false)
+
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
             block-id)
