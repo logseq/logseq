@@ -5,7 +5,6 @@
   (:require ["/frontend/idbkv" :as idb-keyval]
             [cljs.core.async :as async :refer [<! >! go timeout]]
             [clojure.test :as t :refer [deftest is use-fixtures]]
-            [datascript.core :as d]
             [frontend.db.conn :as conn]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]

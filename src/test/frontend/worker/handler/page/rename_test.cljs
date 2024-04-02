@@ -11,7 +11,7 @@
 
 (def init-data (test-helper/initial-test-page-and-blocks))
 
-(def fbid (:block/uuid (second init-data)))
+;; (def fbid (:block/uuid (second init-data)))
 
 (defn start-and-destroy-db
   [f]
