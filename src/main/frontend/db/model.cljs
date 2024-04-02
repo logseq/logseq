@@ -813,9 +813,12 @@ independent of format as format specific heading characters are stripped"
       ffirst))
 
 (defn whiteboard-page?
-  "Given a page name or a page object, check if it is a whiteboard page"
+  "Given a page entity, page object or page name, check if it is a whiteboard page"
   [page]
-  (ldb/whiteboard-page? page))
+  (let [page (if (string? page)
+               (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page))
+               page)]
+    (ldb/whiteboard-page? page)))
 
 (defn get-orphaned-pages
   [opts]

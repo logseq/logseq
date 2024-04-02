@@ -255,7 +255,7 @@
                     (do (when-not untitled? (notification/show! (t :page/illegal-page-name) :warning))
                         (rollback-fn))
 
-                    (and (collide?) (or whiteboard-page? (model/whiteboard-page? @*title-value)))
+                    (collide?)
                     (do (notification/show! (t :page/page-already-exists @*title-value) :error)
                         (rollback-fn))
 
@@ -298,14 +298,13 @@
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   {:init (fn [state]
-           (let [page-name (first (:rum/args state))
-                 original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))
+           (let [page (first (:rum/args state))
+                 original-name (:block/original-name page)
                  *title-value (atom original-name)]
              (assoc state ::title-value *title-value)))}
-  [state page-name {:keys [fmt-journal? preview? *hover?]}]
-  (when page-name
-    (let [page (when page-name (db/entity [:block/name page-name]))
-          page (db/sub-block (:db/id page))
+  [state page {:keys [fmt-journal? preview? *hover?]}]
+  (when page
+    (let [page (db/sub-block (:db/id page))
           title (:block/original-name page)]
       (when title
         (let [icon (:logseq.property/icon page)
@@ -314,14 +313,14 @@
               *input-value (get state ::input-value)
               repo (state/get-current-repo)
               hls-page? (pdf-utils/hls-file? title)
-              whiteboard-page? (model/whiteboard-page? page-name)
-              untitled? (and whiteboard-page? (parse-uuid page-name)) ;; normal page cannot be untitled right?
+              whiteboard-page? (model/whiteboard-page? page)
+              untitled? (and whiteboard-page? (parse-uuid title)) ;; normal page cannot be untitled right?
               title (if hls-page?
                       [:a.asset-ref (pdf-utils/fix-local-asset-pagename title)]
                       (if fmt-journal?
                         (date/journal-title->custom-format title)
                         title))
-              old-name (or title page-name)
+              old-name title
               db-based? (config/db-based-graph? repo)]
           [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
            {:on-mouse-over #(reset! *hover? true)
@@ -344,17 +343,16 @@
             {:class (when-not whiteboard-page? "title")
              :on-pointer-down (fn [e]
                                 (when (util/right-click? e)
-                                  (state/set-state! :page-title/context {:page page-name
+                                  (state/set-state! :page-title/context {:page (:block/original-name page)
                                                                          :page-entity page})))
              :on-click (fn [e]
                          (when-not (= (.-nodeName (.-target e)) "INPUT")
                            (.preventDefault e)
                            (if (gobj/get e "shiftKey")
-                             (when-let [page (db/pull repo '[*] [:block/name page-name])]
-                               (state/sidebar-add-block!
-                                repo
-                                (:db/id page)
-                                :page))
+                             (state/sidebar-add-block!
+                              repo
+                              (:db/id page)
+                              :page)
                              (do
                                (when (and (not hls-page?)
                                           (not fmt-journal?)
@@ -367,7 +365,7 @@
               (page-title-editor page {:*title-value *title-value
                                        :*edit? *edit?
                                        :*input-value *input-value
-                                       :page-name page-name
+                                       :page-name (:block/original-name page)
                                        :old-name old-name
                                        :untitled? untitled?
                                        :whiteboard-page? whiteboard-page?
@@ -375,9 +373,9 @@
               [:span.title.block
                {:on-click (fn []
                             (when (and (state/home?) (not preview?))
-                              (route-handler/redirect-to-page! page-name)))
+                              (route-handler/redirect-to-page! (:block/uuid page))))
                 :data-value @*input-value
-                :data-ref   page-name
+                :data-ref   (:block/original-name page)
                 :style      {:opacity (when @*edit? 0)}}
                (let [nested? (and (string/includes? title page-ref/left-brackets)
                                   (string/includes? title page-ref/right-brackets))]
@@ -426,9 +424,8 @@
 (defn get-page-entity
   [page-name]
   (if-let [block-id (parse-uuid page-name)]
-    (let [entity (db/entity [:block/uuid block-id])]
-      entity)
-    (db/entity [:block/name page-name])))
+    (db/entity [:block/uuid block-id])
+    (db/entity (ldb/get-first-page-by-name (db/get-db) page-name))))
 
 (defn- get-sanity-page-name
   [state page-name]
@@ -460,7 +457,7 @@
                 db-based? (config/db-based-graph? repo)
                 fmt-journal? (boolean (date/journal-title->int page-name))
                 whiteboard? (:whiteboard? option) ;; in a whiteboard portal shape?
-                whiteboard-page? (model/whiteboard-page? page-name) ;; is this page a whiteboard?
+                whiteboard-page? (model/whiteboard-page? page) ;; is this page a whiteboard?
                 route-page-name path-page-name
                 page-name (:block/name page)
                 page-original-name (:block/original-name page)
@@ -496,12 +493,11 @@
                          :on-mouse-leave (fn [e]
                                            (page-mouse-leave e *control-show?))}
                         (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-                     (let [original-name (:block/original-name (db/entity [:block/name (util/page-name-sanity-lc page-name)]))]
-                       (when (and (not whiteboard?) original-name)
-                         (page-title page-name {:journal? journal?
-                                                :fmt-journal? fmt-journal?
-                                                :preview? preview?
-                                                :*hover? (::hover-title? state)})))
+                     (when (and (not whiteboard?) (ldb/page? page))
+                       (page-title page {:journal? journal?
+                                         :fmt-journal? fmt-journal?
+                                         :preview? preview?
+                                         :*hover? (::hover-title? state)}))
                      (when (not config/publishing?)
                        (when config/lsp-enabled?
                          [:div.flex.flex-row

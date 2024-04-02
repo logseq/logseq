@@ -146,7 +146,7 @@
                                       matched-pages)
                               (cons q matched-pages)))
 
-                                ;; reorder, shortest and starts-with first.
+                          ;; reorder, shortest and starts-with first.
                           :else
                           (let [matched-pages (remove nil? matched-pages)
                                 matched-pages (sort-by

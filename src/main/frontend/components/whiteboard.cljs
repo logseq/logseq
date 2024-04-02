@@ -274,7 +274,7 @@
                             e
                             (content/page-title-custom-context-menu-content page))
                            (state/set-state! :page-title/context nil))}
-       (page/page-title (:block/original-name page) {:*hover? (atom false)})]
+       (page/page-title page {:*hover? (atom false)})]
 
       [:div.whiteboard-page-refs
        (references-count (:block/original-name page)
