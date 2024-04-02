@@ -1,6 +1,5 @@
 (ns frontend.components.page-menu
-  (:require [clojure.string :as string]
-            [frontend.commands :as commands]
+  (:require [frontend.commands :as commands]
             [frontend.components.export :as export]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]

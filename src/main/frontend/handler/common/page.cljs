@@ -4,7 +4,6 @@
   is still some file-specific tech debt to remove from create!"
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.db.model :as model]
             [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]

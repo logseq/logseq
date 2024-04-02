@@ -11,7 +11,8 @@
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]))
+            [logseq.outliner.transaction :as outliner-tx]
+            [logseq.db :as ldb]))
 
 
 (use-fixtures :each

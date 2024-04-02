@@ -1,66 +1,12 @@
 (ns frontend.worker.handler.page.rename
   "Page rename"
   (:require [datascript.core :as d]
-            [medley.core :as medley]
             [clojure.string :as string]
             [frontend.worker.file.util :as wfu]
             [frontend.worker.file.page-rename :as page-rename]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]))
-
-(defn- replace-page-ref
-  "Replace from-page refs with to-page"
-  [from-page to-page]
-  (let [refs (:block/_refs from-page)
-        from-uuid (:block/uuid from-page)
-        to-uuid (:block/uuid to-page)
-        replace-ref (fn [content] (string/replace content (str from-uuid) (str to-uuid)))]
-    (when (seq refs)
-      (let [tx-data (mapcat
-                     (fn [{:block/keys [raw-content properties] :as ref}]
-                         ;; block content or properties
-                       (let [content' (replace-ref raw-content)
-                             content-tx (when (not= raw-content content')
-                                          {:db/id (:db/id ref)
-                                           :block/content content'})
-                             properties' (-> (medley/map-vals (fn [v]
-                                                                (cond
-                                                                  (and (coll? v) (uuid? (first v)))
-                                                                  (mapv (fn [id] (if (= id from-uuid) to-uuid id)) v)
-
-                                                                  (and (uuid? v) (= v from-uuid))
-                                                                  to-uuid
-
-                                                                  (and (coll? v) (string? (first v)))
-                                                                  (mapv replace-ref v)
-
-                                                                  (string? v)
-                                                                  (replace-ref v)
-
-                                                                  :else
-                                                                  v)) properties)
-                                             (common-util/remove-nils-non-nested))
-                             tx (merge
-                                 content-tx
-                                 (when (not= (seq properties) (seq properties'))
-                                   {:db/id (:db/id ref)
-                                    ;; FIXME: properties
-                                    :block/properties properties'}))]
-                         (concat
-                          [[:db/add (:db/id ref) :block/refs (:db/id to-page)]
-                           [:db/retract (:db/id ref) :block/refs (:db/id from-page)]]
-                          (when tx [tx]))))
-                     refs)]
-        tx-data))))
-
-(defn- rename-update-block-refs!
-  [refs from-id to-id]
-  (->> refs
-       (remove #{{:db/id from-id}})
-       (cons {:db/id to-id})
-       (distinct)
-       (vec)))
 
 (declare rename-page-aux)
 
