@@ -3,6 +3,7 @@
   (:require [frontend.components.block :as component-block]
             [frontend.components.editor :as editor]
             [frontend.components.class :as class-component]
+            [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
             [frontend.components.icon :as icon-component]
             [frontend.config :as config]
@@ -101,13 +102,17 @@
         mode (rum/react *mode)
         types (:block/type page)
         class? (contains? types "class")
+        property? (contains? types "property")
         page-opts {:configure? true}]
     (when (nil? mode)
       (reset! *mode (cond
                       class? :class
+                      property? :property
                       :else :page)))
     [:div.flex.flex-col.gap-1
      [:<>
+      (when (= mode :property)
+        (property-component/property-config page {:inline-text component-block/inline-text}))
       (when (= mode :class)
         (class-component/configure page {:show-title? false}))
       (when-not config/publishing? (tags-row page))
@@ -127,8 +132,11 @@
   [types *mode]
   (let [current-mode (rum/react *mode)
         class? (contains? types "class")
+        property? (contains? types "property")
         modes (->
                (cond
+                 property?
+                 ["Property"]
                  class?
                  ["Class"]
                  :else
