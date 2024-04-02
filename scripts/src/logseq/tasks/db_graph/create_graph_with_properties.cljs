@@ -8,6 +8,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [clojure.string :as string]
             [clojure.edn :as edn]
+            [clojure.set :as set]
             [datascript.core :as d]
             ["path" :as node-path]
             ["os" :as os]
@@ -185,9 +186,12 @@
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
-        blocks-tx (create-graph/create-blocks-tx
-                   (create-init-data)
-                   {:property-uuids {:icon (:block/uuid (d/entity @conn :logseq.property/icon))}})]
+        blocks-tx (create-graph/create-blocks-tx (create-init-data))
+        existing-names (set (map :v (d/datoms @conn :avet :block/original-name)))
+        conflicting-names (set/intersection existing-names (set (keep :block/original-name blocks-tx)))]
+    (when (seq conflicting-names)
+      (println "Error: Following names conflict -" (string/join "," conflicting-names))
+      (js/process.exit 1))
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
     (d/transact! conn blocks-tx)

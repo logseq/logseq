@@ -18,17 +18,17 @@
                                   db-property/built-in-properties)
                              (into {}))]
     (mapcat
-     (fn [[db-ident {:keys [schema original-name closed-values]}]]
-       (let [name (or original-name (name db-ident))
+     (fn [[db-ident {:keys [schema original-name closed-values] :as m}]]
+       (let [prop-name (or original-name (name (:name m)))
              blocks (if closed-values
                       (db-property-util/build-closed-values
                        db-ident
-                       name
+                       prop-name
                        {:db/ident db-ident :block/schema schema :closed-values closed-values}
                        {})
                       [(sqlite-util/build-new-property
                         db-ident
-                        name
+                        prop-name
                         schema)])]
          (update blocks 0 default-db/mark-block-as-built-in)))
      built-in-properties)))
