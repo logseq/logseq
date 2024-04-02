@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v10",
+    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v11",
     "mldoc": "^1.5.8"
   },
   "dependencies": {
