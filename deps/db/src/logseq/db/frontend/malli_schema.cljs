@@ -63,7 +63,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/original-name :string]
-   [:block/type {:optional true} [:enum #{"class"} #{"whiteboard"} #{"hidden"}]]
+   [:block/type {:optional true} [:enum #{"class"} #{"property"} #{"whiteboard"} #{"hidden"}]]
    [:block/journal? :boolean]
    [:block/namespace {:optional true} :int]
    [:block/alias {:optional true} [:set :int]]
@@ -105,12 +105,7 @@
   "Common attributes for properties"
   [[:db/index {:optional true} :boolean]
    [:db/valueType {:optional true} [:enum :db.type/ref]]
-   [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
-   [:block/original-name :string]
-   [:block/type {:optional true} [:enum #{"property"}]]
-   [:block/created-at :int]
-   [:block/updated-at :int]
-   [:block/tx-id {:optional true} :int]])
+   [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]])
 
 (def normal-page
   (vec
@@ -171,7 +166,9 @@
          [:view-context {:optional true} [:enum :page :block]]]
         property-common-schema-attrs
         property-type-schema-attrs))]]
-    property-attrs)))
+    property-attrs
+    page-attrs
+    page-or-block-attrs)))
 
 (def user-property-schema
   (into
@@ -195,7 +192,9 @@
     [:map
      [:db/ident user-ident]
      [:block/schema {:optional true} user-property-schema]]
-    property-attrs)))
+    property-attrs
+    page-attrs
+    page-or-block-attrs)))
 
 (def property-page
   [:multi {:dispatch (fn [m]
