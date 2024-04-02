@@ -23,7 +23,8 @@
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]))
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
+            [logseq.db :as ldb]))
 
 (rum/defc toggle
   []
@@ -51,7 +52,7 @@
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
-   (when-let [contents (db/entity [:block/name "contents"])]
+   (when-let [contents (db/entity (ldb/get-first-page-by-name (db/get-db) "contents"))]
      (page/contents-page contents))])
 
 (rum/defc shortcut-settings
@@ -200,26 +201,27 @@
         multi-items? (> block-count 1)]
 
     (menu-content
-      {:on-click toggle-fn :class "w-48" :align "end"}
+     {:on-click toggle-fn :class "w-48" :align "end"}
 
-      (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
-      (when multi-items? (menu-item {:on-click (fn []
-                                                 (state/clear-sidebar-blocks!)
-                                                 (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
-      (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
-      (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
-      (when (and collapsed? multi-items?) [:hr.menu-separator])
-      (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
-      (when (= type :page) [:hr.menu-separator])
-      (when (= type :page)
-        (let [name (:block/name (db/entity db-id))]
-          (menu-item {:href (if (db-model/whiteboard-page? name)
-                              (rfe/href :whiteboard {:name name})
-                              (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page)))))))
+     (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
+     (when multi-items? (menu-item {:on-click (fn []
+                                                (state/clear-sidebar-blocks!)
+                                                (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
+     (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
+     (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
+     (when (and collapsed? multi-items?) [:hr.menu-separator])
+     (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
+     (when (= type :page) [:hr.menu-separator])
+     (when (= type :page)
+       (let [page  (db/entity db-id)
+             name (:block/name page)]
+         (menu-item {:href (if (db-model/whiteboard-page? page)
+                             (rfe/href :whiteboard {:name name})
+                             (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page)))))))
 
 (rum/defc drop-indicator
   [idx drag-to]

@@ -26,7 +26,8 @@
             [frontend.components.whiteboard :as whiteboard]
             [cljs-bean.core :as bean]
             [frontend.db.async :as db-async]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -118,7 +119,9 @@
    :exportToImage (fn [page-uuid-str options]
                     (assert (common-util/uuid-string? page-uuid-str))
                     (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
-   :isWhiteboardPage model/whiteboard-page?
+   :isWhiteboardPage (fn [page-name]
+                       (when-let [entity (ldb/get-first-page-by-name (db/get-db) page-name)]
+                         (model/whiteboard-page? entity)))
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl assets-handler/make-asset-url
