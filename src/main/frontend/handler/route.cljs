@@ -13,7 +13,9 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [logseq.graph-parser.text :as text]
             [reitit.frontend.easy :as rfe]
-            [frontend.context.i18n :refer [t]]))
+            [frontend.context.i18n :refer [t]]
+            [clojure.string :as string]
+            [logseq.db :as ldb]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -74,11 +76,14 @@
    (redirect-to-page! page-name {}))
   ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard?]
                :or {click-from-recent? false}}]
-   (when (or (uuid? page-name) (seq page-name))
+   (when (or (uuid? page-name)
+             (and (string? page-name) (not (string/blank? page-name))))
      ;; Always skip onboarding when loading an existing whiteboard
      (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
-     (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
-                                         click-from-recent?)
+     (when-let [db-id (if (uuid? page-name)
+                        (:db/id (db/entity [:block/uuid page-name]))
+                        (:db/id (db/entity (ldb/get-first-page-by-name (db/get-db) page-name))))]
+       (recent-handler/add-page-to-recent! db-id click-from-recent?))
      (if (and (= name (state/get-current-whiteboard)) block-id)
        (state/focus-whiteboard-shape block-id)
        (let [m (cond->

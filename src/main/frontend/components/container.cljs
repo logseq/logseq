@@ -56,7 +56,8 @@
             [logseq.common.path :as path]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.db :as ldb]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class count]} child]
@@ -73,21 +74,18 @@
       (when child [:div.bd child])]]))
 
 (rum/defc page-name
-  [name icon recent?]
-  (let [original-name (db-model/get-page-original-name name)
-        whiteboard-page? (db-model/whiteboard-page? name)
-        untitled? (db-model/untitled-page? name)
-        name (util/safe-page-name-sanity-lc name)
+  [page icon recent?]
+  (let [original-name (:block/original-name page)
+        whiteboard-page? (db-model/whiteboard-page? page)
+        untitled? (db-model/untitled-page? original-name)
+        name (:block/name page)
         file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
         source-page (db-model/get-alias-source-page (state/get-current-repo) name)
         ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
-        open-in-sidebar #(when-let [page-entity (and (not whiteboard-page?)
-                                                     (if (empty? source-page)
-                                                       (db/entity [:block/name name]) source-page))]
-                           (state/sidebar-add-block!
-                            (state/get-current-repo)
-                            (:db/id page-entity)
-                            :page))
+        open-in-sidebar #(state/sidebar-add-block!
+                         (state/get-current-repo)
+                         (:db/id page)
+                         :page)
         x-menu-content (fn []
                          (let [x-menu-item shui/dropdown-menu-item
                                x-menu-shortcut shui/dropdown-menu-shortcut]
@@ -175,7 +173,7 @@
                                 icon (icon/get-page-icon e {})]
                             {:id (str (:db/id e))
                              :value name
-                             :content [:li.favorite-item (page-name name icon false)]}))
+                             :content [:li.favorite-item (page-name e icon false)]}))
                         favorite-entities)]
          (dnd-component/items favorites
                               {:on-drag-end (fn [favorites]
@@ -196,14 +194,14 @@
 
      [:ul.text-sm
       (for [name pages]
-        (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
+        (when-let [entity (db/entity (ldb/get-first-page-by-name (db/get-db) name))]
           [:li.recent-item.select-none
            {:key name
             :title name
             :draggable true
             :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event true))
             :data-ref name}
-           (page-name name (icon/get-page-icon entity {}) true)]))])))
+           (page-name entity (icon/get-page-icon entity {}) true)]))])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]

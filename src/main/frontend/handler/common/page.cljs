@@ -17,7 +17,6 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.file-based.recent :as file-recent-handler]
             [logseq.db :as ldb]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
@@ -46,6 +45,7 @@
          config (state/get-config repo)
          [_ page-name] (worker-page/create! repo conn config title options)]
      (when redirect?
+       ;; FIXME: use uuid instead
        (route-handler/redirect-to-page! page-name))
      (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
        (block-handler/edit-block! first-block :max nil))
@@ -63,6 +63,7 @@
            [p page-name] (worker-page/create! repo conn config title options)
            _result p]
      (when redirect?
+       ;; FIXME: use uuid instead
        (route-handler/redirect-to-page! page-name))
      (let [page (db/entity [:block/name page-name])]
        (when-let [first-block (first (:block/_left page))]
@@ -223,8 +224,6 @@
         (config-handler/set-config! :default-home (assoc home :page new-name))))
 
     (when-not db-based?
-      (file-recent-handler/update-or-add-renamed-page repo old-page-name new-page-name)
-
       (when (and old-path new-path)
         (rename-file! old-path new-path)))
 

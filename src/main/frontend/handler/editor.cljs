@@ -1205,9 +1205,8 @@
              (let [page-id (some-> (db/entity [:block/uuid block-id])
                                    :block/page
                                    :db/id)]
-
-               (when-let [page-name (:block/name (db/entity page-id))]
-                 (route-handler/redirect-to-page! page-name)
+               (when-let [page (db/entity page-id)]
+                 (route-handler/redirect-to-page! (:block/uuid page))
                  (util/schedule #(edit-block! {:block/uuid block-id} :max nil)))))))))
     (js/window.history.back)))
 
