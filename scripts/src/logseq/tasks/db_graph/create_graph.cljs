@@ -152,11 +152,8 @@
    as a set. The following property types are supported: :default, :url,
    :checkbox, :number, :page and :date. :checkbox and :number values are written
    as booleans and integers. :page and :block are references that are written as
-   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`
-
-   This fn also takes an optional map arg which supports these keys:
-   * :property-uuids - A map of property keyword names to uuids to provide ids for built-in properties"
-  [{:keys [pages-and-blocks properties]} & {:as options}]
+   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`"
+  [{:keys [pages-and-blocks properties]}]
   (let [;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
                                   (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
@@ -176,9 +173,7 @@
                                    db-ident
                                    prop-name
                                    (assoc (get properties prop-name) :db/ident db-ident)
-                                   {:icon-id
-                                    (get-in options [:property-uuids :icon])
-                                    :translate-closed-page-value-fn
+                                   {:translate-closed-page-value-fn
                                     #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
                                     :property-attributes
                                     {:db/id (or (property-db-ids (name prop-name))
