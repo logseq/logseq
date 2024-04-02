@@ -2,7 +2,6 @@
   "Property related fns for DB graphs and frontend/datascript usage"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
             [clojure.string :as string]))
 
 (def ^:large-vars/data-var built-in-properties*

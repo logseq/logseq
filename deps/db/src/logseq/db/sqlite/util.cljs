@@ -79,7 +79,11 @@
      (cond->
       {:db/ident db-ident'
        :block/type "property"
+       :block/journal? false
+       :block/format :markdown
        :block/schema (merge {:type :default} prop-schema)
+       :block/name (common-util/page-name-sanity-lc (name prop-name))
+       :block/uuid (d/squuid)
        :block/original-name (name prop-name)}
        (= :many (:cardinality prop-schema))
        (assoc :db/cardinality :db.cardinality/many)
