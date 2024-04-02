@@ -4,18 +4,16 @@
             [logseq.outliner.tree :as otree]
             [frontend.worker.file.core :as worker-file]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]
             [logseq.graph-parser.property :as gp-property]))
 
 (defn block->content
   "Converts a block including its children (recursively) to plain-text."
-  [repo db root-block-uuid-or-page-name tree->file-opts context]
-  (let [root-block-uuid (or
-                         (and (uuid? root-block-uuid-or-page-name) root-block-uuid-or-page-name)
-                         (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc
-                                                                 root-block-uuid-or-page-name)])))
-        init-level (or (:init-level tree->file-opts)
-                       (if (uuid? root-block-uuid-or-page-name) 1 0))
+  [repo db root-block-uuid tree->file-opts context]
+  (assert (uuid? root-block-uuid))
+  (let [init-level (or (:init-level tree->file-opts)
+                       (if (ldb/page? (d/entity db [:block/uuid root-block-uuid]))
+                         0
+                         1))
         blocks (ldb/get-block-and-children repo db root-block-uuid)
         tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
     (worker-file/tree->file-content repo db tree
@@ -54,7 +52,7 @@
                                        (safe-keywordize b'))) blocks))
                     children (if whiteboard?
                                blocks'
-                               (otree/blocks->vec-tree repo db blocks' name))
+                               (otree/blocks->vec-tree repo db blocks' (:db/id page)))
                     page' (safe-keywordize page)]
                 (assoc page' :block/children children))))))
 
@@ -64,4 +62,4 @@
        (map (fn [d]
               (let [e (d/entity db (:e d))]
                 [(:block/original-name e)
-                 (block->content repo db (:v d) {} {})])))))
+                 (block->content repo db (:block/uuid e) {} {})])))))

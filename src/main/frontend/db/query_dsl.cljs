@@ -44,7 +44,6 @@
 ;; sample
 ;; full-text-search ""
 
-;; namespace
 ;; page-property (page)
 ;; page-tags (page)
 ;; all-page-tags
@@ -373,14 +372,6 @@
     {:query (list 'page '?b page-name)
      :rules [:page]}))
 
-(defn- build-namespace
-  [e]
-  (let [page-name (page-ref/get-page-name! (str (first (rest e))))
-        page (util/page-name-sanity-lc page-name)]
-    (when-not (string/blank? page)
-      {:query (list 'namespace '?p page)
-       :rules [:namespace]})))
-
 (defn- build-page-ref
   [e]
   (let [page-name (-> (page-ref/get-page-name! e)
@@ -444,9 +435,6 @@ Some bindings in this fn:
 
        (= 'page fe)
        (build-page e)
-
-       (= 'namespace fe)
-       (build-namespace e)
 
        (= 'page-property fe)
        (build-page-property e env)

@@ -412,21 +412,6 @@ tags: [[other]]
               (dsl-query "(page nope)")))
       "Correctly returns no results"))
 
-(deftest namespace-queries
-  (load-test-files [{:file/path "pages/ns1.page1.md"
-                     :file/content "foo"}
-                    {:file/path "pages/ns1.page2.md"
-                     :file/content "bar"}
-                    {:file/path "pages/ns2.page1.md"
-                     :file/content "baz"}])
-
-  (is (= #{"ns1/page1" "ns1/page2"}
-         (set (map :block/name (dsl-query "(namespace ns1)")))))
-
-  (is (= #{}
-         (set (map :block/name (dsl-query "(namespace blarg)"))))
-      "Correctly returns no results"))
-
 (deftest empty-queries
   (testing "nil or blank strings should be ignored"
     (are [x] (nil? (dsl-query x))

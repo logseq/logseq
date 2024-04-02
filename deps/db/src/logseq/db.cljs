@@ -9,7 +9,8 @@
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -107,34 +108,19 @@
           (->> (map #(db-content/update-block-content repo db % (:db/id %))))))
 
 (defn whiteboard-page?
-  "Given a page name or a page object, check if it is a whiteboard page"
-  [db page]
-  (cond
-    (string? page)
-    (let [page (d/entity db [:block/name (common-util/page-name-sanity-lc page)])]
-      (or
-       (contains? (set (:block/type page)) "whiteboard")
-       (when-let [file (:block/file page)]
-         (when-let [path (:file/path (d/entity db (:db/id file)))]
-           (common-config/whiteboard? path)))))
-
-    (seq page)
-    (contains? (set (:block/type page)) "whiteboard")
-
-    :else false))
+  "Given a page entity or map, check if it is a whiteboard page"
+  [page]
+  (contains? (set (:block/type page)) "whiteboard"))
 
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
    page - name / title of the page"
-  [db page {:keys [pull-keys]
+  [db page-id {:keys [pull-keys]
             :or {pull-keys '[*]}}]
-  (when page
-    (let [page (common-util/page-name-sanity-lc page)
-          page-id (:db/id (d/entity db [:block/name page]))]
-      (when page-id
-        (let [datoms (d/datoms db :avet :block/page page-id)
-              block-eids (mapv :e datoms)]
-          (d/pull-many db pull-keys block-eids))))))
+  (when page-id
+    (let [datoms (d/datoms db :avet :block/page page-id)
+          block-eids (mapv :e datoms)]
+      (d/pull-many db pull-keys block-eids))))
 
 (defn get-page-blocks-count
   [db page-id]
@@ -217,7 +203,7 @@
                                     (= 1 (count children))
                                     (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
                                 (not (contains? built-in-pages name))
-                                (not (whiteboard-page? db page))
+                                (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
                                 (not (contains? (:block/type page) "property"))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
@@ -409,38 +395,6 @@
     (when (seq pages)
       (first pages))))
 
-(defn get-namespace-pages
-  "Accepts both sanitized and unsanitized namespaces"
-  [db namespace {:keys [db-graph?]}]
-  (assert (string? namespace))
-  (let [namespace (common-util/page-name-sanity-lc namespace)
-        pull-attrs  (cond-> [:db/id :block/name :block/original-name :block/namespace]
-                      (not db-graph?)
-                      (conj {:block/file [:db/id :file/path]}))]
-    (d/q
-     [:find [(list 'pull '?c pull-attrs) '...]
-      :in '$ '% '?namespace
-      :where
-      ['?p :block/name '?namespace]
-      (list 'namespace '?p '?c)]
-     db
-     (:namespace rules/rules)
-     namespace)))
-
-(defn get-pages-by-name-partition
-  [db partition]
-  (when-not (string/blank? partition)
-    (let [partition (common-util/page-name-sanity-lc (string/trim partition))
-          ids (->> (d/datoms db :aevt :block/name)
-                   (filter (fn [datom]
-                             (let [page (:v datom)]
-                               (string/includes? page partition))))
-                   (map :e))]
-      (when (seq ids)
-        (d/pull-many db
-                     '[:db/id :block/name :block/original-name]
-                     ids)))))
-
 (defn get-page
   "Get a page given its unsanitized name"
   [db page-name]
@@ -546,6 +500,14 @@
 (defn get-graph-rtc-uuid
   [db]
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
+
+(def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
+
+(defn page?
+  [block]
+  (and block
+       (:block/name block)
+       (nil? (:block/page block))))
 
 (comment
   (defn db-based-graph?

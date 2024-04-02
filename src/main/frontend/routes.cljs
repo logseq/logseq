@@ -13,7 +13,10 @@
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
             [logseq.shui.demo2 :as shui]
-            [frontend.components.imports :as imports]))
+            [frontend.components.imports :as imports]
+            [frontend.config :as config]
+            [logseq.db :as ldb]
+            [frontend.db :as db]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -25,10 +28,6 @@
     {:name :repos
      :view repo/repos}]
 
-   ["/whiteboard/:name"
-    {:name :whiteboard
-     :view whiteboard/whiteboard-route}]
-
    ["/whiteboards"
     {:name :whiteboards
      :view whiteboard/whiteboard-dashboard}]
@@ -37,17 +36,16 @@
     {:name :repo-add
      :view setups/picker}]
 
-   ["/all-files"
-    {:name :all-files
-     :view file/files}]
-
-   ["/file/:path"
-    {:name :file
-     :view file/file}]
-
    ["/page/:name"
     {:name :page
-     :view page/page}]
+     :view (fn [route-match]
+             (let [page-name (get-in route-match [:parameters :path :name])
+                   db (db/get-db)
+                   whiteboard? (when db
+                                 (ldb/whiteboard-page? (db/entity (ldb/get-first-page-by-name db page-name))))]
+               (if whiteboard?
+                 (whiteboard/whiteboard-route route-match)
+                 (page/page route-match))))}]
 
    ["/page/:name/block/:block-route-name"
     {:name :page-block
@@ -93,7 +91,15 @@
     {:name :user-login
      :view login/page}]
 
-   ["/ui"
-    {:name :ui
-     :view shui/page}]
-   ])
+   ["/all-files"
+    {:name :all-files
+     :view file/files}]
+
+   ["/file/:path"
+    {:name :file
+     :view file/file}]
+
+   (when config/dev?
+     ["/ui"
+      {:name :ui
+       :view shui/page}])])

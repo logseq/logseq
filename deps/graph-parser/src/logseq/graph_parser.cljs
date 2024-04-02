@@ -23,12 +23,11 @@
   [db file-path]
   (ffirst
    (d/q
-    '[:find ?page-name
+    '[:find ?page
       :in $ ?path
       :where
       [?file :file/path ?path]
-      [?page :block/file ?file]
-      [?page :block/original-name ?page-name]]
+      [?page :block/file ?file]]
     db
     file-path)))
 
@@ -50,9 +49,9 @@
   UUIDs."
   [db file-page file-path retain-uuid-blocks]
   (let [existing-file-page (get-file-page db file-path)
-        pages-to-clear (distinct (filter some? [existing-file-page (:block/name file-page)]))
-        blocks (mapcat (fn [page]
-                         (ldb/get-page-blocks db page {:pull-keys [:db/id :block/uuid]}))
+        pages-to-clear (distinct (filter some? [existing-file-page (:db/id file-page)]))
+        blocks (mapcat (fn [page-id]
+                         (ldb/get-page-blocks db page-id {:pull-keys [:db/id :block/uuid]}))
                        pages-to-clear)
         retain-uuids (set (keep :block/uuid retain-uuid-blocks))]
     (retract-blocks-tx (distinct blocks) retain-uuids)))

@@ -12,7 +12,9 @@
             [clojure.core.async :as async]
             [frontend.db.async.util :as db-async-util]
             [promesa.core :as p]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -157,13 +159,14 @@
                :page
                (get-in match [:path-params :name])
 
-               :file
-               (get-in match [:path-params :path])
+               :whiteboard
+               (get-in match [:path-params :name])
 
                (date/journal-name))]
     (when page
-      (let [page-name (util/page-name-sanity-lc page)]
-        (db-utils/entity [:block/name page-name])))))
+      (if (common-util/uuid-string? page)
+        (db-utils/entity [:block/uuid (uuid page)])
+        (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page))))))
 
 (defn- execute-query!
   [graph db k {:keys [query inputs transform-fn query-fn inputs-fn result]

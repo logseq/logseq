@@ -4,14 +4,7 @@
 (def ^:large-vars/data-var rules
   "Rules used mainly in frontend.db.model"
   ;; rule "parent" is optimized for parent node -> child node nesting queries
-  {:namespace
-   '[[(namespace ?p ?c)
-      [?c :block/namespace ?p]]
-     [(namespace ?p ?c)
-      [?t :block/namespace ?p]
-      (namespace ?t ?c)]]
-
-   :class-parent
+  {:class-parent
    '[[(class-parent ?p ?c)
       [?c :class/parent ?p]]
      [(class-parent ?p ?c)
@@ -127,11 +120,6 @@
    '[(page ?b ?page-name)
      [?b :block/page ?bp]
      [?bp :block/name ?page-name]]
-
-   :namespace
-   '[(namespace ?p ?namespace)
-     [?p :block/namespace ?parent]
-     [?parent :block/name ?namespace]]
 
    :property
    '[(property ?b ?key ?val)

@@ -24,7 +24,7 @@
                   :db/index true}
    :block/left   {:db/valueType :db.type/ref
                   :db/index true}
-   :block/collapsed? {:db/index true}
+   :block/collapsed? {}
    :block/collapsed-properties {:db/valueType :db.type/ref
                                 :db/cardinality :db.cardinality/many}
 
@@ -98,8 +98,6 @@
    ;; whether page's is a journal
    :block/journal? {}
    :block/journal-day {}
-   ;; page's namespace
-   :block/namespace {:db/valueType :db.type/ref}
 
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
@@ -124,7 +122,8 @@
    (dissoc schema
            :block/properties :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
            :block/properties-order)
-   {:class/parent {:db/valueType :db.type/ref
+   {:block/name {:db/index true}        ; remove db/unique for :block/name
+    :class/parent {:db/valueType :db.type/ref
                    :db/index true}
     :file/last-modified-at {}
     :asset/uuid {:db/unique :db.unique/identity}

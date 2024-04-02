@@ -30,7 +30,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [shadow.cljs.modern :refer [defclass]]
+            [logseq.common.util :as common-util]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -304,7 +305,9 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [selector (ldb/read-transit-str selector-str)
            id (ldb/read-transit-str id-str)
-           result (->> (d/pull @conn selector id)
+           eid (when (and (vector? id) (= :block/name (first id)))
+                 (ldb/get-first-page-by-name @conn (second id)))
+           result (->> (d/pull @conn selector (or eid id))
                        (sqlite-common-db/with-parent-and-left @conn))]
        (ldb/write-transit-str result))))
 
@@ -323,10 +326,11 @@
        (ldb/write-transit-str result))))
 
   (get-block-and-children
-   [_this repo name children?]
-   (assert (string? name))
+   [_this repo id-str children?]
+   (assert (common-util/uuid-string? id-str))
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn name children?))))
+     (let [id (uuid id-str)]
+       (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn id children?)))))
 
   (get-block-refs
    [_this repo id]
@@ -484,19 +488,21 @@
      (search/page-search repo @conn q limit)))
 
   (page-rename
-   [this repo old-name new-name]
+   [this repo page-uuid-str new-name]
+   (assert (common-util/uuid-string? page-uuid-str))
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [config (worker-state/get-config repo)
-           result (worker-page-rename/rename! repo conn config old-name new-name)]
+           result (worker-page-rename/rename! repo conn config (uuid page-uuid-str) new-name)]
        (bean/->js {:result result}))))
 
   (page-delete
-   [this repo page-name]
+   [this repo page-uuid-str]
+   (assert (common-util/uuid-string? page-uuid-str))
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [error-handler (fn [{:keys [msg]}]
                            (worker-util/post-message :notification
                                                      [[:div [:p msg]] :error]))
-           result (worker-page/delete! repo conn page-name {:error-handler error-handler})]
+           result (worker-page/delete! repo conn (uuid page-uuid-str) {:error-handler error-handler})]
        (bean/->js {:result result}))))
 
   (apply-outliner-ops
@@ -537,11 +543,13 @@
 
   ;; Export
   (block->content
-   [this repo block-uuid-or-page-name tree->file-opts context]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (worker-export/block->content repo @conn block-uuid-or-page-name
-                                   (ldb/read-transit-str tree->file-opts)
-                                   (ldb/read-transit-str context))))
+   [this repo block-uuid-str tree->file-opts context]
+   (assert (common-util/uuid-string? block-uuid-str))
+   (let [block-uuid (uuid block-uuid-str)]
+     (when-let [conn (worker-state/get-datascript-conn repo)]
+       (worker-export/block->content repo @conn block-uuid
+                                     (ldb/read-transit-str tree->file-opts)
+                                     (ldb/read-transit-str context)))))
 
   (get-all-pages
    [this repo]

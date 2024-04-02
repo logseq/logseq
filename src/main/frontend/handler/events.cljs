@@ -759,7 +759,7 @@
   (state/set-state! :whiteboard/linked-shapes shapes))
 
 (defmethod handle :whiteboard-go-to-link [[_ link]]
-  (route-handler/redirect! {:to :whiteboard
+  (route-handler/redirect! {:to :page
                             :path-params {:name link}}))
 
 (defmethod handle :graph/dir-gone [[_ dir]]

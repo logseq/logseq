@@ -21,7 +21,9 @@
             [rum.core :as rum]
             [shadow.loader :as loader]
             [frontend.config :as config]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.common.util :as common-util]
+            [frontend.db :as db]))
 
 (defonce tldraw-loaded? (atom false))
 (rum/defc tldraw-app < rum/reactive
@@ -160,7 +162,7 @@
       (util/stop e)
       (if show-checked?
         (on-checked-change (not checked))
-        (route-handler/redirect-to-whiteboard! page-name)))}
+        (route-handler/redirect-to-page! page-name)))}
    [:div.dashboard-card-title
     [:div.flex.w-full.items-center
      [:div.dashboard-card-title-name.font-bold
@@ -248,12 +250,12 @@
     [:div "This feature is not publicly available yet."]))
 
 (rum/defc whiteboard-page
-  [page-name block-id]
-  (let [[ref bp] (use-breakpoint)]
+  [page-uuid block-id]
+  (let [[ref bp] (use-breakpoint)
+        page (db/entity [:block/uuid page-uuid])]
     [:div.absolute.w-full.h-full.whiteboard-page
-
      ;; makes sure the whiteboard will not cover the borders
-     {:key page-name
+     {:key (str page-uuid)
       :ref ref
       :data-breakpoint (name bp)
       :style {:padding "0.5px" :z-index 0
@@ -270,26 +272,27 @@
                            (util/stop e)
                            (common-handler/show-custom-context-menu!
                             e
-                            (content/page-title-custom-context-menu-content page-name))
+                            (content/page-title-custom-context-menu-content page))
                            (state/set-state! :page-title/context nil))}
-       (page/page-title page-name {:*hover? (atom false)})]
+       (page/page-title (:block/original-name page) {:*hover? (atom false)})]
 
       [:div.whiteboard-page-refs
-       (references-count page-name
+       (references-count (:block/original-name page)
                          "text-md px-3 py-2 cursor-default whiteboard-page-refs-count"
                          {:hover? true
                           :render-fn (fn [open? refs-count] [:span.whiteboard-page-refs-count-label
                                                              (t :whiteboard/reference-count refs-count)
                                                              (ui/icon (if open? "references-hide" "references-show")
                                                                       {:extension? true})])})]]
-     (tldraw-app page-name block-id)]))
+     (tldraw-app (:block/original-name page) block-id)]))
 
 (rum/defc whiteboard-route <
   (shortcut/mixin :shortcut.handler/whiteboard false)
   [route-match]
-  (let [name (get-in route-match [:parameters :path :name])
+  (let [page-uuid-str (get-in route-match [:parameters :path :name])
         {:keys [block-id]} (get-in route-match [:parameters :query])]
-    (whiteboard-page name block-id)))
+    (when (common-util/uuid-string? page-uuid-str)
+      (whiteboard-page (uuid page-uuid-str) block-id))))
 
 (rum/defc onboarding-welcome
   [close-fn]

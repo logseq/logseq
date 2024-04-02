@@ -42,16 +42,31 @@
 
 (defn- get-root-and-page
   [db root-id]
-  (if (string? root-id)
+  (cond
+    (uuid? root-id)
+    (let [e (d/entity db [:block/uuid root-id])]
+      (if (:block/page e)
+        [false e]
+        [true e]))
+
+    (number? root-id)
+    (let [e (d/entity db root-id)]
+      (if (:block/page e)
+        [false e]
+        [true e]))
+
+    (string? root-id)
     (if-let [id (parse-uuid root-id)]
       [false (d/entity db [:block/uuid id])]
-      [true (d/entity db [:block/name (string/lower-case root-id)])])
+      [true (d/entity db (ldb/get-first-page-by-name db root-id))])
+
+    :else
     [false root-id]))
 
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."
   [repo db blocks root-id]
-  (let [[page? root] (get-root-and-page db (str root-id))]
+  (let [[page? root] (get-root-and-page db root-id)]
     (if-not root ; custom query
       blocks
       (let [result (blocks->vec-tree-aux repo db blocks root)]

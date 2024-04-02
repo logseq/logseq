@@ -133,19 +133,6 @@
            (get-counts-for-common-attributes db))
         "Counts for blocks with common block attributes")
 
-    (let [no-name (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
-                       (filter (fn [x]
-                                 (when-not (:block/original-name (first x))
-                                   x))))
-          all-namespaces (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
-                              (map (comp :block/original-name first))
-                              set)]
-      (is (= #{"term" "setting" "book" "templates" "Query table" "page"
-               "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
-               "Whiteboard/Property" "Community" "Tweet"}
-             all-namespaces)
-          (str "Has correct namespaces: " no-name)))
-
     (is (empty? (->> (d/q '[:find ?n :where [?b :block/name ?n]] db)
                      (map first)
                      (filter #(string/includes? % "___"))))

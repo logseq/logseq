@@ -9,32 +9,6 @@
 (use-fixtures :each {:before test-helper/start-test-db!
                      :after test-helper/destroy-test-db!})
 
-(deftest get-namespace-pages
-  (load-test-files [{:file/path "pages/a.b.c.md"
-                     :file/content "foo"}
-                    {:file/path "pages/b.c.md"
-                     :file/content "bar"}
-                    {:file/path "pages/b.d.md"
-                     :file/content "baz"}])
-
-  (is (= ["a/b" "a/b/c"]
-         (map :block/name (model/get-namespace-pages test-helper/test-db "a"))))
-
-  (is (= ["b/c" "b/d"]
-         (map :block/name (model/get-namespace-pages test-helper/test-db "b")))))
-
-(deftest get-page-namespace-routes
-  (load-test-files [{:file/path "pages/a.b.c.md"
-                     :file/content "foo"}
-                    {:file/path "pages/b.c.md"
-                     :file/content "bar"}
-                    {:file/path "pages/b.d.md"
-                     :file/content "baz"}])
-
-  (is (= '()
-         (map :block/name (model/get-page-namespace-routes test-helper/test-db "b/c")))
-      "Empty if page exists"))
-
 (deftest test-page-alias-with-multiple-alias
   (load-test-files [{:file/path "aa.md"
                      :file/content "alias:: ab, ac"}
@@ -98,31 +72,6 @@
   (is (= '()
          (map first (model/get-pages-that-mentioned-page test-helper/test-db "generic page" false)))
       "Must be empty"))
-
-(deftest remove-links-for-each-level-of-the-namespaces
-  (load-test-files [{:file/path "pages/generic page.md"
-                     :file/content "tags:: [[one/two/tree]], one/two
-- link to ns [[one]]
-- link to page one [[page ONE]]"}])
-
-  (is (= '("one/two/tree" "page one")
-         (map second (model/get-pages-relation test-helper/test-db true)))
-      "(get-pages-relation) Must be only ns one/two/tree")
-
-  (is (= '("one/two/tree" "page one")
-         (map second (#'model/remove-nested-namespaces-link [["generic page" "one/two/tree"]
-                                                           ["generic page" "one/two"]
-                                                           ["generic page" "one"]
-                                                           ["generic page" "page one"]])))
-      "(model/remove-nested-namespaces-link) Must be only ns one/two/tree")
-
-  (is (= '("one/two/tree" "one/two" "one")
-         (#'model/get-parents-namespace-list "one/two/tree/four"))
-      "Must be one/two/tree one/two one")
-
-  (is (= '("one/two" "one")
-         (#'model/get-unnecessary-namespaces-name '("one/two/tree" "one" "one/two" "non nested tag" "non nested link")))
-      "Must be  one/two one"))
 
 (deftest entity-query-should-return-nil-if-id-not-exists
   (is (nil? (db/entity 1000000))))

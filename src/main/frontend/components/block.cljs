@@ -535,7 +535,7 @@
          (whiteboard-handler/closest-shape (.-target e)))
 
         whiteboard-page?
-        (route-handler/redirect-to-whiteboard! page-name)
+        (route-handler/redirect-to-page! page-name)
 
         (nil? page)
         (state/pub-event! [:page/create page-name-in-block])
@@ -575,7 +575,7 @@
                (and tag? display-close-button?) (str " pl-4"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e))
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e true))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
       :on-pointer-down (fn [e]
@@ -958,8 +958,8 @@
                           ;; pdf annotation
                         [:annotation true] (pdf-assets/open-block-ref! block)
 
-                        [:whiteboard-shape true] (route-handler/redirect-to-whiteboard!
-                                                  (get-in block [:block/page :block/name]) {:block-id block-id})
+                        [:whiteboard-shape true] (route-handler/redirect-to-page!
+                                                  (get-in block [:block/page :block/uuid]) {:block-id block-id})
 
                           ;; default open block page
                         :else (route-handler/redirect-to-page! id))))))}
@@ -1486,27 +1486,6 @@
           format (get-in config [:block :block/format] :markdown)]
       (render-macro config name arguments macro-content format))))
 
-(rum/defc namespace-hierarchy-aux
-  [config namespace children]
-  [:ul
-   (for [child children]
-     [:li {:key (str "namespace-" namespace "-" (:db/id child))}
-      (let [shorten-name (some-> (or (:block/original-name child) (:block/name child))
-                                 (string/split "/")
-                                 last)]
-        (page-cp {:label shorten-name} child))
-      (when (seq (:namespace/children child))
-        (namespace-hierarchy-aux config (:block/name child)
-                                 (:namespace/children child)))])])
-
-(rum/defc namespace-hierarchy
-  [config namespace children]
-  [:div.namespace
-   [:div.font-medium.flex.flex-row.items-center.pb-2
-    [:span.text-sm.mr-1 "Namespace "]
-    (page-cp config {:block/name namespace})]
-   (namespace-hierarchy-aux config namespace children)])
-
 (defn- macro-cp
   [config options]
   (let [{:keys [name arguments]} options
@@ -1525,11 +1504,7 @@
       (macro-function-cp config arguments)
 
       (= name "namespace")
-      (let [namespace (first arguments)]
-        (when-not (string/blank? namespace)
-          (let [namespace (string/lower-case (page-ref/get-page-name! namespace))
-                children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
-            (namespace-hierarchy config namespace children))))
+      [:div.warning "Namespace has been deprecated, use tags instead"]
 
       (= name "youtube")
       (when-let [url (first arguments)]
@@ -1727,7 +1702,7 @@
       (state/conj-selection-block! (gdom/getElement block-id) :down)
       (editor-handler/highlight-block! uuid)))
 
-  (editor-handler/block->data-transfer! uuid event)
+  (editor-handler/block->data-transfer! uuid event false)
   (.setData (gobj/get event "dataTransfer")
             "block-dom-id"
             block-id)
@@ -1738,7 +1713,7 @@
   [e block uuid]
   (cond
     (pu/shape-block? block)
-    (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id uuid})
+    (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id uuid})
 
     (gobj/get e "shiftKey")
     (do

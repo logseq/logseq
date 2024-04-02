@@ -476,7 +476,7 @@
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
   (let [blocks (ldb/get-page-blocks @conn from-page-name {})
-        target-page-block (d/entity @conn [:block/name to-page-name])]
+        target-page-block (d/entity @conn (ldb/get-first-page-by-name @conn to-page-name))]
     (when (and (seq blocks) target-page-block)
       (outliner-tx/transact!
        {:persist-op? true
@@ -512,7 +512,7 @@
   (let [config (worker-state/get-config repo)]
     (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
       (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
-            exist-page (d/entity @conn [:block/name page-name])
+            exist-page (d/entity @conn (ldb/get-first-page-by-name @conn page-name))
             create-opts {:create-first-block? false
                          :uuid self :persist-op? false}]
         (cond
@@ -521,7 +521,7 @@
           (and exist-page
                (not= (:block/uuid exist-page) self)
                (empty-page? exist-page))
-          (do (worker-page/delete! repo conn page-name {:persist-op? false})
+          (do (worker-page/delete! repo conn self {:persist-op? false})
               (worker-page/create! repo conn config original-name create-opts))
 
           ;; same name but different uuid
@@ -531,14 +531,14 @@
           (and exist-page
                (not= (:block/uuid exist-page) self))
           (let [conflict-page-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now)))]
-            (worker-page-rename/rename! repo conn config original-name conflict-page-name {:persist-op? false})
+            (worker-page-rename/rename! repo conn config self conflict-page-name {:persist-op? false})
             (worker-page/create! repo conn config original-name create-opts)
             (move-all-blocks-to-another-page repo conn conflict-page-name original-name))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name
           (and old-page-original-name (not= old-page-original-name original-name))
-          (worker-page-rename/rename! repo conn config old-page-original-name original-name {:persist-op? false})
+          (worker-page-rename/rename! repo conn config self original-name {:persist-op? false})
 
           ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
           ;; just create-page
@@ -550,8 +550,7 @@
 (defn apply-remote-remove-page-ops
   [repo conn remove-page-ops]
   (doseq [op remove-page-ops]
-    (when-let [page-name (:block/name (d/entity @conn [:block/uuid (:block-uuid op)]))]
-      (worker-page/delete! repo conn page-name {:persist-op? false}))))
+    (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
 
 (defn filter-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,

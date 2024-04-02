@@ -264,7 +264,7 @@
               {:class         (when collapsed? "rounded-b-md")
                :draggable     true
                :on-drag-start (fn [event]
-                                (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
+                                (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
                                 (reset! *drag-from idx))
                :on-drag-end   (fn [_event]
                                 (when drag-to (state/sidebar-move-block! idx drag-to))

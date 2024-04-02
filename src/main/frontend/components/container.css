@@ -745,10 +745,6 @@
       }
     }
   }
-
-  .page-hierarchy {
-    @apply pl-[28px];
-  }
 }
 
 .cp__sidebar-main-content[data-is-full-width='true'] {

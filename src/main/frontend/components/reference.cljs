@@ -107,9 +107,9 @@
     (when-not (state/sub-async-query-loading (str (:db/id e) "-refs"))
       (let [page? (some? (:block/name e))
             ref-blocks (if page?
-                         (-> (db/get-page-referenced-blocks (:block/name e))
+                         (-> (db/get-page-referenced-blocks (:db/id e))
                              db-utils/group-by-page)
-                         (db/get-block-referenced-blocks block-id))]
+                         (db/get-block-referenced-blocks (:db/id e)))]
         (when (> (count ref-blocks) 0)
           (let [ref-hiccup (block/->hiccup ref-blocks
                                            {:id (str block-id)
@@ -188,37 +188,34 @@
             (conj result fb))))))))
 
 (rum/defc sub-page-properties-changed < rum/static
-  [page-name v filters-atom]
+  [page-entity v filters-atom]
   (rum/use-effect!
-    (fn []
-      (reset! filters-atom
-              (page-handler/get-filters (util/page-name-sanity-lc page-name))))
-    [page-name v filters-atom])
+   (fn []
+     (reset! filters-atom
+             (page-handler/get-filters page-entity)))
+   [page-entity v filters-atom])
   [:<>])
 
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::ref-pages)
   {:init (fn [state]
-           (let [page-name (->> (first (:rum/args state))
-                                util/page-name-sanity-lc)
-                 page (db/entity [:block/name page-name])
-                 filters (when page-name (atom nil))]
+           (let [page (first (:rum/args state))
+                 filters (when page (atom nil))]
              (when page (db-async/<get-block-refs (state/get-current-repo) (:db/id page)))
              (assoc state ::filters filters)))}
-  [state page-name]
-  (when page-name
-    (let [repo (state/get-current-repo)
-          page-name (util/page-name-sanity-lc page-name)
-          page-entity (db/entity repo [:block/name page-name])]
+  [state page-entity]
+  (when page-entity
+    (let [repo (state/get-current-repo)]
       (when page-entity
         (when-not (state/sub-async-query-loading (str (:db/id page-entity) "-refs"))
-          (let [page-props-v (state/sub-page-properties-changed page-name)
+          (let [page-name (:block/name page-entity)
+                page-props-v (state/sub-page-properties-changed page-name)
                 *ref-pages (::ref-pages state)
                 filters-atom (get state ::filters)
                 filter-state (rum/react filters-atom)
-                ref-blocks (db/get-page-referenced-blocks page-name)
                 page-id (:db/id page-entity)
-                aliases (db/page-alias-set repo page-name)
+                ref-blocks (db/get-page-referenced-blocks page-id)
+                aliases (db/page-alias-set repo page-id)
                 aliases-exclude-self (set (remove #{page-id} aliases))
                 top-level-blocks (filter (fn [b] (some aliases (set (map :db/id (:block/refs b))))) ref-blocks)
                 top-level-blocks-ids (set (map :db/id top-level-blocks))
@@ -255,51 +252,50 @@
             (reset! *ref-pages ref-pages)
             (when (or (seq filter-state) (> filter-n 0))
               [:div.references.page-linked.flex-1.flex-row
-               (sub-page-properties-changed page-name page-props-v filters-atom)
+               (sub-page-properties-changed page-entity page-props-v filters-atom)
                [:div.content.pt-6
                 (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]])))))))
 
 (rum/defc references
-  [page-name]
+  [page-entity]
   (ui/catch-error
    (ui/component-error (if (config/db-based-graph? (state/get-current-repo))
                          "Linked References: Unexpected error."
                          "Linked References: Unexpected error. Please re-index your graph first."))
-   (references* page-name)))
+   (references* page-entity)))
 
 (rum/defcs unlinked-references-aux
   < rum/reactive db-mixins/query
   {:init
    (fn [state]
      (let [*result (atom nil)
-           [page-name *n-ref] (:rum/args state)]
-       (p/let [result (search/get-page-unlinked-refs page-name)]
+           [page *n-ref] (:rum/args state)]
+       (p/let [result (search/get-page-unlinked-refs (:db/id page))]
          (reset! *n-ref (count result))
          (reset! *result result))
        (assoc state ::result *result)))}
-  [state page-name _n-ref]
+  [state page _n-ref]
   (let [ref-blocks (rum/react (::result state))]
     (when (seq ref-blocks)
       [:div.references-blocks
        (let [ref-hiccup (block/->hiccup ref-blocks
-                                        {:id (str page-name "-unlinked-")
+                                        {:id (str (:block/original-name page) "-unlinked-")
                                          :ref? true
                                          :group-by-page? true
                                          :editor-box editor/box}
                                         {})]
-         (content/content page-name
+         (content/content (:block/name page)
                           {:hiccup ref-hiccup}))])))
 
 (rum/defcs unlinked-references < rum/reactive
   (rum/local nil ::n-ref)
-  [state page-name]
+  [state page]
   (let [n-ref (get state ::n-ref)]
-    (when page-name
-      (let [page-name (string/lower-case page-name)]
-        [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster-fade-in
-         [:div.content.flex-1
-          (ui/foldable
-           [:h2.font-medium (t :unlinked-references/reference-count @n-ref)]
-           (fn [] (unlinked-references-aux page-name n-ref))
-           {:default-collapsed? true
-            :title-trigger? true})]]))))
+    (when page
+      [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster-fade-in
+       [:div.content.flex-1
+        (ui/foldable
+         [:h2.font-medium (t :unlinked-references/reference-count @n-ref)]
+         (fn [] (unlinked-references-aux page n-ref))
+         {:default-collapsed? true
+          :title-trigger? true})]])))

@@ -88,7 +88,7 @@
             :auto-push-updates? (:auto-push-updates? state)
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
-                            (count (:block/_page (db/entity [:block/name (util/page-name-sanity-lc page)]))))}
+                            (count (:block/_page (db/entity (ldb/get-first-page-by-name (db/get-db) page)))))}
            (fipp/pprint {:width 20})
            with-out-str)]]
 

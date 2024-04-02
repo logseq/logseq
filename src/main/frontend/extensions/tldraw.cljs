@@ -25,7 +25,8 @@
             [frontend.ui :as ui]
             [frontend.components.whiteboard :as whiteboard]
             [cljs-bean.core :as bean]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.common.util :as common-util]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
@@ -114,7 +115,9 @@
                         (if (util/uuid-string? block-id-str)
                           (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
                           (:block/name (db/entity [:block/name (util/page-name-sanity-lc block-id-str)]))))
-   :exportToImage (fn [page-name options] (state/set-modal! #(export/export-blocks page-name (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
+   :exportToImage (fn [page-uuid-str options]
+                    (assert (common-util/uuid-string? page-uuid-str))
+                    (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage model/whiteboard-page?
    :isMobile util/mobile?
    :saveAsset save-asset-handler
@@ -133,17 +136,17 @@
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
-   :redirectToPage (fn [page-name-or-uuid]
-                     (let [page-name (or (when (util/uuid-string? page-name-or-uuid)
-                                           (:block/name (model/get-block-page (state/get-current-repo)
-                                                                              (parse-uuid page-name-or-uuid))))
-                                         page-name-or-uuid)
-                           page-exists? (model/page-exists? page-name)
-                           whiteboard? (model/whiteboard-page? page-name)]
-                       (when page-exists?
-                         (if whiteboard?
-                           (route-handler/redirect-to-whiteboard! page-name {:block-id page-name-or-uuid})
-                           (route-handler/redirect-to-page! (model/get-redirect-page-name page-name-or-uuid))))))})
+   :redirectToPage (fn [block-uuid-str]
+                     (when (and block-uuid-str (common-util/uuid-string? block-uuid-str))
+                       (let [block-id (parse-uuid block-uuid-str)
+                             page (model/get-block-page (state/get-current-repo) block-id)
+                             whiteboard? (model/whiteboard-page? page)]
+                         (when page
+                           (if whiteboard?
+                             (route-handler/redirect-to-page! (:block/uuid page)
+                                                              (when (not= block-id (:block/uuid page))
+                                                                {:block-id block-id}))
+                             (route-handler/redirect-to-page! (model/get-redirect-page-name (:block/name page))))))))})
 
 (defonce *transact-result (atom nil))
 

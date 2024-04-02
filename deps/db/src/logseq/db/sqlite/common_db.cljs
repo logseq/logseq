@@ -8,6 +8,15 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]))
 
+(defn get-pages-by-name
+  [db page-name]
+  (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
+
+(defn get-first-page-by-name
+  "Return the oldest page"
+  [db page-name]
+  (first (sort (map :e (get-pages-by-name db page-name)))))
+
 (comment
   (defn- get-built-in-files
     [db]
@@ -62,11 +71,10 @@
   (assoc b :block.temp/fully-loaded? true))
 
 (defn get-block-and-children
-  [db name children?]
-  (let [uuid? (common-util/uuid-string? name)
-        block (when uuid?
-                (let [id (uuid name)]
-                  (d/entity db [:block/uuid id])))
+  [db id children?]
+  (let [block (d/entity db (if (uuid? id)
+                             [:block/uuid id]
+                             id))
         get-children (fn [children]
                        (let [long-page? (> (count children) 500)]
                          (if long-page?
@@ -76,16 +84,16 @@
                            (->> (d/pull-many db '[*] (map :db/id children))
                                 (map #(with-block-refs db %))
                                 (map mark-block-fully-loaded)))))]
-    (if (and block (not (:block/name block))) ; not a page
-      (let [block' (->> (d/pull db '[*] (:db/id block))
-                        (with-parent-and-left db)
-                        (with-block-refs db)
-                        mark-block-fully-loaded)]
-        (cond->
-         {:block block'}
-          children?
-          (assoc :children (get-children (:block/_parent block)))))
-      (when-let [block (or block (d/entity db [:block/name name]))]
+    (when block
+      (if (:block/page block) ; not a page
+        (let [block' (->> (d/pull db '[*] (:db/id block))
+                          (with-parent-and-left db)
+                          (with-block-refs db)
+                          mark-block-fully-loaded)]
+          (cond->
+           {:block block'}
+            children?
+            (assoc :children (get-children (:block/_parent block)))))
         (cond->
          {:block (->> (d/pull db '[*] (:db/id block))
                       (with-tags db)
@@ -125,7 +133,8 @@
 (defn get-favorites
   "Favorites page and its blocks"
   [db]
-  (let [{:keys [block children]} (get-block-and-children db common-config/favorites-page-name true)]
+  (let [page-id (get-first-page-by-name db common-config/favorites-page-name)
+        {:keys [block children]} (get-block-and-children db page-id true)]
     (when block
       (concat [block]
               (->> (keep :block/link children)
@@ -135,7 +144,8 @@
 
 (defn get-full-page-and-blocks
   [db page-name]
-  (let [data (get-block-and-children db (common-util/page-name-sanity-lc page-name) true)
+  (let [page-id (get-first-page-by-name db page-name)
+        data (get-block-and-children db page-id true)
         result (first (tree-seq map? :children data))]
     (cons (:block result)
           (map #(dissoc % :children) (:children result)))))

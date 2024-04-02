@@ -57,7 +57,7 @@
       (is (= (model/get-class-objects repo (:db/id class))
              [(:db/id (db/entity [:block/uuid fbid]))]))
 
-      (testing "namespace classes"
+      (testing "classes parent"
         (page-handler/create! "class2" opts)
       ;; set class2's parent to class1
         (let [class2 (db/entity [:block/name "class2"])]

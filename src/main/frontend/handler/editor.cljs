@@ -3473,12 +3473,14 @@
                       (state/get-current-page)
                       (date/today))]
     (let [block-id (or root-block (parse-uuid page))
+          page-id (when-not block-id
+                    (ldb/get-first-page-by-name (db/get-db) page))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
-                   (db/get-page-blocks-no-cache page))
+                   (db/get-page-blocks-no-cache page-id))
           root-block (or block-id root-block)]
       (if incremental?
-        (let [blocks (tree/blocks->vec-tree blocks (or block-id page))]
+        (let [blocks (tree/blocks->vec-tree blocks (or block-id page-id))]
           (->>
            (cond->> blocks
              root-block
@@ -3882,7 +3884,7 @@
 
 (defn block->data-transfer!
   "Set block or page name to the given event's dataTransfer. Used in dnd."
-  [block-or-page-name event]
+  [block-or-page-name event page?]
   (.setData (gobj/get event "dataTransfer")
-            (if (db-model/page? block-or-page-name) "page-name" "block-uuid")
+            (if page? "page-name" "block-uuid")
             (str block-or-page-name)))

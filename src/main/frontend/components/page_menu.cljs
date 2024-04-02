@@ -21,37 +21,33 @@
             [logseq.common.path :as path]))
 
 (defn- delete-page!
-  [page-name]
-  (page-handler/<delete! page-name
+  [page]
+  (page-handler/<delete! (:block/uuid page)
                         (fn []
-                          (notification/show! (str "Page " page-name " was deleted successfully!")
+                          (notification/show! (str "Page " (:block/original-name page) " was deleted successfully!")
                                               :success))
                         {:error-handler (fn [{:keys [msg]}]
                                           (notification/show! msg :warning))})
   (state/close-modal!))
 
 (defn delete-page-confirm!
-  [page-name]
-  (when-not (string/blank? page-name)
+  [page]
+  (when page
     (-> (shui/dialog-confirm!
-          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
-                   [:span.top-1.relative
-                    (shui/tabler-icon "alert-triangle")]
-                   (if (config/db-based-graph? (state/get-current-repo))
-                     (t :page/db-delete-confirmation)
-                     (t :page/delete-confirmation))]
-           :content [:p.opacity-60 (str "- " page-name)]})
-      (p/then #(delete-page! page-name)))))
+         {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
+                  [:span.top-1.relative
+                   (shui/tabler-icon "alert-triangle")]
+                  (if (config/db-based-graph? (state/get-current-repo))
+                    (t :page/db-delete-confirmation)
+                    (t :page/delete-confirmation))]
+          :content [:p.opacity-60 (str "- " (:block/original-name page))]})
+        (p/then #(delete-page! page)))))
 
 (defn ^:large-vars/cleanup-todo page-menu
-  [page-name]
-  (when-let [page-name (or
-                        page-name
-                        (state/get-current-page)
-                        (state/get-current-whiteboard))]
-    (let [page-name (util/page-name-sanity-lc page-name)
+  [page]
+  (when page
+    (let [page-name (:block/name page)
           repo (state/sub :git/current-repo)
-          page (db/entity repo [:block/name page-name])
           page-original-name (:block/original-name page)
           whiteboard? (contains? (set (:block/type page)) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
@@ -68,7 +64,7 @@
                                     (file-sync-handler/current-graph-sync-on?)
                                     (file-sync-handler/get-current-graph-uuid))
           db-based? (config/db-based-graph? repo)]
-      (when (and page (not block?))
+      (when (not block?)
         (->>
          [(when-not config/publishing?
             {:title   (if favorited?
@@ -105,7 +101,7 @@
                         (and db-based?
                              (:logseq.property/built-in? page)))
             {:title   (t :page/delete)
-             :options {:on-click #(delete-page-confirm! page-name)}})
+             :options {:on-click #(delete-page-confirm! page)}})
 
           (when (and (not (mobile-util/native-platform?))
                      (state/get-current-page))
@@ -132,7 +128,7 @@
             {:title   (t :export-page)
              :options {:on-click #(shui/dialog-open!
                                    (fn []
-                                     (export/export-blocks (:block/name page) {:whiteboard? whiteboard?}))
+                                     (export/export-blocks (:block/uuid page) {:whiteboard? whiteboard?}))
                                    {:class "w-auto md:max-w-4xl max-h-[80vh] overflow-y-auto"})}})
 
           (when (util/electron?)

@@ -161,7 +161,7 @@
                  :as _opts}]
   (let [db @conn
         page (d/entity db page-id)]
-    (when-not (or (ldb/whiteboard-page? db page)
+    (when-not (or (ldb/whiteboard-page? page)
                   (ldb/hidden-page? page))
       (let [transact-opts (if replace-tx? {:replace? true} {})
             *fix-tx-data (atom [])]

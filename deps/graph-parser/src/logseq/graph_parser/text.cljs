@@ -47,14 +47,6 @@
        :else
        (remove-level-space-aux! text block-pattern space? trim-left?)))))
 
-(defn namespace-page?
-  [page-name]
-  (and (string? page-name)
-       (string/includes? page-name "/")
-       (not (string/starts-with? page-name "../"))
-       (not (string/starts-with? page-name "./"))
-       (not (common-util/url? page-name))))
-
 (defn parse-non-string-property-value
   "Return parsed non-string property value or nil if none is found"
   [v]

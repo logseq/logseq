@@ -132,7 +132,7 @@
     (let [format (name (get page-block :block/format (:preferred-format context)))
           date-formatter (:date-formatter context)
           title (string/capitalize (:block/name page-block))
-          whiteboard-page? (ldb/whiteboard-page? @conn page-block)
+          whiteboard-page? (ldb/whiteboard-page? page-block)
           format (if whiteboard-page? "edn" format)
           journal-page? (worker-date/valid-journal-title? title date-formatter)
           journal-title (worker-date/normalize-journal-title title date-formatter)
