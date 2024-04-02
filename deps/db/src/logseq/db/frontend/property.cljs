@@ -212,16 +212,9 @@
   [repo db block]
   (= :whiteboard-shape (get-block-property-value repo db block :logseq.property/ls-type)))
 
-(defn get-by-ident-or-name
-  "Gets a property by db-ident or name if it's a user property"
-  [db ident-or-name]
-  (if (and (keyword? ident-or-name) (namespace ident-or-name))
-    (d/entity db ident-or-name)
-    (d/entity db [:block/name (common-util/page-name-sanity-lc (name ident-or-name))])))
-
 (defn get-closed-property-values
-  [db ident-or-name]
-  (when-let [property (get-by-ident-or-name db ident-or-name)]
+  [db property-id]
+  (when-let [property (d/entity db property-id)]
     (get-in property [:block/schema :values])))
 
 (defn closed-value-name
