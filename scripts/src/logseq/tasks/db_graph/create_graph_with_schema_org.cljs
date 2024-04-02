@@ -391,7 +391,7 @@
         conn (create-graph/init-conn dir db-name)
         init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
                                     options)
-        blocks-tx (create-graph/create-blocks-tx @conn init-data)]
+        blocks-tx (create-graph/create-blocks-tx init-data)]
     (println "Generating" (str (count (filter :block/name blocks-tx)) " pages with "
                                (count (:pages-and-blocks init-data)) " classes and "
                                (count (:properties init-data)) " properties ..."))

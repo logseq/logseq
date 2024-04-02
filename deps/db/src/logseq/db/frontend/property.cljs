@@ -239,6 +239,14 @@
              (string/starts-with? k-name "logseq.task")
              (string/starts-with? k-name "user.property")))))
 
+(defn properties
+  "Fetch all properties of entity like :block/properties used to do.
+   Use this in deps because nbb can't use :block/properties from entity-plus"
+  [e]
+  (->> (into {} e)
+       (filter (fn [[k _]] (property? k)))
+       (into {})))
+
 ;; TODO: db ident should obey clojure's rules for keywords
 (defn get-db-ident-from-name
   [property-name]

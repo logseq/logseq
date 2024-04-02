@@ -2,8 +2,7 @@
   "Util fns for building core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.default :as default-db]
-            [datascript.core :as d]
-            [clojure.string :as string]))
+            [datascript.core :as d]))
 
 (defonce hidden-page-name-prefix "$$$")
 

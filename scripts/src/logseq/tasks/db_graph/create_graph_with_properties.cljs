@@ -108,7 +108,16 @@
         {:block/content (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
         {:block/content (str "{{query (property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
         {:block/content (str "{{query (property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
-        {:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
+        #_{:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
+
+      ;; Property values
+      ;; Needs to be before page property pages b/c they are referenced by them
+      {:page {:block/name "page 1"}
+       :blocks
+       [{:block/content "yee"}
+        {:block/content "haw"}]}
+      {:page {:block/name "page 2"}}
+      {:page {:block/name "page 3"}}
 
       ;; Page property pages and queries
       {:page {:block/name "default page" :properties {:default "yolo"}}}
@@ -126,7 +135,7 @@
       {:page {:block/name "date page" :properties {:date [:page (date-journal-title today)]}}}
       {:page {:block/name "date-many page" :properties {:date-many #{[:page (date-journal-title today)]
                                                                      [:page (date-journal-title yesterday)]}}}}
-      {:page {:block/name "date-closed page" :properties {:date-closed (random-page-closed-value :date-closed)}}}
+      #_{:page {:block/name "date-closed page" :properties {:date-closed (random-page-closed-value :date-closed)}}}
       {:page {:block/original-name "Page Property Queries"}
        :blocks
        [{:block/content "{{query (page-property :default \"yolo\")}}"}
@@ -143,15 +152,7 @@
         {:block/content (str "{{query (page-property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
         {:block/content (str "{{query (page-property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
         {:block/content (str "{{query (page-property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
-        {:block/content (str "{{query (page-property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
-
-      ;; Property values
-      {:page {:block/name "page 1"}
-       :blocks
-       [{:block/content "yee"}
-        {:block/content "haw"}]}
-      {:page {:block/name "page 2"}}
-      {:page {:block/name "page 3"}}]
+        {:block/content (str "{{query (page-property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}]
 
      ;; Properties
      :properties
@@ -162,7 +163,7 @@
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:closed-values (closed-values-config (keyword (str (name %) "-closed")))
                                 :block/schema {:type %}})
-                      [:default :url :number :page :date]))
+                      [:default :url :number #_:page #_:date]))
           (into {}))}))
 
 (def spec
@@ -185,7 +186,6 @@
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
         blocks-tx (create-graph/create-blocks-tx
-                   @conn
                    (create-init-data)
                    {:property-uuids {:icon (:block/uuid (d/entity @conn :logseq.property/icon))}})]
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
