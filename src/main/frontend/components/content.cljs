@@ -375,7 +375,7 @@
 
 (rum/defc page-title-custom-context-menu-content
   [page]
-  (when-not (string/blank? page)
+  (when page
     (let [page-menu-options (page-menu/page-menu page)]
       [:.menu-links-wrapper
        (for [{:keys [title options]} page-menu-options]

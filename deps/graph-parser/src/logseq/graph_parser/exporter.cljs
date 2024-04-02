@@ -603,7 +603,7 @@
                                 ;; block/uuid was particularly bad as it actually changed the page's identity across files
                                 disallowed-attributes [:block/name :block/uuid :block/format :block/journal? :block/original-name :block/journal-day
                                                        :block/created-at :block/updated-at]
-                                allowed-attributes [:block/properties :block/tags :block/alias :block/namespace :class/parent :block/type]
+                                allowed-attributes [:block/properties :block/tags :block/alias :class/parent :block/type]
                                 block-changes (select-keys % allowed-attributes)]
                             (when-let [ignored-attrs (not-empty (apply dissoc % (into disallowed-attributes allowed-attributes)))]
                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/original-name %)) ": "

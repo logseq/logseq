@@ -72,33 +72,27 @@
   wrong new page with that name (#3511). page-name can be a block name or uuid"
   ([page-name]
    (redirect-to-page! page-name {}))
-  ([page-name {:keys [anchor push click-from-recent?]
+  ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard?]
                :or {click-from-recent? false}}]
    (when (or (uuid? page-name) (seq page-name))
+     ;; Always skip onboarding when loading an existing whiteboard
+     (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
      (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
                                          click-from-recent?)
-     (let [m (cond->
-               (default-page-route page-name)
+     (if (and (= name (state/get-current-whiteboard)) block-id)
+       (state/focus-whiteboard-shape block-id)
+       (let [m (cond->
+                (default-page-route (str page-name))
 
-               anchor
-               (assoc :query-params {:anchor anchor})
+                 block-id
+                 (assoc :query-params {:block-id anchor})
 
-              (boolean? push)
-              (assoc :push push))]
-       (redirect! m)))))
+                 anchor
+                 (assoc :query-params {:anchor anchor})
 
-(defn redirect-to-whiteboard!
-  ([name]
-   (redirect-to-whiteboard! name nil))
-  ([name {:keys [block-id new-whiteboard? click-from-recent?]}]
-   ;; Always skip onboarding when loading an existing whiteboard
-   (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
-   (recent-handler/add-page-to-recent! (state/get-current-repo) name click-from-recent?)
-   (if (= name (state/get-current-whiteboard))
-     (state/focus-whiteboard-shape block-id)
-     (redirect! {:to :whiteboard
-                 :path-params {:name (str name)}
-                 :query-params (merge {:block-id block-id})}))))
+                 (boolean? push)
+                 (assoc :push push))]
+         (redirect! m))))))
 
 (defn get-title
   [name path-params]

@@ -33,8 +33,7 @@
    (concat
     [(:block/parent block)
      (:block/left block)
-     (:block/page block)
-     (:block/namespace block)]
+     (:block/page block)]
     (:block/tags block)
     (:block/alias block)
     (:block/refs block)

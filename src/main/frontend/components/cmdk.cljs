@@ -410,7 +410,7 @@
           page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
           original-name (:block/original-name page)]
       (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-whiteboard! original-name)
+        (route-handler/redirect-to-page! original-name)
         (route-handler/redirect-to-page! original-name)))
     (state/close-modal!)))
 
@@ -425,7 +425,7 @@
            (let [page-name (:block/name page)]
              (cond
                (= (:block/type page) "whiteboard")
-               (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
+               (route-handler/redirect-to-page! page-name {:block-id block-id})
                (model/parents-collapsed? (state/get-current-repo) block-id)
                (route-handler/redirect-to-page! block-id)
                :else

@@ -31,7 +31,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]
             [electron.ipc :as ipc]
             [frontend.context.i18n :refer [t]]
             [frontend.persist-db.browser :as db-browser]
@@ -86,12 +85,14 @@
   (when-let [db (conn/get-db)]
     (let [repo (state/get-current-repo)]
       (if (config/db-based-graph? repo)
-        (let [blocks (ldb/sort-by-left
-                      (ldb/get-page-blocks db common-config/favorites-page-name {})
-                      (d/entity db [:block/name common-config/favorites-page-name]))]
-          (keep (fn [block]
-                  (when-let [block-db-id (:db/id (:block/link block))]
-                    (d/entity db block-db-id))) blocks))
+        (when-let [page-id (ldb/get-first-page-by-name db common-config/favorites-page-name)]
+          (let [page (d/entity db page-id)
+                blocks (ldb/sort-by-left
+                        (ldb/get-page-blocks db page-id {})
+                        page)]
+            (keep (fn [block]
+                    (when-let [block-db-id (:db/id (:block/link block))]
+                      (d/entity db block-db-id))) blocks)))
         (let [page-names (->> (:favorites (state/sub-config))
                               (remove string/blank?)
                               (filter string?)
@@ -125,25 +126,34 @@
         (<favorite-page! page-name)))))
 
 (defn rename!
-  [old-name new-name & {:as _opts}]
+  [page-uuid-or-old-name new-name & {:as _opts}]
   (when-let [^js worker @db-browser/*worker]
     (p/let [repo (state/get-current-repo)
-            result (.page-rename worker repo old-name new-name)
+            page-uuid (cond
+                        (uuid? page-uuid-or-old-name)
+                        page-uuid-or-old-name
+                        (common-util/uuid-string? page-uuid-or-old-name)
+                        page-uuid-or-old-name
+                        :else
+                        (:block/uuid (db/entity (ldb/get-first-page-by-name (db/get-db) page-uuid-or-old-name))))
+            result (.page-rename worker repo (str page-uuid) new-name)
             result' (:result (bean/->clj result))]
       (case (if (string? result') (keyword result') result')
         :built-in-page
-        (notification/show! "Built-in page's name cannot be modified" :error)
+        (notification/show! "Built-in page's name cannot be modified" :warning)
         :invalid-empty-name
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
-        :merge-whiteboard-pages
-        (notification/show! "Can't merge whiteboard pages" :error)
+        (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
+        :rename-page-exists
+        (notification/show! "Another page with the new name exists already" :warning)
         nil))))
 
 (defn <reorder-favorites!
   [favorites]
-  (let [conn (conn/get-db false)]
-    (when-let [favorites-page-entity (d/entity @conn [:block/name common-config/favorites-page-name])]
-      (let [favorite-page-block-db-id-coll
+  (let [conn (conn/get-db false)
+        db @conn]
+    (when-let [page-id (ldb/get-first-page-by-name db common-config/favorites-page-name)]
+      (let [favorites-page-entity (d/entity db page-id)
+            favorite-page-block-db-id-coll
             (keep (fn [page-name]
                     (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
                             :db/id))
@@ -242,14 +252,14 @@
         (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
-  [page-name]
-  (let [properties (db/get-page-properties page-name)]
-    (if (config/db-based-graph? (state/get-current-repo))
-      (pu/lookup properties :logseq.property/filters)
-      (let [properties-str (or (:filters properties) "{}")]
-        (try (reader/read-string properties-str)
-             (catch :default e
-               (log/error :syntax/filters e)))))))
+  [page]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (:logseq.property/filters page)
+    (let [properties (:block/properties page)
+          properties-str (or (:filters properties) "{}")]
+      (try (reader/read-string properties-str)
+           (catch :default e
+             (log/error :syntax/filters e))))))
 
 (defn save-filter!
   [page-name filter-state]
@@ -369,14 +379,13 @@
               template (state/get-default-journal-template)
               create-f (fn []
                          (p/do!
-                           (<create! title {:redirect? false
-                                          :split-namespace? false
-                                          :create-first-block? (not template)
-                                          :journal? true
-                                          :today-journal? true})
-                           (state/pub-event! [:journal/insert-template today-page])
-                           (ui-handler/re-render-root!)
-                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
+                          (<create! title {:redirect? false
+                                           :create-first-block? (not template)
+                                           :journal? true
+                                           :today-journal? true})
+                          (state/pub-event! [:journal/insert-template today-page])
+                          (ui-handler/re-render-root!)
+                          (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
           (when (db/page-empty? repo today-page)
             (if (config/db-based-graph? repo)
               (let [page-exists (db/get-page today-page)]

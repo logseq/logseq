@@ -49,7 +49,8 @@
             [frontend.modules.layout.core]
             [frontend.handler.code :as code-handler]
             [frontend.handler.search :as search-handler]
-            [logseq.api.block :as api-block]))
+            [logseq.api.block :as api-block]
+            [logseq.db :as ldb]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -61,6 +62,7 @@
                 (and (vector? id-or-name) (= (count id-or-name) 2)) id-or-name
                 (number? id-or-name) id-or-name
                 (and (string? id-or-name) (util/uuid-string? id-or-name)) [:block/uuid (uuid id-or-name)]
+                ;; Can still use block/name lookup ref here because the db_worker convert it to the actual eid
                 :else [:block/name (util/page-name-sanity-lc id-or-name)])]
       (db-async/<pull (state/get-current-repo) eid))))
 
@@ -642,7 +644,8 @@
                                          [nil (uuid block-uuid-or-page-name)]
                                          [block-uuid-or-page-name nil])
                 page-name              (when page-name (util/page-name-sanity-lc page-name))
-                _                      (when (and page-name (not (db/entity [:block/name page-name])))
+                _                      (when (and page-name
+                                                  (nil? (ldb/get-first-page-by-name (db/get-db) page-name)))
                                          (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
                 custom-uuid            (or customUUID (:id properties))
                 custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
@@ -816,8 +819,9 @@
 (def ^:export get_current_page_blocks_tree
   (fn []
     (when-let [page (state/get-current-page)]
-      (let [blocks (db-model/get-page-blocks-no-cache page)
-            blocks (outliner-tree/blocks->vec-tree blocks page)
+      (let [page-id (ldb/get-first-page-by-name (db/get-db) page)
+            blocks (db-model/get-page-blocks-no-cache page-id)
+            blocks (outliner-tree/blocks->vec-tree blocks page-id)
             ;; clean key
             blocks (sdk-utils/normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
@@ -825,9 +829,9 @@
 (def ^:export get_page_blocks_tree
   (fn [id-or-page-name]
     (p/let [_ (<ensure-page-loaded id-or-page-name)]
-      (when-let [page-name (:block/name (db-model/get-page id-or-page-name))]
-        (let [blocks (db-model/get-page-blocks-no-cache page-name)
-              blocks (outliner-tree/blocks->vec-tree blocks page-name)
+      (when-let [page-id (:db/id (db-model/get-page id-or-page-name))]
+        (let [blocks (db-model/get-page-blocks-no-cache page-id)
+              blocks (outliner-tree/blocks->vec-tree blocks page-id)
               blocks (sdk-utils/normalize-keyword-for-json blocks)]
           (bean/->js blocks))))))
 
@@ -837,24 +841,22 @@
           block (db-async/<get-block repo page-name-or-uuid :children? false)
           ;; load refs to db
           _ (when-let [id (:db/id block)] (db-async/<get-block-refs repo id))
-          page-name (:block/name block)
-          ref-blocks (if page-name
-                       (db-model/get-page-referenced-blocks-full page-name)
-                       (db-model/get-block-referenced-blocks (:block/uuid block)))
+          page? (nil? (:block/page block))
+          ref-blocks (if page?
+                       (db-model/get-page-referenced-blocks-full (:db/id block))
+                       (db-model/get-block-referenced-blocks (:db/id block)))
           ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
     (bean/->js (sdk-utils/normalize-keyword-for-json ref-blocks))))
 
 (defn ^:export get_pages_from_namespace
   [ns]
-  (when-let [repo (and ns (state/get-current-repo))]
-    (when-let [pages (db-model/get-namespace-pages repo ns)]
-      (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
+  (when-let [_repo (and ns (state/get-current-repo))]
+    (bean/->js nil)))
 
 (defn ^:export get_pages_tree_from_namespace
   [ns]
-  (when-let [repo (and ns (state/get-current-repo))]
-    (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
-      (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
+  (when-let [_repo (and ns (state/get-current-repo))]
+    (bean/->js nil)))
 
 (defn last-child-of-block
   [block]

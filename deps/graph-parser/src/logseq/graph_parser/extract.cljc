@@ -251,16 +251,9 @@
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
-          namespace-pages (let [page (:block/original-name page-map)]
-                            (when (text/namespace-page? page)
-                              (->> (common-util/split-namespace-pages page)
-                                   (map (fn [page]
-                                          (-> (gp-block/page-name->map page true db true date-formatter)
-                                              (assoc :block/format format)))))))
           pages (->> (concat
                       [page-map]
-                      @ref-pages
-                      namespace-pages)
+                      @ref-pages)
                      ;; remove block references
                      (remove vector?)
                      (remove nil?))

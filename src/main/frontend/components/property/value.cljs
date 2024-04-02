@@ -269,7 +269,8 @@
                                    (let [repo (state/get-current-repo)
                                          class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) string-classes)
                                          descendent-classes (->> class-names
-                                                                 (mapcat #(db/get-namespace-pages repo %))
+                                                                 ;; FIXME:
+                                                                 ;; (mapcat #(db/get-namespace-pages repo %))
                                                                  (map :block/original-name))]
                                      (->> (concat class-names descendent-classes)
                                           (filter #(string/includes? % class-input))

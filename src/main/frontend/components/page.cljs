@@ -4,7 +4,6 @@
             [frontend.components.block :as component-block]
             [frontend.components.content :as content]
             [frontend.components.editor :as editor]
-            [frontend.components.hierarchy :as hierarchy]
             [frontend.components.plugins :as plugins]
             [frontend.components.query :as query]
             [frontend.components.reference :as reference]
@@ -235,13 +234,10 @@
 (rum/defc page-title-editor < rum/reactive
   [page {:keys [*input-value *title-value *edit? untitled? page-name old-name whiteboard-page?]}]
   (let [input-ref (rum/create-ref)
-        title (:block/original-name page)
         collide? #(and (not= (util/page-name-sanity-lc page-name)
-                         (util/page-name-sanity-lc @*title-value))
-                    (db/page-exists? page-name)
-                    (db/page-exists? @*title-value))
-        rename-fn (fn [old-name new-name]
-                    (page-handler/rename! old-name new-name))
+                             (util/page-name-sanity-lc @*title-value))
+                       (db/page-exists? page-name)
+                       (db/page-exists? @*title-value))
         rollback-fn #(let [old-name (if untitled? "" old-name)]
                        (reset! *title-value old-name)
                        (gobj/set (rum/deref input-ref) "value" old-name)
@@ -269,8 +265,8 @@
 
                     :else
                     (p/do!
-                      (rename-fn (or title page-name) @*title-value)
-                      (js/setTimeout #(reset! *edit? false) 100)))
+                     (page-handler/rename! (:block/uuid page) @*title-value)
+                     (js/setTimeout #(reset! *edit? false) 100)))
                   (util/stop e))]
     [:input.edit-input.p-0.focus:outline-none.ring-none
      {:type          "text"
@@ -348,7 +344,8 @@
             {:class (when-not whiteboard-page? "title")
              :on-pointer-down (fn [e]
                                 (when (util/right-click? e)
-                                  (state/set-state! :page-title/context {:page page-name})))
+                                  (state/set-state! :page-title/context {:page page-name
+                                                                         :page-entity page})))
              :on-click (fn [e]
                          (when-not (= (.-nodeName (.-target e)) "INPUT")
                            (.preventDefault e)
@@ -553,19 +550,15 @@
                  (when page
                    [:div {:key "page-references"}
                     (rum/with-key
-                      (reference/references route-page-name)
+                      (reference/references page)
                       (str route-page-name "-refs"))]))
 
                (when (contains? (:block/type page) "class")
                  (class-component/class-children page))
 
-               (when-not block-or-whiteboard?
-                 (when (not journal?)
-                   (hierarchy/structures route-page-name)))
-
                (when-not (or block-or-whiteboard? sidebar? home?)
                  [:div {:key "page-unlinked-references"}
-                  (reference/unlinked-references route-page-name)])])))))))
+                  (reference/unlinked-references page)])])))))))
 
 (rum/defcs page < rum/static
   [state option]
@@ -1041,20 +1034,21 @@
 
      [:div.pt-6.flex.justify-end.gap-4
       (ui/button
-        (t :cancel)
-        :theme :gray
-        :on-click close-fn)
+       (t :cancel)
+       :theme :gray
+       :on-click close-fn)
 
       (ui/button
        (t :yes)
        :on-click (fn []
                    (close-fn)
                    (let [failed-pages (atom [])]
-                     (p/let [_ (p/all (map (fn [page-name]
-                                             (page-handler/<delete! page-name nil
+                     (p/let [_ (p/all (map (fn [page]
+                                             (page-handler/<delete! (:block/uuid page) nil
                                                                     {:error-handler
                                                                      (fn []
-                                                                       (swap! failed-pages conj page-name))})) (map :block/name pages)))]
+                                                                       (swap! failed-pages conj (:block/name page)))}))
+                                        pages))]
                        (if (seq @failed-pages)
                          (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
                                              :warning false)

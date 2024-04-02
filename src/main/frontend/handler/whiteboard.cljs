@@ -144,7 +144,7 @@
         repo (state/get-current-repo)
         db-id-nonces (or
                       (get-in @*last-shapes-nonce [repo page-name])
-                      (set (->> (model/get-whiteboard-id-nonces repo page-name)
+                      (set (->> (model/get-whiteboard-id-nonces repo (:db/id page-block))
                                 (map #(update % :id str)))))
         {:keys [page-block new-shapes deleted-shapes upserted-blocks delete-blocks metadata] :as result}
         (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)]
@@ -204,16 +204,15 @@
    (p/let [uuid (or (and name (parse-uuid name)) (d/squuid))
            name (or name (str uuid))
            _ (db/transact! (get-default-new-whiteboard-tx name uuid))]
-     name)))
+     uuid)))
 
 (defn <create-new-whiteboard-and-redirect!
   ([]
    (<create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
    (when-not config/publishing?
-     (p/do!
-       (<create-new-whiteboard-page! name)
-       (route-handler/redirect-to-whiteboard! name {:new-whiteboard? true})))))
+     (p/let [id (<create-new-whiteboard-page! name)]
+       (route-handler/redirect-to-page! id {:new-whiteboard? true})))))
 
 (defn ->logseq-portal-shape
   [block-id point]

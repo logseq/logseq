@@ -3,7 +3,6 @@
   (:require [promesa.core :as p]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.util :as util]
             [frontend.db.utils :as db-utils]
             [frontend.db.async.util :as db-async-util]
             [frontend.db.file-based.async :as file-async]
@@ -16,7 +15,8 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [logseq.db :as ldb]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.util :as util]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -70,16 +70,6 @@
         (map :block/original-name properties))
       (file-async/<file-based-get-all-properties graph))))
 
-(comment
-  (defn <get-pages
-    [graph]
-    (p/let [result (<q graph
-                       '[:find [?page-original-name ...]
-                         :where
-                         [?page :block/name ?page-name]
-                         [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]])]
-      (remove db-model/hidden-page? result))))
-
 (defn <get-property-values
   [graph property]
   (when-not (config/db-based-graph? graph)
@@ -106,12 +96,13 @@
             (util/uuid-string? name')
             (db/entity [:block/uuid (uuid name')])
             :else
-            (db/entity [:block/name (util/page-name-sanity-lc name')]))]
+            (db/entity (ldb/get-first-page-by-name (db/get-db) name')))
+        uuid-str (or (str (:block/uuid e)) name')]
     (if (:block.temp/fully-loaded? e)
       e
       (when-let [^Object sqlite @db-browser/*worker]
         (state/update-state! :db/async-queries (fn [s] (conj s name')))
-        (p/let [result (.get-block-and-children sqlite graph name' children?)
+        (p/let [result (.get-block-and-children sqlite graph uuid-str children?)
                 {:keys [block children] :as result'} (ldb/read-transit-str result)
                 conn (db/get-db graph false)
                 block-and-children (cons block children)

@@ -102,13 +102,14 @@
 
 (defn- find-block-in-favorites-page
   [page-block-uuid]
-  (let [db (conn/get-db)
-        blocks (ldb/get-page-blocks db common-config/favorites-page-name {})]
-    (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
-      (some (fn [block]
-              (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
-                block))
-            blocks))))
+  (let [db (conn/get-db)]
+    (when-let [page-id (ldb/get-first-page-by-name db common-config/favorites-page-name)]
+      (let [blocks (ldb/get-page-blocks db page-id {})]
+        (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
+          (some (fn [block]
+                  (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
+                    block))
+                blocks))))))
 
 (defn favorited?-v2
   [page-block-uuid]
@@ -144,17 +145,20 @@
   "Deletes a page. If delete is successful calls ok-handler. Otherwise calls error-handler
    if given. Note that error-handler is being called in addition to error messages that worker
    already provides"
-  [page-name ok-handler & {:keys [error-handler]}]
-  (when page-name
-    (when-let [^Object worker @state/*db-worker]
-      (-> (p/let [repo (state/get-current-repo)
-                  res (.page-delete worker repo page-name)
-                  res' (gobj/get res "result")]
-            (if res'
-              (when ok-handler (ok-handler))
-              (when error-handler (error-handler))))
-          (p/catch (fn [error]
-                     (js/console.error error)))))))
+  [page-uuid-or-name ok-handler & {:keys [error-handler]}]
+  (when page-uuid-or-name
+    (assert (or (uuid? page-uuid-or-name) (string? page-uuid-or-name)))
+    (when-let [page-uuid (or (and (uuid? page-uuid-or-name) page-uuid-or-name)
+                             (:block/uuid (db/entity (ldb/get-first-page-by-name (db/get-db) page-uuid-or-name))))]
+      (when-let [^Object worker @state/*db-worker]
+        (-> (p/let [repo (state/get-current-repo)
+                    res (.page-delete worker repo (str page-uuid))
+                    res' (gobj/get res "result")]
+              (if res'
+                (when ok-handler (ok-handler))
+                (when error-handler (error-handler))))
+            (p/catch (fn [error]
+                       (js/console.error error))))))))
 
 ;; other fns
 ;; =========
@@ -202,13 +206,12 @@
   (let [db-based?           (config/db-based-graph? repo)
         old-page-name       (common-util/page-name-sanity-lc old-name)
         new-page-name       (common-util/page-name-sanity-lc new-name)
-        page (db/entity [:block/name new-page-name])
         redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
                      (common-util/page-name-sanity-lc old-page-name))]
 
     ;; Redirect to the newly renamed page
     (when redirect?
-      (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)
+      (route-handler/redirect! {:to          :page
                                 :push        false
                                 :path-params {:name new-page-name}}))
 

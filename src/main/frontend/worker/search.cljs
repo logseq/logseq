@@ -9,7 +9,8 @@
             [frontend.search.fuzzy :as fuzzy]
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]))
 
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))
@@ -225,18 +226,8 @@
 
 (defn whiteboard-page?
   "Given a page name or a page object, check if it is a whiteboard page"
-  [db page]
-  (cond
-    (string? page)
-    (let [page (d/entity db [:block/name page])]
-      (or
-       (= (:block/type page) "whiteboard")
-       (contains? (set (:block/type page)) "whiteboard")))
-
-    (seq page)
-    (contains? (set (:block/type page)) "whiteboard")
-
-    :else false))
+  [db uuid]
+  (ldb/whiteboard-page? (d/entity db [:block/uuid uuid])))
 
 (defn block->index
   "Convert a block to the index for searching"
@@ -246,7 +237,7 @@
         block? (nil? name)
         db-based? (sqlite-util/db-based-graph? repo)]
     (when-not (or
-               (and page? name (whiteboard-page? db name))
+               (and page? name (whiteboard-page? db uuid))
                (and block? (> (count content) 10000))
                (and (empty? properties)
                     (or (and block? (string/blank? content))

@@ -79,7 +79,7 @@
                    (not whiteboard?))
             (dissoc-request! request-id)
             (let [tree-or-blocks (if whiteboard? blocks
-                                     (otree/blocks->vec-tree repo @conn blocks (:block/name page-block)))]
+                                     (otree/blocks->vec-tree repo @conn blocks (:db/id page-block)))]
               (if page-block
                 (file/save-tree! repo conn page-block tree-or-blocks blocks-just-deleted? context request-id)
                 (do

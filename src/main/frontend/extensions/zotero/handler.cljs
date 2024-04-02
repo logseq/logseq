@@ -78,6 +78,7 @@
         (p/do!
          (when-not (str/blank? page-name)
            (if (db/page-exists? (str/lower-case page-name))
+             ;; FIXME: Overwrite if it has a zotero tag (which means created by Zotero)
              (if (setting/setting :overwrite-mode?)
                (page-handler/<delete!
                 page-name

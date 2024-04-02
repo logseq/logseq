@@ -531,7 +531,7 @@
 
 (defn- get-property-hidden-page
   [property]
-  (let [page-name (str db-property-util/hidden-page-name-prefix (:db/ident property))]
+  (let [page-name (str db-property-util/hidden-page-name-prefix (:block/uuid property))]
     (or (db/entity [:block/name page-name])
         (db-property-util/build-property-hidden-page property))))
 

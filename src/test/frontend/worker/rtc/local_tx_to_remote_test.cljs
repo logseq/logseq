@@ -73,11 +73,4 @@
         [(d/entity @conn [:block/uuid uuid1])]
         opts))
       (let [ops (gen-ops-fn)]
-        (is (contains? (set ops) [:remove {:block-uuids [uuid1]}]))))
-
-    (testing "create 'aaa/bbb/ccc' namespace-page"
-      (let [page-uuid (random-uuid)]
-        (page-handler/create! "aaa/bbb/ccc" {:redirect? false :create-first-block? false :uuid page-uuid})
-        (let [ops (gen-ops-fn)]
-          (is (= #{[:update-page "aaa"] [:update-page "aaa/bbb"] [:update-page "aaa/bbb/ccc"]}
-                 (set (map (juxt first (comp :page-name second)) ops)))))))))
+        (is (contains? (set ops) [:remove {:block-uuids [uuid1]}]))))))

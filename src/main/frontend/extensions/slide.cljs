@@ -93,8 +93,8 @@
         page (db/entity [:block/name page-name])
         journal? (:journal? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-page-blocks-no-cache repo page-name)
-                   (outliner-tree/blocks->vec-tree page-name))
+        blocks (-> (db/get-page-blocks-no-cache repo (:db/id page))
+                   (outliner-tree/blocks->vec-tree (:db/id page)))
         blocks (if journal?
                  (rest blocks)
                  blocks)

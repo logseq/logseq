@@ -35,12 +35,12 @@
   get-file-last-modified-at get-file get-file-page get-file-page-id file-exists?
   get-files-blocks get-files-full get-journals-length get-pages-with-file
   get-latest-journals get-page get-page-alias get-page-alias-names
-  get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format get-page-properties
+  get-page-blocks-count get-page-blocks-no-cache get-page-file get-page-format
   get-page-referenced-blocks get-page-referenced-blocks-full get-page-referenced-pages
   get-all-pages get-pages-relation get-pages-that-mentioned-page get-tag-pages
   journal-page? page-alias-set sub-block
   set-file-last-modified-at! page-empty? page-exists? get-alias-source-page
-  set-file-content! has-children? get-namespace-pages get-all-namespace-relation]
+  set-file-content! has-children?]
 
  [frontend.db.react
   get-current-page set-key-value
