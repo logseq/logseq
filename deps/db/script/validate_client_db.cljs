@@ -4,6 +4,7 @@
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.frontend.property :as db-property]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
@@ -15,9 +16,8 @@
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
-  [db ent-maps* {:keys [verbose group-errors closed-maps]}]
-  (let [ent-maps (vec (db-malli-schema/update-properties-in-ents ent-maps*))
-        schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
+  [db ent-maps {:keys [verbose group-errors closed-maps]}]
+  (let [schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
     (if-let [errors (->> ent-maps
                          (m/explain schema)
                          :errors)]
@@ -70,7 +70,7 @@
                                (count (filter #(contains? (:block/type %) "class") ent-maps)) " classes, "
                                (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
                                (count (filter #(contains? (:block/type %) "property") ent-maps)) " properties and "
-                               (count (mapcat :block/properties ent-maps)) " property values"))
+                               (count (mapcat db-property/properties ent-maps)) " property values"))
     (validate-client-db @conn ent-maps options)))
 
 (defn -main [argv]

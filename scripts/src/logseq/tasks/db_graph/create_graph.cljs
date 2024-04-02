@@ -9,12 +9,12 @@
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.outliner.cli.pipeline :as cli-pipeline]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [clojure.string :as string]
             [datascript.core :as d]
             ["fs" :as fs]
             ["path" :as node-path]
-            [nbb.classpath :as cp]))
+            [nbb.classpath :as cp]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- find-on-classpath [rel-path]
   (some (fn [dir]
@@ -54,20 +54,21 @@
   (if (vector? val)
     (case (first val)
       :page
-      (or (page-uuids (second val))
-          (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
+      (if-let [page-uuid (page-uuids (second val))]
+        [:block/uuid page-uuid]
+        (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
       :block
       (or (block-uuids (second val))
           (throw (ex-info (str "No uuid for block '" (second val) "'") {:name (second val)})))
       (throw (ex-info "Invalid property value type. Valid values are :block and :page" {})))
     val))
 
+;; TODO: Remove unused property-uuids
 (defn- ->block-properties-tx [properties {:keys [property-uuids] :as uuid-maps}]
   (->> properties
        (map
         (fn [[prop-name val]]
-          [(or (property-uuids prop-name)
-               (throw (ex-info "No uuid for property" {:name prop-name})))
+          [(db-property/get-db-ident-from-name (name prop-name))
             ;; set indicates a :many value
            (if (set? val)
              (set (map #(translate-property-value % uuid-maps) val))
@@ -100,12 +101,11 @@
      :page-uuids page-uuids
      :block-uuids block-uuids}))
 
+;; TODO: Remove unused property-db-ids
 (defn- build-property-refs [properties property-db-ids]
   (mapv
    (fn [prop-name]
-     {:db/id
-      (or (property-db-ids (name prop-name))
-          (throw (ex-info (str "No :db/id for property '" prop-name "'") {:property prop-name})))})
+     (db-property/get-db-ident-from-name (name prop-name)))
    (keys properties)))
 
 (def current-db-id (atom 0))
@@ -122,8 +122,8 @@
            :block/left {:db/id (or (:db/id last-block) page-id)}
            :block/parent {:db/id page-id}})
          (when (seq (:properties m))
-           {:block/properties (->block-properties-tx (:properties m) uuid-maps)
-            :block/refs (build-property-refs (:properties m) property-db-ids)})))
+           (assoc (->block-properties-tx (:properties m) uuid-maps)
+                  :block/refs (build-property-refs (:properties m) property-db-ids)))))
 
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
@@ -156,7 +156,7 @@
 
    This fn also takes an optional map arg which supports these keys:
    * :property-uuids - A map of property keyword names to uuids to provide ids for built-in properties"
-  [db {:keys [pages-and-blocks properties]} & {:as options}]
+  [{:keys [pages-and-blocks properties]} & {:as options}]
   (let [;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
                                   (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
@@ -171,25 +171,26 @@
                            (mapcat
                             (fn [[prop-name]]
                               (if (get-in properties [prop-name :closed-values])
-                                (db-property-util/build-closed-values
-                                 (keyword "user.property" (name prop-name))
-                                 prop-name
-                                 (get properties prop-name)
-                                 {:icon-id
-                                  (get-in options [:property-uuids :icon])
-                                  :translate-closed-page-value-fn
-                                  #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
-                                  :property-attributes
-                                  {:db/id (or (property-db-ids (name prop-name))
-                                              (throw (ex-info "No :db/id for property" {:property prop-name})))}})
+                                (let [db-ident (db-property/get-db-ident-from-name (name prop-name))]
+                                  (db-property-util/build-closed-values
+                                   db-ident
+                                   prop-name
+                                   (assoc (get properties prop-name) :db/ident db-ident)
+                                   {:icon-id
+                                    (get-in options [:property-uuids :icon])
+                                    :translate-closed-page-value-fn
+                                    #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
+                                    :property-attributes
+                                    {:db/id (or (property-db-ids (name prop-name))
+                                                (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
                                 [(let [db-ident (keyword "user.property" (name prop-name))]
                                    (merge
                                     (sqlite-util/build-new-property db-ident prop-name (get-in properties [prop-name :block/schema]))
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}
                                     (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                      {:block/properties (->block-properties-tx props uuid-maps)
-                                       :block/refs (build-property-refs props property-db-ids)})))]))
+                                      (assoc (->block-properties-tx props uuid-maps)
+                                             :block/refs (build-property-refs props property-db-ids)))))]))
                             property-uuids))
         pages-and-blocks-tx
         (vec
@@ -207,9 +208,10 @@
                    :block/format :markdown}
                   (dissoc page :properties)
                   (when (seq (:properties page))
-                    {:block/properties (->block-properties-tx (:properties page) uuid-maps)
-                     :block/refs (build-property-refs (:properties page) property-db-ids)
-                          ;; app doesn't do this yet but it should to link property to page
+                    (->block-properties-tx (:properties page) uuid-maps))
+                  (when (seq (:properties page))
+                    {:block/refs (build-property-refs (:properties page) property-db-ids)
+                     ;; app doesn't do this yet but it should to link property to page
                      :block/path-refs (build-property-refs (:properties page) property-db-ids)})))]
                ;; blocks tx
                (reduce (fn [acc m]
@@ -218,4 +220,7 @@
                        []
                        blocks))))
           pages-and-blocks'))]
-    (into pages-and-blocks-tx new-properties-tx)))
+    ;; Properties first b/c they have schema. Then pages b/c they can be referenced by blocks
+    (vec (concat new-properties-tx
+                 (filter :block/name pages-and-blocks-tx)
+                 (remove :block/name pages-and-blocks-tx)))))

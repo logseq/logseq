@@ -63,7 +63,7 @@
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name)
-        blocks-tx (create-graph/create-blocks-tx @conn (create-init-data))]
+        blocks-tx (create-graph/create-blocks-tx (create-init-data))]
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
     (d/transact! conn blocks-tx)
