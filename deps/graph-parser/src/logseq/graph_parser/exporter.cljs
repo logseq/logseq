@@ -24,7 +24,7 @@
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
   [db property-name]
-  (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))])))
+  (:block/uuid (ldb/get-page db property-name)))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -587,7 +587,7 @@
                                      (not (:block/file %))))
                        ;; remove file path relative
                        (map #(dissoc % :block/file)))
-        existing-pages (keep #(d/entity @conn [:block/name (:block/name %)]) all-pages)
+        existing-pages (keep #(ldb/get-page @conn (:block/name %)) all-pages)
         existing-page-names (set (map :block/name existing-pages))
         new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
         page-names-to-uuids (into {}
@@ -865,7 +865,7 @@
                     [(get ?bp ?prop-uuid) ?_v]]
                   @conn
                   (set (map :block/name user-classes)))
-             (remove #(ldb/built-in? (d/entity @conn [:block/name (second %)])))
+             (remove #(ldb/built-in? (ldb/get-page @conn (second %))))
              (reduce (fn [acc [class-id _prop-name prop-uuid]]
                        (update acc class-id (fnil conj #{}) prop-uuid))
                      {}))
@@ -924,10 +924,10 @@
      (ldb/create-favorites-page repo)
      (if-let [favorited-ids
               (keep (fn [page-name]
-                      (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
+                      (some-> (ldb/get-page @conn page-name)
                               :block/uuid))
                     favorites)]
-       (let [page-entity (d/entity @conn [:block/name common-config/favorites-page-name])]
+       (let [page-entity (ldb/get-page @conn common-config/favorites-page-name)]
          (insert-favorites repo favorited-ids (:db/id page-entity)))
        (log-fn :no-favorites-found {:favorites favorites})))))
 

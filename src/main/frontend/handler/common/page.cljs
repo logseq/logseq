@@ -23,7 +23,6 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]))
 
-;; TODO: return page entity instead
 (defn create!
   "Create page. Has the following options:
 
@@ -43,11 +42,12 @@
    (let [repo (state/get-current-repo)
          conn (db/get-db repo false)
          config (state/get-config repo)
+         ;; FIXME: create! returns page-entity
          [_ page-name] (worker-page/create! repo conn config title options)]
      (when redirect?
        ;; FIXME: use uuid instead
        (route-handler/redirect-to-page! page-name))
-     (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
+     (when-let [first-block (first (:block/_left (db/get-page page-name)))]
        (block-handler/edit-block! first-block :max nil))
      page-name)))
 
@@ -65,7 +65,7 @@
      (when redirect?
        ;; FIXME: use uuid instead
        (route-handler/redirect-to-page! page-name))
-     (let [page (db/entity [:block/name page-name])]
+     (let [page (db/get-page page-name)]
        (when-let [first-block (first (:block/_left page))]
          (block-handler/edit-block! first-block :max nil))
        page))))
@@ -120,14 +120,14 @@
 (defn <favorite-page!-v2
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])]
+  (let [favorites-page (db/get-page common-config/favorites-page-name)]
     (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
       (p/do!
        (when-not favorites-page (ldb/create-favorites-page (state/get-current-repo)))
        (ui-outliner-tx/transact!
         {:outliner-op :insert-blocks}
         (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
-                                    (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])
+                                    (db/get-page common-config/favorites-page-name)
                                     {}))))))
 
 (defn <unfavorite-page!-v2
@@ -170,9 +170,7 @@
   (let [repo-dir (config/get-repo-dir repo)]
       ;; TODO: move favorite && unfavorite to worker too
     (if (config/db-based-graph? repo)
-      (when-let [page-block-uuid (:block/uuid
-                                  (d/entity (conn/get-db repo)
-                                            [:block/name (common-util/page-name-sanity-lc page-name)]))]
+      (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
         (<unfavorite-page!-v2 page-block-uuid))
       (unfavorite-page! page-name))
 

@@ -93,14 +93,14 @@
        {:block/uuid uuid4 :block/content "uuid4-block"
         :block/left [:block/uuid uuid3]
         :block/parent [:block/uuid uuid1]}]
-      (d/pull @conn '[*] [:block/name "gen-remote-ops-test"])
+      (ldb/get-page @conn  "gen-remote-ops-test")
       {:sibling? true :keep-uuid? true}))
 
     (op-mem-layer/init-empty-ops-store! repo)
     (op-mem-layer/add-ops! repo [["move" {:block-uuid (str uuid2) :epoch 1}]
-                                         ["move" {:block-uuid (str uuid4) :epoch 2}]
-                                         ["move" {:block-uuid (str uuid3) :epoch 3}]
-                                         ["update" {:block-uuid (str uuid4) :epoch 4}]])
+                                 ["move" {:block-uuid (str uuid4) :epoch 2}]
+                                 ["move" {:block-uuid (str uuid3) :epoch 3}]
+                                 ["update" {:block-uuid (str uuid4) :epoch 4}]])
     (let [_ (op-mem-layer/new-branch! repo)
           r1 (rtc-core/gen-block-uuid->remote-ops repo conn "user-uuid" :n 1)
           _ (op-mem-layer/rollback! repo)
@@ -137,7 +137,7 @@
        {:block/uuid uuid2-client :block/content "uuid2-client"
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
-      (d/pull @conn '[*] [:block/name page-name])
+      (ldb/get-page @conn page-name)
       {:sibling? true :keep-uuid? true}))
     (testing "apply-remote-move-ops-test1"
       (let [data-from-ws {:req-id "req-id"
@@ -155,7 +155,7 @@
                         repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-move-ops repo conn date-formatter move-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-remote uuid1-client uuid2-client} (set (map :block/uuid page-blocks))))
           (is (= page-uuid (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid1-remote]))))))))
 
@@ -179,7 +179,7 @@
                         repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-move-ops repo conn date-formatter move-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-remote uuid2-remote uuid1-client uuid2-client} (set (map :block/uuid page-blocks))))
           (is (= uuid1-client (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid2-remote])))))
           (is (= uuid2-remote (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid1-remote]))))))))))
@@ -210,7 +210,7 @@
        {:block/uuid uuid2-client :block/content "uuid2-client"
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
-      (d/pull @conn '[*] [:block/name page-name])
+      (ldb/get-page @conn page-name)
       {:sibling? true :keep-uuid? true}))
     (testing "apply-remote-update-ops-test1"
       (let [data-from-ws {:req-id "req-id"
@@ -230,7 +230,7 @@
                          (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
           (is (= [uuid1-client #{"property"}]
                  ((juxt (comp :block/uuid :block/link) :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))
@@ -253,7 +253,7 @@
                          (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
           (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))
     (testing "apply-remote-update-ops-test3"
@@ -270,7 +270,7 @@
                          (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-client uuid2-client uuid1-remote} (set (map :block/uuid page-blocks))))
           (is (= [nil nil] ((juxt :block/link :block/type) (d/entity @conn [:block/uuid uuid1-remote])))))))
     (testing "update-attr :block/tags"
@@ -317,7 +317,7 @@
        {:block/uuid uuid2-client :block/content "uuid2-client"
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
-      (d/pull @conn '[*] [:block/name page-name])
+      (ldb/get-page @conn page-name)
       {:sibling? true :keep-uuid? true}))
     (testing "apply-remote-remove-ops-test1"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
@@ -330,7 +330,7 @@
               (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-remove-ops repo conn date-formatter remove-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1-client uuid2-client} (set (map :block/uuid page-blocks)))))))
     (testing "apply-remote-remove-ops-test2"
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
@@ -342,7 +342,7 @@
                          (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-remove-ops repo conn date-formatter remove-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid2-client} (set (map :block/uuid page-blocks)))))))))
 
 (deftest apply-remote-remove-ops-test2
@@ -384,7 +384,7 @@ server: ;; remove 2
          {:block/uuid uuid3 :block/content "3"
           :block/left [:block/uuid uuid2]
           :block/parent [:block/uuid uuid2]}]
-        (d/pull @conn '[*] [:block/name page-name])
+        (ldb/get-page @conn page-name)
         {:sibling? false :keep-uuid? true}))
       (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                           :affected-blocks
@@ -396,7 +396,7 @@ server: ;; remove 2
               (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (rtc-core/apply-remote-remove-ops repo conn date-formatter remove-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn page-name {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid1 uuid3} (set (map :block/uuid page-blocks))))
           (is (= page-uuid (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid3]))))))))))
 
@@ -473,7 +473,7 @@ server: ;; remove 2
         :block/content "uuid2-client"
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page1-uuid]}]
-      (d/pull @conn '[*] [:block/name page-name])
+      (ldb/get-page @conn page-name)
       {:sibling? true :keep-uuid? true}))
     (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
                         :affected-blocks
@@ -497,6 +497,7 @@ server: ;; remove 2
       (is (rtc-const/data-from-ws-validator data-from-ws))
       (rtc-core/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
       (rtc-core/apply-remote-move-ops repo conn date-formatter move-ops)
-      (is (= #{uuid1-client uuid2-client uuid1-remote uuid2-remote}
-             (set (map :block/uuid (ldb/get-page-blocks @conn page-name {})))))
-      (is (= page2-uuid (:block/uuid (d/entity @conn [:block/name page-name])))))))
+      (let [page (ldb/get-page @conn page-name)]
+        (is (= #{uuid1-client uuid2-client uuid1-remote uuid2-remote}
+             (set (map :block/uuid (ldb/get-page-blocks @conn (:db/id page) {})))))
+        (is (= page2-uuid (:block/uuid page)))))))

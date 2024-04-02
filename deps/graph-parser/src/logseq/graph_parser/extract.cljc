@@ -225,6 +225,7 @@
           blocks (->> (gp-block/extract-blocks ast content false format options')
                       (attach-block-ids-if-match override-uuids)
                       (mapv #(gp-block/fix-block-id-if-duplicated! db page-name extracted-block-ids %))
+                      ;; FIXME: use page uuid
                       (gp-block/with-parent-and-left {:block/name page-name})
                       (vec))
           ref-pages (atom #{})

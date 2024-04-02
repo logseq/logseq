@@ -315,11 +315,11 @@
   (when-let [app (state/active-tldraw-app)]
     (let [tl-page ^js (second (first (.-pages app)))]
       (when tl-page
-        (when-let [page (db/entity [:block/name page-name])]
-         (let [page-metadata (pu/get-block-property-value page :logseq.property.tldraw/page)
-               shapes-index (:shapes-index page-metadata)]
-           (when (seq shapes-index)
-             (.updateShapesIndex tl-page (bean/->js shapes-index)))))))))
+        (when-let [page (db/get-page page-name)]
+          (let [page-metadata (pu/get-block-property-value page :logseq.property.tldraw/page)
+                shapes-index (:shapes-index page-metadata)]
+            (when (seq shapes-index)
+              (.updateShapesIndex tl-page (bean/->js shapes-index)))))))))
 
 (defn populate-onboarding-whiteboard
   [api]

@@ -84,9 +84,9 @@
   [ref-blocks filters]
   (if (empty? filters)
     ref-blocks
-    (let [exclude-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters false))
+    (let [exclude-ids (->> (keep (fn [page] (:db/id (db/get-page page))) (get filters false))
                            (set))
-          include-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters true))
+          include-ids (->> (keep (fn [page] (:db/id (db/get-page page))) (get filters true))
                            (set))]
       (cond->> ref-blocks
         (seq exclude-ids)

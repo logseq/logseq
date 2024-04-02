@@ -71,7 +71,7 @@
                (not (worker-state/tx-idle? repo {:diff 3000})))
         (async/put! file-writes-chan [repo page-db-id outliner-op (tc/to-long (t/now)) request-id])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
-              blocks (ldb/get-page-blocks @conn (:block/name page-block) {:pull-keys pull-keys})
+              blocks (ldb/get-page-blocks @conn (:db/id page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
           (if (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))

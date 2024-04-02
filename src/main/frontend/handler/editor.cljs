@@ -486,7 +486,7 @@
           sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))
           block (if page
-                  (db/entity [:block/name (util/page-name-sanity-lc page)])
+                  (db/get-page page)
                   (db/entity [:block/uuid block-uuid]))
           db-based? (config/db-based-graph? repo)]
       (when block
@@ -2268,7 +2268,7 @@
   (when id
     (when-let [entity (if-let [id' (parse-uuid (str id))]
                         (db/entity [:block/uuid id'])
-                        (db/entity [:block/name (util/page-name-sanity-lc id)]))]
+                        (db/get-page id))]
       (= (:block/uuid entity) (otree/-get-parent-id current-node (db/get-db false))))))
 
 (defn insert

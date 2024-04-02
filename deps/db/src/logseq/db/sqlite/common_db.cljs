@@ -13,7 +13,7 @@
   (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
 
 (defn get-first-page-by-name
-  "Return the oldest page"
+  "Return the oldest page's db id"
   [db page-name]
   (first (sort (map :e (get-pages-by-name db page-name)))))
 

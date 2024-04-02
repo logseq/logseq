@@ -4,9 +4,7 @@
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.config :as config]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.state :as state]))
 
 (defn remove-block-property!
   [repo block-id property-id-or-key]
@@ -26,12 +24,12 @@
 
 (defn add-page-property!
   "Sanitized page-name, unsanitized key / value"
-  [page-name key value]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (when-let [page (db/entity [:block/name (util/page-name-sanity-lc page-name)])]
-       (set-block-property! repo (:block/uuid page) key value))
-      (file-page-property/add-property! page-name key value))))
+  [page-entity key value]
+  (when page-entity
+    (let [repo (state/get-current-repo)]
+      (if (config/db-based-graph? repo)
+        (set-block-property! repo (:block/uuid page-entity) key value)
+        (file-page-property/add-property! page-entity key value)))))
 
 (defn set-editing-new-property!
   [value]

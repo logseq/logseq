@@ -173,11 +173,12 @@
        (str init-key))]
 
     :page-slide-view
-    (let [page-name (:block/name (db/entity db-id))]
+    (let [page (db/entity db-id)
+          page-name (:block/name page)]
       [[:a.page-title {:href (rfe/href :page {:name page-name})}
-        (db-model/get-page-original-name page-name)]
+        (:block/original-name page)]
        [:div.ml-2.slide.mt-2
-        (slide/slide page-name)]])
+        (slide/slide page)]])
 
     :shortcut-settings
     [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]

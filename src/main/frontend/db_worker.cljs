@@ -383,7 +383,7 @@
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
                         (seq tx-data)
-                        (d/entity @conn [:block/name (:today-journal-name tx-meta)])) ; today journal created already
+                        (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
 
            ;; (prn :debug :transact :tx-data tx-data :tx-meta tx-meta')
            (worker-util/profile "Worker db transact"

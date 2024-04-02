@@ -4,8 +4,9 @@
             [frontend.date :as date]
             [frontend.state :as state]
             [frontend.db.utils :as db-utils]
-            [frontend.util :as util]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
+            [frontend.db.conn :as conn]))
 
 (defn- variable-rules
   []
@@ -19,7 +20,7 @@
                     (let [block-uuid (parse-uuid current-page)
                           page (if block-uuid
                                  (:block/page (db-utils/entity [:block/uuid block-uuid]))
-                                 (db-utils/entity [:block/name (util/page-name-sanity-lc current-page)]))
+                                 (ldb/get-page (conn/get-db) current-page))
                           current-page' (:block/original-name page)]
                       (page-ref/->page-ref current-page')))})
 

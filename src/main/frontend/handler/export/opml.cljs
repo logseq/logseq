@@ -444,9 +444,10 @@
            (common/get-page-content root-block-uuids-or-page-uuid)
            (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
          title (if (uuid? root-block-uuids-or-page-uuid)
-                 (:block/original-name (db/entity [:block/name root-block-uuids-or-page-uuid]))
+                 (:block/original-name (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
                  "untitled")
-         first-block (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])
+         first-block (and (coll? root-block-uuids-or-page-uuid)
+                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
          format (or (:block/format first-block) (state/get-preferred-format))]
      (export-helper content format options :title title))))
 

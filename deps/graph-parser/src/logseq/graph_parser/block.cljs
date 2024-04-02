@@ -13,7 +13,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [logseq.db :as ldb]))
 
 (defn heading-block?
   [block]
@@ -292,7 +293,7 @@
     (and original-page-name (string? original-page-name))
     (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
-          page-entity (some-> db (d/entity [:block/name page-name]))
+          page-entity (some-> db (ldb/get-page page-name))
           original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
       (merge
        {:block/name page-name

@@ -115,7 +115,7 @@
    :getBlockPageName #(let [block-id-str %]
                         (if (util/uuid-string? block-id-str)
                           (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
-                          (:block/name (db/entity [:block/name (util/page-name-sanity-lc block-id-str)]))))
+                          (:block/name (db/get-page block-id-str))))
    :exportToImage (fn [page-uuid-str options]
                     (assert (common-util/uuid-string? page-uuid-str))
                     (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))

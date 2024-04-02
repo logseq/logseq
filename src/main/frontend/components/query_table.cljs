@@ -205,7 +205,7 @@
     (boolean? value) (str value)
     ;; string values will attempt to be rendered as pages, falling back to
     ;; inline-text when no page entity is found
-    (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+    (string? value) (if-let [page (db/get-page value)]
                       (page-cp {} page)
                       (inline-text row-block row-format value))
     ;; render uuids as page refs

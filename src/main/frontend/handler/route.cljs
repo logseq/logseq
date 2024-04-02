@@ -133,8 +133,8 @@
               (str (subs content 0 48) "...")
               content))
           "Page no longer exists!!")
-        (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
-          (or (util/get-page-original-name page)
+        (let [page (db/get-page name)]
+          (or (:block/original-name page)
               "Logseq"))))
     :whiteboard
     (let [name (:name path-params)
@@ -142,8 +142,8 @@
       (str
        (if block?
          (t :untitled)
-         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
-           (or (util/get-page-original-name page)
+         (let [page (db/get-page name)]
+           (or (:block/original-name page)
                "Logseq"))) " - " (t :whiteboard)))
     :tag
     (str "#"  (:name path-params))

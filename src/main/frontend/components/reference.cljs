@@ -25,7 +25,7 @@
   (sort-by second #(> %1 %2) references))
 
 (defn filtered-refs
-  [page-name filters filters-atom filtered-references]
+  [page filters filters-atom filtered-references]
   [:div.flex.gap-2.flex-wrap.items-center
    (for [[ref-name ref-count] filtered-references]
      (when ref-name
@@ -38,13 +38,13 @@
                        (swap! filters-atom #(if (nil? (get filters lc-reference))
                                               (assoc % lc-reference (not (.-shiftKey e)))
                                               (dissoc % lc-reference)))
-                       (page-handler/save-filter! page-name @filters-atom))
+                       (page-handler/save-filter! page @filters-atom))
            :small? true
            :variant :outline
            :key ref-name))))])
 
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
-  [state filters-atom *references page-name]
+  [state page-entity filters-atom *references]
   (let [filter-search (get state ::filterSearch)
         references (rum/react *references)
         filtered-references  (frequencies-sort
@@ -73,11 +73,11 @@
         (when (seq includes)
           [:div.flex.flex-row.flex-wrap.center-items
            [:div.mr-1.font-medium.py-1 (t :linked-references/filter-includes)]
-           (filtered-refs page-name filters filters-atom includes)])
+           (filtered-refs page-entity filters filters-atom includes)])
         (when (seq excludes)
           [:div.flex.flex-row.flex-wrap
            [:div.mr-1.font-medium.py-1 (t :linked-references/filter-excludes)]
-           (filtered-refs page-name filters filters-atom excludes)])])
+           (filtered-refs page-entity filters filters-atom excludes)])])
      [:div.cp__filters-input-panel.flex
       (ui/icon "search")
       [:input.cp__filters-input.w-full
@@ -90,12 +90,12 @@
                         filtered-references)]
        (when (seq refs)
          [:div.mt-4
-          (filtered-refs page-name filters filters-atom refs)]))]))
+          (filtered-refs page-entity filters filters-atom refs)]))]))
 
 (defn filter-dialog
-  [filters-atom *references page-name]
+  [page-entity filters-atom *references]
   (fn []
-    (filter-dialog-inner filters-atom *references page-name)))
+    (filter-dialog-inner page-entity filters-atom *references)))
 
 (rum/defc block-linked-references < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -136,7 +136,7 @@
      (content/content page-name {:hiccup ref-hiccup}))])
 
 (rum/defc references-cp
-  [page-name filters filters-atom filter-state total filter-n filtered-ref-blocks *ref-pages]
+  [page-entity page-name filters filters-atom filter-state total filter-n filtered-ref-blocks *ref-pages]
   (let [threshold (state/get-linked-references-collapsed-threshold)
         default-collapsed? (>= total threshold)
         *collapsed? (atom nil)]
@@ -152,7 +152,7 @@
         :on-pointer-down (fn [e]
                          (util/stop-propagation e))
         :on-click (fn []
-                    (state/set-modal! (filter-dialog filters-atom *ref-pages page-name)
+                    (state/set-modal! (filter-dialog page-entity filters-atom *ref-pages)
                                       {:center? true}))}
        (ui/icon "filter" {:class (cond
                                    (empty? filter-state)
@@ -254,7 +254,7 @@
               [:div.references.page-linked.flex-1.flex-row
                (sub-page-properties-changed page-entity page-props-v filters-atom)
                [:div.content.pt-6
-                (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]])))))))
+                (references-cp page-entity page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]])))))))
 
 (rum/defc references
   [page-entity]
