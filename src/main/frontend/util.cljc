@@ -718,7 +718,7 @@
              (js/console.error e)
              (dec current-pos)))
          (dec current-pos))
-       (dec current-pos))))
+       current-pos)))
 
 #?(:cljs
    ;; for widen char
@@ -735,7 +735,7 @@
              (js/console.error e)
              (inc current-pos)))
          (inc current-pos))
-       (inc current-pos))))
+       current-pos)))
 
 #?(:cljs
    (defn kill-line-before!

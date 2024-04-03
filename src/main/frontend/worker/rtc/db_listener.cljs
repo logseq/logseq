@@ -18,10 +18,18 @@
   [entity-datoms]
   (reduce
    (fn [m datom]
-     (let [[_e a _v t _add?] datom]
-       (if-let [[_e _a _v old-t _old-add?] (get m a)]
-         (if (<= old-t t)
+     (let [[_e a _v t add?] datom]
+       (if-let [[_e _a _v old-t old-add?] (get m a)]
+         (cond
+           (and (= old-t t)
+                (true? add?)
+                (false? old-add?))
            (assoc m a datom)
+
+           (< old-t t)
+           (assoc m a datom)
+
+           :else
            m)
          (assoc m a datom))))
    {} entity-datoms))
