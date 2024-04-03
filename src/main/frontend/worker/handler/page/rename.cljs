@@ -102,7 +102,8 @@
 
         (ldb/transact! conn txs {:outliner-op :rename-page
                                  :data (cond->
-                                        {:old-name old-page-name
+                                        {:page-id (:db/id page)
+                                         :old-name old-page-name
                                          :new-name new-name}
                                          (and old-path new-path)
                                          (merge {:old-path old-path

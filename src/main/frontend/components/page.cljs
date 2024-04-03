@@ -82,11 +82,11 @@
   [state]
   (let [[_ block _ sidebar? preview?] (:rum/args state)]
     (when (and
-            (or preview?
-              (not (contains? #{:home :all-journals :whiteboard} (state/get-current-route))))
-            (not sidebar?))
+           (or preview?
+               (not (contains? #{:home :all-journals} (state/get-current-route))))
+           (not sidebar?))
       (when (and (string/blank? (:block/content block))
-              (not preview?))
+                 (not preview?))
         (editor-handler/edit-block! block :max (:block/uuid block)))))
   state)
 
@@ -481,7 +481,7 @@
                        :class (util/classnames [{:is-journals (or journal? fmt-journal?)}])})
 
                (if (and whiteboard-page? (not sidebar?))
-                 [:div ((state/get-component :whiteboard/tldraw-preview) page-name)] ;; FIXME: this is not reactive
+                 [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
                  [:div.relative
                   (when (and (not sidebar?) (not block?))
                     [:div.flex.flex-row.space-between

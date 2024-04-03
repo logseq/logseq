@@ -40,9 +40,7 @@
     {:name :page
      :view (fn [route-match]
              (let [page-name (get-in route-match [:parameters :path :name])
-                   db (db/get-db)
-                   whiteboard? (when db
-                                 (ldb/whiteboard-page? (db/entity (ldb/get-first-page-by-name db page-name))))]
+                   whiteboard? (ldb/whiteboard-page? (db/get-page page-name))]
                (if whiteboard?
                  (whiteboard/whiteboard-route route-match)
                  (page/page route-match))))}]

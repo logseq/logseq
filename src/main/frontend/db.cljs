@@ -40,7 +40,7 @@
   get-all-pages get-pages-relation get-pages-that-mentioned-page get-tag-pages
   journal-page? page-alias-set sub-block
   set-file-last-modified-at! page-empty? page-exists? get-alias-source-page
-  set-file-content! has-children?]
+  set-file-content! has-children? whiteboard-page?]
 
  [frontend.db.react
   get-current-page set-key-value

@@ -220,9 +220,7 @@
      (when (= type :page)
        (let [page  (db/entity db-id)
              name (:block/name page)]
-         (menu-item {:href (if (db-model/whiteboard-page? page)
-                             (rfe/href :whiteboard {:name name})
-                             (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page)))))))
+         (menu-item {:href (rfe/href :page {:name name})} (t :right-side-bar/pane-open-as-page)))))))
 
 (rum/defc drop-indicator
   [idx drag-to]

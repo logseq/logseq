@@ -200,19 +200,21 @@
                 (println "file rename failed: " error))))))
 
 (defn after-page-renamed!
-  [repo {:keys [old-name new-name old-path new-path]}]
+  [repo {:keys [page-id old-name new-name old-path new-path]}]
   (let [db-based?           (config/db-based-graph? repo)
         old-page-name       (common-util/page-name-sanity-lc old-name)
         new-page-name       (common-util/page-name-sanity-lc new-name)
         redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                     (common-util/page-name-sanity-lc old-page-name))]
+                     (common-util/page-name-sanity-lc old-page-name))
+        page (db/entity repo page-id)]
 
     ;; Redirect to the newly renamed page
-    (when redirect?
+    (when (and redirect? (not (db/whiteboard-page? page)))
       (route-handler/redirect! {:to          :page
                                 :push        false
-                                :path-params {:name new-page-name}}))
+                                :path-params {:name (str (:block/uuid page))}}))
 
+    ;; FIXME: favorites should store db id/uuid instead of page names
     (when (and (config/db-based-graph? repo) (favorited? old-page-name))
       (unfavorite-page! old-page-name)
       (favorite-page! new-page-name))

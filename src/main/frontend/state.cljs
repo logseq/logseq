@@ -847,17 +847,7 @@ Similar to re-frame subscriptions"
 
 (defn get-current-page
   []
-  (when (contains? #{:whiteboard :page} (get-current-route)) ; TODO: move /whiteboard to /page
-    (get-in (get-route-match)
-            [:path-params :name])))
-
-(defn whiteboard-route?
-  []
-  (= :whiteboard (get-current-route)))
-
-(defn get-current-whiteboard
-  []
-  (when (whiteboard-route?)
+  (when (= :page (get-current-route))
     (get-in (get-route-match)
             [:path-params :name])))
 

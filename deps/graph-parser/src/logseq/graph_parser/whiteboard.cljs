@@ -1,9 +1,6 @@
 (ns logseq.graph-parser.whiteboard
   "Whiteboard related parser utilities"
-  (:require [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
-            [logseq.db.frontend.property :as db-property]))
+  (:require [logseq.db.frontend.property :as db-property]))
 
 (defn block->shape [block]
   (get-in block [:block/properties :logseq.tldraw.shape]))
@@ -42,22 +39,19 @@
 
 (defn- get-shape-refs [shape]
   (let [portal-refs (when (= "logseq-portal" (:type shape))
-                      [(if (= (:blockType shape) "P")
-                         {:block/name (common-util/page-name-sanity-lc (:pageId shape))}
-                         {:block/uuid (uuid (:pageId shape))})])
+                      [{:block/uuid (uuid (:pageId shape))}])
         shape-link-refs (->> (:refs shape)
                              (filter (complement empty?))
-                             (map (fn [ref] (if (parse-uuid ref)
-                                              {:block/uuid (parse-uuid ref)}
-                                              {:block/name (common-util/page-name-sanity-lc ref)}))))]
+                             (keep (fn [ref] (when (parse-uuid ref)
+                                              {:block/uuid (parse-uuid ref)}))))]
     (concat portal-refs shape-link-refs)))
 
 (defn- with-whiteboard-block-refs
-  [shape page-name]
+  [shape page-id]
   (let [refs (or (get-shape-refs shape) [])]
     (merge {:block/refs (if (seq refs) refs [])
             :block/path-refs (if (seq refs)
-                               (conj refs {:block/name page-name})
+                               (conj refs page-id)
                                [])})))
 
 (defn- with-whiteboard-content
@@ -65,37 +59,33 @@
   [shape]
   {:block/content (case (:type shape)
                     "text" (:text shape)
-                    "logseq-portal" (if (= (:blockType shape) "P")
-                                      (page-ref/->page-ref (:pageId shape))
-                                      (block-ref/->block-ref (:pageId shape)))
+                    "logseq-portal" ""
                     "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
                     (str "whiteboard " (:type shape)))})
 
 (defn with-whiteboard-block-props
   "Builds additional block attributes for a whiteboard block. Expects :block/properties
    to be in file graph format"
-  [block page-name]
+  [block page-id]
   (let [shape? (shape-block? block)
-        shape (block->shape block)
-        default-page-ref {:block/name page-name}]
+        shape (block->shape block)]
     (merge (when shape?
              (merge
               {:block/uuid (uuid (:id shape))}
-              (with-whiteboard-block-refs shape page-name)
+              (with-whiteboard-block-refs shape page-id)
               (with-whiteboard-content shape)))
-           (when (nil? (:block/parent block)) {:block/parent default-page-ref})
+           (when (nil? (:block/parent block)) {:block/parent page-id})
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
-           {:block/page default-page-ref})))
+           {:block/page page-id})))
 
-(defn shape->block [repo shape page-name]
+(defn shape->block [repo shape page-id]
   (let [properties {(db-property/get-pid repo :logseq.property/ls-type) :whiteboard-shape
                     (db-property/get-pid repo :logseq.property.tldraw/shape) shape}
-        page-name (common-util/page-name-sanity-lc page-name)
         block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
-               :block/page {:block/name page-name}
-               :block/parent {:block/name page-name}
+               :block/page page-id
+               :block/parent page-id
                :block/properties properties}
         additional-props (with-whiteboard-block-props
                            (assoc block :block/properties {:ls-type :whiteboard-shape :logseq.tldraw.shape shape})
-                           page-name)]
+                           page-id)]
     (merge block additional-props)))
