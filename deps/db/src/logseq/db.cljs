@@ -400,10 +400,11 @@
 (defn get-page
   "Get a page given its unsanitized name"
   [db page-name-or-uuid]
-  (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
-                  (parse-uuid page-name-or-uuid))]
-    (d/entity db [:block/uuid id])
-    (d/entity db (get-first-page-by-name db (name page-name-or-uuid)))))
+  (when db
+    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
+                    (parse-uuid page-name-or-uuid))]
+      (d/entity db [:block/uuid id])
+      (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
 
 (defn get-page-alias
   [db page-id]
