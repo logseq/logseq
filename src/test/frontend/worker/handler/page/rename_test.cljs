@@ -32,6 +32,7 @@
 
   (testing "Name changed"
     (let [page (db/get-page "Test")]
+      (page-rename (:block/uuid page) "New name")
       (is (= "New name" (:block/original-name (db/entity (:db/id page)))))))
 
   ;; (testing "Merge existing page"
