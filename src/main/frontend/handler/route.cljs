@@ -70,32 +70,35 @@
      :path-params {:name (str page-name)}}))
 
 (defn redirect-to-page!
-  "Must ensure `page-name` is dereferenced (not an alias), or it will create a
-  wrong new page with that name (#3511). page-name can be a block name or uuid"
+  "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
    (redirect-to-page! page-name {}))
   ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard?]
                :or {click-from-recent? false}}]
    (when (or (uuid? page-name)
              (and (string? page-name) (not (string/blank? page-name))))
-     ;; Always skip onboarding when loading an existing whiteboard
-     (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
-     (when-let [db-id (:db/id (db/get-page page-name))]
-       (recent-handler/add-page-to-recent! db-id click-from-recent?))
-     (if (and (= (str page-name) (state/get-current-page)) block-id)
-       (state/focus-whiteboard-shape block-id)
-       (let [m (cond->
-                (default-page-route (str page-name))
+     (let [page (db/get-page page-name)
+           whiteboard? (db/whiteboard-page? page)]
+       ;; Always skip onboarding when loading an existing whiteboard
+       (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
+       (when-let [db-id (:db/id page)]
+         (recent-handler/add-page-to-recent! db-id click-from-recent?))
+       (if (and whiteboard?  (= (str page-name) (state/get-current-page)) block-id)
+         (state/focus-whiteboard-shape block-id)
+         (let [m (cond->
+                  (default-page-route (str page-name))
 
-                 block-id
-                 (assoc :query-params {:block-id anchor})
+                   block-id
+                   (assoc :query-params (if whiteboard?
+                                          {:block-id block-id}
+                                          {:anchor (str "ls-block-" block-id)}))
 
-                 anchor
-                 (assoc :query-params {:anchor anchor})
+                   anchor
+                   (assoc :query-params {:anchor anchor})
 
-                 (boolean? push)
-                 (assoc :push push))]
-         (redirect! m))))))
+                   (boolean? push)
+                   (assoc :push push))]
+           (redirect! m)))))))
 
 (defn get-title
   [name path-params]
