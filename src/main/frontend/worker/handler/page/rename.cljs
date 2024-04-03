@@ -99,7 +99,6 @@
                             tx-data)
 
                            (remove nil?))))]
-
         (ldb/transact! conn txs {:outliner-op :rename-page
                                  :data (cond->
                                         {:page-id (:db/id page)
@@ -118,29 +117,30 @@
 (defn rename!
   [repo conn config page-uuid new-name & {:keys [persist-op?]
                                           :or {persist-op? true}}]
-  (let [db @conn
-        page-e        (d/entity db [:block/uuid page-uuid])
-        old-name      (:block/original-name page-e)
-        new-name      (string/trim new-name)
-        old-page-name (common-util/page-name-sanity-lc old-name)
-        new-page-name (common-util/page-name-sanity-lc new-name)
-        new-page-exists? (some? (ldb/get-page db new-name))
-        name-changed? (not= old-name new-name)]
-    (cond
-      (string/blank? new-name)
-      :invalid-empty-name
+  (let [db @conn]
+    (when-let [page-e (d/entity db [:block/uuid page-uuid])]
+      (let [old-name      (:block/original-name page-e)
+            new-name      (string/trim new-name)
+            old-page-name (common-util/page-name-sanity-lc old-name)
+            new-page-name (common-util/page-name-sanity-lc new-name)
+            new-page-exists? (when-let [p (ldb/get-page db new-name)]
+                               (not= (:db/id p) (:db/id page-e)))
+            name-changed? (not= old-name new-name)]
+        (cond
+          (string/blank? new-name)
+          :invalid-empty-name
 
-      new-page-exists?
-      :rename-page-exists
+          new-page-exists?
+          :rename-page-exists
 
-      (ldb/built-in? page-e)
-      :built-in-page
+          (ldb/built-in? page-e)
+          :built-in-page
 
-      (and old-name new-name name-changed?)
-      (if (= old-page-name new-page-name) ; case changed
-        (ldb/transact! conn
-                       [{:db/id (:db/id page-e)
-                         :block/original-name new-name}]
-                       {:persist-op? persist-op?
-                        :outliner-op :rename-page})
-        (rename-page! repo conn config page-e new-name)))))
+          (and old-name new-name name-changed?)
+          (if (= old-page-name new-page-name) ; case changed
+            (ldb/transact! conn
+                           [{:db/id (:db/id page-e)
+                             :block/original-name new-name}]
+                           {:persist-op? persist-op?
+                            :outliner-op :rename-page})
+            (rename-page! repo conn config page-e new-name)))))))
