@@ -598,7 +598,9 @@
      {:open open?}
      (shui/dropdown-menu-trigger
       {:class "jtrigger flex flex-1 w-full"
-       :on-click #(set-open! (not open?))
+       :on-click (if config/publishing?
+                   (constantly nil)
+                   #(set-open! (not open?)))
        :on-key-down (fn [^js e]
                       (case (util/ekey e)
                         (" " "Enter")
