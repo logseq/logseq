@@ -16,8 +16,7 @@
             [promesa.core :as p]
             [frontend.persist-db.browser :as db-browser]
             [frontend.worker.export :as worker-export]
-            [clojure.edn :as edn]
-            [logseq.db :as ldb]))
+            [clojure.edn :as edn]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*

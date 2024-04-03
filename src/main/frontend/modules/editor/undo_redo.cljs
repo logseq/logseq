@@ -5,7 +5,6 @@
             [frontend.state :as state]
             [clojure.set :as set]
             [medley.core :as medley]
-            [frontend.handler.route :as route-handler]
             [promesa.core :as p]))
 
 ;;;; APIs

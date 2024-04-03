@@ -14,8 +14,7 @@
             [logseq.graph-parser.text :as text]
             [reitit.frontend.easy :as rfe]
             [frontend.context.i18n :refer [t]]
-            [clojure.string :as string]
-            [logseq.db :as ldb]))
+            [clojure.string :as string]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."

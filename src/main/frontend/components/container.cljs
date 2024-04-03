@@ -56,8 +56,7 @@
             [logseq.common.path :as path]
             [react-draggable]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [logseq.db :as ldb]))
+            [rum.core :as rum]))
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class count]} child]

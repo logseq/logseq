@@ -29,8 +29,7 @@
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
-            [frontend.config :as config]
-            [logseq.db :as ldb]))
+            [frontend.config :as config]))
 
 (rum/defc commands < rum/reactive
   [id format]

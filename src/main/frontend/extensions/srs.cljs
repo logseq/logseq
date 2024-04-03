@@ -30,8 +30,7 @@
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.util.page-ref :as page-ref]
             [medley.core :as medley]
-            [rum.core :as rum]
-            [frontend.handler.property.util :as pu]))
+            [rum.core :as rum]))
 
 ;;; ================================================================
 ;;; Commentary
