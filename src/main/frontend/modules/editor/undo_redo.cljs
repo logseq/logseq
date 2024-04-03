@@ -153,11 +153,7 @@
           editor-cursor (:before (get @(get @state/state :history/tx->editor-cursor) tx-id))]
       (push-redo e)
       (p/do!
-       (transact! new-txs (assoc tx-meta :undo? true))
-
-       (when (= :rename-page (:outliner-op tx-meta))
-         (when-let [old-page (:old-name (:data tx-meta))]
-           (route-handler/redirect-to-page! old-page))))
+       (transact! new-txs (assoc tx-meta :undo? true)))
       (assoc e
              :txs-op new-txs
              :editor-cursor editor-cursor))))
@@ -174,11 +170,7 @@
                             (or (:after s) (:before s))))]
       (push-undo e)
       (p/do!
-       (transact! new-txs (assoc tx-meta :redo? true))
-
-       (when (= :rename-page (:outliner-op tx-meta))
-         (when-let [new-page (:new-name (:data tx-meta))]
-           (route-handler/redirect-to-page! new-page))))
+       (transact! new-txs (assoc tx-meta :redo? true)))
 
       (assoc e
              :txs-op new-txs
