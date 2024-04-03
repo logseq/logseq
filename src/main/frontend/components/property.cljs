@@ -378,17 +378,13 @@
                      :disabled disabled?
                      :default-value description})])]]))]]))))
 
-(defn- get-property-from-db [name]
-  (when-not (string/blank? name)
-    (db/entity (db-property/get-db-ident-from-name name))))
-
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
   [entity property-name {:keys [class-schema? page-configure?]}]
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
-    (if-let [property (get-property-from-db property-name)]
+    (if-let [property (db/entity [:block/original-name property-name])]
       (if (and (not (get-in property [:block/schema :public?]))
                (ldb/built-in? property))
         (do (notification/show! "This is a private built-in property that can't be used." :error)
@@ -463,7 +459,7 @@
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      (if in-block-container? {:style {:padding-left 22}} {})
      (if @*property-key
-       (let [property (get-property-from-db @*property-key)]
+       (let [property (db/entity [:block/original-name @*property-key])]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
           [:div.flex.flex-row.items-center.col-span-2
            [:span.bullet-container.cursor [:span.bullet]]

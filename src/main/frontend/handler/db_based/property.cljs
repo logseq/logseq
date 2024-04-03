@@ -104,33 +104,30 @@
          :db/cardinality cardinality})))
 
 (defn upsert-property!
+  "If property-id is given, updates property or creates a new property"
   [repo property-id schema {:keys [property-name properties]}]
-  (let [db-ident (or property-id (db-property/get-db-ident-from-name property-name))
-        property (db/entity db-ident)]
-    (cond
-      property
-      (let [tx-data (->>
-                     (conj
-                      [(cond->
-                        (merge
-                         (outliner-core/block-with-updated-at
-                          {:db/ident db-ident
-                           :block/schema schema})
-                         properties)
-                         property-name
-                         (assoc :block/original-name property-name))]
-                      (update-schema property schema))
-                     (remove nil?))]
-        (db/transact! repo tx-data {:outliner-op :save-block}))
-
-      :else
-      (let [k-name (or (:block/original-name property)
-                       (and property-name (name property-name))
-                       (name property-id))]
-        (assert (some? k-name)
-                (prn "property-id: " property-id ", property-name: " property-name))
-        (db/transact! repo [(sqlite-util/build-new-property db-ident k-name schema)]
-                      {:outliner-op :new-property})))))
+  (if property-id
+    (let [property (db/entity property-id)
+          tx-data (->>
+                   (conj
+                    [(cond->
+                      (merge
+                       (outliner-core/block-with-updated-at
+                        {:db/ident property-id
+                         :block/schema schema})
+                       properties)
+                       property-name
+                       (assoc :block/original-name property-name))]
+                    (update-schema property schema))
+                   (remove nil?))]
+      (db/transact! repo tx-data {:outliner-op :save-block}))
+    (let [k-name (or (and property-name (name property-name))
+                     (name property-id))
+          db-ident (db-property/get-db-ident-from-name property-name)]
+      (assert (some? k-name)
+              (prn "property-id: " property-id ", property-name: " property-name))
+      (db/transact! repo [(sqlite-util/build-new-property db-ident k-name schema)]
+                    {:outliner-op :new-property}))))
 
 (defn validate-property-value
   [schema value]
