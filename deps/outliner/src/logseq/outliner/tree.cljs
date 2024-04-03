@@ -28,7 +28,8 @@
         blocks (remove #(db-property/shape-block? repo db %) blocks)
         parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
-                  (ldb/sort-by-left (get parent-blocks parent) {:db/id parent}))
+                  (when-let [children (get parent-blocks parent)]
+                    (ldb/sort-by-left children {:db/id parent})))
         block-children (fn block-children [parent level]
                          (map (fn [m]
                                 (let [id (:db/id m)
@@ -37,7 +38,7 @@
                                   (assoc m
                                          :block/level level
                                          :block/children children)))
-                           (sort-fn parent)))]
+                              (sort-fn parent)))]
     (block-children root-id 1)))
 
 (defn- get-root-and-page
@@ -45,15 +46,11 @@
   (cond
     (uuid? root-id)
     (let [e (d/entity db [:block/uuid root-id])]
-      (if (:block/page e)
-        [false e]
-        [true e]))
+      (if (ldb/page? e) [true e] [false e]))
 
     (number? root-id)
     (let [e (d/entity db root-id)]
-      (if (:block/page e)
-        [false e]
-        [true e]))
+      (if (ldb/page? e) [true e] [false e]))
 
     (string? root-id)
     (if-let [id (parse-uuid root-id)]

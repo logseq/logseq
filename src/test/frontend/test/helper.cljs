@@ -24,7 +24,7 @@
 
 (defn start-test-db!
   [& {:as opts}]
-  (let [test-db (if (or (:db-graph? opts) (some? js/process.env.DB_GRAPH))
+  (let [test-db (if (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
                   test-db-name-db-version
                   test-db-name)]
     (state/set-current-repo! test-db)
@@ -196,7 +196,7 @@
   "Given a collection of file maps, loads them into the current test-db.
 This can be called in synchronous contexts as no async fns should be invoked"
   [files]
-  (if js/process.env.DB_GRAPH
+  (if (and node? js/process.env.DB_GRAPH)
     (load-test-files-for-db-graph files)
     (file-repo-handler/parse-files-and-load-to-db!
      test-db
@@ -237,7 +237,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
   connection when done with it."
   [f & {:as start-opts}]
   ;; Set current-repo explicitly since it's not the default
-  (let [db-graph? (or (:db-graph? start-opts) (some? js/process.env.DB_GRAPH))
+  (let [db-graph? (or (:db-graph? start-opts) (and node? (some? js/process.env.DB_GRAPH)))
         repo (if db-graph? test-db-name-db-version test-db-name)]
     (state/set-current-repo! repo)
     (start-test-db! start-opts)
