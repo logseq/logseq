@@ -447,57 +447,58 @@ server: ;; remove 2
         (rtc-core/apply-remote-remove-page-ops repo conn remove-page-ops)
         (is (nil? (d/entity @conn [:block/uuid page1-uuid])))))))
 
-
-(deftest same-name-two-pages-merge-test
-  (let [repo (state/get-current-repo)
-        conn (conn/get-db repo false)
-        date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
-        opts {:persist-op? false
-              :transact-opts {:repo repo
-                              :conn conn}}
-        page-name "same-name-page-test"
-        [page1-uuid page2-uuid
-         uuid1-client uuid2-client
-         uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-    (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page1-uuid})
-    (outliner-tx/transact!
-     opts
-     (outliner-core/insert-blocks!
-      repo
-      conn
-      [{:block/uuid uuid1-client
-        :block/content "uuid1-client"
-        :block/left [:block/uuid page1-uuid]
-        :block/parent [:block/uuid page1-uuid]}
-       {:block/uuid uuid2-client
-        :block/content "uuid2-client"
-        :block/left [:block/uuid uuid1-client]
-        :block/parent [:block/uuid page1-uuid]}]
-      (ldb/get-page @conn page-name)
-      {:sibling? true :keep-uuid? true}))
-    (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
-                        :affected-blocks
-                        {page2-uuid {:op :update-page
-                                     :self page2-uuid
-                                     :page-name page-name
-                                     :original-name page-name}
-                         uuid1-remote {:op :move
-                                       :self uuid1-remote
-                                       :parents [page2-uuid]
-                                       :left page2-uuid
-                                       :content "uuid1-remote"}
-                         uuid2-remote {:op :move
-                                       :self uuid2-remote
-                                       :parents [page2-uuid]
-                                       :left uuid1-remote
-                                       :content "uuid2-remote"}}}
-          all-ops (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))
-          update-page-ops (vals (:update-page-ops-map all-ops))
-          move-ops (#'rtc-core/move-ops-map->sorted-move-ops (:move-ops-map all-ops))]
-      (is (rtc-const/data-from-ws-validator data-from-ws))
-      (rtc-core/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
-      (rtc-core/apply-remote-move-ops repo conn date-formatter move-ops)
-      (let [page (ldb/get-page @conn page-name)]
-        (is (= #{uuid1-client uuid2-client uuid1-remote uuid2-remote}
-             (set (map :block/uuid (ldb/get-page-blocks @conn (:db/id page) {})))))
-        (is (= page2-uuid (:block/uuid page)))))))
+;; TODO: add back once page merge get supported
+(comment
+  (deftest same-name-two-pages-merge-test
+   (let [repo (state/get-current-repo)
+         conn (conn/get-db repo false)
+         date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
+         opts {:persist-op? false
+               :transact-opts {:repo repo
+                               :conn conn}}
+         page-name "same-name-page-test"
+         [page1-uuid page2-uuid
+          uuid1-client uuid2-client
+          uuid1-remote uuid2-remote] (repeatedly random-uuid)]
+     (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page1-uuid})
+     (outliner-tx/transact!
+      opts
+      (outliner-core/insert-blocks!
+       repo
+       conn
+       [{:block/uuid uuid1-client
+         :block/content "uuid1-client"
+         :block/left [:block/uuid page1-uuid]
+         :block/parent [:block/uuid page1-uuid]}
+        {:block/uuid uuid2-client
+         :block/content "uuid2-client"
+         :block/left [:block/uuid uuid1-client]
+         :block/parent [:block/uuid page1-uuid]}]
+       (ldb/get-page @conn page-name)
+       {:sibling? true :keep-uuid? true}))
+     (let [data-from-ws {:req-id "req-id" :t 1 :t-before 0
+                         :affected-blocks
+                         {page2-uuid {:op :update-page
+                                      :self page2-uuid
+                                      :page-name page-name
+                                      :original-name page-name}
+                          uuid1-remote {:op :move
+                                        :self uuid1-remote
+                                        :parents [page2-uuid]
+                                        :left page2-uuid
+                                        :content "uuid1-remote"}
+                          uuid2-remote {:op :move
+                                        :self uuid2-remote
+                                        :parents [page2-uuid]
+                                        :left uuid1-remote
+                                        :content "uuid2-remote"}}}
+           all-ops (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))
+           update-page-ops (vals (:update-page-ops-map all-ops))
+           move-ops (#'rtc-core/move-ops-map->sorted-move-ops (:move-ops-map all-ops))]
+       (is (rtc-const/data-from-ws-validator data-from-ws))
+       (rtc-core/apply-remote-update-page-ops repo conn date-formatter update-page-ops)
+       (rtc-core/apply-remote-move-ops repo conn date-formatter move-ops)
+       (let [page (ldb/get-page @conn page-name)]
+         (is (= #{uuid1-client uuid2-client uuid1-remote uuid2-remote}
+                (set (map :block/uuid (ldb/get-page-blocks @conn (:db/id page) {})))))
+         (is (= page2-uuid (:block/uuid page))))))))
