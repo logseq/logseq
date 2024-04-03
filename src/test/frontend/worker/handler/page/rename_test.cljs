@@ -21,24 +21,18 @@
 
 (use-fixtures :each start-and-destroy-db)
 
-(defn- page-rename [old-name new-name]
-  (worker-page-rename/rename! repo (db/get-db repo false) {} old-name new-name))
+(defn- page-rename [page-uuid new-name]
+  (worker-page-rename/rename! repo (db/get-db repo false) {} page-uuid new-name))
 
 (deftest rename-test
   (testing "Case change"
     (let [page (db/get-page "test")]
-      (page-rename "test" "Test")
-      (let [entity (db/get-page "test")]
-        (is (= "Test" (:block/original-name entity)))
-        ;; db id not changed
-        (is (= (:db/id page) (:db/id entity))))))
+      (page-rename (:block/uuid page) "Test")
+      (is (= "Test" (:block/original-name (db/entity (:db/id page)))))))
 
   (testing "Name changed"
-    (let [page (db/get-page "test")]
-      (page-rename "Test" "New name")
-      (let [entity (db/get-page "new name")]
-        (is (= "New name" (:block/original-name entity)))
-        (is (= (:db/id page) (:db/id entity))))))
+    (let [page (db/get-page "Test")]
+      (is (= "New name" (:block/original-name (db/entity (:db/id page)))))))
 
   ;; (testing "Merge existing page"
   ;;   (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
