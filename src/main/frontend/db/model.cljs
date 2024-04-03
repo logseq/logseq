@@ -640,28 +640,29 @@ independent of format as format specific heading characters are stripped"
               [page ref-page-name]))))))
 
 ;; get pages who mentioned this page
-;; TODO: use :block/_refs
 (defn get-pages-that-mentioned-page
-  [repo page-id include-journals]
+  [repo page-id include-journals?]
   (when (conn/get-db repo)
     (let [pages (page-alias-set repo page-id)
-          query-base '[:find ?mentioned-page-name
-                       :in $ ?pages
-                       :where
-                       [?block :block/refs ?p]
-                       [(contains? ?pages ?p)]
-                       [?block :block/page ?mentioned-page]
-                       [?mentioned-page :block/name ?mentioned-page-name]]
-          query  (if include-journals
-                   query-base
-                   (conj query-base '[?mentioned-page :block/journal? false]))
-
-          mentioned-pages (->> (react/q repo [:frontend.worker.react/page<-pages page-id] {:use-cache? false}
-                                        query
-                                        pages)
-                               react
-                               db-utils/seq-flatten)]
-      (mapv (fn [page] [page (get-page-alias repo page)]) mentioned-pages))))
+          mentioned-pages (->> (react/q repo [:frontend.worker.react/page<-pages page-id]
+                                        {:query-fn (fn [_]
+                                                     (->>
+                                                      (mapcat
+                                                       (fn [id]
+                                                         (let [page (db-utils/entity repo id)]
+                                                           (->> (:block/_refs page)
+                                                                (keep (fn [ref]
+                                                                        (:block/page ref)))
+                                                                (util/distinct-by :db/id))))
+                                                       pages)))}
+                                        {:use-cache? false})
+                               react)]
+      (->> mentioned-pages
+           (keep (fn [page]
+                   (when-not (and (not include-journals?) (:block/journal? page))
+                     page)))
+           (mapv (fn [page]
+                   [(:block/name page) (get-page-alias-names repo (:db/id page))]))))))
 
 (defn get-page-referenced-blocks-full
   ([page-id]

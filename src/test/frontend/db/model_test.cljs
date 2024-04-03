@@ -16,18 +16,20 @@
                      :file/content "alias:: aa, ad"}
                     {:file/path "ae.md"
                      :file/content "## ref to [[ab]]"}])
-  (let [a-aliases (model/page-alias-set test-helper/test-db "aa")
-        b-aliases (model/page-alias-set test-helper/test-db "ab")
-        alias-names (model/get-page-alias-names test-helper/test-db "aa")
-        b-ref-blocks (model/get-page-referenced-blocks "ab")
-        a-ref-blocks (model/get-page-referenced-blocks "aa")]
+  (let [aid (:db/id (db/entity [:block/name "aa"]))
+        bid (:db/id (db/entity [:block/name "ab"]))
+        a-aliases (model/page-alias-set test-helper/test-db aid)
+        b-aliases (model/page-alias-set test-helper/test-db bid)
+        alias-names (model/get-page-alias-names test-helper/test-db aid)
+        b-ref-blocks (model/get-page-referenced-blocks bid)
+        a-ref-blocks (model/get-page-referenced-blocks aid)]
 
     (are [x y] (= x y)
-         4 (count a-aliases)
-         4 (count b-aliases)
-         2 (count b-ref-blocks)
-         2 (count a-ref-blocks)
-         #{"ab" "ac" "ad"} (set alias-names))))
+      4 (count a-aliases)
+      4 (count b-aliases)
+      2 (count b-ref-blocks)
+      2 (count a-ref-blocks)
+      #{"ab" "ac" "ad"} (set alias-names))))
 
 (deftest test-page-alias-set
   (load-test-files [{:file/path "aa.md"
@@ -36,9 +38,10 @@
                      :file/content "alias:: ac"}
                     {:file/path "ad.md"
                      :file/content "## ref to [[ab]]"}])
-  (let [a-aliases (model/page-alias-set test-helper/test-db "aa")
-        alias-names (model/get-page-alias-names test-helper/test-db "aa")
-        a-ref-blocks (model/get-page-referenced-blocks "aa")]
+  (let [page-id (:db/id (db/entity [:block/name "aa"]))
+        a-aliases (model/page-alias-set test-helper/test-db page-id)
+        alias-names (model/get-page-alias-names test-helper/test-db page-id)
+        a-ref-blocks (model/get-page-referenced-blocks page-id)]
     (are [x y] (= x y)
       3 (count a-aliases)
       2 (count a-ref-blocks)
@@ -58,19 +61,19 @@
                      :file/content "- link to page one [[page ONE]]"}])
 
   (is (= '("sep 18th, 2020" "aug 15th, 2020" "generic page")
-         (map first (model/get-pages-that-mentioned-page test-helper/test-db "page ONE" true)))
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db (:db/id (db/entity [:block/name "page one"])) true)))
       "Must be 'generic page' + 2 journals")
 
   (is (= '("generic page")
-         (map first (model/get-pages-that-mentioned-page test-helper/test-db "page ONE" false)))
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db (:db/id (db/entity [:block/name "page one"])) false)))
       "Must be only 'generic page'")
 
   (is (= '("aug 15th, 2020")
-         (map first (model/get-pages-that-mentioned-page test-helper/test-db "generic page" true)))
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db (:db/id (db/entity [:block/name "generic page"])) true)))
       "Must show only 'aug 15th, 2020'")
 
   (is (= '()
-         (map first (model/get-pages-that-mentioned-page test-helper/test-db "generic page" false)))
+         (map first (model/get-pages-that-mentioned-page test-helper/test-db (:db/id (db/entity [:block/name "generic page"])) false)))
       "Must be empty"))
 
 (deftest entity-query-should-return-nil-if-id-not-exists
