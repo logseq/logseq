@@ -328,7 +328,7 @@
         page-block (gp-whiteboard/migrate-page-block page-block)
         blocks (->> blocks
                     (map gp-whiteboard/migrate-shape-block)
-                    (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))
+                    (map #(merge % (gp-whiteboard/with-whiteboard-block-props % [:block/uuid (:block/uuid page-block)]))))
         _ (when verbose (println "Parsing finished: " file))]
     {:pages (list page-block)
      :blocks blocks}))

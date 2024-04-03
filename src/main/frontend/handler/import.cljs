@@ -153,7 +153,7 @@
                 (let [blocks (->> children
                                   (map (partial medley/map-keys (fn [k] (keyword "block" k))))
                                   (map gp-whiteboard/migrate-shape-block)
-                                  (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))]
+                                  (map #(merge % (gp-whiteboard/with-whiteboard-block-props % [:block/uuid uuid]))))]
                   (db/transact! blocks))
                 (editor/insert-block-tree children page-format
                                           {:target-block page-block
