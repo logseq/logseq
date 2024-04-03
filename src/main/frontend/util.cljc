@@ -684,7 +684,7 @@
    (defn safe-dec-current-pos-from-end
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -692,15 +692,16 @@
              (- current-pos (.-length (.pop input))))
            (catch :default e
              (js/console.error e)
-             (dec current-pos))))
-       (dec current-pos))))
+             (dec current-pos)))
+         (dec current-pos))
+       current-pos)))
 
 #?(:cljs
    ;; for widen char
    (defn safe-inc-current-pos-from-start
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substr input current-pos 20))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -708,8 +709,9 @@
              (+ current-pos (.-length (.shift input))))
            (catch :default e
              (js/console.error e)
-             (inc current-pos))))
-       (inc current-pos))))
+             (inc current-pos)))
+         (inc current-pos))
+       current-pos)))
 
 #?(:cljs
    (defn kill-line-before!
