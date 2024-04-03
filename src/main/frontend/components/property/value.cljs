@@ -24,7 +24,8 @@
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [frontend.handler.property.util :as pu]))
 
 (defn- select-type?
   [property type]
@@ -399,7 +400,7 @@
             items (if closed-values?
                     (keep (fn [id]
                             (when-let [block (when id (db/entity [:block/uuid id]))]
-                              (let [icon (:logseq.property/icon block)
+                              (let [icon (get block (pu/get-pid :logseq.property/icon))
                                     value (db-property/closed-value-name block)]
                                 {:label (if icon
                                           [:div.flex.flex-row.gap-2
@@ -543,7 +544,7 @@
       [:div.text-sm.opacity-70 "loading"]
       (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [value' (get-in block [:block/schema :value])
-              icon (:logseq.property/icon block)]
+              icon (get block (pu/get-pid :logseq.property/icon))]
           (cond
             (:block/name block)
             (page-cp {:disable-preview? true
@@ -654,7 +655,7 @@
                  :default)
         type (if (= :block type)
                (let [v-block (db/entity value)]
-                 (if (:logseq.property/created-from-template v-block)
+                 (if (get v-block (pu/get-pid :logseq.property/created-from-template))
                    :template
                    type))
                type)

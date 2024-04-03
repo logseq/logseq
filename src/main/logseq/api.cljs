@@ -50,7 +50,8 @@
             [frontend.handler.code :as code-handler]
             [frontend.handler.search :as search-handler]
             [logseq.api.block :as api-block]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -1021,7 +1022,8 @@
             repo (state/get-current-repo)]
       (if (or (not block) (true? overwrite))
         (do (when-let [old-target block]
-              (property-handler/remove-block-property! repo (:block/uuid old-target) :logseq.property/template))
+              (let [k (db-property/get-pid repo :logseq.property/template)]
+                (property-handler/remove-block-property! repo (:block/uuid old-target) k)))
             (property-handler/set-block-property! repo target-uuid :logseq.property/template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
@@ -1029,9 +1031,9 @@
   [name]
   (p/let [block (when name (db-async/<get-template-by-name name))]
     (when block
-      (property-handler/remove-block-property!
-       (state/get-current-repo)
-       (:block/uuid block) :logseq.property/template))))
+      (let [repo (state/get-current-repo)
+            k (db-property/get-pid repo :logseq.property/template)]
+        (property-handler/remove-block-property! repo (:block/uuid block) k)))))
 
 ;; search
 (defn ^:export search

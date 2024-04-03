@@ -88,12 +88,12 @@
 (defn set-block-own-order-list-type!
   [block type]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/set-block-property! (state/get-current-repo) uuid :logseq.property/order-list-type (name type))))
+    (property-handler/set-block-property! (state/get-current-repo) uuid (pu/get-pid :logseq.property/order-list-type) (name type))))
 
 (defn remove-block-own-order-list-type!
   [block]
   (when-let [uuid (:block/uuid block)]
-    (property-handler/remove-block-property! (state/get-current-repo) uuid :logseq.property/order-list-type)))
+    (property-handler/remove-block-property! (state/get-current-repo) uuid (pu/get-pid :logseq.property/order-list-type))))
 
 (defn own-order-number-list?
   [block]
@@ -109,7 +109,7 @@
   (when (seq blocks)
     (let [has-ordered?    (some own-order-number-list? blocks)
           blocks-uuids    (some->> blocks (map :block/uuid) (remove nil?))
-          order-list-prop :logseq.property/order-list-type
+          order-list-prop (pu/get-pid :logseq.property/order-list-type)
           repo (state/get-current-repo)]
       (if has-ordered?
         (property-handler/batch-remove-block-property! repo blocks-uuids order-list-prop)
@@ -540,18 +540,21 @@
                                    ;; FIXME: assert
                                    :else
                                    nil)]
-          (when block-m
-            (p/do!
-             (outliner-insert-block! {} block-m new-block {:sibling? sibling?
-                                                           :keep-uuid? true
-                                                           :ordered-list? ordered-list?
-                                                           :replace-empty-target? replace-empty-target?})
-             (when edit-block?
-               (if (and replace-empty-target?
-                        (string/blank? (:block/content last-block)))
-                 (edit-block! last-block :max nil)
-                 (edit-block! new-block :max nil)))
-             new-block)))))))
+          (let [new-block' (if db-based?
+                             (merge new-block properties)
+                             new-block)]
+            (when block-m
+              (p/do!
+               (outliner-insert-block! {} block-m new-block' {:sibling? sibling?
+                                                              :keep-uuid? true
+                                                              :ordered-list? ordered-list?
+                                                              :replace-empty-target? replace-empty-target?})
+               (when edit-block?
+                 (if (and replace-empty-target?
+                          (string/blank? (:block/content last-block)))
+                   (edit-block! last-block :max nil)
+                   (edit-block! new-block :max nil)))
+               new-block))))))))
 
 (defn insert-first-page-block-if-not-exists!
   ([page-title]
@@ -887,7 +890,7 @@
 (defn set-block-query-properties!
   [block-id all-properties key add?]
   (when-let [block (db/entity [:block/uuid block-id])]
-    (let [query-properties (:logseq.property/query-properties block)
+    (let [query-properties (get block (pu/get-pid :logseq.property/query-properties))
           repo (state/get-current-repo)
           db-based? (config/db-based-graph? repo)
           query-properties (if db-based?
@@ -903,11 +906,11 @@
           query-properties (vec query-properties)]
       (if (seq query-properties)
         (property-handler/set-block-property! repo block-id
-                                              :logseq.property/query-properties
+                                              (pu/get-pid :logseq.property/query-properties)
                                               (if db-based?
                                                 query-properties
                                                 (str query-properties)))
-        (property-handler/remove-block-property! repo block-id :logseq.property/query-properties)))))
+        (property-handler/remove-block-property! repo block-id (pu/get-pid :logseq.property/query-properties))))))
 
 (defn set-block-timestamp!
   [block-id key value]

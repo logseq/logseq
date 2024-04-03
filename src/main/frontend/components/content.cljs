@@ -42,10 +42,11 @@
     [:.menu-links-wrapper
      (ui/menu-background-color #(property-handler/batch-set-block-property! repo
                                                                             (state/get-selection-block-ids)
-                                                                            :logseq.property/background-color %)
+                                                                            (pu/get-pid :logseq.property/background-color)
+                                                                            %)
                                #(property-handler/batch-remove-block-property! repo
                                                                                (state/get-selection-block-ids)
-                                                                               :logseq.property/background-color))
+                                                                               (pu/get-pid :logseq.property/background-color)))
 
      (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
                       #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
@@ -167,10 +168,12 @@
                                           [:p (t :context-menu/template-exists-warning)]
                                           :error)
                                          (p/do!
-                                           (property-handler/set-block-property! repo block-id :logseq.property/template title)
-                                           (when (false? template-including-parent?)
-                                             (property-handler/set-block-property! repo block-id :logseq.property/template-including-parent false))
-                                           (state/hide-custom-context-menu!))))))))]
+                                          (property-handler/set-block-property! repo block-id (pu/get-pid :logseq.property/template) title)
+                                          (when (false? template-including-parent?)
+                                            (property-handler/set-block-property! repo block-id
+                                                                                  (pu/get-pid :logseq.property/template-including-parent)
+                                                                                  false))
+                                          (state/hide-custom-context-menu!))))))))]
          [:hr.menu-separator]])
       (ui/menu-link
        {:key "Make a Template"
@@ -189,8 +192,11 @@
             heading (or (pu/lookup properties :logseq.property/heading)
                         false)]
         [:.menu-links-wrapper
-         (ui/menu-background-color #(property-handler/set-block-property! repo block-id :logseq.property/background-color %)
-                                   #(property-handler/remove-block-property! repo block-id :logseq.property/background-color))
+         (ui/menu-background-color #(property-handler/set-block-property! repo block-id
+                                                                          (pu/get-pid :logseq.property/background-color)
+                                                                          %)
+                                   #(property-handler/remove-block-property! repo block-id
+                                                                             (pu/get-pid :logseq.property/background-color)))
 
          (ui/menu-heading heading
                           #(editor-handler/set-heading! block-id %)

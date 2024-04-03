@@ -13,7 +13,8 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.property.util :as pu]))
 
 (defn built-in-custom-query?
   [title]
@@ -156,7 +157,7 @@
                        collapsed?
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
-        query-table? (:logseq.property/query-table current-block)
+        query-table? (get current-block (pu/get-pid :logseq.property/query-table))
         table? (or table-view?
                    query-table?
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
@@ -209,12 +210,12 @@
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                   :logseq.property/query-table
+                                                                                                   (pu/get-pid :logseq.property/query-table)
                                                                                                    false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                   :logseq.property/query-table
+                                                                                                   (pu/get-pid :logseq.property/query-table)
                                                                                                    true))}
                     (ui/icon "table" {:style {:font-size 20}})]))
 

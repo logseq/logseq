@@ -129,10 +129,12 @@
 (defn update-hl-block!
   [highlight]
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
-    (doseq [[k v] {:logseq.property/hl-stamp (if (area-highlight? highlight)
-                                               (get-in highlight [:content :image])
-                                               (js/Date.now))
-                   :logseq.property/hl-color (get-in highlight [:properties :color])}]
+    (doseq [[k v] {(pu/get-pid :logseq.property/hl-stamp)
+                   (if (area-highlight? highlight)
+                     (get-in highlight [:content :image])
+                     (js/Date.now))
+                   (pu/get-pid :logseq.property/hl-color)
+                   (get-in highlight [:properties :color])}]
       (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k v))))
 
 (defn unlink-hl-area-image$
@@ -178,7 +180,7 @@
 
         ;; try to update file path
         (do
-          (property-handler/add-page-property! page-name :logseq.property/file-path url)
+          (property-handler/add-page-property! page-name (pu/get-pid :logseq.property/file-path) url)
           page)))))
 
 (defn ensure-ref-block!
@@ -194,13 +196,13 @@
            (let [text       (:text content)
                  wrap-props #(if-let [stamp (:image content)]
                                (assoc %
-                                      :logseq.property/hl-type :area
-                                      :logseq.property/hl-stamp stamp)
+                                      (pu/get-pid :logseq.property/hl-type) :area
+                                      (pu/get-pid :logseq.property/hl-stamp) stamp)
                                %)
                  props (cond->
-                        {:logseq.property/ls-type  :annotation
-                         :logseq.property/hl-page  page
-                         :logseq.property/hl-color (:color properties)}
+                        {(pu/get-pid :logseq.property/ls-type)  :annotation
+                         (pu/get-pid :logseq.property/hl-page)  page
+                         (pu/get-pid :logseq.property/hl-color) (:color properties)}
                          (not (config/db-based-graph? (state/get-current-repo)))
                           ;; force custom uuid
                          (assoc :id (str id)))

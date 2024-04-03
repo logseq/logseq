@@ -290,9 +290,9 @@
 
 (defonce *query-properties (atom {}))
 (rum/defc query-properties-settings-inner < rum/reactive
-                                            {:will-unmount (fn [state]
-                                                             (reset! *query-properties {})
-                                                             state)}
+  {:will-unmount (fn [state]
+                   (reset! *query-properties {})
+                   state)}
   [block shown-properties all-properties]
   (let [query-properties (rum/react *query-properties)]
     [:div.p-4
@@ -302,7 +302,8 @@
        :on-click
        (fn []
          (reset! *query-properties {})
-         (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/query-properties))}
+         (let [k (pu/get-pid :logseq.property/query-properties)]
+           (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) k)))}
       (ui/icon "refresh")]
      (for [property all-properties]
        (let [property-value (get query-properties property)
@@ -312,15 +313,15 @@
          [:div.flex.flex-row.m-2.justify-between.align-items
           [:div (if (keyword? property) (db-pu/get-property-name property) (name property))]
           [:div.mt-1 (ui/toggle shown?
-                       (fn []
-                         (let [value (not shown?)]
-                           (swap! *query-properties assoc property value)
-                           (editor-handler/set-block-query-properties!
-                             (:block/uuid block)
-                             all-properties
-                             property
-                             value)))
-                       true)]]))]))
+                                (fn []
+                                  (let [value (not shown?)]
+                                    (swap! *query-properties assoc property value)
+                                    (editor-handler/set-block-query-properties!
+                                     (:block/uuid block)
+                                     all-properties
+                                     property
+                                     value)))
+                                true)]]))]))
 
 (defn query-properties-settings
   [block shown-properties all-properties]

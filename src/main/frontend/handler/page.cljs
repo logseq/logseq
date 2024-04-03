@@ -40,7 +40,8 @@
             [logseq.db :as ldb]
             [logseq.graph-parser.db :as gp-db]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]))
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.handler.property.util :as pu]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
@@ -173,7 +174,7 @@
 
 (defn update-public-attribute!
   [page value]
-  (property-handler/add-page-property! page :logseq.property/public value))
+  (property-handler/add-page-property! page (pu/get-pid :logseq.property/public) value))
 
 (defn get-page-ref-text
   [page]
@@ -246,17 +247,18 @@
 
 (defn get-filters
   [page]
-  (if (config/db-based-graph? (state/get-current-repo))
-    (:logseq.property/filters page)
-    (let [properties (:block/properties page)
-          properties-str (or (:filters properties) "{}")]
-      (try (reader/read-string properties-str)
-           (catch :default e
-             (log/error :syntax/filters e))))))
+  (let [k (pu/get-pid :logseq.property/filters)]
+    (if (config/db-based-graph? (state/get-current-repo))
+      (get page k)
+      (let [properties (:block/properties page)
+            properties-str (or (get properties k) "{}")]
+        (try (reader/read-string properties-str)
+             (catch :default e
+               (log/error :syntax/filters e)))))))
 
 (defn save-filter!
   [page filter-state]
-  (property-handler/add-page-property! page :logseq.property/filters filter-state))
+  (property-handler/add-page-property! page (pu/get-pid :logseq.property/filters) filter-state))
 
 ;; Editor
 (defn page-not-exists-handler
