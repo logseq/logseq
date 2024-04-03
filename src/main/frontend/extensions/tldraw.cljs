@@ -120,7 +120,7 @@
                     (assert (common-util/uuid-string? page-uuid-str))
                     (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
    :isWhiteboardPage (fn [page-name]
-                       (when-let [entity (ldb/get-first-page-by-name (db/get-db) page-name)]
+                       (when-let [entity (db/get-page page-name)]
                          (model/whiteboard-page? entity)))
    :isMobile util/mobile?
    :saveAsset save-asset-handler

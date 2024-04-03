@@ -162,7 +162,7 @@
     (when page
       (if (common-util/uuid-string? page)
         (db-utils/entity [:block/uuid (uuid page)])
-        (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page))))))
+        (ldb/get-page (conn/get-db) page)))))
 
 (defn- execute-query!
   [graph db k {:keys [query inputs transform-fn query-fn inputs-fn result]

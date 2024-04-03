@@ -306,7 +306,7 @@
      (let [selector (ldb/read-transit-str selector-str)
            id (ldb/read-transit-str id-str)
            eid (when (and (vector? id) (= :block/name (first id)))
-                 (ldb/get-first-page-by-name @conn (second id)))
+                 (:db/id (ldb/get-page @conn (second id))))
            result (->> (d/pull @conn selector (or eid id))
                        (sqlite-common-db/with-parent-and-left @conn))]
        (ldb/write-transit-str result))))

@@ -100,8 +100,8 @@
 (defn- find-block-in-favorites-page
   [page-block-uuid]
   (let [db (conn/get-db)]
-    (when-let [page-id (ldb/get-first-page-by-name db common-config/favorites-page-name)]
-      (let [blocks (ldb/get-page-blocks db page-id {})]
+    (when-let [page (db/get-page common-config/favorites-page-name)]
+      (let [blocks (ldb/get-page-blocks db (:db/id page) {})]
         (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
           (some (fn [block]
                   (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
@@ -146,7 +146,7 @@
   (when page-uuid-or-name
     (assert (or (uuid? page-uuid-or-name) (string? page-uuid-or-name)))
     (when-let [page-uuid (or (and (uuid? page-uuid-or-name) page-uuid-or-name)
-                             (:block/uuid (db/entity (ldb/get-first-page-by-name (db/get-db) page-uuid-or-name))))]
+                             (:block/uuid (db/get-page page-uuid-or-name)))]
       (when-let [^Object worker @state/*db-worker]
         (-> (p/let [repo (state/get-current-repo)
                     res (.page-delete worker repo (str page-uuid))

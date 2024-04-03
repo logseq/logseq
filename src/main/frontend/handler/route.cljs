@@ -80,9 +80,7 @@
              (and (string? page-name) (not (string/blank? page-name))))
      ;; Always skip onboarding when loading an existing whiteboard
      (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
-     (when-let [db-id (if (uuid? page-name)
-                        (:db/id (db/entity [:block/uuid page-name]))
-                        (:db/id (db/entity (ldb/get-first-page-by-name (db/get-db) page-name))))]
+     (when-let [db-id (:db/id (db/get-page page-name))]
        (recent-handler/add-page-to-recent! db-id click-from-recent?))
      (if (and (= (str page-name) (state/get-current-page)) block-id)
        (state/focus-whiteboard-shape block-id)

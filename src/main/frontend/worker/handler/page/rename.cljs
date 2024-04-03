@@ -124,7 +124,7 @@
         new-name      (string/trim new-name)
         old-page-name (common-util/page-name-sanity-lc old-name)
         new-page-name (common-util/page-name-sanity-lc new-name)
-        new-page-exists? (some? (ldb/get-first-page-by-name db new-name))
+        new-page-exists? (some? (ldb/get-page db new-name))
         name-changed? (not= old-name new-name)]
     (cond
       (string/blank? new-name)

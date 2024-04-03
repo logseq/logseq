@@ -108,7 +108,7 @@
   "Unsanitized only"
   [db config page new-name]
   ;; update all pages which have references to this page
-  (let [to-page (d/entity db (ldb/get-first-page-by-name db new-name))
+  (let [to-page (ldb/get-page db new-name)
         old-original-name (:block/original-name page)
         blocks (:block/_refs (d/entity db (:db/id page)))
         tx       (->> (map (fn [{:block/keys [uuid content properties format] :as block}]

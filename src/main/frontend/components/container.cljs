@@ -225,7 +225,7 @@
     (let [page (:page default-home)
           page (when (and (string? page)
                           (not (string/blank? page)))
-                 (db/entity (ldb/get-first-page-by-name (db/get-db) page)))]
+                 (db/get-page page))]
       (if page
         default-home
         (dissoc default-home :page)))))
@@ -652,7 +652,7 @@
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
-                                              [(ldb/get-first-page-by-name (db/get-db) page) :page])]
+                                              [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            (when (state/mobile?)
