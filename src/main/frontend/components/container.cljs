@@ -75,12 +75,13 @@
 
 (rum/defc page-name
   [page icon recent?]
-  (let [original-name (:block/original-name page)
+  (let [repo (state/get-current-repo)
+        page (or (db/get-alias-source-page repo (:db/id page)) page)
+        original-name (:block/original-name page)
         whiteboard-page? (db-model/whiteboard-page? page)
         untitled? (db-model/untitled-page? original-name)
         name (:block/name page)
         file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
-        source-page (db-model/get-alias-source-page (state/get-current-repo) name)
         ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
         open-in-sidebar #(state/sidebar-add-block!
                           (state/get-current-repo)

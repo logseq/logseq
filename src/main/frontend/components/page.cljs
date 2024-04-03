@@ -1025,7 +1025,7 @@
        (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
          [:tr {:key name}
           [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
-          [:td.name [:a {:href     (rfe/href :page {:name (str (:block/uuid page))})}
+          [:td.name [:a {:href     (rfe/href :page {:name (:block/uuid page)})}
                      (component-block/page-cp {} page)]]
           [:td.backlinks [:span (or backlinks "0")]]
           (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
@@ -1325,7 +1325,7 @@
                                                repo
                                                (:db/id page)
                                                :page))))
-                              :href     (rfe/href :page {:name (str (:block/uuid page))})}
+                              :href     (rfe/href :page {:name (:block/uuid page)})}
                           (component-block/page-cp {} page)]]
 
                (when-not mobile?

@@ -42,9 +42,9 @@
       (highlight-neighbours! graph node (set @*focus-nodes) dark?)
       (highlight-edges! graph node dark?))
     (when-not drag?
-      (let [page-name (model/get-redirect-page-name node)]
+      (do
         (.unhoverNode ^js graph node)
-        (route-handler/redirect-to-page! page-name)))))
+        (route-handler/redirect-to-page! node)))))
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)

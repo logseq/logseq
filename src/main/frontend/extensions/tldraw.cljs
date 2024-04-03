@@ -27,16 +27,16 @@
             [frontend.components.whiteboard :as whiteboard]
             [cljs-bean.core :as bean]
             [frontend.db.async :as db-async]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.common.util :as common-util]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
 (def generate-preview (gobj/get TldrawLogseq "generateJSXFromModel"))
 
+;; FIXME: use page uuid instead or creating a ref
 (rum/defc page-cp
   [props]
-  (page/page {:page-name (model/get-redirect-page-name (gobj/get props "pageName")) :whiteboard? true}))
+  (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
 
 (rum/defc block-cp
   [props]
@@ -152,7 +152,7 @@
                                  page' (or new-page page)]
                            (route-handler/redirect-to-page! (if whiteboard?
                                                               (:block/uuid page')
-                                                              (model/get-redirect-page-name (:block/name page')))
+                                                              (model/get-redirect-page-name (:block/uuid page')))
                                                             (when (and block-id (not= block-id (:block/uuid page')))
                                                               {:block-id block-id}))))))})
 

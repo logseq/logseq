@@ -97,10 +97,10 @@
              distinct)))
 
 (defn get-alias-source-page
-  "return the source page (page-name) of an alias"
-  [repo alias]
+  "return the source page of an alias"
+  [repo alias-id]
   (when-let [db (conn/get-db repo)]
-    (ldb/get-alias-source-page db alias)))
+    (ldb/get-alias-source-page db alias-id)))
 
 (defn get-files-blocks
   [repo-url paths]
@@ -533,7 +533,6 @@ independent of format as format specific heading characters are stripped"
   (when page-name-or-uuid
     (ldb/get-page (conn/get-db) page-name-or-uuid)))
 
-;; FIXME: should pass page's db id
 (defn get-redirect-page-name
   "Given any readable page-name, return the exact page-name in db. If page
    doesn't exists yet, will return the passed `page-name`. Accepts both
@@ -542,11 +541,10 @@ independent of format as format specific heading characters are stripped"
   ([page-name] (get-redirect-page-name page-name false))
   ([page-name alias?]
    (when page-name
-     (let [page-name' (util/page-name-sanity-lc page-name)
-           page-entity (ldb/get-page (conn/get-db) page-name)]
+     (let [page-entity (ldb/get-page (conn/get-db) page-name)]
        (cond
          alias?
-         page-name'
+         (or (:block/name page-entity) page-name)
 
          (nil? page-entity)
          (if-let [journal-name (date/journal-title->custom-format page-name)]
@@ -554,9 +552,10 @@ independent of format as format specific heading characters are stripped"
            page-name)
 
          :else
-         (let [source-page (get-alias-source-page (state/get-current-repo) page-name')]
-           (or (when source-page (:block/name source-page))
-               page-name')))))))
+         (let [source-page (get-alias-source-page (state/get-current-repo) (:db/id page-entity))]
+           (or (:block/name source-page)
+               (:block/name page-entity)
+               page-name)))))))
 
 (defn get-page-original-name
   [page-name]
