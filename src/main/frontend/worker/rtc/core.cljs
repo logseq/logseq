@@ -512,7 +512,7 @@
   (let [config (worker-state/get-config repo)]
     (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
       (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
-            exist-page (d/entity @conn (ldb/get-first-page-by-name @conn page-name))
+            exist-page (ldb/get-page @conn page-name)
             create-opts {:create-first-block? false
                          :uuid self :persist-op? false}]
         (cond

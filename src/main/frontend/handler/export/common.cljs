@@ -101,7 +101,7 @@
 
 (defn- page-name->ast
   [page-name]
-  (let [page (db/entity (ldb/get-first-page-by-name (db/get-db) page-name))]
+  (let [page (db/get-page page-name)]
     (when-let [content (get-page-content (:block/uuid page))]
       (when content
         (let [format :markdown]

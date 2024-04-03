@@ -133,7 +133,7 @@
   [page theme show-journal]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
-      (let [page-entity (db/entity (ldb/get-first-page-by-name (db/get-db) page))
+      (let [page-entity (db/entity page)
             page-id (:db/id page-entity)
             tags (if (config/db-based-graph? repo)
                    (set (map #(:block/name (db/entity repo (:db/id %)))
@@ -156,7 +156,7 @@
                              (set))
             other-pages-links (mapcat
                                (fn [page]
-                                 (let [page-id (ldb/get-first-page-by-name (db/get-db) page)
+                                 (let [page-id (:db/id (db/get-page page))
                                        ref-pages (-> (map first (db/get-page-referenced-pages repo page-id))
                                                      (set)
                                                      (set/intersection other-pages))

@@ -52,7 +52,7 @@
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
-   (when-let [contents (db/entity (ldb/get-first-page-by-name (db/get-db) "contents"))]
+   (when-let [contents (db/get-page "contents")]
      (page/contents-page contents))])
 
 (rum/defc shortcut-settings
@@ -153,7 +153,7 @@
         (if-let [icon (get-in page [:block/properties :icon])]
           [:.text-md.mr-2 icon]
           (ui/icon (if (= "whiteboard" (:block/type page)) "whiteboard" "page") {:class "text-md mr-2"}))
-        [:span.overflow-hidden.text-ellipsis (db-model/get-page-original-name page-name)]]
+        [:span.overflow-hidden.text-ellipsis (:block/original-name page)]]
        (page-cp repo page-name)])
 
     :search

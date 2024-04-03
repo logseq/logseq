@@ -109,10 +109,10 @@
                         (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
-        (p/let [page (db/entity (ldb/get-first-page-by-name (db/get-db) chosen-item))
+        (p/let [page (db/get-page chosen-item)
                 _ (when-not page (page-handler/<create! chosen-item {:redirect? false
                                                                      :create-first-block? false}))
-                page' (db/entity (ldb/get-first-page-by-name (db/get-db) chosen-item))
+                page' (db/get-page chosen-item)
                 current-block (state/get-edit-block)]
           (editor-handler/api-insert-new-block! chosen-item
                                                 {:block-uuid (:block/uuid current-block)

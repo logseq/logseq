@@ -96,7 +96,7 @@
             (util/uuid-string? name')
             (db/entity [:block/uuid (uuid name')])
             :else
-            (db/entity (ldb/get-first-page-by-name (db/get-db) name')))
+            (db/get-page name'))
         uuid-str (or (str (:block/uuid e)) name')]
     (if (:block.temp/fully-loaded? e)
       e

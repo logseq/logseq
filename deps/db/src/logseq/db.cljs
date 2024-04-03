@@ -172,6 +172,15 @@
   (when page-name
     (some? (get-first-page-by-name db page-name))))
 
+(defn get-page
+  "Get a page given its unsanitized name"
+  [db page-name-or-uuid]
+  (when db
+    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
+                    (parse-uuid page-name-or-uuid))]
+      (d/entity db [:block/uuid id])
+      (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
+
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
   `page-id` could be either a string or a db/id."
@@ -192,7 +201,7 @@
         orphaned-pages (->>
                         (map
                          (fn [page]
-                           (when-let [page (d/entity db (get-first-page-by-name db page))]
+                           (when-let [page (get-page db page)]
                              (let [name (:block/name page)]
                                (and
                                 (empty-ref-f page)
@@ -396,15 +405,6 @@
       ;; only return the first result for idiot-proof
     (when (seq pages)
       (first pages))))
-
-(defn get-page
-  "Get a page given its unsanitized name"
-  [db page-name-or-uuid]
-  (when db
-    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
-                    (parse-uuid page-name-or-uuid))]
-      (d/entity db [:block/uuid id])
-      (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
 
 (defn get-page-alias
   [db page-id]

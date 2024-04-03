@@ -236,7 +236,7 @@ independent of format as format specific heading characters are stripped"
     :markdown
     (keyword
      (or
-      (let [page (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page-name))]
+      (let [page (ldb/get-page (conn/get-db) page-name)]
         (or
          (:block/format page)
          (when-let [file (:block/file page)]
@@ -318,8 +318,7 @@ independent of format as format specific heading characters are stripped"
        :level - the level of the block, 1 for root, 2 for children of root, etc."
   [page-name]
   {:pre [(string? page-name)]}
-  (let [page-id (ldb/get-first-page-by-name (conn/get-db) page-name)
-        root (db-utils/entity page-id)]
+  (let [root (ldb/get-page (conn/get-db) page-name)]
     (loop [result []
            children (sort-by-left (:block/_parent root) root)
            ;; BFS log of walking depth
@@ -544,7 +543,7 @@ independent of format as format specific heading characters are stripped"
   ([page-name alias?]
    (when page-name
      (let [page-name' (util/page-name-sanity-lc page-name)
-           page-entity (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page-name))]
+           page-entity (ldb/get-page (conn/get-db) page-name)]
        (cond
          alias?
          page-name'
@@ -559,13 +558,11 @@ independent of format as format specific heading characters are stripped"
            (or (when source-page (:block/name source-page))
                page-name')))))))
 
-;; FIXME: should pass page's db id
 (defn get-page-original-name
   [page-name]
   (when (string? page-name)
-    (let [page (ldb/get-first-page-by-name (conn/get-db) page-name)]
-      (or (:block/original-name page)
-          (:block/name page)))))
+    (let [page (ldb/get-page (conn/get-db) page-name)]
+      (:block/original-name page))))
 
 (defn get-journals-length
   []
@@ -747,7 +744,7 @@ independent of format as format specific heading characters are stripped"
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
-  (:block/journal? (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page-name))))
+  (:block/journal? (ldb/get-page (conn/get-db) page-name)))
 
 (defn get-block-property-values
   "Get blocks which have this property."
@@ -831,7 +828,7 @@ independent of format as format specific heading characters are stripped"
 ;; FIXME: use `Untitled` instead of UUID for db based graphs
 (defn untitled-page?
   [page-name]
-  (when (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page-name))
+  (when (ldb/get-page (conn/get-db) page-name)
     (some? (parse-uuid page-name))))
 
 (defn get-all-whiteboards

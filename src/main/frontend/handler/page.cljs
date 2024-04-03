@@ -131,7 +131,7 @@
                         (common-util/uuid-string? page-uuid-or-old-name)
                         page-uuid-or-old-name
                         :else
-                        (:block/uuid (db/entity (ldb/get-first-page-by-name (db/get-db) page-uuid-or-old-name))))
+                        (:block/uuid (db/get-page page-uuid-or-old-name)))
             result (.page-rename worker repo (str page-uuid) new-name)
             result' (:result (bean/->clj result))]
       (case (if (string? result') (keyword result') result')

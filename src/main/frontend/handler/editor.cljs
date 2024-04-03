@@ -3473,7 +3473,7 @@
                       (date/today))]
     (let [block-id (or root-block (parse-uuid page))
           page-id (when-not block-id
-                    (ldb/get-first-page-by-name (db/get-db) page))
+                    (:db/id (db/get-page page)))
           blocks (if block-id
                    (db/get-block-and-children (state/get-current-repo) block-id)
                    (db/get-page-blocks-no-cache page-id))

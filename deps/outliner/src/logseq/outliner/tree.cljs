@@ -58,7 +58,7 @@
     (string? root-id)
     (if-let [id (parse-uuid root-id)]
       [false (d/entity db [:block/uuid id])]
-      [true (d/entity db (ldb/get-first-page-by-name db root-id))])
+      [true (ldb/get-page db root-id)])
 
     :else
     [false root-id]))

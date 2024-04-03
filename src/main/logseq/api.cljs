@@ -645,7 +645,7 @@
                                          [block-uuid-or-page-name nil])
                 page-name              (when page-name (util/page-name-sanity-lc page-name))
                 _                      (when (and page-name
-                                                  (nil? (ldb/get-first-page-by-name (db/get-db) page-name)))
+                                                  (nil? (ldb/get-page (db/get-db) page-name)))
                                          (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
                 custom-uuid            (or customUUID (:id properties))
                 custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
@@ -819,7 +819,7 @@
 (def ^:export get_current_page_blocks_tree
   (fn []
     (when-let [page (state/get-current-page)]
-      (let [page-id (ldb/get-first-page-by-name (db/get-db) page)
+      (let [page-id (:db/id (ldb/get-page (db/get-db) page))
             blocks (db-model/get-page-blocks-no-cache page-id)
             blocks (outliner-tree/blocks->vec-tree blocks page-id)
             ;; clean key
