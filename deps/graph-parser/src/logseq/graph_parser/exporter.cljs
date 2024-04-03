@@ -13,6 +13,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.common.util.macro :as macro-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.rules :as rules]
@@ -108,6 +109,108 @@
           (update :block/tags
                   (fn [tags]
                     (keep #(convert-tag-to-class % tag-classes) tags)))))
+    block))
+
+(defn- update-block-marker
+  "If a block has a marker, convert it to a task object"
+  [block db {:keys [log-fn]}]
+  (if-let [marker (:block/marker block)]
+    (let [old-to-new {"TODO" :logseq.task/status.todo
+                      "LATER" :logseq.task/status.todo
+                      "IN-PROGRESS" :logseq.task/status.doing
+                      "NOW" :logseq.task/status.doing
+                      "DOING" :logseq.task/status.doing
+                      "DONE" :logseq.task/status.done
+                      "WAIT" :logseq.task/status.backlog
+                      "WAITING" :logseq.task/status.backlog
+                      "CANCELED" :logseq.task/status.canceled
+                      "CANCELLED" :logseq.task/status.canceled}
+          status-prop (:block/uuid (d/entity db :logseq.task/status))
+          status-ident (or (old-to-new marker)
+                           (do
+                             (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
+                             :logseq.task/status.todo))
+          status-value (:block/uuid (d/entity db status-ident))]
+      (-> block
+          (update :block/properties assoc status-prop status-value)
+          (update :block/content string/replace-first (re-pattern (str marker "\\s*")) "")
+          (update :block/tags (fnil conj []) :logseq.class/task)
+          (update :block/refs (fn [refs]
+                                (into (remove #(= marker (:block/original-name %)) refs)
+                                      [:logseq.class/task :logseq.task/status status-ident])))
+          (update :block/path-refs (fn [refs]
+                                     (into (remove #(= marker (:block/original-name %)) refs)
+                                           [:logseq.class/task :logseq.task/status status-ident])))
+          (dissoc :block/marker)))
+    block))
+
+(defn- update-block-priority
+  [block db {:keys [log-fn]}]
+  (if-let [priority (:block/priority block)]
+    (let [old-to-new {"A" :logseq.task/priority.high
+                      "B" :logseq.task/priority.medium
+                      "C" :logseq.task/priority.low}
+          priority-prop (:block/uuid (d/entity db :logseq.task/priority))
+          priority-ident (or (old-to-new priority)
+                             (do
+                               (log-fn :invalid-priority (str (pr-str priority) " is not a valid priority so setting it to low"))
+                               :logseq.task/priority.low))
+          priority-value (:block/uuid (d/entity db priority-ident))]
+      (-> block
+          (update :block/properties assoc priority-prop priority-value)
+          (update :block/content string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
+          (update :block/refs (fn [refs]
+                                (into (remove #(= priority (:block/original-name %)) refs)
+                                      [:logseq.task/priority priority-ident])))
+          (update :block/path-refs (fn [refs]
+                                     (into (remove #(= priority (:block/original-name %)) refs)
+                                           [:logseq.task/priority priority-ident])))
+          (dissoc :block/priority)))
+    block))
+
+(defn- update-block-deadline
+  ":block/content doesn't contain DEADLINE.* text so unable to detect timestamp
+  or repeater usage and notify user that they aren't supported"
+  [block db {:keys [user-config]}]
+  (if-let [deadline (:block/deadline block)]
+    (let [deadline-prop (:block/uuid (d/entity db :logseq.task/deadline))
+          deadline-page (or (ffirst (d/q '[:find (pull ?b [:block/uuid])
+                                           :in $ ?journal-day
+                                           :where [?b :block/journal-day ?journal-day]]
+                                         db deadline))
+                            ;; FIXME: Register new pages so that two different refs to same new page
+                            ;; don't create different uuids and thus an invalid page
+                            (assoc (sqlite-util/build-new-page
+                                    (date-time-util/int->journal-title deadline (common-config/get-date-formatter user-config)))
+                                   :block/journal? true
+                                   :block/journal-day deadline
+                                   :block/format :markdown))]
+      (-> block
+          (update :block/properties assoc deadline-prop (:block/uuid deadline-page))
+          (update :block/refs (fnil into []) [:logseq.task/deadline deadline-page])
+          (update :block/path-refs (fnil into []) [:logseq.task/deadline deadline-page])
+          (dissoc :block/deadline)))
+    block))
+
+(defn- update-block-scheduled
+  "Should have same implementation as update-block-deadline"
+  [block db {:keys [user-config]}]
+  (if-let [scheduled (:block/scheduled block)]
+    (let [scheduled-prop (:block/uuid (d/entity db :logseq.task/scheduled))
+          scheduled-page (or (ffirst (d/q '[:find (pull ?b [:block/uuid])
+                                           :in $ ?journal-day
+                                           :where [?b :block/journal-day ?journal-day]]
+                                         db scheduled))
+                            (assoc (sqlite-util/build-new-page
+                                    (date-time-util/int->journal-title scheduled (common-config/get-date-formatter user-config)))
+                                   :block/journal? true
+                                   :block/journal-day scheduled
+                                   :block/format :markdown))]
+      (-> block
+          (update :block/properties assoc scheduled-prop (:block/uuid scheduled-page))
+          (update :block/refs (fnil into []) [:logseq.task/scheduled scheduled-page])
+          (update :block/path-refs (fnil into []) [:logseq.task/scheduled scheduled-page])
+          (dissoc :block/scheduled)))
     block))
 
 (defn- text-with-refs?
@@ -448,6 +551,10 @@
         (handle-block-properties db page-names-to-uuids (:block/refs block) options)
         (update-block-refs page-names-to-uuids old-property-schemas options)
         (update-block-tags tag-classes page-names-to-uuids)
+        (update-block-marker db options)
+        (update-block-priority db options)
+        (update-block-deadline db options)
+        (update-block-scheduled db options)
         add-missing-timestamps
         ;; ((fn [x] (prn :block-out x) x))
         ;; TODO: org-mode content needs to be handled
@@ -831,6 +938,7 @@
                          :user-config config
                          :filename-format (or (:file/name-format config) :legacy)
                          :verbose (:verbose options)}
+       :user-config config
        :user-options (select-keys options [:tag-classes :property-classes :property-parent-classes])
        :page-tags-uuid (:block/uuid (d/entity @conn :logseq.property/page-tags))
        :import-state (new-import-state)
