@@ -15,7 +15,8 @@
 (defn get-first-page-by-name
   "Return the oldest page's db id"
   [db page-name]
-  (first (sort (map :e (get-pages-by-name db page-name)))))
+  (when (and db (string? page-name))
+    (first (sort (map :e (get-pages-by-name db page-name))))))
 
 (comment
   (defn- get-built-in-files
