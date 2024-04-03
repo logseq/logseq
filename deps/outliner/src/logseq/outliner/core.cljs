@@ -929,9 +929,10 @@
        (remove nil?)))))
 
 (defn ^:api delete-block
-  "Delete block from the tree."
+  "FIXME: why expose this fn? there's already a public fn `delete-blocks!`
+  Delete block from the tree."
   [repo conn txs-state node {:keys [children? children-check? date-formatter]
-                        :or {children-check? true}}]
+                             :or {children-check? true}}]
   (if (and children-check?
            (not children?)
            (first (:block/_parent (d/entity @conn [:block/uuid (:block/uuid (get-data node))]))))
