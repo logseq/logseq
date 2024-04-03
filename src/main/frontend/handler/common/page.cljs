@@ -71,7 +71,7 @@
 
 ;; favorite fns
 ;; ============
-(defn favorited?
+(defn file-favorited?
   [page-name]
   (let [favorites (->> (:favorites (state/get-config))
                        (filter string?)
@@ -79,7 +79,7 @@
                        (set))]
     (contains? favorites page-name)))
 
-(defn favorite-page!
+(defn file-favorite-page!
   [page-name]
   (when-not (string/blank? page-name)
     (let [favorites (->
@@ -90,7 +90,7 @@
                      (vec))]
       (config-handler/set-config! :favorites favorites))))
 
-(defn unfavorite-page!
+(defn file-unfavorite-page!
   [page-name]
   (when-not (string/blank? page-name)
     (let [old-favorites (:favorites (state/get-config))
@@ -111,12 +111,12 @@
                     block))
                 blocks))))))
 
-(defn favorited?-v2
+(defn db-favorited?
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
   (some? (find-block-in-favorites-page page-block-uuid)))
 
-(defn <favorite-page!-v2
+(defn <db-favorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
   (let [favorites-page (db/get-page common-config/favorites-page-name)]
@@ -129,7 +129,7 @@
                                     (db/get-page common-config/favorites-page-name)
                                     {}))))))
 
-(defn <unfavorite-page!-v2
+(defn <db-unfavorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
   (when-let [block (find-block-in-favorites-page page-block-uuid)]
@@ -170,8 +170,8 @@
       ;; TODO: move favorite && unfavorite to worker too
     (if (config/db-based-graph? repo)
       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-        (<unfavorite-page!-v2 page-block-uuid))
-      (unfavorite-page! page-name))
+        (<db-unfavorite-page! page-block-uuid))
+      (file-unfavorite-page! page-name))
 
     (when (and (not= :rename-page (:real-outliner-op tx-meta))
                (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
@@ -215,9 +215,9 @@
                                 :path-params {:name (str (:block/uuid page))}}))
 
     ;; FIXME: favorites should store db id/uuid instead of page names
-    (when (and (config/db-based-graph? repo) (favorited? old-page-name))
-      (unfavorite-page! old-page-name)
-      (favorite-page! new-page-name))
+    (when (and (config/db-based-graph? repo) (file-favorited? old-page-name))
+      (file-unfavorite-page! old-page-name)
+      (file-favorite-page! new-page-name))
     (let [home (get (state/get-config) :default-home {})]
       (when (= old-page-name (common-util/page-name-sanity-lc (get home :page "")))
         (config-handler/set-config! :default-home (assoc home :page new-name))))

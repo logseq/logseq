@@ -52,8 +52,8 @@
    (let [repo (state/get-current-repo)]
      (if (config/db-based-graph? repo)
        (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-         (page-common-handler/<unfavorite-page!-v2 page-block-uuid))
-       (page-common-handler/unfavorite-page! page-name)))
+         (page-common-handler/<db-unfavorite-page! page-block-uuid))
+       (page-common-handler/file-unfavorite-page! page-name)))
    (state/update-favorites-updated!)))
 
 (defn <favorite-page!
@@ -62,8 +62,8 @@
    (let [repo (state/get-current-repo)]
      (if (config/db-based-graph? repo)
        (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-         (page-common-handler/<favorite-page!-v2 page-block-uuid))
-       (page-common-handler/favorite-page! page-name)))
+         (page-common-handler/<db-favorite-page! page-block-uuid))
+       (page-common-handler/file-favorite-page! page-name)))
    (state/update-favorites-updated!)))
 
 (defn favorited?
@@ -72,8 +72,8 @@
     (if (config/db-based-graph? repo)
       (boolean
        (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
-         (page-common-handler/favorited?-v2 page-block-uuid)))
-      (page-common-handler/favorited? page-name))))
+         (page-common-handler/db-favorited? page-block-uuid)))
+      (page-common-handler/file-favorited? page-name))))
 
 
 (defn get-favorites
@@ -82,10 +82,9 @@
   (when-let [db (conn/get-db)]
     (let [repo (state/get-current-repo)]
       (if (config/db-based-graph? repo)
-        (when-let [page-id (ldb/get-first-page-by-name db common-config/favorites-page-name)]
-          (let [page (d/entity db page-id)
-                blocks (ldb/sort-by-left
-                        (ldb/get-page-blocks db page-id {})
+        (when-let [page (ldb/get-page db common-config/favorites-page-name)]
+          (let [blocks (ldb/sort-by-left
+                        (ldb/get-page-blocks db (:db/id page) {})
                         page)]
             (keep (fn [block]
                     (when-let [block-db-id (:db/id (:block/link block))]
@@ -146,16 +145,14 @@
 
 (defn <reorder-favorites!
   [favorites]
-  (let [conn (conn/get-db false)
-        db @conn]
-    (when-let [page-id (db/get-page common-config/favorites-page-name)]
-      (let [favorites-page-entity (d/entity db page-id)
-            favorite-page-block-db-id-coll
-            (keep (fn [page-name]
-                    (:db/id (db/get-page page-name)))
+  (let [conn (conn/get-db false)]
+    (when-let [favorites-page (db/get-page common-config/favorites-page-name)]
+      (let [favorite-page-block-db-id-coll
+            (keep (fn [page-uuid]
+                    (:db/id (db/get-page page-uuid)))
                   favorites)
-            current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn common-config/favorites-page-name {})
-                                             favorites-page-entity)]
+            current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn (:db/id favorites-page) {})
+                                             favorites-page)]
         (p/do!
          (ui-outliner-tx/transact!
           {}

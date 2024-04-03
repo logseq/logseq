@@ -168,10 +168,9 @@
      (when (seq favorite-entities)
        (let [favorites (map
                         (fn [e]
-                          (let [name (:block/name e)
-                                icon (icon/get-page-icon e {})]
+                          (let [icon (icon/get-page-icon e {})]
                             {:id (str (:db/id e))
-                             :value name
+                             :value (:block/uuid e)
                              :content [:li.favorite-item (page-name e icon false)]}))
                         favorite-entities)]
          (dnd-component/items favorites
