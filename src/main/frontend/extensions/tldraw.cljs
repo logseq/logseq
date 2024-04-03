@@ -10,6 +10,7 @@
             [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -139,17 +140,21 @@
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
-   :redirectToPage (fn [block-uuid-str]
-                     (when (and block-uuid-str (common-util/uuid-string? block-uuid-str))
-                       (let [block-id (parse-uuid block-uuid-str)
-                             page (model/get-block-page (state/get-current-repo) block-id)
+   :redirectToPage (fn [page-name-or-uuid] ; FIXME whiteboard link refs should store UUIDs instead of page names
+                     (when page-name-or-uuid
+                       (let [block-id (parse-uuid page-name-or-uuid)
+                             page (if block-id
+                                    (model/get-block-page (state/get-current-repo) block-id)
+                                    (db/get-page page-name-or-uuid))
                              whiteboard? (model/whiteboard-page? page)]
-                         (when page
-                           (if whiteboard?
-                             (route-handler/redirect-to-page! (:block/uuid page)
-                                                              (when (not= block-id (:block/uuid page))
-                                                                {:block-id block-id}))
-                             (route-handler/redirect-to-page! (model/get-redirect-page-name (:block/name page))))))))})
+                         (p/let [new-page (when (nil? page)
+                                            (page-handler/<create! page-name-or-uuid {:redirect? false}))
+                                 page' (or new-page page)]
+                           (route-handler/redirect-to-page! (if whiteboard?
+                                                              (:block/uuid page')
+                                                              (model/get-redirect-page-name (:block/name page')))
+                                                            (when (and block-id (not= block-id (:block/uuid page')))
+                                                              {:block-id block-id}))))))})
 
 (defonce *transact-result (atom nil))
 
