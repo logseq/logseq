@@ -20,6 +20,8 @@
             [cljs-bean.core :as bean]
             [logseq.db.sqlite.util :as sqlite-util]))
 
+;; FIXME: no need to store :logseq.property/ls-type since it's stored already in `:block/type`
+
 (defn js->clj-keywordize
   [obj]
   (js->clj obj :keywordize-keys true))
@@ -54,7 +56,24 @@
                               :name (:block/name page-block)
                               :shapes shapes})]})))
 
-(defn build-page-block
+(defn db-build-page-block
+  [page-entity page-name tldraw-page assets shapes-index]
+  (let [get-k #(gobj/get tldraw-page %)]
+    {:block/original-name page-name
+     :block/name (util/page-name-sanity-lc page-name)
+     :block/type "whiteboard"
+     :logseq.property/ls-type :whiteboard-page
+     :logseq.property.tldraw/page {:id (get-k "id")
+                                   :name (get-k "name")
+                                   :bindings (js->clj-keywordize (get-k "bindings"))
+                                   :nonce (get-k "nonce")
+                                   :assets (js->clj-keywordize assets)
+                                   :shapes-index shapes-index}
+     :block/updated-at (util/time-ms)
+     :block/created-at (or (:block/created-at page-entity)
+                           (util/time-ms))}))
+
+(defn file-build-page-block
   [page-entity page-name tldraw-page assets shapes-index]
   (let [get-k #(gobj/get tldraw-page %)]
     {:block/original-name page-name
@@ -73,6 +92,13 @@
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
+
+(defn build-page-block
+  [page-entity page-name tldraw-page assets shapes-index]
+  (let [f (if (config/db-based-graph? (state/get-current-repo))
+            db-build-page-block
+            file-build-page-block)]
+    (f page-entity page-name tldraw-page assets shapes-index)))
 
 (defn- compute-tx
   [^js app ^js tl-page new-id-nonces db-id-nonces page-uuid replace?]
@@ -187,16 +213,18 @@
                      :ls-type :whiteboard-page,
                      :bindings {},
                      :nonce 1,
-                     :assets []}}]
-    [#:block{:uuid id
-             :name (util/page-name-sanity-lc page-name),
-             :original-name page-name
-             :type "whiteboard",
-             :properties properties,
-             :journal? false
-             :format :markdown
-             :updated-at (util/time-ms),
-             :created-at (util/time-ms)}]))
+                     :assets []}}
+        m #:block{:uuid id
+                  :name (util/page-name-sanity-lc page-name),
+                  :original-name page-name
+                  :type "whiteboard",
+                  :journal? false
+                  :format :markdown
+                  :updated-at (util/time-ms),
+                  :created-at (util/time-ms)}]
+    (if (config/db-based-graph? (state/get-current-repo))
+      [(merge m properties)]
+      [(assoc m :block/properties properties)])))
 
 (defn <create-new-whiteboard-page!
   ([]
