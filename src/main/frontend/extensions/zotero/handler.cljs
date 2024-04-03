@@ -60,7 +60,7 @@
                       :sibling? false}))))
 
 (defn- create-page [page-name properties]
-  (page-handler/create!
+  (page-handler/<create!
    page-name
    {:redirect? false
     :format :markdown

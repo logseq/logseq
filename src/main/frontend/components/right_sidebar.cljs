@@ -168,14 +168,13 @@
                          :on-input-change (fn [new-value]
                                             (reset! *db-id new-value))
                          :on-input-blur (fn [new-value]
-                                            (state/sidebar-replace-block! [repo db-id block-type]
-                                                                          [repo new-value block-type]))})
+                                          (state/sidebar-replace-block! [repo db-id block-type]
+                                                                        [repo new-value block-type]))})
        (str init-key))]
 
     :page-slide-view
-    (let [page (db/entity db-id)
-          page-name (:block/name page)]
-      [[:a.page-title {:href (rfe/href :page {:name page-name})}
+    (let [page (db/entity db-id)]
+      [[:a.page-title {:href (rfe/href :page {:name (str (:block/uuid page))})}
         (:block/original-name page)]
        [:div.ml-2.slide.mt-2
         (slide/slide page)]])
@@ -218,9 +217,8 @@
      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
      (when (= type :page) [:hr.menu-separator])
      (when (= type :page)
-       (let [page  (db/entity db-id)
-             name (:block/name page)]
-         (menu-item {:href (rfe/href :page {:name name})} (t :right-side-bar/pane-open-as-page)))))))
+       (let [page  (db/entity db-id)]
+         (menu-item {:href (rfe/href :page {:name (str (:block/uuid page))})} (t :right-side-bar/pane-open-as-page)))))))
 
 (rum/defc drop-indicator
   [idx drag-to]

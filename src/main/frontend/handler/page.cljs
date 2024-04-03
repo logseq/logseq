@@ -197,7 +197,7 @@
                              "/"
                              (get-file-name journal? page)
                              ".org")]
-          (create! page {:redirect? false})
+          (<create! page {:redirect? false})
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
                        page)))

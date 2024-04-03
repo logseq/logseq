@@ -41,12 +41,10 @@
    (let [repo (state/get-current-repo)
          conn (db/get-db repo false)
          config (state/get-config repo)
-         ;; FIXME: create! returns page-entity
-         [_ page-name] (worker-page/create! repo conn config title options)]
+         [_ page-name page-uuid] (worker-page/create! repo conn config title options)]
      (when redirect?
-       ;; FIXME: use uuid instead
-       (route-handler/redirect-to-page! page-name))
-     (when-let [first-block (first (:block/_left (db/get-page page-name)))]
+       (route-handler/redirect-to-page! page-uuid))
+     (when-let [first-block (first (:block/_left (db/get-page page-uuid)))]
        (block-handler/edit-block! first-block :max nil))
      page-name)))
 
@@ -59,12 +57,11 @@
    (p/let [repo (state/get-current-repo)
            conn (db/get-db repo false)
            config (state/get-config repo)
-           [p page-name] (worker-page/create! repo conn config title options)
+           [p _page-name page-uuid] (worker-page/create! repo conn config title options)
            _result p]
      (when redirect?
-       ;; FIXME: use uuid instead
-       (route-handler/redirect-to-page! page-name))
-     (let [page (db/get-page page-name)]
+       (route-handler/redirect-to-page! page-uuid))
+     (let [page (db/get-page page-uuid)]
        (when-let [first-block (first (:block/_left page))]
          (block-handler/edit-block! first-block :max nil))
        page))))

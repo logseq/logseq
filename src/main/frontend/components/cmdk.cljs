@@ -386,11 +386,8 @@
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-name state)]
     (let [redirect-page-name (model/get-redirect-page-name page-name)
-          page (db/get-page redirect-page-name)
-          original-name (:block/original-name page)]
-      (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-page! original-name)
-        (route-handler/redirect-to-page! original-name)))
+          page (db/get-page redirect-page-name)]
+      (route-handler/redirect-to-page! (:block/uuid page)))
     (state/close-modal!)))
 
 (defmethod handle-action :open-block [_ state _event]
@@ -398,18 +395,17 @@
     (p/let [repo (state/get-current-repo)
             _ (db-async/<get-block repo block-id :children? false)]
       (let [get-block-page (partial model/get-block-page repo)
-           block (db/entity [:block/uuid block-id])]
-       (when block
-         (when-let [page (some-> block-id get-block-page)]
-           (let [page-name (:block/name page)]
-             (cond
-               (= (:block/type page) "whiteboard")
-               (route-handler/redirect-to-page! page-name {:block-id block-id})
-               (model/parents-collapsed? (state/get-current-repo) block-id)
-               (route-handler/redirect-to-page! block-id)
-               :else
-               (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
-           (state/close-modal!)))))))
+            block (db/entity [:block/uuid block-id])]
+        (when block
+          (when-let [page (some-> block-id get-block-page)]
+            (cond
+              (db/whiteboard-page? page)
+              (route-handler/redirect-to-page! (:block/uuid page) {:block-id block-id})
+              (model/parents-collapsed? (state/get-current-repo) block-id)
+              (route-handler/redirect-to-page! block-id)
+              :else
+              (route-handler/redirect-to-page! (:block/uuid page) {:anchor (str "ls-block-" block-id)}))
+            (state/close-modal!)))))))
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (get-highlighted-page-name state)]

@@ -1024,7 +1024,7 @@
        (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
          [:tr {:key name}
           [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
-          [:td.name [:a {:href     (rfe/href :page {:name (:block/name page)})}
+          [:td.name [:a {:href     (rfe/href :page {:name (str (:block/uuid page))})}
                      (component-block/page-cp {} page)]]
           [:td.backlinks [:span (or backlinks "0")]]
           (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
@@ -1046,7 +1046,7 @@
                                                                     {:error-handler
                                                                      (fn []
                                                                        (swap! failed-pages conj (:block/name page)))}))
-                                        pages))]
+                                           pages))]
                        (if (seq @failed-pages)
                          (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
                                              :warning false)
@@ -1084,16 +1084,16 @@
          (ui/icon "chevrons-right")]])]))
 
 (rum/defcs ^:large-vars/cleanup-todo all-pages < rum/reactive
-                                                 (rum/local nil ::pages)
-                                                 (rum/local nil ::search-key)
-                                                 (rum/local nil ::results-all)
-                                                 (rum/local nil ::results)
-                                                 (rum/local {} ::checks)
-                                                 (rum/local :block/updated-at ::sort-by-item)
-                                                 (rum/local true ::desc?)
-                                                 (rum/local {:journals? false :page-type ""} ::filters)
-                                                 (rum/local nil ::filter-fn)
-                                                 (rum/local 1 ::current-page)
+  (rum/local nil ::pages)
+  (rum/local nil ::search-key)
+  (rum/local nil ::results-all)
+  (rum/local nil ::results)
+  (rum/local {} ::checks)
+  (rum/local :block/updated-at ::sort-by-item)
+  (rum/local true ::desc?)
+  (rum/local {:journals? false :page-type ""} ::filters)
+  (rum/local nil ::filter-fn)
+  (rum/local 1 ::current-page)
   [state]
   (let [current-repo (state/sub :git/current-repo)
         per-page-num 40
@@ -1111,21 +1111,21 @@
 
         ;; TODO: remove this
         *indeterminate (rum/derived-atom
-                         [*checks] ::indeterminate
-                         (fn [checks]
-                           (when-let [checks (vals checks)]
-                             (if (every? true? checks)
-                               1 (if (some true? checks) -1 0)))))
+                        [*checks] ::indeterminate
+                        (fn [checks]
+                          (when-let [checks (vals checks)]
+                            (if (every? true? checks)
+                              1 (if (some true? checks) -1 0)))))
 
         mobile? (util/mobile?)
         total-items (count @*results-all)
         ;; FIXME: "pages" is ambiguous here, it can be either "Logseq pages" or "result pages"
         total-pages (if-not @*results-all 0
-                                          (js/Math.ceil (/ total-items per-page-num)))
+                            (js/Math.ceil (/ total-items per-page-num)))
         to-page (fn [page]
                   (when (> total-pages 1)
                     (if (and (> page 0)
-                          (<= page total-pages))
+                             (<= page total-pages))
                       (reset! *current-page page)
                       (reset! *current-page 1))
                     (js/setTimeout #(util/scroll-to-top))))
@@ -1133,7 +1133,7 @@
         search-key (fn [key]
                      (when-let [key (and key (string/trim key))]
                        (if (and (not (string/blank? key))
-                             (seq @*results))
+                                (seq @*results))
                          (reset! *search-key key)
                          (reset! *search-key nil))))
 
@@ -1151,18 +1151,18 @@
        ;; all pages
        (when (nil? @*pages)
          (let [pages (->> (page-handler/get-all-pages current-repo)
-                       (map-indexed (fn [idx page] (assoc page
-                                                     :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
-                                                     :block/idx idx))))]
+                          (map-indexed (fn [idx page] (assoc page
+                                                             :block/backlinks (count (:block/_refs (db/entity (:db/id page))))
+                                                             :block/idx idx))))]
            (reset! *filter-fn
-             (memoize (fn [sort-by-item desc? {:keys [journal? page-type]}]
-                        (->> pages
-                          (filter #(and
-                                     (or (boolean journal?)
-                                       (= false (boolean (:block/journal? %))))
-                                     (or (empty? page-type)
-                                       (contains? (set (:block/type %)) page-type))))
-                          (sort-pages-by sort-by-item desc?)))))
+                   (memoize (fn [sort-by-item desc? {:keys [journal? page-type]}]
+                              (->> pages
+                                   (filter #(and
+                                             (or (boolean journal?)
+                                                 (= false (boolean (:block/journal? %))))
+                                             (or (empty? page-type)
+                                                 (contains? (set (:block/type %)) page-type))))
+                                   (sort-pages-by sort-by-item desc?)))))
            (reset! *pages pages)))
 
        ;; filter results
@@ -1172,8 +1172,8 @@
                ;; search key
                pages (if-not (string/blank? @*search-key)
                        (search/fuzzy-search pages (util/page-name-sanity-lc @*search-key)
-                         :limit 20
-                         :extract-fn :block/name)
+                                            :limit 20
+                                            :extract-fn :block/name)
                        pages)
 
                _ (reset! *results-all pages)
@@ -1187,24 +1187,24 @@
        [:div.cp__all_pages-content
         [:div.actions.pt-4
          {:class (util/classnames [{:has-selected (or (nil? @*indeterminate)
-                                                    (not= 0 @*indeterminate))}])}
+                                                      (not= 0 @*indeterminate))}])}
          [:div.l.flex.items-center
           [:div.actions-wrap
            (ui/button
-             (t :delete)
-             {:on-click
-              (fn []
-                (let [selected (filter (fn [[_ v]] v) @*checks)
-                      selected (and (seq selected)
-                                 (into #{} (for [[k _] selected] k)))]
-                  (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
-                    (state/set-modal! (batch-delete-dialog pages false #(do
-                                                                          (reset! *checks nil)
-                                                                          (refresh-pages)))))))
-              :icon "trash"
-              :variant :destructive
-              :icon-props {:size 14}
-              :size :sm})]
+            (t :delete)
+            {:on-click
+             (fn []
+               (let [selected (filter (fn [[_ v]] v) @*checks)
+                     selected (and (seq selected)
+                                   (into #{} (for [[k _] selected] k)))]
+                 (when-let [pages (and selected (filter #(contains? selected (:block/idx %)) @*results))]
+                   (state/set-modal! (batch-delete-dialog pages false #(do
+                                                                         (reset! *checks nil)
+                                                                         (refresh-pages)))))))
+             :icon "trash"
+             :variant :destructive
+             :icon-props {:size 14}
+             :size :sm})]
 
           [:div.search-wrap.flex.items-center.pl-2
            (let [search-fn (fn []
@@ -1217,9 +1217,9 @@
                               (reset! *search-key nil)))]
 
              [(ui/button (ui/icon "search")
-                :on-click search-fn
-                :variant :link
-                :size :xs)
+                         :on-click search-fn
+                         :variant :link
+                         :size :xs)
               [:input.form-input {:placeholder   (t :search/page-names)
                                   :on-key-up     (fn [^js e]
                                                    (let [^js target (.-target e)]
@@ -1240,63 +1240,63 @@
            (ui/select (->> (if (config/db-based-graph? current-repo)
                              ["" "class" "property" "whiteboard"]
                              ["" "whiteboard"])
-                        (map (fn [block-type]
-                               {:label (if (seq block-type) (string/capitalize block-type) "Filter by page type")
-                                :selected (= block-type type)
-                                :disabled config/publishing?
-                                :value block-type})))
-             (fn [_e value]
-               (swap! *filters assoc :page-type value)))]
+                           (map (fn [block-type]
+                                  {:label (if (seq block-type) (string/capitalize block-type) "Filter by page type")
+                                   :selected (= block-type type)
+                                   :disabled config/publishing?
+                                   :value block-type})))
+                      (fn [_e value]
+                        (swap! *filters assoc :page-type value)))]
           [:div
            (ui/tippy
-             {:html  [:small (t :page/show-journals)]
-              :arrow true}
-             [:a.button.journal
-              {:class    (util/classnames [{:active (boolean (:journal? @*filters))}])
-               :on-click #(swap! *filters update :journal? not)}
-              (ui/icon "calendar" {:size ui/icon-size})])]
+            {:html  [:small (t :page/show-journals)]
+             :arrow true}
+            [:a.button.journal
+             {:class    (util/classnames [{:active (boolean (:journal? @*filters))}])
+              :on-click #(swap! *filters update :journal? not)}
+             (ui/icon "calendar" {:size ui/icon-size})])]
 
           [:div.paginates
            (pagination :current @*current-page
-             :total total-items
-             :per-page per-page-num
-             :on-change #(to-page %))]
+                       :total total-items
+                       :per-page per-page-num
+                       :on-change #(to-page %))]
 
           (ui/dropdown-with-links
-            (fn [{:keys [toggle-fn]}]
-              [:a.button.fade-link
-               {:on-click toggle-fn}
-               (ui/icon "dots" {:size ui/icon-size})])
-            [{:title (t :remove-orphaned-pages)
-              :options {:on-click (fn []
-                                    (let [orphaned-pages (model/get-orphaned-pages {})
-                                          orphaned-pages? (seq orphaned-pages)]
-                                      (if orphaned-pages?
-                                        (state/set-modal!
-                                          (batch-delete-dialog
-                                            orphaned-pages  true
-                                            #(do
-                                               (reset! *checks nil)
-                                               (refresh-pages))))
-                                        (notification/show! "Congratulations, no orphaned pages in your graph!" :success))))}
-              :icon (ui/icon "file-x")}
-             {:title (t :all-files)
-              :options {:href (rfe/href :all-files)}
-              :icon (ui/icon "files")}]
-            {})]]
+           (fn [{:keys [toggle-fn]}]
+             [:a.button.fade-link
+              {:on-click toggle-fn}
+              (ui/icon "dots" {:size ui/icon-size})])
+           [{:title (t :remove-orphaned-pages)
+             :options {:on-click (fn []
+                                   (let [orphaned-pages (model/get-orphaned-pages {})
+                                         orphaned-pages? (seq orphaned-pages)]
+                                     (if orphaned-pages?
+                                       (state/set-modal!
+                                        (batch-delete-dialog
+                                         orphaned-pages  true
+                                         #(do
+                                            (reset! *checks nil)
+                                            (refresh-pages))))
+                                       (notification/show! "Congratulations, no orphaned pages in your graph!" :success))))}
+             :icon (ui/icon "file-x")}
+            {:title (t :all-files)
+             :options {:href (rfe/href :all-files)}
+             :icon (ui/icon "files")}]
+           {})]]
 
         [:table.table-auto.cp__all_pages_table
          [:thead
           [:tr
            [:th.selector
             (checkbox-opt "all-pages-select-all"
-              (= 1 @*indeterminate)
-              {:on-change     (fn []
-                                (let [indeterminate? (= -1 @*indeterminate)
-                                      all? (= 1 @*indeterminate)]
-                                  (doseq [{:block/keys [idx]} @*results]
-                                    (swap! *checks assoc idx (or indeterminate? (not all?))))))
-               :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
+                          (= 1 @*indeterminate)
+                          {:on-change     (fn []
+                                            (let [indeterminate? (= -1 @*indeterminate)
+                                                  all? (= 1 @*indeterminate)]
+                                              (doseq [{:block/keys [idx]} @*results]
+                                                (swap! *checks assoc idx (or indeterminate? (not all?))))))
+                           :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
            [:th.icon ""]
            (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
            (when-not mobile?
@@ -1310,9 +1310,9 @@
               [:tr {:key name}
                [:td.selector
                 (checkbox-opt (str "label-" idx)
-                  (get @*checks idx)
-                  {:on-change (fn []
-                                (swap! *checks update idx not))})]
+                              (get @*checks idx)
+                              {:on-change (fn []
+                                            (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
                 (when-let [icon (:logseq.property/icon page)]
                   icon)]
@@ -1321,10 +1321,10 @@
                                           (let [repo (state/get-current-repo)]
                                             (when (gobj/get e "shiftKey")
                                               (state/sidebar-add-block!
-                                                repo
-                                                (:db/id page)
-                                                :page))))
-                              :href     (rfe/href :page {:name (:block/name page)})}
+                                               repo
+                                               (:db/id page)
+                                               :page))))
+                              :href     (rfe/href :page {:name (str (:block/uuid page))})}
                           (component-block/page-cp {} page)]]
 
                (when-not mobile?
@@ -1338,6 +1338,6 @@
 
         [:div.flex.justify-end.py-4
          (pagination :current @*current-page
-           :total total-items
-           :per-page per-page-num
-           :on-change #(to-page %))]])]))
+                     :total total-items
+                     :per-page per-page-num
+                     :on-change #(to-page %))]])]))

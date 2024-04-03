@@ -597,7 +597,7 @@
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger.pl-2
-        {:on-click #(route-handler/redirect-to-page! (:block/name property))}
+        {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/original-name property)]
 
        (shui/trigger-as :a
@@ -606,7 +606,7 @@
                          :class "property-k flex select-none jtrigger pl-2"
                          :on-pointer-down (fn [^js e]
                                             (when (util/meta-key? e)
-                                              (route-handler/redirect-to-page! (:block/name property))
+                                              (route-handler/redirect-to-page! (:block/uuid property))
                                               (.preventDefault e)))
                          :on-click (fn [^js e]
                                      (shui/popup-show!

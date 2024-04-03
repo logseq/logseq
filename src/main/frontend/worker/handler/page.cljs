@@ -79,40 +79,37 @@
   (let [date-formatter (common-config/get-date-formatter config)
         [title page-name] (get-title-and-pagename title)
         with-uuid? (if (uuid? uuid) uuid true)
-        result (when (ldb/page-empty? @conn page-name)
-                 (let [pages    [title]
-                       format   (or format (common-config/get-preferred-format config))
-                       pages    (map (fn [page]
-                                       ;; only apply uuid to the deepest hierarchy of page to create if provided.
-                                       (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter)
-                                           (assoc :block/format format)))
-                                     pages)
-                       txs      (->> pages
-                                     (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
-                                     (remove nil?))
-                       page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
-                       first-block-tx (when (and
-                                             create-first-block?
-                                             (not (or whiteboard? class?))
-                                             page-txs)
-                                        (let [page-id [:block/uuid (:block/uuid (first page-txs))]]
-                                          [(sqlite-util/block-with-timestamps
-                                            {:block/uuid (ldb/new-block-id)
-                                             :block/page page-id
-                                             :block/parent page-id
-                                             :block/left page-id
-                                             :block/content ""
-                                             :block/format format})]))
-                       txs      (concat
-                                 txs
-                                 page-txs
-                                 first-block-tx)]
-                   (when (seq txs)
-                     (ldb/transact! conn txs (cond-> {:persist-op? persist-op?}
-                                               today-journal?
-                                               (assoc :create-today-journal? true
-                                                      :today-journal-name page-name))))))] ;; FIXME: prettier validation
-    [result page-name]))
+        [page-uuid result] (when (ldb/page-empty? @conn page-name)
+                             (let [format   (or format (common-config/get-preferred-format config))
+                                   page (-> (gp-block/page-name->map title with-uuid? @conn true date-formatter)
+                                            (assoc :block/format format))
+                                   page-uuid (:block/uuid page)
+                                   txs      (->> [page]
+                                                 (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
+                                                 (remove nil?))
+                                   page-txs (build-page-tx repo conn config date-formatter format properties page (select-keys options [:whiteboard? :class? :tags]))
+                                   first-block-tx (when (and
+                                                         create-first-block?
+                                                         (not (or whiteboard? class?))
+                                                         page-txs)
+                                                    (let [page-id [:block/uuid (:block/uuid (first page-txs))]]
+                                                      [(sqlite-util/block-with-timestamps
+                                                        {:block/uuid (ldb/new-block-id)
+                                                         :block/page page-id
+                                                         :block/parent page-id
+                                                         :block/left page-id
+                                                         :block/content ""
+                                                         :block/format format})]))
+                                   txs      (concat
+                                             txs
+                                             page-txs
+                                             first-block-tx)]
+                               (when (seq txs)
+                                 [page-uuid (ldb/transact! conn txs (cond-> {:persist-op? persist-op?}
+                                                                      today-journal?
+                                                                      (assoc :create-today-journal? true
+                                                                             :today-journal-name page-name)))])))] ;; FIXME: prettier validation
+    [result page-name page-uuid]))
 
 (defn db-refs->page
   "Replace [[page name]] with page name"
