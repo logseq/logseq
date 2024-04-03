@@ -218,7 +218,7 @@
                         (fn [page]
                           (let [entity (db/get-page page)
                                 whiteboard? (= (:block/type entity) "whiteboard")
-                                source-page (model/get-alias-source-page repo page)]
+                                source-page (model/get-alias-source-page repo (:db/id entity))]
                             (hash-map :icon (if whiteboard? "whiteboard" "page")
                                       :icon-theme :gray
                                       :text page
@@ -385,8 +385,7 @@
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-name state)]
-    (let [redirect-page-name (model/get-redirect-page-name page-name)
-          page (db/get-page redirect-page-name)]
+    (let [page (db/get-page page-name)]
       (route-handler/redirect-to-page! (:block/uuid page)))
     (state/close-modal!)))
 
@@ -409,8 +408,7 @@
 
 (defmethod handle-action :open-page-right [_ state _event]
   (when-let [page-name (get-highlighted-page-name state)]
-    (let [redirect-page-name (model/get-redirect-page-name page-name)
-          page (db/get-page redirect-page-name)]
+    (let [page (db/get-page page-name)]
       (when page
         (editor-handler/open-block-in-sidebar! (:block/uuid page))))
     (state/close-modal!)))

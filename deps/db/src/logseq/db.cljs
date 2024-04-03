@@ -392,19 +392,11 @@
 
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
-  [db alias]
-  (let [alias (common-util/page-name-sanity-lc alias)
-        pages (d/q '[:find [(pull ?p [*]) ...]
-                     :in $ ?alias
-                     :where
-                     [?a :block/name ?alias]
-                     [?p :block/alias ?a]]
-                   db
-                   alias)]
-    ;; may be a case that a user added same alias into multiple pages.
+  [db alias-id]
+  (when alias-id
+      ;; may be a case that a user added same alias into multiple pages.
       ;; only return the first result for idiot-proof
-    (when (seq pages)
-      (first pages))))
+    (first (:block/_alias (d/entity db alias-id)))))
 
 (defn get-page-alias
   [db page-id]

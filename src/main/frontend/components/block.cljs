@@ -87,7 +87,8 @@
             [shadow.loader :as loader]
             [logseq.common.path :as path]
             [electron.ipc :as ipc]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [datascript.impl.entity :as de]))
 
 ;; local state
 (defonce *dragging?
@@ -509,18 +510,10 @@
 (declare page-reference)
 
 (defn open-page-ref
-  [e config page-name page-name-in-block contents-page? whiteboard-page?]
+  [page-entity e page-name page-name-in-block contents-page?]
   (util/stop e)
   (when (not (util/right-click? e))
-    (p/let [redirect-page-name (model/get-redirect-page-name page-name (:block/alias? config))
-            redirect-page-name (if (or (= (util/page-name-sanity-lc (str (:id config)))
-                                          (util/page-name-sanity-lc redirect-page-name))
-                                       (= (some-> (state/get-current-page) util/page-name-sanity-lc)
-                                          (some-> redirect-page-name util/page-name-sanity-lc)))
-                                 page-name
-                                 redirect-page-name)
-            page (when redirect-page-name
-                   (db-async/<pull (state/get-current-repo) [:block/name (util/page-name-sanity-lc redirect-page-name)]))]
+    (let [page (or (first (:block/_alias page-entity)) page-entity)]
       (cond
         (gobj/get e "shiftKey")
         (when page
@@ -534,14 +527,11 @@
          page-name
          (whiteboard-handler/closest-shape (.-target e)))
 
-        whiteboard-page?
-        (route-handler/redirect-to-page! page-name)
-
         (nil? page)
         (state/pub-event! [:page/create page-name-in-block])
 
         :else
-        (route-handler/redirect-to-page! redirect-page-name))))
+        (route-handler/redirect-to-page! (:block/uuid page)))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -586,10 +576,10 @@
                            (reset! *mouse-down? true))))
       :on-pointer-up (fn [e]
                      (when @*mouse-down?
-                       (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)
+                       (open-page-ref page-entity e page-name page-name-in-block contents-page?)
                        (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
-                           (open-page-ref e config page-name page-name-in-block contents-page? whiteboard-page?)))}
+                           (open-page-ref page-entity e page-name page-name-in-block contents-page?)))}
      (when-not hide-icon?
        (when-let [icon (:logseq.property/icon page-entity)]
          [:span.mr-1.inline-flex.items-center (icon/icon icon)]))
@@ -611,7 +601,7 @@
           (->elem :span (map-inline config label))
 
           :else
-          (let [original-name (util/get-page-original-name page-entity)
+          (let [original-name (:block/original-name page-entity)
                 s (cond untitled?
                         (t :untitled)
 
@@ -711,7 +701,7 @@
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (common-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
-          page-entity (db/get-page page-name)
+          page-entity (if (de/entity? page) page (db/get-page page-name))
           whiteboard-page? (model/whiteboard-page? page-name)
           inner (page-inner config
                             page-name-in-block

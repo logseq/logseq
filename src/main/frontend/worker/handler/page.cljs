@@ -204,14 +204,8 @@
                 file-path (:file/path file)
                 delete-file-tx (when file
                                  [[:db.fn/retractEntity [:file/path file-path]]])
-              ;; if other page alias this pagename,
-              ;; then just remove some attrs of this entity instead of retractEntity
-                delete-page-tx (if (and db-based? (ldb/get-alias-source-page @conn page-name))
-                                 (mapv (fn [attribute]
-                                         [:db/retract (:db/id page) attribute])
-                                       db-schema/retract-page-attributes)
-                                 (concat (db-refs->page repo page)
-                                         [[:db.fn/retractEntity (:db/id page)]]))
+                delete-page-tx (concat (db-refs->page repo page)
+                                       [[:db.fn/retractEntity (:db/id page)]])
                 tx-data (concat truncate-blocks-tx-data delete-page-tx delete-file-tx)]
 
             (ldb/transact! conn tx-data
