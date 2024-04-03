@@ -1,4 +1,5 @@
 (ns frontend.worker.db-listener
+  "Db listeners for worker-db."
   (:require [datascript.core :as d]))
 
 

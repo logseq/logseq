@@ -8,11 +8,15 @@
                        :db/latest-transact-time {}
                        :worker/context {}
 
+                       ;; FIXME: this name :config is too general
                        :config {}
                        :git/current-repo nil
                        :rtc/batch-processing? false
                        :rtc/remote-batch-txs nil
-                       :rtc/downloading-graph? false}))
+                       :rtc/downloading-graph? false
+
+                       :undo/repo->undo-stack (atom {})
+                       :undo/repo->redo-stack (atom {})}))
 
 (defonce *rtc-ws-url (atom nil))
 
