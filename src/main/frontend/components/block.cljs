@@ -87,8 +87,7 @@
             [shadow.loader :as loader]
             [logseq.common.path :as path]
             [electron.ipc :as ipc]
-            [frontend.db.async :as db-async]
-            [datascript.impl.entity :as de]))
+            [frontend.db.async :as db-async]))
 
 ;; local state
 (defonce *dragging?
@@ -581,7 +580,7 @@
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (open-page-ref page-entity e page-name page-name-in-block contents-page?)))}
      (when-not hide-icon?
-       (when-let [icon (:logseq.property/icon page-entity)]
+       (when-let [icon (get page-entity (pu/get-pid :logseq.property/icon))]
          [:span.mr-1.inline-flex.items-center (icon/icon icon)]))
      [:span
       (if (and (coll? children) (seq children))
@@ -701,7 +700,7 @@
   (when-let [page-name-in-block (:block/name page)]
     (let [page-name-in-block (common-util/remove-boundary-slashes page-name-in-block)
           page-name (util/page-name-sanity-lc page-name-in-block)
-          page-entity (if (de/entity? page) page (db/get-page page-name))
+          page-entity (if (e/entity? page) page (db/get-page page-name))
           whiteboard-page? (model/whiteboard-page? page-name)
           inner (page-inner config
                             page-name-in-block
@@ -3604,7 +3603,7 @@
 (defn hidden-page->source-page
   [page]
   (or
-   (:logseq.property/source-page-id page)
+   (get page (pu/get-pid :logseq.property/source-page-id))
    ;; FIXME: what if the source page has been deleted?
    page))
 

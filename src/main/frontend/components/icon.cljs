@@ -13,7 +13,8 @@
             [frontend.util :as util]
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.handler.property.util :as pu]))
 
 (defn icon
   [icon & [opts]]
@@ -28,7 +29,7 @@
 (defn get-page-icon
   [page-entity opts]
   (let [default-icon (ui/icon "page" (merge opts {:extension? true}))
-        page-icon (:logseq.property/icon page-entity)]
+        page-icon (get page-entity (pu/get-pid :logseq.property/icon))]
     (or
      (when-not (string/blank? page-icon)
        (icon page-icon opts))

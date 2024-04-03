@@ -48,7 +48,8 @@
             [rum.core :as rum]
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.db.async :as db-async]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.handler.property.util :as pu]))
 
 (defn- get-page-name
   [state]
@@ -308,7 +309,7 @@
     (let [page (db/sub-block (:db/id page))
           title (:block/original-name page)]
       (when title
-        (let [icon (:logseq.property/icon page)
+        (let [icon (get page (pu/get-pid :logseq.property/icon))
               *title-value (get state ::title-value)
               *edit? (get state ::edit?)
               *input-value (get state ::input-value)
@@ -335,7 +336,7 @@
                                                           (db-property-handler/set-block-property!
                                                            repo
                                                            (:db/id page)
-                                                           :logseq.property/icon
+                                                           (pu/get-pid :logseq.property/icon)
                                                            icon
                                                            {}))
                                              :icon-props {:size 38}})
@@ -1315,7 +1316,7 @@
                               {:on-change (fn []
                                             (swap! *checks update idx not))})]
                [:td.icon.w-4.p-0.overflow-hidden
-                (when-let [icon (:logseq.property/icon page)]
+                (when-let [icon (get page (pu/get-pid :logseq.property/icon))]
                   icon)]
                [:td.name [:a {:on-click (fn [e]
                                           (.preventDefault e)
