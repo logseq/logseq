@@ -3230,7 +3230,7 @@
 
 (defn whiteboard?
   []
-  (and (state/whiteboard-route?)
+  (and (db-model/whiteboard-page? (state/get-current-page))
        (.closest (.-activeElement js/document) ".logseq-tldraw")))
 
 (defn shortcut-cut

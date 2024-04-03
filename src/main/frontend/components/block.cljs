@@ -864,17 +864,17 @@
                     page-name)
               (not= (util/page-name-sanity-lc (get config :id ""))
                     page-name))
-         (if whiteboard-page?
-           ((state/get-component :whiteboard/tldraw-preview) page-name)
-           (let [block (model/get-page page-name)
-                 block (db/sub-block (:db/id block))
-                 blocks (db/sort-by-left (:block/_parent block) block)]
-             (blocks-container blocks (assoc config
-                                             :db/id (:db/id block)
-                                             :id page-name
-                                             :embed? true
-                                             :page-embed? true
-                                             :ref? false))))))]))
+         (let [block (model/get-page page-name)
+               block (db/sub-block (:db/id block))]
+           (if whiteboard-page?
+             ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
+             (let [blocks (db/sort-by-left (:block/_parent block) block)]
+               (blocks-container blocks (assoc config
+                                               :db/id (:db/id block)
+                                               :id page-name
+                                               :embed? true
+                                               :page-embed? true
+                                               :ref? false)))))))]))
 
 (defn- get-label-text
   [label]

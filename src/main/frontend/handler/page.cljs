@@ -363,7 +363,6 @@
                (not (:graph/loading? @state/state))
                (not (:graph/importing @state/state))
                (not (state/loading-files? repo))
-               (not (state/whiteboard-route?))
                (not config/publishing?))
       (state/set-today! (date/today))
       (when (or (config/db-based-graph? repo)

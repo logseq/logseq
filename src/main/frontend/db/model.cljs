@@ -531,7 +531,8 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-page
   [page-name-or-uuid]
-  (ldb/get-page (conn/get-db) page-name-or-uuid))
+  (when page-name-or-uuid
+    (ldb/get-page (conn/get-db) page-name-or-uuid)))
 
 ;; FIXME: should pass page's db id
 (defn get-redirect-page-name
@@ -813,7 +814,7 @@ independent of format as format specific heading characters are stripped"
   "Given a page entity, page object or page name, check if it is a whiteboard page"
   [page]
   (let [page (if (string? page)
-               (db-utils/entity (ldb/get-first-page-by-name (conn/get-db) page))
+               (get-page page)
                page)]
     (ldb/whiteboard-page? page)))
 
@@ -836,7 +837,9 @@ independent of format as format specific heading characters are stripped"
 (defn get-all-whiteboards
   [repo]
   (d/q
-    '[:find [(pull ?page [:block/name
+    '[:find [(pull ?page [:db/id
+                          :block/uuid
+                          :block/name
                           :block/original-name
                           :block/created-at
                           :block/updated-at]) ...]

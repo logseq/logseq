@@ -158,10 +158,6 @@
         page (case route-name
                :page
                (get-in match [:path-params :name])
-
-               :whiteboard
-               (get-in match [:path-params :name])
-
                (date/journal-name))]
     (when page
       (if (common-util/uuid-string? page)

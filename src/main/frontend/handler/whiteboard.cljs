@@ -24,9 +24,9 @@
   [obj]
   (js->clj obj :keywordize-keys true))
 
-(defn shape->block [shape page-name]
+(defn shape->block [shape page-id]
   (let [repo (state/get-current-repo)]
-    (gp-whiteboard/shape->block repo shape page-name)))
+    (gp-whiteboard/shape->block repo shape page-id)))
 
 (defn- build-shapes
   [page-block blocks]
@@ -75,8 +75,9 @@
                            (util/time-ms))}))
 
 (defn- compute-tx
-  [^js app ^js tl-page new-id-nonces db-id-nonces page-name replace?]
-  (let [assets (js->clj-keywordize (.getCleanUpAssets app))
+  [^js app ^js tl-page new-id-nonces db-id-nonces page-uuid replace?]
+  (let [page-entity (db/get-page page-uuid)
+        assets (js->clj-keywordize (.getCleanUpAssets app))
         new-shapes (.-shapes tl-page)
         shapes-index (map #(gobj/get % "id") new-shapes)
         shape-id->index (zipmap shapes-index (range (.-length new-shapes)))
@@ -100,7 +101,7 @@
                               (mapv (fn [b] (pu/get-block-property-value b :logseq.property.tldraw/shape)))
                               (remove nil?)))
         deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
-        upserted-blocks (->> (map #(shape->block % page-name) upsert-shapes)
+        upserted-blocks (->> (map #(shape->block % (:db/id page-entity)) upsert-shapes)
                              (remove (fn [b]
                                        (= (:nonce
                                            (pu/get-block-property-value
@@ -110,7 +111,7 @@
                                            (pu/get-block-property-value
                                             b
                                             :logseq.property.tldraw/shape))))))
-        page-entity (model/get-page page-name)
+        page-name (or (:block/original-name page-entity) (str page-uuid))
         page-block (build-page-block page-entity page-name tl-page assets shapes-index)]
     (when (or (seq upserted-blocks)
               (seq deleted-shapes-tx)
@@ -128,10 +129,10 @@
 
 ;; FIXME: it seems that nonce for the page block will not be updated with new updates for the whiteboard
 (defn <transact-tldr-delta!
-  [page-name ^js app replace?]
+  [page-uuid ^js app replace?]
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
-        page-block (model/get-page page-name)
+        page-block (model/get-page page-uuid)
         prev-page-metadata (pu/get-block-property-value page-block :logseq.property.tldraw/page)
         prev-shapes-index (:shapes-index prev-page-metadata)
         shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
@@ -143,30 +144,30 @@
                                                       (js/Date.now))})) shapes))
         repo (state/get-current-repo)
         db-id-nonces (or
-                      (get-in @*last-shapes-nonce [repo page-name])
+                      (get-in @*last-shapes-nonce [repo page-uuid])
                       (set (->> (model/get-whiteboard-id-nonces repo (:db/id page-block))
                                 (map #(update % :id str)))))
         {:keys [page-block new-shapes deleted-shapes upserted-blocks delete-blocks metadata] :as result}
-        (compute-tx app tl-page new-id-nonces db-id-nonces page-name replace?)]
+        (compute-tx app tl-page new-id-nonces db-id-nonces page-uuid replace?)]
     (when (seq result)
       (let [tx-data (concat delete-blocks [page-block] upserted-blocks)
             metadata' (cond
-                    ;; group
+                        ;; group
                         (some #(= "group" (:type %)) new-shapes)
                         (assoc metadata :whiteboard/op :group)
 
-                    ;; ungroup
+                        ;; ungroup
                         (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
                         (assoc metadata :whiteboard/op :un-group)
 
-                    ;; arrow
+                        ;; arrow
                         (some #(and (= "line" (:type %))
                                     (= "arrow " (:end (:decorations %)))) new-shapes)
 
                         (assoc metadata :whiteboard/op :new-arrow)
                         :else
                         metadata)]
-        (swap! *last-shapes-nonce assoc-in [repo page-name] new-id-nonces)
+        (swap! *last-shapes-nonce assoc-in [repo page-uuid] new-id-nonces)
         (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
           (state/set-state! :whiteboard/pending-tx-data
                             {:tx-data tx-data
@@ -241,24 +242,23 @@
       (when link?
         (.createNewLineBinding api source-shape (:id shape))))))
 
-(defn page-name->tldr!
-  [page-name]
-  (let [page (model/get-page page-name)
+(defn get-page-tldr
+  [page-uuid]
+  (let [page (model/get-page page-uuid)
         react-page (db/sub-block (:db/id page))
         blocks (:block/_page react-page)]
     (whiteboard-clj->tldr react-page blocks)))
 
 (defn <add-new-block!
-  [page-name content]
+  [page-uuid content]
   (p/let [repo (state/get-current-repo)
           new-block-id (db/new-block-id)
-          page-entity (model/get-page page-name)
+          page-entity (model/get-page page-uuid)
           tx (sqlite-util/block-with-timestamps
               {:block/uuid new-block-id
                :block/content (or content "")
                :block/format :markdown
-               :block/page {:block/name (util/page-name-sanity-lc page-name)
-                            :block/original-name page-name}
+               :block/page (:db/id page-entity)
                :block/parent (:db/id page-entity)})
           _ (db/transact! repo [tx] {:whiteboard/transact? true})]
     new-block-id))
@@ -296,12 +296,12 @@
                                                     :bindings bindings})))))
 (defn should-populate-onboarding-whiteboard?
   "When there is no whiteboard, or there is only one whiteboard that has the given page name, we should populate the onboarding shapes"
-  [page-name]
+  [page-uuid]
   (let [whiteboards (model/get-all-whiteboards (state/get-current-repo))]
     (and (or (empty? whiteboards)
              (and
               (= 1 (count whiteboards))
-              (= page-name (:block/name (first whiteboards)))))
+              (= (str page-uuid) (str (:block/uuid (first whiteboards))))))
          (not (state/get-onboarding-whiteboard?)))))
 
 (defn update-shapes!
@@ -311,11 +311,11 @@
       (apply (.-updateShapes api) (bean/->js shapes)))))
 
 (defn update-shapes-index!
-  [page-name]
+  [page-uuid]
   (when-let [app (state/active-tldraw-app)]
     (let [tl-page ^js (second (first (.-pages app)))]
       (when tl-page
-        (when-let [page (db/get-page page-name)]
+        (when-let [page (db/get-page page-uuid)]
           (let [page-metadata (pu/get-block-property-value page :logseq.property.tldraw/page)
                 shapes-index (:shapes-index page-metadata)]
             (when (seq shapes-index)

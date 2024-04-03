@@ -84,7 +84,7 @@
                         (:db/id (db/entity [:block/uuid page-name]))
                         (:db/id (db/entity (ldb/get-first-page-by-name (db/get-db) page-name))))]
        (recent-handler/add-page-to-recent! db-id click-from-recent?))
-     (if (and (= name (state/get-current-whiteboard)) block-id)
+     (if (and (= (str page-name) (state/get-current-page)) block-id)
        (state/focus-whiteboard-shape block-id)
        (let [m (cond->
                 (default-page-route (str page-name))

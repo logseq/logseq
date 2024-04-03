@@ -907,7 +907,8 @@
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
+        margin-less-pages? (or (boolean (#{:graph} route-name))
+                               (db-model/whiteboard-page? (state/get-current-page)))
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
@@ -997,10 +998,10 @@
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer
-        {:t t
-         :current-repo current-repo
-         :nfs-granted? granted?
-         :db-restoring? db-restoring?})
+       {:t t
+        :current-repo current-repo
+        :nfs-granted? granted?
+        :db-restoring? db-restoring?})
       (app-context-menu-observer)
 
       [:a#download.hidden]
