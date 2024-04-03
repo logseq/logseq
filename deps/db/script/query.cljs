@@ -27,8 +27,11 @@
   (let [[graph-dir query*] args
         [dir db-name] (get-dir-and-db-name graph-dir)
         conn (sqlite-db/open-db! dir db-name)
-        query (into (edn/read-string query*) [:in '$ '%]) ;; assumes no :in are in queries
-        results (mapv first (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)))]
+        results (if ((set args) "-e")
+                  (map #(into {} (d/entity @conn (edn/read-string %))) (drop 2 args))
+                  ;; assumes no :in are in queries
+                  (let [query (into (edn/read-string query*) [:in '$ '%])]
+                    (mapv first (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)))))]
     (when ((set args) "-v") (println "DB contains" (count (d/datoms @conn :eavt)) "datoms"))
     (prn results)))
 
