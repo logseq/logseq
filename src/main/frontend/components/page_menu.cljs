@@ -101,7 +101,9 @@
              :options {:on-click #(page-handler/copy-page-url page-original-name)}})
 
           (when-not (or contents?
-                        config/publishing?)
+                        config/publishing?
+                        (and db-based?
+                             (:logseq.property/built-in? page)))
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page-name)}})
 
