@@ -423,9 +423,15 @@
 
 (defn get-page-entity
   [page-name]
-  (if-let [block-id (parse-uuid page-name)]
-    (db/entity [:block/uuid block-id])
-    (db/entity (ldb/get-first-page-by-name (db/get-db) page-name))))
+  (cond
+    (uuid? page-name)
+    (db/entity [:block/uuid page-name])
+
+    (common-util/uuid-string? page-name)
+    (db/entity [:block/uuid (uuid page-name)])
+
+    :else
+    (db/get-page page-name)))
 
 (defn- get-sanity-page-name
   [state page-name]
@@ -467,7 +473,6 @@
                         (= page-name (util/page-name-sanity-lc (date/journal-name))))
                 *control-show? (::control-show? state)
                 *all-collapsed? (::all-collapsed? state)
-                *current-block-page (::current-page state)
                 block-or-whiteboard? (or block? whiteboard?)
                 home? (= :home (state/get-current-route))]
             (when (or page-name block-or-whiteboard?)
@@ -527,10 +532,7 @@
                      [:div.space-y-2
                       (shui/skeleton {:class "h-6 w-full"})
                       (shui/skeleton {:class "h-6 w-full"})]
-                     (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
-                           _ (when (and block? (not page))
-                               (route-handler/redirect-to-page! @*current-block-page))]
-                       (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?})))]])
+                     (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
                (when today?
                  (today-queries repo today? sidebar?))
