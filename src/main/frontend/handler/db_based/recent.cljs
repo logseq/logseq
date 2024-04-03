@@ -2,7 +2,6 @@
   "Fns related to recent pages feature"
   (:require [frontend.db :as db]
             [frontend.state :as state]
-            [clojure.string :as string]
             [logseq.db :as ldb]))
 
 (defn add-page-to-recent!
@@ -20,9 +19,7 @@
   []
   (->> (state/get-recent-pages)
        (distinct)
-       (map (fn [id]
-              (let [e (db/entity id)]
-                (:block/original-name e))))
-       (remove string/blank?)
-       (remove ldb/hidden-page?)
-       (take 20)))
+       (take 20)
+       (keep db/entity)
+       (filter db/page?)
+       (remove ldb/hidden-page?)))
