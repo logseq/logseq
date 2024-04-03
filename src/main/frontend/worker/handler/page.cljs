@@ -11,8 +11,7 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
-            [medley.core :as medley]
-            [logseq.db.frontend.schema :as db-schema]))
+            [medley.core :as medley]))
 
 (defn properties-block
   [repo conn config date-formatter properties format page]

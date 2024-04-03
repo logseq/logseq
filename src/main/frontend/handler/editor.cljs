@@ -539,22 +539,22 @@
 
                                    ;; FIXME: assert
                                    :else
-                                   nil)]
-          (let [new-block' (if db-based?
-                             (merge new-block properties)
-                             new-block)]
-            (when block-m
-              (p/do!
-               (outliner-insert-block! {} block-m new-block' {:sibling? sibling?
-                                                              :keep-uuid? true
-                                                              :ordered-list? ordered-list?
-                                                              :replace-empty-target? replace-empty-target?})
-               (when edit-block?
-                 (if (and replace-empty-target?
-                          (string/blank? (:block/content last-block)))
-                   (edit-block! last-block :max nil)
-                   (edit-block! new-block :max nil)))
-               new-block))))))))
+                                   nil)
+              new-block' (if db-based?
+                           (merge new-block properties)
+                           new-block)]
+          (when block-m
+            (p/do!
+             (outliner-insert-block! {} block-m new-block' {:sibling? sibling?
+                                                            :keep-uuid? true
+                                                            :ordered-list? ordered-list?
+                                                            :replace-empty-target? replace-empty-target?})
+             (when edit-block?
+               (if (and replace-empty-target?
+                        (string/blank? (:block/content last-block)))
+                 (edit-block! last-block :max nil)
+                 (edit-block! new-block :max nil)))
+             new-block)))))))
 
 (defn insert-first-page-block-if-not-exists!
   ([page-title]

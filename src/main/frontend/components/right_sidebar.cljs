@@ -10,7 +10,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as db-model]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
@@ -23,8 +22,7 @@
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [logseq.db :as ldb]))
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]))
 
 (rum/defc toggle
   []

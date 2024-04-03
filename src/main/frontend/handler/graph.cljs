@@ -9,8 +9,7 @@
             [frontend.config :as config]
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.common.util :as common-util]))
 
 (defn- build-links
   [links]
