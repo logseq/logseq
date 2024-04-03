@@ -154,52 +154,66 @@
   (merge
    query-dsl-rules
    {:page-tags
-   '[(page-tags ?p ?tags)
-     [?p :block/tags ?t]
-     [?t :block/name ?tag]
-     [(missing? $ ?p :block/link)]
-     [(contains? ?tags ?tag)]]
+    '[(page-tags ?p ?tags)
+      [?p :block/tags ?t]
+      [?t :block/name ?tag]
+      [(missing? $ ?p :block/link)]
+      [(contains? ?tags ?tag)]]
 
     :has-page-property
     '[(has-page-property ?p ?prop)
       [?p :block/name]
-      [?p :block/properties ?bp]
-      [(name ?prop) ?prop-name-str]
-      [?prop-b :block/name ?prop-name-str]
-      [?prop-b :block/type "property"]
-      [?prop-b :block/uuid ?prop-uuid]
-      [(get ?bp ?prop-uuid) ?v]
+      [?p ?prop ?v]
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]
       ;; Some deleted properties leave #{} which this rule shouldn't match on
       [(not= #{} ?v)]]
+    ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
+    #_'[(has-page-property ?p ?prop)
+        [?p :block/name]
+        [?p :block/properties ?bp]
+        [(name ?prop) ?prop-name-str]
+        [?prop-b :block/name ?prop-name-str]
+        [?prop-b :block/type "property"]
+        [?prop-b :block/uuid ?prop-uuid]
+        [(get ?bp ?prop-uuid) ?v]
+      ;; Some deleted properties leave #{} which this rule shouldn't match on
+        [(not= #{} ?v)]]
 
     :page-property
     '[;; Clause 1: Match non-ref values
-      [(page-property ?p ?key ?val)
+      [(page-property ?p ?prop ?val)
        [?p :block/name]
-       [?p :block/properties ?prop]
-       [(name ?key) ?key-str]
-       [?prop-b :block/name ?key-str]
-       [?prop-b :block/type "property"]
-       [?prop-b :block/uuid ?prop-uuid]
-       [(get ?prop ?prop-uuid) ?v]
-       (or ([= ?v ?val])
-           [(contains? ?v ?val)])]
+       [?p ?prop ?val]
+       [?prop-e :db/ident ?prop]
+       [?prop-e :block/type "property"]]
+      ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
+      #_[(page-property ?p ?key ?val)
+         [?p :block/name]
+         [?p :block/properties ?prop]
+         [(name ?key) ?key-str]
+         [?prop-b :block/name ?key-str]
+         [?prop-b :block/type "property"]
+         [?prop-b :block/uuid ?prop-uuid]
+         [(get ?prop ?prop-uuid) ?v]
+         (or ([= ?v ?val])
+             [(contains? ?v ?val)])]
 
       ;; Clause 2: Match values joined by refs
-      [(page-property ?p ?key ?val)
-       [?p :block/name]
-       [?p :block/properties ?prop]
-       [(name ?key) ?key-str]
-       [?prop-b :block/name ?key-str]
-       [?prop-b :block/type "property"]
-       [?prop-b :block/uuid ?prop-uuid]
-       [(get ?prop ?prop-uuid) ?v]
-       [(str ?val) ?str-val]
+      #_[(page-property ?p ?key ?val)
+         [?p :block/name]
+         [?p :block/properties ?prop]
+         [(name ?key) ?key-str]
+         [?prop-b :block/name ?key-str]
+         [?prop-b :block/type "property"]
+         [?prop-b :block/uuid ?prop-uuid]
+         [(get ?prop ?prop-uuid) ?v]
+         [(str ?val) ?str-val]
       ;; str-val is for integer pages that aren't strings
-       [?prop-val-b :block/original-name ?str-val]
-       [?prop-val-b :block/uuid ?val-uuid]
-       (or ([= ?v ?val-uuid])
-           [(contains? ?v ?val-uuid)])]]
+         [?prop-val-b :block/original-name ?str-val]
+         [?prop-val-b :block/uuid ?val-uuid]
+         (or ([= ?v ?val-uuid])
+             [(contains? ?v ?val-uuid)])]]
 
     :has-property
     '[(has-property ?b ?prop)
