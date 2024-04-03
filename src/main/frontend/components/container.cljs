@@ -83,9 +83,9 @@
         source-page (db-model/get-alias-source-page (state/get-current-repo) name)
         ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
         open-in-sidebar #(state/sidebar-add-block!
-                         (state/get-current-repo)
-                         (:db/id page)
-                         :page)
+                          (state/get-current-repo)
+                          (:db/id page)
+                          :page)
         x-menu-content (fn []
                          (let [x-menu-item shui/dropdown-menu-item
                                x-menu-shortcut shui/dropdown-menu-shortcut]
@@ -121,10 +121,9 @@
     [:a.flex.items-center.justify-between.relative.group
      {:on-click
       (fn [e]
-        (let [name (if (empty? source-page) name (:block/name source-page))]
-          (if (gobj/get e "shiftKey")
-            (open-in-sidebar)
-            (route-handler/redirect-to-page! name {:click-from-recent? recent?}))))
+        (if (gobj/get e "shiftKey")
+          (open-in-sidebar)
+          (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
       :on-context-menu (fn [^js e]
                          (shui/popup-show! e (x-menu-content)
                                            {:as-dropdown? true
@@ -193,15 +192,14 @@
       :count (count pages)}
 
      [:ul.text-sm
-      (for [name pages]
-        (when-let [entity (db/entity (ldb/get-first-page-by-name (db/get-db) name))]
-          [:li.recent-item.select-none
-           {:key name
-            :title name
-            :draggable true
-            :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event true))
-            :data-ref name}
-           (page-name entity (icon/get-page-icon entity {}) true)]))])))
+      (for [page pages]
+        [:li.recent-item.select-none
+         {:key (str "recent-" (:db/id page))
+          :title (:block/original-name page)
+          :draggable true
+          :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
+          :data-ref name}
+         (page-name page (icon/get-page-icon page {}) true)])])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
