@@ -111,4 +111,5 @@
    {:block/name (common-util/page-name-sanity-lc page-name)
     :block/original-name page-name
     :block/journal? false
-    :block/uuid (d/squuid)}))
+    :block/uuid (d/squuid)
+    :block/format :markdown}))
