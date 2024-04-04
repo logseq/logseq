@@ -237,7 +237,8 @@
     (and k-name
          (or (string/starts-with? k-name "logseq.property")
              (string/starts-with? k-name "logseq.task")
-             (string/starts-with? k-name "user.property")))))
+             (string/starts-with? k-name "user.property")
+             (and (keyword? k) (contains? #{:block/tags :block/alias} k))))))
 
 (defn properties
   "Fetch all properties of entity like :block/properties used to do.
