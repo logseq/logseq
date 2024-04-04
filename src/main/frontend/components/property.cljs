@@ -715,9 +715,6 @@
                      (->> (db-property/get-class-ordered-properties block)
                           (map #(vector % %)))
                      (sort-by first block-properties))
-        alias (set (map :db/id (:block/alias block)))
-        alias-properties (when (seq alias)
-                           [[:block/alias alias]])
         remove-built-in-properties (fn [properties]
                                      (remove (fn [[id _]]
                                                (when-let [ent (db/entity id)]
@@ -726,8 +723,7 @@
                                              properties))
         {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))
-        block-own-properties (->> (concat (seq alias-properties)
-                                          (seq properties))
+        block-own-properties (->> (concat (seq properties))
                                   remove-built-in-properties
                                   (remove (fn [[id _]] ((set classes-properties) id))))
         root-block? (= (:id opts) (str (:block/uuid block)))
