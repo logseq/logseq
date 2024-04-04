@@ -648,6 +648,7 @@
         multiple-values? (= :many (:cardinality schema))
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
+        type (:type schema)
         type (or (when (and (= type :default) (uuid? value)) :block)
                  type
                  :default)
@@ -671,7 +672,7 @@
                                                 (nil? (:block/_parent property-block))))
                         value (if invalid-block? "" value)]
                     (when (or (= type :default) invalid-block?)
-                      (set-editing! (assoc property :block/uuid (random-uuid)) editor-id dom-id value {:ref @*ref}))))}
+                      (set-editing! property editor-id dom-id value {:ref @*ref}))))}
      (if (string/blank? value)
        (if template?
          (let [id (first (:classes schema))

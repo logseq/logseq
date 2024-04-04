@@ -451,14 +451,14 @@
 
 (defn property-create-new-block
   [block property value parse-block]
-  (let [current-page-id (:block/uuid (or (:block/page block) block))
+  (let [current-page-id (:db/id (or (:block/page block) block))
         page-name (str "$$$" current-page-id)
         page-entity (db/entity [:block/name page-name])
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :logseq.property/source-page-id current-page-id)))
+                            :logseq.property/source-page current-page-id)))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
@@ -469,8 +469,8 @@
                     :block/parent page-id
                     :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
-                    :logseq.property/created-from-block block
-                    :logseq.property/created-from-property property}
+                    :logseq.property/created-from-block (:db/id block)
+                    :logseq.property/created-from-property (:db/id property)}
                    sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -503,14 +503,14 @@
 
 (defn property-create-new-block-from-template
   [block property template]
-  (let [current-page-id (:block/uuid (or (:block/page block) block))
+  (let [current-page-id (:db/id (or (:block/page block) block))
         page-name (str "$$$" current-page-id)
         page-entity (db/entity [:block/name page-name])
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :logseq.property/source-page-id current-page-id)))
+                            :logseq.property/source-page current-page-id)))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)

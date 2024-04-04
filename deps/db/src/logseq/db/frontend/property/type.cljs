@@ -12,7 +12,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :uuid})
+  #{:keyword :map :coll :any :uuid :entity})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -60,14 +60,11 @@
   ;; TODO: Confirm that macro expanded value is url when it's easier to pass data into validations
   (macro-util/macro? s))
 
-(defn- logseq-block?
+(defn- entity?
   [db id]
   (some? (d/entity db id)))
 
-;; FIXME: template instance check
-(defn- logseq-template?
-  [db id]
-  (some? (d/entity db id)))
+;; TODO: strict check on date/page/template
 
 (defn- existing-closed-value-valid?
   "Validates that the given existing closed value is valid"
@@ -106,17 +103,20 @@
               (some-fn number? uuid?)]
    :date     [:fn
               {:error/message "should be a journal date"}
-              logseq-block?]
+              entity?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
               (some-fn url? uuid? macro-url?)]
    :page     [:fn
               {:error/message "should be a page"}
-              logseq-block?]
+              entity?]
    :template [:fn
               {:error/message "should has #template"}
-              logseq-template?]
+              entity?]
+   :entity   [:fn
+              {:error/message "should be a db entity"}
+              entity?]
    ;; internal usage
    :keyword  keyword?
    :uuid     uuid?
@@ -132,7 +132,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:date :page :template})
+  #{:date :page :template :entity})
 
 ;; Helper fns
 ;; ==========
