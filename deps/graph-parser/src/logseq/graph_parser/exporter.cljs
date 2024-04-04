@@ -183,8 +183,7 @@
                             (assoc (sqlite-util/build-new-page
                                     (date-time-util/int->journal-title deadline (common-config/get-date-formatter user-config)))
                                    :block/journal? true
-                                   :block/journal-day deadline
-                                   :block/format :markdown))]
+                                   :block/journal-day deadline))]
       (-> block
           (update :block/properties assoc deadline-prop (:block/uuid deadline-page))
           (update :block/refs (fnil into []) [:logseq.task/deadline deadline-page])
@@ -204,8 +203,7 @@
                             (assoc (sqlite-util/build-new-page
                                     (date-time-util/int->journal-title scheduled (common-config/get-date-formatter user-config)))
                                    :block/journal? true
-                                   :block/journal-day scheduled
-                                   :block/format :markdown))]
+                                   :block/journal-day scheduled))]
       (-> block
           (update :block/properties assoc scheduled-prop (:block/uuid scheduled-page))
           (update :block/refs (fnil into []) [:logseq.task/scheduled scheduled-page])

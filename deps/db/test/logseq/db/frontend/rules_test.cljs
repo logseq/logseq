@@ -21,7 +21,7 @@
   (let [conn (new-db-conn)
         _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo "foo" {})
                              (sqlite-util/build-new-property :user.property/foo2 "foo2" {})
-                             (assoc (sqlite-util/build-new-page "Page") :block/format :markdown)
+                             (sqlite-util/build-new-page "Page")
                              {:block/original-name "Page" :user.property/foo "bar"}])]
     (is (= ["Page"]
            (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (has-page-property ?b :user.property/foo)]
@@ -45,8 +45,8 @@
                              (sqlite-util/build-new-property :user.property/foo2 "foo2" {})
                              (sqlite-util/build-new-property :user.property/number-many "number-many" {:type :number :cardinality :many})
                              (sqlite-util/build-new-property :user.property/page-many "page-many" {:type :page :cardinality :many})
-                             (assoc (sqlite-util/build-new-page "Page") :block/format :markdown)
-                             (assoc (sqlite-util/build-new-page "Page A") :block/format :markdown)
+                             (sqlite-util/build-new-page "Page")
+                             (sqlite-util/build-new-page "Page A")
                              {:block/original-name "Page" :user.property/foo "bar"}
                              {:block/original-name "Page" :user.property/number-many #{5 10}}
                              {:block/original-name "Page" :user.property/page-many #{[:block/original-name "Page A"]}}
