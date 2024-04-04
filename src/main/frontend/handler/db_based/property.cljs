@@ -122,8 +122,12 @@
                          property-name
                          (assoc :block/original-name property-name))]
                       (update-schema property schema))
-                     (remove nil?))]
-        (db/transact! repo tx-data {:outliner-op :save-block}))
+                     (remove nil?))
+            many->one? (and (= (:db/cardinality property) :db.cardinality/many)
+                            (= :one (:cardinality schema)))]
+        (db/transact! repo tx-data {:outliner-op :update-property
+                                    :property-id (:db/id property)
+                                    :many->one? many->one?}))
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))]
         (assert (some? k-name)
