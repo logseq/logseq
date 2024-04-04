@@ -46,10 +46,10 @@
                                        :public? true}}
    ;; number (1-6) or boolean for auto heading
    :logseq.property/heading {:schema {:type :any :hide? true}}
-   :logseq.property/created-from-block    {:schema {:type :uuid}}
-   :logseq.property/created-from-property {:schema {:type :uuid}}
-   :logseq.property/created-from-template {:schema {:type :uuid}}
-   :logseq.property/source-page-id        {:schema {:type :uuid}}
+   :logseq.property/created-from-block    {:schema {:type :entity}}
+   :logseq.property/created-from-property {:schema {:type :entity}}
+   :logseq.property/created-from-template {:schema {:type :entity}}
+   :logseq.property/source-page           {:schema {:type :entity}}
    :logseq.property/built-in?             {:schema {:type :checkbox}}
    :logseq.property/hide-properties?      {:schema {:type :checkbox}}
    :logseq.property/query-table {:schema {:type :checkbox}}

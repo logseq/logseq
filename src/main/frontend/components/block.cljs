@@ -3638,7 +3638,7 @@
 (defn hidden-page->source-page
   [page]
   (or
-   (:logseq.property/source-page-id page)
+   (get page (pu/get-pid :logseq.property/source-page))
    ;; FIXME: what if the source page has been deleted?
    page))
 
