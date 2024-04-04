@@ -28,7 +28,7 @@
                        (let [[property-type schema-fn] e
                              schema-fn' (if (db-property-type/property-types-with-db property-type) (partial schema-fn db) schema-fn)
                              validation-fn #(validate-property-value property-type schema-fn' %)]
-                         [property-type [:tuple :uuid [:fn validation-fn]]])
+                         [property-type [:tuple :entity [:fn validation-fn]]])
                        :else
                        e)))
                  db-schema))

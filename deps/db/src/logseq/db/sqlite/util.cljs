@@ -64,7 +64,7 @@
                 (assoc :block/created-at updated-at))]
     block))
 
-(def property-ref-types #{:page :block :date :object})
+(def property-ref-types #{:page :block :date :entity})
 
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts"
