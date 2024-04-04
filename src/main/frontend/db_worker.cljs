@@ -31,7 +31,8 @@
             [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [frontend.worker.db.fix :as db-fix]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -367,6 +368,11 @@
              tx-meta (if (string? tx-meta)
                        (ldb/read-transit-str tx-meta)
                        tx-meta)
+             tx-data' (if (and (= :update-property (:outliner-op tx-meta))
+                               (:many->one? tx-meta) (:property-id tx-meta))
+                        (concat tx-data
+                                (db-fix/fix-cardinality-many->one @conn (:property-id tx-meta)))
+                        tx-data)
              context (if (string? context)
                        (ldb/read-transit-str context)
                        context)
@@ -382,12 +388,12 @@
                           (dissoc :insert-blocks?)))]
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
-                        (seq tx-data)
+                        (seq tx-data')
                         (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
 
-           ;; (prn :debug :transact :tx-data tx-data :tx-meta tx-meta')
+           ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
            (worker-util/profile "Worker db transact"
-                                (ldb/transact! conn tx-data tx-meta')))
+                                (ldb/transact! conn tx-data' tx-meta')))
          nil)
        (catch :default e
          (prn :debug :error)
