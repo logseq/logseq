@@ -66,7 +66,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.fs.capacitor-fs :as capacitor-fs]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.db.query-dsl :as query-dsl]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -3409,8 +3410,17 @@
 (defn- valid-dsl-query-block?
   "Whether block has a valid dsl query."
   [block]
-  (some-> (:block/content block)
-          (string/includes? "{{query ")))
+  (->> (:block/macros (db/entity (:db/id block)))
+       (some (fn [macro]
+               (let [properties (:block/properties macro)
+                     macro-name (pu/lookup properties :logseq.property/macro-name)
+                     macro-arguments (pu/lookup properties :logseq.property/macro-arguments)]
+                 (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
+                   (seq (:query
+                         (try
+                           (query-dsl/parse-query query-body)
+                           (catch :default _e
+                             nil))))))))))
 
 (defn- valid-custom-query-block?
   "Whether block has a valid custom query."
