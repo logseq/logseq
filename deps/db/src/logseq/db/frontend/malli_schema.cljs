@@ -10,12 +10,8 @@
 ;; :db/ident malli schemas
 ;; =======================
 
-(def db-attribute-properties
-  "Internal properties that are also db attributes"
-  #{:block/alias :block/tags})
-
 (def db-attribute-ident
-  (into [:enum] db-attribute-properties))
+  (into [:enum] db-property/db-attribute-properties))
 
 (def logseq-property-ident
   [:and :keyword [:fn
@@ -243,7 +239,7 @@
 (def property-page
   [:multi {:dispatch (fn [m]
                        (or (db-property/logseq-property? (m :db/ident))
-                           (contains? db-attribute-properties (m :db/ident))))}
+                           (contains? db-property/db-attribute-properties (m :db/ident))))}
    [true internal-property]
    [:malli.core/default user-property]])
 

@@ -177,6 +177,15 @@
                  (assoc v :name (keyword (string/lower-case (name k)))))]))
        (into {})))
 
+(def db-attribute-properties
+  "Internal properties that are also db schema attributes"
+  #{:block/alias :block/tags})
+
+(assert (= db-attribute-properties
+           (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
+                        built-in-properties)))
+        "All db attribute properties are configured in built-in-properties")
+
 (defn valid-property-name?
   [s]
   {:pre [(string? s)]}

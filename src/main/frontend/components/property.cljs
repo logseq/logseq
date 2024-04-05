@@ -446,7 +446,7 @@
                                (map #(:block/original-name (db/entity %)))
                                (remove nil?)
                                (set))
-        existing-tag-alias (->> [:block/tags :block/alias]
+        existing-tag-alias (->> db-property/db-attribute-properties
                                 (map db-property/built-in-properties)
                                 (keep #(when (get entity (:attribute %)) (:original-name %)))
                                 set)

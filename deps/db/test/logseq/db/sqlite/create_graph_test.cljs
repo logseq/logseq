@@ -6,7 +6,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.frontend.malli-schema :as malli-schema]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db :as ldb]))
 
 (deftest new-graph-db-idents
@@ -25,7 +25,7 @@
         (is (= '() (remove namespace default-idents))
             "All default :db/ident's have namespaces")
         (is (= []
-               (->> (remove malli-schema/db-attribute-properties default-idents)
+               (->> (remove db-property/db-attribute-properties default-idents)
                     (keep namespace)
                     (remove #(string/starts-with? % "logseq."))))
             "All default :db/ident namespaces start with logseq."))
