@@ -1,8 +1,10 @@
 (ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [clojure.string :as string]))
+
+;; Main property vars
+;; ==================
 
 (def ^:large-vars/data-var built-in-properties*
   "Map of built in properties for db graphs with their :db/ident as keys.
@@ -19,8 +21,7 @@
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :closed-values - Vec of closed-value maps for properties with choices. Map
-     has keys :value, :db-ident, :uuid and :icon
-   * :db-ident - Keyword to set :db/ident and give property unique id in db"
+     has keys :value, :db-ident, :uuid and :icon"
   {:block/alias           {:original-name "Alias"
                            :attribute :block/alias
                            :schema {:type :page
@@ -179,6 +180,47 @@
                  (assoc v :name (keyword (string/lower-case (name k)))))]))
        (into {})))
 
+(def db-attribute-properties
+  "Internal properties that are also db schema attributes"
+  #{:block/alias :block/tags})
+
+(assert (= db-attribute-properties
+           (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
+                      built-in-properties)))
+        "All db attribute properties are configured in built-in-properties")
+
+(def logseq-property-namespaces
+  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
+    "logseq.task"})
+
+(defn logseq-property?
+  "Determines if keyword is a logseq property"
+  [kw]
+  (contains? logseq-property-namespaces (namespace kw)))
+
+(def user-property-namespaces
+  #{"user.property"})
+
+(defn property?
+  "Determines if ident kw is a property"
+  [k]
+  (let [k-name (namespace k)]
+    (and k-name
+         (or (contains? logseq-property-namespaces k-name)
+             (contains? user-property-namespaces k-name)
+             (and (keyword? k) (contains? #{:block/tags :block/alias} k))))))
+
+;; Helper fns
+;; ==========
+
+(defn properties
+  "Fetch all properties of entity like :block/properties used to do.
+   Use this in deps because nbb can't use :block/properties from entity-plus"
+  [e]
+  (->> (into {} e)
+       (filter (fn [[k _]] (property? k)))
+       (into {})))
+
 (defn valid-property-name?
   [s]
   {:pre [(string? s)]}
@@ -186,11 +228,11 @@
   (not (re-find #"^(#|\[\[)" s)))
 
 (defn get-pid
-  "Get a built-in property's id (keyword name for file graph and uuid for db graph)
-  given its db-ident. Use this fn on a file or db graph. Use
-  db-pu/get-built-in-property-uuid if only in a db graph context"
+  "Get a built-in property's id (keyword name for file graph and db-ident for db
+  graph) given its db-ident. No need to use this fn in a db graph only context"
   [repo db-ident]
-  (if (sqlite-util/db-based-graph? repo)
+  ;; FIXME: Use db-based-graph? when this fn moves to another ns
+  (if (string/starts-with? repo "logseq_db_")
     db-ident
     (get-in built-in-properties [db-ident :name])))
 
@@ -203,9 +245,12 @@
   "Get the value of built-in block's property by its db-ident"
   [repo db block db-ident]
   (when db
-    (let [block (or (d/entity db (:db/id block)) block)]
-      (when-let [properties (:block/properties block)]
-        (lookup repo properties db-ident)))))
+    (let [block (or (d/entity db (:db/id block)) block)
+          ;; FIXME: Use db-based-graph? when this fn moves to another ns
+          properties' (if (string/starts-with? repo "logseq_db_")
+                        (properties block)
+                        (:block/properties block))]
+      (lookup repo properties' db-ident))))
 
 (defn shape-block?
   [repo db block]
@@ -231,25 +276,9 @@
               (when (= (closed-value-name e) value-name)
                 e))) values)))
 
-(defn property?
-  [k]
-  (let [k-name (namespace k)]
-    (and k-name
-         (or (string/starts-with? k-name "logseq.property")
-             (string/starts-with? k-name "logseq.task")
-             (string/starts-with? k-name "user.property")
-             (and (keyword? k) (contains? #{:block/tags :block/alias} k))))))
-
-(defn properties
-  "Fetch all properties of entity like :block/properties used to do.
-   Use this in deps because nbb can't use :block/properties from entity-plus"
-  [e]
-  (->> (into {} e)
-       (filter (fn [[k _]] (property? k)))
-       (into {})))
-
 ;; TODO: db ident should obey clojure's rules for keywords
-(defn get-db-ident-from-name
+(defn user-property-ident-from-name
+  "Makes a user property :db/ident from a name by sanitizing the given name"
   [property-name]
   (let [n (-> (string/lower-case property-name)
               (string/replace #"^:\s*" "")
@@ -257,8 +286,8 @@
               (string/replace " " "-")
               (string/replace "#" "")
               (string/trim))]
-    (when-not (string/blank? n)
-      (keyword "user.property" n))))
+    (assert (seq n) "name is not empty")
+    (keyword "user.property" n)))
 
 (defn get-class-ordered-properties
   [class-entity]

@@ -7,7 +7,8 @@
             [datascript.transit :as dt]
             [datascript.impl.entity :as de]
             [datascript.core :as d]
-            [cljs-bean.transit]))
+            [cljs-bean.transit]
+            [logseq.db.frontend.property :as db-property]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -67,32 +68,32 @@
 (def property-ref-types #{:page :block :date :entity})
 
 (defn build-new-property
-  "Build a standard new property so that it is is consistent across contexts"
-  [db-ident prop-name prop-schema]
-  (assert (keyword? db-ident))
-  (let [db-ident' (if (or (= "user.property" (namespace db-ident))
-                          (string/starts-with? (namespace db-ident) "logseq.")
-                          (contains? #{:block/tags :block/alias} db-ident))
-                    db-ident
-                    (keyword "user.property" (name db-ident)))]
-    (block-with-timestamps
-     (cond->
-      {:db/ident db-ident'
-       :block/type "property"
-       :block/journal? false
-       :block/format :markdown
-       :block/schema (merge {:type :default} prop-schema)
-       :block/name (common-util/page-name-sanity-lc (name prop-name))
-       :block/uuid (d/squuid)
-       :block/original-name (name prop-name)}
-       (= :many (:cardinality prop-schema))
-       (assoc :db/cardinality :db.cardinality/many)
-       (not= :many (:cardinality prop-schema))
-       (assoc :db/cardinality :db.cardinality/one)
-       (contains? property-ref-types (:type prop-schema))
-       (assoc :db/valueType :db.type/ref)
-       true
-       (assoc :db/index true)))))
+  "Build a standard new property so that it is is consistent across contexts. Takes
+   an optional map with following keys:
+   * :original-name - Case sensitive property name. Defaults to deriving this from db-ident"
+  ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
+  ([db-ident prop-schema {:keys [original-name]}]
+   (assert (keyword? db-ident))
+   (let [db-ident' (if (qualified-keyword? db-ident)
+                     db-ident
+                     (db-property/user-property-ident-from-name (name db-ident)))
+         prop-name (or original-name (name db-ident'))]
+     (block-with-timestamps
+      (cond->
+       {:db/ident db-ident'
+        :block/type "property"
+        :block/journal? false
+        :block/format :markdown
+        :block/schema (merge {:type :default} prop-schema)
+        :block/name (common-util/page-name-sanity-lc (name prop-name))
+        :block/uuid (d/squuid)
+        :block/original-name (name prop-name)
+        :db/index true
+        :db/cardinality (if (= :many (:cardinality prop-schema))
+                          :db.cardinality/many
+                          :db.cardinality/one)}
+        (contains? property-ref-types (:type prop-schema))
+        (assoc :db/valueType :db.type/ref))))))
 
 
 (defn build-new-class

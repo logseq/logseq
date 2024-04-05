@@ -171,7 +171,7 @@
                                     {id true}))
                 (property-handler/set-block-property! repo (:block/uuid block)
                                                       property-name
-                                                      (if (= type :default) "" :property/empty-placeholder)))))))}
+                                                      (if (= type :default) "" :logseq.property/empty-placeholder)))))))}
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
@@ -446,7 +446,7 @@
                                (map #(:block/original-name (db/entity %)))
                                (remove nil?)
                                (set))
-        existing-tag-alias (->> [:block/tags :block/alias]
+        existing-tag-alias (->> db-property/db-attribute-properties
                                 (map db-property/built-in-properties)
                                 (keep #(when (get entity (:attribute %)) (:original-name %)))
                                 set)

@@ -108,7 +108,7 @@
    Two main  ways to create a property are to set property-id to a qualified keyword
    or to set it to nil and pass :property-name as an option"
   [repo property-id schema {:keys [property-name properties]}]
-  (let [db-ident (or property-id (db-property/get-db-ident-from-name property-name))]
+  (let [db-ident (or property-id (db-property/user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (db/entity db-ident)]
       (let [tx-data (->>
@@ -132,7 +132,7 @@
                        (name property-id))]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
-        (db/transact! repo [(sqlite-util/build-new-property db-ident k-name schema)]
+        (db/transact! repo [(sqlite-util/build-new-property db-ident schema {:original-name k-name})]
                       {:outliner-op :new-property})))))
 
 (defn validate-property-value
@@ -157,7 +157,7 @@
                       (catch :default e
                         (notification/show! (str e) :error false)
                         nil))
-            tags-or-alias? (contains? #{:block/tags :block/alias} property-id)
+            tags-or-alias? (contains? db-property/db-attribute-properties property-id)
             old-values (if tags-or-alias?
                          (->> (get block property-id)
                               (map (fn [e] (:db/id e))))
@@ -203,7 +203,7 @@
   [repo block-eid property-id v {:keys [property-name] :as opts}]
   (let [block-eid (->eid block-eid)
         property-id (if (string? property-id)
-                      (db-property/get-db-ident-from-name property-id)
+                      (db-property/user-property-ident-from-name property-id)
                       property-id)
         _ (assert (keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
@@ -222,7 +222,7 @@
                 schema (get (built-in-validation-schemas property) property-type)
                 value (when-let [id (:db/ident property)]
                         (get block id))
-                v* (if (= v :property/empty-placeholder)
+                v* (if (= v :logseq.property/empty-placeholder)
                      v
                      (try
                        (convert-property-input-string property-type v)
@@ -230,19 +230,19 @@
                          (js/console.error e)
                          (notification/show! (str e) :error false)
                          nil)))
-                tags-or-alias? (and (contains? #{:block/tags :block/alias} property-id) (uuid? v*))]
+                tags-or-alias? (and (contains? db-property/db-attribute-properties property-id) (uuid? v*))]
             (if tags-or-alias?
               (let [property-value-id v*]
                 (db/transact! repo
                               [[:db/add (:db/id block) property-id property-value-id]]
                               {:outliner-op :save-block}))
               (when-not (contains? (if (set? value) value #{value}) v*)
-                (if-let [msg (when-not (= v* :property/empty-placeholder) (validate-property-value schema v*))]
+                (if-let [msg (when-not (= v* :logseq.property/empty-placeholder) (validate-property-value schema v*))]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {:property-name property-name})
                         status? (= :logseq.task/status (:db/ident property))
-                        value (if (= value :property/empty-placeholder) [] value)
+                        value (if (= value :logseq.property/empty-placeholder) [] value)
                         new-value (cond
                                     multiple-values?
                                     (let [f (if (coll? v*) concat conj)]
@@ -272,7 +272,7 @@
             (if (string? property-id)
               (if-let [ent (db/entity [:block/original-name property-id])]
                 [(:db/ident ent) ent]
-                [(db-property/get-db-ident-from-name property-id) nil])
+                [(db-property/user-property-ident-from-name property-id) nil])
               [property-id (db/entity property-id)])
             property-type (get-in property [:block/schema :type])
             _ (upsert-property! repo db-ident
@@ -364,7 +364,7 @@
 (defn remove-block-property!
   [repo eid property-id]
   (let [eid (->eid eid)]
-    (if (contains? #{:block/alias :block/tags} property-id)
+    (if (contains? db-property/db-attribute-properties property-id)
      (when-let [block (db/entity eid)]
        (db/transact! repo
                      [[:db/retract (:db/id block) property-id]]
