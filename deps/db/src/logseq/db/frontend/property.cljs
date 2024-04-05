@@ -275,9 +275,9 @@
               (when (= (closed-value-name e) value-name)
                 e))) values)))
 
-
 ;; TODO: db ident should obey clojure's rules for keywords
-(defn get-db-ident-from-name
+(defn user-property-ident-from-name
+  "Makes a user property :db/ident from a name by sanitizing the given name"
   [property-name]
   (let [n (-> (string/lower-case property-name)
               (string/replace #"^:\s*" "")
@@ -285,8 +285,8 @@
               (string/replace " " "-")
               (string/replace "#" "")
               (string/trim))]
-    (when-not (string/blank? n)
-      (keyword "user.property" n))))
+    (assert (seq n) "name is not empty")
+    (keyword "user.property" n)))
 
 (defn get-class-ordered-properties
   [class-entity]

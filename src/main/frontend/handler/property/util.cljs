@@ -24,7 +24,7 @@
                         (name key)
                         key)]
     (if (sqlite-util/db-based-graph? repo)
-      (when-let [property (d/entity db (db-property/get-db-ident-from-name property-name))]
+      (when-let [property (d/entity db (db-property/user-property-ident-from-name property-name))]
         (get coll (:block/uuid property)))
       (get coll key))))
 

@@ -28,8 +28,8 @@
                        {})
                       [(sqlite-util/build-new-property
                         db-ident
-                        prop-name
-                        schema)])]
+                        schema
+                        {:original-name prop-name})])]
          (update blocks 0 default-db/mark-block-as-built-in)))
      built-in-properties)))
 

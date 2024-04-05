@@ -68,7 +68,7 @@
   (->> properties
        (map
         (fn [[prop-name val]]
-          [(db-property/get-db-ident-from-name (name prop-name))
+          [(db-property/user-property-ident-from-name (name prop-name))
             ;; set indicates a :many value
            (if (set? val)
              (set (map #(translate-property-value % uuid-maps) val))
@@ -105,7 +105,7 @@
 (defn- build-property-refs [properties property-db-ids]
   (mapv
    (fn [prop-name]
-     (db-property/get-db-ident-from-name (name prop-name)))
+     (db-property/user-property-ident-from-name (name prop-name)))
    (keys properties)))
 
 (def current-db-id (atom 0))
@@ -168,7 +168,7 @@
                            (mapcat
                             (fn [[prop-name]]
                               (if (get-in properties [prop-name :closed-values])
-                                (let [db-ident (db-property/get-db-ident-from-name (name prop-name))]
+                                (let [db-ident (db-property/user-property-ident-from-name (name prop-name))]
                                   (db-property-util/build-closed-values
                                    db-ident
                                    prop-name
@@ -178,14 +178,13 @@
                                     :property-attributes
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
-                                [(let [db-ident (keyword "user.property" (name prop-name))]
-                                   (merge
-                                    (sqlite-util/build-new-property db-ident prop-name (get-in properties [prop-name :block/schema]))
-                                    {:db/id (or (property-db-ids (name prop-name))
-                                                (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                                    (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                      (assoc (->block-properties-tx props uuid-maps)
-                                             :block/refs (build-property-refs props property-db-ids)))))]))
+                                [(merge
+                                  (sqlite-util/build-new-property prop-name (get-in properties [prop-name :block/schema]))
+                                  {:db/id (or (property-db-ids (name prop-name))
+                                              (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                                  (when-let [props (not-empty (get-in properties [prop-name :properties]))]
+                                    (assoc (->block-properties-tx props uuid-maps)
+                                           :block/refs (build-property-refs props property-db-ids))))]))
                             property-uuids))
         pages-and-blocks-tx
         (vec
