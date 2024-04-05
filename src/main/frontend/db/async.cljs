@@ -97,7 +97,7 @@
             (db/entity [:block/uuid (uuid name')])
             :else
             (db/get-page name'))
-        uuid-str (or (str (:block/uuid e)) name')]
+        uuid-str (or (and (:block/uuid e) (str (:block/uuid e))) name')]
     (if (:block.temp/fully-loaded? e)
       e
       (when-let [^Object sqlite @db-browser/*worker]
