@@ -650,11 +650,11 @@
          (let [list? (and (some? (:block/uuid block))
                           (nil? (list-type-fn block)))]
            (cond-> block
-             (and db-based? list?)
-             (assoc k list-type)
-
              list?
-             (update :block/properties assoc k list-type)
+             ((fn [b]
+                (if db-based?
+                  (assoc b k list-type)
+                  (update b :block/properties assoc k list-type))))
 
              (not db-based?)
              (assoc :block/content (gp-property/insert-property repo format content :logseq.order-list-type list-type)))))
