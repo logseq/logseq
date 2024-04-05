@@ -494,6 +494,27 @@
                (conj acc (assoc block :block/path-refs path-ref-pages))
                parents)))))
 
+(defn- macro->block
+  "macro: {:name \"\" arguments [\"\"]}"
+  [macro]
+  {:block/uuid (random-uuid)
+   :block/type "macro"
+   :block/properties {:logseq.macro-name (:name macro)
+                      :logseq.macro-arguments (:arguments macro)}})
+
+(defn extract-macros-from-ast
+  [ast]
+  (let [*result (atom #{})]
+    (walk/postwalk
+     (fn [f]
+       (if (and (vector? f) (= (first f) "Macro"))
+         (do
+           (swap! *result conj (second f))
+           nil)
+         f))
+     ast)
+    (mapv macro->block @*result)))
+
 (defn with-pre-block-if-exists
   [blocks body pre-block-properties encoded-content {:keys [db date-formatter user-config]}]
   (let [first-block (first blocks)
@@ -524,6 +545,7 @@
                                 :block/properties-text-values properties-text-values
                                 :block/invalid-properties invalid-properties
                                 :block/pre-block? pre-block?
+                                :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
                          (with-page-block-refs {:body body :refs property-refs} false db date-formatter)]
@@ -669,8 +691,9 @@
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)]
-                  (recur (conj headings block') (rest blocks) {} {} []))
+                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
+                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
+                  (recur (conj headings block'') (rest blocks) {} {} []))
 
                 :else
                 (recur headings (rest blocks) timestamps properties (conj body block))))
