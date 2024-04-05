@@ -153,7 +153,7 @@
                       (catch :default e
                         (notification/show! (str e) :error false)
                         nil))
-            tags-or-alias? (contains? #{:block/tags :block/alias} property-id)
+            tags-or-alias? (contains? db-property/db-attribute-properties property-id)
             old-values (if tags-or-alias?
                          (->> (get block property-id)
                               (map (fn [e] (:db/id e))))
@@ -226,7 +226,7 @@
                          (js/console.error e)
                          (notification/show! (str e) :error false)
                          nil)))
-                tags-or-alias? (and (contains? #{:block/tags :block/alias} property-id) (uuid? v*))]
+                tags-or-alias? (and (contains? db-property/db-attribute-properties property-id) (uuid? v*))]
             (if tags-or-alias?
               (let [property-value-id v*]
                 (db/transact! repo
@@ -360,7 +360,7 @@
 (defn remove-block-property!
   [repo eid property-id]
   (let [eid (->eid eid)]
-    (if (contains? #{:block/alias :block/tags} property-id)
+    (if (contains? db-property/db-attribute-properties property-id)
      (when-let [block (db/entity eid)]
        (db/transact! repo
                      [[:db/retract (:db/id block) property-id]]

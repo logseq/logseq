@@ -72,7 +72,7 @@
   [db-ident prop-name prop-schema]
   (assert (keyword? db-ident))
   (let [db-ident' (if (or (db-property/property? db-ident)
-                          (contains? #{:block/tags :block/alias} db-ident))
+                          (db-property/db-attribute-properties db-ident))
                     db-ident
                     (keyword "user.property" (name db-ident)))]
     (block-with-timestamps
