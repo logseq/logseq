@@ -392,6 +392,7 @@
                         (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
 
            ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
+
            (worker-util/profile "Worker db transact"
                                 (ldb/transact! conn tx-data' tx-meta')))
          nil)
