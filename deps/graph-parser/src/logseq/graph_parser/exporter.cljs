@@ -529,6 +529,20 @@
                      (map #(add-uuid-to-page-map % page-names-to-uuids)))))
       block)))
 
+(defn- update-block-macros
+  [block db page-names-to-uuids]
+  (if (seq (:block/macros block))
+    (update block :block/macros
+            (fn [macros]
+              (mapv (fn [m]
+                      (-> m
+                          (update :block/properties
+                                  (fn [props]
+                                    (update-keys props #(cached-prop-name->uuid db page-names-to-uuids %))))
+                          (assoc :block/uuid (d/squuid))))
+                    macros)))
+    block))
+
 (defn- fix-pre-block-references
   [{:block/keys [left parent page] :as block} pre-blocks]
   (cond-> block
@@ -545,6 +559,7 @@
   (let [old-property-schemas @(:property-schemas import-state)]
     (-> block
         (fix-pre-block-references pre-blocks)
+        (update-block-macros db page-names-to-uuids)
         ;; needs to come before update-block-refs to detect new property schemas
         (handle-block-properties db page-names-to-uuids (:block/refs block) options)
         (update-block-refs page-names-to-uuids old-property-schemas options)
