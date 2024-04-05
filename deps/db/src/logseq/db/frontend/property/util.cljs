@@ -42,8 +42,7 @@
   [property]
   (let [page-name (str hidden-page-name-prefix (:block/uuid property))]
     (-> (sqlite-util/build-new-page page-name)
-        (assoc :block/type #{"hidden"}
-               :block/format :markdown))))
+        (assoc :block/type #{"hidden"}))))
 
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including

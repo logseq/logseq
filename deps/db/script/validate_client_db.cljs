@@ -16,8 +16,9 @@
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
-  [db ent-maps {:keys [verbose group-errors closed-maps]}]
-  (let [schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
+  [db ent-maps* {:keys [verbose group-errors closed-maps]}]
+  (let [ent-maps (db-malli-schema/update-properties-in-ents ent-maps*)
+        schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
     (if-let [errors (->> ent-maps
                          (m/explain schema)
                          :errors)]

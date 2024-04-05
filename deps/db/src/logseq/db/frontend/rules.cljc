@@ -169,13 +169,13 @@
         [(not= #{} ?v)]]
 
     :page-property
-    '[;; Clause 1: Match non-ref values
-      [(page-property ?p ?prop ?val)
+    '[[(page-property ?p ?prop ?val)
        [?p :block/name]
        [?p ?prop ?val]
        [?prop-e :db/ident ?prop]
        [?prop-e :block/type "property"]]
       ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
+      ;; Clause 1: Match non-ref values
       #_[(page-property ?p ?key ?val)
          [?p :block/name]
          [?p :block/properties ?prop]

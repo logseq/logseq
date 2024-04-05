@@ -63,8 +63,7 @@
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
-                           (map #(assoc % :block/format :markdown))
-                           (map #(default-db/mark-block-as-built-in %)))
+                           (map default-db/mark-block-as-built-in))
         default-properties (build-initial-properties)
         db-ident->properties (zipmap
                               (map :db/ident default-properties)

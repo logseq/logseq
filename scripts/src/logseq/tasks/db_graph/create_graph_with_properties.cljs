@@ -60,7 +60,8 @@
         random-page-closed-value #(let [val (-> closed-values-config % rand-nth :value)]
                                     (swap! closed-values assoc % (second val))
                                     val)
-        get-closed-value #(get @closed-values %)]
+        ;; TODO: Remove default when page-closed/date-closed re-enabled
+        get-closed-value #(get @closed-values % "")]
     {:pages-and-blocks
      ;; Journals
      [{:page
@@ -88,11 +89,12 @@
         {:block/content "number-closed property block" :properties {:number-closed (random-closed-value :number-closed)}}
         {:block/content "page property block" :properties {:page [:page "page 1"]}}
         {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
-        {:block/content "page-closed property block" :properties {:page-closed (random-page-closed-value :page-closed)}}
+        ;; TODO: Fix page-closed and date-closed
+        #_{:block/content "page-closed property block" :properties {:page-closed (random-page-closed-value :page-closed)}}
         {:block/content "date property block" :properties {:date [:page (date-journal-title today)]}}
         {:block/content "date-many property block" :properties {:date-many #{[:page (date-journal-title today)]
                                                                              [:page (date-journal-title yesterday)]}}}
-        {:block/content "date-closed property block" :properties {:date-closed (random-page-closed-value :date-closed)}}]}
+        #_{:block/content "date-closed property block" :properties {:date-closed (random-page-closed-value :date-closed)}}]}
       {:page {:block/original-name "Block Property Queries"}
        :blocks
        [{:block/content "{{query (property :default \"haha\")}}"}
@@ -132,7 +134,7 @@
       {:page {:block/name "number-closed page" :properties {:number-closed (random-closed-value :number-closed)}}}
       {:page {:block/name "page page" :properties {:page [:page "page 1"]}}}
       {:page {:block/name "page-many page" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}}
-      {:page {:block/name "page-closed page" :properties {:page-closed (random-page-closed-value :page-closed)}}}
+      #_{:page {:block/name "page-closed page" :properties {:page-closed (random-page-closed-value :page-closed)}}}
       {:page {:block/name "date page" :properties {:date [:page (date-journal-title today)]}}}
       {:page {:block/name "date-many page" :properties {:date-many #{[:page (date-journal-title today)]
                                                                      [:page (date-journal-title yesterday)]}}}}
