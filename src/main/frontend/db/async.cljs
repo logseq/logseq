@@ -15,8 +15,8 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [logseq.db :as ldb]
-            [clojure.string :as string]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.db.frontend.property :as db-property]))
 
 (def <q db-async-util/<q)
 (def <pull db-async-util/<pull)
@@ -58,7 +58,7 @@
     (->> result
          ;; remove private built-in properties
          (remove #(and (:db/ident %)
-                       (string/starts-with? (namespace (:db/ident %)) "logseq.")
+                       (db-property/logseq-property? (:db/ident %))
                        (not (get-in % [:block/schema :public?])))))))
 
 (defn <get-all-property-names
@@ -82,7 +82,7 @@
         :in $ ?property-id
         :where
         [?b ?property-id ?v]
-        [(not= ?v :property/empty-placeholder)]]
+        [(not= ?v :logseq.property/empty-placeholder)]]
       property-id))
 
 ;; TODO: batch queries for better performance and UX

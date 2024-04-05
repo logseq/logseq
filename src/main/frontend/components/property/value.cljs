@@ -179,7 +179,7 @@
   [block property {:keys [items selected-choices multiple-choices?] :as opts}]
   (let [selected-choices (->> selected-choices
                               (remove nil?)
-                              (remove #(= :property/empty-placeholder %)))
+                              (remove #(= :logseq.property/empty-placeholder %)))
         clear-value (str "No " (:block/original-name property))
         items' (->>
                 (if (and (seq selected-choices) (not multiple-choices?))
@@ -187,7 +187,7 @@
                          :label clear-value}
                         items)
                   items)
-                (remove #(= :property/empty-placeholder (:value %))))
+                (remove #(= :logseq.property/empty-placeholder (:value %))))
         k (if multiple-choices? :on-apply :on-chosen)
         f (get opts k)
         f' (fn [chosen]
@@ -569,7 +569,7 @@
   (let [closed-values? (seq (get-in property [:block/schema :values]))]
     [:div.select-item
      (cond
-       (= value :property/empty-placeholder)
+       (= value :logseq.property/empty-placeholder)
        (shui/button {:class "empty-btn" :variant :text} "Empty")
 
        (contains? #{:page :date} type)
@@ -715,7 +715,7 @@
         select-type? (select-type? property type)
         closed-values? (seq (:values schema))
         select-opts {:on-chosen on-chosen}
-        value (if (and (de/entity? value) (= (:db/ident value) :property/empty-placeholder))
+        value (if (and (de/entity? value) (= (:db/ident value) :logseq.property/empty-placeholder))
                 nil
                 value)]
     (if (and select-type?
@@ -815,7 +815,7 @@
          schema (:block/schema property)
          type (some-> schema (get :type :default))
          multiple-values? (= :many (:cardinality schema))
-         empty-value? (= :property/empty-placeholder v)
+         empty-value? (= :logseq.property/empty-placeholder v)
          editor-args {:block property
                       :parent-block block
                       :format :markdown}

@@ -63,7 +63,7 @@
                (:closed-values property)))
         property-schema (assoc (:block/schema property)
                                :values (mapv :block/uuid closed-value-blocks-tx))
-        property-tx (merge (sqlite-util/build-new-property db-ident prop-name property-schema)
+        property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:original-name prop-name})
                            property-attributes)]
     (into [property-tx page-tx]
           (when-not closed-value-page-uuids? closed-value-blocks-tx))))

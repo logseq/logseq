@@ -28,8 +28,8 @@
                        {})
                       [(sqlite-util/build-new-property
                         db-ident
-                        prop-name
-                        schema)])]
+                        schema
+                        {:original-name prop-name})])]
          (update blocks 0 default-db/mark-block-as-built-in)))
      built-in-properties)))
 
@@ -48,8 +48,8 @@
   [config-content]
   (let [initial-data [(kv :db/type "db")
                       (kv :schema/version db-schema/version)
-                      ;; empty property value
-                      {:db/ident :property/empty-placeholder}]
+                      ;; Empty property value used by db.type/ref properties
+                      {:db/ident :logseq.property/empty-placeholder}]
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content

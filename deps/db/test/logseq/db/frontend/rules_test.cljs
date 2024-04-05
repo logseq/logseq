@@ -19,8 +19,8 @@
 
 (deftest has-page-property-rule
   (let [conn (new-db-conn)
-        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo "foo" {})
-                             (sqlite-util/build-new-property :user.property/foo2 "foo2" {})
+        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo {})
+                             (sqlite-util/build-new-property :user.property/foo2 {})
                              (sqlite-util/build-new-page "Page")
                              {:block/original-name "Page" :user.property/foo "bar"}])]
     (is (= ["Page"]
@@ -41,10 +41,10 @@
 
 (deftest page-property-rule
   (let [conn (new-db-conn)
-        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo "foo" {})
-                             (sqlite-util/build-new-property :user.property/foo2 "foo2" {})
-                             (sqlite-util/build-new-property :user.property/number-many "number-many" {:type :number :cardinality :many})
-                             (sqlite-util/build-new-property :user.property/page-many "page-many" {:type :page :cardinality :many})
+        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo {})
+                             (sqlite-util/build-new-property :user.property/foo2 {})
+                             (sqlite-util/build-new-property :user.property/number-many {:type :number :cardinality :many})
+                             (sqlite-util/build-new-property :user.property/page-many {:type :page :cardinality :many})
                              (sqlite-util/build-new-page "Page")
                              (sqlite-util/build-new-page "Page A")
                              {:block/original-name "Page" :user.property/foo "bar"}

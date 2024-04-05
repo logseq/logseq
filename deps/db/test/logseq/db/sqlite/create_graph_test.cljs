@@ -6,6 +6,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db :as ldb]))
 
 (deftest new-graph-db-idents
@@ -24,7 +25,8 @@
         (is (= '() (remove namespace default-idents))
             "All default :db/ident's have namespaces")
         (is (= []
-               (->> (keep namespace default-idents)
+               (->> (remove db-property/db-attribute-properties default-idents)
+                    (keep namespace)
                     (remove #(string/starts-with? % "logseq."))))
             "All default :db/ident namespaces start with logseq."))
 
@@ -47,8 +49,10 @@
         idents (->> (d/q '[:find [(pull ?b [:db/ident :logseq.property/built-in?]) ...]
                            :where [?b :db/ident]]
                          @conn)
-                    ;; only kv's don't have built-in property
-                    (remove #(= "logseq.kv" (namespace (:db/ident %)))))]
+                    ;; only kv's and empty property value aren't marked because
+                    ;; they aren't user facing
+                    (remove #(or (= "logseq.kv" (namespace (:db/ident %)))
+                                 (= :logseq.property/empty-placeholder (:db/ident %)))))]
     (is (= []
            (remove ldb/built-in? idents))
         "All entities with :db/ident have built-in property (except for kv idents)")))

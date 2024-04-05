@@ -10,35 +10,26 @@
 ;; :db/ident malli schemas
 ;; =======================
 
-(def logseq-property-namespaces
-  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
-    "logseq.task"})
-
-(def db-attribute-properties
-  "Internal properties that are also db attributes"
-  #{:block/alias :block/tags})
-
 (def db-attribute-ident
-  (into [:enum] db-attribute-properties))
+  (into [:enum] db-property/db-attribute-properties))
 
 (def logseq-property-ident
   [:and :keyword [:fn
                   {:error/message "should be a valid logseq property namespace"}
-                  (fn logseq-namespace? [k]
-                    (contains? logseq-property-namespaces (namespace k)))]])
+                  db-property/logseq-property?]])
 
 (def internal-property-ident
   [:or logseq-property-ident db-attribute-ident])
 
-(defn user-property-namespace?
+(defn- user-property?
   "Determines if keyword is a user property"
   [kw]
-  (contains? #{"user.property"} (namespace kw)))
+  (contains? db-property/user-property-namespaces (namespace kw)))
 
 (def user-property-ident
   [:and :keyword [:fn
                   {:error/message "should be a valid user property namespace"}
-                  user-property-namespace?]])
+                  user-property?]])
 
 (def property-ident
   [:or internal-property-ident user-property-ident])
@@ -48,7 +39,7 @@
   db-attribute-ident. It's important to grow this list purposefully and have it
   start with 'logseq' to allow for users and 3rd party plugins to provide their
   own namespaces to core concepts."
-  (into logseq-property-namespaces #{"logseq.class" "logseq.kv"}))
+  (into db-property/logseq-property-namespaces #{"logseq.class" "logseq.kv"}))
 
 (def logseq-ident
   [:and :keyword [:fn
@@ -246,8 +237,8 @@
 
 (def property-page
   [:multi {:dispatch (fn [m]
-                       (or (contains? logseq-property-namespaces (namespace (m :db/ident)))
-                           (contains? db-attribute-properties (m :db/ident))))}
+                       (or (db-property/logseq-property? (m :db/ident))
+                           (contains? db-property/db-attribute-properties (m :db/ident))))}
    [true internal-property]
    [:malli.core/default user-property]])
 
@@ -357,7 +348,7 @@
 
 (def property-value-placeholder
   [:map
-   [:db/ident [:= :property/empty-placeholder]]])
+   [:db/ident [:= :logseq.property/empty-placeholder]]])
 
 (def DB
   "Malli schema for entities from schema/schema-for-db-based-graph. In order to
