@@ -60,12 +60,19 @@
                                          {:tx tx :revert-tx revert-tx})) refs)))
                             (apply concat))
           retracted-tx' (mapcat :tx retracted-tx)
-          revert-tx (mapcat :revert-tx retracted-tx)]
+          revert-tx (mapcat :revert-tx retracted-tx)
+          macros-tx (mapcat (fn [b]
+                              ;; Only delete if last reference
+                              (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
+                                               1)
+                                       (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
+                                    (:block/macros b)))
+                            retracted-blocks)]
       (when (and (seq retracted-tx') (fn? set-state-fn))
         (set-state-fn [:editor/last-replace-ref-content-tx repo]
                       {:retracted-block-ids retracted-block-ids
                        :revert-tx revert-tx}))
-      (concat txs retracted-tx'))
+      (concat txs retracted-tx' macros-tx))
     txs))
 
 (defn transact!

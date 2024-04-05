@@ -114,7 +114,8 @@
             :card-next-schedule 6, :ls-type 79, :card-last-interval 6, :type 107,
             :template 5, :title 114, :alias 41, :supports 5, :id 145, :url 5,
             :card-ease-factor 6, :created-at 46,
-            :card-last-reviewed 6, :platforms 51, :initial-version 8, :heading 226}
+            :card-last-reviewed 6, :platforms 51, :initial-version 8, :heading 226
+            :logseq.macro-arguments 109, :logseq.macro-name 109}
            (get-top-block-properties db))
         "Counts for top block properties")
 
@@ -161,7 +162,7 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 303 (count files)) "Correct file count")
-    (is (= 63954 (count (d/datoms db :eavt))) "Correct datoms count")
+    (is (= 64390 (count (d/datoms db :eavt))) "Correct datoms count")
 
     (is (= 5866
            (ffirst
