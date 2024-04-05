@@ -23,7 +23,7 @@
   [{:keys [db-after tx-data tx-meta]} validate-options]
   (let [changed-ids (->> tx-data (map :e) distinct)
         ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
-        ent-maps (vec ent-maps*)
+        ent-maps (db-malli-schema/update-properties-in-ents ent-maps*)
         db-schema (update-schema db-malli-schema/DB db-after validate-options)
         explain-result (m/explain db-schema ent-maps)]
     (js/console.log "changed eids:" changed-ids tx-meta)
@@ -68,9 +68,8 @@
   [db]
   (let [datoms (d/datoms db :eavt)
         ent-maps* (db-malli-schema/datoms->entity-maps datoms)
-        ent-maps (vec (vals ent-maps*))
-        ;; FIXME: Fix validation for closed-schema? true
-        schema (update-schema db-malli-schema/DB db {:closed-schema? false})
+        ent-maps (db-malli-schema/update-properties-in-ents (vals ent-maps*))
+        schema (update-schema db-malli-schema/DB db {:closed-schema? true})
         errors (->> ent-maps (m/explain schema) :errors)]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}
