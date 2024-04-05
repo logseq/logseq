@@ -91,10 +91,6 @@
    ;; page's original name
    :block/original-name {:db/unique :db.unique/identity}
 
-   ;; class properties
-   :class/schema.properties {:db/valueType :db.type/ref
-                             :db/cardinality :db.cardinality/many}
-
    ;; whether page's is a journal
    :block/journal? {}
    :block/journal-day {}
@@ -123,8 +119,13 @@
            :block/properties :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
            :block/properties-order)
    {:block/name {:db/index true}        ; remove db/unique for :block/name
+    ;; class properties
     :class/parent {:db/valueType :db.type/ref
                    :db/index true}
+    :class/schema.properties {:db/valueType :db.type/ref
+                              :db/cardinality :db.cardinality/many
+                              :db/index true}
+
     :file/last-modified-at {}
     :asset/uuid {:db/unique :db.unique/identity}
     :asset/meta {}}))
