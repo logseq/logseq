@@ -1,7 +1,6 @@
 (ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [clojure.string :as string]))
 
 (def ^:large-vars/data-var built-in-properties*
@@ -19,8 +18,7 @@
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :closed-values - Vec of closed-value maps for properties with choices. Map
-     has keys :value, :db-ident, :uuid and :icon
-   * :db-ident - Keyword to set :db/ident and give property unique id in db"
+     has keys :value, :db-ident, :uuid and :icon"
   {:block/alias           {:original-name "Alias"
                            :attribute :block/alias
                            :schema {:type :page
@@ -186,11 +184,11 @@
   (not (re-find #"^(#|\[\[)" s)))
 
 (defn get-pid
-  "Get a built-in property's id (keyword name for file graph and uuid for db graph)
-  given its db-ident. Use this fn on a file or db graph. Use
-  db-pu/get-built-in-property-uuid if only in a db graph context"
+  "Get a built-in property's id (keyword name for file graph and db-ident for db
+  graph) given its db-ident. No need to use this fn in a db graph only context"
   [repo db-ident]
-  (if (sqlite-util/db-based-graph? repo)
+  ;; FIXME: Use db-based-graph? when this fn and others moves to another ns
+  (if (string/starts-with? repo "logseq_db_")
     db-ident
     (get-in built-in-properties [db-ident :name])))
 
@@ -231,13 +229,25 @@
               (when (= (closed-value-name e) value-name)
                 e))) values)))
 
+(def logseq-property-namespaces
+  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
+    "logseq.task"})
+
+(defn logseq-property?
+  "Determines if keyword is a logseq property"
+  [kw]
+  (contains? logseq-property-namespaces (namespace kw)))
+
+(def user-property-namespaces
+  #{"user.property"})
+
 (defn property?
+  "Determines if ident kw is a property"
   [k]
   (let [k-name (namespace k)]
     (and k-name
-         (or (string/starts-with? k-name "logseq.property")
-             (string/starts-with? k-name "logseq.task")
-             (string/starts-with? k-name "user.property")))))
+         (or (contains? logseq-property-namespaces k-name)
+             (contains? user-property-namespaces k-name)))))
 
 (defn properties
   "Fetch all properties of entity like :block/properties used to do.

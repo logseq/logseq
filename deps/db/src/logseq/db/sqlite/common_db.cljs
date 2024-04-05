@@ -156,6 +156,7 @@
                     (remove (fn [[k _v]]
                               (or (integer? k)
                                   (and (keyword? k)
+                                       ;; filters out all logseq-ident-namespaces
                                        (string/starts-with? (namespace k) "logseq.")))))
                     (into {}))
         idents (remove nil?
