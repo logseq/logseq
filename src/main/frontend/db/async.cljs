@@ -92,7 +92,7 @@
         :in $ ?property-id
         :where
         [?b ?property-id ?v]
-        [(not= ?v :property/empty-placeholder)]]
+        [(not= ?v :logseq.property/empty-placeholder)]]
       property-id))
 
 ;; TODO: batch queries for better performance and UX

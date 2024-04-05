@@ -218,7 +218,7 @@
                 schema (get (built-in-validation-schemas property) property-type)
                 value (when-let [id (:db/ident property)]
                         (get block id))
-                v* (if (= v :property/empty-placeholder)
+                v* (if (= v :logseq.property/empty-placeholder)
                      v
                      (try
                        (convert-property-input-string property-type v)
@@ -233,12 +233,12 @@
                               [[:db/add (:db/id block) property-id property-value-id]]
                               {:outliner-op :save-block}))
               (when-not (contains? (if (set? value) value #{value}) v*)
-                (if-let [msg (when-not (= v* :property/empty-placeholder) (validate-property-value schema v*))]
+                (if-let [msg (when-not (= v* :logseq.property/empty-placeholder) (validate-property-value schema v*))]
                   (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                     (notification/show! msg' :warning))
                   (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {:property-name property-name})
                         status? (= :logseq.task/status (:db/ident property))
-                        value (if (= value :property/empty-placeholder) [] value)
+                        value (if (= value :logseq.property/empty-placeholder) [] value)
                         new-value (cond
                                     multiple-values?
                                     (let [f (if (coll? v*) concat conj)]
