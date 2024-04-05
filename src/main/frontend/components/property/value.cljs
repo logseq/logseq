@@ -820,7 +820,7 @@
                       :parent-block block
                       :format :markdown}
          v (cond
-             (and multiple-values? (or (set? v) (and (coll? v) (empty? v))))
+             (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
              v
              multiple-values?
              #{v}
