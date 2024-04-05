@@ -358,7 +358,7 @@
 
 (def property-value-placeholder
   [:map
-   [:db/ident [:= :property/empty-placeholder]]])
+   [:db/ident [:= :logseq.property/empty-placeholder]]])
 
 (def DB
   "Malli schema for entities from schema/schema-for-db-based-graph. In order to

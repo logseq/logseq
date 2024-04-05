@@ -171,7 +171,7 @@
                                     {id true}))
                 (property-handler/set-block-property! repo (:block/uuid block)
                                                       property-name
-                                                      (if (= type :default) "" :property/empty-placeholder)))))))}
+                                                      (if (= type :default) "" :logseq.property/empty-placeholder)))))))}
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
