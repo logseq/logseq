@@ -7,7 +7,8 @@
             [datascript.transit :as dt]
             [datascript.impl.entity :as de]
             [datascript.core :as d]
-            [cljs-bean.transit]))
+            [cljs-bean.transit]
+            [logseq.db.frontend.property :as db-property]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -70,8 +71,7 @@
   "Build a standard new property so that it is is consistent across contexts"
   [db-ident prop-name prop-schema]
   (assert (keyword? db-ident))
-  (let [db-ident' (if (or (= "user.property" (namespace db-ident))
-                          (string/starts-with? (namespace db-ident) "logseq.")
+  (let [db-ident' (if (or (db-property/property? db-ident)
                           (contains? #{:block/tags :block/alias} db-ident))
                     db-ident
                     (keyword "user.property" (name db-ident)))]
