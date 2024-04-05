@@ -108,7 +108,7 @@
    Two main  ways to create a property are to set property-id to a qualified keyword
    or to set it to nil and pass :property-name as an option"
   [repo property-id schema {:keys [property-name properties]}]
-  (let [db-ident (or property-id (db-property/get-db-ident-from-name property-name))]
+  (let [db-ident (or property-id (db-property/user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (db/entity db-ident)]
       (let [tx-data (->>
@@ -128,7 +128,7 @@
                        (name property-id))]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
-        (db/transact! repo [(sqlite-util/build-new-property db-ident k-name schema)]
+        (db/transact! repo [(sqlite-util/build-new-property db-ident schema {:original-name k-name})]
                       {:outliner-op :new-property})))))
 
 (defn validate-property-value
@@ -199,7 +199,7 @@
   [repo block-eid property-id v {:keys [property-name] :as opts}]
   (let [block-eid (->eid block-eid)
         property-id (if (string? property-id)
-                      (db-property/get-db-ident-from-name property-id)
+                      (db-property/user-property-ident-from-name property-id)
                       property-id)
         _ (assert (keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
@@ -268,7 +268,7 @@
             (if (string? property-id)
               (if-let [ent (db/entity [:block/original-name property-id])]
                 [(:db/ident ent) ent]
-                [(db-property/get-db-ident-from-name property-id) nil])
+                [(db-property/user-property-ident-from-name property-id) nil])
               [property-id (db/entity property-id)])
             property-type (get-in property [:block/schema :type])
             _ (upsert-property! repo db-ident
