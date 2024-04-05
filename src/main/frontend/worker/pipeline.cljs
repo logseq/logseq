@@ -42,7 +42,7 @@
                        created-block (d/entity after-db (:db/id created-from-block))]
                    (when (and created-block created-from-property)
                      [[:db/retractEntity (:db/id b)]
-                      [:db/add (:db/id created-block) (:db/id created-from-property) ""]])))
+                      [:db/add (:db/id created-block) (:db/ident created-from-property) ""]])))
                empty-property-parents)
        (remove nil?)))))
 
