@@ -48,6 +48,24 @@
 
 (def undo-ops-validator (m/validator [:sequential undo-op-schema]))
 
+(def ^:private entity-map-pull-pattern
+  [:block/uuid
+   {:block/left [:block/uuid]}
+   {:block/parent [:block/uuid]}
+   :block/content
+   :block/created-at
+   :block/updated-at
+   :block/format
+   {:block/tags [:block/uuid]}])
+
+(defn- ->block-entity-map
+  [db eid]
+  (let [m (d/pull db entity-map-pull-pattern eid)]
+    (cond-> m
+      true                  (update :block/left :block/uuid)
+      true                  (update :block/parent :block/uuid)
+      (seq (:block/tags m)) (update :block/tags (partial mapv :block/uuid)))))
+
 (defn reverse-op
   [db op]
   (let [block-uuid (:block-uuid (second op))]
@@ -57,17 +75,7 @@
       :insert-block
       [:remove-block
        {:block-uuid block-uuid
-        :block-entity-map (d/pull db [:block/uuid
-                                      {:block/left [:block/uuid]}
-                                      {:block/parent [:block/uuid]}
-                                      :block/created-at
-                                      :block/updated-at
-                                      :block/format
-                                      :block/properties
-                                      {:block/tags [:block/uuid]}
-                                      :block/content
-                                      {:block/page [:block/uuid]}]
-                                  [:block/uuid block-uuid])}]
+        :block-entity-map (->block-entity-map db [:block/uuid block-uuid])}]
 
       :move-block
       (let [b (d/entity db [:block/uuid block-uuid])]
@@ -80,7 +88,7 @@
       [:insert-block {:block-uuid block-uuid}]
 
       :update-block
-      (let [block-origin-content (when (:block-origin-content op)
+      (let [block-origin-content (when (:block-origin-content (second op))
                                    (:block/content (d/entity db [:block/uuid block-uuid])))]
         [:update-block
          (cond-> {:block-uuid block-uuid}
@@ -91,6 +99,7 @@
 
 (defn- push-undo-ops
   [repo ops]
+  (assert (undo-ops-validator ops) ops)
   (swap! (:undo/repo->undo-stack @worker-state/*state) update repo apply-conj-vec ops))
 
 (defn- pop-undo-op
@@ -102,6 +111,7 @@
 
 (defn- push-redo-ops
   [repo ops]
+  (assert (undo-ops-validator ops) ops)
   (swap! (:undo/repo->redo-stack @worker-state/*state) update repo apply-conj-vec ops))
 
 (defn- pop-redo-op
@@ -188,41 +198,26 @@
 
 (defn undo
   [repo]
-  (when-let [op (pop-undo-op repo)]
+  (if-let [op (pop-undo-op repo)]
     (let [conn (worker-state/get-datascript-conn repo)
           rev-op (reverse-op @conn op)]
       (when (= :push-undo-redo (reverse-apply-op op conn repo))
-        (push-redo-ops repo [rev-op])))))
+        (push-redo-ops repo [rev-op])))
+    (prn "No further undo infomation")))
 
 (defn redo
   [repo]
-  (when-let [op (pop-redo-op repo)]
+  (if-let [op (pop-redo-op repo)]
     (let [conn (worker-state/get-datascript-conn repo)
           rev-op (reverse-op @conn op)]
       (when (= :push-undo-redo (reverse-apply-op op conn repo))
-        (push-undo-ops repo [rev-op])))))
+        (push-undo-ops repo [rev-op])))
+    (prn "No further redo infomation")))
 
 
 ;;; listen db changes and push undo-ops
 
-(def ^:private entity-map-pull-pattern
-  [:block/uuid
-   {:block/left [:block/uuid]}
-   {:block/parent [:block/uuid]}
-   :block/content
-   :block/created-at
-   :block/updated-at
-   :block/format
-   {:block/tags [:block/uuid]}])
 
-(defn- ->block-entity-map
-  [db eid]
-  (let [m (-> (d/pull db entity-map-pull-pattern eid)
-              (update :block/left :block/uuid)
-              (update :block/parent :block/uuid))]
-    (if (seq (:block/tags m))
-      (update m :block/tags (partial mapv :block/uuid))
-      m)))
 
 (defn- normal-block?
   [entity]
@@ -272,7 +267,6 @@
 (defn- generate-undo-ops
   [repo db-before db-after same-entity-datoms-coll id->attr->datom]
   (let [ops (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll)]
-    (assert (undo-ops-validator ops) ops)
     (when (seq ops)
       (push-undo-ops repo ops))))
 
@@ -284,3 +278,28 @@
     (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom)))
 
 ;;; listen db changes and push undo-ops (ends)
+
+
+
+(comment
+  (defn- clear-undo-redo-stack
+    []
+    (reset! (:undo/repo->undo-stack @worker-state/*state) {})
+    (reset! (:undo/repo->redo-stack @worker-state/*state) {}))
+  (clear-undo-redo-stack)
+  (add-watch (:undo/repo->undo-stack @worker-state/*state)
+             :xxx
+             (fn [_ _ o n]
+               (cljs.pprint/pprint {:k :undo
+                                    :o o
+                                    :n n})))
+
+  (add-watch (:undo/repo->redo-stack @worker-state/*state)
+             :xxx
+             (fn [_ _ o n]
+               (cljs.pprint/pprint {:k :redo
+                                    :o o
+                                    :n n})))
+
+  (remove-watch (:undo/repo->undo-stack @worker-state/*state) :xxx)
+  (remove-watch (:undo/repo->redo-stack @worker-state/*state) :xxx))

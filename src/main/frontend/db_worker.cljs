@@ -23,7 +23,7 @@
             [frontend.worker.rtc.snapshot :as rtc-snapshot]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.undo-redo]
+            [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -676,6 +676,14 @@
   (rtc-get-block-update-log
    [_this block-uuid]
    (transit/write transit-w (rtc-core/get-block-update-log (uuid block-uuid))))
+
+  (undo
+   [_this repo]
+   (undo-redo/undo repo)
+   nil)
+  (redo
+   [_this repo]
+   (undo-redo/redo repo))
 
   (keep-alive
    [_this]
