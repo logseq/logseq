@@ -17,7 +17,7 @@
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.rtc.core :as rtc-core]
-            [frontend.worker.rtc.db-listener :as rtc-db-listener]
+            [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.snapshot :as rtc-snapshot]
@@ -176,9 +176,7 @@
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb! repo)]
-          (rtc-db-listener/listen-to-db-changes! repo conn)
-          (db-listener/listen-db-changes! repo conn))
-        ))))
+          (db-listener/listen-db-changes! repo conn))))))
 
 (defn- iter->vec [iter]
   (when iter
@@ -588,7 +586,6 @@
          (try
            (let [state (<? (rtc-core/<init-state token false))
                  r (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))]
-             (rtc-db-listener/listen-db-to-generate-ops repo conn)
              (p/resolve! d r))
            (catch :default e
              (worker-util/post-message :notification
