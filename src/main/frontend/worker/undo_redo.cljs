@@ -34,9 +34,9 @@
          [:block/left :uuid]
          [:block/parent :uuid]
          [:block/content :string]
-         [:block/created-at :int]
-         [:block/updated-at :int]
-         [:block/format :any]
+         [:block/created-at {:optional true} :int]
+         [:block/updated-at {:optional true} :int]
+         [:block/format {:optional true} :any]
          [:block/tags {:optional true} [:sequential :uuid]]]]]]]
     [:update-block
      [:cat :keyword
@@ -126,9 +126,13 @@
          (outliner-core/insert-blocks! repo conn
                                        [(cond-> {:block/uuid block-uuid
                                                  :block/content (:block/content block-entity-map)
-                                                 :block/created-at (:block/created-at block-entity-map)
-                                                 :block/updated-at (:block/updated-at block-entity-map)
                                                  :block/format :markdown}
+                                          (:block/created-at block-entity-map)
+                                          (assoc :block/created-at (:block/created-at block-entity-map))
+
+                                          (:block/updated-at block-entity-map)
+                                          (assoc :block/updated-at (:block/updated-at block-entity-map))
+
                                           (seq (:block/tags block-entity-map))
                                           (assoc :block/tags (mapv (partial vector :block/uuid)
                                                                    (:block/tags block-entity-map))))]
