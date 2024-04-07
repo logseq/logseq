@@ -148,3 +148,11 @@
           (if-some [new-val (parse-non-string-property-value v')]
             new-val
             v'))))))
+
+(defn namespace-page?
+  [page-name]
+  (and (string? page-name)
+       (string/includes? page-name "/")
+       (not (string/starts-with? page-name "../"))
+       (not (string/starts-with? page-name "./"))
+       (not (common-util/url? page-name))))

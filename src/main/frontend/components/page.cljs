@@ -49,7 +49,8 @@
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.db.async :as db-async]
             [logseq.db :as ldb]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.components.hierarchy :as hierarchy]))
 
 (defn- get-page-name
   [state]
@@ -555,6 +556,10 @@
 
                (when (contains? (:block/type page) "class")
                  (class-component/class-children page))
+
+               (when-not block-or-whiteboard?
+                 (when (and (not journal?) (not db-based?))
+                   (hierarchy/structures route-page-name)))
 
                (when-not (or block-or-whiteboard? sidebar? home?)
                  [:div {:key "page-unlinked-references"}

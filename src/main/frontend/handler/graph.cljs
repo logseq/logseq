@@ -19,8 +19,9 @@
        links))
 
 (defn- build-nodes
-  [dark? current-page page-links tags nodes]
-  (let [current-page (or current-page "")
+  [dark? current-page page-links tags nodes namespaces]
+  (let [parents (set (map last namespaces))
+        current-page (or current-page "")
         pages (set (flatten nodes))]
     (->>
      pages
@@ -38,10 +39,13 @@
                            color)
                    n (get page-links p 1)
                    size (int (* 8 (max 1.0 (js/Math.cbrt n))))]
-               {:id p
-                :label p
-                :size size
-                :color color}))))))
+                (cond->
+                  {:id p
+                   :label p
+                   :size size
+                   :color color}
+                  (contains? parents p)
+                  (assoc :parent true))))))))
 
                   ;; slow
 (defn- uuid-or-asset?
@@ -88,6 +92,7 @@
     (when-let [repo (state/get-current-repo)]
       (let [relation (db/get-pages-relation repo journal?)
             tagged-pages (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-tagged-pages repo))
+            namespaces (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
             full-pages-map (into {} (map (juxt :block/name identity) full-pages))
@@ -105,7 +110,8 @@
               (not excluded-pages?)
               (remove (fn [p] (true? (pu/get-block-property-value p :logseq.property/exclude-from-graph-view)))))
             links (concat (seq relation)
-                          (seq tagged-pages))
+                          (seq tagged-pages)
+                          (seq namespaces))
             linked (set (flatten links))
             build-in-pages (->> (if (config/db-based-graph? repo) sqlite-create-graph/built-in-pages-names gp-db/built-in-pages-names)
                                 (map string/lower-case)
@@ -119,7 +125,7 @@
             page-links (reduce (fn [m [k v]] (-> (update m k inc)
                                                  (update v inc))) {} links)
             links (build-links (remove (fn [[_ to]] (nil? to)) links))
-            nodes (build-nodes dark? (string/lower-case current-page) page-links tags nodes)]
+            nodes (build-nodes dark? (string/lower-case current-page) page-links tags nodes namespaces)]
         (-> {:nodes (map #(assoc % :block/created-at (get-in full-pages-map [(:id %) :block/created-at])) nodes)
              :links links
              :page-name->original-name page-name->original-name}
@@ -141,7 +147,9 @@
             tags (remove #(= page %) tags)
             ref-pages (db/get-page-referenced-pages repo page-id)
             mentioned-pages (db/get-pages-that-mentioned-page repo page-id show-journal)
+            namespaces (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
             links (concat
+                   namespaces
                    (map (fn [[p _aliases]]
                           [page p]) ref-pages)
                    (map (fn [[p _aliases]]
@@ -177,7 +185,7 @@
                         tags)
                        (remove nil?)
                        (distinct))
-            nodes (build-nodes dark? page links (set tags) nodes)
+            nodes (build-nodes dark? page links (set tags) nodes namespaces)
             full-pages (db/get-all-pages repo)
             all-pages (map common-util/get-page-original-name full-pages)
             page-name->original-name (zipmap (map :block/name full-pages) all-pages)]
@@ -189,34 +197,38 @@
 (defn build-block-graph
   "Builds a citation/reference graph for a given block uuid."
   [block theme]
-  (let [dark? (= "dark" theme)
-        ref-blocks (db/get-block-referenced-blocks block)
-        other-blocks (->> (concat (map first ref-blocks))
-                          (remove nil?)
-                          (set))
-        other-blocks-links (mapcat
-                            (fn [block]
-                              (let [ref-blocks (-> (map first (db/get-block-referenced-blocks block))
-                                                   (set)
-                                                   (set/intersection other-blocks))]
-                                (concat
-                                 (map (fn [p] [block p]) ref-blocks))))
-                            other-blocks)
-        links (->> other-blocks-links
-                   (remove nil?)
-                   (distinct)
-                   (build-links))
-        nodes (->> (concat
-                    [block]
-                    (map first ref-blocks))
-                   (remove nil?)
-                   (distinct)
+  (when-let [repo (state/get-current-repo)]
+    (let [dark? (= "dark" theme)
+          ref-blocks (db/get-block-referenced-blocks block)
+          namespaces (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
+          other-blocks (->> (concat (map first ref-blocks))
+                            (remove nil?)
+                            (set))
+          other-blocks-links (mapcat
+                              (fn [block]
+                                (let [ref-blocks (-> (map first (db/get-block-referenced-blocks block))
+                                                     (set)
+                                                     (set/intersection other-blocks))]
+                                  (concat
+                                   (map (fn [p] [block p]) ref-blocks))))
+                              other-blocks)
+          links (concat
+                 (->> other-blocks-links
+                      (remove nil?)
+                      (distinct)
+                      (build-links))
+                 namespaces)
+          nodes (->> (concat
+                      [block]
+                      (map first ref-blocks))
+                     (remove nil?)
+                     (distinct)
                        ;; FIXME: get block tags
-                   )
-        nodes (build-nodes dark? block links #{} nodes)]
-    (normalize-page-name
-     {:nodes nodes
-      :links links})))
+                     )
+          nodes (build-nodes dark? block links #{} nodes namespaces)]
+      (normalize-page-name
+       {:nodes nodes
+        :links links}))))
 
 (defn n-hops
   "Get all nodes that are n hops from nodes (a collection of node ids)"

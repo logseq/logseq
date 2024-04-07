@@ -12,7 +12,7 @@
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page.db-based.rename :as worker-page-rename]
             [frontend.worker.react :as worker-react]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [frontend.worker.rtc.const :as rtc-const]

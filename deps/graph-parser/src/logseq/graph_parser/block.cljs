@@ -293,6 +293,8 @@
     (and original-page-name (string? original-page-name))
     (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+          namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
+                          (text/namespace-page? original-page-name))
           page-entity (some-> db (ldb/get-page page-name))
           original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
       (merge
@@ -304,6 +306,10 @@
                                (uuid? with-id?) with-id?)
                          (d/squuid))]
            {:block/uuid new-uuid}))
+       (when namespace?
+         (let [namespace (first (common-util/split-last "/" original-page-name))]
+           (when-not (string/blank? namespace)
+             {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
          (let [current-ms (common-util/time-ms)]
            {:block/created-at current-ms
@@ -348,7 +354,19 @@
     (let [*name->id (atom {})
           ref->map-fn (fn [*col _tag?]
                         (let [col (remove string/blank? @*col)
-                              col (distinct col)]
+                              children-pages (->> (mapcat (fn [p]
+                                                            (let [p (if (map? p)
+                                                                      (:block/original-name p)
+                                                                      p)]
+                                                              (when (string? p)
+                                                                (let [p (or (text/get-nested-page-name p) p)]
+                                                                  (when (text/namespace-page? p)
+                                                                    (common-util/split-namespace-pages p))))))
+                                                          col)
+                                                  (remove string/blank?)
+                                                  (distinct))
+                              col (->> (distinct (concat col children-pages))
+                                       (remove nil?))]
                           (map
                            (fn [item]
                              (let [macro? (and (map? item)

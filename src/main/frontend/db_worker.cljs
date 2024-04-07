@@ -15,7 +15,8 @@
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
+            [frontend.worker.handler.page.db-based.rename :as db-worker-page-rename]
             [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.db-listener :as rtc-db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
@@ -499,7 +500,10 @@
    (assert (common-util/uuid-string? page-uuid-str))
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [config (worker-state/get-config repo)
-           result (worker-page-rename/rename! repo conn config (uuid page-uuid-str) new-name)]
+           f (if (sqlite-util/db-based-graph? repo)
+               db-worker-page-rename/rename!
+               file-worker-page-rename/rename!)
+           result (f repo conn config (uuid page-uuid-str) new-name)]
        (bean/->js {:result result}))))
 
   (page-delete

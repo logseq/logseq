@@ -374,6 +374,7 @@
               create-f (fn []
                          (p/do!
                           (<create! title {:redirect? false
+                                           :split-namespace? false
                                            :create-first-block? (not template)
                                            :journal? true
                                            :today-journal? true})

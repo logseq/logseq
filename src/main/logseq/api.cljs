@@ -851,13 +851,15 @@
 
 (defn ^:export get_pages_from_namespace
   [ns]
-  (when-let [_repo (and ns (state/get-current-repo))]
-    (bean/->js nil)))
+  (when-let [repo (and ns (state/get-current-repo))]
+    (when-let [pages (db-model/get-namespace-pages repo ns)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
 
 (defn ^:export get_pages_tree_from_namespace
   [ns]
-  (when-let [_repo (and ns (state/get-current-repo))]
-    (bean/->js nil)))
+  (when-let [repo (and ns (state/get-current-repo))]
+    (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
 
 (defn last-child-of-block
   [block]

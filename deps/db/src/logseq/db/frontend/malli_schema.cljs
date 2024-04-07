@@ -138,7 +138,9 @@
    [:block/journal? :boolean]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
-   [:block/path-refs {:optional true} [:set :int]]])
+   [:block/path-refs {:optional true} [:set :int]]
+   ;; file-based
+   [:block/namespace {:optional true} :int]])
 
 (def property-attrs
   "Common attributes for properties"

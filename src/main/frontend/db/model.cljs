@@ -19,7 +19,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [frontend.config :as config]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.graph-parser.text :as text]))
 
 ;; TODO: extract to specific models and move data transform logic to the
 ;; corresponding handlers.
@@ -616,29 +617,6 @@ independent of format as format specific heading characters are stripped"
                      pages)]
       (mapv (fn [[ref-page ref-page-name]] [ref-page-name (get-page-alias repo ref-page)]) ref-pages))))
 
-;; Ignore files with empty blocks for now
-(defn get-pages-relation
-  [repo with-journal?]
-  (when-let [db (conn/get-db repo)]
-    (let [q (if with-journal?
-              '[:find ?page ?ref-page-name
-                :where
-                [?p :block/name ?page]
-                [?block :block/page ?p]
-                [?block :block/refs ?ref-page]
-                [?ref-page :block/name ?ref-page-name]]
-              '[:find ?page ?ref-page-name
-                :where
-                [?p :block/journal? false]
-                [?p :block/name ?page]
-                [?block :block/page ?p]
-                [?block :block/refs ?ref-page]
-                [?ref-page :block/name ?ref-page-name]])]
-      (->>
-       (d/q q db)
-       (map (fn [[page ref-page-name]]
-              [page ref-page-name]))))))
-
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
   [repo page-id include-journals?]
@@ -900,6 +878,137 @@ independent of format as format specific heading characters are stripped"
        (:class-parent rules/rules)
        class-id)
       (map :db/id (:block/_tags class)))))
+
+
+(defn get-all-namespace-relation
+  [repo]
+  (d/q '[:find ?page-name ?parent
+         :where
+         [?page :block/name ?page-name]
+         [?page :block/namespace ?e]
+         [?e :block/original-name ?parent]]
+    (conn/get-db repo)))
+
+(defn get-all-namespace-parents
+  [repo]
+  (->> (get-all-namespace-relation repo)
+       (map second)))
+
+(def ns-char "/")
+(def ns-re #"/")
+
+(defn- get-parents-namespace-list
+  "Return list of parents namespace"
+  [page-namespace & nested-found]
+  (if (text/namespace-page? page-namespace)
+    (let [pre-nested-vec (drop-last (string/split page-namespace ns-re))
+          my-nested-found (if (nil? nested-found)
+                            []
+                            nested-found)]
+      (if (= (count pre-nested-vec) 1)
+        (conj my-nested-found (nth pre-nested-vec 0))
+        (let [pre-nested-str (string/join ns-char pre-nested-vec)]
+          (recur pre-nested-str (conj my-nested-found pre-nested-str)))))
+    []))
+
+(defn- get-unnecessary-namespaces-name
+  "Return unnecessary namespace from a list of page's name"
+  [pages-list]
+  (->> pages-list
+       (remove nil?)
+       (mapcat get-parents-namespace-list)
+       distinct))
+
+(defn- remove-nested-namespaces-link
+  "Remove relations between pages and their nested namespace"
+  [pages-relations]
+  (let [pages-relations-to-return (distinct (mapcat
+                                             identity
+                                             (for [item (for [a-link-from (mapv (fn [a-rel] (first a-rel)) pages-relations)]
+                                                          [a-link-from (mapv
+                                                                        (fn [a-rel] (second a-rel))
+                                                                        (filterv
+                                                                         (fn [link-target] (=  a-link-from (first link-target)))
+                                                                         pages-relations))])
+                                                   :let [list-to (get item 1)
+                                                         page (get item 0)
+                                                         namespaces-to-remove (get-unnecessary-namespaces-name list-to)
+                                                         list-to-without-nested-ns (filterv (fn [elem] (not (some #{elem} namespaces-to-remove))) list-to)
+                                                         node-links (for [item-ok list-to-without-nested-ns]
+                                                                      [page item-ok])]]
+                                               (seq node-links))))]
+    pages-relations-to-return))
+
+;; Ignore files with empty blocks for now
+(defn get-pages-relation
+  [repo with-journal?]
+  (when-let [db (conn/get-db repo)]
+    (let [q (if with-journal?
+              '[:find ?page ?ref-page-name
+                :where
+                [?p :block/name ?page]
+                [?block :block/page ?p]
+                [?block :block/refs ?ref-page]
+                [?ref-page :block/name ?ref-page-name]]
+              '[:find ?page ?ref-page-name
+                :where
+                [?p :block/journal? false]
+                [?p :block/name ?page]
+                [?block :block/page ?p]
+                [?block :block/refs ?ref-page]
+                [?ref-page :block/name ?ref-page-name]])]
+      (->>
+       (d/q q db)
+       (map (fn [[page ref-page-name]]
+              [page ref-page-name]))
+       (remove-nested-namespaces-link)))))
+
+(defn get-namespace-pages
+  "Accepts both sanitized and unsanitized namespaces"
+  [repo namespace]
+  (ldb/get-namespace-pages (conn/get-db repo) namespace {:db-graph? (config/db-based-graph? repo)}))
+
+(defn- tree [flat-col root]
+  (let [sort-fn #(sort-by :block/name %)
+        children (group-by :block/namespace flat-col)
+        namespace-children (fn namespace-children [parent-id]
+                             (map (fn [m]
+                                    (assoc m :namespace/children
+                                           (sort-fn (namespace-children {:db/id (:db/id m)}))))
+                                  (sort-fn (get children parent-id))))]
+    (namespace-children root)))
+
+(defn get-namespace-hierarchy
+  "Unsanitized namespaces"
+  [repo namespace]
+  (let [children (get-namespace-pages repo namespace)
+        namespace-id (:db/id (db-utils/entity [:block/name (util/page-name-sanity-lc namespace)]))
+        root {:db/id namespace-id}
+        col (conj children root)]
+    (tree col root)))
+
+(defn get-page-namespace
+  [repo page]
+  (:block/namespace (db-utils/entity repo [:block/name (util/page-name-sanity-lc page)])))
+
+(defn get-page-namespace-routes
+  [repo page]
+  (assert (string? page))
+  (when-let [db (conn/get-db repo)]
+    (when-not (string/blank? page)
+      (let [page (util/page-name-sanity-lc (string/trim page))
+            page-exist? (db-utils/entity repo [:block/name page])
+            ids (if page-exist?
+                  '()
+                  (->> (d/datoms db :aevt :block/name)
+                       (filter (fn [datom]
+                                 (string/ends-with? (:v datom) (str "/" page))))
+                       (map :e)))]
+        (when (seq ids)
+          (db-utils/pull-many repo
+                              '[:db/id :block/name :block/original-name
+                                {:block/file [:db/id :file/path]}]
+                              ids))))))
 
 (comment
   ;; For debugging
