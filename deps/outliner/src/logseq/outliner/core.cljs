@@ -267,7 +267,15 @@
                         (fn [t]
                           {:db/id (ref->eid t)
                            :block/type "class"})
-                        (:block/tags m))]
+                        (:block/tags m))
+          refs (map (fn [ref]
+                      (if (and (map? ref)
+                               (:block/name ref))
+                        (let [page-id (:db/id (ldb/get-page @conn (:block/name ref)))]
+                          (cond-> ref
+                            (some? page-id)
+                            (assoc :db/id page-id)))
+                        ref)) refs)]
       (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
                                                :block/refs refs}]
                                          add-tag-type))))))
@@ -395,7 +403,6 @@
                                       (concat (keep :db/id (:block/tags block-entity))
                                               (keep ref->eid tags))))
               m)]
-
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)

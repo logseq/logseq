@@ -234,18 +234,14 @@
           blocks (map (fn [block]
                         (if (contains? (:block/type block) "macro")
                           block
-                          (let [block-ref-pages (seq (:block/refs block))
-                                page-lookup-ref [:block/name page-name]
-                                block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
-                                                          (remove nil?))]
+                          (let [block-ref-pages (seq (:block/refs block))]
                             (when block-ref-pages
                               (swap! ref-pages set/union (set block-ref-pages)))
                             (-> block
                                 (dissoc :ref-pages)
                                 (assoc :block/format format
                                        :block/page [:block/name page-name]
-                                       :block/refs block-ref-pages
-                                       :block/path-refs block-path-ref-pages)))))
+                                       :block/refs block-ref-pages)))))
                       blocks)
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))

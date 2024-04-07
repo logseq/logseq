@@ -77,7 +77,7 @@
   (when-not (:pipeline-replace? (:tx-meta tx-report))
     (let [tx-meta (:tx-meta tx-report)
           {:keys [from-disk? new-graph? undo? redo?]} tx-meta]
-      (if (or from-disk? new-graph?)
+      (if (or from-disk? new-graph?)    ; FIXME: compute block path refs
         {:tx-report tx-report}
         (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
               _ (when (sqlite-util/local-file-based-graph? repo)
