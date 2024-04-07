@@ -327,7 +327,6 @@
  :remove-orphaned-pages "Rimuovere le pagine orfane?"
  :toggle-theme "Inverti tema"
  :untitled "Senza titolo"
- :whiteboard "Lavagna"
  :whiteboards "Lavagne"
  :accessibility/skip-to-main-content "Salta al contenuto principale"
  :asset/copy "Copia immagine"

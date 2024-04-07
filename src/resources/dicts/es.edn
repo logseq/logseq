@@ -67,7 +67,6 @@
  :toggle-theme                                      "Alternar tema"
  :type                                              "Tipo"
  :untitled                                          "Sin título"
- :whiteboard                                        "Pizarra"
  :whiteboards                                       "Pizarras"
  :yes                                               "Sí"
  :accessibility/skip-to-main-content                "Saltar a contenido principal"
