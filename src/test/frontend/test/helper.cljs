@@ -214,7 +214,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
      [;; page
       {:block/uuid page-uuid
        :block/name "test"
-       :block/original-name "test"}
+       :block/original-name "Test"}
       ;; first block
       {:block/uuid first-block-uuid
        :block/page page-id
