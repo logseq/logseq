@@ -28,7 +28,9 @@ when undo this op, this original entity-map will be transacted back into db")
 (sr/defkeyword ::update-block
   "when a block is updated, generate a ::update-block undo-op.")
 
-(def undo-op-schema
+(def ^:private boundary [::boundary])
+
+(def ^:private undo-op-schema
   (mu/closed-schema
    [:multi {:dispatch first}
     [::boundary
@@ -65,7 +67,7 @@ when undo this op, this original entity-map will be transacted back into db")
        ;; TODO: add more attrs
        ]]]]))
 
-(def undo-ops-validator (m/validator [:sequential undo-op-schema]))
+(def ^:private undo-ops-validator (m/validator [:sequential undo-op-schema]))
 
 (def ^:private entity-map-pull-pattern
   [:block/uuid
@@ -85,7 +87,7 @@ when undo this op, this original entity-map will be transacted back into db")
       true                  (update :block/parent :block/uuid)
       (seq (:block/tags m)) (update :block/tags (partial mapv :block/uuid)))))
 
-(defn reverse-op
+(defn- reverse-op
   [db op]
   (let [block-uuid (:block-uuid (second op))]
     (case (first op)
@@ -120,26 +122,47 @@ when undo this op, this original entity-map will be transacted back into db")
   (assert (undo-ops-validator ops) ops)
   (swap! (:undo/repo->undo-stack @worker-state/*state) update repo apply-conj-vec ops))
 
-(defn- pop-undo-op
+(defn- pop-ops-helper
+  [stack]
+  (let [[ops i]
+        (loop [i (dec (count stack)) r []]
+          (let [peek-op (nth stack i nil)]
+            (cond
+              (neg? i)
+              [r 0]
+
+              (nil? peek-op)
+              [r i]
+
+              (= boundary peek-op)
+              [r i]
+
+              :else
+              (recur (dec i) (conj r peek-op)))))]
+    [ops (subvec stack 0 i)]))
+
+(defn- pop-undo-ops
   [repo]
-  (let [repo->undo-stack (:undo/repo->undo-stack @worker-state/*state)]
-    (when-let [peek-op (peek (@repo->undo-stack repo))]
-      (swap! repo->undo-stack update repo pop)
-      peek-op)))
+  (let [repo->undo-stack (:undo/repo->undo-stack @worker-state/*state)
+        undo-stack (@repo->undo-stack repo)
+        [ops undo-stack*] (pop-ops-helper undo-stack)]
+    (swap! repo->undo-stack assoc repo undo-stack*)
+    ops))
 
 (defn- push-redo-ops
   [repo ops]
   (assert (undo-ops-validator ops) ops)
   (swap! (:undo/repo->redo-stack @worker-state/*state) update repo apply-conj-vec ops))
 
-(defn- pop-redo-op
+(defn- pop-redo-ops
   [repo]
-  (let [repo->redo-stack (:undo/repo->redo-stack @worker-state/*state)]
-    (when-let [peek-op (peek (@repo->redo-stack repo))]
-      (swap! repo->redo-stack update repo pop)
-      peek-op)))
+  (let [repo->redo-stack (:undo/repo->redo-stack @worker-state/*state)
+        redo-stack (@repo->redo-stack repo)
+        [ops redo-stack*] (pop-ops-helper redo-stack)]
+    (swap! repo->redo-stack assoc repo redo-stack*)
+    ops))
 
-(defmulti reverse-apply-op (fn [op _conn _repo] (first op)))
+(defmulti ^:private reverse-apply-op (fn [op _conn _repo] (first op)))
 (defmethod reverse-apply-op ::remove-block
   [op conn repo]
   (let [[_ {:keys [block-uuid block-entity-map]}] op]
@@ -213,21 +236,30 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defn undo
   [repo]
-  (if-let [op (pop-undo-op repo)]
+  (if-let [ops (not-empty (pop-undo-ops repo))]
     (let [conn (worker-state/get-datascript-conn repo)
-          rev-op (reverse-op @conn op)]
-      (when (= :push-undo-redo (reverse-apply-op op conn repo))
-        (push-redo-ops repo [rev-op])))
+          redo-ops-to-push (transient [])]
+      (doseq [op ops]
+        (let [rev-op (reverse-op @conn op)]
+          (when (= :push-undo-redo (reverse-apply-op op conn repo))
+            (conj! redo-ops-to-push rev-op))))
+      (when-let [rev-ops (not-empty (persistent! redo-ops-to-push))]
+        (push-redo-ops repo (cons boundary rev-ops))))
     (prn "No further undo infomation")))
 
 (defn redo
   [repo]
-  (if-let [op (pop-redo-op repo)]
+  (if-let [ops (not-empty (pop-redo-ops repo))]
     (let [conn (worker-state/get-datascript-conn repo)
-          rev-op (reverse-op @conn op)]
-      (when (= :push-undo-redo (reverse-apply-op op conn repo))
-        (push-undo-ops repo [rev-op])))
+          undo-ops-to-push (transient [])]
+      (doseq [op ops]
+        (let [rev-op (reverse-op @conn op)]
+          (when (= :push-undo-redo (reverse-apply-op op conn repo))
+            (conj! undo-ops-to-push rev-op))))
+      (when-let [rev-ops (not-empty (persistent! undo-ops-to-push))]
+        (push-undo-ops repo (cons boundary rev-ops))))
     (prn "No further redo infomation")))
+
 
 ;;; listen db changes and push undo-ops
 
@@ -279,7 +311,7 @@ when undo this op, this original entity-map will be transacted back into db")
   [repo db-before db-after same-entity-datoms-coll id->attr->datom]
   (let [ops (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll)]
     (when (seq ops)
-      (push-undo-ops repo ops))))
+      (push-undo-ops repo (cons boundary ops)))))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
