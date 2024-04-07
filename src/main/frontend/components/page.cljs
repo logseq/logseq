@@ -310,7 +310,8 @@
     (let [page (db/sub-block (:db/id page))
           title (:block/original-name page)]
       (when title
-        (let [icon (get page (pu/get-pid :logseq.property/icon))
+        (let [journal? (:block/journal? page)
+              icon (get page (pu/get-pid :logseq.property/icon))
               *title-value (get state ::title-value)
               *edit? (get state ::edit?)
               *input-value (get state ::input-value)
@@ -356,13 +357,12 @@
                               repo
                               (:db/id page)
                               :page)
-                             (do
-                               (when (and (not hls-page?)
-                                          (not fmt-journal?)
-                                          (not config/publishing?)
-                                          (not (ldb/built-in? page)))
-                                 (reset! *input-value (if untitled? "" old-name))
-                                 (reset! *edit? true))))))}
+                             (when (and (not hls-page?)
+                                        (not journal?)
+                                        (not config/publishing?)
+                                        (not (ldb/built-in? page)))
+                               (reset! *input-value (if untitled? "" old-name))
+                               (reset! *edit? true)))))}
 
             (if @*edit?
               (page-title-editor page {:*title-value *title-value
