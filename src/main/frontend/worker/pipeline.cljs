@@ -96,7 +96,8 @@
                               (delete-property-parent-block-if-empty tx-report deleted-block-uuids))
 
                             ;; update block/tx-id
-                            (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b))) blocks)
+                            (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
+                                                         (concat pages blocks))
                                   tx-id (get-in tx-report [:tempids :db/current-tx])]
                               (->>
                                (map (fn [b]
