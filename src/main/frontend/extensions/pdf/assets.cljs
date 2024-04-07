@@ -165,6 +165,7 @@
         (let [label (:filename pdf-current)]
           (p/do!
            (page-handler/<create! page-name {:redirect?        false :create-first-block? false
+                                             :split-namespace? false
                                              :format           format
                                              ;; FIXME: file and file-path properties for db version
                                              :properties       {:file      (case format

@@ -1,5 +1,5 @@
-(ns frontend.worker.handler.page.rename
-  "Page rename"
+(ns frontend.worker.handler.page.db-based.rename
+  "DB based page rename"
   (:require [datascript.core :as d]
             [clojure.string :as string]
             [frontend.worker.file.util :as wfu]

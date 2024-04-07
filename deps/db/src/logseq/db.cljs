@@ -504,3 +504,36 @@
     "Whether the current graph is db-only"
     [db]
     (= "db" (:db/type (d/entity db :logseq.kv.db/type)))))
+
+;; File based fns
+(defn get-namespace-pages
+  "Accepts both sanitized and unsanitized namespaces"
+  [db namespace {:keys [db-graph?]}]
+  (assert (string? namespace))
+  (let [namespace (common-util/page-name-sanity-lc namespace)
+        pull-attrs  (cond-> [:db/id :block/name :block/original-name :block/namespace]
+                      (not db-graph?)
+                      (conj {:block/file [:db/id :file/path]}))]
+    (d/q
+     [:find [(list 'pull '?c pull-attrs) '...]
+      :in '$ '% '?namespace
+      :where
+      ['?p :block/name '?namespace]
+      (list 'namespace '?p '?c)]
+     db
+     (:namespace rules/rules)
+     namespace)))
+
+(defn get-pages-by-name-partition
+  [db partition]
+  (when-not (string/blank? partition)
+    (let [partition (common-util/page-name-sanity-lc (string/trim partition))
+          ids (->> (d/datoms db :aevt :block/name)
+                   (filter (fn [datom]
+                             (let [page (:v datom)]
+                               (string/includes? page partition))))
+                   (map :e))]
+      (when (seq ids)
+        (d/pull-many db
+                     '[:db/id :block/name :block/original-name]
+                     ids)))))

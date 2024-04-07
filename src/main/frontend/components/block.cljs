@@ -1475,6 +1475,27 @@
           format (get-in config [:block :block/format] :markdown)]
       (render-macro config name arguments macro-content format))))
 
+(rum/defc namespace-hierarchy-aux
+  [config namespace children]
+  [:ul
+   (for [child children]
+     [:li {:key (str "namespace-" namespace "-" (:db/id child))}
+      (let [shorten-name (some-> (or (:block/original-name child) (:block/name child))
+                                 (string/split "/")
+                                 last)]
+        (page-cp {:label shorten-name} child))
+      (when (seq (:namespace/children child))
+        (namespace-hierarchy-aux config (:block/name child)
+                                 (:namespace/children child)))])])
+
+(rum/defc namespace-hierarchy
+  [config namespace children]
+  [:div.namespace
+   [:div.font-medium.flex.flex-row.items-center.pb-2
+    [:span.text-sm.mr-1 "Namespace "]
+    (page-cp config {:block/name namespace})]
+   (namespace-hierarchy-aux config namespace children)])
+
 (defn- macro-cp
   [config options]
   (let [{:keys [name arguments]} options
@@ -1493,7 +1514,13 @@
       (macro-function-cp config arguments)
 
       (= name "namespace")
-      [:div.warning "Namespace has been deprecated, use tags instead"]
+      (if (config/db-based-graph? (state/get-current-repo))
+        [:div.warning "Namespace has been deprecated, use tags instead"]
+        (let [namespace (first arguments)]
+          (when-not (string/blank? namespace)
+            (let [namespace (string/lower-case (page-ref/get-page-name! namespace))
+                  children (model/get-namespace-hierarchy (state/get-current-repo) namespace)]
+              (namespace-hierarchy config namespace children)))))
 
       (= name "youtube")
       (when-let [url (first arguments)]

@@ -156,6 +156,12 @@
         repo (state/get-current-repo)]
     [:div
      (case @*mode
+       "namespace"
+       (let [items (sort (db-model/get-all-namespace-parents repo))]
+         (select items
+                 (fn [{:keys [value]}]
+                   (append-tree! *tree opts loc [:namespace value]))))
+
        "tags"
        (let [items (->> (db-model/get-all-tagged-pages repo)
                         (map second)
@@ -324,7 +330,7 @@
       (str (name f) ": "
            (string/join " | " (rest clause)))
 
-      (contains? #{:page :task} (keyword f))
+      (contains? #{:page :task :namespace} (keyword f))
       (str (name f) ": " (if (vector? (second clause))
                            (second (second clause))
                            (second clause)))

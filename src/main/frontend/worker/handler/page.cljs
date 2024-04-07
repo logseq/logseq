@@ -11,7 +11,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
-            [medley.core :as medley]))
+            [medley.core :as medley]
+            [frontend.worker.date :as date]))
 
 (defn properties-block
   [repo conn config date-formatter properties format page]
@@ -76,17 +77,44 @@
              persist-op?         true}
       :as options}]
   (let [date-formatter (common-config/get-date-formatter config)
+        split-namespace? (not (or (string/starts-with? title "hls__")
+                                  (date/valid-journal-title? date-formatter title)))
         [title page-name] (get-title-and-pagename title)
         with-uuid? (if (uuid? uuid) uuid true)
         [page-uuid result] (when (ldb/page-empty? @conn page-name)
-                             (let [format   (or format (common-config/get-preferred-format config))
-                                   page (-> (gp-block/page-name->map title with-uuid? @conn true date-formatter)
-                                            (assoc :block/format format))
-                                   page-uuid (:block/uuid page)
-                                   txs      (->> [page]
+                             (let [pages    (if split-namespace?
+                                              (common-util/split-namespace-pages title)
+                                              [title])
+                                   format   (or format (common-config/get-preferred-format config))
+                                   pages    (map (fn [page]
+                             ;; only apply uuid to the deepest hierarchy of page to create if provided.
+                                                   (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter)
+                                                       (assoc :block/format format)))
+                                                 pages)
+                                   txs      (->> pages
+                           ;; for namespace pages, only last page need properties
+                                                 drop-last
                                                  (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
                                                  (remove nil?))
-                                   page-txs (build-page-tx repo conn config date-formatter format properties page (select-keys options [:whiteboard? :class? :tags]))
+                                   txs      (map-indexed (fn [i page]
+                                                           (if (zero? i)
+                                                             page
+                                                             (assoc page :block/namespace
+                                                                    [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                                         txs)
+                                   txs      (map-indexed (fn [i page]
+                                                           (if (zero? i)
+                                                             page
+                                                             (assoc page :block/namespace
+                                                                    [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                                         txs)
+                                   page-uuid (:block/uuid (last pages))
+                                   page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
+                                   page-txs (if (seq txs)
+                                              (update page-txs 0
+                                                      (fn [p]
+                                                        (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
+                                              page-txs)
                                    first-block-tx (when (and
                                                          create-first-block?
                                                          (not (or whiteboard? class?))

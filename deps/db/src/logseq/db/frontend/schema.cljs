@@ -49,6 +49,9 @@
    :block/link {:db/valueType :db.type/ref
                 :db/index true}
 
+   ;; page's namespace
+   :block/namespace {:db/valueType :db.type/ref}
+
    ;; for pages
    :block/alias {:db/valueType :db.type/ref
                  :db/cardinality :db.cardinality/many}
@@ -120,7 +123,7 @@
 (def schema-for-db-based-graph
   (merge
    (dissoc schema
-           :block/properties :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
+           :block/namespace :block/properties :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
            :block/properties-order)
    {:block/name {:db/index true}        ; remove db/unique for :block/name
     ;; class properties
