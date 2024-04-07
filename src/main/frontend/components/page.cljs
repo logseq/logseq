@@ -450,7 +450,9 @@
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)]
-             (db-async/<get-block (state/get-current-repo) page-name')
+             (p/do!
+              (db-async/<get-block (state/get-current-repo) page-name')
+              (route-handler/update-page-title-and-label! (state/get-route-match)))
              (assoc state ::page-name page-name')))}
   [state {:keys [repo page-name preview? sidebar?] :as option}]
   (let [loading? (when (::page-name state)  (state/sub-async-query-loading (::page-name state)))]

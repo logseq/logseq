@@ -128,27 +128,19 @@
     "Create a new page"
     :page
     (let [name (:name path-params)
-          block? (util/uuid-string? name)]
-      (if block?
-        (if-let [block (db/entity [:block/uuid (uuid name)])]
-          (let [content (text/remove-level-spaces (:block/content block)
-                                                  (:block/format block) (config/get-block-pattern (:block/format block)))]
-            (if (> (count content) 48)
-              (str (subs content 0 48) "...")
-              content))
-          "Page no longer exists!!")
-        (let [page (db/get-page name)]
-          (or (:block/original-name page)
-              "Logseq"))))
-    :whiteboard
-    (let [name (:name path-params)
-          block? (util/uuid-string? name)]
-      (str
-       (if block?
-         (t :untitled)
-         (let [page (db/get-page name)]
-           (or (:block/original-name page)
-               "Logseq"))) " - " (t :whiteboard)))
+          page (db/get-page name)
+          page (and (db/page? page) page)
+          block? (util/uuid-string? name)
+          block-title (when (and block? (not page))
+                        (when-let [block (db/entity [:block/uuid (uuid name)])]
+                          (let [content (text/remove-level-spaces (:block/content block)
+                                                                  (:block/format block) (config/get-block-pattern (:block/format block)))]
+                            (if (> (count content) 48)
+                              (str (subs content 0 48) "...")
+                              content))))]
+      (or (:block/original-name page)
+          block-title
+          "Logseq"))
     :tag
     (str "#"  (:name path-params))
     :diff
@@ -172,7 +164,12 @@
   [route]
   (let [{:keys [data]} route]
     (when-let [data-name (:name data)]
-      (set! (. js/document.body.dataset -page) (name data-name)))))
+      (set! (. js/document.body.dataset -page) (get-title data-name (:path-params route))))))
+
+(defn update-page-title-and-label!
+  [route]
+  (update-page-title! route)
+  (update-page-label! route))
 
 (defn jump-to-anchor!
   [anchor-text]
