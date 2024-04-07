@@ -5,9 +5,7 @@
 (defonce version 2)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
-  {:schema/version  {}
-   :db/type         {}
-   :db/ident        {:db/unique :db.unique/identity}
+  {:db/ident        {:db/unique :db.unique/identity}
 
    :recent/pages {}
 

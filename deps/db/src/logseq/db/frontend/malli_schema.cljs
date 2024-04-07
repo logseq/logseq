@@ -405,7 +405,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-one-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs (rest normal-page))
+(let [malli-one-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (filter #(= (last %) :int))
                                (map first)
                                set)
@@ -415,7 +415,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-non-ref-attrs (->> (concat page-attrs block-attrs page-or-block-attrs (rest normal-page))
+(let [malli-non-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (concat (rest file-block) (rest asset-block)
                                        db-ident-keys (rest class-page))
                                (remove #(= (last %) [:set :int]))

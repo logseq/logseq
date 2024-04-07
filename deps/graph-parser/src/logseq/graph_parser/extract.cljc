@@ -16,7 +16,8 @@
             [logseq.common.config :as common-config]
             #?(:org.babashka/nbb [logseq.common.log :as log]
                :default [lambdaisland.glogi :as log])
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [logseq.db :as ldb]))
 
 (defn- filepath->page-name
   [filepath]
@@ -217,7 +218,8 @@
                                             resolve-uuid-fn (constantly nil)}
                                        :as options}]
   (try
-    (let [page (get-page-name file ast false filename-format)
+    (let [db-based? (ldb/db-based-graph? db)
+          page (get-page-name file ast false filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (assoc options :page-name page-name)
           ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
@@ -252,12 +254,13 @@
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
-          namespace-pages (let [page (:block/original-name page-map)]
-                            (when (text/namespace-page? page)
-                              (->> (common-util/split-namespace-pages page)
-                                   (map (fn [page]
-                                          (-> (gp-block/page-name->map page true db true date-formatter)
-                                              (assoc :block/format format)))))))
+          namespace-pages (when-not db-based?
+                            (let [page (:block/original-name page-map)]
+                              (when (text/namespace-page? page)
+                                (->> (common-util/split-namespace-pages page)
+                                     (map (fn [page]
+                                            (-> (gp-block/page-name->map page true db true date-formatter)
+                                                (assoc :block/format format))))))))
           pages (->> (concat
                       [page-map]
                       @ref-pages

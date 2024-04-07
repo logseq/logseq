@@ -76,9 +76,12 @@
              uuid                nil
              persist-op?         true}
       :as options}]
-  (let [date-formatter (common-config/get-date-formatter config)
-        split-namespace? (not (or (string/starts-with? title "hls__")
-                                  (date/valid-journal-title? date-formatter title)))
+  (let [db-based? (ldb/db-based-graph? @conn)
+        date-formatter (common-config/get-date-formatter config)
+        split-namespace? (and
+                          (not db-based?)
+                          (not (or (string/starts-with? title "hls__")
+                                   (date/valid-journal-title? date-formatter title))))
         [title page-name] (get-title-and-pagename title)
         with-uuid? (if (uuid? uuid) uuid true)
         [page-uuid result] (when (ldb/page-empty? @conn page-name)
@@ -87,30 +90,33 @@
                                               [title])
                                    format   (or format (common-config/get-preferred-format config))
                                    pages    (map (fn [page]
-                             ;; only apply uuid to the deepest hierarchy of page to create if provided.
+                                                   ;; only apply uuid to the deepest hierarchy of page to create if provided.
                                                    (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter)
                                                        (assoc :block/format format)))
                                                  pages)
-                                   txs      (->> pages
-                           ;; for namespace pages, only last page need properties
-                                                 drop-last
-                                                 (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
-                                                 (remove nil?))
-                                   txs      (map-indexed (fn [i page]
-                                                           (if (zero? i)
-                                                             page
-                                                             (assoc page :block/namespace
-                                                                    [:block/uuid (:block/uuid (nth txs (dec i)))])))
-                                                         txs)
-                                   txs      (map-indexed (fn [i page]
-                                                           (if (zero? i)
-                                                             page
-                                                             (assoc page :block/namespace
-                                                                    [:block/uuid (:block/uuid (nth txs (dec i)))])))
-                                                         txs)
+                                   txs      (when-not db-based?
+                                              (->> pages
+                                                   ;; for namespace pages, only last page need properties
+                                                   drop-last
+                                                   (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
+                                                   (remove nil?)))
+                                   txs      (when-not db-based?
+                                              (map-indexed (fn [i page]
+                                                             (if (zero? i)
+                                                               page
+                                                               (assoc page :block/namespace
+                                                                      [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                                           txs))
+                                   txs      (when-not db-based?
+                                              (map-indexed (fn [i page]
+                                                             (if (zero? i)
+                                                               page
+                                                               (assoc page :block/namespace
+                                                                      [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                                           txs))
                                    page-uuid (:block/uuid (last pages))
                                    page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
-                                   page-txs (if (seq txs)
+                                   page-txs (if (and (seq txs) (not db-based?))
                                               (update page-txs 0
                                                       (fn [p]
                                                         (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))

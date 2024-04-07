@@ -10,7 +10,6 @@
 (def operators [:and :or :not])
 (def operators-set (set operators))
 
-;; FIXME: remove namespace for db-based graphs
 (def page-filters ["all page tags"
                    "namespace"
                    "tags"
