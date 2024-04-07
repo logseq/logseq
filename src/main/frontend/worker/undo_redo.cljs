@@ -10,6 +10,9 @@
             [malli.core :as m]
             [malli.util :as mu]))
 
+(sr/defkeyword :gen-undo-op?
+  "tx-meta option, generate undo ops from tx-data when true (default true)")
+
 (sr/defkeyword ::boundary
   "boundary of one or more undo-ops.
 when one undo/redo will operate on all ops between two ::boundary")
