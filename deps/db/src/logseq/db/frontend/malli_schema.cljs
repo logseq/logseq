@@ -5,7 +5,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property.type :as db-property-type]
             [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; :db/ident malli schemas
 ;; =======================
@@ -251,13 +252,6 @@
     page-attrs
     page-or-block-attrs)))
 
-(def page
-  [:multi {:dispatch :block/type}
-   [#{"property"} property-page]
-   [#{"class"} class-page]
-   [#{"hidden"} hidden-page]
-   [:malli.core/default normal-page]])
-
 (def block-attrs
   "Common attributes for normal blocks"
   [[:block/content :string]
@@ -352,19 +346,53 @@
   [:map
    [:db/ident [:= :logseq.property/empty-placeholder]]])
 
+(defn- type-set
+  [d]
+  (when-let [type (:block/type d)]
+    (if (coll? type)
+      (set type)
+      #{type})))
+
+(def Data
+  (into
+   [:multi {:dispatch (fn [d]
+                        (cond
+                          (contains? (type-set d) "property")
+                          :property
+                          (contains? (type-set d) "class")
+                          :class
+                          (contains? (type-set d) "hidden")
+                          :hidden
+                          (contains? (type-set d) "whiteboard")
+                          :normal-page
+                          (sqlite-util/page? d)
+                          :normal-page
+                          (:file/path d)
+                          :file-block
+                          (:block/uuid d)
+                          :block
+                          (:asset/uuid d)
+                          :asset-block
+                          (and (= 1 (count d)) {:db/ident :logseq.property/empty-placeholder})
+                          :property-value-placeholder
+                          (:db/ident d)
+                          :db-ident-key-value))}]
+   {:property property-page
+    :class class-page
+    :hidden hidden-page
+    :normal-page normal-page
+    :block block
+    :file-block file-block
+    :db-ident-key-value db-ident-key-val
+    :asset-block asset-block
+    :property-value-placeholder property-value-placeholder}))
+
 (def DB
   "Malli schema for entities from schema/schema-for-db-based-graph. In order to
   thoroughly validate properties, the entities and this schema should be
   prepared with update-properties-in-ents and update-properties-in-schema
   respectively"
-  [:sequential
-   [:or
-    page
-    block
-    file-block
-    db-ident-key-val
-    asset-block
-    property-value-placeholder]])
+  [:sequential Data])
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
