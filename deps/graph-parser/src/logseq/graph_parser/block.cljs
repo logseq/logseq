@@ -154,6 +154,8 @@
   (cond
     (coll? value)
     (filter (fn [v] (and (string? v) (not (string/blank? v)))) value)
+    (and (string? value) (= \" (first value) (last value)))
+    nil
     (string? value)
     (let [ast (gp-mldoc/inline->edn value (gp-mldoc/default-config format))]
       (text/extract-refs-from-mldoc-ast ast))
