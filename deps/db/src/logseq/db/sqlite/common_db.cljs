@@ -170,13 +170,15 @@
                                        ;; filters out all logseq-ident-namespaces
                                        (string/starts-with? (namespace k) "logseq.")))))
                     (into {}))
-        idents (remove nil?
-                       (let [e (d/entity db :logseq.kv/graph-uuid)
+        db-type-ident (when (d/entity db :logseq.kv/db-type)
+                        (d/pull db '[*] :logseq.kv/db-type))
+        graph-id-ident (let [e (d/entity db :logseq.kv/graph-uuid)
                              id (:graph/uuid e)]
                          (when id
-                           [{:db/id (:db/id e)
-                             :db/ident :logseq.kv/graph-uuid
-                             :graph/uuid id}])))
+                           {:db/id (:db/id e)
+                            :db/ident :logseq.kv/graph-uuid
+                            :graph/uuid id}))
+        idents (remove nil? [db-type-ident graph-id-ident])
         favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)

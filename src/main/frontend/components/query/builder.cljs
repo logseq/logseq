@@ -18,7 +18,8 @@
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 (rum/defc page-block-selector
   [*find]
@@ -239,8 +240,11 @@
   (rum/local nil ::property)
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
+        db-based? (config/db-based-graph? (state/get-current-repo))
         filters (if (= :page @*find)
-                  query-builder/page-filters
+                  (if db-based?
+                    (remove #{"namespace"} query-builder/page-filters)
+                    query-builder/page-filters)
                   query-builder/block-filters)
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]

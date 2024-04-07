@@ -289,44 +289,46 @@
     as there's no chance to introduce timestamps via editing in page"
   [original-page-name with-id? db with-timestamp? date-formatter
    & {:keys [from-page]}]
-  (cond
-    (and original-page-name (string? original-page-name))
-    (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
-          [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
-          namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
-                          (text/namespace-page? original-page-name))
-          page-entity (some-> db (ldb/get-page original-page-name))
-          original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
-      (merge
-       {:block/name page-name
-        :block/original-name original-page-name}
-       (when with-id?
-         (let [new-uuid (or
-                         (cond page-entity      (:block/uuid page-entity)
-                               (uuid? with-id?) with-id?)
-                         (d/squuid))]
-           {:block/uuid new-uuid}))
-       (when namespace?
-         (let [namespace (first (common-util/split-last "/" original-page-name))]
-           (when-not (string/blank? namespace)
-             {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
-       (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
-         (let [current-ms (common-util/time-ms)]
-           {:block/created-at current-ms
-            :block/updated-at current-ms}))
-       (if journal-day
-         {:block/journal? true
-          :block/journal-day journal-day}
-         {:block/journal? false})))
+  (let [db-based? (ldb/db-based-graph? db)]
+    (cond
+     (and original-page-name (string? original-page-name))
+     (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
+           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+           namespace? (and (not db-based?)
+                           (not (boolean (text/get-nested-page-name original-page-name)))
+                           (text/namespace-page? original-page-name))
+           page-entity (some-> db (ldb/get-page original-page-name))
+           original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
+       (merge
+        {:block/name page-name
+         :block/original-name original-page-name}
+        (when with-id?
+          (let [new-uuid (or
+                          (cond page-entity      (:block/uuid page-entity)
+                                (uuid? with-id?) with-id?)
+                          (d/squuid))]
+            {:block/uuid new-uuid}))
+        (when namespace?
+          (let [namespace (first (common-util/split-last "/" original-page-name))]
+            (when-not (string/blank? namespace)
+              {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
+        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
+          (let [current-ms (common-util/time-ms)]
+            {:block/created-at current-ms
+             :block/updated-at current-ms}))
+        (if journal-day
+          {:block/journal? true
+           :block/journal-day journal-day}
+          {:block/journal? false})))
 
-    (and (map? original-page-name) (:block/uuid original-page-name))
-    original-page-name
+     (and (map? original-page-name) (:block/uuid original-page-name))
+     original-page-name
 
-    (and (map? original-page-name) with-id?)
-    (assoc original-page-name :block/uuid (d/squuid))
+     (and (map? original-page-name) with-id?)
+     (assoc original-page-name :block/uuid (d/squuid))
 
-    :else
-    nil))
+     :else
+     nil)))
 
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} with-id? db date-formatter]
@@ -334,7 +336,8 @@
                   (remove string/blank?)
                   (distinct))
         *refs (atom refs)
-        *structured-tags (atom #{})]
+        *structured-tags (atom #{})
+        db-based? (ldb/db-based-graph? db)]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
@@ -354,17 +357,18 @@
     (let [*name->id (atom {})
           ref->map-fn (fn [*col _tag?]
                         (let [col (remove string/blank? @*col)
-                              children-pages (->> (mapcat (fn [p]
-                                                            (let [p (if (map? p)
-                                                                      (:block/original-name p)
-                                                                      p)]
-                                                              (when (string? p)
-                                                                (let [p (or (text/get-nested-page-name p) p)]
-                                                                  (when (text/namespace-page? p)
-                                                                    (common-util/split-namespace-pages p))))))
-                                                          col)
-                                                  (remove string/blank?)
-                                                  (distinct))
+                              children-pages (when-not db-based?
+                                               (->> (mapcat (fn [p]
+                                                              (let [p (if (map? p)
+                                                                        (:block/original-name p)
+                                                                        p)]
+                                                                (when (string? p)
+                                                                  (let [p (or (text/get-nested-page-name p) p)]
+                                                                    (when (text/namespace-page? p)
+                                                                      (common-util/split-namespace-pages p))))))
+                                                            col)
+                                                    (remove string/blank?)
+                                                    (distinct)))
                               col (->> (distinct (concat col children-pages))
                                        (remove nil?))]
                           (map

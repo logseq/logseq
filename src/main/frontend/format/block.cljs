@@ -18,19 +18,21 @@
 and handles unexpected failure."
   [blocks content format {:keys [with-id? page-name]
                           :or {with-id? true}}]
-  (try
-    (gp-block/extract-blocks blocks content with-id? format
-                             {:user-config (state/get-config)
-                              :block-pattern (config/get-block-pattern format)
-                              :db (db/get-db (state/get-current-repo))
-                              :date-formatter (state/get-date-formatter)
-                              :page-name page-name})
-    (catch :default e
-      (log/error :exception e)
-      (state/pub-event! [:capture-error {:error e
-                                         :payload {:type "Extract-blocks"}}])
-      (notification/show! "An unexpected error occurred during block extraction." :error)
-      [])))
+  (let [repo (state/get-current-repo)]
+    (try
+     (gp-block/extract-blocks blocks content with-id? format
+                              {:user-config (state/get-config)
+                               :block-pattern (config/get-block-pattern format)
+                               :db (db/get-db repo)
+                               :date-formatter (state/get-date-formatter)
+                               :page-name page-name
+                               :db-graph-mode? (config/db-based-graph? repo)})
+     (catch :default e
+       (log/error :exception e)
+       (state/pub-event! [:capture-error {:error e
+                                          :payload {:type "Extract-blocks"}}])
+       (notification/show! "An unexpected error occurred during block extraction." :error)
+       []))))
 
 (defn page-name->map
   "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
