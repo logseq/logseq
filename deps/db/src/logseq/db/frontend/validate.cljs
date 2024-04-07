@@ -25,13 +25,15 @@
         ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
         ent-maps (db-malli-schema/update-properties-in-ents ent-maps*)
         db-schema (update-schema db-malli-schema/DB db-after validate-options)
-        explain-result (m/explain db-schema ent-maps)]
+        invalid-ent-maps (remove #(m/validate db-schema [%]) ent-maps)]
     (js/console.log "changed eids:" changed-ids tx-meta)
-    (if (:errors explain-result)
-      (do (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
-          (pprint/pprint {:errors (me/humanize explain-result)})
-          (pprint/pprint {:entity-maps ent-maps})
-          false)
+    (if (seq invalid-ent-maps)
+      (do
+        (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
+        (doseq [m invalid-ent-maps]
+          (pprint/pprint {:entity-map m
+                          :errors (me/humanize (m/explain db-schema [m]))}))
+        false)
       true)))
 
 (defn group-errors-by-entity

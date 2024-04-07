@@ -493,11 +493,7 @@
   [db]
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
 
-(defn page?
-  [block]
-  (and block
-       (:block/name block)
-       (nil? (:block/page block))))
+(def page? sqlite-util/page?)
 
 (comment
   (defn db-based-graph?

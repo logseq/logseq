@@ -114,3 +114,10 @@
     :block/journal? false
     :block/uuid (d/squuid)
     :block/format :markdown}))
+
+(defn page?
+  [block]
+  (and block
+       (:block/name block)
+       (:block/original-name block)
+       (nil? (:block/page block))))
