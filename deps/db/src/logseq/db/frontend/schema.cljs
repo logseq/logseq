@@ -185,14 +185,16 @@
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.type/ref (:db/valueType attr-body-map))
                   attr-name)))
-        schema))
+        (merge schema
+               schema-for-db-based-graph)))
 
 (def card-many-attributes
   (into #{}
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.cardinality/many (:db/cardinality attr-body-map))
                   attr-name)))
-        schema))
+        (merge schema
+               schema-for-db-based-graph)))
 
 (def card-many-ref-type-attributes
   (set/intersection card-many-attributes ref-type-attributes))
