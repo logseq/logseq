@@ -445,7 +445,6 @@
 
  :home                                             "Domov"
  :new-page                                         "Nová stránka:"
- :whiteboard                                       "Tabuľa"
  :whiteboards                                      "Tabule"
  :new-graph                                        "Pridať nový graf"
  :graph                                            "Graf"

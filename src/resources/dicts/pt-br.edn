@@ -777,7 +777,6 @@
 
  ;; Allowed duplicates - start
  :settings-of-plugins "Plugins"
- :whiteboard "Whiteboard"
  :whiteboards "Whiteboards"
  :on-boarding/quick-tour-journal-page-desc-2 "[[link]]"
  :plugin/downloads "Downloads"

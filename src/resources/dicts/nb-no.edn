@@ -456,7 +456,6 @@
  :port "Port"
  :toggle-theme "Bytt tema"
  :type "Type"
- :whiteboard "Whiteboard"
  :whiteboards "Whiteboard"
  :command.misc/copy "Kopier"
  :file-sync/rsapi-cannot-upload-err "Kunne ikke starte synkronisering, vennligst sjekk om..."

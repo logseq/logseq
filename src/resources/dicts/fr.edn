@@ -404,7 +404,6 @@
     :new-page "Nouvelle page :"
     :remove-orphaned-pages "Supprimer les pages orphelines ?"
     :toggle-theme "Changer le thème"
-    :whiteboard "Tableau blanc"
     :whiteboards "Tableaux blancs"
     :bug-report/clipboard-inspector-title "Inspecteur du presse-papier"
     :bug-report/inspector-page-btn-back "Retour en arrière"

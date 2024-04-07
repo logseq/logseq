@@ -310,7 +310,6 @@
  :whiteboard/shape-quick-links                         "Быстрые ссылки элемента"
  :home                                                 "Домой"
  :new-page                                             "Новая страница:"
- :whiteboard                                           "Интерактивная доска"
  :whiteboards                                          "Интерактивные доски"
  :new-graph                                            "Добавить новый граф"
  :graph                                                "Граф"
