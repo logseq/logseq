@@ -498,7 +498,7 @@
 (defn db-based-graph?
   "Whether the current graph is db-only"
   [db]
-  (= "db" (:db/type (d/entity db :logseq.kv.db/type))))
+  (= "db" (:db/type (d/entity db :logseq.kv/db-type))))
 
 ;; File based fns
 (defn get-namespace-pages
