@@ -509,7 +509,7 @@
 (declare page-reference)
 
 (defn open-page-ref
-  [page-entity e page-name page-name-in-block contents-page?]
+  [page-entity e page-name contents-page?]
   (util/stop e)
   (when (not (util/right-click? e))
     (let [page (or (first (:block/_alias page-entity)) page-entity)]
@@ -527,7 +527,7 @@
          (whiteboard-handler/closest-shape (.-target e)))
 
         (nil? page)
-        (state/pub-event! [:page/create page-name-in-block])
+        (state/pub-event! [:page/create page-name])
 
         :else
         (route-handler/redirect-to-page! (:block/uuid page)))))
@@ -544,13 +544,14 @@
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [state config page-name-in-block page-name page-entity contents-page? children html-export? label whiteboard-page?]
+  [state config page-entity contents-page? children html-export? label whiteboard-page?]
   (let [*hover? (::hover? state)
         *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
+        page-name (:block/name page-entity)
         breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (model/untitled-page? page-name)
+        untitled? (when page-name (model/untitled-page? page-name))
         display-close-button? (and (not (:hide-close-button? config))
                                    (not config/publishing?))
         hide-icon? (:hide-icon? config)]
@@ -564,21 +565,21 @@
                (and tag? display-close-button?) (str " pl-4"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name-in-block e true))
+      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e true))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
       :on-pointer-down (fn [e]
-                       (if breadcrumb?
-                         (.preventDefault e)
-                         (do
-                           (util/stop e)
-                           (reset! *mouse-down? true))))
+                         (if breadcrumb?
+                           (.preventDefault e)
+                           (do
+                             (util/stop e)
+                             (reset! *mouse-down? true))))
       :on-pointer-up (fn [e]
-                     (when @*mouse-down?
-                       (open-page-ref page-entity e page-name page-name-in-block contents-page?)
-                       (reset! *mouse-down? false)))
+                       (when @*mouse-down?
+                         (open-page-ref page-entity e page-name contents-page?)
+                         (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
-                           (open-page-ref page-entity e page-name page-name-in-block contents-page?)))}
+                           (open-page-ref page-entity e page-name contents-page?)))}
      (when-not hide-icon?
        (when-let [icon (get page-entity (pu/get-pid :logseq.property/icon))]
          [:span.mr-1.inline-flex.items-center (icon/icon icon)]))
@@ -592,8 +593,8 @@
               (rum/with-key (page-reference html-export? page-name (assoc config :children children) nil) page-name))))
         (cond
           (and label
-            (string? label)
-            (not (string/blank? label)))                    ; alias
+               (string? label)
+               (not (string/blank? label)))                    ; alias
           label
 
           (coll? label)
@@ -608,16 +609,15 @@
                         (pdf-utils/hls-file? page-name)
                         (pdf-utils/fix-local-asset-pagename page-name)
 
-                        (not= (util/safe-page-name-sanity-lc original-name) page-name-in-block)
-                        page-name-in-block                  ;; page-name-in-block might be overridden (legacy))
+                        (not= (util/safe-page-name-sanity-lc original-name) page-name)
+                        page-name                  ;; page-name-in-block might be overridden (legacy))
 
                         original-name
                         (util/trim-safe original-name)
 
                         :else
                         (util/trim-safe page-name))
-                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name
-                                          " page-name-in-block: " page-name-in-block))]
+                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name))]
             (if tag? (str "#" s) s))))]
 
      (let [repo (state/get-current-repo)
@@ -692,20 +692,20 @@
                 children)
       children)))
 
-(rum/defc page-cp
+(rum/defcs page-cp-aux < db-mixins/query
+  {:init (fn [state]
+           (assoc state :page-id (:db/id (last (:rum/args state)))))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [{:keys [html-export? label children contents-page? preview? disable-preview?] :as config} page]
-  (when-let [page-name-in-block (:block/name page)]
-    (let [page-name-in-block (common-util/remove-boundary-slashes page-name-in-block)
-          page-name (util/page-name-sanity-lc page-name-in-block)
-          page-entity (if (e/entity? page) page (db/get-page page-name))
+  [state {:keys [html-export? label children contents-page? preview? disable-preview?] :as config} page]
+  (when-let [id (or (:db/id page) (:page-id state))]
+    (let [page-entity (if (e/entity? page) page (db/entity id))
+          page-entity (when page-entity (db/sub-block (:db/id page-entity)))
+          page-name (or (:block/name page-entity)
+                        (:block/name page))
           whiteboard-page? (model/whiteboard-page? page-name)
-          inner (page-inner config
-                            page-name-in-block
-                            page-name
-                            page-entity contents-page? children html-export? label whiteboard-page?)
+          inner (page-inner config page-entity contents-page? children html-export? label whiteboard-page?)
           modal? (:modal/show? @state/state)]
       (if (and (not (util/mobile?))
                (not= page-name (:id config))
@@ -714,6 +714,12 @@
                (not modal?))
         (page-preview-trigger (assoc config :children inner) page-name)
         inner))))
+
+(rum/defc page-cp < rum/static
+  [config page]
+  (when-let [page-name (:block/name page)]
+    (let [page (if (e/entity? page) page (db/get-page page-name))]
+      (page-cp-aux config page))))
 
 (rum/defc asset-reference
   [config title path]

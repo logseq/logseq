@@ -119,5 +119,4 @@
   [block]
   (and block
        (:block/name block)
-       (:block/original-name block)
        (nil? (:block/page block))))
