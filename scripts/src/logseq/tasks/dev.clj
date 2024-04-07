@@ -34,11 +34,11 @@
   (apply shell "yarn cljs:run-test" args))
 
 (defn lint-and-test
-  "Run all lint tasks, then run tests.
+  "Run all lint tasks, then run tests(exclude testcases taged by :long).
   pass args through to cmd 'yarn cljs:run-test'"
-  [& args]
+  []
   (lint)
-  (apply test args))
+  (test "-e" "long"))
 
 
 (defn gen-malli-kondo-config

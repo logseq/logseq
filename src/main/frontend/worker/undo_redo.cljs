@@ -1,6 +1,7 @@
 (ns frontend.worker.undo-redo
   "undo/redo related fns and op-schema"
   (:require [datascript.core :as d]
+            [frontend.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
@@ -9,22 +10,40 @@
             [malli.core :as m]
             [malli.util :as mu]))
 
+(sr/defkeyword ::boundary
+  "boundary of one or more undo-ops.
+when one undo/redo will operate on all ops between two ::boundary")
+
+(sr/defkeyword ::insert-block
+  "when a block is inserted, generate a ::insert-block undo-op.
+when undo this op, the related block will be removed.")
+
+(sr/defkeyword ::move-block
+  "when a block is moved, generate a ::move-block undo-op.")
+
+(sr/defkeyword ::remove-block
+  "when a block is removed, generate a ::remove-block undo-op.
+when undo this op, this original entity-map will be transacted back into db")
+
+(sr/defkeyword ::update-block
+  "when a block is updated, generate a ::update-block undo-op.")
+
 (def undo-op-schema
   (mu/closed-schema
    [:multi {:dispatch first}
-    [:boundary
+    [::boundary
      [:cat :keyword]]
-    [:insert-block
+    [::insert-block
      [:cat :keyword
       [:map
        [:block-uuid :uuid]]]]
-    [:move-block
+    [::move-block
      [:cat :keyword
       [:map
        [:block-uuid :uuid]
        [:block-origin-left :uuid]
        [:block-origin-parent :uuid]]]]
-    [:remove-block
+    [::remove-block
      [:cat :keyword
       [:map
        [:block-uuid :uuid]
@@ -38,7 +57,7 @@
          [:block/updated-at {:optional true} :int]
          [:block/format {:optional true} :any]
          [:block/tags {:optional true} [:sequential :uuid]]]]]]]
-    [:update-block
+    [::update-block
      [:cat :keyword
       [:map
        [:block-uuid :uuid]
@@ -70,30 +89,29 @@
   [db op]
   (let [block-uuid (:block-uuid (second op))]
     (case (first op)
-      :boundary op
+      ::boundary op
 
-      :insert-block
-      [:remove-block
+      ::insert-block
+      [::remove-block
        {:block-uuid block-uuid
         :block-entity-map (->block-entity-map db [:block/uuid block-uuid])}]
 
-      :move-block
+      ::move-block
       (let [b (d/entity db [:block/uuid block-uuid])]
-        [:move-block
+        [::move-block
          {:block-uuid block-uuid
           :block-origin-left (:block/uuid (:block/left b))
           :block-origin-parent (:block/uuid (:block/parent b))}])
 
-      :remove-block
-      [:insert-block {:block-uuid block-uuid}]
+      ::remove-block
+      [::insert-block {:block-uuid block-uuid}]
 
-      :update-block
+      ::update-block
       (let [block-origin-content (when (:block-origin-content (second op))
                                    (:block/content (d/entity db [:block/uuid block-uuid])))]
-        [:update-block
+        [::update-block
          (cond-> {:block-uuid block-uuid}
            block-origin-content (assoc :block-origin-content block-origin-content))]))))
-
 
 (def ^:private apply-conj-vec (partial apply (fnil conj [])))
 
@@ -121,9 +139,8 @@
       (swap! repo->redo-stack update repo pop)
       peek-op)))
 
-
 (defmulti reverse-apply-op (fn [op _conn _repo] (first op)))
-(defmethod reverse-apply-op :remove-block
+(defmethod reverse-apply-op ::remove-block
   [op conn repo]
   (let [[_ {:keys [block-uuid block-entity-map]}] op]
     (when-let [left-entity (d/entity @conn [:block/uuid (:block/left block-entity-map)])]
@@ -147,10 +164,9 @@
                                           (assoc :block/tags (mapv (partial vector :block/uuid)
                                                                    (:block/tags block-entity-map))))]
                                        left-entity {:sibling? sibling? :keep-uuid? true}))
-        :push-undo-redo
-        ))))
+        :push-undo-redo))))
 
-(defmethod reverse-apply-op :insert-block
+(defmethod reverse-apply-op ::insert-block
   [op conn repo]
   (let [[_ {:keys [block-uuid]}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
@@ -166,7 +182,7 @@
                                        {:children? false}))
         :push-undo-redo))))
 
-(defmethod reverse-apply-op :move-block
+(defmethod reverse-apply-op ::move-block
   [op conn repo]
   (let [[_ {:keys [block-uuid block-origin-left block-origin-parent]}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
@@ -180,7 +196,7 @@
            (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))
           :push-undo-redo)))))
 
-(defmethod reverse-apply-op :update-block
+(defmethod reverse-apply-op ::update-block
   [op conn repo]
   (let [[_ {:keys [block-uuid block-origin-content]}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
@@ -194,7 +210,6 @@
                                     (common-config/get-date-formatter (worker-state/get-config repo))
                                     new-block))
         :push-undo-redo))))
-
 
 (defn undo
   [repo]
@@ -214,16 +229,12 @@
         (push-undo-ops repo [rev-op])))
     (prn "No further redo infomation")))
 
-
 ;;; listen db changes and push undo-ops
-
-
 
 (defn- normal-block?
   [entity]
   (and (:block/parent entity)
        (:block/left entity)))
-
 
 (defn- entity-datoms=>ops
   [db-before db-after id->attr->datom entity-datoms]
@@ -239,28 +250,28 @@
           (cond
             (and (not add1?) block-uuid
                  (normal-block? entity-before))
-            [[:remove-block
+            [[::remove-block
               {:block-uuid (:block/uuid entity-before)
                :block-entity-map (->block-entity-map db-before e)}]]
 
             (and add1? block-uuid
                  (normal-block? entity-after))
-            [[:insert-block {:block-uuid (:block/uuid entity-after)}]]
+            [[::insert-block {:block-uuid (:block/uuid entity-after)}]]
 
             (and (or add3? add4?)
                  (normal-block? entity-after))
-            (cond-> [[:move-block
+            (cond-> [[::move-block
                       {:block-uuid (:block/uuid entity-after)
                        :block-origin-left (:block/uuid (:block/left entity-before))
                        :block-origin-parent (:block/uuid (:block/parent entity-before))}]]
               (and add2? block-content)
-              (conj [:update-block
+              (conj [::update-block
                      {:block-uuid (:block/uuid entity-after)
                       :block-origin-content (:block/content entity-before)}]))
 
             (and add2? block-content
                  (normal-block? entity-after))
-            [[:update-block
+            [[::update-block
               {:block-uuid (:block/uuid entity-after)
                :block-origin-content (:block/content entity-before)}]]))))))
 
@@ -270,7 +281,6 @@
     (when (seq ops)
       (push-undo-ops repo ops))))
 
-
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
              repo id->attr->datom same-entity-datoms-coll]}]
@@ -278,8 +288,6 @@
     (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom)))
 
 ;;; listen db changes and push undo-ops (ends)
-
-
 
 (comment
   (defn- clear-undo-redo-stack
