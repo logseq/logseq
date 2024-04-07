@@ -13,6 +13,14 @@
 (sr/defkeyword :gen-undo-op?
   "tx-meta option, generate undo ops from tx-data when true (default true)")
 
+(sr/defkeyword :gen-undo-boundary-op?
+  "tx-meta option, generate `::boundary` undo-op when true (default true).
+usually every transaction's tx-data will generate ops like: [<boundary> <op1> <op2> ...],
+push to undo-stack, result in [...<boundary> <op0> <boundary> <op1> <op2> ...].
+
+when this option is false, only generate [<op1> <op2> ...]. undo-stack: [...<boundary> <op0> <op1> <op2> ...]
+so when undo, it will undo [<op0> <op1> <op2>] instead of [<op1> <op2>]")
+
 (sr/defkeyword ::boundary
   "boundary of one or more undo-ops.
 when one undo/redo will operate on all ops between two ::boundary")
@@ -311,16 +319,17 @@ when undo this op, this original entity-map will be transacted back into db")
                :block-origin-content (:block/content entity-before)}]]))))))
 
 (defn- generate-undo-ops
-  [repo db-before db-after same-entity-datoms-coll id->attr->datom]
+  [repo db-before db-after same-entity-datoms-coll id->attr->datom gen-boundary-op?]
   (let [ops (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll)]
     (when (seq ops)
-      (push-undo-ops repo (cons boundary ops)))))
+      (push-undo-ops repo (if gen-boundary-op? (cons boundary ops) ops)))))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
              repo id->attr->datom same-entity-datoms-coll]}]
   (when (:gen-undo-op? tx-meta true)
-    (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom)))
+    (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom
+                       (:gen-undo-boundary-op? tx-meta true))))
 
 ;;; listen db changes and push undo-ops (ends)
 
