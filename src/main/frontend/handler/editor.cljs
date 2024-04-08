@@ -381,8 +381,8 @@
         (state/set-edit-content! edit-input-id new-content)))
     (p/let [_ (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
        (outliner-insert-block! config left-block prev-block {:sibling? sibling?
-                                                             :keep-uuid? true}))]
-      prev-block)))
+                                                             :keep-uuid? true}))])
+    prev-block))
 
 (defn insert-new-block-aux!
   [config
@@ -407,8 +407,8 @@
         sibling? (when block-self? false)]
     (p/let [_ (outliner-insert-block! config current-block next-block {:sibling? sibling?
                                                                        :keep-uuid? true})]
-      (util/set-change-value input fst-block-text)
-      (assoc next-block :block/content snd-block-text))))
+      (util/set-change-value input fst-block-text))
+    (assoc next-block :block/content snd-block-text)))
 
 (defn clear-when-saved!
   []
@@ -440,13 +440,13 @@
   ([_state block-value]
    (when (not config/publishing?)
      (when-let [state (get-state)]
+       (state/set-editor-op! :insert-block)
        (let [{:keys [block value config]} state
              value (if (string? block-value) block-value value)
              block-id (:block/uuid block)
              block-self? (block-self-alone-when-insert? config block-id)
              input-id (state/get-edit-input-id)
              input (gdom/getElement input-id)
-             block-node (state/get-edit-block-node)
              selection-start (util/get-selection-start input)
              selection-end (util/get-selection-end input)
              [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
@@ -470,10 +470,10 @@
                          insert-new-block-before-block-aux!
 
                          :else
-                         insert-new-block-aux!)]
-         (p/let [last-block (insert-fn config block'' value)]
-           (clear-when-saved!)
-           (edit-block! last-block 0 (when-not original-block block-node))))))))
+                         insert-new-block-aux!)
+             last-block (insert-fn config block'' value)]
+         (clear-when-saved!)
+         (edit-block! last-block 0))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
@@ -553,8 +553,8 @@
              (when edit-block?
                (if (and replace-empty-target?
                         (string/blank? (:block/content last-block)))
-                 (edit-block! last-block :max nil)
-                 (edit-block! new-block :max nil)))
+                 (edit-block! last-block :max)
+                 (edit-block! new-block :max)))
              new-block)))))))
 
 (defn insert-first-page-block-if-not-exists!
@@ -717,7 +717,6 @@
         block (db/pull repo '[*] [:block/uuid uuid])]
     (when block
       (let [blocks (block-handler/get-top-level-blocks [block])]
-        (state/set-state! :ui/deleting-block uuid)
         (ui-outliner-tx/transact!
          {:outliner-op :delete-blocks}
          (outliner-op/delete-blocks! blocks
@@ -732,7 +731,7 @@
       (when-let [block (db/entity [:block/uuid (uuid sibling-block-id)])]
         (if (:block/name block)
           (do
-            (edit-block! block :max (state/get-edit-block-node) {})
+            (edit-block! block :max)
             {:prev-block block
              :new-value (:block/original-name block)})
           (let [edit-block (some-> (:db/id (state/get-edit-block)) db/entity)
@@ -760,7 +759,6 @@
                               (db/pull (:db/id block)))]
             (edit-block! edit-target
                          pos
-                         (state/get-edit-block-node)
                          {:custom-content new-value
                           :tail-len tail-len})
 
@@ -1175,6 +1173,7 @@
 
 (declare save-current-block!)
 
+;; FIXME: doesn't work on Web (Chrome)
 (defn zoom-in! []
   (if (state/editing?)
     (when-let [id (some-> (state/get-edit-block)
@@ -1185,9 +1184,7 @@
       (state/clear-editor-action!)
       (p/do!
        (save-current-block!)
-       (let [pos (state/get-edit-pos)]
-        (route-handler/redirect-to-page! id)
-        (util/schedule #(edit-block! {:block/uuid id} pos nil)))))
+       (route-handler/redirect-to-page! id)))
     (js/window.history.forward)))
 
 (defn zoom-out!
@@ -1203,15 +1200,12 @@
            (if-let [id (and
                         (nil? (:block/name block-parent))
                         (:block/uuid block-parent))]
-             (do
-               (route-handler/redirect-to-page! id)
-               (util/schedule #(edit-block! {:block/uuid block-id} :max nil)))
+             (route-handler/redirect-to-page! id)
              (let [page-id (some-> (db/entity [:block/uuid block-id])
                                    :block/page
                                    :db/id)]
                (when-let [page (db/entity page-id)]
-                 (route-handler/redirect-to-page! (:block/uuid page))
-                 (util/schedule #(edit-block! {:block/uuid block-id} :max nil)))))))))
+                 (route-handler/redirect-to-page! (:block/uuid page)))))))))
     (js/window.history.back)))
 
 (defn cut-block!
@@ -1758,7 +1752,7 @@
                (util/schedule (fn []
                                 (when-not (gdom/getElement input-id)
                                  ;; could be crossing containers
-                                  (edit-block! block pos nil))))))))
+                                  (edit-block! block pos))))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -2019,7 +2013,7 @@
      (when-let [last-block (last (:blocks result))]
        (clear-when-saved!)
        (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
-         (edit-block! last-block' :max nil))))))
+         (edit-block! last-block' :max))))))
 
 (defn- nested-blocks
   [blocks]
@@ -2265,7 +2259,7 @@
         (outliner-op/move-blocks! (block-handler/get-top-level-blocks [block])
                                   target true)))
      (when original-block
-       (util/schedule #(edit-block! block pos nil))))))
+       (util/schedule #(edit-block! block pos))))))
 
 (defn- last-top-level-child?
   [{:keys [id]} current-node]
@@ -2529,22 +2523,28 @@
             (outdent-on-enter current-node)
 
             :else
-            (let [main-container (gdom/getElement "main-content-container")
-                  ;; Lazy blocks will not be rendered by default if it's below the screen
-                  input-top (some-> (state/get-input)
-                                    (.getBoundingClientRect)
-                                    (gobj/get "top"))
-                  bottom-reached? (when input-top
-                                    (< (- js/window.innerHeight input-top) 100))]
-              (when (and bottom-reached? main-container)
-                (util/scroll-to main-container (+ (.-scrollTop main-container)
-                                                  200)
-                                false))
-              (profile
-               "Insert block"
-               (ui-outliner-tx/transact!
-                {:outliner-op :insert-blocks}
-                (insert-new-block! state))))))))))
+            (profile
+             "Insert block"
+             (ui-outliner-tx/transact!
+              {:outliner-op :insert-blocks}
+              (insert-new-block! state)))
+            ;; (let [main-container (gdom/getElement "main-content-container")
+            ;;       ;; Lazy blocks will not be rendered by default if it's below the screen
+            ;;       input-top (some-> (state/get-input)
+            ;;                         (.getBoundingClientRect)
+            ;;                         (gobj/get "top"))
+            ;;       bottom-reached? (when input-top
+            ;;                         (< (- js/window.innerHeight input-top) 200))]
+            ;;   (when (and bottom-reached? main-container)
+            ;;     (util/scroll-to main-container (+ (.-scrollTop main-container)
+            ;;                                       200)
+            ;;                     false))
+            ;;   (profile
+            ;;    "Insert block"
+            ;;    (ui-outliner-tx/transact!
+            ;;     {:outliner-op :insert-blocks}
+            ;;     (insert-new-block! state))))
+            ))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
@@ -2612,7 +2612,6 @@
           (edit-block! block
                        (or (:pos move-opts)
                            [direction line-pos])
-                       (state/get-edit-block-node)
                        {:direction direction})))
       (case direction
         :up (cursor/move-cursor-to input 0)
@@ -2660,7 +2659,7 @@
           (when (and value (not= (clean-content! repo format content) (string/trim value)))
             (save-block! repo uuid value)))
         (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
-          (edit-block! block pos (state/get-edit-block-node)))))))
+          (edit-block! block pos))))))
 
 (defn keydown-arrow-handler
   [direction]
@@ -2746,7 +2745,7 @@
                                        :block/properties new-properties
                                        :block/tags new-tags})))))
          (let [block (if next-block-has-refs? next-block edit-block)]
-           (edit-block! block current-pos nil)))))))
+           (edit-block! block current-pos)))))))
 
 (defn keydown-delete-handler
   [_e]
@@ -3336,13 +3335,8 @@
                                 uuid)]
       (util/stop e)
       (let [block    {:block/uuid block-id}
-            block-id (-> selected-blocks
-                         f
-                         (gobj/get "id"))
             left?    (= direction :left)]
-        (edit-block! block
-                     (if left? 0 :max)
-                     (when block-id (gdom/getElement block-id)))))))
+        (edit-block! block (if left? 0 :max))))))
 
 (defn shortcut-left-right [direction]
   (fn [e]

@@ -87,7 +87,7 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (and (rum/react state/*editor-editing-ref)
+  (when (and (state/editing?)
              (or (state/sub :mobile/show-toolbar?)
                  (mobile-util/native-ipad?)))
     (let [parent-id (state/get-edit-input-id)

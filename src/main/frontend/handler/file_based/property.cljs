@@ -62,9 +62,7 @@
     ;; update editing input content
        (when-let [editing-block (state/get-edit-block)]
          (when (= (:block/uuid editing-block) block-id)
-           (block-handler/edit-block! editing-block
-                                      input-pos
-                                      (state/get-edit-input-id))))))))
+           (block-handler/edit-block! editing-block input-pos)))))))
 
 (defn batch-set-block-property!
   [block-ids property-key property-value]

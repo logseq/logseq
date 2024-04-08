@@ -76,14 +76,6 @@
             (update-current-tx-editor-cursor! tx-report)))
 
         (when-not (:graph/importing @state/state)
-          (when (and (= (:outliner-op tx-meta) :insert-blocks) (:local-tx? tx-meta))
-            (let [new-datoms (filter (fn [datom]
-                                       (and
-                                        (= :block/uuid (:a datom))
-                                        (true? (:added datom)))) tx-data)]
-              (when (seq new-datoms)
-                (state/set-state! :editor/new-created-block-id (last (map :v new-datoms))))))
-
           (react/refresh! repo affected-keys)
 
           (when-let [state (:ui/restore-cursor-state @state/state)]
@@ -106,13 +98,4 @@
       (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
 
     (when (= (:outliner-op tx-meta) :rename-page)
-      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
-
-    (when-let [deleting-block-id (:ui/deleting-block @state/state)]
-      (when (some (fn [datom] (and
-                               (= :block/uuid (:a datom))
-                               (= (:v datom) deleting-block-id)
-                               (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
-        (state/set-state! :ui/deleting-block nil)))
-
-    (state/set-state! :editor/new-created-block-id nil)))
+      (state/pub-event! [:page/renamed repo (:data tx-meta)]))))

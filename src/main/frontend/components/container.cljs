@@ -531,7 +531,7 @@
                  (state/set-editor-last-pos! pos)))
     :onStop (fn [_event]
               (when-let [block (get @(get @state/state :editor/block) :block/uuid)]
-                (editor-handler/edit-block! block :max nil)
+                (editor-handler/edit-block! block :max)
                 (when-let [input (state/get-input)]
                   (when-let [saved-cursor (state/get-editor-last-pos)]
                     (cursor/move-cursor-to input saved-cursor)))))}
@@ -885,7 +885,7 @@
                                   (and
                                    ;; FIXME: this does not work on CI tests
                                    util/node-test?
-                                   state/*editor-editing-ref)))
+                                   (state/editing?))))
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection e)))))))
   [state route-match main-content]
@@ -912,7 +912,7 @@
         home? (= :home route-name)
         native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
-        edit? (some? @state/*editor-editing-ref)
+        edit? (state/editing?)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/enable-fold-button-right?)

@@ -618,7 +618,7 @@
     (when-let [block-uuid (and block-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
         (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
-          (editor-handler/edit-block! block pos block-uuid))))))
+          (editor-handler/edit-block! block pos))))))
 
 ;; TODO: perf improvement, some operations such as delete-block doesn't need to load the full page
 ;; instead, the db worker should provide those calls

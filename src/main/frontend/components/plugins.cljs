@@ -1217,7 +1217,7 @@
        (ui/button (ui/icon "square-toggle-horizontal" {:size 14})
                   :on-click #(set-editor-active! (not editor-active?)))
        (ui/button (ui/icon "source-code" {:size 14})
-                  :on-click #(editor-handler/edit-block! block (count content1) (:block/uuid block)))]
+         :on-click #(editor-handler/edit-block! block (count content1)))]
       (when (fn? render)
         (js/React.createElement render #js {:content content1}))]]))
 

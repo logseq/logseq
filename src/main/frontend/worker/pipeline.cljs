@@ -128,7 +128,8 @@
                           (do
                             (when-not (exists? js/process) (d/store @conn))
                             tx-report))
-              fix-tx-data (validate-and-fix-db! repo conn tx-report context)
+              ;; fix-tx-data (validate-and-fix-db! repo conn tx-report context)
+              fix-tx-data nil
               full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
               final-tx-report (assoc tx-report'
                                      :tx-data full-tx-data
