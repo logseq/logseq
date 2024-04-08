@@ -1,7 +1,14 @@
 (ns frontend.worker.state
   "State hub for worker"
   (:require [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [frontend.schema-register :include-macros true :as sr]))
+
+(sr/defkeyword :undo/repo->undo-stack
+  "{repo [first-op, second-op, ...]}")
+
+(sr/defkeyword :undo/repo->undo-stack
+  "{repo [first-op, second-op, ...]}")
 
 (defonce *state (atom {:worker/object nil
 
