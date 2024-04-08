@@ -280,8 +280,9 @@
   "Makes a user property :db/ident from a name by sanitizing the given name"
   [property-name]
   (let [n (-> (string/lower-case property-name)
-              (string/replace #"^:\s*" "")
+              (string/replace #"(^:\s*|\s*:$)" "")
               (string/replace #"\s*:\s*$" "")
+              (string/replace-first #"^\d+" "")
               (string/replace " " "-")
               (string/replace "#" "")
               (string/trim))]

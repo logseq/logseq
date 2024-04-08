@@ -170,7 +170,7 @@
                   (state/set-state! :editor/editing-property-value-id
                                     {id true}))
                 (property-handler/set-block-property! repo (:block/uuid block)
-                                                      property-name
+                                                      (:db/ident (db/entity [:block/original-name property-name]))
                                                       (if (= type :default) "" :logseq.property/empty-placeholder)))))))}
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
