@@ -76,7 +76,7 @@
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
-                     (db-property/user-property-ident-from-name (name db-ident)))
+                     (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or original-name (name db-ident'))]
      (block-with-timestamps
       (cond->
