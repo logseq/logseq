@@ -377,19 +377,19 @@
                     (reset! *search-key nil)
                     (.focus target))}
       (ui/icon "x")])
-   [:input.form-input.is-small
-    {:placeholder (t :plugin/search-plugin)
-     :ref         *search-ref
-     :auto-focus  true
-     :on-key-down (fn [^js e]
-                    (when (= 27 (.-keyCode e))
-                      (util/stop e)
-                      (if (string/blank? search-key)
-                        (some-> (js/document.querySelector ".cp__plugins-page") (.focus))
-                        (reset! *search-key nil))))
-     :on-change   #(let [^js target (.-target %)]
-                     (reset! *search-key (some-> (.-value target) (string/triml))))
-     :value       (or search-key "")}]])
+   (shui/input
+     {:placeholder (t :plugin/search-plugin)
+      :ref *search-ref
+      :auto-focus true
+      :on-key-down (fn [^js e]
+                     (when (= 27 (.-keyCode e))
+                       (util/stop e)
+                       (if (string/blank? search-key)
+                         (some-> (js/document.querySelector ".cp__plugins-page") (.focus))
+                         (reset! *search-key nil))))
+      :on-change #(let [^js target (.-target %)]
+                    (reset! *search-key (some-> (.-value target) (string/triml))))
+      :value (or search-key "")})])
 
 (rum/defc panel-tab-developer
   []
@@ -1407,7 +1407,7 @@
   (shui/dialog-open!
     (plugins-page)
     {:label :plugins-dashboard
-     :side :center}))
+     :align :start}))
 
 (defn open-waiting-updates-modal!
   []
