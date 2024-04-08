@@ -74,6 +74,8 @@
              (not (:node-test? context)))
     (fix-db! conn tx-report)))
 
+(defonce *enable-db-validate? (atom false))
+
 (defn invoke-hooks
   [repo conn tx-report context]
   (when-not (:pipeline-replace? (:tx-meta tx-report))
@@ -128,8 +130,7 @@
                           (do
                             (when-not (exists? js/process) (d/store @conn))
                             tx-report))
-              ;; fix-tx-data (validate-and-fix-db! repo conn tx-report context)
-              fix-tx-data nil
+              fix-tx-data (when @*enable-db-validate? (validate-and-fix-db! repo conn tx-report context))
               full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
               final-tx-report (assoc tx-report'
                                      :tx-data full-tx-data
