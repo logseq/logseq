@@ -42,7 +42,7 @@
     (editor-handler/clear-when-saved!)
     (state/set-editor-op! nil)
     (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
-      (when-not (or (contains? #{:undo :redo :escape :insert-block} editor-op)
+      (when-not (or (contains? #{:undo :redo :escape :insert-block :paste-blocks} editor-op)
                     (state/editor-in-composition?))
         (editor-handler/save-block! state value))))
   state)
