@@ -380,7 +380,7 @@
    (code-handler/save-code-editor!)
    (when-let [block-id (:block/uuid config)]
      (let [block (db/pull [:block/uuid block-id])]
-       (editor-handler/edit-block! block :max block-id)))))
+       (editor-handler/edit-block! block :max)))))
 
 (defn render!
   [state]

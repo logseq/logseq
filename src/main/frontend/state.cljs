@@ -24,8 +24,6 @@
 (defonce *profile-state
   (atom {}))
 
-(defonce *editor-editing-ref (atom nil))
-
 (defonce *db-worker (atom nil))
 
 ;; Stores main application state
@@ -127,7 +125,7 @@
       :editor/action-data                    nil
       ;; With label or other data
       :editor/last-saved-cursor              nil
-      :editor/ref->editing?                  (atom {})
+      :editor/editing?                       (atom {})
       :editor/editing-prev-node              (atom nil)
       :editor/editing-parent-node            (atom nil)
       :editor/in-composition?                false
@@ -157,7 +155,7 @@
 
       :db/properties-changed-pages           {}
       :editor/cursor-range                   (atom nil)
-      :editor/new-created-block-id           (atom nil)
+      :editor/container-id                   (atom nil)
 
       :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute
@@ -604,13 +602,19 @@ Similar to re-frame subscriptions"
       ks-coll? (util/react (rum/cursor-in state ks))
       :else    (util/react (rum/cursor state ks)))))
 
+(defn set-editing-block!
+  [container-block]
+  (swap! (:editor/editing? @state) assoc container-block true))
+
 (defn sub-editing?
-  [block-ref]
-  (when block-ref
-    (when (nil? (get @(:editor/ref->editing? @state) block-ref))
-      (swap! (:editor/ref->editing? @state) assoc block-ref (atom false)))
+  [container-block]
+  (when container-block
     (rum/react
-     (get @(:editor/ref->editing? @state) block-ref))))
+     (r/cached-derived-atom
+      (:editor/editing? @state)
+      [(get-current-repo) ::editing-block container-block]
+      (fn [s]
+        (get s container-block))))))
 
 (defn sub-property-value-editing?
   [property-value-id]
@@ -977,31 +981,22 @@ Similar to re-frame subscriptions"
 (defn get-edit-input-id
   []
   (when-not (exists? js/process)
-    (or
-     (when-let [node @*editor-editing-ref]
-       (some-> (dom/sel1 node "textarea")
-               (gobj/get "id")))
-     (try
-       (when-let [elem js/document.activeElement]
-         (when (util/input? elem)
-           (let [id (gobj/get elem "id")]
-             (when (string/starts-with? id "edit-block-")
-               id))))
-       (catch :default _e)))))
+    (try
+      (when-let [elem js/document.activeElement]
+        (when (util/input? elem)
+          (let [id (gobj/get elem "id")]
+            (when (string/starts-with? id "edit-block-")
+              id))))
+      (catch :default _e))))
 
 (defn get-input
   []
   (when-let [id (get-edit-input-id)]
     (gdom/getElement id)))
 
-(defn get-edit-block-node
-  []
-  @*editor-editing-ref)
-
 (defn editing?
   []
-  (let [input (get-input)]
-    (and input (= input (.-activeElement js/document)))))
+  (seq @(:editor/editing? @state)))
 
 (defn get-edit-content
   []
@@ -1299,9 +1294,7 @@ Similar to re-frame subscriptions"
 
 (defn clear-edit!
   []
-  (when-let [prev-ref @*editor-editing-ref]
-    (reset! (get @(:editor/ref->editing? @state) prev-ref) false))
-  (reset! *editor-editing-ref nil)
+  (set-state! :editor/editing? {})
   (set-state! :editor/editing-prev-node nil)
   (set-state! :editor/editing-parent-node nil)
   (set-state! :editor/cursor-range nil)
@@ -1313,9 +1306,6 @@ Similar to re-frame subscriptions"
 
 (defn into-code-editor-mode!
   []
-  (when-let [prev-ref @*editor-editing-ref]
-    (reset! (get @(:editor/ref->editing? @state) prev-ref) false))
-  (reset! *editor-editing-ref nil)
   (set-state! :editor/cursor-range nil)
   (swap! state merge {:editor/code-mode? true}))
 
@@ -1977,23 +1967,8 @@ Similar to re-frame subscriptions"
    (clear-edit!)
    (set-selection-blocks! blocks direction)))
 
-(defn set-editing-ref!
-  [ref]
-  (let [prev-ref @*editor-editing-ref]
-    (when (and prev-ref (not= ref prev-ref))
-      (reset! (get @(:editor/ref->editing? @state) prev-ref) false)))
-  (if-let [*state (get @(:editor/ref->editing? @state) ref)]
-    (reset! *state true)
-    (swap! (:editor/ref->editing? @state) assoc ref (atom true)))
-  (reset! *editor-editing-ref ref)
-  (when ref
-    (when-let [prev (.-previousSibling ref)]
-      (set-state! :editor/editing-prev-node prev))
-    (when-let [parent (util/rec-get-node (.-parentNode ref) "ls-block")]
-      (set-state! :editor/editing-parent-node parent))))
-
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [move-cursor? ref]
+  [edit-input-id content block cursor-range & {:keys [move-cursor? ref container-id]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
     (if (> (count content)
@@ -2017,12 +1992,15 @@ Similar to re-frame subscriptions"
                                :block.temp/container (gobj/get container "id"))
                         block)
                 content (string/trim (or content ""))]
-            (when ref (set-editing-ref! ref))
+            (assert (and container-id (:block/uuid block))
+                    "container-id or block uuid is missing")
+            (set-editing-block! [container-id (:block/uuid block)])
             (set-state! :editor/block block)
             (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
             (set-state! :editor/last-key-code nil)
             (set-state! :editor/set-timestamp-block nil)
             (set-state! :editor/cursor-range cursor-range)
+            (set-state! :editor/container-id container-id)
 
             (when-let [input (gdom/getElement edit-input-id)]
               (let [pos (count cursor-range)]

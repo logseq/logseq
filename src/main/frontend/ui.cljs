@@ -988,7 +988,7 @@
                     :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
                                                 :hide {:enabled false}
                                                 :preventOverflow {:enabled false}}}
-                    :onShow #(when-not (or (some? @state/*editor-editing-ref)
+                    :onShow #(when-not (or (state/editing?)
                                            @(:ui/scrolling? @state/state))
                                (reset! *mounted? true))
                     :onHide #(reset! *mounted? false)}
@@ -1158,7 +1158,8 @@
                                      :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
                                      :onChange (fn [in-view? _entry]
-                                                 (set-visible! in-view?))})
+                                                 (when-not (= in-view? visible?)
+                                                   (set-visible! in-view?)))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in?))))
 

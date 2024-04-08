@@ -17,7 +17,6 @@
       (when-let [block-uuid (:block/uuid last-edit-block)]
         (when-let [block (db/pull [:block/uuid block-uuid])]
           (editor/edit-block! block (or (when undo? pos) end-pos)
-                              (:block/uuid block)
                               {:custom-content (:block/content block)}))))))
 
 (defn- get-route-data

@@ -169,56 +169,14 @@
   (when repo
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
+;; TODO: remove retry
 (defn- edit-block-aux
-  [repo block content block-node text-range {:keys [direction retry-times max-retry-times]
-                                             :or {retry-times 0
-                                                  max-retry-times 10}
-                                             :as opts}]
-  (when (and (<= retry-times max-retry-times) block)
-    (let [block-node block-node
-          block-id (:block/uuid block)
-          id-class (str "id" block-id)
-          next-edit-node (cond
-                           (and block-node (< retry-times max-retry-times))
-                           (or
-                              ;; up/down
-                            (when direction
-                              (let [blocks (dom/by-class "ls-block")
-                                    idx (.indexOf blocks block-node)]
-                                (when idx
-                                  (if (= direction :down)
-                                    (util/nth-safe blocks (inc idx))
-                                    (util/nth-safe blocks (dec idx))))))
-
-                              ;; next
-                            (let [id (some-> (dom/attr block-node "blockid") uuid)
-                                  link (when id (:link (db/entity [:block/uuid id])))
-                                  block-node (if link
-                                               (.-previousSibling block-node)
-                                               block-node)]
-                              (when-let [next (.-nextSibling block-node)]
-                                (when (dom/has-class? next id-class)
-                                  next)))
-
-                              ;; first child
-                            (when-let [first-child (first (dom/sel block-node ".ls-block"))]
-                              (when (dom/has-class? first-child id-class)
-                                first-child))
-
-                              ;; prev
-                            (when-let [prev (.-previousSibling block-node)]
-                              (when (dom/has-class? prev id-class)
-                                prev)))
-
-                           :else
-                           ;; take the first dom node
-                           (gdom/getElement (str "ls-block-" (:block/uuid block))))]
-      (state/set-editing! "" content block text-range {:ref next-edit-node})
-      (if next-edit-node
-        (do
-          (state/update-tx-after-cursor-state!)
-          (mark-last-input-time! repo))
-        (util/schedule (fn [] (edit-block-aux repo block content block-node text-range (update opts :retry-times inc))))))))
+  [repo block content text-range {:keys [container-id]}]
+  (when block
+    (state/clear-edit!)
+    (state/set-editing! "" content block text-range {:container-id (or container-id @(:editor/container-id @state/state))})
+    (js/setTimeout #(state/update-tx-after-cursor-state!) 80)
+    (mark-last-input-time! repo)))
 
 (defn sanity-block-content
   [repo format content]
@@ -228,21 +186,14 @@
         (drawer/remove-logbook))))
 
 (defn edit-block!
-  [block pos block-node & {:keys [custom-content tail-len _direction]
-                           :or {tail-len 0}
-                           :as opts}]
+  [block pos & {:keys [custom-content tail-len]
+                :or {tail-len 0}
+                :as opts}]
   (when-not config/publishing?
     (p/do!
      (state/pub-event! [:editor/save-code-editor])
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
-             block-node (cond
-                          (uuid? block-node)
-                          nil
-                          (string? block-node)
-                          (gdom/getElement (string/replace block-node "edit-block" "ls-block"))
-                          :else
-                          block-node)
              db-graph? (config/db-based-graph? repo)
              block (or (db/entity [:block/uuid block-id]) block)
              content (if (and db-graph? (:block/name block))
@@ -263,7 +214,7 @@
                           (subs content 0 pos))
              content (sanity-block-content repo (:block/format block) content)]
          (state/clear-selection!)
-         (edit-block-aux repo block content block-node text-range opts))))))
+         (edit-block-aux repo block content text-range opts))))))
 
 (defn- get-original-block-by-dom
   [node]
@@ -378,7 +329,7 @@
   (when-let [touches (.-targetTouches event)]
     (let [selection-type (.-type (.getSelection js/document))]
       (when-not (= selection-type "Range")
-        (when (or (not @state/*editor-editing-ref)
+        (when (or (not (state/editing?))
                   (< (- (js/Date.now) @*touch-start) 600))
           (when (and (= (.-length touches) 1) @*swipe)
             (let [{:keys [x0 xi direction]} @*swipe

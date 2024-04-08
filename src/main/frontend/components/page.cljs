@@ -89,7 +89,7 @@
            (not sidebar?))
       (when (and (string/blank? (:block/content block))
                  (not preview?))
-        (editor-handler/edit-block! block :max (:block/uuid block)))))
+        (editor-handler/edit-block! block :max))))
   state)
 
 (rum/defc page-blocks-inner <
@@ -115,7 +115,7 @@
     (let [[hover set-hover!] (rum/use-state false)
           click-handler-fn (fn []
                              (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
-                               (js/setTimeout #(editor-handler/edit-block! block :max (:block/uuid block)) 0)))
+                               (js/setTimeout #(editor-handler/edit-block! block :max) 0)))
           drop-handler-fn (fn [^js event]
                             (util/stop event)
                             (p/let [block-uuids (state/get-selection-block-ids)
