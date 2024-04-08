@@ -241,9 +241,10 @@
   [repo conn]
   (d/unlisten! conn :gen-ops)
   (d/unlisten! conn :sync-db)
+  (sync-db-to-main-thread repo conn)
   (when (op-mem-layer/rtc-db-graph? repo)
     (listen-db-to-generate-ops repo conn)
     ;; (rtc-db-listener/listen-db-to-batch-txs conn)
     )
 
-  (sync-db-to-main-thread repo conn))
+  )

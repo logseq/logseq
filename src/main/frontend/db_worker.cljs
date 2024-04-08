@@ -378,15 +378,13 @@
                        (ldb/read-transit-str context)
                        context)
              _ (when context (worker-state/set-context! context))
-             tx-meta' (if (:new-graph? tx-meta)
-                        tx-meta
-                        (cond-> tx-meta
-                          (and (not (:whiteboard/transact? tx-meta))
-                               (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
-                          (assoc :skip-store? true)
+             tx-meta' (cond-> tx-meta
+                        (and (not (:whiteboard/transact? tx-meta))
+                             (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
+                        (assoc :skip-store? true)
 
-                          true
-                          (dissoc :insert-blocks?)))]
+                        true
+                        (dissoc :insert-blocks?))]
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
                         (seq tx-data')

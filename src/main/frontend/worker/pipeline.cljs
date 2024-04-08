@@ -14,14 +14,16 @@
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
-  (when-let [outliner-op (:outliner-op tx-meta)]
+  (let [outliner-op (:outliner-op tx-meta)]
     (not (or
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
           (:undo? tx-meta) (:redo? tx-meta)))))
 
 (defn compute-block-path-refs-tx
   [{:keys [tx-meta] :as tx-report} blocks]
-  (when (and (:outliner-op tx-meta) (path-refs-need-recalculated? tx-meta))
+  (when (or (and (:outliner-op tx-meta) (path-refs-need-recalculated? tx-meta))
+            (:from-disk? tx-meta)
+            (:new-graph? tx-meta))
     (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
 
 (defn- delete-property-parent-block-if-empty
@@ -76,11 +78,24 @@
   [repo conn tx-report context]
   (when-not (:pipeline-replace? (:tx-meta tx-report))
     (let [tx-meta (:tx-meta tx-report)
-          {:keys [from-disk? new-graph? undo? redo?]} tx-meta]
-      (if (or from-disk? new-graph?)    ; FIXME: compute block path refs
-        {:tx-report tx-report}
-        (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-              _ (when (sqlite-util/local-file-based-graph? repo)
+          {:keys [from-disk? new-graph? undo? redo?]} tx-meta
+          {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)]
+      (if (or from-disk? new-graph?)
+        (let [path-refs (set (compute-block-path-refs-tx tx-report blocks))
+              tx-report' (or
+                          (when (seq path-refs)
+                            (ldb/transact! conn path-refs {:replace? true
+                                                           :pipeline-replace? true}))
+                          (do
+                            (when-not (exists? js/process) (d/store @conn))
+                            tx-report))
+              full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
+              final-tx-report (assoc tx-report'
+                                     :tx-meta (:tx-meta tx-report)
+                                     :tx-data full-tx-data
+                                     :db-before (:db-before tx-report))]
+          {:tx-report final-tx-report})
+        (let [_ (when (sqlite-util/local-file-based-graph? repo)
                   (let [page-ids (distinct (map :db/id pages))]
                     (doseq [page-id page-ids]
                       (when (d/entity @conn page-id)
@@ -111,7 +126,7 @@
                             (ldb/transact! conn replace-tx {:replace? true
                                                             :pipeline-replace? true}))
                           (do
-                            (d/store @conn)
+                            (when-not (exists? js/process) (d/store @conn))
                             tx-report))
               fix-tx-data (validate-and-fix-db! repo conn tx-report context)
               full-tx-data (concat (:tx-data tx-report) fix-tx-data (:tx-data tx-report'))
