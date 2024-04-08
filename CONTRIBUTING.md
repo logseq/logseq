@@ -168,7 +168,7 @@ Your contributions to open source, large or small, make great projects like this
 [github]: https://github.com/logseq/logseq "Logseq Repo"
 [discord]: https://discord.gg/KpN4eHY "Logseq Discord Server"
 [individual-cla]: https://cla-assistant.io/logseq/logseq "Individual CLA"
-[feature-request]: https://discuss.logseq.com/c/feature-requests/ "Submit Feature Request"
+[feature-request]: https://discuss.logseq.com/c/feedback/feature-requests/ "Submit Feature Request"
 [forum]: https://discuss.logseq.com "Logseq Forum"
 [search-pr]: https://github.com/logseq/logseq/pulls "Search open PRs"
 [new-issue]: https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.yaml "Submit a New issue"
