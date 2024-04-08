@@ -1431,6 +1431,7 @@
       [:div.settings-modal.of-plugins
        (focused-settings-content title)])
     {:label   "plugin-settings-modal"
+     :align   :start
      :id      "ls-focused-settings-modal"}))
 
 (defn hook-custom-routes

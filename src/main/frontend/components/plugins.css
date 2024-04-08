@@ -963,8 +963,7 @@ html[data-theme='dark'] {
 }
 
 .ui__dialog-content[label=plugin-settings-modal] {
-  @apply w-auto lg:max-w-5xl p-0 gap-0
-  top-[10%] translate-y-0 !animate-none;
+  @apply w-auto lg:max-w-5xl p-0 gap-0;
 }
 
 .ui__dialog-content[label=plugins-dashboard] {
