@@ -67,7 +67,8 @@
             [rum.core :as rum]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [logseq.db :as ldb]
-            [frontend.db.query-dsl :as query-dsl]))
+            [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.transact :as db-transact]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -381,8 +382,8 @@
         (state/set-edit-content! edit-input-id new-content)))
     (p/let [_ (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
        (outliner-insert-block! config left-block prev-block {:sibling? sibling?
-                                                             :keep-uuid? true}))])
-    prev-block))
+                                                             :keep-uuid? true})
+       prev-block)])))
 
 (defn insert-new-block-aux!
   [config
@@ -407,8 +408,8 @@
         sibling? (when block-self? false)]
     (p/let [_ (outliner-insert-block! config current-block next-block {:sibling? sibling?
                                                                        :keep-uuid? true})]
-      (util/set-change-value input fst-block-text))
-    (assoc next-block :block/content snd-block-text)))
+      (util/set-change-value input fst-block-text)
+      (assoc next-block :block/content snd-block-text))))
 
 (defn clear-when-saved!
   []
@@ -470,10 +471,10 @@
                          insert-new-block-before-block-aux!
 
                          :else
-                         insert-new-block-aux!)
-             last-block (insert-fn config block'' value)]
-         (clear-when-saved!)
-         (edit-block! last-block 0))))))
+                         insert-new-block-aux!)]
+         (p/let [last-block (insert-fn config block'' value)]
+           (clear-when-saved!)
+           (edit-block! last-block 0)))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
@@ -775,98 +776,99 @@
 (declare expand-block!)
 (defn delete-block!
   [repo delete-children?]
-  (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
-    (when block-id
-      (when-let [block-e (db/entity [:block/uuid block-id])]
-        (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))]
-          (cond
-            (nil? prev-block)
-            nil
+  (when (db-transact/request-finished?)
+    (let [{:keys [id block-id block-parent-id value format config]} (get-state)]
+      (when block-id
+        (when-let [block-e (db/entity [:block/uuid block-id])]
+          (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))]
+            (cond
+              (nil? prev-block)
+              nil
 
-            :else
-            (let [has-children? (seq (:block/_parent block-e))
-                  block (db/pull (:db/id block-e))
-                  left (otree/-get-left (outliner-core/block (db/get-db) block) (db/get-db false))
-                  left-has-children? (and left
-                                          (when-let [block-id (:block/uuid (:data left))]
-                                            (let [block (db/entity [:block/uuid block-id])]
-                                              (seq (:block/_parent block)))))
-                  delete-block-fn (fn [block]
-                                    (delete-block-aux! block delete-children? {:children-check? false}))]
-              (when-not (and has-children? left-has-children?)
-                (when block-parent-id
-                  (let [block-parent (gdom/getElement block-parent-id)
-                        sibling-block (if (:embed? config)
-                                        (util/get-prev-block-non-collapsed
-                                         block-parent
-                                         {:container (util/rec-get-blocks-container block-parent)})
-                                        (util/get-prev-block-non-collapsed-non-embed block-parent))
-                        {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
-                        concat-prev-block? (boolean (and prev-block new-content))
-                        transact-opts {:outliner-op :delete-blocks}
-                        db-based? (config/db-based-graph? repo)
-                        db (db/get-db repo)]
-                    (ui-outliner-tx/transact!
-                     transact-opts
-                     (cond
-                       (and prev-block (:block/name prev-block)
-                            (not= (:db/id prev-block) (:db/id (:block/parent block)))
-                            (db-model/hidden-page? (:block/page block))) ; embed page
-                       nil
+              :else
+              (let [has-children? (seq (:block/_parent block-e))
+                    block (db/pull (:db/id block-e))
+                    left (otree/-get-left (outliner-core/block (db/get-db) block) (db/get-db false))
+                    left-has-children? (and left
+                                            (when-let [block-id (:block/uuid (:data left))]
+                                              (let [block (db/entity [:block/uuid block-id])]
+                                                (seq (:block/_parent block)))))
+                    delete-block-fn (fn [block]
+                                      (delete-block-aux! block delete-children? {:children-check? false}))]
+                (when-not (and has-children? left-has-children?)
+                  (when block-parent-id
+                    (let [block-parent (gdom/getElement block-parent-id)
+                          sibling-block (if (:embed? config)
+                                          (util/get-prev-block-non-collapsed
+                                           block-parent
+                                           {:container (util/rec-get-blocks-container block-parent)})
+                                          (util/get-prev-block-non-collapsed-non-embed block-parent))
+                          {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                          concat-prev-block? (boolean (and prev-block new-content))
+                          transact-opts {:outliner-op :delete-blocks}
+                          db-based? (config/db-based-graph? repo)
+                          db (db/get-db repo)]
+                      (ui-outliner-tx/transact!
+                       transact-opts
+                       (cond
+                         (and prev-block (:block/name prev-block)
+                              (not= (:db/id prev-block) (:db/id (:block/parent block)))
+                              (db-model/hidden-page? (:block/page block))) ; embed page
+                         nil
 
-                       concat-prev-block?
-                       (let [prev-e (db/entity (:db/id prev-block))
-                             current-e (db/entity (:db/id block))
-                             new-properties (merge (:block/properties prev-e)
-                                                   (:block/properties current-e))
-                             new-tags (->> (concat (:block/tags prev-e) (:block/tags current-e)))]
-                         (if (seq (:block/_refs (db/entity (:db/id block))))
-                           (do
-                             (delete-block-fn prev-block)
-                             (save-block! repo block new-content {})
-                             (outliner-save-block! {:db/id (:db/id block)
-                                                    :block/parent (:db/id (:block/parent prev-block))
-                                                    :block/left (or (:db/id (:block/left prev-block))
-                                                                    (:db/id (:block/parent prev-block)))})
+                         concat-prev-block?
+                         (let [prev-e (db/entity (:db/id prev-block))
+                               current-e (db/entity (:db/id block))
+                               new-properties (merge (:block/properties prev-e)
+                                                     (:block/properties current-e))
+                               new-tags (->> (concat (:block/tags prev-e) (:block/tags current-e)))]
+                           (if (seq (:block/_refs (db/entity (:db/id block))))
+                             (do
+                               (delete-block-fn prev-block)
+                               (save-block! repo block new-content {})
+                               (outliner-save-block! {:db/id (:db/id block)
+                                                      :block/parent (:db/id (:block/parent prev-block))
+                                                      :block/left (or (:db/id (:block/left prev-block))
+                                                                      (:db/id (:block/parent prev-block)))})
 
                              ;; block->right needs to point its `left` to block->left
-                             (let [block-right (outliner-core/get-right-sibling db (:db/id block))]
-                               (when (and block-right (not= (:db/id (:block/parent prev-block))
-                                                            (:db/id (:block/parent block))))
-                                 (outliner-save-block! {:db/id (:db/id block-right)
-                                                        :block/left (:db/id (:block/left block))})))
+                               (let [block-right (outliner-core/get-right-sibling db (:db/id block))]
+                                 (when (and block-right (not= (:db/id (:block/parent prev-block))
+                                                              (:db/id (:block/parent block))))
+                                   (outliner-save-block! {:db/id (:db/id block-right)
+                                                          :block/left (:db/id (:block/left block))})))
 
                              ;; update prev-block's children to point to the refed block
-                             (when (or (:block/collapsed? prev-block)
-                                       (= (:db/id prev-block) (:db/id (:block/parent block))))
-                               (let [children (:block/_parent prev-block)]
-                                 (doseq [child children]
-                                   (when-not (= (:db/id child) (:db/id block))
-                                     (outliner-save-block! {:db/id (:db/id child)
-                                                            :block/parent (:db/id block)
-                                                            :block/left (:db/id block)})))))
+                               (when (or (:block/collapsed? prev-block)
+                                         (= (:db/id prev-block) (:db/id (:block/parent block))))
+                                 (let [children (:block/_parent prev-block)]
+                                   (doseq [child children]
+                                     (when-not (= (:db/id child) (:db/id block))
+                                       (outliner-save-block! {:db/id (:db/id child)
+                                                              :block/parent (:db/id block)
+                                                              :block/left (:db/id block)})))))
 
                              ;; parent will be removed
-                             (when (= (:db/id prev-block) (:db/id (:block/parent block)))
-                               (when-let [parent-right (when prev-block (outliner-core/get-right-sibling db (:db/id prev-block)))]
-                                 (outliner-save-block! {:db/id (:db/id parent-right)
-                                                        :block/left (:db/id block)})))
+                               (when (= (:db/id prev-block) (:db/id (:block/parent block)))
+                                 (when-let [parent-right (when prev-block (outliner-core/get-right-sibling db (:db/id prev-block)))]
+                                   (outliner-save-block! {:db/id (:db/id parent-right)
+                                                          :block/left (:db/id block)})))
 
-                             (when db-based?
-                               (outliner-save-block! {:db/id (:db/id block)
-                                                      :block/properties new-properties
-                                                      :block/tags new-tags})))
+                               (when db-based?
+                                 (outliner-save-block! {:db/id (:db/id block)
+                                                        :block/properties new-properties
+                                                        :block/tags new-tags})))
 
-                           (do
-                             (delete-block-fn block)
-                             (save-block! repo prev-block new-content {})
-                             (when db-based?
-                               (outliner-save-block! {:db/id (:db/id prev-block)
-                                                      :block/properties new-properties
-                                                      :block/tags new-tags})))))
+                             (do
+                               (delete-block-fn block)
+                               (save-block! repo prev-block new-content {})
+                               (when db-based?
+                                 (outliner-save-block! {:db/id (:db/id prev-block)
+                                                        :block/properties new-properties
+                                                        :block/tags new-tags})))))
 
-                       :else
-                       (delete-block-fn block)))))))))))))
+                         :else
+                         (delete-block-fn block))))))))))))))
 
 (defn delete-blocks!
   [repo block-uuids blocks dom-blocks]
@@ -2854,7 +2856,7 @@
 
       ;; just delete
       :else
-      (when-not (mobile-util/native-ios?)
+      (when (and input (not (mobile-util/native-ios?)))
         (util/stop e)
         (delete-and-update
          input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
