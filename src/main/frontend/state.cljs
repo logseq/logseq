@@ -977,25 +977,26 @@ Similar to re-frame subscriptions"
      (set-state! :editor/content value :path-in-sub-atom
                  (or (:block/uuid (get-edit-block)) input-id)))))
 
+(defn editing?
+  []
+  (seq @(:editor/editing? @state)))
+
 (defn get-edit-input-id
   []
   (when-not (exists? js/process)
-    (try
-      (when-let [elem js/document.activeElement]
-        (when (util/input? elem)
-          (let [id (gobj/get elem "id")]
-            (when (string/starts-with? id "edit-block-")
-              id))))
-      (catch :default _e))))
+    (when (editing?)
+      (try
+        (when-let [elem js/document.activeElement]
+          (when (util/input? elem)
+            (let [id (gobj/get elem "id")]
+              (when (string/starts-with? id "edit-block-")
+                id))))
+        (catch :default _e)))))
 
 (defn get-input
   []
   (when-let [id (get-edit-input-id)]
     (gdom/getElement id)))
-
-(defn editing?
-  []
-  (seq @(:editor/editing? @state)))
 
 (defn get-edit-content
   []
