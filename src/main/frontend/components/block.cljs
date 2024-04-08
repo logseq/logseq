@@ -1780,20 +1780,7 @@
 
    (every? #(= % ["Horizontal_Rule"]) body)))
 
-(def save-block-should-update
-  (fn [old-state new-state]
-    ;; Don't refresh content until UI get notified from the worker
-    (let [old-edit? (:edit? (last (:rum/args old-state)))
-          new-edit? (:edit? (last (:rum/args new-state)))
-          old-tx-id (:block/tx-id (nth (:rum/args old-state) 1))
-          new-tx-id (:block/tx-id (nth (:rum/args new-state) 1))]
-      (or (not old-edit?)
-          (and old-edit? (not= old-tx-id new-tx-id))
-          (and (not (state/editing?)) (not= old-edit? new-edit?))))))
-
-
 (rum/defcs block-control < rum/reactive
-  {:should-update save-block-should-update}
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected?]}]
   (let [doc-mode?          (state/sub :document/mode?)
         control-show?      (util/react *control-show?)
@@ -2515,8 +2502,7 @@
                (reset! *refs-count count))
              (assoc state
                     ::hide-block-refs? (atom default-hide?)
-                    ::refs-count *refs-count)))
-   :should-update save-block-should-update}
+                    ::refs-count *refs-count)))}
   [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? selected? *ref]}]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
