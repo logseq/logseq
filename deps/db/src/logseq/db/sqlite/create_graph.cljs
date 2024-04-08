@@ -45,6 +45,8 @@
   #{"Contents"})
 
 (defn build-db-initial-data
+  "Builds tx of initial data for a new graph including key values, initial files,
+   built-in properties and built-in classes"
   [config-content]
   (let [initial-data [(kv :db/type "db")
                       (kv :schema/version db-schema/version)
@@ -72,20 +74,29 @@
                          (fn [[db-ident {:keys [schema original-name]}]]
                            (let [original-name' (or original-name (name db-ident))]
                              (default-db/mark-block-as-built-in
-                             (sqlite-util/build-new-class
-                              (let [properties (mapv
-                                                (fn [db-ident]
-                                                  (let [property (get db-ident->properties db-ident)]
-                                                    (assert property (str "Built-in property " db-ident " is not defined yet"))
-                                                    db-ident))
-                                                (:properties schema))]
-                                (cond->
-                                 {:block/original-name original-name'
-                                  :block/name (common-util/page-name-sanity-lc original-name')
-                                  :db/ident db-ident
-                                  :block/uuid (d/squuid)}
-                                  (seq properties)
-                                  (assoc :class/schema.properties properties)))))))
-                         db-class/built-in-classes)]
-    (vec (concat default-properties default-classes
-                 initial-data initial-files default-pages))))
+                              (sqlite-util/build-new-class
+                               (let [properties (mapv
+                                                 (fn [db-ident]
+                                                   (let [property (get db-ident->properties db-ident)]
+                                                     (assert property (str "Built-in property " db-ident " is not defined yet"))
+                                                     db-ident))
+                                                 (:properties schema))]
+                                 (cond->
+                                  {:block/original-name original-name'
+                                   :block/name (common-util/page-name-sanity-lc original-name')
+                                   :db/ident db-ident
+                                   :block/uuid (d/squuid)}
+                                   (seq properties)
+                                   (assoc :class/schema.properties properties)))))))
+                         db-class/built-in-classes)
+        tx (vec (concat default-properties default-classes
+                        initial-data initial-files default-pages))]
+    (when-let [conflicting-idents
+               (->> (keep :db/ident tx)
+                    frequencies
+                    (keep (fn [[k v]] (when (> v 1) k)))
+                    seq)]
+      (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
+                           (vec conflicting-idents))
+                      {:idents conflicting-idents})))
+    tx))
