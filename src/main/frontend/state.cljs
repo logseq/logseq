@@ -126,8 +126,6 @@
       ;; With label or other data
       :editor/last-saved-cursor              nil
       :editor/editing?                       (atom {})
-      :editor/editing-prev-node              (atom nil)
-      :editor/editing-parent-node            (atom nil)
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
@@ -1295,8 +1293,6 @@ Similar to re-frame subscriptions"
 (defn clear-edit!
   []
   (set-state! :editor/editing? {})
-  (set-state! :editor/editing-prev-node nil)
-  (set-state! :editor/editing-parent-node nil)
   (set-state! :editor/cursor-range nil)
   (swap! state merge {:editor/last-saved-cursor nil})
   (set-state! :editor/content {})
