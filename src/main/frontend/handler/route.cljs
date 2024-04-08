@@ -14,7 +14,8 @@
             [logseq.graph-parser.text :as text]
             [reitit.frontend.easy :as rfe]
             [frontend.context.i18n :refer [t]]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.common.util :as common-util]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -137,8 +138,13 @@
                                                                   (:block/format block) (config/get-block-pattern (:block/format block)))]
                             (if (> (count content) 48)
                               (str (subs content 0 48) "...")
-                              content))))]
-      (or (:block/original-name page)
+                              content))))
+          block-name (:block/original-name page)
+          block-name' (when block-name
+                        (if (common-util/uuid-string? block-name)
+                          "Untitled"
+                          block-name))]
+      (or block-name'
           block-title
           "Logseq"))
     :tag
