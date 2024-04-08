@@ -85,10 +85,10 @@
         block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
                :block/page page-id
                :block/parent page-id}
+        properties' (merge properties {:ls-type :whiteboard-shape
+                                       :logseq.tldraw.shape shape})
         block' (if (config/db-based-graph? repo)
-                 (merge block properties)
-                 (assoc block :block/properties properties))
-        additional-props (with-whiteboard-block-props
-                           (assoc block' :block/properties {:ls-type :whiteboard-shape :logseq.tldraw.shape shape})
-                           page-id)]
+                 (merge block properties')
+                 (assoc block :block/properties properties'))
+        additional-props (with-whiteboard-block-props block' page-id)]
     (merge block' additional-props)))
