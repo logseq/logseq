@@ -46,7 +46,7 @@ jobs:
               - **Blog**: https://blog.logseq.com
               - **Docs**: https://docs.logseq.com
 
-            Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
+            Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feedback/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
       - name: '🧹 Close stale awaiting response issues'
         id: awaiting_issues
@@ -74,5 +74,5 @@ jobs:
               - **Blog**: https://blog.logseq.com
               - **Docs**: https://docs.logseq.com
 
-            Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
+            Thanks for your contributions to Logseq! If you have any other [**issues**](https://github.com/logseq/logseq/issues/new/choose) or [**feature requests**](https://discuss.logseq.com/c/feedback/feature-requests/), please don't hesitate to [let us know](https://github.com/logseq/logseq/issues/new/choose). We always welcome pull requests too!
 
