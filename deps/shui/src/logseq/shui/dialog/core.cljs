@@ -104,8 +104,11 @@
 ;; components
 (rum/defc modal-inner
   [config]
-  (let [{:keys [id title description content footer on-open-change open?]} config
-        props (dissoc config :id :title :description :content :footer :on-open-change :open?)]
+  (let [{:keys [id title description content footer on-open-change align open?]} config
+        props (dissoc config
+                :id :title :description :content :footer
+                :align :on-open-change :open?)
+        props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (rum/use-effect!
       (fn []

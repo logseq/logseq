@@ -756,7 +756,7 @@
    {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
    :hr
    {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
-   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feature-requests/"}
+   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feedback/feature-requests/"}
    {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
    :hr
    {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
