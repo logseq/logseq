@@ -2547,7 +2547,7 @@
                                                    (p/do!
                                                     (state/set-editor-op! :escape)
                                                     (editor-handler/save-block! (editor-handler/get-state) value)
-                                                    (js/setTimeout #(editor-handler/escape-editing select?) 10))))}
+                                                    (when select? (editor-handler/escape-editing select?)))))}
                                      edit-input-id
                                      config))]
           [:div.flex.flex-1.flex-row.gap-1.items-start
