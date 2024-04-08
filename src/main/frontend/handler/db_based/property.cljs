@@ -16,6 +16,7 @@
             [malli.util :as mu]
             [malli.error :as me]
             [logseq.common.util.page-ref :as page-ref]
+            [datascript.core :as d]
             [datascript.impl.entity :as e]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
@@ -103,14 +104,35 @@
         {:db/ident ident
          :db/cardinality cardinality})))
 
+(defn ensure-unique-ident
+  "Ensures the given db-ident is unique by querying for any existing ones and adding a suffix if needed"
+  [db db-ident]
+  (if (d/entity db db-ident)
+    (let [existing-idents
+          (d/q '[:find [?ident ...]
+                 :in $ ?ident-name
+                 :where
+                 [?b :db/ident ?ident]
+                 [(str ?ident) ?str-ident]
+                 [(clojure.string/starts-with? ?str-ident ?ident-name)]]
+               db
+               (str db-ident "-"))
+          new-ident (if-let [max-num (->> existing-idents
+                                          (keep #(parse-long (string/replace-first (str %) (str db-ident "-") "")))
+                                          (apply max))]
+                      (keyword (namespace db-ident) (str (name db-ident) "-" (inc max-num)))
+                      (keyword (namespace db-ident) (str (name db-ident) "-1")))]
+      new-ident)
+    db-ident))
+
 (defn upsert-property!
-  "Updates property for property-id if it exists or creates a new property.
-   Two main  ways to create a property are to set property-id to a qualified keyword
-   or to set it to nil and pass :property-name as an option"
+  "Updates property if property-id is given. Otherwise creates a property
+   with the given property-id or :property-name option. When a property is created
+   it is ensured to have a unique :db/ident"
   [repo property-id schema {:keys [property-name properties]}]
   (let [db-ident (or property-id (db-property/user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
-    (if-let [property (db/entity db-ident)]
+    (if-let [property (and (qualified-keyword? property-id) (db/entity db-ident))]
       (let [tx-data (->>
                      (conj
                       [(cond->
@@ -125,10 +147,12 @@
                      (remove nil?))]
         (db/transact! repo tx-data {:outliner-op :save-block}))
       (let [k-name (or (and property-name (name property-name))
-                       (name property-id))]
+                       (name property-id))
+            db-ident' (ensure-unique-ident (db/get-db repo) db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
-        (db/transact! repo [(sqlite-util/build-new-property db-ident schema {:original-name k-name})]
+        (db/transact! repo
+                      [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
                       {:outliner-op :new-property})))))
 
 (defn validate-property-value
@@ -198,9 +222,6 @@
 (defn set-block-property!
   [repo block-eid property-id v {:keys [property-name] :as opts}]
   (let [block-eid (->eid block-eid)
-        property-id (if (string? property-id)
-                      (db-property/user-property-ident-from-name property-id)
-                      property-id)
         _ (assert (keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
         property (db/entity property-id)
@@ -287,7 +308,7 @@
       (when-let [property (db/entity repo property-id)]
         (when-not (ldb/built-in-class-property? class property)
           (db/transact! repo [[:db/retract (:db/id class) :class/schema.properties property-id]]
-            {:outliner-op :save-block}))))))
+                        {:outliner-op :save-block}))))))
 
 (defn class-set-schema!
   [repo class-uuid schema]
