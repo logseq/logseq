@@ -42,12 +42,12 @@
   (state/clear-edit!))
 
 (defn set-editing!
-  [property editor-id dom-id v opts]
+  [block property editor-id dom-id v opts]
   (let [v (str v)
         cursor-range (if dom-id
                        (some-> (gdom/getElement dom-id) util/caret-range)
                        "")]
-    (state/set-editing! editor-id v property cursor-range opts)))
+    (state/set-editing! editor-id v property cursor-range (assoc opts :property-block block))))
 
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
@@ -332,14 +332,16 @@
 
 (defn <create-new-block!
   [block property value]
-  (let [{:keys [last-block-id result]} (db-property-handler/create-property-text-block! block property value
+  (let [container-id (state/get-current-container-id)
+        {:keys [last-block-id result]} (db-property-handler/create-property-text-block! block property value
                                                                                         editor-handler/wrap-parse-block
 
                                                                                         {})]
     (p/do!
      result
      (exit-edit-property)
-     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max last-block-id))))
+     (editor-handler/edit-block! (db/entity [:block/uuid last-block-id]) :max
+                                 {:container-id (inc container-id)}))))
 
 (defn <create-new-block-from-template!
   "`template`: tag block"
@@ -642,10 +644,10 @@
                                              (assoc :property-value value)))]))]))
 
 (defn- property-value-inner
-  [block property value *ref {:keys [inline-text block-cp page-cp
-                                     editor-id dom-id row?
-                                     editor-box]
-                              :as opts}]
+  [block property value {:keys [inline-text block-cp page-cp
+                                editor-id dom-id row?
+                                editor-box]
+                         :as opts}]
   (let [schema (:block/schema property)
         multiple-values? (= :many (:cardinality schema))
         class (str (when-not row? "flex flex-1 ")
@@ -674,7 +676,7 @@
                                                 (nil? (:block/_parent property-block))))
                         value (if invalid-block? "" value)]
                     (when (or (= type :default) invalid-block?)
-                      (set-editing! property editor-id dom-id value {:ref @*ref}))))}
+                      (set-editing! block property editor-id dom-id value opts))))}
      (if (string/blank? value)
        (if template?
          (let [id (first (:classes schema))
@@ -699,19 +701,16 @@
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query
-  (rum/local nil ::ref)
-  [state block property value {:keys [editor-id editor-box editor-args editing?
+  [state block property value {:keys [container-id editor-id editor-box editor-args editing?
                                       on-chosen]
                                :as opts}]
-  (let [*ref (::ref state)
-        property (model/sub-block (:db/id property))
-
+  (let [property (model/sub-block (:db/id property))
         schema (:block/schema property)
         type (get schema :type :default)
 
         editing? (or editing?
                      (state/sub-property-value-editing? editor-id)
-                     (and @*ref (state/sub-editing? @*ref)))
+                     (state/sub-editing? [container-id (:block/uuid block) (:block/uuid property)]))
         select-type? (select-type? property type)
         closed-values? (seq (:values schema))
         select-opts {:on-chosen on-chosen}
@@ -740,10 +739,10 @@
                                          (when (= (util/ekey e) "Enter")
                                            (add-property!)))}))
         ;; :others
-        [:div.flex.flex-1 {:ref #(when-not @*ref (reset! *ref %))}
-   (if editing?
-     (property-editing  block property value schema editor-box editor-args editor-id)
-     (property-value-inner block property value *ref opts))]))))
+        [:div.flex.flex-1
+         (if editing?
+           (property-editing block property value schema editor-box editor-args editor-id)
+           (property-value-inner block property value opts))]))))
 
 (rum/defc multiple-values
   [block property v {:keys [on-chosen dropdown? editing?]

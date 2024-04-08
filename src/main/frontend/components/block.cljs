@@ -2138,6 +2138,7 @@
                                         :block-cp blocks-container
                                         :properties-cp db-properties-cp
                                         :editor-box (get config :editor-box)
+                                        :container-id (:container-id config)
                                         :id (:id config)}
                                        opts)))
 
@@ -3551,10 +3552,9 @@
       ;;   :debug-id (str (:db/id item) "-" (:block/content item))})
       )))
 
-(defonce *container-id (atom 0))
 (rum/defcs blocks-container < rum/static
   {:init (fn [state]
-           (let [container-id (swap! *container-id inc)]
+           (let [container-id (swap! (:ui/container-id @state/state) inc)]
              (assoc state ::container-id container-id)))}
   [state blocks config]
   (let [doc-mode? (:document/mode? config)]

@@ -292,6 +292,7 @@
       :encryption/graph-parsing?             false
 
       :ui/loading?                           {}
+      :ui/container-id                       (atom 0)
       :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
       :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
@@ -600,7 +601,7 @@ Similar to re-frame subscriptions"
       ks-coll? (util/react (rum/cursor-in state ks))
       :else    (util/react (rum/cursor state ks)))))
 
-(defn set-editing-block!
+(defn set-editing-block-id!
   [container-block]
   (swap! (:editor/editing? @state) assoc container-block true))
 
@@ -1964,7 +1965,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks direction)))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [move-cursor? ref container-id]
+  [edit-input-id content block cursor-range & {:keys [move-cursor? ref container-id property-block]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
     (if (> (count content)
@@ -1990,7 +1991,9 @@ Similar to re-frame subscriptions"
                 content (string/trim (or content ""))]
             (assert (and container-id (:block/uuid block))
                     "container-id or block uuid is missing")
-            (set-editing-block! [container-id (:block/uuid block)])
+            (if property-block
+              (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
+              (set-editing-block-id! [container-id (:block/uuid block)]))
             (set-state! :editor/block block)
             (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
             (set-state! :editor/last-key-code nil)
@@ -2356,3 +2359,7 @@ Similar to re-frame subscriptions"
 
 (def get-worker-next-request-id db-transact/get-next-request-id)
 (def add-worker-request! db-transact/add-request!)
+
+(defn get-current-container-id
+  []
+  @(:ui/container-id @state))
