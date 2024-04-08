@@ -13,7 +13,8 @@
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.worker.pipeline :as worker-pipeline]))
 
 (def node? (exists? js/process))
 
@@ -28,7 +29,11 @@
                   test-db-name-db-version
                   test-db-name)]
     (state/set-current-repo! test-db)
-    (conn/start! test-db opts)))
+    (conn/start! test-db opts)
+    (let [conn (conn/get-db test-db false)]
+      (d/listen! conn ::listen-db-changes!
+                 (fn [tx-report]
+                   (worker-pipeline/invoke-hooks test-db conn tx-report {}))))))
 
 (defn destroy-test-db!
   []

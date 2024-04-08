@@ -117,6 +117,5 @@
 
 (defn page?
   [block]
-  (and block
-       (:block/name block)
+  (and (:block/name block)
        (nil? (:block/page block))))
