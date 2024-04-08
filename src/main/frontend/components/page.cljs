@@ -94,14 +94,14 @@
 
 (rum/defc page-blocks-inner <
   {:did-mount open-root-block!}
-  [page-name _block blocks config sidebar? whiteboard? _block-uuid]
+  [page-e blocks config sidebar? whiteboard? _block-uuid]
   (let [hiccup (component-block/->hiccup blocks config {})]
     [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
      (rum/with-key
-       (content/content page-name
-         {:hiccup   hiccup
-          :sidebar? sidebar?})
-       (str page-name "-hiccup"))]))
+       (content/content (str (:block/uuid page-e))
+                        {:hiccup   hiccup
+                         :sidebar? sidebar?})
+       (str (:block/uuid page-e) "-hiccup"))]))
 
 (declare page)
 
@@ -173,7 +173,7 @@
                         (str (:block/uuid page-e)))
           block-id (parse-uuid page-name)
           block? (boolean block-id)
-          block (get-block page-name)
+          block (get-block (or (:block/uuid page-e) (:block/name page-e)))
           children (:block/_parent block)]
       (cond
         (and
@@ -196,7 +196,7 @@
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-left children block))]
           [:div
-           (page-blocks-inner page-name block blocks config sidebar? whiteboard? block-id)
+           (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
            (when-not config/publishing?
              (let [args (if block-id
                           {:block-uuid block-id}
