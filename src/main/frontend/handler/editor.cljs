@@ -2033,6 +2033,7 @@
                   revert-cut-txs
                   skip-empty-target?]
            :or {exclude-properties []}}]
+  (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
