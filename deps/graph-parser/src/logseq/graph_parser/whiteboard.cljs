@@ -1,6 +1,7 @@
 (ns logseq.graph-parser.whiteboard
   "Whiteboard related parser utilities"
-  (:require [logseq.db.frontend.property :as db-property]))
+  (:require [logseq.db.frontend.property :as db-property]
+            [frontend.config :as config]))
 
 (defn block->shape [block]
   (get-in block [:block/properties :logseq.tldraw.shape]))
@@ -83,9 +84,11 @@
                     (db-property/get-pid repo :logseq.property.tldraw/shape) shape}
         block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
                :block/page page-id
-               :block/parent page-id
-               :block/properties properties}
+               :block/parent page-id}
+        block' (if (config/db-based-graph? repo)
+                 (merge block properties)
+                 (assoc block :block/properties properties))
         additional-props (with-whiteboard-block-props
-                           (assoc block :block/properties {:ls-type :whiteboard-shape :logseq.tldraw.shape shape})
+                           (assoc block' :block/properties {:ls-type :whiteboard-shape :logseq.tldraw.shape shape})
                            page-id)]
-    (merge block additional-props)))
+    (merge block' additional-props)))
