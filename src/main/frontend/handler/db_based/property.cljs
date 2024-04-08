@@ -104,8 +104,9 @@
         {:db/ident ident
          :db/cardinality cardinality})))
 
-(defn ensure-unique-ident
-  "Ensures the given db-ident is unique by querying for any existing ones and adding a suffix if needed"
+(defn- ensure-unique-db-ident
+  "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
+  unique by adding a suffix with a unique number e.g. :db-ident-1 :db-ident-2"
   [db db-ident]
   (if (d/entity db db-ident)
     (let [existing-idents
@@ -130,7 +131,7 @@
    with the given property-id or :property-name option. When a property is created
    it is ensured to have a unique :db/ident"
   [repo property-id schema {:keys [property-name properties]}]
-  (let [db-ident (or property-id (db-property/user-property-ident-from-name property-name))]
+  (let [db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (db/entity db-ident))]
       (let [tx-data (->>
@@ -148,7 +149,7 @@
         (db/transact! repo tx-data {:outliner-op :save-block}))
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
-            db-ident' (ensure-unique-ident (db/get-db repo) db-ident)]
+            db-ident' (ensure-unique-db-ident (db/get-db repo) db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
         (db/transact! repo
@@ -284,19 +285,26 @@
   [repo class-uuid property-id]
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
-      (let [[db-ident property]
+      (let [[db-ident property options]
             ;; strings come from user
             (if (string? property-id)
               (if-let [ent (db/entity [:block/original-name property-id])]
-                [(:db/ident ent) ent]
-                [(db-property/user-property-ident-from-name property-id) nil])
-              [property-id (db/entity property-id)])
+                [(:db/ident ent) ent {}]
+                ;; creates ident beforehand b/c needed in later transact and this avoids
+                ;; making this whole fn async for now
+                [(ensure-unique-db-ident
+                  (db/get-db (state/get-current-repo))
+                  (db-property/create-user-property-ident-from-name property-id))
+                 nil
+                 {:property-name property-id}])
+              [property-id (db/entity property-id) {}])
             property-type (get-in property [:block/schema :type])
-            _ (upsert-property! repo db-ident
+            _ (upsert-property! repo
+                                db-ident
                                 (cond-> (:block/schema property)
                                   (some? property-type)
                                   (assoc :type property-type))
-                                {})]
+                                options)]
         (db/transact! repo
                       [[:db/add (:db/id class) :class/schema.properties db-ident]]
                       {:outliner-op :save-block})))))

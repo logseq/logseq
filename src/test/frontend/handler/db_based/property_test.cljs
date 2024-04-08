@@ -178,11 +178,13 @@
       (db-property-handler/class-add-property! repo c1id :user.property/property-2)
       ;; repeated adding property-2
       (db-property-handler/class-add-property! repo c1id :user.property/property-2)
-      (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
+      ;; add new property with same base db-ident as property-1
+      (db-property-handler/class-add-property! repo c1id ":property-1")
+      (is (= 3 (count (:class/schema.properties (db/entity (:db/id c1)))))))
 
     (testing "Class remove property"
       (db-property-handler/class-remove-property! repo c1id :user.property/property-1)
-      (is (= 1 (count (:class/schema.properties (db/entity (:db/id c1)))))))
+      (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
     (testing "Add classes to a block"
       (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
       (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
@@ -199,7 +201,7 @@
                         :class/parent (:db/id c2)}]))
       (db-property-handler/class-add-property! repo c2id :user.property/property-3)
       (db-property-handler/class-add-property! repo c2id :user.property/property-4)
-      (is (= 3 (count (:classes-properties
+      (is (= 4 (count (:classes-properties
                        (db-property-handler/get-block-classes-properties (:db/id (db/entity [:block/uuid fbid]))))))))))
 
 

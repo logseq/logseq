@@ -68,7 +68,7 @@
   (->> properties
        (map
         (fn [[prop-name val]]
-          [(db-property/user-property-ident-from-name (name prop-name))
+          [(db-property/create-user-property-ident-from-name (name prop-name))
             ;; set indicates a :many value
            (if (set? val)
              (set (map #(translate-property-value % uuid-maps) val))
@@ -105,7 +105,7 @@
 (defn- build-property-refs [properties property-db-ids]
   (mapv
    (fn [prop-name]
-     (db-property/user-property-ident-from-name (name prop-name)))
+     (db-property/create-user-property-ident-from-name (name prop-name)))
    (keys properties)))
 
 (def current-db-id (atom 0))
@@ -168,7 +168,7 @@
                            (mapcat
                             (fn [[prop-name]]
                               (if (get-in properties [prop-name :closed-values])
-                                (let [db-ident (db-property/user-property-ident-from-name (name prop-name))]
+                                (let [db-ident (db-property/create-user-property-ident-from-name (name prop-name))]
                                   (db-property-util/build-closed-values
                                    db-ident
                                    prop-name
