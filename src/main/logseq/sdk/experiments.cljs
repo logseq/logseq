@@ -21,10 +21,15 @@
 (defn ^:export cp_page_editor
   [^js props]
   (let [props1 (jsx->clj props)
-        name (some-> props1 :page)
+        page-name (some-> props1 :page)
         config (some-> props1 (dissoc :page))]
-    (when-let [entity (page/get-page-entity name)]
-      (page/page-blocks-cp (state/get-current-repo) entity config))))
+    (when-let [_entity (page/get-page-entity page-name)]
+      (page/page
+        {:repo (state/get-current-repo)
+         :page-name page-name
+         :preview? false
+         :sidebar? false
+         :config config}))))
 
 (defn ^:export register_fenced_code_renderer
   [pid type ^js opts]

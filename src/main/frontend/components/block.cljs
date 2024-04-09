@@ -2551,7 +2551,7 @@
                                                     (js/setTimeout (fn []
                                                                      (editor-handler/escape-editing select?)
                                                                      (some-> config :on-escape-editing
-                                                                       (apply []))) 10))))}
+                                                                       (apply [(str uuid) (= event :esc)]))) 10))))}
                            edit-input-id
                            config))]
           [:div.flex.flex-1.flex-row.gap-1.items-start
