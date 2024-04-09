@@ -45,7 +45,7 @@
      (when redirect?
        (route-handler/redirect-to-page! page-uuid))
      (when-let [first-block (first (:block/_left (db/get-page page-uuid)))]
-       (block-handler/edit-block! first-block :max))
+       (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
      page-name)))
 
 (defn <create!
@@ -63,7 +63,7 @@
        (route-handler/redirect-to-page! page-uuid))
      (let [page (db/get-page page-uuid)]
        (when-let [first-block (first (:block/_left page))]
-         (block-handler/edit-block! first-block :max))
+         (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
        page))))
 
 ;; favorite fns

@@ -17,7 +17,8 @@
 
     (when-let [element (gdom/getElement id)]
       ;; TODO: check whether editor is visible, do less work
-      (js/setTimeout #(util/scroll-editor-cursor element) 50)))
+      (js/setTimeout #(util/scroll-editor-cursor element) 50))
+    (state/update-tx-after-cursor-state!))
   state)
 
 ;; (defn will-remount!
