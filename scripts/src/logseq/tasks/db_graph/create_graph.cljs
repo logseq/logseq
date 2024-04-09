@@ -57,6 +57,10 @@
       (if-let [page-uuid (page-uuids (second val))]
         [:block/uuid page-uuid]
         (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
+      :page-uuid
+      (if-let [page-uuid (page-uuids (second val))]
+        page-uuid
+        (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
       :block
       (or (block-uuids (second val))
           (throw (ex-info (str "No uuid for block '" (second val) "'") {:name (second val)})))
