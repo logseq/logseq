@@ -258,7 +258,7 @@ when undo this op, this original entity-map will be transacted back into db")
               (conj! redo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! redo-ops-to-push))]
         (push-redo-ops repo (cons boundary rev-ops))))
-    (prn "No further undo infomation")))
+    (prn "No further undo information")))
 
 (defn redo
   [repo]
@@ -272,7 +272,7 @@ when undo this op, this original entity-map will be transacted back into db")
               (conj! undo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! undo-ops-to-push))]
         (push-undo-ops repo (cons boundary rev-ops))))
-    (prn "No further redo infomation")))
+    (prn "No further redo information")))
 
 
 ;;; listen db changes and push undo-ops
