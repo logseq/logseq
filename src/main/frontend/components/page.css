@@ -322,16 +322,6 @@ html.is-native-iphone-without-notch {
 
   .page-info {
     @apply mx-2;
-
-    .ls-page-properties {}
-
-    &.is-collapsed {
-      @apply !py-0 -mb-1.5;
-
-      &:not(:has(.select-item)) {
-        @apply hidden;
-      }
-    }
   }
 }
 
@@ -407,10 +397,6 @@ html.is-native-ios {
     @apply py-2;
   }
 
-  .ls-page-properties {
-    @apply bg-gray-03 rounded-md px-3 gap-1;
-  }
-
   .configure-wrap {
     @apply px-2;
   }
@@ -420,23 +406,7 @@ html.is-native-ios {
   }
 
   &.is-collapsed {
-    @apply border-transparent mt-[-4px] -mb-[14px];
-
-    &:has(.select-item) {
-      @apply py-2 relative -left-1;
-
-      .info-title {
-        @apply relative -top-1;
-      }
-    }
-
-    .page-info-inner {
-      @apply py-0 relative -top-1.5 min-h-[26px];
-
-      &:has(.ls-page-properties) {
-        @apply mb-3 opacity-90;
-      }
-    }
+    @apply border-transparent;
 
     .ls-new-property {
       @apply hidden;
@@ -450,16 +420,14 @@ html.is-native-ios {
   }
 
   .info-title {
-    @apply relative min-h-[28px] flex items-center pl-1;
-  }
-
-  .ls-properties-area {
-    &:has(.property-pair) {
-      @apply pt-2.5;
-    }
+    @apply relative min-h-[28px] flex items-center;
   }
 }
 
 .page-info-title-placeholder {
   min-height: 28px;
+}
+
+.info-title a.tag:hover, .multi-values a.tag:hover {
+    text-decoration: none;
 }

@@ -297,6 +297,15 @@
       :on-focus (fn []
                   (when untitled? (reset! *title-value "")))}]))
 
+(rum/defc page-title-configure
+  [*show-page-info?]
+  [:div.absolute.-top-4.left-2.fade-in
+   (shui/button
+    {:variant :outline
+     :size :xs
+     :on-click #(swap! *show-page-info? not)}
+    "Configure")])
+
 (rum/defcs ^:large-vars/cleanup-todo page-title < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
@@ -305,7 +314,7 @@
                  original-name (:block/original-name page)
                  *title-value (atom original-name)]
              (assoc state ::title-value *title-value)))}
-  [state page {:keys [fmt-journal? preview? *hover?]}]
+  [state page {:keys [fmt-journal? preview? *hover? *show-page-info?]}]
   (when page
     (let [page (db/sub-block (:db/id page))
           title (:block/original-name page)]
@@ -385,7 +394,10 @@
                  (cond untitled? [:span.opacity-50 (t :untitled)]
                        nested? (component-block/map-inline {} (gp-mldoc/inline->edn title (mldoc/get-default-config
                                                                                            (:block/format page))))
-                       :else title))])]])))))
+                       :else title))])]
+
+           (when (and db-based? @*hover?)
+             (page-title-configure *show-page-info?))])))))
 
 (defn- page-mouse-over
   [e *control-show? *all-collapsed?]
@@ -447,6 +459,7 @@
   (rum/local false ::control-show?)
   (rum/local nil   ::current-page)
   (rum/local false ::hover-title?)
+  (rum/local false ::show-page-info?)
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)]
@@ -507,7 +520,8 @@
                        (page-title page {:journal? journal?
                                          :fmt-journal? fmt-journal?
                                          :preview? preview?
-                                         :*hover? (::hover-title? state)}))
+                                         :*hover? (::hover-title? state)
+                                         :*show-page-info? (::show-page-info? state)}))
                      (when (not config/publishing?)
                        (when config/lsp-enabled?
                          [:div.flex.flex-row
@@ -516,8 +530,8 @@
 
                   (cond
                     (and db-based? (not block?))
-                    [:div.pb-2
-                     (db-page/page-info page (::hover-title? state))]
+                    [:div.py-4
+                     (db-page/page-info page (::show-page-info? state))]
 
                     (and (not db-based?) (not block?))
                     [:div.pb-2])
