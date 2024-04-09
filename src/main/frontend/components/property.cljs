@@ -719,10 +719,10 @@
                                      (remove (fn [property]
                                                (let [id (if (vector? property) (first property) property)]
                                                  (or
-                                                 (= id :block/tags)
-                                                 (when-let [ent (db/entity id)]
-                                                   (and (not (get-in ent [:block/schema :public?]))
-                                                        (ldb/built-in? ent))))))
+                                                  (= id :block/tags)
+                                                  (when-let [ent (db/entity id)]
+                                                    (and (not (get-in ent [:block/schema :public?]))
+                                                         (ldb/built-in? ent))))))
                                              properties))
         {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))
@@ -778,12 +778,11 @@
                    (not (:page-configure? opts))
                    (not keyboard-triggered?))
       [:div.ls-properties-area
-       (cond-> (if in-block-container?
-                 {:id id}
-                 {:id id
-                  :class (when class-schema? "class-properties")})
-         (:selected? opts)
-         (update :class conj "select-none")
+       (cond-> {:id id}
+         (and in-block-container? class-schema?)
+         (assoc :class "class-properties")
+         (state/selection?)
+         (update :class str " select-none")
          true (assoc :tab-index 0
                      :on-key-up #(when-let [block (and (= "Escape" (.-key %))
                                                        (.closest (.-target %) "[blockid]"))]

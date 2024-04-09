@@ -2408,6 +2408,7 @@
         [:div.warning.text-sm
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
+       {:class (when (state/selection?) " select-none")}
        (when-not plugin-slotted?
          (let [block-tags (:block/tags block)
                db-based? (config/db-based-graph? (state/get-current-repo))]
@@ -3011,7 +3012,8 @@
        (dnd-separator-wrapper block children block-id slide? true false))
 
      [:div.block-main-container.flex.flex-row.pr-2
-      {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
+      {:class (str (if (and heading? (seq (:block/title block))) "items-baseline" "")
+                   (when (state/selection?) " select-none"))
        :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
                         (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
