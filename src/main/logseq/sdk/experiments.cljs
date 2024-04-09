@@ -1,6 +1,5 @@
 (ns logseq.sdk.experiments
-  (:require [cljs-bean.core :as bean]
-            [frontend.state :as state]
+  (:require [frontend.state :as state]
             [frontend.components.page :as page]
             [frontend.util :as util]
             [camel-snake-kebab.core :as csk]
@@ -9,7 +8,7 @@
 
 (defn- jsx->clj
   [^js obj]
-  (if (goog.isObject obj)
+  (if (js/goog.isObject obj)
     (-> (fn [result k]
           (let [v (gobj/get obj k)
                 k (keyword (csk/->kebab-case k))]
