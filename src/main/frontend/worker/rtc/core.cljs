@@ -10,10 +10,10 @@
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
-            [frontend.worker.react :as worker-react]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
@@ -642,22 +642,14 @@
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
 
-          (worker-state/start-batch-tx-mode!)
-          (js/console.groupCollapsed "rtc/apply-remote-ops-log")
-          (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
-          (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
-          (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
-          (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
-          (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
-          (js/console.groupEnd)
-          (let [txs (worker-state/get-batch-txs)]
-            (worker-state/exit-batch-tx-mode!)
-            (when (seq txs)
-              (let [affected-keys (worker-react/get-affected-queries-keys {:db-after @conn
-                                                                           :tx-data txs})]
-                (when (seq affected-keys)
-                  (worker-util/post-message :refresh-ui
-                                            {:affected-keys affected-keys})))))
+          (batch-tx/with-batch-tx-mode conn
+            (js/console.groupCollapsed "rtc/apply-remote-ops-log")
+            (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
+            (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+            (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
+            (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
+            (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
+            (js/console.groupEnd))
 
           (op-mem-layer/update-local-tx! repo remote-t)
           (update-log state {:remote-update-map affected-blocks-map}))

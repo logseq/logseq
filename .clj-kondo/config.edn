@@ -126,6 +126,7 @@
              frontend.worker.handler.page worker-page
              frontend.worker.handler.page.rename worker-page-rename
              frontend.worker.handler.file.util wfu
+             frontend.worker.batch-tx batch-tx
              lambdaisland.glogi log
              logseq.common.config common-config
              logseq.common.graph common-graph
