@@ -364,24 +364,23 @@
       (let [txs (mapcat
                  (fn [eid]
                    (when-let [block (db/entity eid)]
-                     (when (get block property-id)
-                       (let [value (get block property-id)
-                             block-value? (and (= :default (get-in property [:block/schema :type] :default))
-                                               (uuid? value))
-                             property-block (when block-value? (db/entity [:block/uuid value]))
-                             retract-blocks-tx (when (and property-block
-                                                          (some? (get property-block :logseq.property/created-from-block))
-                                                          (some? (get property-block :logseq.property/created-from-property)))
-                                                 (let [txs-state (atom [])]
-                                                   (outliner-core/delete-block repo
-                                                                               (db/get-db false)
-                                                                               txs-state
-                                                                               (outliner-core/->Block property-block)
-                                                                               {:children? true})
-                                                   @txs-state))]
-                         (concat
-                          [[:db/retract (:db/id block) property-id]]
-                          retract-blocks-tx)))))
+                     (let [value (get block property-id)
+                           block-value? (and (= :default (get-in property [:block/schema :type] :default))
+                                             (uuid? value))
+                           property-block (when block-value? (db/entity [:block/uuid value]))
+                           retract-blocks-tx (when (and property-block
+                                                        (some? (get property-block :logseq.property/created-from-block))
+                                                        (some? (get property-block :logseq.property/created-from-property)))
+                                               (let [txs-state (atom [])]
+                                                 (outliner-core/delete-block repo
+                                                                             (db/get-db false)
+                                                                             txs-state
+                                                                             (outliner-core/->Block property-block)
+                                                                             {:children? true})
+                                                 @txs-state))]
+                       (concat
+                        [[:db/retract (:db/id block) property-id]]
+                        retract-blocks-tx))))
                  block-eids)]
         (when (seq txs)
           (db/transact! repo txs {:outliner-op :save-block}))))))
