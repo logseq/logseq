@@ -576,9 +576,11 @@
                              (reset! *mouse-down? true))))
       :on-pointer-up (fn [e]
                        (when @*mouse-down?
+                         (state/clear-edit!)
                          (open-page-ref page-entity e page-name contents-page?)
                          (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
+                           (state/clear-edit!)
                            (open-page-ref page-entity e page-name contents-page?)))}
      (when-not hide-icon?
        (when-let [icon (get page-entity (pu/get-pid :logseq.property/icon))]
@@ -2536,7 +2538,7 @@
                                                    (p/do!
                                                     (state/set-editor-op! :escape)
                                                     (editor-handler/save-block! (editor-handler/get-state) value)
-                                                    (when select? (editor-handler/escape-editing select?)))))}
+                                                    (editor-handler/escape-editing select?))))}
                                      edit-input-id
                                      config))]
           [:div.flex.flex-1.flex-row.gap-1.items-start
