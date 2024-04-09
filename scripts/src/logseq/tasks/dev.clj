@@ -34,7 +34,7 @@
   (apply shell "yarn cljs:run-test" args))
 
 (defn lint-and-test
-  "Run all lint tasks, then run tests(exclude testcases taged by :long).
+  "Run all lint tasks, then run tests(exclude testcases tagged by :long).
   pass args through to cmd 'yarn cljs:run-test'"
   []
   (lint)
