@@ -86,6 +86,7 @@
                      (subs % 1)
                      (keyword %)))
              (get-in @state/state)
+             (#(if (util/atom? %) @% %))
              (sdk-utils/normalize-keyword-for-json)
              (bean/->js))))
 
