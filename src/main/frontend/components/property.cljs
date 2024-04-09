@@ -421,7 +421,7 @@
      [])
     [:div.ls-property-add.flex.flex-row.items-center
     [:span.bullet-container.cursor [:span.bullet]]
-    [:div.ls-property-key {:style {:padding-left 6
+    [:div.ls-property-key {:style {:padding-left 9
                                    :height "1.5em"}} ; TODO: ugly
      (select/select {:items (map (fn [x] {:value x}) properties)
                      :dropdown? true
@@ -463,7 +463,7 @@
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
           [:div.flex.flex-row.items-center.col-span-2
            [:span.bullet-container.cursor [:span.bullet]]
-           [:div {:style {:padding-left 6}} @*property-key]]
+           [:div {:style {:padding-left 9}} @*property-key]]
           (when property
             [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
              (when-not class-schema?
@@ -523,7 +523,7 @@
                          (reset! *new-property? true))}
             [:div.flex.flex-row.items-center {:style {:padding-left 1}}
              (ui/icon "plus" {:size 15})
-             [:div.ml-1 {:style {:padding-left 2}} "Add property"]]]
+             [:div.ml-2.text-sm "Add property"]]]
 
            :else
            [:div {:style {:height 28}}]))])))

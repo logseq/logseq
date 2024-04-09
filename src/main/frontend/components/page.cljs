@@ -530,7 +530,7 @@
 
                   (cond
                     (and db-based? (not block?))
-                    [:div.py-4
+                    [:div.pt-4
                      (db-page/page-info page (::show-page-info? state))]
 
                     (and (not db-based?) (not block?))

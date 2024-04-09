@@ -165,7 +165,7 @@
         class? (contains? types "class")
         collapsed? (not @*show-info?)
         has-tags? (seq (:block/tags page))
-        has-properties? (seq (:block/properties page))
+        has-properties? (seq (remove #{:logseq.property/filters} (keys (:block/properties page))))
         show-info? (or @*show-info? has-tags? has-properties?)]
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
