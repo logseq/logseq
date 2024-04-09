@@ -86,7 +86,8 @@
             [shadow.loader :as loader]
             [logseq.common.path :as path]
             [electron.ipc :as ipc]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; local state
 (defonce *dragging?
@@ -691,34 +692,32 @@
                 children)
       children)))
 
-(rum/defcs page-cp-aux < db-mixins/query
+(rum/defcs page-cp < db-mixins/query rum/reactive
   {:init (fn [state]
-           (assoc state :page-id (:db/id (last (:rum/args state)))))}
+           (let [page (last (:rum/args state))]
+             (assoc state ::page-entity
+                    (if (e/entity? page)
+                      page
+                      (db/get-page (:block/name page))))))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [html-export? label children contents-page? preview? disable-preview?] :as config} page]
-  (when-let [id (or (:db/id page) (:page-id state))]
-    (let [page-entity (if (e/entity? page) page (db/entity id))
-          page-entity (when page-entity (db/sub-block (:db/id page-entity)))
-          page-name (or (:block/name page-entity)
-                        (:block/name page))
-          whiteboard-page? (model/whiteboard-page? page-name)
-          inner (page-inner config page-entity contents-page? children html-export? label whiteboard-page?)
-          modal? (:modal/show? @state/state)]
-      (if (and (not (util/mobile?))
-               (not= page-name (:id config))
-               (not (false? preview?))
-               (not disable-preview?)
-               (not modal?))
-        (page-preview-trigger (assoc config :children inner) page-name)
-        inner))))
-
-(rum/defc page-cp < rum/static
-  [config page]
-  (when-let [page-name (:block/name page)]
-    (let [page (if (e/entity? page) page (db/get-page page-name))]
-      (page-cp-aux config page))))
+  (let [page-entity (::page-entity state)]
+    (when (:db/id page-entity)
+      (let [page-entity (when page-entity (db/sub-block (:db/id page-entity)))
+            page-name (or (:block/name page-entity)
+                          (:block/name page))
+            whiteboard-page? (model/whiteboard-page? page-name)
+            inner (page-inner config page-entity contents-page? children html-export? label whiteboard-page?)
+            modal? (:modal/show? @state/state)]
+        (if (and (not (util/mobile?))
+                 (not= page-name (:id config))
+                 (not (false? preview?))
+                 (not disable-preview?)
+                 (not modal?))
+          (page-preview-trigger (assoc config :children inner) page-name)
+          inner)))))
 
 (rum/defc asset-reference
   [config title path]
@@ -783,7 +782,10 @@
                   (not html-export?)
                   (not contents-page?))
          [:span.text-gray-500.bracket page-ref/left-brackets])
-       (let [s (string/trim s)]
+       (let [s (string/trim s)
+             s (if (string/starts-with? s db-content/page-ref-special-chars)
+                 (common-util/safe-subs s 2)
+                 s)]
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
                          :contents-page? contents-page?)
@@ -836,32 +838,32 @@
            state)}
   [config page-name]
   (let [page-name (util/page-name-sanity-lc (string/trim page-name))
-        current-page (state/get-current-page)
-        whiteboard-page? (model/whiteboard-page? page-name)]
-    [:div.color-level.embed.embed-page.bg-base-2
-     {:class (when (:sidebar? config) "in-sidebar")
-      :on-pointer-down #(.stopPropagation %)}
-     [:section.flex.items-center.p-1.embed-header
-      [:div.mr-3 svg/page]
-      (page-cp config {:block/name page-name})]
-     (if (and page-name (state/sub-async-query-loading page-name))
-       [:span "Loading..."]
-       (when (and
-              (not= (util/page-name-sanity-lc (or current-page ""))
-                    page-name)
-              (not= (util/page-name-sanity-lc (get config :id ""))
-                    page-name))
-         (let [block (model/get-page page-name)
-               block (db/sub-block (:db/id block))]
+        current-page (state/get-current-page)]
+    (if (and page-name (state/sub-async-query-loading page-name))
+      (ui/loading "embed")
+      (let [block (model/get-page page-name)
+            block (db/sub-block (:db/id block))
+            whiteboard-page? (model/whiteboard-page? block)]
+        [:div.color-level.embed.embed-page.bg-base-2
+         {:class (when (:sidebar? config) "in-sidebar")
+          :on-pointer-down #(.stopPropagation %)}
+         [:section.flex.items-center.p-1.embed-header
+          [:div.mr-3 svg/page]
+          (page-cp config block)]
+         (when (and
+                (not= (util/page-name-sanity-lc (or current-page ""))
+                      page-name)
+                (not= (util/page-name-sanity-lc (get config :id ""))
+                      page-name))
            (if whiteboard-page?
-             ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
-             (let [blocks (db/sort-by-left (:block/_parent block) block)]
-               (blocks-container blocks (assoc config
-                                               :db/id (:db/id block)
-                                               :id page-name
-                                               :embed? true
-                                               :page-embed? true
-                                               :ref? false)))))))]))
+               ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
+               (let [blocks (db/sort-by-left (:block/_parent block) block)]
+                 (blocks-container blocks (assoc config
+                                                 :db/id (:db/id block)
+                                                 :id page-name
+                                                 :embed? true
+                                                 :page-embed? true
+                                                 :ref? false)))))]))))
 
 (defn- get-label-text
   [label]
@@ -2932,7 +2934,7 @@
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
-        {:block/keys [uuid pre-block? content properties]} block
+        {:block/keys [uuid pre-block? raw-content content properties]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         heading? (pu/lookup properties :logseq.property/heading)
@@ -3034,7 +3036,7 @@
         (block-reference {} (str uuid) nil)
             ;; Not embed self
         [:div.flex.flex-col.w-full
-         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
+         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? (or raw-content content)))
                hide-block-refs-count? (and (:embed? config)
                                            (= (:block/uuid block) (:embed-id config)))]
            (block-content-or-editor config block
