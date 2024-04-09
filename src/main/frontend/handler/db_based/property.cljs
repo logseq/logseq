@@ -96,7 +96,7 @@
   [property {:keys [type cardinality]}]
   (let [ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
-        type-data (when (and type (sqlite-util/property-ref-types type)) ; type changes
+        type-data (when (and type (db-property-type/ref-property-types type)) ; type changes
                     {:db/ident ident
                      :db/valueType :db.type/ref
                      :db/cardinality cardinality})]
@@ -642,7 +642,7 @@
                                icon
                                (assoc :logseq.property/icon icon)))]
                           (let [hidden-tx
-                                (if (contains? sqlite-util/property-ref-types (:type property-schema))
+                                (if (contains? db-property-type/ref-property-types (:type property-schema))
                                   []
                                   (let [page (get-property-hidden-page property)
                                         new-block (db-property-util/build-closed-value-block block-id resolved-value [:block/uuid (:block/uuid page)]
@@ -653,7 +653,7 @@
                                       (conj page)
                                       true
                                       (conj new-block))))
-                                new-values (if (contains? sqlite-util/property-ref-types (:type property-schema))
+                                new-values (if (contains? db-property-type/ref-property-types (:type property-schema))
                                              (vec (conj closed-values (:block/uuid (db/entity resolved-value))))
                                              (vec (conj closed-values block-id)))]
                             (conj hidden-tx

@@ -12,7 +12,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :uuid :entity})
+  #{:keyword :map :coll :any :entity})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -24,6 +24,13 @@
 
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
+
+(def ref-property-types #{:page :date :entity})
+
+(assert (set/subset? ref-property-types
+                     (into internal-built-in-property-types
+                           user-built-in-property-types))
+        "All ref types are valid property types")
 
 (def ^:private user-built-in-allowed-schema-attributes
   "Map of types to their set of allowed :schema attributes"
@@ -120,7 +127,6 @@
               entity?]
    ;; internal usage
    :keyword  keyword?
-   :uuid     uuid?
    :map      map?
    ;; coll elements are ordered as it's saved as a vec
    :coll     coll?
