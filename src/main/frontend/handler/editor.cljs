@@ -1540,10 +1540,9 @@
   (let [repo (state/get-current-repo)]
     (when (config/local-db? repo)
       (-> (save-assets! repo (js->clj files))
-          ;; FIXME: only the first asset is handled
           (p/then
            (fn [res]
-             (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (and (seq res) (first res))]
+             (when-let [[asset-file-name file-obj asset-file-fpath matched-alias] (first res)]
                (let [image? (config/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
@@ -1558,7 +1557,8 @@
                   format
                   {:last-pattern (if drop-or-paste? "" commands/command-trigger)
                    :restore?     true
-                   :command      :insert-asset})))))
+                   :command      :insert-asset})
+                 (recur (rest res))))))
           (p/finally
             (fn []
               (reset! uploading? false)
