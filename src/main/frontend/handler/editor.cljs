@@ -2651,19 +2651,16 @@
         repo (state/get-current-repo)
         editing-block (gdom/getElement (state/get-editing-block-dom-id))
         f (if up? util/get-prev-block-non-collapsed util/get-next-block-non-collapsed)
-        sibling-block (f editing-block)
-        same-container? (when (and editing-block sibling-block)
-                          (->> [editing-block sibling-block]
-                               (map (fn [^js b] (.closest b ".blocks-container")))
-                               (apply =)))]
-    (when (and sibling-block same-container?)
+        sibling-block (f editing-block)]
+    (when sibling-block
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [content (:block/content block)
               value (state/get-edit-content)]
           (when (and value (not= (clean-content! repo format content) (string/trim value)))
             (save-block! repo uuid value)))
-        (let [block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
-          (edit-block! block pos))))))
+        (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
+              block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
+          (edit-block! block pos {:container-id container-id}))))))
 
 (defn keydown-arrow-handler
   [direction]
