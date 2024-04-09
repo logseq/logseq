@@ -2,6 +2,7 @@
   "undo/redo related fns and op-schema"
   (:require [datascript.core :as d]
             [frontend.schema-register :include-macros true :as sr]
+            [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
@@ -250,10 +251,11 @@ when undo this op, this original entity-map will be transacted back into db")
   (if-let [ops (not-empty (pop-undo-ops repo))]
     (let [conn (worker-state/get-datascript-conn repo)
           redo-ops-to-push (transient [])]
-      (doseq [op ops]
-        (let [rev-op (reverse-op @conn op)]
-          (when (= :push-undo-redo (reverse-apply-op op conn repo))
-            (conj! redo-ops-to-push rev-op))))
+      (batch-tx/with-batch-tx-mode conn
+        (doseq [op ops]
+          (let [rev-op (reverse-op @conn op)]
+            (when (= :push-undo-redo (reverse-apply-op op conn repo))
+              (conj! redo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! redo-ops-to-push))]
         (push-redo-ops repo (cons boundary rev-ops))))
     (prn "No further undo infomation")))
@@ -263,10 +265,11 @@ when undo this op, this original entity-map will be transacted back into db")
   (if-let [ops (not-empty (pop-redo-ops repo))]
     (let [conn (worker-state/get-datascript-conn repo)
           undo-ops-to-push (transient [])]
-      (doseq [op ops]
-        (let [rev-op (reverse-op @conn op)]
-          (when (= :push-undo-redo (reverse-apply-op op conn repo))
-            (conj! undo-ops-to-push rev-op))))
+      (batch-tx/with-batch-tx-mode conn
+        (doseq [op ops]
+          (let [rev-op (reverse-op @conn op)]
+            (when (= :push-undo-redo (reverse-apply-op op conn repo))
+              (conj! undo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! undo-ops-to-push))]
         (push-undo-ops repo (cons boundary rev-ops))))
     (prn "No further redo infomation")))
