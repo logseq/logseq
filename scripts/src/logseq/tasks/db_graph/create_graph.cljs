@@ -178,7 +178,7 @@
                                    prop-name
                                    (assoc (get properties prop-name) :db/ident db-ident)
                                    {:translate-closed-page-value-fn
-                                    #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
+                                    #(translate-property-value (:value %) uuid-maps)
                                     :property-attributes
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}}))

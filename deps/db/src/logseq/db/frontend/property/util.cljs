@@ -2,7 +2,7 @@
   "Util fns for building core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.default :as default-db]
-            [datascript.core :as d]))
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defonce hidden-page-name-prefix "$$$")
 
@@ -19,8 +19,9 @@
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
   [block-uuid block-value page-id property {:keys [db-ident icon description]}]
+  (assert block-uuid (uuid? block-uuid))
   (cond->
-   (closed-value-new-block page-id (or block-uuid (d/squuid)) block-value property)
+   (closed-value-new-block page-id block-uuid block-value property)
     (and db-ident (keyword? db-ident))
     (assoc :db/ident db-ident)
 
@@ -49,21 +50,26 @@
    the hidden page and closed value blocks as needed"
   [db-ident prop-name property {:keys [translate-closed-page-value-fn property-attributes]
                                 :or {translate-closed-page-value-fn identity}}]
-  (let [page-tx (build-property-hidden-page property)
-        page-id [:block/uuid (:block/uuid page-tx)]
-        closed-value-page-uuids? (contains? #{:page :date} (get-in property [:block/schema :type]))
-        closed-value-blocks-tx
-        (if closed-value-page-uuids?
-          (map translate-closed-page-value-fn (:closed-values property))
-          (map (fn [{:keys [db-ident value icon description uuid]}]
-                 (build-closed-value-block
-                  uuid value page-id property {:db-ident db-ident
-                                               :icon icon
-                                               :description description}))
-               (:closed-values property)))
-        property-schema (assoc (:block/schema property)
-                               :values (mapv :block/uuid closed-value-blocks-tx))
+  (let [property-schema (assoc (:block/schema property)
+                               :values
+                               (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                                 (mapv translate-closed-page-value-fn (:closed-values property))
+                                 (mapv :uuid (:closed-values property))))
         property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:original-name prop-name})
-                           property-attributes)]
-    (into [property-tx page-tx]
-          (when-not closed-value-page-uuids? closed-value-blocks-tx))))
+                           property-attributes)
+        hidden-tx
+        ;; closed ref types don't have hidden tx
+        (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+          []
+          (let [page-tx (build-property-hidden-page property)
+                closed-value-blocks-tx
+                (map (fn [{:keys [db-ident value icon description uuid]}]
+                       (build-closed-value-block
+                        uuid
+                        value
+                        [:block/uuid (:block/uuid page-tx)]
+                        property
+                        {:db-ident db-ident :icon icon :description description}))
+                     (:closed-values property))]
+            (into [page-tx] closed-value-blocks-tx)))]
+    (into [property-tx] hidden-tx)))
