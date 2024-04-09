@@ -6,10 +6,14 @@
   }
 
   .journal-item {
-    @apply border-t min-h-[250px];
+    @apply border-b min-h-[250px] pb-[64px] mb-[38px];
 
     &:first-child {
-      @apply pt-0 border-none min-h-[500px];
+      @apply pt-0 min-h-[500px];
+    }
+
+    &:last-child {
+      @apply border-none;
     }
   }
 }
