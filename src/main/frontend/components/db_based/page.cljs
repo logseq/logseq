@@ -157,26 +157,21 @@
 (rum/defcs page-info < rum/reactive
   (rum/local false ::hover?)
   (rum/local nil ::mode)
-  {:init (fn [state]
-           (assoc state ::collapsed? (atom true)))}
-  [state page *hover-title?]
+  [state page *show-info?]
   (let [page (db/sub-block (:db/id page))
-        *collapsed? (::collapsed? state)
         *hover? (::hover? state)
         *mode (::mode state)
         types (:block/type page)
         class? (contains? types "class")
-        hover-title? (rum/react *hover-title?)
-        collapsed? (rum/react *collapsed?)
+        collapsed? (not @*show-info?)
         has-tags? (seq (:block/tags page))
         has-properties? (seq (:block/properties page))
-        hover-or-expanded? (or @*hover? hover-title? (not collapsed?))
-        show-info? (or hover-or-expanded? has-tags? has-properties? class?)]
+        show-info? (or @*show-info? has-tags? has-properties?)]
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
             ;; as it creates a fair amount of empty vertical space
             (or has-tags? (some? types))
-            true)
+            (or show-info? has-tags? has-properties?))
       [:div.page-info
        {:class (util/classnames [{:is-collapsed collapsed?}])}
        [:div.py-2 {:class (if (or @*hover? (not collapsed?))
@@ -189,23 +184,21 @@
           :on-click (if config/publishing?
                       (fn [_]
                         (when (seq (set/intersection #{"class" "property"} types))
-                          (swap! *collapsed? not)))
-                      #(swap! *collapsed? not))}
+                          (swap! *show-info? not)))
+                      #(swap! *show-info? not))}
          (when show-info?
            [:<>
             [:div.flex.flex-row.items-center.gap-2
              (if collapsed?
-               (if (or has-tags? @*hover? config/publishing?)
-                 [:<>
-                  (if has-tags?
-                    [:div.px-1 {:style {:min-height 28}}]
-                    [:a.flex.fade-link.ml-2 (ui/icon "tags")])
-                  (if (and config/publishing? (seq (set/intersection #{"class" "property"} types)))
-                    [:div
-                     [:div.opacity-50.pointer.text-sm "Expand for more info"]]
-                    [:div {:on-click util/stop-propagation}
-                     (tags page)])]
-                 [:div.page-info-title-placeholder])
+               (when (or has-tags? @*hover? config/publishing?)
+                 (if (and config/publishing? (seq (set/intersection #{"class" "property"} types)))
+                   [:div
+                    [:div.opacity-50.pointer.text-sm "Expand for more info"]]
+                   (when has-tags?
+                     [:div.pl-3.page-info-tags
+                      {:style {:margin-left 2}
+                       :on-click util/stop-propagation}
+                      (tags page)])))
                [:div.flex.flex-row.items-center.gap-1
                 [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
                 (mode-switch types *mode)])]
@@ -221,7 +214,7 @@
           (if collapsed?
             (when (or (seq (:block/properties page))
                       (and class? (seq (:class/schema.properties page))))
-              [:div.px-4
+              [:div.px-2 {:style {:margin-left 2}}
                (page-properties page {:mode (if class? :class :page)})])
             [:div.pt-2.px-4
              (page-configure page *mode)]))]])))
