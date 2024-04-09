@@ -615,10 +615,10 @@
        :onEscapeKeyDown #(set-open! false)}
       [:div.property-select
        (case type
-         (:number :url :date :default)
+         (:number :url :default)
          (select block property select-opts' opts)
 
-         :page
+         (:page :date)
          (property-value-select-page block property select-opts' opts))]))))
 
 (defn- property-editing
