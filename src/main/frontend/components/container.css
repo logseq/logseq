@@ -602,8 +602,8 @@
   user-select: none;
 
   .resizer {
-    @apply absolute top-0 bottom-0 touch-none left-[1px] w-[3px] select-none !bg-primary;
-    @apply !cursor-col-resize hover:bg-primary/90 focus:bg-primary/90 active:bg-primary/90;
+    @apply absolute top-0 bottom-0 touch-none left-[1px] w-[3px] select-none;
+    @apply cursor-col-resize hover:bg-primary/90 focus:bg-primary/90 active:bg-primary/90;
     @apply z-[1000] delay-300 transition-[background-color] duration-300;
   }
 
