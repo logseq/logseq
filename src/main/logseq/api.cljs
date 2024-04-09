@@ -546,6 +546,10 @@
                                                   (db-model/query-block-by-uuid)))))]
         (bean/->js (sdk-utils/normalize-keyword-for-json blocks))))))
 
+(def ^:export clear_selected_blocks
+  (fn []
+    (state/clear-selection!)))
+
 (def ^:export get_current_page
   (fn []
     (when-let [page (state/get-current-page)]

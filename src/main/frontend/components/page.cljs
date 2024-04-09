@@ -450,7 +450,7 @@
                  page-name' (get-sanity-page-name state page-name)]
              (db-async/<get-block (state/get-current-repo) page-name')
              (assoc state ::page-name page-name')))}
-  [state {:keys [repo page-name preview? sidebar?] :as option}]
+  [state {:keys [repo page-name config preview? sidebar?] :as option}]
   (let [loading? (when (::page-name state)  (state/sub-async-query-loading (::page-name state)))]
     (when-let [path-page-name (get-path-page-name state page-name)]
       (let [current-repo (state/sub :git/current-repo)
@@ -537,7 +537,7 @@
                      (let [_ (and block? page (reset! *current-block-page (:block/name (:block/page page))))
                            _ (when (and block? (not page))
                                (route-handler/redirect-to-page! @*current-block-page))]
-                       (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?})))]])
+                       (page-blocks-cp repo page (merge config {:sidebar? sidebar? :whiteboard? whiteboard?}))))]])
 
                (when today?
                  (today-queries repo today? sidebar?))

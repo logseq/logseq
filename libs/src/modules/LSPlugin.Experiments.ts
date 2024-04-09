@@ -21,7 +21,7 @@ export class LSPluginExperiments {
   get Components() {
     const exper = this.ensureHostScope().logseq.sdk.experiments
     return {
-      Editor: exper.cp_page_editor as (props: { page: string }) => any
+      Editor: exper.cp_page_editor as (props: { page: string } & any) => any
     }
   }
 
