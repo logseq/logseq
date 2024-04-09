@@ -174,8 +174,9 @@
   [repo block content text-range {:keys [container-id]}]
   (when block
     (state/clear-edit!)
-    (state/set-editing! "" content block text-range {:container-id (or container-id @(:editor/container-id @state/state))})
-    (js/setTimeout #(state/update-tx-after-cursor-state!) 80)
+    (let [container-id (or container-id
+                           @(:editor/container-id @state/state))]
+      (state/set-editing! "" content block text-range {:container-id container-id}))
     (mark-last-input-time! repo)))
 
 (defn sanity-block-content
@@ -186,7 +187,7 @@
         (drawer/remove-logbook))))
 
 (defn edit-block!
-  [block pos & {:keys [custom-content tail-len]
+  [block pos & {:keys [_container-id custom-content tail-len]
                 :or {tail-len 0}
                 :as opts}]
   (when-not config/publishing?

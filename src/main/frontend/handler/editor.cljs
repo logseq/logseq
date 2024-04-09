@@ -2595,30 +2595,31 @@
 
 (defn- move-cross-boundary-up-down
   [direction move-opts]
-  (let [input (state/get-input)
-        line-pos (util/get-line-pos (.-value input) (util/get-selection-start input))
-        repo (state/get-current-repo)
-        f (case direction
-            :up util/get-prev-block-non-collapsed
-            :down util/get-next-block-non-collapsed)
-        sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
-        {:block/keys [uuid content format]} (state/get-edit-block)]
-    (if sibling-block
-      (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-        (let [value (state/get-edit-content)]
-          (when (not= (clean-content! repo format content)
-                      (string/trim value))
-            (save-block! repo uuid value)))
-
-        (let [new-uuid (cljs.core/uuid sibling-block-id)
-              block (db/pull repo '[*] [:block/uuid new-uuid])]
-          (edit-block! block
-                       (or (:pos move-opts)
-                           [direction line-pos])
-                       {:direction direction})))
-      (case direction
-        :up (cursor/move-cursor-to input 0)
-        :down (cursor/move-cursor-to-end input)))))
+  (when-let [input (state/get-input)]
+    (let [line-pos (util/get-line-pos (.-value input) (util/get-selection-start input))
+          repo (state/get-current-repo)
+          f (case direction
+              :up util/get-prev-block-non-collapsed
+              :down util/get-next-block-non-collapsed)
+          sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
+          {:block/keys [uuid content format]} (state/get-edit-block)]
+      (if sibling-block
+        (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
+          (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
+                value (state/get-edit-content)]
+            (when (not= (clean-content! repo format content)
+                        (string/trim value))
+              (save-block! repo uuid value))
+            (let [new-uuid (cljs.core/uuid sibling-block-id)
+                  block (db/pull repo '[*] [:block/uuid new-uuid])]
+              (edit-block! block
+                           (or (:pos move-opts)
+                               [direction line-pos])
+                           {:container-id container-id
+                            :direction direction}))))
+        (case direction
+          :up (cursor/move-cursor-to input 0)
+          :down (cursor/move-cursor-to-end input))))))
 
 (defn keydown-up-down-handler
   [direction {:keys [_pos] :as move-opts}]

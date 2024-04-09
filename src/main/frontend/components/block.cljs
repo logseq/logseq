@@ -2932,7 +2932,9 @@
                             (= (:id config*)
                                (str (:block/uuid block))))
         edit-input-id (str "edit-block-" (:block/uuid block))
-        edit? (state/sub-editing? [(:container-id config*) (:block/uuid block)])
+        container-id (:container-id config*)
+        edit? (or (state/sub-editing? [container-id (:block/uuid block)])
+                  (state/sub-editing? [:unknown-container (:block/uuid block)]))
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
@@ -2968,8 +2970,9 @@
         children (:block/_parent block)]
     [:div.ls-block
      (cond->
-      {:blockid (str uuid)
-       :id (str "ls-block-" uuid)
+      {:id (str "ls-block-" uuid)
+       :blockid (str uuid)
+       :containerid container-id
        :ref #(when (nil? @*ref) (reset! *ref %))
        :data-collapsed (and collapsed? has-child?)
        :class (str "id" uuid " "
