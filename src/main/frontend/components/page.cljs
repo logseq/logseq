@@ -505,53 +505,52 @@
 
                (if (and whiteboard-page? (not sidebar?))
                  [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-                 [:div.relative
+                 [:div.relative.grid.gap-4
                   (when (and (not sidebar?) (not block?))
-                    [:div.flex.flex-row.space-between
-                     (when (or (mobile-util/native-platform?) (util/mobile?))
-                       [:div.flex.flex-row.pr-2
-                        {:style {:margin-left -15}
-                         :on-mouse-over (fn [e]
-                                          (page-mouse-over e *control-show? *all-collapsed?))
-                         :on-mouse-leave (fn [e]
-                                           (page-mouse-leave e *control-show?))}
-                        (page-blocks-collapse-control title *control-show? *all-collapsed?)])
-                     (when (and (not whiteboard?) (ldb/page? page))
-                       (page-title page {:journal? journal?
-                                         :fmt-journal? fmt-journal?
-                                         :preview? preview?
-                                         :*hover? (::hover-title? state)
-                                         :*show-page-info? (::show-page-info? state)}))
-                     (when (not config/publishing?)
-                       (when config/lsp-enabled?
-                         [:div.flex.flex-row
-                          (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                          (plugins/hook-ui-items :pagebar)]))])
+                     [:div.flex.flex-row.space-between
+                      (when (or (mobile-util/native-platform?) (util/mobile?))
+                        [:div.flex.flex-row.pr-2
+                         {:style {:margin-left -15}
+                          :on-mouse-over (fn [e]
+                                           (page-mouse-over e *control-show? *all-collapsed?))
+                          :on-mouse-leave (fn [e]
+                                            (page-mouse-leave e *control-show?))}
+                         (page-blocks-collapse-control title *control-show? *all-collapsed?)])
+                      (when (and (not whiteboard?) (ldb/page? page))
+                        (page-title page {:journal? journal?
+                                          :fmt-journal? fmt-journal?
+                                          :preview? preview?
+                                          :*hover? (::hover-title? state)
+                                          :*show-page-info? (::show-page-info? state)}))
+                      (when (not config/publishing?)
+                        (when config/lsp-enabled?
+                          [:div.flex.flex-row
+                           (plugins/hook-ui-slot :page-head-actions-slotted nil)
+                           (plugins/hook-ui-items :pagebar)]))])
 
-                  (cond
-                    (and db-based? (not block?))
-                    [:div.pt-4
-                     (db-page/page-info page (::show-page-info? state))]
+                   (cond
+                     (and db-based? (not block?))
+                     (db-page/page-info page (::show-page-info? state))
 
-                    (and (not db-based?) (not block?))
-                    [:div.pb-2])
+                     (and (not db-based?) (not block?))
+                     [:div.pb-2])
 
-                  [:div
-                   (when (and block? (not sidebar?) (not whiteboard?))
-                     (let [config {:id "block-parent"
-                                   :block? true}]
-                       [:div.mb-4
-                        (component-block/breadcrumb config repo block-id {:level-limit 3})]))
+                   [:div
+                    (when (and block? (not sidebar?) (not whiteboard?))
+                      (let [config {:id "block-parent"
+                                    :block? true}]
+                        [:div.mb-4
+                         (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-                   (when (and db-based? (not block?) (not preview?))
-                     (db-page/page-properties-react page {:configure? false}))
+                    (when (and db-based? (not block?) (not preview?))
+                      (db-page/page-properties-react page {:configure? false}))
 
                    ;; blocks
-                   (if loading?
-                     [:div.space-y-2
-                      (shui/skeleton {:class "h-6 w-full"})
-                      (shui/skeleton {:class "h-6 w-full"})]
-                     (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
+                    (if loading?
+                      [:div.space-y-2
+                       (shui/skeleton {:class "h-6 w-full"})
+                       (shui/skeleton {:class "h-6 w-full"})]
+                      (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
                (when today?
                  (today-queries repo today? sidebar?))
