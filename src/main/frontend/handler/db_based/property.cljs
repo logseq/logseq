@@ -641,17 +641,25 @@
                                                (dissoc schema :description))}
                                icon
                                (assoc :logseq.property/icon icon)))]
-                          (let [page (get-property-hidden-page property)
-                                page-tx (when-not (e/entity? page) page)
-                                page-id [:block/uuid (:block/uuid page)]
-                                new-block (db-property-util/build-closed-value-block block-id resolved-value page-id property {:icon icon
-                                                                                                                               :description description})
-                                new-values (vec (conj closed-values block-id))]
-                            (->> (cons page-tx [new-block
-                                                {:db/id (:db/id property)
-                                                 :block/schema (merge {:type property-type}
-                                                                      (assoc property-schema :values new-values))}])
-                                 (remove nil?))))]
+                          (let [hidden-tx
+                                (if (contains? sqlite-util/property-ref-types (:type property-schema))
+                                  []
+                                  (let [page (get-property-hidden-page property)
+                                        new-block (db-property-util/build-closed-value-block block-id resolved-value [:block/uuid (:block/uuid page)]
+                                                                                             property {:icon icon
+                                                                                                       :description description})]
+                                    (cond-> []
+                                      (not (e/entity? page))
+                                      (conj page)
+                                      true
+                                      (conj new-block))))
+                                new-values (if (contains? sqlite-util/property-ref-types (:type property-schema))
+                                             (vec (conj closed-values (:block/uuid (db/entity resolved-value))))
+                                             (vec (conj closed-values block-id)))]
+                            (conj hidden-tx
+                                  {:db/id (:db/id property)
+                                   :block/schema (merge {:type property-type}
+                                                        (assoc property-schema :values new-values))})))]
             {:block-id block-id
              :tx-data tx-data}))))))
 
