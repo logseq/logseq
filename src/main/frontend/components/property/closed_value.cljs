@@ -127,8 +127,7 @@
                                      {:on-change (fn [page]
                                                    (db-property-handler/replace-closed-value property
                                                                                              (:db/id page)
-                                                                                             (:db/id item)))})
-         ((:page-cp parent-opts) {:preview? false} item)]
+                                                                                             (:db/id item)))})]
 
         (and page? (:page-cp parent-opts))
         ((:page-cp parent-opts) {:preview? false} item)
