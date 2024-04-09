@@ -70,11 +70,12 @@
   "Validates that the given existing closed value is valid"
   [db property type-validate-fn value]
   (boolean
-   (when-let [e (and (uuid? value)
-                     (d/entity db [:block/uuid value]))]
+   (when-let [e (if (uuid? value)
+                  (d/entity db [:block/uuid value])
+                  (d/entity db value))]
      (let [values (get-in property [:block/schema :values])]
        (and
-        (contains? (set values) value)
+        (contains? (set values) (:block/uuid e))
         (if (contains? (:block/type e) "closed value")
           (type-validate-fn (:value (:block/schema e)))
           ;; page uuids aren't closed value types
