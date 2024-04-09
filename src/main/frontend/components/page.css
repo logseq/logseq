@@ -452,6 +452,12 @@ html.is-native-ios {
   .info-title {
     @apply relative min-h-[28px] flex items-center pl-1;
   }
+
+  .ls-properties-area {
+    &:has(.property-pair) {
+      @apply pt-2.5;
+    }
+  }
 }
 
 .page-info-title-placeholder {

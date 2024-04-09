@@ -47,7 +47,7 @@
 }
 
 .ls-properties-area {
-    @apply grid gap-0.5 pt-2 pb-1.5;
+    @apply grid gap-0.5 pt-1.5 pb-1.5;
 
     .property-pair {
         @apply grid grid-cols-5 gap-1;
