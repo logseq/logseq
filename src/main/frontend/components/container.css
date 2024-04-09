@@ -815,3 +815,7 @@ html[data-theme='dark'] {
     }
   }
 }
+
+.blocks-selection-mode .page-title, .blocks-selection-mode .block-content-inner, .blocks-selection-mode .ls-properties-area {
+    user-select: none;
+}

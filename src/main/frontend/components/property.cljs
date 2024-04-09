@@ -781,8 +781,6 @@
        (cond-> {:id id}
          (and in-block-container? class-schema?)
          (assoc :class "class-properties")
-         (state/selection?)
-         (update :class str " select-none")
          true (assoc :tab-index 0
                      :on-key-up #(when-let [block (and (= "Escape" (.-key %))
                                                        (.closest (.-target %) "[blockid]"))]

@@ -2194,7 +2194,7 @@
    (dom/closest target ".query-table")))
 
 (defn- block-content-on-pointer-down
-  [e block block-id content edit-input-id ref config]
+  [e block block-id content edit-input-id config]
   (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
     (let [target (gobj/get e "target")
           button (gobj/get e "buttons")
@@ -2254,8 +2254,7 @@
                           content
                           block
                           cursor-range
-                          {:ref ref
-                           :move-cursor? false
+                          {:move-cursor? false
                            :container-id (:container-id config)}))]
                 ;; wait a while for the value of the caret range
                 (p/do!
@@ -2357,7 +2356,7 @@
                                :inline-text inline-text})))])))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
-  [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide? selected? *ref]
+  [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [repo (state/get-current-repo)
         content (or (:block/original-name block)
                     (property-util/remove-built-in-properties format content))
@@ -2388,10 +2387,9 @@
 
                 (not block-ref?)
                 (assoc mouse-down-key (fn [e]
-                                        (block-content-on-pointer-down e block block-id content edit-input-id @*ref config))))]
+                                        (block-content-on-pointer-down e block block-id content edit-input-id config))))]
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
-              :class (when selected? "select-none")
               :on-pointer-up (fn [e]
                              (when (and
                                     (state/in-selection-mode?)
@@ -2408,7 +2406,6 @@
         [:div.warning.text-sm
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
-       {:class (when (state/selection?) " select-none")}
        (when-not plugin-slotted?
          (let [block-tags (:block/tags block)
                db-based? (config/db-based-graph? (state/get-current-repo))]
@@ -2508,7 +2505,7 @@
              (assoc state
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
-  [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? selected? *ref]}]
+  [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? selected?]}]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
@@ -2561,7 +2558,7 @@
                                             (editor-handler/clear-selection!)
                                             (editor-handler/unhighlight-blocks!)
                                             (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
-             (block-content config block edit-input-id block-id slide? selected? *ref))]
+             (block-content config block edit-input-id block-id slide? selected?))]
 
            (when (and (not hide-block-refs-count?)
                       (not named?))
@@ -3012,8 +3009,7 @@
        (dnd-separator-wrapper block children block-id slide? true false))
 
      [:div.block-main-container.flex.flex-row.pr-2
-      {:class (str (if (and heading? (seq (:block/title block))) "items-baseline" "")
-                   (when (state/selection?) " select-none"))
+      {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
        :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
                         (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
@@ -3051,8 +3047,7 @@
                                      :block-id block-id
                                      :edit? edit?
                                      :hide-block-refs-count? hide-block-refs-count?
-                                     :selected? selected?
-                                     :*ref *ref}))])
+                                     :selected? selected?}))])
 
       (when (and @*show-right-menu? (not in-whiteboard?))
         (block-right-menu config block edit?))]
