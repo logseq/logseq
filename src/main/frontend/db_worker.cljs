@@ -676,11 +676,14 @@
 
   (undo
    [_this repo]
-   (undo-redo/undo repo)
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (undo-redo/undo repo conn))
    nil)
+
   (redo
    [_this repo]
-   (undo-redo/redo repo))
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (undo-redo/redo repo conn)))
 
   (keep-alive
    [_this]
