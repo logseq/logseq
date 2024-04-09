@@ -14,6 +14,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [rum.core :as rum]
             [frontend.modules.outliner.tree :as tree]
@@ -77,12 +78,13 @@
         (when (seq excludes)
           [:div.flex.flex-row.flex-wrap
            [:div.mr-1.font-medium.py-1 (t :linked-references/filter-excludes)]
+
            (filtered-refs page-entity filters filters-atom excludes)])])
-     [:div.cp__filters-input-panel.flex
+     [:div.cp__filters-input-panel.flex.focus-within:bg-gray-03
       (ui/icon "search")
-      [:input.cp__filters-input.w-full
+      [:input.cp__filters-input.w-full.bg-transparent
        {:placeholder (t :linked-references/filter-search)
-        :auto-focus true
+        :autofocus true
         :on-change (fn [e]
                      (reset! filter-search (util/evalue e)))}]]
      (let [all-filters (set (keys filters))
@@ -150,10 +152,9 @@
                            ;; expand
                            (reset! @*collapsed? false)))
         :on-pointer-down (fn [e]
-                         (util/stop-propagation e))
-        :on-click (fn []
-                    (state/set-modal! (filter-dialog page-entity filters-atom *ref-pages)
-                                      {:center? true}))}
+                           (util/stop-propagation e)
+                           (shui/dialog-open!
+                             (filter-dialog page-entity filters-atom *ref-pages)))}
        (ui/icon "filter" {:class (cond
                                    (empty? filter-state)
                                    "opacity-60 hover:opacity-100"

@@ -6,8 +6,6 @@
 
 (deftest reverse-op-test
   ;; TODO: add tests for undo-redo
-  #'undo-redo/undo-op-schema
-  #'undo-redo/reverse-op
   undo-redo/undo
   undo-redo/redo
   )

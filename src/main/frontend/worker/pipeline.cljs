@@ -1,16 +1,16 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
-            [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]
-            [frontend.worker.react :as worker-react]
+            [frontend.worker.batch-tx :as batch-tx]
+            [frontend.worker.db.fix :as db-fix]
             [frontend.worker.file :as file]
+            [frontend.worker.react :as worker-react]
             [frontend.worker.util :as worker-util]
-            [frontend.worker.state :as worker-state]
+            [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.worker.db.fix :as db-fix]
-            [logseq.db :as ldb]))
+            [logseq.outliner.datascript-report :as ds-report]
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
@@ -135,12 +135,12 @@
               final-tx-report (assoc tx-report'
                                      :tx-data full-tx-data
                                      :db-before (:db-before tx-report))
-              batch-processing? (worker-state/rtc-batch-processing?)
+              batch-processing? (batch-tx/tx-batch-processing?)
               affected-query-keys (when-not (or (:importing? context)
                                                 batch-processing?)
                                     (worker-react/get-affected-queries-keys final-tx-report))]
           (when batch-processing?
-            (worker-state/conj-batch-txs! full-tx-data))
+            (batch-tx/conj-batch-txs! full-tx-data))
           {:tx-report final-tx-report
            :affected-keys affected-query-keys
            :deleted-block-uuids deleted-block-uuids

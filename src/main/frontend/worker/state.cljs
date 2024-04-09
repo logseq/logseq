@@ -1,7 +1,14 @@
 (ns frontend.worker.state
   "State hub for worker"
   (:require [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [frontend.schema-register :include-macros true :as sr]))
+
+(sr/defkeyword :undo/repo->undo-stack
+  "{repo [first-op, second-op, ...]}")
+
+(sr/defkeyword :undo/repo->undo-stack
+  "{repo [first-op, second-op, ...]}")
 
 (defonce *state (atom {:worker/object nil
 
@@ -11,8 +18,10 @@
                        ;; FIXME: this name :config is too general
                        :config {}
                        :git/current-repo nil
-                       :rtc/batch-processing? false
-                       :rtc/remote-batch-txs nil
+
+                       :tx/batch-processing? false
+                       :tx/batch-txs nil
+
                        :rtc/downloading-graph? false
 
                        :undo/repo->undo-stack (atom {})
@@ -98,24 +107,3 @@
 (defn rtc-downloading-graph?
   []
   (:rtc/downloading-graph? @*state))
-
-(defn start-batch-tx-mode!
-  []
-  (swap! *state assoc :rtc/batch-processing? true))
-
-(defn rtc-batch-processing?
-  []
-  (:rtc/batch-processing? @*state))
-
-(defn get-batch-txs
-  []
-  (:rtc/remote-batch-txs @*state))
-
-(defn conj-batch-txs!
-  [tx-data]
-  (swap! *state update :rtc/remote-batch-txs (fn [data] (into data tx-data))))
-
-(defn exit-batch-tx-mode!
-  []
-  (swap! *state assoc :rtc/batch-processing? false)
-  (swap! *state assoc :rtc/remote-batch-txs nil))

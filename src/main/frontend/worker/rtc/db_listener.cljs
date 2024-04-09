@@ -5,6 +5,7 @@
             [clojure.data :as data]
             [clojure.set :as set]
             [datascript.core :as d]
+            [frontend.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
 
@@ -164,6 +165,9 @@
     (when (seq asset-ops*)
       (op-mem-layer/add-asset-ops! repo asset-ops*))))
 
+
+(sr/defkeyword :persist-op?
+  "tx-meta option, generate rtc ops when not nil (default true)")
 
 (defmethod db-listener/listen-db-changes :gen-rtc-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
