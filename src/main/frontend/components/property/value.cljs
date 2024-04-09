@@ -755,7 +755,7 @@
                     (if (seq items)
                       (concat
                        (for [item items]
-                         (select-item property type item opts))
+                         (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
                        (when date?
                          [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing?

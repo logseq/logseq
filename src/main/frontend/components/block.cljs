@@ -1814,11 +1814,14 @@
                        (state/toggle-collapsed-block! uuid)
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
-                         (editor-handler/collapse-block! uuid))))}
+                         (editor-handler/collapse-block! uuid)))
+                     ;; debug config context
+                     (when (and (state/developer-mode?) (.-metaKey event))
+                       (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show?
-                                    (or collapsed?
-                                        (editor-handler/collapsable? uuid {:semantic? true})))
-                               (and collapsed? (or order-list? config/publishing?)))
+                                 (or collapsed?
+                                   (editor-handler/collapsable? uuid {:semantic? true})))
+                             (and collapsed? (or order-list? config/publishing?)))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
@@ -2545,9 +2548,12 @@
                                                    (p/do!
                                                     (state/set-editor-op! :escape)
                                                     (editor-handler/save-block! (editor-handler/get-state) value)
-                                                    (js/setTimeout #(editor-handler/escape-editing select?) 10))))}
-                                     edit-input-id
-                                     config))]
+                                                    (js/setTimeout (fn []
+                                                                     (editor-handler/escape-editing select?)
+                                                                     (some-> config :on-escape-editing
+                                                                       (apply [(str uuid) (= event :esc)]))) 10))))}
+                           edit-input-id
+                           config))]
           [:div.flex.flex-1.flex-row.gap-1.items-start
            editor-cp
            (when (and (seq (:block/tags block)) db-based?)
@@ -2559,8 +2565,8 @@
           [:div.flex.flex-row
            [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
             (ui/catch-error
-             (ui/block-error "Block Render Error:"
-                             {:content (:block/content block)
+              (ui/block-error "Block Render Error:"
+                {:content (:block/content block)
                               :section-attrs
                               {:on-click #(let [content (or (:block/original-name block)
                                                             (:block/content block))]

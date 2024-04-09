@@ -1,21 +1,23 @@
 (ns frontend.core
   "Entry ns for the mobile, browser and electron frontend apps"
   {:dev/always true}
-  (:require [rum.core :as rum]
+  (:require [frontend.common-keywords]
+            [frontend.components.plugins :as plugins]
+            [frontend.config :as config]
+            [frontend.fs.sync :as sync]
             [frontend.handler :as handler]
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.route :as route-handler]
-            [frontend.components.plugins :as plugins]
+            [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
+            [frontend.schema-register :as sr]
             [frontend.spec]
-            [frontend.log]
+            [logseq.api]
+            [malli.dev.cljs :as md]
             [reitit.frontend :as rf]
             [reitit.frontend.easy :as rfe]
-            [logseq.api]
-            [frontend.fs.sync :as sync]
-            [frontend.config :as config]
-            [malli.dev.cljs :as md]))
+            [rum.core :as rum]))
 
 (defn set-router!
   []
@@ -47,6 +49,7 @@
 (defn ^:export start []
   (when config/dev?
     (md/start!))
+  (frontend.schema-register/init)
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)

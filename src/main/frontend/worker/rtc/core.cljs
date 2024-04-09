@@ -10,10 +10,10 @@
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
-            [frontend.worker.react :as worker-react]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
@@ -125,6 +125,7 @@
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :gen-undo-op? false
     :outliner-op :delete-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
@@ -133,6 +134,7 @@
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
+    :gen-undo-op? false
     :outliner-op :move-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
@@ -141,6 +143,7 @@
 (defmethod transact-db! :move-blocks&persist-op [_ & args]
   (outliner-tx/transact!
    {:persist-op? true
+    :gen-undo-op? false
     :outliner-op :move-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
@@ -149,6 +152,7 @@
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
       {:persist-op? false
+       :gen-undo-op? false
        :outliner-op :insert-blocks
        :transact-opts {:repo (first args)
                        :conn (second args)}}
@@ -163,12 +167,14 @@
                           ;; must be `logseq.db.frontend.malli-schema.closed-value-block`
                           :block/type #{"closed value"}})
                        block-uuids)
-                 {:persist-op? false}))
+                 {:persist-op? false
+                  :gen-undo-op? false}))
 
 
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
       {:persist-op? false
+       :gen-undo-op? false
        :outliner-op :save-block
        :transact-opts {:repo (first args)
                        :conn (second args)}}
@@ -177,10 +183,12 @@
 (defmethod transact-db! :delete-whiteboard-blocks [_ conn block-uuids]
   (ldb/transact! conn
                  (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
-                 {:persist-op? false}))
+                 {:persist-op? false
+                  :gen-undo-op? false}))
 
 (defmethod transact-db! :upsert-whiteboard-block [_ conn blocks]
-  (ldb/transact! conn blocks {:persist-op? false}))
+  (ldb/transact! conn blocks {:persist-op? false
+                              :gen-undo-op? false}))
 
 (defn- whiteboard-page-block?
   [block]
@@ -444,7 +452,8 @@
                      [:db/retract db-id :block/journal-day]
                      [:db/retract db-id :block/journal?]))
             (when (seq @*other-tx-data)
-              (ldb/transact! conn @*other-tx-data {:persist-op? false}))
+              (ldb/transact! conn @*other-tx-data {:persist-op? false
+                                                   :gen-undo-op? false}))
             (transact-db! :save-block repo conn date-formatter new-block)))))))
 
 (defn apply-remote-move-ops
@@ -480,6 +489,7 @@
     (when (and (seq blocks) target-page-block)
       (outliner-tx/transact!
        {:persist-op? true
+        :gen-undo-op? false
         :transact-opts {:repo repo
                         :conn conn}}
        (outliner-core/move-blocks! repo conn blocks target-page-block false)))))
@@ -631,22 +641,14 @@
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
 
-          (worker-state/start-batch-tx-mode!)
-          (js/console.groupCollapsed "rtc/apply-remote-ops-log")
-          (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
-          (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
-          (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
-          (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
-          (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
-          (js/console.groupEnd)
-          (let [txs (worker-state/get-batch-txs)]
-            (worker-state/exit-batch-tx-mode!)
-            (when (seq txs)
-              (let [affected-keys (worker-react/get-affected-queries-keys {:db-after @conn
-                                                                           :tx-data txs})]
-                (when (seq affected-keys)
-                  (worker-util/post-message :refresh-ui
-                                            {:affected-keys affected-keys})))))
+          (batch-tx/with-batch-tx-mode conn
+            (js/console.groupCollapsed "rtc/apply-remote-ops-log")
+            (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
+            (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+            (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
+            (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
+            (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
+            (js/console.groupEnd))
 
           (op-mem-layer/update-local-tx! repo remote-t)
           (update-log state {:remote-update-map affected-blocks-map}))

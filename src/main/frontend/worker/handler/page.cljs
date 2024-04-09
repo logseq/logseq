@@ -128,7 +128,8 @@
                                  page-txs
                                  first-block-tx)]
                    (when (seq txs)
-                     (ldb/transact! conn txs (cond-> {:persist-op? persist-op?}
+                     (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
+                                                      :outliner-op :create-page}
                                                today-journal?
                                                (assoc :create-today-journal? true
                                                       :today-journal-name page-name))))))] ;; FIXME: prettier validation

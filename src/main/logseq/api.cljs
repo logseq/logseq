@@ -86,6 +86,7 @@
                      (subs % 1)
                      (keyword %)))
              (get-in @state/state)
+             (#(if (util/atom? %) @% %))
              (sdk-utils/normalize-keyword-for-json)
              (bean/->js))))
 
@@ -544,6 +545,10 @@
                         (map (fn [^js el] (some-> (.getAttribute el "blockid")
                                                   (db-model/query-block-by-uuid)))))]
         (bean/->js (sdk-utils/normalize-keyword-for-json blocks))))))
+
+(def ^:export clear_selected_blocks
+  (fn []
+    (state/clear-selection!)))
 
 (def ^:export get_current_page
   (fn []
