@@ -5,34 +5,9 @@
             [clojure.data :as data]
             [clojure.set :as set]
             [datascript.core :as d]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.state :as worker-state]
-            [frontend.worker.pipeline :as worker-pipeline]
-            [frontend.worker.search :as search]
-            [frontend.worker.util :as worker-util]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]))
-
-
-(defn- entity-datoms=>attr->datom
-  [entity-datoms]
-  (reduce
-   (fn [m datom]
-     (let [[_e a _v t add?] datom]
-       (if-let [[_e _a _v old-t old-add?] (get m a)]
-         (cond
-           (and (= old-t t)
-                (true? add?)
-                (false? old-add?))
-           (assoc m a datom)
-
-           (< old-t t)
-           (assoc m a datom)
-
-           :else
-           m)
-         (assoc m a datom))))
-   {} entity-datoms))
+            [frontend.schema-register :include-macros true :as sr]
+            [frontend.worker.db-listener :as db-listener]
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
 
 
 (defn- diff-value-of-set-type-attr
@@ -60,11 +35,11 @@
       (seq retract-uuids) (conj [:retract retract-uuids]))))
 
 (defn- entity-datoms=>ops
-  [db-before db-after entity-datoms]
-  (let [attr->datom (entity-datoms=>attr->datom entity-datoms)]
+  [db-before db-after id->attr->datom entity-datoms]
+  (let [e (ffirst entity-datoms)
+        attr->datom (id->attr->datom e)]
     (when (seq attr->datom)
       (let [updated-key-set (set (keys attr->datom))
-            e (some-> attr->datom first second first)
             {[_e _a block-uuid _t add1?] :block/uuid
              [_e _a _v _t add2?]         :block/name
              [_e _a _v _t add3?]         :block/parent
@@ -153,36 +128,32 @@
         ops*))))
 
 (defn- entity-datoms=>asset-op
-  [db-after entity-datoms]
-  (let [attr->datom (entity-datoms=>attr->datom entity-datoms)]
-    (when (seq attr->datom)
-      (let [e (some-> attr->datom first second first)
-            {[_e _a asset-uuid _t add1?] :asset/uuid
-             [_e _a asset-meta _t add2?] :asset/meta}
-            attr->datom
-            op (cond
-                 (or (and add1? asset-uuid)
-                     (and add2? asset-meta))
-                 [:update-asset]
+  [db-after id->attr->datom entity-datoms]
+  (when-let [e (ffirst entity-datoms)]
+    (let [attr->datom (id->attr->datom e)]
+      (when (seq attr->datom)
+        (let [{[_e _a asset-uuid _t add1?] :asset/uuid
+               [_e _a asset-meta _t add2?] :asset/meta}
+              attr->datom
+              op (cond
+                   (or (and add1? asset-uuid)
+                       (and add2? asset-meta))
+                   [:update-asset]
 
-                 (and (not add1?) asset-uuid)
-                 [:remove-asset asset-uuid])]
-        (when op
-          (let [asset-uuid (some-> (d/entity db-after e) :asset/uuid str)]
-            (case (first op)
-              :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
-              :remove-asset ["remove-asset" {:asset-uuid (str (second op))}])))))))
+                   (and (not add1?) asset-uuid)
+                   [:remove-asset asset-uuid])]
+          (when op
+            (let [asset-uuid (some-> (d/entity db-after e) :asset/uuid str)]
+              (case (first op)
+                :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
+                :remove-asset ["remove-asset" {:asset-uuid (str (second op))}]))))))))
 
 
 (defn generate-rtc-ops
-  [repo db-before db-after datoms]
-  (let [datom-vec-coll (map vec datoms)
-        id->same-entity-datoms (group-by first datom-vec-coll)
-        id-order (distinct (map first datom-vec-coll))
-        same-entity-datoms-coll (map id->same-entity-datoms id-order)
-        asset-ops (keep (partial entity-datoms=>asset-op db-after) same-entity-datoms-coll)
+  [repo db-before db-after same-entity-datoms-coll id->attr->datom]
+  (let [asset-ops (keep (partial entity-datoms=>asset-op db-after id->attr->datom) same-entity-datoms-coll)
         ops (when (empty asset-ops)
-              (mapcat (partial entity-datoms=>ops db-before db-after) same-entity-datoms-coll))
+              (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll))
         now-epoch*1000 (* 1000 (tc/to-long (t/now)))
         ops* (map-indexed (fn [idx op]
                             [(first op) (assoc (second op) :epoch (+ idx now-epoch*1000))]) ops)
@@ -195,55 +166,12 @@
       (op-mem-layer/add-asset-ops! repo asset-ops*))))
 
 
+(sr/defkeyword :persist-op?
+  "tx-meta option, generate rtc ops when not nil (default true)")
 
-(defn listen-db-to-generate-ops
-  [repo conn]
-  (d/listen! conn :gen-ops
-             (fn [{:keys [tx-data tx-meta db-before db-after]}]
-               (when (:persist-op? tx-meta true)
-                 (generate-rtc-ops repo db-before db-after tx-data)))))
-
-(comment
-  (defn listen-db-to-batch-txs
-   [conn]
-   (d/listen! conn :batch-txs
-              (fn [{:keys [tx-data]}]
-                (when (worker-state/batch-tx-mode?)
-                  (worker-state/conj-batch-txs! tx-data))))))
-
-(defn sync-db-to-main-thread
-  [repo conn]
-  (d/listen! conn :sync-db
-             (fn [{:keys [tx-meta] :as tx-report}]
-               (let [{:keys [pipeline-replace? from-disk?]} tx-meta
-                     result (worker-pipeline/invoke-hooks repo conn tx-report (worker-state/get-context))
-                     tx-report' (or (:tx-report result) tx-report)]
-                 (when-not pipeline-replace?
-                   (let [data (merge
-                               {:request-id (:request-id tx-meta)
-                                :repo repo
-                                :tx-data (:tx-data tx-report')
-                                :tx-meta tx-meta}
-                               (dissoc result :tx-report))]
-                     (worker-util/post-message :sync-db-changes data))
-
-                   (when-not from-disk?
-                     (p/do!
-                      (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
-                            ^js wo (worker-state/get-worker-object)]
-                        (when wo
-                          (when (seq blocks-to-remove-set)
-                            (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
-                          (when (seq blocks-to-add)
-                            (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))))))
-
-(defn listen-to-db-changes!
-  [repo conn]
-  (d/unlisten! conn :gen-ops)
-  (d/unlisten! conn :sync-db)
-  (when (op-mem-layer/rtc-db-graph? repo)
-    (listen-db-to-generate-ops repo conn)
-    ;; (rtc-db-listener/listen-db-to-batch-txs conn)
-    )
-
-  (sync-db-to-main-thread repo conn))
+(defmethod db-listener/listen-db-changes :gen-rtc-ops
+  [_ {:keys [_tx-data tx-meta db-before db-after
+             repo id->attr->datom same-entity-datoms-coll]}]
+  (when (and (op-mem-layer/rtc-db-graph? repo)
+             (:persist-op? tx-meta true))
+    (generate-rtc-ops repo db-before db-after same-entity-datoms-coll id->attr->datom)))

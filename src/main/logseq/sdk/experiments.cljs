@@ -2,13 +2,34 @@
   (:require [frontend.state :as state]
             [frontend.components.page :as page]
             [frontend.util :as util]
+            [camel-snake-kebab.core :as csk]
+            [goog.object :as gobj]
             [frontend.handler.plugin :as plugin-handler]))
+
+(defn- jsx->clj
+  [^js obj]
+  (if (js/goog.isObject obj)
+    (-> (fn [result k]
+          (let [v (gobj/get obj k)
+                k (keyword (csk/->kebab-case k))]
+            (if (= "function" (goog/typeOf v))
+              (assoc result k v)
+              (assoc result k (jsx->clj v)))))
+      (reduce {} (gobj/getKeys obj)))
+    obj))
 
 (defn ^:export cp_page_editor
   [^js props]
-  (let [p (some-> props (aget "page"))]
-    (when-let [e (page/get-page-entity p)]
-      (page/page-blocks-cp (state/get-current-repo) e {}))))
+  (let [props1 (jsx->clj props)
+        page-name (some-> props1 :page)
+        config (some-> props1 (dissoc :page))]
+    (when-let [_entity (page/get-page-entity page-name)]
+      (page/page
+        {:repo (state/get-current-repo)
+         :page-name page-name
+         :preview? false
+         :sidebar? false
+         :config config}))))
 
 (defn ^:export register_fenced_code_renderer
   [pid type ^js opts]
@@ -34,7 +55,7 @@
   (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
     (plugin-handler/register-daemon-renderer
       (keyword pid) key (reduce #(assoc %1 %2 (aget opts (name %2))) {}
-                           [:before :subs :render]))))
+                          [:before :subs :render]))))
 
 (defn ^:export register_extensions_enhancer
   [pid type enhancer]

@@ -150,10 +150,11 @@
         z-index: 1;
       }
 
-      .form-input {
+      .ui__input {
         background-color: var(--ls-primary-background-color);
         padding: 6px 7px 5px 29px;
-        opacity: .5;
+        opacity: .7;
+        height: 30px;
 
         &:focus {
           background-color: var(--ls-secondary-background-color);
@@ -963,8 +964,7 @@ html[data-theme='dark'] {
 }
 
 .ui__dialog-content[label=plugin-settings-modal] {
-  @apply w-auto lg:max-w-5xl p-0 gap-0
-  top-[10%] translate-y-0 !animate-none;
+  @apply w-auto lg:max-w-5xl p-0 gap-0;
 }
 
 .ui__dialog-content[label=plugins-dashboard] {

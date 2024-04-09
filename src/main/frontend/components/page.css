@@ -416,7 +416,7 @@ html.is-native-ios {
   }
 
   .ls-new-property {
-    @apply mt-1;
+    @apply mt-[3px];
   }
 
   &.is-collapsed {
@@ -451,6 +451,12 @@ html.is-native-ios {
 
   .info-title {
     @apply relative min-h-[28px] flex items-center pl-1;
+  }
+
+  .ls-properties-area {
+    &:has(.property-pair) {
+      @apply pt-2.5;
+    }
   }
 }
 

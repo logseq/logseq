@@ -356,13 +356,6 @@ jobs:
         run: yarn run postinstall
         working-directory: ./static/node_modules/dugite/
 
-      - name: Prepare Code Sign
-        if: ${{ github.repository == 'logseq/logseq' }}
-        run: |
-          [IO.File]::WriteAllBytes($(Get-Location).Path + "\codesign.pfx", [Convert]::FromBase64String($env:CERTIFICATE))
-        env:
-          CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
-
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
@@ -550,9 +543,33 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
       SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
+  codesign-windows:
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
+    needs: [ build-windows ]
+    runs-on: [self-hosted, macos, token]
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win64-builds
+          path: ./builds
+
+      - name: Sign Windows Executable
+        run: |
+          ls -lah ./builds
+          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.digicert.com ./builds/*.exe
+        env:
+          PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-win64-signed-builds
+          path: builds
+
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows, build-android, e2e-test ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
     runs-on: ubuntu-20.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -579,10 +596,10 @@ jobs:
           name: logseq-linux-arm64-builds
           path: ./
 
-      - name: Download The Windows Artifact
+      - name: Download The Windows Artifact (Signed)
         uses: actions/download-artifact@v3
         with:
-          name: logseq-win64-builds
+          name: logseq-win64-signed-builds
           path: ./
 
       - name: Download Android Artifacts
@@ -625,7 +642,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, build-windows, e2e-test ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
     runs-on: ubuntu-20.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -655,7 +672,7 @@ jobs:
       - name: Download The Windows Artifact
         uses: actions/download-artifact@v3
         with:
-          name: logseq-win64-builds
+          name: logseq-win64-signed-builds
           path: ./
 
       - name: Download Android Artifacts

@@ -27,6 +27,19 @@
     (println cmd)
     (shell cmd)))
 
+(defn test
+  "Run tests. Pass args through to cmd 'yarn cljs:run-test'"
+  [& args]
+  (shell "yarn cljs:test")
+  (apply shell "yarn cljs:run-test" args))
+
+(defn lint-and-test
+  "Run all lint tasks, then run tests(exclude testcases tagged by :long).
+  pass args through to cmd 'yarn cljs:run-test'"
+  []
+  (lint)
+  (test "-e" "long"))
+
 
 (defn gen-malli-kondo-config
   "Generate clj-kondo type-mismatch config from malli schema

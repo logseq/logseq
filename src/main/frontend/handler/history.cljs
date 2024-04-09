@@ -1,13 +1,14 @@
 (ns ^:no-doc frontend.handler.history
-  (:require [frontend.db :as db]
+  (:require [frontend.config :as config]
+            [frontend.db :as db]
+            [frontend.db.transact :as db-transact]
             [frontend.handler.editor :as editor]
+            [frontend.handler.route :as route-handler]
             [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.handler.route :as route-handler]
             [goog.dom :as gdom]
-            [promesa.core :as p]
-            [frontend.db.transact :as db-transact]))
+            [promesa.core :as p]))
 
 (defn restore-cursor!
   [{:keys [last-edit-block container pos end-pos]} undo?]
@@ -41,20 +42,28 @@
 
 (defn undo!
   [e]
-  (when (db-transact/request-finished?)
-    (util/stop e)
-    (p/do!
-     (state/set-state! [:editor/last-replace-ref-content-tx (state/get-current-repo)] nil)
-     (editor/save-current-block!)
-     (state/clear-editor-action!)
-     (state/set-block-op-type! nil)
-     (let [cursor-state (undo-redo/undo)]
-       (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state]))))))
+  (when-let [repo (state/get-current-repo)]
+    (when (db-transact/request-finished?)
+      (util/stop e)
+      (p/do!
+       (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
+       (editor/save-current-block!)
+       (state/clear-editor-action!)
+       (state/set-block-op-type! nil)
+       (if (config/db-based-graph? repo)
+         (let [^js worker @state/*db-worker]
+           (.undo worker repo))
+         (let [cursor-state (undo-redo/undo)]
+           (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state]))))))))
 
 (defn redo!
   [e]
-  (when (db-transact/request-finished?)
-    (util/stop e)
-    (state/clear-editor-action!)
-    (let [cursor-state (undo-redo/redo)]
-      (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))))
+  (when-let [repo (state/get-current-repo)]
+    (when (db-transact/request-finished?)
+      (util/stop e)
+      (state/clear-editor-action!)
+      (if (config/db-based-graph? repo)
+        (let [^js worker @state/*db-worker]
+          (.redo worker repo))
+        (let [cursor-state (undo-redo/redo)]
+          (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))))))

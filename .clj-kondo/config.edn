@@ -126,6 +126,7 @@
              frontend.worker.handler.page worker-page
              frontend.worker.handler.page.rename worker-page-rename
              frontend.worker.handler.file.util wfu
+             frontend.worker.batch-tx batch-tx
              lambdaisland.glogi log
              logseq.common.config common-config
              logseq.common.graph common-graph
@@ -182,6 +183,7 @@
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.test.helper/with-reset cljs.test/async
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
-           frontend.react/defc clojure.core/defn}
+           frontend.react/defc clojure.core/defn
+           frontend.schema-register/defkeyword cljs.spec.alpha/def}
  :skip-comments true
  :output {:progress true}}

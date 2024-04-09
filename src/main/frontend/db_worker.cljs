@@ -17,13 +17,13 @@
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.rtc.core :as rtc-core]
-            [frontend.worker.rtc.db-listener :as rtc-db-listener]
+            [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.snapshot :as rtc-snapshot]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.undo-redo]
+            [frontend.worker.undo-redo :as undo-redo]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -176,9 +176,7 @@
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb! repo)]
-          (rtc-db-listener/listen-to-db-changes! repo conn)
-          (db-listener/listen-db-changes! repo conn))
-        ))))
+          (db-listener/listen-db-changes! repo conn))))))
 
 (defn- iter->vec [iter]
   (when iter
@@ -588,7 +586,6 @@
          (try
            (let [state (<? (rtc-core/<init-state token false))
                  r (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))]
-             (rtc-db-listener/listen-db-to-generate-ops repo conn)
              (p/resolve! d r))
            (catch :default e
              (worker-util/post-message :notification
@@ -676,6 +673,17 @@
   (rtc-get-block-update-log
    [_this block-uuid]
    (transit/write transit-w (rtc-core/get-block-update-log (uuid block-uuid))))
+
+  (undo
+   [_this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (undo-redo/undo repo conn))
+   nil)
+
+  (redo
+   [_this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (undo-redo/redo repo conn)))
 
   (keep-alive
    [_this]

@@ -225,13 +225,14 @@ html[data-theme=dark] {
   }
 }
 
-.ui__dialog-content {
-  &[side=start] {
-    @apply translate-y-0 top-[56px];
-  }
+.ui__dialog-overlay {
+  &[data-align=start],
+  &[data-align=top] {
+    @apply !items-start;
 
-  &[side=end] {
-
+    .ui__dialog-content {
+      @apply top-20;
+    }
   }
 }
 

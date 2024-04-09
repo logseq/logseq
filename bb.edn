@@ -136,6 +136,12 @@
   dev:lint
   logseq.tasks.dev/lint
 
+  dev:test
+  logseq.tasks.dev/test
+
+  dev:lint-and-test
+  logseq.tasks.dev/lint-and-test
+
   dev:gen-malli-kondo-config
   logseq.tasks.dev/gen-malli-kondo-config
 
