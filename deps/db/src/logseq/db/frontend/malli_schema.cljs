@@ -170,7 +170,7 @@
      [:block/schema
       {:optional true}
       [:map
-       [:properties {:optional true} [:vector :uuid]]]]]
+       [:properties {:optional true} [:vector property-ident]]]]]
     class-attrs
     page-attrs
     page-or-block-attrs)))
