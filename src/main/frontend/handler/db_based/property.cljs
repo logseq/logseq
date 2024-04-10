@@ -230,6 +230,10 @@
         _ (assert (keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
         property (db/entity property-id)
+        v (if (and (uuid? v)
+                   (= :entity (get-in property [:block/schema :type])))
+            (:db/id (db/entity [:block/uuid v]))
+            v)
         k-name (:block/original-name property)
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
@@ -759,7 +763,10 @@
 (defn batch-set-property-closed-value!
   [block-ids db-ident closed-value]
   (let [repo (state/get-current-repo)
-        closed-value-id (:block/uuid (pu/get-closed-value-entity-by-name db-ident closed-value))]
+        property (db/entity db-ident)
+        ref-type? (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+        closed-value-entity (pu/get-closed-value-entity-by-name db-ident closed-value)
+        closed-value-id (if ref-type? (:db/id closed-value-entity) (:block/uuid closed-value-entity))]
     (when closed-value-id
       (batch-set-property! repo
                            block-ids

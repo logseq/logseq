@@ -50,16 +50,18 @@
    the hidden page and closed value blocks as needed"
   [db-ident prop-name property {:keys [translate-closed-page-value-fn property-attributes]
                                 :or {translate-closed-page-value-fn identity}}]
-  (let [property-schema (assoc (:block/schema property)
+  (let [ref-type? (contains? (disj db-property-type/ref-property-types :entity)
+                             (get-in property [:block/schema :type]))
+        property-schema (assoc (:block/schema property)
                                :values
-                               (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                               (if ref-type?
                                  (mapv translate-closed-page-value-fn (:closed-values property))
                                  (mapv :uuid (:closed-values property))))
         property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:original-name prop-name})
                            property-attributes)
         hidden-tx
         ;; closed ref types don't have hidden tx
-        (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+        (if ref-type?
           []
           (let [page-tx (build-property-hidden-page property)
                 closed-value-blocks-tx
