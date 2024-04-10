@@ -576,8 +576,10 @@
 
        (contains? #{:page :date} type)
        (when value
-         (page-cp {:disable-preview? true
-                   :hide-close-button? true} value))
+         (rum/with-key
+           (page-cp {:disable-preview? true
+                    :hide-close-button? true} value)
+           (:db/id value)))
 
        closed-values?
        (closed-value-item value opts)
