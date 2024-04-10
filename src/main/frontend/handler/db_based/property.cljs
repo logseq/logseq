@@ -16,6 +16,7 @@
             [malli.util :as mu]
             [malli.error :as me]
             [logseq.common.util.page-ref :as page-ref]
+            [datascript.core :as d]
             [datascript.impl.entity :as e]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
@@ -95,7 +96,7 @@
   [property {:keys [type cardinality]}]
   (let [ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
-        type-data (when (and type (sqlite-util/property-ref-types type)) ; type changes
+        type-data (when (and type (db-property-type/ref-property-types type)) ; type changes
                     {:db/ident ident
                      :db/valueType :db.type/ref
                      :db/cardinality cardinality})]
@@ -103,14 +104,36 @@
         {:db/ident ident
          :db/cardinality cardinality})))
 
+(defn- ensure-unique-db-ident
+  "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
+  unique by adding a suffix with a unique number e.g. :db-ident-1 :db-ident-2"
+  [db db-ident]
+  (if (d/entity db db-ident)
+    (let [existing-idents
+          (d/q '[:find [?ident ...]
+                 :in $ ?ident-name
+                 :where
+                 [?b :db/ident ?ident]
+                 [(str ?ident) ?str-ident]
+                 [(clojure.string/starts-with? ?str-ident ?ident-name)]]
+               db
+               (str db-ident "-"))
+          new-ident (if-let [max-num (->> existing-idents
+                                          (keep #(parse-long (string/replace-first (str %) (str db-ident "-") "")))
+                                          (apply max))]
+                      (keyword (namespace db-ident) (str (name db-ident) "-" (inc max-num)))
+                      (keyword (namespace db-ident) (str (name db-ident) "-1")))]
+      new-ident)
+    db-ident))
+
 (defn upsert-property!
-  "Updates property for property-id if it exists or creates a new property.
-   Two main  ways to create a property are to set property-id to a qualified keyword
-   or to set it to nil and pass :property-name as an option"
+  "Updates property if property-id is given. Otherwise creates a property
+   with the given property-id or :property-name option. When a property is created
+   it is ensured to have a unique :db/ident"
   [repo property-id schema {:keys [property-name properties]}]
-  (let [db-ident (or property-id (db-property/user-property-ident-from-name property-name))]
+  (let [db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
-    (if-let [property (db/entity db-ident)]
+    (if-let [property (and (qualified-keyword? property-id) (db/entity db-ident))]
       (let [tx-data (->>
                      (conj
                       [(cond->
@@ -129,10 +152,12 @@
                                     :property-id (:db/id property)
                                     :many->one? many->one?}))
       (let [k-name (or (and property-name (name property-name))
-                       (name property-id))]
+                       (name property-id))
+            db-ident' (ensure-unique-db-ident (db/get-db repo) db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
-        (db/transact! repo [(sqlite-util/build-new-property db-ident schema {:original-name k-name})]
+        (db/transact! repo
+                      [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
                       {:outliner-op :new-property})))))
 
 (defn validate-property-value
@@ -202,9 +227,6 @@
 (defn set-block-property!
   [repo block-eid property-id v {:keys [property-name] :as opts}]
   (let [block-eid (->eid block-eid)
-        property-id (if (string? property-id)
-                      (db-property/user-property-ident-from-name property-id)
-                      property-id)
         _ (assert (keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
         property (db/entity property-id)
@@ -267,19 +289,26 @@
   [repo class-uuid property-id]
   (when-let [class (db/entity repo [:block/uuid class-uuid])]
     (when (contains? (:block/type class) "class")
-      (let [[db-ident property]
+      (let [[db-ident property options]
             ;; strings come from user
             (if (string? property-id)
               (if-let [ent (db/entity [:block/original-name property-id])]
-                [(:db/ident ent) ent]
-                [(db-property/user-property-ident-from-name property-id) nil])
-              [property-id (db/entity property-id)])
+                [(:db/ident ent) ent {}]
+                ;; creates ident beforehand b/c needed in later transact and this avoids
+                ;; making this whole fn async for now
+                [(ensure-unique-db-ident
+                  (db/get-db (state/get-current-repo))
+                  (db-property/create-user-property-ident-from-name property-id))
+                 nil
+                 {:property-name property-id}])
+              [property-id (db/entity property-id) {}])
             property-type (get-in property [:block/schema :type])
-            _ (upsert-property! repo db-ident
+            _ (upsert-property! repo
+                                db-ident
                                 (cond-> (:block/schema property)
                                   (some? property-type)
                                   (assoc :type property-type))
-                                {})]
+                                options)]
         (db/transact! repo
                       [[:db/add (:db/id class) :class/schema.properties db-ident]]
                       {:outliner-op :save-block})))))
@@ -291,7 +320,7 @@
       (when-let [property (db/entity repo property-id)]
         (when-not (ldb/built-in-class-property? class property)
           (db/transact! repo [[:db/retract (:db/id class) :class/schema.properties property-id]]
-            {:outliner-op :save-block}))))))
+                        {:outliner-op :save-block}))))))
 
 (defn class-set-schema!
   [repo class-uuid schema]
@@ -339,24 +368,23 @@
       (let [txs (mapcat
                  (fn [eid]
                    (when-let [block (db/entity eid)]
-                     (when (get block property-id)
-                       (let [value (get block property-id)
-                             block-value? (and (= :default (get-in property [:block/schema :type] :default))
-                                               (uuid? value))
-                             property-block (when block-value? (db/entity [:block/uuid value]))
-                             retract-blocks-tx (when (and property-block
-                                                          (some? (get property-block :logseq.property/created-from-block))
-                                                          (some? (get property-block :logseq.property/created-from-property)))
-                                                 (let [txs-state (atom [])]
-                                                   (outliner-core/delete-block repo
-                                                                               (db/get-db false)
-                                                                               txs-state
-                                                                               (outliner-core/->Block property-block)
-                                                                               {:children? true})
-                                                   @txs-state))]
-                         (concat
-                          [[:db/retract (:db/id block) property-id]]
-                          retract-blocks-tx)))))
+                     (let [value (get block property-id)
+                           block-value? (and (= :default (get-in property [:block/schema :type] :default))
+                                             (uuid? value))
+                           property-block (when block-value? (db/entity [:block/uuid value]))
+                           retract-blocks-tx (when (and property-block
+                                                        (some? (get property-block :logseq.property/created-from-block))
+                                                        (some? (get property-block :logseq.property/created-from-property)))
+                                               (let [txs-state (atom [])]
+                                                 (outliner-core/delete-block repo
+                                                                             (db/get-db false)
+                                                                             txs-state
+                                                                             (outliner-core/->Block property-block)
+                                                                             {:children? true})
+                                                 @txs-state))]
+                       (concat
+                        [[:db/retract (:db/id block) property-id]]
+                        retract-blocks-tx))))
                  block-eids)]
         (when (seq txs)
           (db/transact! repo txs {:outliner-op :save-block}))))))
@@ -616,17 +644,25 @@
                                                (dissoc schema :description))}
                                icon
                                (assoc :logseq.property/icon icon)))]
-                          (let [page (get-property-hidden-page property)
-                                page-tx (when-not (e/entity? page) page)
-                                page-id [:block/uuid (:block/uuid page)]
-                                new-block (db-property-util/build-closed-value-block block-id resolved-value page-id property {:icon icon
-                                                                                                                               :description description})
-                                new-values (vec (conj closed-values block-id))]
-                            (->> (cons page-tx [new-block
-                                                {:db/id (:db/id property)
-                                                 :block/schema (merge {:type property-type}
-                                                                      (assoc property-schema :values new-values))}])
-                                 (remove nil?))))]
+                          (let [hidden-tx
+                                (if (contains? db-property-type/ref-property-types (:type property-schema))
+                                  []
+                                  (let [page (get-property-hidden-page property)
+                                        new-block (db-property-util/build-closed-value-block block-id resolved-value [:block/uuid (:block/uuid page)]
+                                                                                             property {:icon icon
+                                                                                                       :description description})]
+                                    (cond-> []
+                                      (not (e/entity? page))
+                                      (conj page)
+                                      true
+                                      (conj new-block))))
+                                new-values (if (contains? db-property-type/ref-property-types (:type property-schema))
+                                             (vec (conj closed-values (:block/uuid (db/entity resolved-value))))
+                                             (vec (conj closed-values block-id)))]
+                            (conj hidden-tx
+                                  {:db/id (:db/id property)
+                                   :block/schema (merge {:type property-type}
+                                                        (assoc property-schema :values new-values))})))]
             {:block-id block-id
              :tx-data tx-data}))))))
 

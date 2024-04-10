@@ -19,7 +19,6 @@
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.window :as window-handler]
             [frontend.handler.jump :as jump-handler]
-            [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -359,9 +358,6 @@
 
    :editor/zoom-out                         {:binding (if mac? "mod+," "alt+left")
                                              :fn      editor-handler/zoom-out!}
-
-   :editor/toggle-undo-redo-mode            {:binding []
-                                             :fn      undo-redo/toggle-undo-redo-mode!}
 
    :editor/toggle-number-list               {:binding "t n"
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
@@ -722,7 +718,6 @@
      (-> (build-category-map
            [:editor/insert-link
             :editor/select-all-blocks
-            :editor/toggle-undo-redo-mode
             :editor/toggle-number-list
             :editor/undo
             :editor/redo
@@ -888,7 +883,6 @@
      :shortcut.category/toggle
      [:ui/toggle-help
       :editor/toggle-open-blocks
-      :editor/toggle-undo-redo-mode
       :editor/toggle-number-list
       :ui/toggle-wide-mode
       :ui/toggle-document-mode

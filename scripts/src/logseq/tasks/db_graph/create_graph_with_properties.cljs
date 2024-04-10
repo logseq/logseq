@@ -40,10 +40,10 @@
                     :uuid (random-uuid))
          [10 42 (rand 100)])
    :page-closed
-   (mapv #(hash-map :value [:page %])
+   (mapv #(hash-map :value [:page-uuid %])
          ["page 1" "page 2" "page 3"])
    :date-closed
-   (mapv #(hash-map :value [:page (date-journal-title %)])
+   (mapv #(hash-map :value [:page-uuid (date-journal-title %)])
          dates)})
 
 (defn- create-init-data
@@ -59,9 +59,8 @@
                                (:uuid val))
         random-page-closed-value #(let [val (-> closed-values-config % rand-nth :value)]
                                     (swap! closed-values assoc % (second val))
-                                    val)
-        ;; TODO: Remove default when page-closed/date-closed re-enabled
-        get-closed-value #(get @closed-values % "")]
+                                    [:page (second val)])
+        get-closed-value #(get @closed-values %)]
     {:pages-and-blocks
      ;; Journals
      [{:page
@@ -89,12 +88,11 @@
         {:block/content "number-closed property block" :properties {:number-closed (random-closed-value :number-closed)}}
         {:block/content "page property block" :properties {:page [:page "page 1"]}}
         {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
-        ;; TODO: Fix page-closed and date-closed
-        #_{:block/content "page-closed property block" :properties {:page-closed (random-page-closed-value :page-closed)}}
+        {:block/content "page-closed property block" :properties {:page-closed (random-page-closed-value :page-closed)}}
         {:block/content "date property block" :properties {:date [:page (date-journal-title today)]}}
         {:block/content "date-many property block" :properties {:date-many #{[:page (date-journal-title today)]
                                                                              [:page (date-journal-title yesterday)]}}}
-        #_{:block/content "date-closed property block" :properties {:date-closed (random-page-closed-value :date-closed)}}]}
+        {:block/content "date-closed property block" :properties {:date-closed (random-page-closed-value :date-closed)}}]}
       {:page {:block/original-name "Block Property Queries"}
        :blocks
        [{:block/content "{{query (property :default \"haha\")}}"}
@@ -111,7 +109,7 @@
         {:block/content (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
         {:block/content (str "{{query (property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
         {:block/content (str "{{query (property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
-        #_{:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
+        {:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
 
       ;; Property values
       ;; Needs to be before page property pages b/c they are referenced by them
@@ -134,11 +132,11 @@
       {:page {:block/name "number-closed page" :properties {:number-closed (random-closed-value :number-closed)}}}
       {:page {:block/name "page page" :properties {:page [:page "page 1"]}}}
       {:page {:block/name "page-many page" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}}
-      #_{:page {:block/name "page-closed page" :properties {:page-closed (random-page-closed-value :page-closed)}}}
+      {:page {:block/name "page-closed page" :properties {:page-closed (random-page-closed-value :page-closed)}}}
       {:page {:block/name "date page" :properties {:date [:page (date-journal-title today)]}}}
       {:page {:block/name "date-many page" :properties {:date-many #{[:page (date-journal-title today)]
                                                                      [:page (date-journal-title yesterday)]}}}}
-      #_{:page {:block/name "date-closed page" :properties {:date-closed (random-page-closed-value :date-closed)}}}
+      {:page {:block/name "date-closed page" :properties {:date-closed (random-page-closed-value :date-closed)}}}
       {:page {:block/original-name "Page Property Queries"}
        :blocks
        [{:block/content "{{query (page-property :default \"yolo\")}}"}
@@ -166,7 +164,7 @@
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:closed-values (closed-values-config (keyword (str (name %) "-closed")))
                                 :block/schema {:type %}})
-                      [:default :url :number #_:page #_:date]))
+                      [:default :url :number :page :date]))
           (into {}))}))
 
 (def spec

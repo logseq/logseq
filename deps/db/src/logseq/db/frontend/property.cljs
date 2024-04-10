@@ -277,12 +277,16 @@
                 e))) values)))
 
 ;; TODO: db ident should obey clojure's rules for keywords
-(defn user-property-ident-from-name
-  "Makes a user property :db/ident from a name by sanitizing the given name"
+(defn create-user-property-ident-from-name
+  "Creates a user property :db/ident from a name by sanitizing the given name.
+
+   NOTE: Only use this when creating a db-ident for a property name. Using this
+   in read-only contexts like querying can result in db-ident conflicts"
   [property-name]
   (let [n (-> (string/lower-case property-name)
-              (string/replace #"^:\s*" "")
+              (string/replace #"(^:\s*|\s*:$)" "")
               (string/replace #"\s*:\s*$" "")
+              (string/replace-first #"^\d+" "")
               (string/replace " " "-")
               (string/replace "#" "")
               (string/trim))]

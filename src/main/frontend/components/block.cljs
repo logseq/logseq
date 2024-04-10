@@ -910,9 +910,7 @@
           (let [title [:span.block-ref
                        (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                       block nil (:block/uuid block)
-                                      (:slide? config)
-                                      false
-                                      (atom nil))]
+                                      (:slide? config))]
                 inner (if label
                         (->elem
                          :span.block-ref
@@ -1808,11 +1806,14 @@
                        (state/toggle-collapsed-block! uuid)
                        (if collapsed?
                          (editor-handler/expand-block! uuid)
-                         (editor-handler/collapse-block! uuid))))}
+                         (editor-handler/collapse-block! uuid)))
+                     ;; debug config context
+                     (when (and (state/developer-mode?) (.-metaKey event))
+                       (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show?
-                                    (or collapsed?
-                                        (editor-handler/collapsable? uuid {:semantic? true})))
-                               (and collapsed? (or order-list? config/publishing?)))
+                                 (or collapsed?
+                                   (editor-handler/collapsable? uuid {:semantic? true})))
+                             (and collapsed? (or order-list? config/publishing?)))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
@@ -2505,7 +2506,7 @@
              (assoc state
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
-  [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count? selected?]}]
+  [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
@@ -2536,7 +2537,9 @@
                                                    (p/do!
                                                     (state/set-editor-op! :escape)
                                                     (editor-handler/save-block! (editor-handler/get-state) value)
-                                                    (editor-handler/escape-editing select?))))}
+                                                    (editor-handler/escape-editing select?)
+                                                    (some-> config :on-escape-editing
+                                                            (apply [(str uuid) (= event :esc)])))))}
                                      edit-input-id
                                      config))]
           [:div.flex.flex-1.flex-row.gap-1.items-start
@@ -2550,15 +2553,15 @@
           [:div.flex.flex-row
            [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
             (ui/catch-error
-             (ui/block-error "Block Render Error:"
-                             {:content (:block/content block)
+              (ui/block-error "Block Render Error:"
+                {:content (:block/content block)
                               :section-attrs
                               {:on-click #(let [content (or (:block/original-name block)
                                                             (:block/content block))]
                                             (editor-handler/clear-selection!)
                                             (editor-handler/unhighlight-blocks!)
                                             (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
-             (block-content config block edit-input-id block-id slide? selected?))]
+              (block-content config block edit-input-id block-id slide?))]
 
            (when (and (not hide-block-refs-count?)
                       (not named?))

@@ -619,10 +619,10 @@
        :onEscapeKeyDown #(set-open! false)}
       [:div.property-select
        (case type
-         (:number :url :date :default)
+         (:number :url :default)
          (select block property select-opts' opts)
 
-         :page
+         (:page :date)
          (property-value-select-page block property select-opts' opts))]))))
 
 (defn- property-editing
@@ -756,7 +756,7 @@
                     (if (seq items)
                       (concat
                        (for [item items]
-                         (select-item property type item opts))
+                         (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
                        (when date?
                          [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing?

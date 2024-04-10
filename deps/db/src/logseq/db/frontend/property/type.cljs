@@ -12,7 +12,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :uuid :entity})
+  #{:keyword :map :coll :any :entity})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -24,6 +24,13 @@
 
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
+
+(def ref-property-types #{:page :date :entity})
+
+(assert (set/subset? ref-property-types
+                     (into internal-built-in-property-types
+                           user-built-in-property-types))
+        "All ref types are valid property types")
 
 (def ^:private user-built-in-allowed-schema-attributes
   "Map of types to their set of allowed :schema attributes"
@@ -70,11 +77,12 @@
   "Validates that the given existing closed value is valid"
   [db property type-validate-fn value]
   (boolean
-   (when-let [e (and (uuid? value)
-                     (d/entity db [:block/uuid value]))]
+   (when-let [e (if (uuid? value)
+                  (d/entity db [:block/uuid value])
+                  (d/entity db value))]
      (let [values (get-in property [:block/schema :values])]
        (and
-        (contains? (set values) value)
+        (contains? (set values) (:block/uuid e))
         (if (contains? (:block/type e) "closed value")
           (type-validate-fn (:value (:block/schema e)))
           ;; page uuids aren't closed value types
@@ -119,7 +127,6 @@
               entity?]
    ;; internal usage
    :keyword  keyword?
-   :uuid     uuid?
    :map      map?
    ;; coll elements are ordered as it's saved as a vec
    :coll     coll?

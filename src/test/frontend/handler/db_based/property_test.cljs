@@ -178,11 +178,13 @@
       (db-property-handler/class-add-property! repo c1id :user.property/property-2)
       ;; repeated adding property-2
       (db-property-handler/class-add-property! repo c1id :user.property/property-2)
-      (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
+      ;; add new property with same base db-ident as property-1
+      (db-property-handler/class-add-property! repo c1id ":property-1")
+      (is (= 3 (count (:class/schema.properties (db/entity (:db/id c1)))))))
 
     (testing "Class remove property"
       (db-property-handler/class-remove-property! repo c1id :user.property/property-1)
-      (is (= 1 (count (:class/schema.properties (db/entity (:db/id c1)))))))
+      (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
     (testing "Add classes to a block"
       (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
       (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
@@ -199,7 +201,7 @@
                         :class/parent (:db/id c2)}]))
       (db-property-handler/class-add-property! repo c2id :user.property/property-3)
       (db-property-handler/class-add-property! repo c2id :user.property/property-4)
-      (is (= 3 (count (:classes-properties
+      (is (= 4 (count (:classes-properties
                        (db-property-handler/get-block-classes-properties (:db/id (db/entity [:block/uuid fbid]))))))))))
 
 
@@ -252,6 +254,28 @@
         ;; expand property-1
         (db-property-handler/collapse-expand-property! repo fb property false)
         (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid]))))))))
+
+(deftest upsert-property!
+  (testing "Update an existing property"
+    (let [repo (state/get-current-repo)]
+      (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p0"})
+      (db-property-handler/upsert-property! repo :user.property/p0 {:type :default :cardinality :many} {})
+      (is (= :many (get-in (db/entity repo :user.property/p0) [:block/schema :cardinality])))))
+  (testing "Multiple properties that generate the same initial :db/ident"
+    (let [repo (state/get-current-repo)]
+      (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p1"})
+      (db-property-handler/upsert-property! repo nil {} {:property-name ":p1"})
+      (db-property-handler/upsert-property! repo nil {} {:property-name "1p1"})
+
+      (is (= {:block/name "p1" :block/original-name "p1" :block/schema {:type :default}}
+             (select-keys (db/entity repo :user.property/p1) [:block/name :block/original-name :block/schema]))
+          "Existing db/ident does not get modified")
+      (is (= ":p1"
+             (:block/original-name (db/entity repo :user.property/p1-1)))
+          "2nd property gets unique ident")
+      (is (= "1p1"
+             (:block/original-name (db/entity repo :user.property/p1-2)))
+          "3rd property gets unique ident"))))
 
 ;; template (TBD, template implementation not settle down yet)
 ;; property-create-new-block-from-template

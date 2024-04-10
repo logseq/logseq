@@ -307,7 +307,6 @@
       :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
       :whiteboard/last-persisted-at          {}
       :whiteboard/pending-tx-data            {}
-      :history/page-only-mode?               false
       :history/tx-before-editor-cursor       (atom nil)
       ;; db tx-id -> editor cursor
       :history/tx->editor-cursor             (atom {})

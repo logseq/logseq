@@ -8,6 +8,7 @@
             [datascript.impl.entity :as de]
             [datascript.core :as d]
             [cljs-bean.transit]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.property :as db-property]))
 
 (defonce db-version-prefix "logseq_db_")
@@ -65,8 +66,6 @@
                 (assoc :block/created-at updated-at))]
     block))
 
-(def property-ref-types #{:page :block :date :entity})
-
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts. Takes
    an optional map with following keys:
@@ -76,7 +75,7 @@
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
-                     (db-property/user-property-ident-from-name (name db-ident)))
+                     (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or original-name (name db-ident'))]
      (block-with-timestamps
       (cond->
@@ -92,7 +91,7 @@
         :db/cardinality (if (= :many (:cardinality prop-schema))
                           :db.cardinality/many
                           :db.cardinality/one)}
-        (contains? property-ref-types (:type prop-schema))
+        (contains? db-property-type/ref-property-types (:type prop-schema))
         (assoc :db/valueType :db.type/ref))))))
 
 

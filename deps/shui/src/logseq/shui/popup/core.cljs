@@ -196,4 +196,4 @@
     [:<>
      (for [config popups
            :when (and (map? config) (:id config))]
-       (x-popup config))]))
+       (rum/with-key (x-popup config) (:id config)))]))

@@ -17,7 +17,8 @@
             [frontend.db.async :as db-async]
             [frontend.state :as state]
             [promesa.core :as p]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
@@ -127,8 +128,7 @@
                                      {:on-change (fn [page]
                                                    (db-property-handler/replace-closed-value property
                                                                                              (:db/id page)
-                                                                                             (:db/id item)))})
-         ((:page-cp parent-opts) {:preview? false} item)]
+                                                                                             (:db/id item)))})]
 
         (and page? (:page-cp parent-opts))
         ((:page-cp parent-opts) {:preview? false} item)
@@ -184,7 +184,7 @@
    [:ol
     (for [value values]
       [:li (if (uuid? value)
-             (let [result (db/entity value)]
+             (let [result (db/entity [:block/uuid value])]
                (:block/original-name result))
              (str value))])]
    (ui/button
@@ -225,7 +225,9 @@
              (shui/popup-show! (.-target e)
                                (fn [{:keys [id]}]
                                  (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
-                                       values' (->> (map second values)
+                                       values' (->> (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                                                      (map #(:block/uuid (db/entity (second %))) values)
+                                                      (map second values))
                                                     (remove string/blank?)
                                                     (remove (set (get-in property [:block/schema :values])))
                                                     distinct)]
