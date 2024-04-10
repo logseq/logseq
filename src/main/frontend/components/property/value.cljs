@@ -536,15 +536,10 @@
           [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])))))
 
 (rum/defc closed-value-item < rum/reactive
-  {:init (fn [state]
-           (let [block-id (first (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) block-id :children? false))
-           state)}
   [value {:keys [page-cp inline-text icon?]}]
   (when value
-    (if (state/sub-async-query-loading value)
-      [:div.text-sm.opacity-70 "loading"]
-      (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+    (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
+      (when-let [block (db/sub-block (:db/id (db/entity eid)))]
         (let [value' (get-in block [:block/schema :value])
               icon (get block (pu/get-pid :logseq.property/icon))]
           (cond
@@ -612,16 +607,16 @@
                         (" " "Enter")
                         (do (set-open! true) (util/stop e))
                         :dune))}
-       (if (string/blank? value)
-         [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"]
-         (value-f)))
-      (shui/dropdown-menu-content
-        {:align "start"
-         :on-interact-outside #(set-open! false)
+      (if (string/blank? value)
+        [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"]
+        (value-f)))
+     (shui/dropdown-menu-content
+      {:align "start"
+       :on-interact-outside #(set-open! false)
        :onEscapeKeyDown #(set-open! false)}
       [:div.property-select
        (case type
-         (:number :url :default)
+         (:entity :number :url :default)
          (select block property select-opts' opts)
 
          (:page :date)
