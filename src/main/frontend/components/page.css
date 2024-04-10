@@ -391,7 +391,7 @@ html.is-native-ios {
 }
 
 .page-info {
-  @apply ml-[-10px] mb-[12px] border rounded-md;
+  @apply ml-[-10px] border rounded-md;
 
   &-inner {
     @apply py-2;
