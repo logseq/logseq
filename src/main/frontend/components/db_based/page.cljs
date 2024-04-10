@@ -174,7 +174,7 @@
             (or show-info? has-tags? has-properties?))
       [:div.page-info
        {:class (util/classnames [{:is-collapsed collapsed?}])}
-       [:div.py-2 {:class (if (or @*hover? (not collapsed?))
+       [:div.py-1 {:class (if (or @*hover? (not collapsed?))
                             "border rounded"
                             "border rounded border-transparent")}
         [:div.info-title.cursor
