@@ -17,8 +17,6 @@
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
-            [frontend.config :as config]
-            [frontend.modules.editor.undo-redo :as undo-redo]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -68,49 +66,53 @@
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
      (block-cp repo idx block)]))
 
-(rum/defc history-action-info
-  [[k v]]
-  (when v [:.ml-4 (ui/foldable
-                   [:div (str k)]
-                   [:.ml-4 (case k
-                             :tx-id
-                             [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str v)]]
+(comment
+  (rum/defc history-action-info
+   [[k v]]
+   (when v [:.ml-4 (ui/foldable
+                    [:div (str k)]
+                    [:.ml-4 (case k
+                              :tx-id
+                              [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str v)]]
 
-                             :blocks
-                             (map (fn [block]
-                                    [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
+                              :blocks
+                              (map (fn [block]
+                                     [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
 
-                             :txs
-                             (map (fn [[_ key val]]
-                                    (when val
-                                      [:pre.code.pre-wrap-white-space.bg-base-4
-                                       [:span.font-bold (str key) " "] (str val)])) v)
+                              :txs
+                              (map (fn [[_ key val]]
+                                     (when val
+                                       [:pre.code.pre-wrap-white-space.bg-base-4
+                                        [:span.font-bold (str key) " "] (str val)])) v)
 
-                             (map (fn [[key val]]
-                                    (when val
-                                      [:pre.code.pre-wrap-white-space.bg-base-4
-                                       [:span.font-bold (str key) " "] (str val)])) v))]
-                   {:default-collapsed? true})]))
+                              (map (fn [[key val]]
+                                     (when val
+                                       [:pre.code.pre-wrap-white-space.bg-base-4
+                                        [:span.font-bold (str key) " "] (str val)])) v))]
+                    {:default-collapsed? true})])))
 
-(rum/defc history-stack
-  [label stack]
-  [:.ml-4 (ui/foldable
-           [:div label " (" (count stack) ")"]
-           (map-indexed (fn [index item]
-                          [:.ml-4 (ui/foldable [:div (str index " " (-> item :tx-meta :outliner-op))]
-                                               (map history-action-info item)
-                                               {:default-collapsed? true})]) stack)
-           {:default-collapsed? true})])
+(comment
+  (rum/defc history-stack
+   [label stack]
+   [:.ml-4 (ui/foldable
+            [:div label " (" (count stack) ")"]
+            (map-indexed (fn [index item]
+                           [:.ml-4 (ui/foldable [:div (str index " " (-> item :tx-meta :outliner-op))]
+                                                (map history-action-info item)
+                                                {:default-collapsed? true})]) stack)
+            {:default-collapsed? true})]))
 
-(rum/defc history < rum/reactive
-  []
-  (let [state (undo-redo/get-state)
-        page-only-mode? (state/sub :history/page-only-mode?)]
-    [:div.ml-4
-     [:div.ml-3.font-bold (if page-only-mode? (t :right-side-bar/history-pageonly) (t :right-side-bar/history-global))]
-     [:div.p-4 [:.ml-4.mb-2
-                (history-stack (t :right-side-bar/history-undos) (rum/react (:undo-stack state)))
-                (history-stack (t :right-side-bar/history-redos) (rum/react (:redo-stack state)))]]]))
+(comment
+  (rum/defc history < rum/reactive
+   []
+  ;; (let [state (undo-redo/get-state)
+  ;;       page-only-mode? (state/sub :history/page-only-mode?)]
+  ;;   [:div.ml-4
+  ;;    [:div.ml-3.font-bold (if page-only-mode? (t :right-side-bar/history-pageonly) (t :right-side-bar/history-global))]
+  ;;    [:div.p-4 [:.ml-4.mb-2
+  ;;               (history-stack (t :right-side-bar/history-undos) (rum/react (:undo-stack state)))
+  ;;               (history-stack (t :right-side-bar/history-redos) (rum/react (:redo-stack state)))]]])
+   ))
 
 (defn build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
@@ -126,9 +128,9 @@
     [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
      (page/page-graph)]
 
-    :history
-    [[:.flex.items-center (ui/icon "history" {:class "text-md mr-2"}) (t :right-side-bar/history)]
-     (history)]
+    ;; :history
+    ;; [[:.flex.items-center (ui/icon "history" {:class "text-md mr-2"}) (t :right-side-bar/history)]
+    ;;  (history)]
 
     :block-ref
     #_:clj-kondo/ignore
@@ -457,11 +459,12 @@
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}
             "(Dev) RTC"]])
 
-        (when (and config/dev? (state/sub [:ui/developer-mode?]))
-          [:div.text-sm
-           [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-                                                                       (state/sidebar-add-block! repo "history" :history))}
-            (t :right-side-bar/history)]])]]
+        ;; (when (and config/dev? (state/sub [:ui/developer-mode?]))
+        ;;   [:div.text-sm
+        ;;    [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
+        ;;                                                                (state/sidebar-add-block! repo "history" :history))}
+        ;;     (t :right-side-bar/history)]])
+        ]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?

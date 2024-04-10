@@ -623,6 +623,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   getSelectedBlocks: () => Promise<Array<BlockEntity> | null>
 
+  clearSelectedBlocks: () => Promise<void>
+
   /**
    * get all blocks of the current page as a tree structure
    *

@@ -2574,7 +2574,10 @@
   "Select first or last block in viewpoint"
   [direction]
   (let [f (case direction :up last :down first)
-        block (->> (util/get-blocks-noncollapse)
+        container (if (some-> js/document.activeElement
+                        (.querySelector ".blocks-container"))
+                    js/document.activeElement js/document.body)
+        block (->> (util/get-blocks-noncollapse container)
                    (f))]
     (when block
       (util/scroll-to-block block)

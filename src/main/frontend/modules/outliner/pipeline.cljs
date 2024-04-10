@@ -1,21 +1,11 @@
 (ns frontend.modules.outliner.pipeline
-  (:require [frontend.config :as config]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.db.react :as react]
             [frontend.state :as state]
-            [frontend.modules.editor.undo-redo :as undo-redo]
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.history :as history]
             [frontend.util :as util]))
-
-(defn store-undo-data!
-  [{:keys [tx-meta] :as opts}]
-  (when-not config/test?
-    (when (or (:outliner/transact? tx-meta)
-              (:outliner-op tx-meta)
-              (:whiteboard/transact? tx-meta))
-      (undo-redo/listen-db-changes! opts))))
 
 (defn- get-tx-id
   [tx-report]
@@ -35,12 +25,12 @@
   (history/restore-app-state! app-state))
 
 (defn invoke-hooks
-  [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
+  [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
   ;; (prn :debug
   ;;      :request-id request-id
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
-  (let [{:keys [from-disk? new-graph? local-tx? undo? redo? initial-pages? end?]} tx-meta
+  (let [{:keys [from-disk? new-graph? undo? redo? initial-pages? end?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}
@@ -69,9 +59,6 @@
                            (concat update-blocks-fully-loaded tx-data))
                          tx-data)
               tx-report (d/transact! conn tx-data' tx-meta)]
-          (when local-tx?
-            (let [tx-id (get-tx-id tx-report)]
-              (store-undo-data! (assoc opts :tx-id tx-id))))
           (when-not (or undo? redo?)
             (update-current-tx-editor-cursor! tx-report)))
 

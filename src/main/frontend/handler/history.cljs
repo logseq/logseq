@@ -1,10 +1,8 @@
 (ns ^:no-doc frontend.handler.history
-  (:require [frontend.config :as config]
-            [frontend.db :as db]
+  (:require [frontend.db :as db]
             [frontend.db.transact :as db-transact]
             [frontend.handler.editor :as editor]
             [frontend.handler.route :as route-handler]
-            [frontend.modules.editor.undo-redo :as undo-redo]
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
@@ -29,15 +27,14 @@
 
 (defn restore-app-state!
   [state]
-  (when-not (:history/page-only-mode? @state/state)
-   (let [route-match (:route-match state)
-         current-route (:route-match @state/state)
-         prev-route-data (get-route-data route-match)
-         current-route-data (get-route-data current-route)]
-     (when (and (not= prev-route-data current-route-data)
-                prev-route-data)
-       (route-handler/redirect! prev-route-data))
-     (swap! state/state merge state))))
+  (let [route-match (:route-match state)
+        current-route (:route-match @state/state)
+        prev-route-data (get-route-data route-match)
+        current-route-data (get-route-data current-route)]
+    (when (and (not= prev-route-data current-route-data)
+               prev-route-data)
+      (route-handler/redirect! prev-route-data))
+    (swap! state/state merge state)))
 
 (defn undo!
   [e]
@@ -49,11 +46,8 @@
        (editor/save-current-block!)
        (state/clear-editor-action!)
        (state/set-block-op-type! nil)
-       (if (config/db-based-graph? repo)
-         (let [^js worker @state/*db-worker]
-           (.undo worker repo))
-         (let [cursor-state (undo-redo/undo)]
-           (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state]))))))))
+       (let [^js worker @state/*db-worker]
+         (.undo worker repo))))))
 
 (defn redo!
   [e]
@@ -61,8 +55,5 @@
     (when (db-transact/request-finished?)
       (util/stop e)
       (state/clear-editor-action!)
-      (if (config/db-based-graph? repo)
-        (let [^js worker @state/*db-worker]
-          (.redo worker repo))
-        (let [cursor-state (undo-redo/redo)]
-          (state/set-state! :ui/restore-cursor-state (select-keys cursor-state [:editor-cursor :app-state])))))))
+      (let [^js worker @state/*db-worker]
+        (.redo worker repo)))))

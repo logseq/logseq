@@ -57,6 +57,10 @@
       (if-let [page-uuid (page-uuids (second val))]
         [:block/uuid page-uuid]
         (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
+      :page-uuid
+      (if-let [page-uuid (page-uuids (second val))]
+        page-uuid
+        (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
       :block
       (or (block-uuids (second val))
           (throw (ex-info (str "No uuid for block '" (second val) "'") {:name (second val)})))
@@ -68,7 +72,7 @@
   (->> properties
        (map
         (fn [[prop-name val]]
-          [(db-property/user-property-ident-from-name (name prop-name))
+          [(db-property/create-user-property-ident-from-name (name prop-name))
             ;; set indicates a :many value
            (if (set? val)
              (set (map #(translate-property-value % uuid-maps) val))
@@ -105,7 +109,7 @@
 (defn- build-property-refs [properties property-db-ids]
   (mapv
    (fn [prop-name]
-     (db-property/user-property-ident-from-name (name prop-name)))
+     (db-property/create-user-property-ident-from-name (name prop-name)))
    (keys properties)))
 
 (def current-db-id (atom 0))
@@ -168,13 +172,13 @@
                            (mapcat
                             (fn [[prop-name]]
                               (if (get-in properties [prop-name :closed-values])
-                                (let [db-ident (db-property/user-property-ident-from-name (name prop-name))]
+                                (let [db-ident (db-property/create-user-property-ident-from-name (name prop-name))]
                                   (db-property-util/build-closed-values
                                    db-ident
                                    prop-name
                                    (assoc (get properties prop-name) :db/ident db-ident)
                                    {:translate-closed-page-value-fn
-                                    #(hash-map :block/uuid (translate-property-value (:value %) uuid-maps))
+                                    #(translate-property-value (:value %) uuid-maps)
                                     :property-attributes
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
