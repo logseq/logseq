@@ -87,6 +87,10 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (def ^:private undo-ops-validator (m/validator [:sequential undo-op-schema]))
 
+(def ^:dynamic *undo-redo-info-for-test*
+  "record undo-op info when running-test"
+  nil)
+
 (def ^:private entity-map-pull-pattern
   [:block/uuid
    {:block/left [:block/uuid]}
@@ -201,42 +205,44 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-not block-entity ;; this block shouldn't exist now
       (when-let [left-entity (d/entity @conn [:block/uuid (:block/left block-entity-map)])]
         (let [sibling? (not= (:block/left block-entity-map) (:block/parent block-entity-map))]
-          (outliner-tx/transact!
-           {:gen-undo-op? false
-            :outliner-op :insert-blocks
-            :transact-opts {:repo repo
-                            :conn conn}}
-           (outliner-core/insert-blocks! repo conn
-                                         [(cond-> {:block/uuid block-uuid
-                                                   :block/content (:block/content block-entity-map)
-                                                   :block/format :markdown}
-                                            (:block/created-at block-entity-map)
-                                            (assoc :block/created-at (:block/created-at block-entity-map))
+          (some->>
+           (outliner-tx/transact!
+            {:gen-undo-op? false
+             :outliner-op :insert-blocks
+             :transact-opts {:repo repo
+                             :conn conn}}
+            (outliner-core/insert-blocks! repo conn
+                                          [(cond-> {:block/uuid block-uuid
+                                                    :block/content (:block/content block-entity-map)
+                                                    :block/format :markdown}
+                                             (:block/created-at block-entity-map)
+                                             (assoc :block/created-at (:block/created-at block-entity-map))
 
-                                            (:block/updated-at block-entity-map)
-                                            (assoc :block/updated-at (:block/updated-at block-entity-map))
+                                             (:block/updated-at block-entity-map)
+                                             (assoc :block/updated-at (:block/updated-at block-entity-map))
 
-                                            (seq (:block/tags block-entity-map))
-                                            (assoc :block/tags (mapv (partial vector :block/uuid)
-                                                                     (:block/tags block-entity-map))))]
-                                         left-entity {:sibling? sibling? :keep-uuid? true}))
-          :push-undo-redo)))))
+                                             (seq (:block/tags block-entity-map))
+                                             (assoc :block/tags (mapv (partial vector :block/uuid)
+                                                                      (:block/tags block-entity-map))))]
+                                          left-entity {:sibling? sibling? :keep-uuid? true}))
+           (conj [:push-undo-redo])))))))
 
 (defmethod reverse-apply-op ::insert-block
   [op conn repo]
   (let [[_ {:keys [block-uuid]}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when (empty? (:block/_parent block-entity)) ;if have children, skip
-        (outliner-tx/transact!
-         {:gen-undo-op? false
-          :outliner-op :delete-blocks
-          :transact-opts {:repo repo
-                          :conn conn}}
-         (outliner-core/delete-blocks! repo conn
-                                       (common-config/get-date-formatter (worker-state/get-config repo))
-                                       [block-entity]
-                                       {:children? false}))
-        :push-undo-redo))))
+        (some->>
+         (outliner-tx/transact!
+          {:gen-undo-op? false
+           :outliner-op :delete-blocks
+           :transact-opts {:repo repo
+                           :conn conn}}
+          (outliner-core/delete-blocks! repo conn
+                                        (common-config/get-date-formatter (worker-state/get-config repo))
+                                        [block-entity]
+                                        {:children? false}))
+         (conj [:push-undo-redo]))))))
 
 (defmethod reverse-apply-op ::move-block
   [op conn repo]
@@ -244,13 +250,14 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when-let [left-entity (d/entity @conn [:block/uuid block-origin-left])]
         (let [sibling? (not= block-origin-left block-origin-parent)]
-          (outliner-tx/transact!
-           {:gen-undo-op? false
-            :outliner-op :move-blocks
-            :transact-opts {:repo repo
-                            :conn conn}}
-           (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))
-          :push-undo-redo)))))
+          (some->>
+           (outliner-tx/transact!
+            {:gen-undo-op? false
+             :outliner-op :move-blocks
+             :transact-opts {:repo repo
+                             :conn conn}}
+            (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))
+           (conj [:push-undo-redo])))))))
 
 (defmethod reverse-apply-op ::update-block
   [op conn repo]
@@ -258,15 +265,16 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when (normal-block? block-entity)
         (let [new-block (assoc block-entity :block/content block-origin-content)]
-          (outliner-tx/transact!
-           {:gen-undo-op? false
-            :outliner-op :save-block
-            :transact-opts {:repo repo
-                            :conn conn}}
-           (outliner-core/save-block! repo conn
-                                      (common-config/get-date-formatter (worker-state/get-config repo))
-                                      new-block))
-          :push-undo-redo)))))
+          (some->>
+           (outliner-tx/transact!
+            {:gen-undo-op? false
+             :outliner-op :save-block
+             :transact-opts {:repo repo
+                             :conn conn}}
+            (outliner-core/save-block! repo conn
+                                       (common-config/get-date-formatter (worker-state/get-config repo))
+                                       new-block))
+           (conj [:push-undo-redo])))))))
 
 (defn undo
   [repo conn]
@@ -274,8 +282,10 @@ when undo this op, this original entity-map will be transacted back into db")
     (let [redo-ops-to-push (transient [])]
       (batch-tx/with-batch-tx-mode conn
         (doseq [op ops]
-          (let [rev-op (reverse-op @conn op)]
-            (when (= :push-undo-redo (reverse-apply-op op conn repo))
+          (let [rev-op (reverse-op @conn op)
+                r (reverse-apply-op op conn repo)]
+            (when (= :push-undo-redo (first r))
+              (some-> *undo-redo-info-for-test* (reset! {:op op :tx (second r)}))
               (conj! redo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! redo-ops-to-push))]
         (push-redo-ops repo (cons boundary rev-ops)))
@@ -291,8 +301,10 @@ when undo this op, this original entity-map will be transacted back into db")
     (let [undo-ops-to-push (transient [])]
       (batch-tx/with-batch-tx-mode conn
         (doseq [op ops]
-          (let [rev-op (reverse-op @conn op)]
-            (when (= :push-undo-redo (reverse-apply-op op conn repo))
+          (let [rev-op (reverse-op @conn op)
+                r (reverse-apply-op op conn repo)]
+            (when (= :push-undo-redo (first r))
+              (some-> *undo-redo-info-for-test* (reset! {:op op :tx (second r)}))
               (conj! undo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! undo-ops-to-push))]
         (push-undo-ops repo (cons boundary rev-ops)))

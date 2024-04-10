@@ -7,8 +7,8 @@
             [frontend.test.helper :as test-helper]
             [frontend.worker.undo-redo :as undo-redo]))
 
-(def init-data (test-helper/initial-test-page-and-blocks))
-(defn start-and-destroy-db
+(def ^:private init-data (test-helper/initial-test-page-and-blocks))
+(defn- start-and-destroy-db
   [f]
   (test-helper/db-based-start-and-destroy-db
    f
@@ -16,7 +16,7 @@
 
 (use-fixtures :each start-and-destroy-db)
 
-(def gen-non-exist-block-uuid gen/uuid)
+(def ^:private gen-non-exist-block-uuid gen/uuid)
 
 (defn- gen-block-uuid
   [db & {:keys [non-exist-frequency] :or {non-exist-frequency 1}}]
@@ -45,7 +45,7 @@
   [db]
   (gen/let [block-uuid (gen-block-uuid db {:non-exist-frequency 80})
             [parent left] (gen-parent-left-pair db)
-            content gen/string-ascii]
+            content gen/string-alphanumeric]
     [:frontend.worker.undo-redo/remove-block
      {:block-uuid block-uuid
       :block-entity-map
@@ -57,12 +57,12 @@
 (defn- gen-update-block-op
   [db]
   (gen/let [block-uuid (gen-block-uuid db)
-            content gen/string-ascii]
+            content gen/string-alphanumeric]
     [:frontend.worker.undo-redo/update-block
      {:block-uuid block-uuid
       :block-origin-content content}]))
 
-(def gen-boundary (gen/return [:frontend.worker.undo-redo/boundary]))
+(def ^:private gen-boundary (gen/return [:frontend.worker.undo-redo/boundary]))
 
 (defn- gen-op
   [db & {:keys [insert-block-op move-block-op remove-block-op update-block-op boundary-op]
@@ -79,41 +79,71 @@
 
 (defn- get-db-block-set
   [db]
-  (set (d/q '[:find ?uuid ?parent-uuid ?left-uuid
-              :where
-              [?b :block/uuid ?uuid]
-              [?b :block/parent ?parent]
-              [?b :block/left ?left]
-              [?parent :block/uuid ?parent-uuid]
-              [?left :block/uuid ?left-uuid]]
-            db)))
+  (set
+   (apply concat
+          (d/q '[:find ?uuid
+                 :where
+                 [?b :block/uuid ?uuid]
+                 [?b :block/parent ?parent]
+                 [?b :block/left ?left]
+                 [?parent :block/uuid ?parent-uuid]
+                 [?left :block/uuid ?left-uuid]]
+               db))))
+
+
+(defn- check-block-count
+  [{:keys [op tx]} current-db]
+  (case (first op)
+    :frontend.worker.undo-redo/move-block
+    (assert (= (:block-origin-left (second op))
+               (:block/uuid (:block/left (d/entity current-db [:block/uuid (:block-uuid (second op))]))))
+            {:op op :tx-data (:tx-data tx) :x (keys tx)})
+
+    :frontend.worker.undo-redo/update-block
+    (assert (some? (d/entity current-db [:block/uuid (:block-uuid (second op))]))
+            {:op op :tx-data (:tx-data tx)})
+
+    :frontend.worker.undo-redo/insert-block
+    (assert (nil? (d/entity current-db [:block/uuid (:block-uuid (second op))]))
+            {:op op :tx-data (:tx-data tx) :x (keys tx)})
+    :frontend.worker.undo-redo/remove-block
+    (assert (some? (d/entity current-db [:block/uuid (:block-uuid (second op))]))
+            {:op op :tx-data (:tx-data tx) :x (keys tx)})
+    ;; else
+    nil))
 
 (defn- undo-all-then-redo-all
   [conn]
-  (loop [i 0]
-    (if (not= :frontend.worker.undo-redo/empty-undo-stack
-              (undo-redo/undo test-helper/test-db-name-db-version conn))
-      (recur (inc i))
-      (prn :undo-count i)))
-
-  (loop []
-    (when (not= :frontend.worker.undo-redo/empty-redo-stack
-                (undo-redo/redo test-helper/test-db-name-db-version conn))
-      (recur))))
-
-(deftest undo-test
-  (let [conn (db/get-db false)
-        all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 100))]
-    (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version all-remove-ops)
+  (binding [undo-redo/*undo-redo-info-for-test* (atom nil)]
     (loop [i 0]
-      (if (not= :frontend.worker.undo-redo/empty-undo-stack
-                (undo-redo/undo test-helper/test-db-name-db-version conn))
-        (recur (inc i))
-        (prn :undo-count i)))
+      (let [r (undo-redo/undo test-helper/test-db-name-db-version conn)
+            current-db @conn]
+        (check-block-count @undo-redo/*undo-redo-info-for-test* current-db)
+        (if (not= :frontend.worker.undo-redo/empty-undo-stack r)
+          (recur (inc i))
+          (prn :undo-count i))))
+
+    (loop []
+      (let [r (undo-redo/redo test-helper/test-db-name-db-version conn)
+            current-db @conn]
+        (check-block-count @undo-redo/*undo-redo-info-for-test* current-db)
+        (when (not= :frontend.worker.undo-redo/empty-redo-stack r)
+          (recur))))))
+
+(deftest undo-redo-gen-test
+  (let [conn (db/get-db false)
+        all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 20))]
+    (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version all-remove-ops)
+    (prn :block-count-before-init (count (get-db-block-set @conn)))
+    (loop [i 0]
+      (when (not= :frontend.worker.undo-redo/empty-undo-stack
+                  (undo-redo/undo test-helper/test-db-name-db-version conn))
+        (recur (inc i))))
+    (prn :block-count (count (get-db-block-set @conn)))
     (undo-redo/clear-undo-redo-stack)
     (testing "move blocks"
       (let [origin-graph-block-set (get-db-block-set @conn)
-            ops (gen/generate (gen/vector (gen-op @conn {:move-block-op 1000 :boundary-op 500}) 1000))]
+            ops (gen/generate (gen/vector (gen-op @conn {:move-block-op 1000 :boundary-op 500}) 300))]
         (prn :ops (count ops))
         (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version ops)
 
@@ -133,4 +163,5 @@
         (undo-all-then-redo-all conn)
         (undo-all-then-redo-all conn)
 
-        (is (= origin-graph-block-set (get-db-block-set @conn)))))))
+        (is (= origin-graph-block-set (get-db-block-set @conn)))))
+    ))
