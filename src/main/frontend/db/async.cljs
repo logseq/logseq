@@ -16,7 +16,6 @@
             [cljs-time.core :as t]
             [cljs-time.format :as tf]
             [logseq.db :as ldb]
-            [clojure.string :as string]
             [logseq.db.frontend.property :as db-property]))
 
 (def <q db-async-util/<q)
