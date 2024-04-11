@@ -17,6 +17,15 @@
   (let [page-name (state/get-current-page)]
     (:db/id (db/get-page page-name))))
 
+(defn get-latest-edit-page-id
+  "Fetch the editing page id. If there is an edit-input-id set, we are probably still
+   on editing mode"
+  []
+  (or
+    (get-in (first (state/get-editor-args)) [:block :block/page :db/id])
+    ;; not found
+    (get-current-page-id)))
+
 (defn get-page-file-rpath
   "Gets the file path of a page. If no page is given, detects the current page.
 Returns nil if no file path is found or no page is detected or given"

@@ -104,8 +104,6 @@
  :right-side-bar/switch-theme         "پوسته"
  :right-side-bar/contents             "محتوا"
  :right-side-bar/page-graph           "گراف برگه"
- :right-side-bar/history-global       "سراسری"
- :right-side-bar/history-pageonly     "فقط برگه"
  :right-side-bar/block-ref            "ارجاعات بلوک"
  :right-side-bar/graph-view           "نمای گراف"
  :right-side-bar/all-pages            "همه برگه‌ها"

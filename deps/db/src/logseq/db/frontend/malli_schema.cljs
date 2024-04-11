@@ -172,7 +172,7 @@
      [:block/schema
       {:optional true}
       [:map
-       [:properties {:optional true} [:vector :uuid]]]]]
+       [:properties {:optional true} [:vector property-ident]]]]]
     class-attrs
     page-attrs
     page-or-block-attrs)))
@@ -330,7 +330,8 @@
   [[:db/type :string]
    [:schema/version :int]
    [:graph/uuid :string]
-   [:graph/local-tx :string]])
+   [:graph/local-tx :string]
+   [:editor/tx-batch-mode? :boolean]])
 
 (def db-ident-key-val
   "A key-val map consists of a :db/ident and a specific key val"

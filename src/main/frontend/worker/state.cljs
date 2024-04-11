@@ -4,11 +4,11 @@
             [logseq.common.config :as common-config]
             [frontend.schema-register :include-macros true :as sr]))
 
-(sr/defkeyword :undo/repo->undo-stack
-  "{repo [first-op, second-op, ...]}")
+(sr/defkeyword :undo/repo->pege-block-uuid->undo-ops
+  "{repo {<page-block-uuid> [op1 op2 ...]}}")
 
-(sr/defkeyword :undo/repo->undo-stack
-  "{repo [first-op, second-op, ...]}")
+(sr/defkeyword :undo/repo->pege-block-uuid->redo-ops
+  "{repo {<page-block-uuid> [op1 op2 ...]}}")
 
 (defonce *state (atom {:worker/object nil
 
@@ -19,13 +19,13 @@
                        :config {}
                        :git/current-repo nil
 
-                       :tx/batch-processing? false
-                       :tx/batch-txs nil
+                       :batch/txs []
+                       :batch/db-before nil
 
                        :rtc/downloading-graph? false
 
-                       :undo/repo->undo-stack (atom {})
-                       :undo/repo->redo-stack (atom {})}))
+                       :undo/repo->pege-block-uuid->undo-ops (atom {})
+                       :undo/repo->pege-block-uuid->redo-ops (atom {})}))
 
 (defonce *rtc-ws-url (atom nil))
 
