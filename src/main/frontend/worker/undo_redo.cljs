@@ -139,10 +139,18 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (def ^:private apply-conj-vec (partial apply (fnil conj [])))
 
+(comment
+  (def ^:private op-count-hard-limit 3000)
+  (def ^:private op-count-limit 2000))
+
 (defn- push-undo-ops
-  [repo ops]
-  (assert (undo-ops-validator ops) ops)
-  (swap! (:undo/repo->undo-stack @worker-state/*state) update repo apply-conj-vec ops))
+  [repo page-block-uuid ops]
+  (assert (and (undo-ops-validator ops)
+               (uuid? page-block-uuid))
+          {:ops ops :page-block-uuid page-block-uuid})
+  (swap! (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
+         update-in [repo page-block-uuid]
+         apply-conj-vec ops))
 
 (defn- pop-ops-helper
   [stack]
@@ -164,32 +172,38 @@ when undo this op, this original entity-map will be transacted back into db")
     [ops (subvec (vec stack) 0 i)]))
 
 (defn- pop-undo-ops
-  [repo]
-  (let [repo->undo-stack (:undo/repo->undo-stack @worker-state/*state)
-        undo-stack (@repo->undo-stack repo)
+  [repo page-block-uuid]
+  (assert (uuid? page-block-uuid) page-block-uuid)
+  (let [repo->pege-block-uuid->undo-ops (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
+        undo-stack (get-in @repo->pege-block-uuid->undo-ops [repo page-block-uuid])
         [ops undo-stack*] (pop-ops-helper undo-stack)]
-    (swap! repo->undo-stack assoc repo undo-stack*)
+    (swap! repo->pege-block-uuid->undo-ops assoc-in [repo page-block-uuid] undo-stack*)
     ops))
 
 (defn- empty-undo-stack?
-  [repo]
-  (empty? (@(:undo/repo->undo-stack @worker-state/*state) repo)))
+  [repo page-block-uuid]
+  (empty? (get-in @(:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) [repo page-block-uuid])))
 
 (defn- empty-redo-stack?
-  [repo]
-  (empty? (@(:undo/repo->redo-stack @worker-state/*state) repo)))
+  [repo page-block-uuid]
+  (empty? (get-in @(:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) [repo page-block-uuid])))
 
 (defn- push-redo-ops
-  [repo ops]
-  (assert (undo-ops-validator ops) ops)
-  (swap! (:undo/repo->redo-stack @worker-state/*state) update repo apply-conj-vec ops))
+  [repo page-block-uuid ops]
+  (assert (and (undo-ops-validator ops)
+               (uuid? page-block-uuid))
+          {:ops ops :page-block-uuid page-block-uuid})
+  (swap! (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
+         update-in [repo page-block-uuid]
+         apply-conj-vec ops))
 
 (defn- pop-redo-ops
-  [repo]
-  (let [repo->redo-stack (:undo/repo->redo-stack @worker-state/*state)
-        redo-stack (@repo->redo-stack repo)
-        [ops redo-stack*] (pop-ops-helper redo-stack)]
-    (swap! repo->redo-stack assoc repo redo-stack*)
+  [repo page-block-uuid]
+  (assert (uuid? page-block-uuid) page-block-uuid)
+  (let [repo->pege-block-uuid->redo-ops (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
+        undo-stack (get-in @repo->pege-block-uuid->redo-ops [repo page-block-uuid])
+        [ops undo-stack*] (pop-ops-helper undo-stack)]
+    (swap! repo->pege-block-uuid->redo-ops assoc-in [repo page-block-uuid] undo-stack*)
     ops))
 
 (defn- normal-block?
@@ -277,8 +291,8 @@ when undo this op, this original entity-map will be transacted back into db")
            (conj [:push-undo-redo])))))))
 
 (defn undo
-  [repo conn]
-  (if-let [ops (not-empty (pop-undo-ops repo))]
+  [repo page-block-uuid conn]
+  (if-let [ops (not-empty (pop-undo-ops repo page-block-uuid))]
     (let [redo-ops-to-push (transient [])]
       (batch-tx/with-batch-tx-mode conn
         (doseq [op ops]
@@ -288,16 +302,16 @@ when undo this op, this original entity-map will be transacted back into db")
               (some-> *undo-redo-info-for-test* (reset! {:op op :tx (second r)}))
               (conj! redo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! redo-ops-to-push))]
-        (push-redo-ops repo (cons boundary rev-ops)))
+        (push-redo-ops repo page-block-uuid (cons boundary rev-ops)))
       nil)
 
-    (when (empty-undo-stack? repo)
+    (when (empty-undo-stack? repo page-block-uuid)
       (prn "No further undo information")
       ::empty-undo-stack)))
 
 (defn redo
-  [repo conn]
-  (if-let [ops (not-empty (pop-redo-ops repo))]
+  [repo page-block-uuid conn]
+  (if-let [ops (not-empty (pop-redo-ops repo page-block-uuid))]
     (let [undo-ops-to-push (transient [])]
       (batch-tx/with-batch-tx-mode conn
         (doseq [op ops]
@@ -307,10 +321,10 @@ when undo this op, this original entity-map will be transacted back into db")
               (some-> *undo-redo-info-for-test* (reset! {:op op :tx (second r)}))
               (conj! undo-ops-to-push rev-op)))))
       (when-let [rev-ops (not-empty (persistent! undo-ops-to-push))]
-        (push-undo-ops repo (cons boundary rev-ops)))
+        (push-undo-ops repo page-block-uuid (cons boundary rev-ops)))
       nil)
 
-    (when (empty-redo-stack? repo)
+    (when (empty-redo-stack? repo page-block-uuid)
       (prn "No further redo information")
       ::empty-redo-stack)))
 
@@ -368,11 +382,21 @@ when undo this op, this original entity-map will be transacted back into db")
               {:block-uuid (:block/uuid entity-after)
                :block-origin-content (:block/content entity-before)}]]))))))
 
+(defn- find-page-block-uuid
+  [db-before db-after same-entity-datoms-coll]
+  (some
+   (fn [entity-datoms]
+     (when-let [e (ffirst entity-datoms)]
+       (or (some-> (d/entity db-before e) :block/page :block/uuid)
+           (some-> (d/entity db-after e) :block/page :block/uuid))))
+   same-entity-datoms-coll))
+
 (defn- generate-undo-ops
   [repo db-before db-after same-entity-datoms-coll id->attr->datom gen-boundary-op?]
-  (let [ops (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll)]
-    (when (seq ops)
-      (push-undo-ops repo (if gen-boundary-op? (cons boundary ops) ops)))))
+  (when-let [page-block-uuid (find-page-block-uuid db-before db-after same-entity-datoms-coll)]
+    (let [ops (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll)]
+      (when (seq ops)
+        (push-undo-ops repo page-block-uuid (if gen-boundary-op? (cons boundary ops) ops))))))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
@@ -385,8 +409,8 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defn clear-undo-redo-stack
   []
-  (reset! (:undo/repo->undo-stack @worker-state/*state) {})
-  (reset! (:undo/repo->redo-stack @worker-state/*state) {}))
+  (reset! (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) {})
+  (reset! (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) {}))
 
 (comment
 
