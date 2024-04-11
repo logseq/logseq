@@ -8,7 +8,7 @@
             [logseq.db.frontend.content :as db-content]
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.entity-plus]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.common-db :as sqlite-common-db]))
 
@@ -495,10 +495,7 @@
 
 (def page? sqlite-util/page?)
 
-(defn db-based-graph?
-  "Whether the current graph is db-only"
-  [db]
-  (= "db" (:db/type (d/entity db :logseq.kv/db-type))))
+
 
 ;; File based fns
 (defn get-namespace-pages
@@ -532,3 +529,5 @@
         (d/pull-many db
                      '[:db/id :block/name :block/original-name]
                      ids)))))
+
+(def db-based-graph? entity-plus/db-based-graph?)
