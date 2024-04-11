@@ -287,7 +287,7 @@
    NOTE: Only use this when creating a db-ident for a property name. Using this
    in read-only contexts like querying can result in db-ident conflicts"
   [property-name]
-  (let [n (-> (string/lower-case property-name)
+  (let [n (-> property-name
               (string/replace #"(^:\s*|\s*:$)" "")
               (string/replace #"\s*:\s*$" "")
               (string/replace-first #"^\d+" "")
