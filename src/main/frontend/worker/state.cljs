@@ -19,7 +19,6 @@
                        :config {}
                        :git/current-repo nil
 
-                       :tx/batch-processing? false
                        :tx/batch-txs nil
 
                        :rtc/downloading-graph? false

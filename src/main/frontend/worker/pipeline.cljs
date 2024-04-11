@@ -75,7 +75,7 @@
     (fix-db! conn tx-report)))
 
 (defn invoke-hooks
-  [repo conn tx-report context]
+  [repo conn {:keys [db-before db-after] :as tx-report} context]
   (when-not (:pipeline-replace? (:tx-meta tx-report))
     (let [tx-meta (:tx-meta tx-report)
           {:keys [from-disk? new-graph?]} tx-meta]
@@ -114,19 +114,20 @@
                             (d/store @conn)
                             tx-report))
               fix-tx-data (validate-and-fix-db! repo conn tx-report context)
-              batch-processing? (batch-tx/tx-batch-processing?)
-              batch-tx-data (batch-tx/get-batch-txs)
+              before-batch-mode? (:editor/tx-batch-mode? (d/entity db-before :logseq.kv/tx-batch-mode?))
+              now-batch-processing? (:editor/tx-batch-mode? (d/entity db-after :logseq.kv/tx-batch-mode?))
+              exiting-batch-mode? (and before-batch-mode? (not now-batch-processing?))
               full-tx-data (concat (:tx-data tx-report)
                                    fix-tx-data
                                    (:tx-data tx-report')
-                                   (when (and (not batch-processing?) (seq batch-tx-data))
-                                     batch-tx-data))
+                                   (when exiting-batch-mode?
+                                     (batch-tx/get-batch-txs)))
               final-tx-report (assoc tx-report'
                                      :tx-data full-tx-data
                                      :db-before (:db-before tx-report))
-              affected-query-keys (when-not (:importing? context)
+              affected-query-keys (when-not (or (:importing? context) now-batch-processing?)
                                     (worker-react/get-affected-queries-keys final-tx-report))]
-          (when batch-processing?
+          (when now-batch-processing?
             (batch-tx/conj-batch-txs! full-tx-data))
           {:tx-report final-tx-report
            :affected-keys affected-query-keys
