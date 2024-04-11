@@ -526,7 +526,6 @@
  :command.editor/select-parent                         "Выбрать родительский блок"
  :command.editor/zoom-in                               "Войти в редактируемый блок / Иначе вперёд"
  :command.editor/zoom-out                              "Выйти из редактируемого блока / Иначе назад"
- :command.editor/toggle-undo-redo-mode                 "Переключить режим Отменить/Повторить (глобально или только на странице)"
  :command.editor/toggle-number-list                    "Переключить формат нумерованного списка"
  :command.whiteboard/select                            "Инструмент 'Выделение'"
  :command.whiteboard/pan                               "Инструмент 'Рука'"
