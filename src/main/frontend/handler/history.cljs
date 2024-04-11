@@ -5,6 +5,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.page :as page-util]
             [goog.dom :as gdom]
             [promesa.core :as p]))
 
@@ -40,11 +41,7 @@
 (defn undo!
   [e]
   (when-let [repo (state/get-current-repo)]
-    ;; TODO:
-    ;; 1. :block/name will be non-unique, switch to other way to get current-page-uuid
-    ;; 2. (state/get-current-page) return wrong result when editing in right-sidebar
-    (when-let [current-page-uuid-str (some->> (state/get-current-page)
-                                              (vector :block/name)
+    (when-let [current-page-uuid-str (some->> (page-util/get-editing-page-id)
                                               db/entity
                                               :block/uuid
                                               str)]
@@ -61,8 +58,7 @@
 (defn redo!
   [e]
   (when-let [repo (state/get-current-repo)]
-    (when-let [current-page-uuid-str (some->> (state/get-current-page)
-                                              (vector :block/name)
+    (when-let [current-page-uuid-str (some->> (page-util/get-editing-page-id)
                                               db/entity
                                               :block/uuid
                                               str)]

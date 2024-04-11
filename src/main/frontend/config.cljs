@@ -25,8 +25,9 @@
 
 (reset! state/publishing? publishing?)
 
-(goog-define TEST false)
-(def test? TEST)
+(comment
+  (goog-define TEST false)
+  (def test? TEST))
 
 (def ENABLE-FILE-SYNC-PRODUCTION false)
 
