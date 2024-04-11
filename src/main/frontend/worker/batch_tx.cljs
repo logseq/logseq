@@ -5,20 +5,8 @@
             [frontend.schema-register :include-macros true :as sr]))
 
 
-(sr/defkeyword :tx/batch-processing?
-  "will not sync worker-db-changes to UI when true")
-
 (sr/defkeyword :tx/batch-txs
   "store all tx-data when batch-processing")
-
-
-(defn start-batch-tx-mode
-  []
-  (swap! worker-state/*state assoc :tx/batch-processing? true))
-
-(defn tx-batch-processing?
-  []
-  (:tx/batch-processing? @worker-state/*state))
 
 (defn get-batch-txs
   []
@@ -28,7 +16,6 @@
   [tx-data]
   (swap! worker-state/*state update :tx/batch-txs (fn [data] (into data tx-data))))
 
-(defn exit-batch-tx-mode
+(defn clear-batch-txs!
   []
-  (swap! worker-state/*state assoc :tx/batch-processing? false)
   (swap! worker-state/*state assoc :tx/batch-txs nil))
