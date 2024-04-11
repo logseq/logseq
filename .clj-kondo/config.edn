@@ -7,7 +7,7 @@
   ;; false positive with match/match and _
   frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
   frontend.db {:linters {:aliased-namespace-symbol
-                         {:exclude [frontend.db.conn frontend.db.react logseq.db.frontend.default]}}}}
+                         {:exclude [frontend.db.conn frontend.db.react]}}}}
 
  :linters
  {:path-invalid-construct/string-join {:level :info}

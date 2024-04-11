@@ -123,5 +123,10 @@
 (defn build-property-pair
   [db-ident value]
   (block-with-timestamps
-   {:property/pair-property db-ident
+   {:property/pair-property {:db/ident db-ident}
     db-ident value}))
+
+(defn mark-block-as-built-in
+  "Marks built-in blocks as built-in? including pages, classes, properties and closed values"
+  [block]
+  (assoc block :block/properties (build-property-pair :logseq.property/built-in? true)))
