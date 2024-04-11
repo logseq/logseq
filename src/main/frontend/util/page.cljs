@@ -20,12 +20,13 @@
     (or (and page-name (:db/id (db/entity [:block/name page-name])))
         (get-in (first (state/get-editor-args)) [:block :block/page :db/id]))))
 
-(defn get-editing-page-id
-  "Fetch the editing page id. If there is an edit-input-id set, we are probably still 
+(defn get-latest-edit-page-id
+  "Fetch the editing page id. If there is an edit-input-id set, we are probably still
    on editing mode"
   []
-  (if (or (state/editing?) (state/get-edit-input-id))
+  (or
     (get-in (first (state/get-editor-args)) [:block :block/page :db/id])
+    ;; not found
     (get-current-page-id)))
 
 (defn get-page-file-rpath

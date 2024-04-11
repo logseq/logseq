@@ -44,7 +44,7 @@
     (p/do!
      @*last-request
      (when-let [repo (state/get-current-repo)]
-       (when-let [current-page-uuid-str (some->> (page-util/get-editing-page-id)
+       (when-let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
                                                  db/entity
                                                  :block/uuid
                                                  str)]
@@ -64,7 +64,7 @@
     (p/do!
      @*last-request
      (when-let [repo (state/get-current-repo)]
-       (when-let [current-page-uuid-str (some->> (page-util/get-editing-page-id)
+       (when-let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
                                                  db/entity
                                                  :block/uuid
                                                  str)]
