@@ -415,19 +415,19 @@ when undo this op, this original entity-map will be transacted back into db")
 (comment
 
   (clear-undo-redo-stack)
-  (add-watch (:undo/repo->undo-stack @worker-state/*state)
+  (add-watch (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
              :xxx
              (fn [_ _ o n]
                (cljs.pprint/pprint {:k :undo
                                     :o o
                                     :n n})))
 
-  (add-watch (:undo/repo->redo-stack @worker-state/*state)
+  (add-watch (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
              :xxx
              (fn [_ _ o n]
                (cljs.pprint/pprint {:k :redo
                                     :o o
                                     :n n})))
 
-  (remove-watch (:undo/repo->undo-stack @worker-state/*state) :xxx)
-  (remove-watch (:undo/repo->redo-stack @worker-state/*state) :xxx))
+  (remove-watch (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) :xxx)
+  (remove-watch (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) :xxx))
