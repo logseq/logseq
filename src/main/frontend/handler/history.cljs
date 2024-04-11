@@ -40,21 +40,34 @@
 (defn undo!
   [e]
   (when-let [repo (state/get-current-repo)]
-    (when (db-transact/request-finished?)
-      (util/stop e)
-      (p/do!
-       (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
-       (editor/save-current-block!)
-       (state/clear-editor-action!)
-       (state/set-block-op-type! nil)
-       (let [^js worker @state/*db-worker]
-         (.undo worker repo))))))
+    ;; TODO:
+    ;; 1. :block/name will be non-unique, switch to other way to get current-page-uuid
+    ;; 2. (state/get-current-page) return wrong result when editing in right-sidebar
+    (when-let [current-page-uuid-str (some->> (state/get-current-page)
+                                              (vector :block/name)
+                                              db/entity
+                                              :block/uuid
+                                              str)]
+      (when (db-transact/request-finished?)
+        (util/stop e)
+        (p/do!
+         (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
+         (editor/save-current-block!)
+         (state/clear-editor-action!)
+         (state/set-block-op-type! nil)
+         (let [^js worker @state/*db-worker]
+           (.undo worker repo current-page-uuid-str)))))))
 
 (defn redo!
   [e]
   (when-let [repo (state/get-current-repo)]
-    (when (db-transact/request-finished?)
-      (util/stop e)
-      (state/clear-editor-action!)
-      (let [^js worker @state/*db-worker]
-        (.redo worker repo)))))
+    (when-let [current-page-uuid-str (some->> (state/get-current-page)
+                                              (vector :block/name)
+                                              db/entity
+                                              :block/uuid
+                                              str)]
+      (when (db-transact/request-finished?)
+        (util/stop e)
+        (state/clear-editor-action!)
+        (let [^js worker @state/*db-worker]
+          (.redo worker repo current-page-uuid-str))))))
