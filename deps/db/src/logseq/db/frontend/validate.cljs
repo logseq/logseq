@@ -70,8 +70,11 @@
   [db]
   (let [datoms (d/datoms db :eavt)
         ent-maps* (db-malli-schema/datoms->entity-maps datoms)
-        ent-maps (db-malli-schema/update-properties-in-ents (vals ent-maps*))
-        schema (update-schema db-malli-schema/DB db {:closed-schema? true})
+        ent-maps (vals ent-maps*)
+        schema db-malli-schema/DB
+        ;; TODO: Fix these fns
+        ;; ent-maps (db-malli-schema/update-properties-in-ents (vals ent-maps*))
+        ;; (update-schema db-malli-schema/DB db {:closed-schema? true})
         errors (->> ent-maps (m/explain schema) :errors)]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}

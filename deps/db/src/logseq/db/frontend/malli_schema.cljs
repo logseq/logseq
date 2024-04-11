@@ -336,6 +336,13 @@
    [:graph/local-tx :string]
    [:editor/tx-batch-mode? :boolean]])
 
+(def property-pair
+  [:map
+   [:property/pair-property :int]
+   [:block/tx-id {:optional true} :int]
+   [:block/created-at {:optional true} :int]
+   [:block/updated-at {:optional true} :int]])
+
 (def db-ident-key-val
   "A key-val map consists of a :db/ident and a specific key val"
   (into [:or]
@@ -348,7 +355,8 @@
 
 (def property-value-placeholder
   [:map
-   [:db/ident [:= :logseq.property/empty-placeholder]]])
+   [:db/ident [:= :logseq.property/empty-placeholder]]
+   [:block/tx-id {:optional true} :int]])
 
 (defn- type-set
   [d]
@@ -375,9 +383,11 @@
                           :file-block
                           (:block/uuid d)
                           :block
+                          (:property/pair-property d)
+                          :property-pair
                           (:asset/uuid d)
                           :asset-block
-                          (and (= 1 (count d)) {:db/ident :logseq.property/empty-placeholder})
+                          (= (:db/ident d) :logseq.property/empty-placeholder)
                           :property-value-placeholder
                           (:db/ident d)
                           :db-ident-key-value))}]
@@ -388,6 +398,7 @@
     :block block
     :file-block file-block
     :db-ident-key-value db-ident-key-val
+    :property-pair property-pair
     :asset-block asset-block
     :property-value-placeholder property-value-placeholder}))
 
