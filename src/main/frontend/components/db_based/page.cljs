@@ -15,7 +15,8 @@
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [clojure.set :as set]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.db.frontend.property :as db-property]))
 
 (rum/defc page-properties < rum/reactive
   [page {:keys [mode configure?]}]
@@ -165,7 +166,8 @@
         class? (contains? types "class")
         collapsed? (not @*show-info?)
         has-tags? (seq (:block/tags page))
-        has-properties? (seq (remove #{:logseq.property/filters} (keys (:block/properties page))))
+        has-properties? (seq (remove (set (keys db-property/built-in-properties))
+                                     (keys (:block/properties page))))
         show-info? (or @*show-info? has-tags? has-properties?)]
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
