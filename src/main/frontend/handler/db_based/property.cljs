@@ -27,6 +27,27 @@
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
 
+(defn- build-property-pair
+  [db-ident value]
+  (outliner-core/block-with-timestamps
+   {:property/pair-property db-ident
+    db-ident value}))
+
+(defn- build-property-value-tx-data
+  [block property-id value status?]
+  (when value
+    (let [property-pair-e (db-property/get-pair-e block property-id)
+          property-tx-data (outliner-core/block-with-updated-at
+                            (if property-pair-e
+                              {:db/id (:db/id property-pair-e)
+                               property-id value}
+                              {:db/id (:db/id block)
+                               :block/properties (build-property-pair property-id value)}))
+          block-tx-data (when status?
+                          {:db/id (:db/id block)
+                           :block/tags :logseq.class/task})]
+      [property-tx-data block-tx-data])))
+
 (defn built-in-validation-schemas
   "A frontend version of built-in-validation-schemas that adds the current database to
    schema fns"
@@ -193,11 +214,11 @@
               (notification/show! msg' :warning))
             (do
               (when-not tags-or-alias? (upsert-property! repo property-id (assoc property-schema :type property-type) {}))
-              (db/transact! repo
-                            [[:db/retract (:db/id block) property-id]
-                             {:db/id block-eid
-                              property-id values'}]
-                            {:outliner-op :save-block}))))))))
+              (let [pair-id (:db/id (db-property/get-pair-e block property-id))
+                    tx-data (concat
+                             [(when pair-id [:db/retractEnitty pair-id])]
+                             (build-property-value-tx-data block property-id values' false))]
+                (db/transact! repo tx-data {:outliner-op :save-block})))))))))
 
 (defn- resolve-tag
   "Change `v` to a tag's db id if v is a string tag, e.g. `#book`"
@@ -276,18 +297,14 @@
 
                                     :else
                                     v*)
-                          ;; don't modify maps
+                        ;; don't modify maps
                         new-value (if (or (sequential? new-value) (set? new-value))
                                     (if (= :coll property-type)
                                       (vec (remove string/blank? new-value))
                                       (set (remove string/blank? new-value)))
                                     new-value)
-                        block (cond->
-                               {:block/uuid (:block/uuid block)
-                                property-id new-value}
-                                status?
-                                (assoc :block/tags [:logseq.class/task]))]
-                    (db/transact! repo [block] {:outliner-op :save-block})))))))))))
+                        tx-data (build-property-value-tx-data block property-id new-value status?)]
+                    (db/transact! repo tx-data {:outliner-op :save-block})))))))))))
 
 (defn class-add-property!
   [repo class-uuid property-id]
@@ -356,10 +373,7 @@
                                         (catch :default e
                                           (notification/show! (str e) :error false)
                                           nil))]
-                          [{:block/uuid (:block/uuid block)
-                            property-id v*}
-                           (when status?
-                             [:db/add (:db/id block) :block/tags :logseq.class/task])]))))
+                          (build-property-value-tx-data block property-id v* status?)))))
                   block-eids)
                  (remove nil?))]
         (when (seq txs)
@@ -385,9 +399,11 @@
                                                                              txs-state
                                                                              (outliner-core/->Block property-block)
                                                                              {:children? true})
-                                                 @txs-state))]
+                                                 @txs-state))
+                           pair-id (:db/id (db-property/get-pair-e block property-id))]
                        (concat
-                        [[:db/retract (:db/id block) property-id]]
+                        (when pair-id
+                          [[:db/retractEntity pair-id]])
                         retract-blocks-tx))))
                  block-eids)]
         (when (seq txs)

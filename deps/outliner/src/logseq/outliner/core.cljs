@@ -69,7 +69,7 @@
     (when entity
       (block db entity))))
 
-(defn- block-with-timestamps
+(defn ^:api block-with-timestamps
   [block]
   (let [updated-at (common-util/time-ms)
         block (cond->

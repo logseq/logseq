@@ -241,6 +241,10 @@
   [repo coll db-ident]
   (get coll (get-pid repo db-ident)))
 
+(defn get-pair-e
+  [block db-ident]
+  (first (filter #(some? (db-ident %)) (:block/raw-properties block))))
+
 (defn get-block-property-value
   "Get the value of built-in block's property by its db-ident"
   [repo db block db-ident]
