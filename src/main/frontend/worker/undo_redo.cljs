@@ -1,6 +1,7 @@
 (ns frontend.worker.undo-redo
   "undo/redo related fns and op-schema"
-  (:require [datascript.core :as d]
+  (:require [clojure.set :as set]
+            [datascript.core :as d]
             [frontend.schema-register :include-macros true :as sr]
             [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [frontend.worker.db-listener :as db-listener]
@@ -82,6 +83,7 @@ when undo this op, this original entity-map will be transacted back into db")
       [:map
        [:block-uuid :uuid]
        [:block-origin-content {:optional true} :string]
+       [:block-origin-tags {:optional true} [:sequential :uuid]]
        ;; TODO: add more attrs
        ]]]]))
 
@@ -117,25 +119,30 @@ when undo this op, this original entity-map will be transacted back into db")
 
       ::insert-block
       [::remove-block
-       {:block-uuid block-uuid
+       {:block-uuid       block-uuid
         :block-entity-map (->block-entity-map db [:block/uuid block-uuid])}]
 
       ::move-block
       (let [b (d/entity db [:block/uuid block-uuid])]
         [::move-block
-         {:block-uuid block-uuid
-          :block-origin-left (:block/uuid (:block/left b))
+         {:block-uuid          block-uuid
+          :block-origin-left   (:block/uuid (:block/left b))
           :block-origin-parent (:block/uuid (:block/parent b))}])
 
       ::remove-block
       [::insert-block {:block-uuid block-uuid}]
 
       ::update-block
-      (let [block-origin-content (when (:block-origin-content (second op))
-                                   (:block/content (d/entity db [:block/uuid block-uuid])))]
+      (let [value-keys           (set (keys (second op)))
+            block-entity         (d/entity db [:block/uuid block-uuid])
+            block-origin-content (when (contains? value-keys :block-origin-content)
+                                   (:block/content block-entity))
+            block-origin-tags    (when (contains? value-keys :block-origin-tags)
+                                   (mapv :block/uuid (:block/tags block-entity)))]
         [::update-block
          (cond-> {:block-uuid block-uuid}
-           block-origin-content (assoc :block-origin-content block-origin-content))]))))
+           (some? block-origin-content) (assoc :block-origin-content block-origin-content)
+           (some? block-origin-tags)    (assoc :block-origin-tags block-origin-tags))]))))
 
 (def ^:private apply-conj-vec (partial apply (fnil conj [])))
 
@@ -208,7 +215,8 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defn- normal-block?
   [entity]
-  (and (:block/parent entity)
+  (and (:block/uuid entity)
+       (:block/parent entity)
        (:block/left entity)))
 
 (defmulti ^:private reverse-apply-op (fn [op _conn _repo] (first op)))
@@ -275,20 +283,30 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defmethod reverse-apply-op ::update-block
   [op conn repo]
-  (let [[_ {:keys [block-uuid block-origin-content]}] op]
+  (let [[_ {:keys [block-uuid block-origin-content block-origin-tags]}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when (normal-block? block-entity)
-        (let [new-block (assoc block-entity :block/content block-origin-content)]
-          (some->>
-           (outliner-tx/transact!
-            {:gen-undo-op? false
-             :outliner-op :save-block
-             :transact-opts {:repo repo
-                             :conn conn}}
-            (outliner-core/save-block! repo conn
-                                       (common-config/get-date-formatter (worker-state/get-config repo))
-                                       new-block))
-           (conj [:push-undo-redo])))))))
+        (let [db-id (:db/id block-entity)
+              _ (when (some? block-origin-tags)
+                  (d/transact! conn [[:db/retract db-id :block/tags]] {:gen-undo-op? false}))
+              new-block (cond-> block-entity
+                          block-origin-content
+                          (assoc :block/content block-origin-content)
+                          block-origin-tags
+                          (assoc :block/tags (some->> block-origin-tags
+                                                      (map (partial vector :block/uuid))
+                                                      (d/pull-many @conn [:db/id])
+                                                      (keep :db/id))))
+              r2 (outliner-tx/transact!
+                  {:gen-undo-op? false
+                   :outliner-op :save-block
+                   :transact-opts {:repo repo
+                                   :conn conn}}
+                  (outliner-core/save-block! repo conn
+                                             (common-config/get-date-formatter (worker-state/get-config repo))
+                                             new-block))]
+
+          (when r2 [:push-undo-redo r2]))))))
 
 (defn undo
   [repo page-block-uuid conn]
@@ -335,52 +353,63 @@ when undo this op, this original entity-map will be transacted back into db")
   (when-let [e (ffirst entity-datoms)]
     (let [attr->datom (id->attr->datom e)]
       (when (seq attr->datom)
-        (let [{[_ _ block-uuid _ add1?]    :block/uuid
-               [_ _ block-content _ add2?] :block/content
+        (let [updated-key-set (set (keys attr->datom))
+              {[_ _ block-uuid _ add1?]    :block/uuid
                [_ _ _ _ add3?]             :block/left
                [_ _ _ _ add4?]             :block/parent} attr->datom
               entity-before (d/entity db-before e)
-              entity-after (d/entity db-after e)]
-          (cond
-            (and (not add1?) block-uuid
-                 (normal-block? entity-before))
-            [[::remove-block
-              {:block-uuid (:block/uuid entity-before)
-               :block-entity-map (->block-entity-map db-before e)}]]
+              entity-after (d/entity db-after e)
+              ops
+              (cond
+                (and (not add1?) block-uuid
+                     (normal-block? entity-before))
+                [[::remove-block
+                  {:block-uuid (:block/uuid entity-before)
+                   :block-entity-map (->block-entity-map db-before e)}]]
 
-            (and add1? block-uuid
-                 (normal-block? entity-after))
-            [[::insert-block {:block-uuid (:block/uuid entity-after)}]]
+                (and add1? block-uuid
+                     (normal-block? entity-after))
+                [[::insert-block {:block-uuid (:block/uuid entity-after)}]]
 
-            (and (or add3? add4?)
-                 (normal-block? entity-after))
-            (let [origin-left (:block/left entity-before)
-                  origin-parent (:block/parent entity-before)
-                  origin-left-in-db-after (d/entity db-after [:block/uuid (:block/uuid origin-left)])
-                  origin-parent-in-db-after (d/entity db-after [:block/uuid (:block/uuid origin-parent)])
-                  origin-left-and-parent-available-in-db-after?
-                  (and origin-left-in-db-after origin-parent-in-db-after
-                       (if (not= (:block/uuid origin-left) (:block/uuid origin-parent))
-                         (= (:block/uuid (:block/parent origin-left))
-                            (:block/uuid (:block/parent origin-left-in-db-after)))
-                         true))]
-              (cond-> []
-                origin-left-and-parent-available-in-db-after?
-                (conj [::move-block
-                       {:block-uuid (:block/uuid entity-after)
-                        :block-origin-left (:block/uuid (:block/left entity-before))
-                        :block-origin-parent (:block/uuid (:block/parent entity-before))}])
+                (and (or add3? add4?)
+                     (normal-block? entity-after))
+                (let [origin-left (:block/left entity-before)
+                      origin-parent (:block/parent entity-before)
+                      origin-left-in-db-after (d/entity db-after [:block/uuid (:block/uuid origin-left)])
+                      origin-parent-in-db-after (d/entity db-after [:block/uuid (:block/uuid origin-parent)])
+                      origin-left-and-parent-available-in-db-after?
+                      (and origin-left-in-db-after origin-parent-in-db-after
+                           (if (not= (:block/uuid origin-left) (:block/uuid origin-parent))
+                             (= (:block/uuid (:block/parent origin-left))
+                                (:block/uuid (:block/parent origin-left-in-db-after)))
+                             true))]
+                  (when origin-left-and-parent-available-in-db-after?
+                    [[::move-block
+                      {:block-uuid (:block/uuid entity-after)
+                       :block-origin-left (:block/uuid (:block/left entity-before))
+                       :block-origin-parent (:block/uuid (:block/parent entity-before))}]])))
+              other-ops
+              (let [updated-attrs (seq (set/intersection
+                                        updated-key-set
+                                        #{:block/content :block/tags}))]
+                (when-let [update-block-op-value
+                           (when (normal-block? entity-after)
+                             (some->> updated-attrs
+                                      (keep
+                                       (fn [attr-name]
+                                         (case attr-name
+                                           :block/content
+                                           (when-let [origin-content (:block/content entity-before)]
+                                             [:block-origin-content origin-content])
 
-                (and add2? block-content)
-                (conj [::update-block
-                       {:block-uuid (:block/uuid entity-after)
-                        :block-origin-content (:block/content entity-before)}])))
+                                           :block/tags
+                                           [:block-origin-tags (mapv :block/uuid (:block/tags entity-before))]
 
-            (and add2? block-content
-                 (normal-block? entity-after))
-            [[::update-block
-              {:block-uuid (:block/uuid entity-after)
-               :block-origin-content (:block/content entity-before)}]]))))))
+                                           nil)))
+                                      seq
+                                      (into {:block-uuid (:block/uuid entity-after)})))]
+                  [[::update-block update-block-op-value]]))]
+          (concat ops other-ops))))))
 
 (defn- find-page-block-uuid
   [db-before db-after same-entity-datoms-coll]
