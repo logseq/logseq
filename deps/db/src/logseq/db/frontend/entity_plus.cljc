@@ -9,24 +9,37 @@
             #?(:org.babashka/nbb [datascript.db])
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.db.frontend.content :as db-content]
+            [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]))
+
+(defn db-based-graph?
+  "Whether the current graph is db-only"
+  [db]
+  (= "db" (:db/type (d/entity db :logseq.kv/db-type))))
 
 (def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity
   ([e k] (lookup-kv-then-entity e k nil))
   ([^Entity e k default-value]
-   (cond
-     (= k :block/raw-content)
+   (case k
+     :block/raw-content
      (lookup-entity e :block/content default-value)
 
-     ;; Should we keep this?
-     (= k :block/properties)
-     (lookup-entity e :block/properties
-                    (->> (into {} e)
-                         (filter (fn [[k _]] (db-property/property? k)))
-                         (into {})))
+     :block/raw-properties
+     (lookup-entity e :block/properties default-value)
 
-     (= k :block/content)
+     :block/properties
+     (let [db (.-db e)]
+       (if (db-based-graph? db)
+         (let [result (lookup-entity e k default-value)]
+           (->>
+            (map (fn [pair-e]
+                   (let [pid (:db/ident (lookup-entity pair-e :property/pair-property nil))]
+                     {pid (lookup-entity pair-e pid nil)})) result)
+            (into {})))
+         (lookup-entity e :block/properties nil)))
+
+     :block/content
      (or
       (get (.-kv e) k)
       (let [result (lookup-entity e k default-value)
@@ -37,9 +50,12 @@
            (db-content/special-id-ref->page-ref result (distinct (concat refs tags))))
          default-value)))
 
-     :else
      (or (get (.-kv e) k)
-         (lookup-entity e k default-value)))))
+         (if (and (db-property/property? k)
+                  (db-based-graph? (.-db e))
+                  (not (:property/pair-property e))) ; property pair will be direct access
+           (k (first (filter #(some? (k %)) (lookup-entity e :block/properties nil))))
+           (lookup-entity e k default-value))))))
 
 #?(:org.babashka/nbb
    nil
