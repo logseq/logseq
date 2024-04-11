@@ -22,13 +22,17 @@
   [^js props]
   (let [props1 (jsx->clj props)
         page-name (some-> props1 :page)
-        config (some-> props1 (dissoc :page))]
+        linked-refs? (some-> props1 :include-linked-refs)
+        unlinked-refs? (some-> props1 :include-unlinked-refs)
+        config (some-> props1 (dissoc :page :include-linked-refs :include-unlinked-refs))]
     (when-let [_entity (page/get-page-entity page-name)]
       (page/page
         {:repo (state/get-current-repo)
          :page-name page-name
          :preview? false
          :sidebar? false
+         :linked-refs? (not (false? linked-refs?))
+         :unlinked-refs? (not (false? unlinked-refs?))
          :config config}))))
 
 (defn ^:export register_fenced_code_renderer
