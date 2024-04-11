@@ -10,6 +10,7 @@
             [logseq.outliner.cli.pipeline :as cli-pipeline]
             [logseq.common.util :as common-util]
             [clojure.string :as string]
+            [clojure.set :as set]
             [datascript.core :as d]
             ["fs" :as fs]
             ["path" :as node-path]
@@ -85,9 +86,8 @@
   (let [property-uuids (->> pages-and-blocks
                             (map #(-> (:blocks %) vec (conj (:page %))))
                             (mapcat #(->> % (map :properties) (mapcat keys)))
-                            set
+                            ((fn [x] (set/difference (set x) (set (keys properties)))))
                             (map #(vector % (random-uuid)))
-                            ;; TODO: Dedupe with above to avoid squashing a previous definition
                             (concat (map (fn [[k v]]
                                            [k (or (:block/uuid v) (random-uuid))])
                                          properties))
@@ -109,7 +109,7 @@
 (defn- build-property-refs [properties property-db-ids]
   (mapv
    (fn [prop-name]
-     (db-property/create-user-property-ident-from-name (name prop-name)))
+     {:db/ident (db-property/create-user-property-ident-from-name (name prop-name))})
    (keys properties)))
 
 (def current-db-id (atom 0))
@@ -183,7 +183,9 @@
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
                                 [(merge
-                                  (sqlite-util/build-new-property prop-name (get-in properties [prop-name :block/schema]))
+                                  (sqlite-util/build-new-property prop-name
+                                                                  (get-in properties [prop-name :block/schema])
+                                                                  {:block-uuid (get-in properties [prop-name :block/uuid])})
                                   {:db/id (or (property-db-ids (name prop-name))
                                               (throw (ex-info "No :db/id for property" {:property prop-name})))}
                                   (when-let [props (not-empty (get-in properties [prop-name :properties]))]

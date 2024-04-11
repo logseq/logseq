@@ -12,6 +12,7 @@
      * schema.org assumes no cardinality. For now, only :page properties are given a :cardinality :many"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.property :as db-property]
             [clojure.string :as string]
             [datascript.core :as d]
             ["path" :as node-path]
@@ -77,7 +78,7 @@
       parent-class
       (assoc :class/parent {:db/id (get-class-db-id class-db-ids parent-class)})
       (seq properties)
-      (assoc :block/schema {:properties (mapv property-uuids properties)}))))
+      (assoc :class/schema.properties (mapv #(hash-map :block/uuid (property-uuids %)) properties)))))
 
 (def schema->logseq-data-types
   "Schema datatypes, https://schema.org/DataType, mapped to their Logseq equivalents"
@@ -322,6 +323,7 @@
         ;; Debug: Uncomment to generate a narrower graph of classes
         ;; select-class-ids ["schema:Person" "schema:CreativeWorkSeries"
         ;;                   "schema:Movie" "schema:CreativeWork" "schema:Thing"]
+        ;; select-class-ids ["schema:Thing"]
         ;; Generate class uuids as they are needed for properties (:page) and pages
         class-uuids (->> all-classes
                          (map #(vector (% "@id") (random-uuid)))
@@ -356,9 +358,9 @@
              :desc "Verbose mode"}})
 
 (defn- write-debug-file [blocks-tx db]
-  (let [block-uuid->name* (->> (d/q '[:find (pull ?b [:block/name :block/uuid]) :where [?b :block/name]] db)
+  (let [block-uuid->name* (->> (d/q '[:find (pull ?b [:block/original-name :block/uuid]) :where [?b :block/original-name]] db)
                                (map first)
-                               (map (juxt :block/uuid :block/name))
+                               (map (juxt :block/uuid :block/original-name))
                                (into {}))
         block-uuid->name #(or (block-uuid->name* %) (throw (ex-info (str "No entity found for " %) {})))
         ;; TODO: Figure out why some Thing's properties don't exist
@@ -368,14 +370,15 @@
                       (pr-str
                        (->> blocks-tx
                             (map (fn [m]
-                                   (cond-> (select-keys m [:block/name :block/type :block/original-name
-                                                           :block/properties :block/schema])
-                                     (seq (:block/properties m))
-                                     (update :block/properties #(update-keys % block-uuid->name))
-                                     (seq (get-in m [:block/schema :properties]))
-                                     (update-in [:block/schema :properties] #(mapv (partial block-uuid->name-please-fixme m) %))
-                                     (seq (get-in m [:block/schema :classes]))
-                                     (update-in [:block/schema :classes] #(mapv block-uuid->name %)))))
+                                   (let [props (db-property/properties m)]
+                                     (cond-> (select-keys m [:block/name :block/type :block/original-name :block/schema])
+                                       (seq props)
+                                       (assoc :block/properties (update-keys props name))
+                                       (seq (:class/schema.properties m))
+                                       (assoc-in [:block/schema :properties] (mapv (partial block-uuid->name-please-fixme m)
+                                                                                   (map :block/uuid (:class/schema.properties m))))
+                                       (seq (get-in m [:block/schema :classes]))
+                                       (update-in [:block/schema :classes] #(mapv block-uuid->name %))))))
                             set)))))
 
 (defn -main [args]
