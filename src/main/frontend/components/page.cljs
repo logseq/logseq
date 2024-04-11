@@ -467,7 +467,7 @@
               (db-async/<get-block (state/get-current-repo) page-name')
               (route-handler/update-page-title-and-label! (state/get-route-match)))
              (assoc state ::page-name page-name')))}
-  [state {:keys [repo page-name preview? sidebar?] :as option}]
+  [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs?] :as option}]
   (let [loading? (when (::page-name state)  (state/sub-async-query-loading (::page-name state)))]
     (when-let [path-page-name (get-path-page-name state page-name)]
       (let [current-repo (state/sub :git/current-repo)
@@ -563,7 +563,7 @@
 
                ;; referenced blocks
                (when-not block-or-whiteboard?
-                 (when page
+                 (when (and page (not (false? linked-refs?)))
                    [:div {:key "page-references"}
                     (rum/with-key
                       (reference/references page)
@@ -576,7 +576,8 @@
                  (when (and (not journal?) (not db-based?))
                    (hierarchy/structures route-page-name)))
 
-               (when-not (or block-or-whiteboard? sidebar? home?)
+               (when (and (not (false? unlinked-refs?))
+                       (not (or block-or-whiteboard? sidebar? home?)))
                  [:div {:key "page-unlinked-references"}
                   (reference/unlinked-references page)])])))))))
 

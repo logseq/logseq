@@ -210,8 +210,8 @@ This can be called in synchronous contexts as no async fns should be invoked"
      {:re-render? false :verbose false :refresh? true})))
 
 (defn initial-test-page-and-blocks
-  []
-  (let [page-uuid (random-uuid)
+  [& {:keys [page-uuid]}]
+  (let [page-uuid (or page-uuid (random-uuid))
         first-block-uuid (random-uuid)
         second-block-uuid (random-uuid)
         page-id [:block/uuid page-uuid]]
