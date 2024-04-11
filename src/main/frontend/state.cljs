@@ -154,6 +154,7 @@
       :db/properties-changed-pages           {}
       :editor/cursor-range                   (atom nil)
       :editor/container-id                   (atom nil)
+      :editor/next-edit-block                (atom nil)
 
       :selection/mode                        (atom false)
       ;; Warning: blocks order is determined when setting this attribute

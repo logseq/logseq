@@ -2969,7 +2969,7 @@
         selected? (when-not (:slide? config)
                     (state/sub-block-selected? uuid))
         children (:block/_parent block)]
-    (when-not (= (:ui/deleting-block @state/state) (:block/uuid block))
+    (when-not (= (:editor/deleting-block @state/state) (:block/uuid block))
       [:div.ls-block
        (cond->
         {:id (str "ls-block-" uuid)
