@@ -716,6 +716,7 @@
   (let [repo (or repo (state/get-current-repo))
         block (db/pull repo '[*] [:block/uuid uuid])]
     (when block
+      (state/set-state! :ui/deleting-block uuid)
       (let [blocks (block-handler/get-top-level-blocks [block])]
         (ui-outliner-tx/transact!
          {:outliner-op :delete-blocks}
