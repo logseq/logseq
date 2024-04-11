@@ -33,9 +33,10 @@
        (if (db-based-graph? db)
          (let [result (lookup-entity e k default-value)]
            (->>
-            (map (fn [pair-e]
-                   (let [pid (:db/ident (lookup-entity pair-e :property/pair-property nil))]
-                     {pid (lookup-entity pair-e pid nil)})) result)
+            (keep (fn [pair-e]
+                    (when pair-e
+                      (let [pid (:db/ident (lookup-entity pair-e :property/pair-property nil))]
+                        {pid (lookup-entity pair-e pid nil)}))) result)
             (into {})))
          (lookup-entity e :block/properties nil)))
 

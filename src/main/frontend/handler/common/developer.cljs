@@ -14,26 +14,13 @@
 
 ;; Fns used between menus and commands
 (defn show-entity-data
-  [& pull-args]
-  (let [result* (apply db/pull pull-args)
-        ;; handles page uuids and closed values w/o knowing type
-        get-uuid-prop-value (fn [v]
-                              (or (db-pu/get-property-name v)
-                                  (get-in (db/entity [:block/uuid v]) [:block/schema :value])))
+  [eid]
+  (let [result* (db/entity eid)
+        ;; ;; handles page uuids and closed values w/o knowing type
+        ;; get-uuid-prop-value (fn [v]
+        ;;                       (or (db-pu/get-property-name v)
+        ;;                           (get-in (db/entity [:block/uuid v]) [:block/schema :value])))
         result (cond-> result*
-                 (and (seq (:block/properties result*)) (config/db-based-graph? (state/get-current-repo)))
-                 (assoc :block.debug/properties
-                        (->> (update-keys (:block/properties result*) db-pu/get-property-name)
-                             (map (fn [[k v]]
-                                    [k
-                                     (cond
-                                       (and (set? v) (uuid? (first v)))
-                                       (set (map get-uuid-prop-value v))
-                                       (uuid? v)
-                                       (get-uuid-prop-value v)
-                                       :else
-                                       v)]))
-                             (into {})))
                  (seq (:block/refs result*))
                  (assoc :block.debug/refs
                         (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))

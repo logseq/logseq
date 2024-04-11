@@ -102,22 +102,24 @@
 ;; Main malli schemas
 ;; ==================
 ;; These schemas should be data vars to remain as simple and reusable as possible
-(def property-tuple
-  "Represents a tuple of a property and its property value. This schema
+(comment
+  (def property-tuple
+    "Represents a tuple of a property and its property value. This schema
    has 2 metadata hooks which are used to inject a datascript db later"
-  (into
-   [:multi {:dispatch ^:add-db (fn [db property-tuple]
-                                 (get-in (d/entity db (first property-tuple))
-                                         [:block/schema :type]))}]
-   (map (fn [[prop-type value-schema]]
-          ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
-        db-property-type/built-in-validation-schemas)))
-
-(def block-properties
-  "Validates a slightly modified version of :block/properties. Properties are
+    (into
+     [:multi {:dispatch ^:add-db (fn [db property-tuple]
+                                   (get-in (d/entity db (first property-tuple))
+                                           [:block/schema :type]))}]
+     (map (fn [[prop-type value-schema]]
+            ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
+          db-property-type/built-in-validation-schemas)))
+  (def block-properties
+    "Validates a slightly modified version of :block/properties. Properties are
   expected to be a vector of tuples instead of a map in order to validate each
   property with its property value that is valid for its type"
-  [:sequential property-tuple])
+    [:sequential property-tuple]))
+
+
 
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
@@ -125,7 +127,8 @@
    [:block/created-at :int]
    [:block/updated-at :int]
    [:block/format [:enum :markdown]]
-   [:block/properties {:optional true} block-properties]
+   [:block/properties {:optional true} [:set :int]]
+   [:property/pair-property {:optional true} :int]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/collapsed-properties {:optional true} [:set :int]]
