@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.editor :as editor-handler]
             [frontend.util :as util]))
 
 (defn- get-tx-id
@@ -63,8 +64,14 @@
             (update-current-tx-editor-cursor! tx-report)))
 
         (when-not (:graph/importing @state/state)
-          (react/refresh! repo affected-keys)
+          ;; safe to edit the next block now since other blocks (e.g. prev editing block)
+          ;; has been saved to the db now
+          (when-let [next-edit-block @(:editor/next-edit-block @state/state)]
+            (let [{:keys [block pos]} next-edit-block]
+              (editor-handler/edit-block! block pos)
+              (state/set-state! :editor/next-edit-block nil)))
 
+          (react/refresh! repo affected-keys)
           (when-let [state (:ui/restore-cursor-state @state/state)]
             (when (or undo? redo?)
               (restore-cursor-and-app-state! state undo?)
@@ -87,9 +94,9 @@
     (when (= (:outliner-op tx-meta) :rename-page)
       (state/pub-event! [:page/renamed repo (:data tx-meta)]))
 
-    (when-let [deleting-block-id (:ui/deleting-block @state/state)]
+    (when-let [deleting-block-id (:editor/deleting-block @state/state)]
       (when (some (fn [datom] (and
                                (= :block/uuid (:a datom))
                                (= (:v datom) deleting-block-id)
                                (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
-        (state/set-state! :ui/deleting-block nil)))))
+        (state/set-state! :editor/deleting-block nil)))))

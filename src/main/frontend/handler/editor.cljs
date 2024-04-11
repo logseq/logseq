@@ -382,8 +382,8 @@
         (state/set-edit-content! edit-input-id new-content)))
     (p/let [_ (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
        (outliner-insert-block! config left-block prev-block {:sibling? sibling?
-                                                             :keep-uuid? true})
-       prev-block)])))
+                                                             :keep-uuid? true}))])
+    prev-block))
 
 (defn insert-new-block-aux!
   [config
@@ -406,10 +406,10 @@
                               new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)]
-    (p/let [_ (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                                       :keep-uuid? true})]
-      (util/set-change-value input fst-block-text)
-      (assoc next-block :block/content snd-block-text))))
+    (util/set-change-value input fst-block-text)
+    (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                             :keep-uuid? true})
+    (assoc next-block :block/content snd-block-text)))
 
 (defn clear-when-saved!
   []
@@ -471,10 +471,11 @@
                          insert-new-block-before-block-aux!
 
                          :else
-                         insert-new-block-aux!)]
-         (p/let [last-block (insert-fn config block'' value)]
-           (clear-when-saved!)
-           (edit-block! last-block 0)))))))
+                         insert-new-block-aux!)
+             next-block (insert-fn config block'' value)]
+         (clear-when-saved!)
+         (state/set-state! :editor/next-edit-block {:block next-block
+                                                    :pos 0}))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
@@ -716,7 +717,7 @@
   (let [repo (or repo (state/get-current-repo))
         block (db/pull repo '[*] [:block/uuid uuid])]
     (when block
-      (state/set-state! :ui/deleting-block uuid)
+      (state/set-state! :editor/deleting-block uuid)
       (let [blocks (block-handler/get-top-level-blocks [block])]
         (ui-outliner-tx/transact!
          {:outliner-op :delete-blocks}
