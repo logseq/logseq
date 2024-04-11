@@ -336,7 +336,7 @@
               old-name title
               db-based? (config/db-based-graph? repo)]
           [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
-           {:on-mouse-over #(reset! *hover? true)
+           {:on-mouse-over #(when-not @*edit? (reset! *hover? true))
             :on-mouse-out #(reset! *hover? false)}
            (when icon
              [:div.page-icon
@@ -371,6 +371,7 @@
                                         (not config/publishing?)
                                         (not (ldb/built-in? page)))
                                (reset! *input-value (if untitled? "" old-name))
+                               (reset! *hover? false)
                                (reset! *edit? true)))))}
 
             (if @*edit?
