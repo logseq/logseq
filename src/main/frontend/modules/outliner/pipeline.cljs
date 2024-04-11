@@ -25,12 +25,12 @@
   (history/restore-app-state! app-state))
 
 (defn invoke-hooks
-  [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks] :as opts}]
+  [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
   ;; (prn :debug
   ;;      :request-id request-id
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
-  (let [{:keys [from-disk? new-graph? local-tx? undo? redo? initial-pages? end?]} tx-meta
+  (let [{:keys [from-disk? new-graph? undo? redo? initial-pages? end?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}

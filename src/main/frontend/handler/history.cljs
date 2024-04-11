@@ -5,6 +5,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.util :as util]
+            [frontend.util.page :as page-util]
             [goog.dom :as gdom]
             [promesa.core :as p]))
 
@@ -37,24 +38,38 @@
       (route-handler/redirect! prev-route-data))
     (swap! state/state merge state)))
 
-(defn undo!
-  [e]
-  (when-let [repo (state/get-current-repo)]
-    (when (db-transact/request-finished?)
-      (util/stop e)
-      (p/do!
-       (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
-       (editor/save-current-block!)
-       (state/clear-editor-action!)
-       (state/set-block-op-type! nil)
-       (let [^js worker @state/*db-worker]
-         (.undo worker repo))))))
+(let [*last-request (atom nil)]
+  (defn undo!
+    [e]
+    (p/do!
+     @*last-request
+     (when-let [repo (state/get-current-repo)]
+       (when-let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
+                                                 db/entity
+                                                 :block/uuid
+                                                 str)]
+         (when (db-transact/request-finished?)
+           (util/stop e)
+           (p/do!
+            (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
+            (editor/save-current-block!)
+            (state/clear-editor-action!)
+            (state/set-block-op-type! nil)
+            (let [^js worker @state/*db-worker]
+              (reset! *last-request (.undo worker repo current-page-uuid-str))))))))))
 
-(defn redo!
-  [e]
-  (when-let [repo (state/get-current-repo)]
-    (when (db-transact/request-finished?)
-      (util/stop e)
-      (state/clear-editor-action!)
-      (let [^js worker @state/*db-worker]
-        (.redo worker repo)))))
+(let [*last-request (atom nil)]
+  (defn redo!
+    [e]
+    (p/do!
+     @*last-request
+     (when-let [repo (state/get-current-repo)]
+       (when-let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
+                                                 db/entity
+                                                 :block/uuid
+                                                 str)]
+         (when (db-transact/request-finished?)
+           (util/stop e)
+           (state/clear-editor-action!)
+           (let [^js worker @state/*db-worker]
+             (reset! *last-request (.redo worker repo current-page-uuid-str)))))))))

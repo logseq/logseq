@@ -18,7 +18,6 @@
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
-            [frontend.config :as config]
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -103,17 +102,6 @@
                                                 (map history-action-info item)
                                                 {:default-collapsed? true})]) stack)
             {:default-collapsed? true})]))
-
-(rum/defc history < rum/reactive
-  []
-  ;; (let [state (undo-redo/get-state)
-  ;;       page-only-mode? (state/sub :history/page-only-mode?)]
-  ;;   [:div.ml-4
-  ;;    [:div.ml-3.font-bold (if page-only-mode? (t :right-side-bar/history-pageonly) (t :right-side-bar/history-global))]
-  ;;    [:div.p-4 [:.ml-4.mb-2
-  ;;               (history-stack (t :right-side-bar/history-undos) (rum/react (:undo-stack state)))
-  ;;               (history-stack (t :right-side-bar/history-redos) (rum/react (:redo-stack state)))]]])
-  )
 
 (defn build-sidebar-item
   [repo idx db-id block-type *db-id init-key]

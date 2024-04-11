@@ -388,7 +388,6 @@
  :command.editor/select-parent                             "Вибрати батьківський блок"
  :command.editor/zoom-in                                   "Збільшити"
  :command.editor/zoom-out                                  "Зменшити"
- :command.editor/toggle-undo-redo-mode                     "Переключити режим скасування/повтору (глобально чи лише на сторінці)"
  :command.editor/toggle-number-list                        "Переключити номерний список"
  :command.whiteboard/select                                "Вибрати інструмент"
  :command.whiteboard/pan                                   "Прокрутка"
