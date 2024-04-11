@@ -199,7 +199,7 @@
   db-pu/get-built-in-property-uuid if only in a db graph context"
   [repo db db-ident]
   (if (sqlite-util/db-based-graph? repo)
-    (:block/uuid (d/entity db db-ident))
+    (when db (:block/uuid (d/entity db db-ident)))
     (get-in built-in-properties [db-ident :name])))
 
 (defn lookup
