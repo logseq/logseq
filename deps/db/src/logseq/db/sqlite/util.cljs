@@ -118,3 +118,9 @@
   [block]
   (and (:block/name block)
        (nil? (:block/page block))))
+
+(defn build-property-pair
+  [db-ident value]
+  (block-with-timestamps
+   {:property/pair-property db-ident
+    db-ident value}))

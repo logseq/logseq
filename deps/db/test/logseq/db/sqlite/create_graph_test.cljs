@@ -73,5 +73,8 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         validation (db-validate/validate-db! @conn)]
+    ;; For debugging
+    ;; (cljs.pprint/pprint (map :entity (:errors validation)))
+    ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))
     (is (nil? (:errors validation))
         "New graph has no validation errors")))
