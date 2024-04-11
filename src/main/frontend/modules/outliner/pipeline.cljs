@@ -85,4 +85,11 @@
       (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
 
     (when (= (:outliner-op tx-meta) :rename-page)
-      (state/pub-event! [:page/renamed repo (:data tx-meta)]))))
+      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
+
+    (when-let [deleting-block-id (:ui/deleting-block @state/state)]
+      (when (some (fn [datom] (and
+                               (= :block/uuid (:a datom))
+                               (= (:v datom) deleting-block-id)
+                               (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
+        (state/set-state! :ui/deleting-block nil)))))
