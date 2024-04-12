@@ -163,9 +163,8 @@
     :has-page-property
     '[(has-page-property ?p ?prop)
       [?p :block/name]
-      [?p ?prop ?v]
-      [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
+      [?p :block/properties ?bp]
+      [?bp ?prop ?v]
       ;; Some deleted properties leave #{} which this rule shouldn't match on
       [(not= #{} ?v)]]
     ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
@@ -183,9 +182,8 @@
     :page-property
     '[[(page-property ?p ?prop ?val)
        [?p :block/name]
-       [?p ?prop ?val]
-       [?prop-e :db/ident ?prop]
-       [?prop-e :block/type "property"]]
+       [?p :block/properties ?bp]
+       [?bp ?prop ?val]]
       ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
       ;; Clause 1: Match non-ref values
       #_[(page-property ?p ?key ?val)
