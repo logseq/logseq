@@ -87,10 +87,17 @@
   "Returns entity maps for given :eavt datoms indexed by db/id"
   [datoms]
   (->> datoms
-       (reduce (fn [acc m]
-                 (if (contains? db-schema/card-many-attributes (:a m))
-                   (update acc (:e m) update (:a m) (fnil conj #{}) (:v m))
-                   (update acc (:e m) assoc (:a m) (:v m))))
+       (reduce (fn [acc {:keys [a e v]}]
+                 (if (contains? db-schema/card-many-attributes a)
+                   (update acc e update a (fnil conj #{}) v)
+                   ;; TODO: Only do this for property pair ents. Is there a way to
+                   ;; confirm property's cardinality w/o more ent lookups?
+                   ;; If there's already a val, automatically start collecting it as a :many
+                   (if-let [existing-val (get-in acc [e a])]
+                     (if (set? existing-val)
+                       (update acc e assoc a (conj existing-val v))
+                       (update acc e assoc a #{existing-val v}))
+                     (update acc e assoc a v))))
                {})))
 
 (defn datoms->entities
