@@ -4,7 +4,6 @@
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.frontend.property :as db-property]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
