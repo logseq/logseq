@@ -541,7 +541,8 @@
         (state/pub-event! [:page/create page-name-in-block])
 
         :else
-        (route-handler/redirect-to-page! redirect-page-name))))
+        (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
+          (apply [redirect-page-name])))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -1735,7 +1736,7 @@
   (reset! *dragging-block block))
 
 (defn- bullet-on-click
-  [e block uuid]
+  [e block uuid {:keys [on-redirect-to-page]}]
   (cond
     (pu/shape-block? block)
     (route-handler/redirect-to-whiteboard! (get-in block [:block/page :block/name]) {:block-id uuid})
@@ -1755,7 +1756,9 @@
         (util/stop e))
 
     :else
-    (when uuid (route-handler/redirect-to-page! uuid))))
+    (when uuid
+      (-> (or on-redirect-to-page route-handler/redirect-to-page!)
+        (apply [(str uuid)])))))
 
 (declare block-list)
 (rum/defc block-children < rum/reactive
@@ -1826,7 +1829,7 @@
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
 
-     (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid)}
+     (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid config)}
                    [:span.bullet-container.cursor
                     {:id (str "dot-" uuid)
                      :draggable true
@@ -2649,7 +2652,9 @@
                (if (:block/name block) :page :block)]))
 
            :else
-           (route-handler/redirect-to-page! (:block/uuid block))))}
+           (when-let [uuid (:block/uuid block)]
+             (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
+               (apply [(str uuid)])))))}
    label])
 
 (rum/defc breadcrumb-separator
@@ -2659,13 +2664,13 @@
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb < rum/reactive
-  {:init (fn [state]
-           (let [args (:rum/args state)
-                 block-id (nth args 2)
-                 depth (:level-limit (last args))]
-             (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
-               (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
-             state))}
+                       {:init (fn [state]
+                                (let [args (:rum/args state)
+                                      block-id (nth args 2)
+                                      depth (:level-limit (last args))]
+                                  (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
+                                    (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
+                                  state))}
   [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
