@@ -60,11 +60,16 @@
 
 (defn- gen-update-block-op
   [db]
-  (gen/let [block-uuid (gen-block-uuid db)
-            content gen/string-alphanumeric]
-    [:frontend.worker.undo-redo/update-block
-     {:block-uuid block-uuid
-      :block-origin-content content}]))
+  (let [gen-content-attr (gen/let [content gen/string-alphanumeric]
+                           [:block-origin-content content])
+        gen-collapsed-attr (gen/let [v gen/boolean]
+                             [:block-origin-collapsed v])
+        gen-tags-attr (gen/let [tags (gen/vector (gen-block-uuid db))]
+                        [:block-origin-tags tags])]
+    (gen/let [block-uuid (gen-block-uuid db)
+              attrs (gen/vector (gen/one-of [gen-content-attr gen-collapsed-attr gen-tags-attr]) 3)]
+      [:frontend.worker.undo-redo/update-block
+       (into {:block-uuid block-uuid} attrs)])))
 
 (def ^:private gen-boundary (gen/return [:frontend.worker.undo-redo/boundary]))
 
