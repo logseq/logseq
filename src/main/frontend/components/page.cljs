@@ -521,8 +521,8 @@
 
                   [:div
                    (when (and block? (not sidebar?) (not whiteboard?))
-                     (let [config {:id "block-parent"
-                                   :block? true}]
+                     (let [config (merge config {:id "block-parent"
+                                                 :block? true})]
                        [:div.mb-4
                         (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
