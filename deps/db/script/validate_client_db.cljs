@@ -71,7 +71,7 @@
                                (count (filter #(contains? (:block/type %) "class") ent-maps)) " classes, "
                                (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
                                (count (filter #(contains? (:block/type %) "property") ent-maps)) " properties and "
-                               (count (mapcat db-property/properties ent-maps)) " property values"))
+                               (count (filter :property/pair-property ent-maps)) " property pairs"))
     (validate-client-db @conn ent-maps options)))
 
 (defn -main [argv]
