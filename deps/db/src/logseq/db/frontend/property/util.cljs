@@ -62,7 +62,7 @@
         ;; closed ref types don't have hidden tx
         (if ref-type?
           []
-          (let [page-tx (build-property-hidden-page property)
+          (let [page-tx (build-property-hidden-page property-tx)
                 closed-value-blocks-tx
                 (map (fn [{:keys [db-ident value icon description uuid]}]
                        (build-closed-value-block
