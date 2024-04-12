@@ -4,8 +4,7 @@
             [logseq.publishing.db :as publish-db]
             [logseq.graph-parser :as graph-parser]
             [datascript.core :as d]
-            [logseq.graph-parser.db :as gp-db]
-            [logseq.db :as ldb]))
+            [logseq.graph-parser.db :as gp-db]))
 
 (deftest clean-export!
   (let [conn (gp-db/start-conn)
@@ -57,7 +56,7 @@
         "Contains all pages that have been marked public")
     (is (not (contains? exported-pages "page1"))
         "Doesn't contain private page")
-    (is (seq (ldb/get-pages-by-name filtered-db "page2-alias"))
+    (is (seq (d/entity filtered-db [:block/original-name "page2-alias"]))
         "Alias of public page is exported")
     (is (= #{"page2" "page3"} exported-block-pages)
         "Only exports blocks from public pages")

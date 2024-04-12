@@ -214,12 +214,28 @@
 ;; ==========
 
 (defn properties
-  "Fetch all properties of entity like :block/properties used to do.
+  "Returns a block's properties as a map indexed by property's db-ident.
    Use this in deps because nbb can't use :block/properties from entity-plus"
   [e]
-  (->> (into {} e)
-       (filter (fn [[k _]] (property? k)))
+  (->> (:block/properties e)
+       (map (fn [pair-e]
+              (let [pid (:db/ident (:property/pair-property pair-e))]
+                {pid (pair-e pid)})))
        (into {})))
+
+(defn get-property-value
+  "Fetches a block's property value given a property's db-ident. Iterates over a
+  block's property pairs until it finds the given ident. This is nbb compatible"
+  [e ident]
+  (some (fn [pair-e]
+          ;; This assumes the property/pair-property's entity has been loaded
+          ;; which query results don't do by default.
+          ;; Should we have another helper that just fetches by the pair-e key
+          ;; that satisfies property?
+          (let [pid (get-in pair-e [:property/pair-property :db/ident])]
+            (when-some [val (and (= ident pid) (pair-e pid))]
+              val)))
+        (:block/properties e)))
 
 (defn valid-property-name?
   [s]
