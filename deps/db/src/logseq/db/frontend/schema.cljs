@@ -139,8 +139,7 @@
     :asset/meta {}}))
 
 (def retract-attributes
-  #{
-    :block/refs
+  #{:block/refs
     :block/tags
     :block/alias
     :block/marker
@@ -154,9 +153,7 @@
     :block/properties-text-values
     :block/macros
     :block/invalid-properties
-    :block/warning
-    }
-  )
+    :block/warning})
 
 ;; If only block/content changes
 (def db-version-retract-attributes
@@ -181,21 +178,21 @@
     :block/tags})
 
 
+;; DB graph helpers
+;; ================
 (def ref-type-attributes
   (into #{}
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.type/ref (:db/valueType attr-body-map))
                   attr-name)))
-        (merge schema
-               schema-for-db-based-graph)))
+        schema-for-db-based-graph))
 
 (def card-many-attributes
   (into #{}
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.cardinality/many (:db/cardinality attr-body-map))
                   attr-name)))
-        (merge schema
-               schema-for-db-based-graph)))
+        schema-for-db-based-graph))
 
 (def card-many-ref-type-attributes
   (set/intersection card-many-attributes ref-type-attributes))

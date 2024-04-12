@@ -134,7 +134,6 @@
    [:block/updated-at :int]
    [:block/format [:enum :markdown]]
    [:block/properties {:optional true} [:set :int]]
-   [:property/pair-property {:optional true} :int]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/collapsed-properties {:optional true} [:set :int]]
@@ -428,7 +427,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-one-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
+(let [malli-one-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page) (rest property-pair))
                                (filter #(= (last %) :int))
                                (map first)
                                set)

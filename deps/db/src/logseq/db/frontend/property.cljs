@@ -267,7 +267,9 @@
   (when db
     (let [block (or (d/entity db (:db/id block)) block)
           ;; FIXME: Use db-based-graph? when this fn moves to another ns
-          properties' (if (string/starts-with? repo "logseq_db_")
+          properties' (if (and (string/starts-with? repo "logseq_db_")
+                               ;; FIXME: Find a way to do this nbb check without affecting frontend
+                               (not (:block/raw-properties block)))
                         (properties block)
                         (:block/properties block))]
       (lookup repo properties' db-ident))))
