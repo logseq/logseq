@@ -17,7 +17,9 @@
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
   [db ent-maps* {:keys [verbose group-errors closed-maps]}]
-  (let [ent-maps (db-malli-schema/update-properties-in-ents ent-maps*)
+  (let [ent-maps ent-maps*
+        ;; TODO: Fix
+        ;; ent-maps (db-malli-schema/update-properties-in-ents ent-maps*)
         schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
     (if-let [errors (->> ent-maps
                          (m/explain schema)
@@ -63,7 +65,7 @@
                     (println "Error: For graph" (str (pr-str graph-dir) ":") (str e))
                     (js/process.exit 1)))
         datoms (d/datoms @conn :eavt)
-        ent-maps (vals (db-malli-schema/datoms->entity-maps datoms))]
+        ent-maps (db-malli-schema/datoms->entities datoms)]
     (println "Read graph" (str db-name " with " (count datoms) " datoms, "
                                (count ent-maps) " entities, "
                                (count (filter :block/name ent-maps)) " pages, "

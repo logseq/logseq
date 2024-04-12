@@ -90,7 +90,7 @@
    ents))
 
 (defn datoms->entity-maps
-  "Returns entity maps for given :eavt datoms"
+  "Returns entity maps for given :eavt datoms indexed by db/id"
   [datoms]
   (->> datoms
        (reduce (fn [acc m]
@@ -98,6 +98,12 @@
                    (update acc (:e m) update (:a m) (fnil conj #{}) (:v m))
                    (update acc (:e m) assoc (:a m) (:v m))))
                {})))
+
+(defn datoms->entities
+  "Returns a vec of entity maps given :eavt datoms"
+  [datoms]
+  (mapv (fn [[db-id m]] (with-meta m {:db/id db-id}))
+        (datoms->entity-maps datoms)))
 
 ;; Main malli schemas
 ;; ==================
@@ -338,10 +344,12 @@
 
 (def property-pair
   [:map
+   ;; TODO: Validate property value(s)
+   {:closed false}
    [:property/pair-property :int]
-   [:block/tx-id {:optional true} :int]
-   [:block/created-at {:optional true} :int]
-   [:block/updated-at {:optional true} :int]])
+   [:block/created-at :int]
+   [:block/updated-at :int]
+   [:block/tx-id {:optional true} :int]])
 
 (def db-ident-key-val
   "A key-val map consists of a :db/ident and a specific key val"

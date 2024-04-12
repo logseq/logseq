@@ -12,8 +12,9 @@
    and to optionally close maps"
   [db-schema db {:keys [closed-schema?]}]
   (cond-> db-schema
-    true
-    (db-malli-schema/update-properties-in-schema db)
+    ;; TODO: Fix
+    ;; true
+    ;; (db-malli-schema/update-properties-in-schema db)
     closed-schema?
     mu/closed-schema))
 
@@ -39,15 +40,20 @@
 (defn group-errors-by-entity
   "Groups malli errors by entities. db is used for providing more debugging info"
   [db ent-maps errors]
+  (assert (vector? ent-maps) "Must be a vec for grouping to work")
   (->> errors
        (group-by #(-> % :in first))
        (map (fn [[idx errors']]
-              {:entity (cond-> (get ent-maps idx)
-                         ;; Provide additional page info for debugging
-                         (:block/page (get ent-maps idx))
-                         (update :block/page
-                                 (fn [id] (select-keys (d/entity db id)
-                                                       [:block/name :block/type :db/id :block/created-at]))))
+              {:entity (let [ent (get ent-maps idx)
+                             db-id (:db/id (meta ent))]
+                         (cond-> ent
+                           db-id
+                           (assoc :db/id db-id)
+                           ;; Provide additional page info for debugging
+                           (:block/page ent)
+                           (update :block/page
+                                   (fn [id] (select-keys (d/entity db id)
+                                                         [:block/name :block/type :db/id :block/created-at])))))
                ;; Group by type to reduce verbosity
                :errors-by-type
                (->> (group-by :type errors')
@@ -69,12 +75,10 @@
   :errors and grouped by entity"
   [db]
   (let [datoms (d/datoms db :eavt)
-        ent-maps* (db-malli-schema/datoms->entity-maps datoms)
-        ent-maps (vals ent-maps*)
-        schema db-malli-schema/DB
-        ;; TODO: Fix these fns
+        ent-maps (db-malli-schema/datoms->entities datoms)
+        schema (update-schema db-malli-schema/DB db {:closed-schema? true})
+        ;; TODO: Fix
         ;; ent-maps (db-malli-schema/update-properties-in-ents (vals ent-maps*))
-        ;; (update-schema db-malli-schema/DB db {:closed-schema? true})
         errors (->> ent-maps (m/explain schema) :errors)]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}
