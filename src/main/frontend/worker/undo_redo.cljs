@@ -84,6 +84,7 @@ when undo this op, this original entity-map will be transacted back into db")
        [:block-uuid :uuid]
        [:block-origin-content {:optional true} :string]
        [:block-origin-tags {:optional true} [:sequential :uuid]]
+       [:block-origin-collapsed {:optional true} :boolean]
        ;; TODO: add more attrs
        ]]]]))
 
@@ -133,16 +134,19 @@ when undo this op, this original entity-map will be transacted back into db")
       [::insert-block {:block-uuid block-uuid}]
 
       ::update-block
-      (let [value-keys           (set (keys (second op)))
-            block-entity         (d/entity db [:block/uuid block-uuid])
-            block-origin-content (when (contains? value-keys :block-origin-content)
-                                   (:block/content block-entity))
-            block-origin-tags    (when (contains? value-keys :block-origin-tags)
-                                   (mapv :block/uuid (:block/tags block-entity)))]
+      (let [value-keys             (set (keys (second op)))
+            block-entity           (d/entity db [:block/uuid block-uuid])
+            block-origin-content   (when (contains? value-keys :block-origin-content)
+                                     (:block/content block-entity))
+            block-origin-tags      (when (contains? value-keys :block-origin-tags)
+                                     (mapv :block/uuid (:block/tags block-entity)))
+            block-origin-collapsed (when (contains? value-keys :block-origin-collapsed)
+                                     (boolean (:block/collapsed? block-entity)))]
         [::update-block
          (cond-> {:block-uuid block-uuid}
-           (some? block-origin-content) (assoc :block-origin-content block-origin-content)
-           (some? block-origin-tags)    (assoc :block-origin-tags block-origin-tags))]))))
+           (some? block-origin-content)   (assoc :block-origin-content block-origin-content)
+           (some? block-origin-tags)      (assoc :block-origin-tags block-origin-tags)
+           (some? block-origin-collapsed) (assoc :block-origin-collapsed block-origin-collapsed))]))))
 
 (def ^:private apply-conj-vec (partial apply (fnil conj [])))
 
@@ -283,20 +287,22 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defmethod reverse-apply-op ::update-block
   [op conn repo]
-  (let [[_ {:keys [block-uuid block-origin-content block-origin-tags]}] op]
+  (let [[_ {:keys [block-uuid block-origin-content block-origin-tags block-origin-collapsed]}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when (normal-block? block-entity)
         (let [db-id (:db/id block-entity)
               _ (when (some? block-origin-tags)
                   (d/transact! conn [[:db/retract db-id :block/tags]] {:gen-undo-op? false}))
               new-block (cond-> block-entity
-                          block-origin-content
+                          (some? block-origin-content)
                           (assoc :block/content block-origin-content)
-                          block-origin-tags
+                          (some? block-origin-tags)
                           (assoc :block/tags (some->> block-origin-tags
                                                       (map (partial vector :block/uuid))
                                                       (d/pull-many @conn [:db/id])
-                                                      (keep :db/id))))
+                                                      (keep :db/id)))
+                          (some? block-origin-collapsed)
+                          (assoc :block/collapsed? (boolean block-origin-collapsed)))
               r2 (outliner-tx/transact!
                   {:gen-undo-op? false
                    :outliner-op :save-block
@@ -391,7 +397,7 @@ when undo this op, this original entity-map will be transacted back into db")
               other-ops
               (let [updated-attrs (seq (set/intersection
                                         updated-key-set
-                                        #{:block/content :block/tags}))]
+                                        #{:block/content :block/tags :block/collapsed?}))]
                 (when-let [update-block-op-value
                            (when (normal-block? entity-after)
                              (some->> updated-attrs
@@ -404,6 +410,9 @@ when undo this op, this original entity-map will be transacted back into db")
 
                                            :block/tags
                                            [:block-origin-tags (mapv :block/uuid (:block/tags entity-before))]
+
+                                           :block/collapsed?
+                                           [:block-origin-collapsed (boolean (:block/collapsed? entity-before))]
 
                                            nil)))
                                       seq
