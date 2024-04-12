@@ -53,9 +53,9 @@
 (defn- validate-property-value
   "Validates the value in a property tuple. The property value can be one or
   many of a value to validated"
-  [prop-type schema-fn val]
+  [schema-fn [{:keys [type]} val]]
   (if (and (or (sequential? val) (set? val))
-           (not= :coll prop-type))
+           (not= :coll type))
     (every? schema-fn val)
     (schema-fn val)))
 
@@ -64,29 +64,23 @@
   [db-schema db]
   (walk/postwalk (fn [e]
                    (let [meta' (meta e)]
-                     (cond
-                       (:add-db meta')
-                       (partial e db)
-                       (:property-value meta')
+                     (if (:property-value meta')
                        (let [[property-type schema-fn] e
                              schema-fn' (if (db-property-type/property-types-with-db property-type) (partial schema-fn db) schema-fn)
-                             validation-fn #(validate-property-value property-type schema-fn' %)]
-                         [property-type [:tuple property-ident [:fn validation-fn]]])
-                       :else
+                             validation-fn #(validate-property-value schema-fn' %)]
+                         [property-type [:fn validation-fn]])
                        e)))
                  db-schema))
 
 (defn update-properties-in-ents
   "Prepares properties in entities to be validated by DB schema"
-  [ents]
+  [db ents]
   (mapv
-   (fn [ent]
-     (reduce (fn [m [k v]]
-               (if (db-property/property? k)
-                 (update m :block/properties (fnil conj []) [k v])
-                 (assoc m k v)))
-             {}
-             ent))
+   #(if-let [pair (some->> (:property/pair-property %) (d/entity db))]
+      (assoc % :property-tuple
+             [(select-keys (:block/schema pair) [:type :cardinality])
+              (get % (:db/ident pair))])
+      %)
    ents))
 
 (defn datoms->entity-maps
@@ -108,24 +102,6 @@
 ;; Main malli schemas
 ;; ==================
 ;; These schemas should be data vars to remain as simple and reusable as possible
-(comment
-  (def property-tuple
-    "Represents a tuple of a property and its property value. This schema
-   has 2 metadata hooks which are used to inject a datascript db later"
-    (into
-     [:multi {:dispatch ^:add-db (fn [db property-tuple]
-                                   (get-in (d/entity db (first property-tuple))
-                                           [:block/schema :type]))}]
-     (map (fn [[prop-type value-schema]]
-            ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
-          db-property-type/built-in-validation-schemas)))
-  (def block-properties
-    "Validates a slightly modified version of :block/properties. Properties are
-  expected to be a vector of tuples instead of a map in order to validate each
-  property with its property value that is valid for its type"
-    [:sequential property-tuple]))
-
-
 
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
@@ -341,13 +317,24 @@
    [:graph/local-tx :string]
    [:editor/tx-batch-mode? :boolean]])
 
+(def property-tuple
+  "A tuple of a property map and a property value. This schema
+   has 1 metadata hook which is used to inject a datascript db later"
+  (into
+   [:multi {:dispatch (comp :type first)}]
+   (map (fn [[prop-type value-schema]]
+          ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
+        db-property-type/built-in-validation-schemas)))
+
 (def property-pair
   [:map
-   ;; TODO: Validate property value(s)
+   ;; Not closed because property value key is different with every property
    {:closed false}
    [:property/pair-property :int]
    [:block/created-at :int]
    [:block/updated-at :int]
+   ;; Injected by update-properties-in-ents
+   [:property-tuple property-tuple]
    [:block/tx-id {:optional true} :int]])
 
 (def db-ident-key-val
