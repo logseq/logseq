@@ -12,9 +12,8 @@
    and to optionally close maps"
   [db-schema db {:keys [closed-schema?]}]
   (cond-> db-schema
-    ;; TODO: Fix
-    ;; true
-    ;; (db-malli-schema/update-properties-in-schema db)
+    true
+    (db-malli-schema/update-properties-in-schema db)
     closed-schema?
     mu/closed-schema))
 
@@ -24,7 +23,7 @@
   [{:keys [db-after tx-data tx-meta]} validate-options]
   (let [changed-ids (->> tx-data (map :e) distinct)
         ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
-        ent-maps (db-malli-schema/update-properties-in-ents ent-maps*)
+        ent-maps (db-malli-schema/update-properties-in-ents db-after ent-maps*)
         db-schema (update-schema db-malli-schema/DB db-after validate-options)
         invalid-ent-maps (remove #(m/validate db-schema [%]) ent-maps)]
     (js/console.log "changed eids:" changed-ids tx-meta)
@@ -75,10 +74,9 @@
   :errors and grouped by entity"
   [db]
   (let [datoms (d/datoms db :eavt)
-        ent-maps (db-malli-schema/datoms->entities datoms)
+        ent-maps* (db-malli-schema/datoms->entities datoms)
         schema (update-schema db-malli-schema/DB db {:closed-schema? true})
-        ;; TODO: Fix
-        ;; ent-maps (db-malli-schema/update-properties-in-ents (vals ent-maps*))
+        ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
         errors (->> ent-maps (m/explain schema) :errors)]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}
