@@ -70,15 +70,15 @@
 
 ;; TODO: Remove unused property-uuids
 (defn- ->block-properties-tx [properties {:keys [property-uuids] :as uuid-maps}]
-  (->> properties
-       (map
-        (fn [[prop-name val]]
-          [(db-property/create-user-property-ident-from-name (name prop-name))
-            ;; set indicates a :many value
-           (if (set? val)
-             (set (map #(translate-property-value % uuid-maps) val))
-             (translate-property-value val uuid-maps))]))
-       (into {})))
+  (mapv
+   (fn [[prop-name val]]
+     (sqlite-util/build-property-pair
+      (db-property/create-user-property-ident-from-name (name prop-name))
+      ;; set indicates a :many value
+      (if (set? val)
+        (set (map #(translate-property-value % uuid-maps) val))
+        (translate-property-value val uuid-maps))))
+   properties))
 
 (defn- create-uuid-maps
   "Creates maps of unique page names, block contents and property names to their uuids"
@@ -126,8 +126,8 @@
            :block/left {:db/id (or (:db/id last-block) page-id)}
            :block/parent {:db/id page-id}})
          (when (seq (:properties m))
-           (assoc (->block-properties-tx (:properties m) uuid-maps)
-                  :block/refs (build-property-refs (:properties m) property-db-ids)))))
+           {:block/properties (->block-properties-tx (:properties m) uuid-maps)
+            :block/refs (build-property-refs (:properties m) property-db-ids)})))
 
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
@@ -189,8 +189,8 @@
                                   {:db/id (or (property-db-ids (name prop-name))
                                               (throw (ex-info "No :db/id for property" {:property prop-name})))}
                                   (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                    (assoc (->block-properties-tx props uuid-maps)
-                                           :block/refs (build-property-refs props property-db-ids))))]))
+                                    {:block/properties (->block-properties-tx props uuid-maps)
+                                     :block/refs (build-property-refs props property-db-ids)}))]))
                             property-uuids))
         pages-and-blocks-tx
         (vec
@@ -208,7 +208,7 @@
                    :block/format :markdown}
                   (dissoc page :properties)
                   (when (seq (:properties page))
-                    (->block-properties-tx (:properties page) uuid-maps))
+                    {:block/properties (->block-properties-tx (:properties page) uuid-maps)})
                   (when (seq (:properties page))
                     {:block/refs (build-property-refs (:properties page) property-db-ids)
                      ;; app doesn't do this yet but it should to link property to page
