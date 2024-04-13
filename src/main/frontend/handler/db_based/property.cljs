@@ -27,12 +27,6 @@
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
 
-(defn- build-property-pair
-  [db-ident value]
-  (outliner-core/block-with-timestamps
-   {:property/pair-property db-ident
-    db-ident value}))
-
 (defn- build-property-value-tx-data
   [block property-id value status?]
   (when value
@@ -42,7 +36,7 @@
                               {:db/id (:db/id property-pair-e)
                                property-id value}
                               {:db/id (:db/id block)
-                               :block/properties (build-property-pair property-id value)}))
+                               :block/properties (sqlite-util/build-property-pair property-id value)}))
           block-tx-data (when status?
                           {:db/id (:db/id block)
                            :block/tags :logseq.class/task})]
@@ -510,7 +504,8 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :logseq.property/source-page current-page-id)))
+                            :block/properties
+                            (sqlite-util/build-property-pair :logseq.property/source-page current-page-id))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
@@ -521,8 +516,9 @@
                     :block/parent page-id
                     :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
-                    :logseq.property/created-from-block (:db/id block)
-                    :logseq.property/created-from-property (:db/id property)}
+                    :block/properties
+                    [(sqlite-util/build-property-pair :logseq.property/created-from-block (:db/id block))
+                     (sqlite-util/build-property-pair :logseq.property/created-from-property (:db/id property))]}
                    sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -562,7 +558,8 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :logseq.property/source-page current-page-id)))
+                            :block/properties
+                            (sqlite-util/build-property-pair :logseq.property/source-page current-page-id))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)
@@ -574,9 +571,10 @@
                        :block/parent page-id
                        :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                        page-id)
-                       :logseq.property/created-from-block [:block/uuid (:block/uuid block)]
-                       :logseq.property/created-from-property (:db/id property)
-                       :logseq.property/created-from-template [:block/uuid (:block/uuid template)]}
+                       :block/properties
+                       [(sqlite-util/build-property-pair :logseq.property/created-from-block [:block/uuid (:block/uuid block)])
+                        (sqlite-util/build-property-pair :logseq.property/created-from-property (:db/id property))
+                        (sqlite-util/build-property-pair :logseq.property/created-from-template [:block/uuid (:block/uuid template)])]}
                       sqlite-util/block-with-timestamps)]
     {:page page-tx
      :blocks [new-block]}))
