@@ -208,7 +208,7 @@
     (and k-name
          (or (contains? logseq-property-namespaces k-name)
              (contains? user-property-namespaces k-name)
-             (and (keyword? k) (contains? #{:block/tags :block/alias} k))))))
+             (and (keyword? k) (contains? db-attribute-properties k))))))
 
 ;; Helper fns
 ;; ==========
