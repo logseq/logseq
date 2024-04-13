@@ -52,7 +52,8 @@
          default-value)))
 
      (or (get (.-kv e) k)
-         (if (and (db-property/property? k)
+         (if (and (not (db-property/db-attribute-properties k))
+                  (db-property/property? k)
                   (db-based-graph? (.-db e))
                   (not (:property/pair-property e))) ; property pair will be direct access
            (k (first (filter #(some? (k %)) (lookup-entity e :block/properties nil))))
