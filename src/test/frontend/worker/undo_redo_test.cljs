@@ -155,7 +155,7 @@
     (testing "move blocks"
       (let [origin-graph-block-set (get-db-block-set @conn)
             ops (gen/generate (gen/vector (gen-op @conn {:move-block-op 1000 :boundary-op 500}) 300))]
-        (prn :ops (count ops))
+        (prn :generate-move-ops (count ops))
         (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid ops)
 
         (undo-all-then-redo-all conn)
@@ -167,7 +167,7 @@
     (testing "random ops"
       (let [origin-graph-block-set (get-db-block-set @conn)
             ops (gen/generate (gen/vector (gen-op @conn) 1000))]
-        (prn :ops (count ops))
+        (prn :generate-random-ops (count ops))
         (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid ops)
 
         (undo-all-then-redo-all conn)
