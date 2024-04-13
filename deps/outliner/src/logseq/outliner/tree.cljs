@@ -1,7 +1,6 @@
 (ns logseq.outliner.tree
   "Provides tree fns and INode protocol"
   (:require [logseq.db :as ldb]
-            [clojure.string :as string]
             [logseq.db.frontend.property :as db-property]
             [datascript.core :as d]))
 
