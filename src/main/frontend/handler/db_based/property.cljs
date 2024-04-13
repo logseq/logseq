@@ -210,7 +210,7 @@
               (when-not tags-or-alias? (upsert-property! repo property-id (assoc property-schema :type property-type) {}))
               (let [pair-id (:db/id (db-property/get-pair-e block property-id))
                     tx-data (concat
-                             [(when pair-id [:db/retractEntity pair-id])]
+                             [(when pair-id [:db/retract pair-id property-id])]
                              (build-property-value-tx-data block property-id values' false))]
                 (db/transact! repo tx-data {:outliner-op :save-block})))))))))
 
