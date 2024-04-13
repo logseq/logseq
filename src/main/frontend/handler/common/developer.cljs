@@ -10,17 +10,36 @@
             [frontend.format.mldoc :as mldoc]
             [frontend.config :as config]
             [frontend.persist-db :as persist-db]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [datascript.impl.entity :as de]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
   [eid]
-  (let [result* (db/entity eid)
-        ;; ;; handles page uuids and closed values w/o knowing type
-        ;; get-uuid-prop-value (fn [v]
-        ;;                       (or (db-pu/get-property-name v)
-        ;;                           (get-in (db/entity [:block/uuid v]) [:block/schema :value])))
+  (let [result* (db/pull eid)
+        entity (db/entity eid)
+        ;; handles page uuids and closed values w/o knowing type
+        get-uuid-prop-value (fn [v]
+                              (or (db-pu/get-property-name v)
+                                  (get-in (db/entity [:block/uuid v]) [:block/schema :value])))
         result (cond-> result*
+                 (and (seq (:block/properties entity)) (config/db-based-graph? (state/get-current-repo)))
+                 (assoc :block.debug/properties
+                        (->> (:block/properties entity)
+                             (map (fn [[k v]]
+                                    [k
+                                     (cond
+                                       (de/entity? v)
+                                       (:block/original-name v)
+                                       (and (set? v) (every? de/entity? v))
+                                       (set (map :block/original-name v))
+                                       (and (set? v) (uuid? (first v)))
+                                       (set (map get-uuid-prop-value v))
+                                       (uuid? v)
+                                       (get-uuid-prop-value v)
+                                       :else
+                                       v)]))
+                             (into {})))
                  (seq (:block/refs result*))
                  (assoc :block.debug/refs
                         (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))
