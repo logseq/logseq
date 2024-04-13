@@ -42,8 +42,8 @@
 (defn- gen-insert-block-op
   [db]
   (gen/let [block-uuid (gen-block-uuid db)]
-    [:frontend.worker.undo-redo/insert-block
-     {:block-uuid block-uuid}]))
+    [:frontend.worker.undo-redo/insert-blocks
+     {:block-uuids [block-uuid]}]))
 
 (defn- gen-remove-block-op
   [db]
@@ -112,9 +112,11 @@
     (assert (some? (d/entity current-db [:block/uuid (:block-uuid (second op))]))
             {:op op :tx-data (:tx-data tx)})
 
-    :frontend.worker.undo-redo/insert-block
-    (assert (nil? (d/entity current-db [:block/uuid (:block-uuid (second op))]))
-            {:op op :tx-data (:tx-data tx) :x (keys tx)})
+    :frontend.worker.undo-redo/insert-blocks
+    (let [entities (map #(d/entity current-db [:block/uuid %]) (:block-uuids (second op)))]
+      (assert (every? nil? entities)
+              {:op op :tx-data (:tx-data tx) :x (keys tx)}))
+
     :frontend.worker.undo-redo/remove-block
     (assert (some? (d/entity current-db [:block/uuid (:block-uuid (second op))]))
             {:op op :tx-data (:tx-data tx) :x (keys tx)})
@@ -174,3 +176,16 @@
 
         (is (= origin-graph-block-set (get-db-block-set @conn)))))
     ))
+
+;;; TODO: generate outliner-ops then undo/redo/validate
+;; (deftest undo-redo-single-step-check-gen-test
+;;   (let [conn (db/get-db false)
+;;         all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 20))]
+;;     (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid all-remove-ops)
+;;     (loop []
+;;       (when (not= :frontend.worker.undo-redo/empty-undo-stack
+;;                   (undo-redo/undo test-helper/test-db-name-db-version page-uuid conn))
+;;         (recur)))
+;;     (prn :init-blocks (d/entity @conn ))
+
+;;     ))

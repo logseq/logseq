@@ -298,3 +298,31 @@
 (defn replace-first-ignore-case
   [s old-value new-value]
   (string/replace-first s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
+
+
+(defn sort-coll-by-dependency
+  "Sort the elements in the collection based on dependencies.
+coll:  [{:id 1 :depend-on 2} {:id 2 :depend-on 3} {:id 3}]
+get-elem-id-fn: :id
+get-elem-dep-id-fn :depend-on
+return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
+  [get-elem-id-fn get-elem-dep-id-fn coll]
+  (let [id->elem (into {} (keep (juxt get-elem-id-fn identity)) coll)
+        id->dep-id (into {} (keep (juxt get-elem-id-fn get-elem-dep-id-fn)) coll)
+        all-ids (set (keys id->dep-id))
+        sorted-ids
+        (loop [r []
+               rest-ids all-ids
+               id (first rest-ids)]
+          (if-not id
+            r
+            (if-let [dep-id (id->dep-id id)]
+              ;; TODO: check no dep-cycle
+              (if-let [next-id (get rest-ids dep-id)]
+                (recur r rest-ids next-id)
+                (let [rest-ids* (disj rest-ids id)]
+                  (recur (conj r id) rest-ids* (first rest-ids*))))
+              ;; not found dep-id, so this id can be put into result now
+              (let [rest-ids* (disj rest-ids id)]
+                (recur (conj r id) rest-ids* (first rest-ids*))))))]
+    (mapv id->elem sorted-ids)))
