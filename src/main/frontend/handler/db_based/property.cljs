@@ -37,9 +37,9 @@
                                property-id value}
                               {:db/id (:db/id block)
                                :block/properties (sqlite-util/build-property-pair property-id value)}))
-          block-tx-data (when status?
-                          {:db/id (:db/id block)
-                           :block/tags :logseq.class/task})]
+          block-tx-data (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
+                          status?
+                          (assoc :block/tags :logseq.class/task))]
       [property-tx-data block-tx-data])))
 
 (defn built-in-validation-schemas
@@ -210,7 +210,7 @@
               (when-not tags-or-alias? (upsert-property! repo property-id (assoc property-schema :type property-type) {}))
               (let [pair-id (:db/id (db-property/get-pair-e block property-id))
                     tx-data (concat
-                             [(when pair-id [:db/retractEnitty pair-id])]
+                             [(when pair-id [:db/retractEntity pair-id])]
                              (build-property-value-tx-data block property-id values' false))]
                 (db/transact! repo tx-data {:outliner-op :save-block})))))))))
 
