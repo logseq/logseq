@@ -367,7 +367,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-block-parents-v2
   [repo block-id]
   (d/pull (conn/get-db repo)
-          '[:db/id :block/collapsed? :block/properties {:block/parent ...}]
+          '[:db/id :block/collapsed? {:block/parent ...}]
           [:block/uuid block-id]))
 
 (def get-block-last-direct-child-id ldb/get-block-last-direct-child-id)

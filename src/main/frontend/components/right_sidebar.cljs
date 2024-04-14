@@ -20,7 +20,8 @@
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]))
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
+            [frontend.handler.property.util :as pu]))
 
 (rum/defc toggle
   []
@@ -98,7 +99,7 @@
           page (db/entity repo lookup)
           page-name (:block/name page)]
       [[:.flex.items-center.page-title
-        (if-let [icon (get-in page [:block/properties :icon])]
+        (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
           [:.text-md.mr-2 icon]
           (ui/icon (if (= "whiteboard" (:block/type page)) "whiteboard" "page") {:class "text-md mr-2"}))
         [:span.overflow-hidden.text-ellipsis (:block/original-name page)]]

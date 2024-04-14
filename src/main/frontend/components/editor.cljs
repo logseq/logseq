@@ -583,8 +583,7 @@
   "Get textarea css class according to it's content"
   [block content format]
   (let [content (if content (str content) "")
-        properties (:block/properties block)
-        heading (pu/lookup properties :logseq.property/heading)
+        heading (pu/get-block-property-value block :logseq.property/heading)
         heading (if (true? heading)
                   (min (inc (:block/level block)) 6)
                   heading)]
