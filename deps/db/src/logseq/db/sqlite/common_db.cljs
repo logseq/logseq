@@ -84,7 +84,14 @@
                                 children)
                            (->> (d/pull-many db '[*] (map :db/id children))
                                 (map #(with-block-refs db %))
-                                (map mark-block-fully-loaded)))))]
+                                (map mark-block-fully-loaded)
+                                (mapcat (fn [block]
+                                          (let [e (d/entity db (:db/id block))]
+                                            (conj
+                                             (if (seq (:block/raw-properties e))
+                                               (vec (d/pull-many db '[*] (map :db/id (:block/raw-properties e))))
+                                               [])
+                                             block))))))))]
     (when block
       (if (:block/page block) ; not a page
         (let [block' (->> (d/pull db '[*] (:db/id block))
