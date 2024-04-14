@@ -100,9 +100,11 @@
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))
-  ([id] (hide! id 0))
-  ([id delay]
-   (let [f #(update-popup! id :open? false)]
+  ([id] (hide! id 0 {}))
+  ([id delay] (hide! id delay {}))
+  ([id delay {:keys [all?]}]
+   (let [f #(do (update-popup! id :open? false)
+                (when (true? all?) (update-popup! id :all? true)))]
      (if (and (number? delay) (> delay 0))
        (js/setTimeout f delay)
        (f)))))
@@ -110,7 +112,7 @@
 (defn hide-all!
   []
   (doseq [{:keys [id]} @*popups]
-    (hide! id)))
+    (hide! id 0 {:all? true})))
 
 (rum/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
@@ -195,5 +197,5 @@
 
     [:<>
      (for [config popups
-           :when (and (map? config) (:id config))]
+           :when (and (map? config) (:id config) (not (:all? config)))]
        (rum/with-key (x-popup config) (:id config)))]))
