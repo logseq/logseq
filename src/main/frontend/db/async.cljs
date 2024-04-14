@@ -103,9 +103,9 @@
       (when-let [^Object sqlite @db-browser/*worker]
         (state/update-state! :db/async-queries (fn [s] (conj s name')))
         (p/let [result (.get-block-and-children sqlite graph uuid-str children?)
-                {:keys [block children] :as result'} (ldb/read-transit-str result)
+                {:keys [property-pairs block children] :as result'} (ldb/read-transit-str result)
                 conn (db/get-db graph false)
-                block-and-children (cons block children)
+                block-and-children (concat property-pairs [block] children)
                 _ (d/transact! conn block-and-children)]
           (state/update-state! :db/async-queries (fn [s] (disj s name')))
           (react/refresh-affected-queries!
