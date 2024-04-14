@@ -265,14 +265,11 @@
   "Get the value of built-in block's property by its db-ident"
   [repo db block db-ident]
   (when db
-    (let [block (or (d/entity db (:db/id block)) block)
-          ;; FIXME: Use db-based-graph? when this fn moves to another ns
-          properties' (if (and (string/starts-with? repo "logseq_db_")
-                               ;; FIXME: Find a way to do this nbb check without affecting frontend
-                               (not (:block/raw-properties block)))
-                        (properties block)
-                        (:block/properties block))]
-      (lookup repo properties' db-ident))))
+    (let [block (or (d/entity db (:db/id block)) block)]
+      ;; FIXME: Use db-based-graph? when this fn moves to another ns
+      (if (string/starts-with? repo "logseq_db_")
+        (get (get-pair-e block db-ident) db-ident)
+        (lookup repo (:block/properties block) db-ident)))))
 
 (defn shape-block?
   [repo db block]
