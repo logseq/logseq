@@ -56,11 +56,11 @@
         (gp-util/capitalize-all title)]]
 
       (if today?
-        (blocks-cp repo page)
+        ;;(blocks-cp repo page)
         (ui/lazy-visible
          (fn [] (blocks-cp repo page))
-         {:debug-id (str "journal-blocks " page)}))
-
+         ;;{:debug-id (str "journal-blocks " page)}
+         ))
       {})
 
      (page/today-queries repo today? false)
