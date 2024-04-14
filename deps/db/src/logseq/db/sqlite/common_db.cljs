@@ -93,12 +93,16 @@
                           mark-block-fully-loaded)]
           (cond->
            {:block block'}
+            (seq (:block/raw-properties block))
+            (assoc :property-pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block))))
             children?
             (assoc :children (get-children (:block/_parent block)))))
         (cond->
          {:block (->> (d/pull db '[*] (:db/id block))
                       (with-tags db)
                       mark-block-fully-loaded)}
+          (seq (:block/raw-properties block))
+          (assoc :property-pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block))))
           children?
           (assoc :children
                  (if (contains? (:block/type block) "whiteboard")
