@@ -2364,3 +2364,7 @@ Similar to re-frame subscriptions"
 (defn get-current-container-id
   []
   @(:ui/container-id @state))
+
+(defn get-next-container-id
+  []
+  (swap! (:ui/container-id @state) inc))

@@ -2120,8 +2120,12 @@
       :else
       nil)))
 
-(rum/defc db-properties-cp
-  [config block edit-input-id opts]
+(rum/defcs db-properties-cp <
+  {:init (fn [state]
+           (let [container-id (or (:container-id (first (:rum/args state)))
+                                  (state/get-next-container-id))]
+             (assoc state ::initial-container-id container-id)))}
+  [state config block edit-input-id opts]
   (property-component/properties-area block
                                       edit-input-id
                                       (merge
@@ -2130,7 +2134,8 @@
                                         :block-cp blocks-container
                                         :properties-cp db-properties-cp
                                         :editor-box (get config :editor-box)
-                                        :container-id (:container-id config)
+                                        :container-id (or (:container-id config)
+                                                          (::initial-container-id state))
                                         :id (:id config)}
                                        opts)))
 
