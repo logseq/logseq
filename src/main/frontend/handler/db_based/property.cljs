@@ -28,19 +28,21 @@
 ;;           min, max -> string length, number range, cardinality size limit
 
 (defn- build-property-value-tx-data
-  [block property-id value status?]
-  (when value
-    (let [property-pair-e (db-property/get-pair-e block property-id)
-          property-tx-data (outliner-core/block-with-updated-at
-                            (if property-pair-e
-                              {:db/id (:db/id property-pair-e)
-                               property-id value}
-                              {:db/id (:db/id block)
-                               :block/properties (sqlite-util/build-property-pair property-id value)}))
-          block-tx-data (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
-                          status?
-                          (assoc :block/tags :logseq.class/task))]
-      [property-tx-data block-tx-data])))
+  ([block property-id value]
+   (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
+  ([block property-id value status?]
+   (when value
+     (let [property-pair-e (db-property/get-pair-e block property-id)
+           property-tx-data (outliner-core/block-with-updated-at
+                             (if property-pair-e
+                               {:db/id (:db/id property-pair-e)
+                                property-id value}
+                               {:db/id (:db/id block)
+                                :block/properties (sqlite-util/build-property-pair property-id value)}))
+           block-tx-data (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
+                           status?
+                           (assoc :block/tags :logseq.class/task))]
+       [property-tx-data block-tx-data]))))
 
 (defn built-in-validation-schemas
   "A frontend version of built-in-validation-schemas that adds the current database to
@@ -150,16 +152,18 @@
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (db/entity db-ident))]
       (let [tx-data (->>
-                     (conj
+                     (concat
                       [(cond->
-                        (merge
-                         (outliner-core/block-with-updated-at
-                          {:db/ident db-ident
-                           :block/schema schema})
-                         properties)
+                        (outliner-core/block-with-updated-at
+                         {:db/ident db-ident
+                          :block/schema schema})
                          property-name
                          (assoc :block/original-name property-name))]
-                      (update-schema property schema))
+                      (when (seq properties)
+                        (mapcat
+                         (fn [[property-id v]]
+                           (build-property-value-tx-data property property-id v)) properties))
+                      [(update-schema property schema)])
                      (remove nil?))
             many->one? (and (= (:db/cardinality property) :db.cardinality/many)
                             (= :one (:cardinality schema)))]

@@ -3,8 +3,6 @@
             [frontend.components.page :as page]
             [frontend.util :as util]
             [logseq.sdk.utils :as sdk-util]
-            [camel-snake-kebab.core :as csk]
-            [goog.object :as gobj]
             [frontend.handler.plugin :as plugin-handler]))
 
 (defn ^:export cp_page_editor
