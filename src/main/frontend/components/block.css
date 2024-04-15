@@ -6,13 +6,7 @@
 }
 
 .block-content {
-  min-height: 24px;
-  max-width: 100%;
-  overflow: initial;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  cursor: text;
+  @apply min-h-[24px] max-w-full whitespace-pre-wrap break-words cursor-text;
 
   img {
     max-width: 100%;
@@ -384,6 +378,13 @@
 
   &.selected {
     border-radius: 2px;
+  }
+}
+
+.block-children {
+  > .ls-block:first-child {
+    padding-top: 2px;
+    border-top: 1px solid transparent;
   }
 }
 
