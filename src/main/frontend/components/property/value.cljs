@@ -69,7 +69,7 @@
 
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
-  Otherwise, add a block's property and its value"
+  Otherwise, add a block's property and its value. Creates a new property as needed"
   ([block property-key property-value] (<add-property! block property-key property-value {}))
   ([block property-key property-value {:keys [exit-edit? class-schema?]
                                        :or {exit-edit? true}}]
@@ -79,7 +79,17 @@
       (when property-key
         (if (and class? class-schema?)
           (db-property-handler/class-add-property! repo (:block/uuid block) property-key)
-          (property-handler/set-block-property! repo (:block/uuid block) property-key property-value)))
+          (let [[property-id property-value']
+                (if (string? property-key)
+                 (if-let [ent (db/entity [:block/original-name property-key])]
+                   [(:db/ident ent) property-value]
+                  ;; This is a new property. Create a new property id to use of set-block-property!
+                   [(db-property-handler/ensure-unique-db-ident
+                     (db/get-db (state/get-current-repo))
+                     (db-property/create-user-property-ident-from-name property-key))
+                    :logseq.property/empty-placeholder])
+                  [property-key property-value])]
+            (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?
         (shui/popup-hide!)
         (exit-edit-property))))))

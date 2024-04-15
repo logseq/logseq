@@ -121,7 +121,7 @@
         {:db/ident ident
          :db/cardinality cardinality})))
 
-(defn- ensure-unique-db-ident
+(defn ensure-unique-db-ident
   "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
   unique by adding a suffix with a unique number e.g. :db-ident-1 :db-ident-2"
   [db db-ident]
@@ -247,9 +247,11 @@
   (if (uuid? id) [:block/uuid id] id))
 
 (defn set-block-property!
+  "Updates a block property's value for the an existing property-id. If possibly
+  creating a new property, use upsert-property!"
   [repo block-eid property-id v {:keys [property-name] :as opts}]
   (let [block-eid (->eid block-eid)
-        _ (assert (keyword? property-id) "property-id should be a keyword")
+        _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
         property (db/entity property-id)
         v (if (and (uuid? v)
