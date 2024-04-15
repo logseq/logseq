@@ -132,12 +132,11 @@
                           (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
                                                        (concat pages blocks))
                                 tx-id (get-in tx-report [:tempids :db/current-tx])]
-                            (->>
-                             (map (fn [b]
+                            (keep (fn [b]
                                     (when-let [db-id (:db/id b)]
-                                      {:db/id db-id
-                                       :block/tx-id tx-id})) updated-blocks)
-                             (remove nil?))))
+                                      (when-not (:property/pair-property b)
+                                        {:db/id db-id
+                                         :block/tx-id tx-id}))) updated-blocks)))
               tx-report' (or
                           (when (seq replace-tx)
                           ;; TODO: remove this since transact! is really slow

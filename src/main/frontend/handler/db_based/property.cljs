@@ -259,6 +259,7 @@
       db-attribute?
       (db/transact! repo [{:db/id (:db/id block) property-id v}]
         {:outliner-op :save-block})
+
       (and multiple-values? (coll? v))
       (reset-block-property-multiple-values! repo block-eid property-id v opts)
 
