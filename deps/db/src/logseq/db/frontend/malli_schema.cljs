@@ -85,21 +85,36 @@
    ents))
 
 (defn datoms->entity-maps
-  "Returns entity maps for given :eavt datoms indexed by db/id"
-  [datoms]
-  (->> datoms
-       (reduce (fn [acc {:keys [a e v]}]
-                 (if (contains? db-schema/card-many-attributes a)
-                   (update acc e update a (fnil conj #{}) v)
-                   ;; TODO: Only do this for property pair ents. Is there a way to
-                   ;; confirm property's cardinality w/o more ent lookups?
-                   ;; If there's already a val, automatically start collecting it as a :many
-                   (if-let [existing-val (get-in acc [e a])]
-                     (if (set? existing-val)
-                       (update acc e assoc a (conj existing-val v))
-                       (update acc e assoc a #{existing-val v}))
-                     (update acc e assoc a v))))
-               {})))
+  "Returns entity maps for given :eavt datoms indexed by db/id. Optional keys:
+   * :entity-fn - Optional fn that given an entity id, returns entity. Defaults
+     to just doing a lookup within entity-maps to be as performant as possible"
+  [datoms & {:keys [entity-fn]}]
+  (let [ent-maps
+        (reduce (fn [acc {:keys [a e v]}]
+                  (if (contains? db-schema/card-many-attributes a)
+                    (update acc e update a (fnil conj #{}) v)
+                    ;; If there's already a val, don't clobber it and automatically start collecting it as a :many
+                    (if-let [existing-val (get-in acc [e a])]
+                      (if (set? existing-val)
+                        (update acc e assoc a (conj existing-val v))
+                        (update acc e assoc a #{existing-val v}))
+                      (update acc e assoc a v))))
+                {}
+                datoms)
+        entity-fn' (or entity-fn #(get ent-maps %))]
+    (-> ent-maps
+        (update-vals
+         (fn [v]
+           (let [pair-ent (when (:property/pair-property v) (entity-fn' (:property/pair-property v)))]
+             (if-let [prop-value
+                      (and pair-ent
+                           (= :db.cardinality/many (:db/cardinality pair-ent))
+                           (get v (:db/ident pair-ent)))]
+               (if-not (set? prop-value)
+                 ;; Fix :many property values that only had one value
+                 (assoc v (:db/ident pair-ent) #{prop-value})
+                 v)
+               v)))))))
 
 (defn datoms->entities
   "Returns a vec of entity maps given :eavt datoms"
