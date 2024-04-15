@@ -95,13 +95,14 @@
 (rum/defc page-blocks-inner <
   {:did-mount open-root-block!}
   [page-e blocks config sidebar? whiteboard? _block-uuid]
-  (let [hiccup (component-block/->hiccup blocks config {})]
-    [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
-     (rum/with-key
-       (content/content (str (:block/uuid page-e))
-                        {:hiccup   hiccup
-                         :sidebar? sidebar?})
-       (str (:block/uuid page-e) "-hiccup"))]))
+  (when page-e
+    (let [hiccup (component-block/->hiccup blocks config {})]
+      [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
+       (rum/with-key
+         (content/content (str (:block/uuid page-e))
+                          {:hiccup   hiccup
+                           :sidebar? sidebar?})
+         (str (:block/uuid page-e) "-hiccup"))])))
 
 (declare page)
 

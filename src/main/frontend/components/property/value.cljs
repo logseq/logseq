@@ -402,7 +402,7 @@
             items (if closed-values?
                     (keep (fn [id]
                             (when-let [block (when id (db/entity [:block/uuid id]))]
-                              (let [icon (get block (pu/get-pid :logseq.property/icon))
+                              (let [icon (pu/get-block-property-value block :logseq.property/icon)
                                     value (db-property/closed-value-name block)]
                                 {:label (if icon
                                           [:div.flex.flex-row.gap-2
@@ -541,7 +541,7 @@
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
         (let [value' (get-in block [:block/schema :value])
-              icon (get block (pu/get-pid :logseq.property/icon))]
+              icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
             (:block/name block)
             (page-cp {:disable-preview? true
