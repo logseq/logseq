@@ -392,10 +392,18 @@
   (let [repo (state/get-current-repo)]
     ;; existing property selected or entered
     (if-let [property (db/entity [:block/original-name property-name])]
-      (if (and (not (get-in property [:block/schema :public?]))
-               (ldb/built-in? property))
+      (cond
+        (and (not (get-in property [:block/schema :public?]))
+             (ldb/built-in? property))
         (do (notification/show! "This is a private built-in property that can't be used." :error)
             (pv/exit-edit-property))
+
+        (= :default (get-in property [:block/schema :type]))
+        (do
+          (pv/<create-new-block! entity property "")
+          nil)
+
+        :else
         ;; Both conditions necessary so that a class can add its own page properties
         (when (and (contains? (:block/type entity) "class") class-schema?)
           (pv/<add-property! entity property-name "" {:class-schema? class-schema?

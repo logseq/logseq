@@ -56,6 +56,8 @@
     .property-pair {
         @apply grid grid-cols-5 gap-1;
 
+        min-height: 30px;
+
         .jtrigger {
             @apply relative;
 
