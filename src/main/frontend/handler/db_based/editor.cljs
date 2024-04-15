@@ -79,7 +79,9 @@
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
-                      block' (merge block (block/parse-block (assoc block :block/content content')))
+                      block' (merge block
+                                    (block/parse-block (assoc block :block/content content'))
+                                    {:block/content content})
                       block' (if (seq (:block/properties block))
                                (update block' :block/properties (fn [m] (merge m (:block/properties block))))
                                block')]

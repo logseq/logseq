@@ -300,7 +300,7 @@
 
 (rum/defc page-title-configure
   [*show-page-info?]
-  [:div.absolute.-top-4.left-2.fade-in
+  [:div.absolute.-top-4.left-2.fade-in.faster-fade-in
    (shui/button
     {:variant :outline
      :size :xs
