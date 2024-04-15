@@ -468,7 +468,7 @@
               (db-async/<get-block (state/get-current-repo) page-name')
               (route-handler/update-page-title-and-label! (state/get-route-match)))
              (assoc state ::page-name page-name')))}
-  [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs?] :as option}]
+  [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
   (let [loading? (when (::page-name state)  (state/sub-async-query-loading (::page-name state)))]
     (when-let [path-page-name (get-path-page-name state page-name)]
       (let [current-repo (state/sub :git/current-repo)
