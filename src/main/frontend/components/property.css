@@ -171,12 +171,6 @@ input.simple-input:focus {
     box-shadow: none;
 }
 
-.page-configure {
-    @screen md {
-        max-width: 720px;
-    }
-}
-
 .property-key .bullet-container .bullet, .ls-property-input .bullet-container .bullet {
     background-color: darkgrey;
 }

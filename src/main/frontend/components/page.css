@@ -401,18 +401,28 @@ html.is-native-ios {
 }
 
 .page-info {
-  @apply ml-[-10px] mb-[12px] border rounded-md;
+  @apply ml-[-18px] mb-[12px] border rounded-md;
 
   &-inner {
     @apply py-2;
   }
 
   .ls-page-properties {
-    @apply bg-gray-03 rounded-md px-3 gap-1;
+    @apply bg-gray-03 rounded-md px-2.5 gap-1;
   }
 
   .configure-wrap {
-    @apply px-2;
+    @apply px-2.5 pt-1;
+  }
+
+  .page-configure {
+    > div:not(.ls-page-properties) {
+      @apply pl-[36px];
+
+      > .col-span-3 {
+        @apply relative left-[-24px];
+      }
+    }
   }
 
   .ls-new-property {
@@ -423,10 +433,14 @@ html.is-native-ios {
     @apply border-transparent mt-[-4px] -mb-[14px];
 
     &:has(.select-item) {
-      @apply py-2 relative -left-1;
+      @apply py-2 relative left-0;
 
       .info-title {
         @apply relative -top-1;
+      }
+
+      .properties-wrap {
+        @apply pl-2;
       }
     }
 

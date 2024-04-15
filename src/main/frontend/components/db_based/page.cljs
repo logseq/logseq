@@ -113,7 +113,7 @@
                       property? :property
                       class? :class
                       :else :page)))
-    [:div.flex.flex-col.gap-1
+    [:div.flex.flex-col.gap-1.page-configure
      (if (= mode :property)
        (property-component/property-config page {:inline-text component-block/inline-text})
        [:<>
@@ -122,7 +122,6 @@
         (when-not (or config/publishing? class?)
           (tags-row page))
         (when-not config/publishing? (icon-row page))
-        [:h2 "Properties: "]
         (page-properties page (assoc page-opts :mode mode))])]))
 
 (rum/defc page-properties-react < rum/reactive
@@ -212,13 +211,13 @@
                     [:div {:on-click util/stop-propagation}
                      (tags page)])]
                  [:div.page-info-title-placeholder])
-               [:div.flex.flex-row.items-center.gap-1
+               [:div.flex.flex-row.items-center
                 [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
                 (mode-switch types *mode)])]
             (when (or @*hover? (not collapsed?))
-              [:div.px-1.absolute.right-0.top-0
+              [:div.px-1.absolute.right-1.top-0
                (shui/button
-                 {:variant :ghost :size :sm}
+                 {:variant :ghost :size :sm :class "!px-1"}
                  (if collapsed?
                    [:span.opacity-80.flex.items-center
                     (ui/icon "adjustments-horizontal" {:size 16})]
@@ -230,5 +229,5 @@
                       (and class? (seq (:properties (:block/schema page)))))
               [:div.properties-wrap
                (page-properties page {:mode (if class? :class :page)})])
-            [:div.pt-2.configure-wrap
+            [:div.configure-wrap
              (page-configure page *mode)]))]])))
