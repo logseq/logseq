@@ -28,8 +28,8 @@
             [frontend.handler.property.util :as pu]))
 
 (rum/defc property-empty-value
-  []
-  (shui/button {:class "empty-btn" :variant :text} "Empty"))
+  [& {:as opts}]
+  (shui/button (merge {:class "empty-btn" :variant :text} opts) "Empty"))
 
 (rum/defc icon-row < rum/reactive
   [block]
@@ -495,7 +495,7 @@
     (when value
       (if (state/sub-async-query-loading value)
         [:div.text-sm.opacity-70 "loading"]
-        (if-let [v-block (db/sub-block (:db/id (db/entity [:block/uuid value])))]
+        (if-let [v-block (db/sub-block (:db/id value))]
           (let [class? (contains? (:block/type v-block) "class")
                 invalid-warning [:div.warning.text-sm
                                  "Invalid block value, please delete the current property."]]
@@ -515,8 +515,8 @@
                 (:block/name v-block)
                 (rum/with-key
                   (page-cp {:disable-preview? true
-                           :hide-close-button? true
-                           :tag? class?} v-block)
+                            :hide-close-button? true
+                            :tag? class?} v-block)
                   (:db/id v-block))
                 :else
                 invalid-warning)
@@ -634,14 +634,12 @@
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
         type (:type schema)
-        type (or (when (and (= type :default) (uuid? value)) :block)
-                 type
-                 :default)
-        type (if (= :block type)
-               (let [v-block (db/entity value)]
-                 (if (get v-block (pu/get-pid :logseq.property/created-from-template))
-                   :template
-                   type))
+        type (if (= :default type)
+               (or
+                (let [v-block (db/entity value)]
+                  (when (get v-block (pu/get-pid :logseq.property/created-from-template))
+                    :template))
+                type)
                type)
         template? (= :template type)]
     [:div.cursor-text.jtrigger
@@ -650,32 +648,24 @@
       :class class
       :style {:min-height 24}
       :on-click (fn []
-                  (let [property-block (when (and (= type :block) (uuid? value))
-                                         (db/entity [:block/uuid value]))
-                        invalid-block? (and (= type :block) (uuid? value)
-                                            (or (nil? property-block)
-                                                (nil? (:block/_parent property-block))))
-                        value (if invalid-block? "" value)]
-                    (when (or (= type :default) invalid-block?)
-                      (set-editing! block property editor-id dom-id value opts))))}
-     (if (string/blank? value)
-       (if template?
-         (let [id (first (:classes schema))
-               template (when id (db/entity [:block/uuid id]))]
-           (when template
-             [:a.fade-link.pointer.text-sm.jtrigger
-              {:on-click (fn [e]
-                           (util/stop e)
-                           (<create-new-block-from-template! block property template))}
-              (str "Use template #" (:block/original-name template))]))
-         (property-empty-value))
+                  ;; FIXME:
+                  )}
+     (if (and (string/blank? value) template?)
+       (let [id (first (:classes schema))
+             template (when id (db/entity [:block/uuid id]))]
+         (when template
+           [:a.fade-link.pointer.text-sm.jtrigger
+            {:on-click (fn [e]
+                         (util/stop e)
+                         (<create-new-block-from-template! block property template))}
+            (str "Use template #" (:block/original-name template))]))
        (cond
          (= type :template)
          (property-template-value {:editor-id editor-id}
                                   value
                                   opts)
 
-         (and (= type :block) (uuid? value))
+         (= type :default)
          (property-block-value value block property block-cp editor-box opts page-cp editor-id)
 
          :else

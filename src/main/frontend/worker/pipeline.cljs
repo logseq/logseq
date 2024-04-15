@@ -10,7 +10,8 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
@@ -43,8 +44,7 @@
                        created-from-property (get b :logseq.property/created-from-property)
                        created-block (d/entity after-db (:db/id created-from-block))]
                    (when (and created-block created-from-property)
-                     [[:db/retractEntity (:db/id b)]
-                      [:db/add (:db/id created-block) (:db/ident created-from-property) ""]])))
+                     [[:db/retractEntity (:db/id b)]])))
                empty-property-parents)
        (remove nil?)))))
 
