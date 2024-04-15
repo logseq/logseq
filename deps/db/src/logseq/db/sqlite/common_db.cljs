@@ -71,6 +71,23 @@
   [b]
   (assoc b :block.temp/fully-loaded? true))
 
+(defn- property-with-values
+  [db block]
+  (let [pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block)))]
+    (mapcat
+     (fn [pair]
+       (let [property (d/entity db (:db/id (:property/pair-property pair)))
+             property-values (get pair (:db/ident property))
+             values (if (set? property-values) property-values #{property-values})
+             value-ids (when (every? map? values)
+                         (map :db/id values))
+             value-blocks (when (seq value-ids) (d/pull-many db '[*] value-ids))
+             page (when (seq values)
+                    (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
+                      (d/pull db '[*] page-id)))]
+         (concat [page] value-blocks [pair])))
+     pairs)))
+
 (defn get-block-and-children
   [db id children?]
   (let [block (d/entity db (if (uuid? id)
@@ -89,7 +106,7 @@
                                           (let [e (d/entity db (:db/id block))]
                                             (conj
                                              (if (seq (:block/raw-properties e))
-                                               (vec (d/pull-many db '[*] (map :db/id (:block/raw-properties e))))
+                                               (vec (property-with-values db e))
                                                [])
                                              block))))))))]
     (when block
@@ -101,7 +118,7 @@
           (cond->
            {:block block'}
             (seq (:block/raw-properties block))
-            (assoc :property-pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block))))
+            (assoc :property-pairs (property-with-values db block))
             children?
             (assoc :children (get-children (:block/_parent block)))))
         (cond->
@@ -109,7 +126,7 @@
                       (with-tags db)
                       mark-block-fully-loaded)}
           (seq (:block/raw-properties block))
-          (assoc :property-pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block))))
+          (assoc :property-pairs (property-with-values db block))
           children?
           (assoc :children
                  (if (contains? (:block/type block) "whiteboard")

@@ -478,7 +478,7 @@
 (rum/defcs property-block-value < rum/reactive
   (rum/local nil ::template-instance)
   {:init (fn [state]
-           (let [block-id (first (:rum/args state))]
+           (let [block-id (:block/uuid (first (:rum/args state)))]
              (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
   [state value block property block-cp editor-box opts page-cp editor-id]
@@ -491,7 +491,7 @@
           (let [class? (contains? (:block/type v-block) "class")
                 invalid-warning [:div.warning.text-sm
                                  "Invalid block value, please delete the current property."]]
-            (if v-block
+            (when v-block
               (cond
                 (:block/page v-block)
                 (property-normal-block-value v-block block-cp editor-box)
@@ -511,8 +511,7 @@
                             :tag? class?} v-block)
                   (:db/id v-block))
                 :else
-                invalid-warning)
-              invalid-warning))
+                invalid-warning)))
           (property-empty-value))))))
 
 (rum/defc closed-value-item < rum/reactive
