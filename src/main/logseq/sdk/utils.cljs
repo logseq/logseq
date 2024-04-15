@@ -2,6 +2,7 @@
   (:require [clojure.walk :as walk]
             [camel-snake-kebab.core :as csk]
             [frontend.util :as util]
+            [goog.object :as gobj]
             [cljs-bean.core :as bean]))
 
 (defn normalize-keyword-for-json
@@ -31,6 +32,20 @@
     :else
     (throw (js/Error. (str s " is not a valid UUID string.")))))
 
+(defn jsx->clj
+  [^js obj]
+  (if (js/goog.isObject obj)
+    (-> (fn [result k]
+          (let [v (gobj/get obj k)
+                k (keyword (csk/->kebab-case k))]
+            (if (= "function" (goog/typeOf v))
+              (assoc result k v)
+              (assoc result k (jsx->clj v)))))
+      (reduce {} (gobj/getKeys obj)))
+    obj))
+
 (def ^:export to-clj bean/->clj)
+(def ^:export jsx-to-clj jsx->clj)
+(def ^:export to-js bean/->js)
 (def ^:export to-keyword keyword)
 (def ^:export to-symbol symbol)

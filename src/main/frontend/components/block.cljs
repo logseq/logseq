@@ -509,7 +509,7 @@
 (declare page-reference)
 
 (defn open-page-ref
-  [page-entity e page-name contents-page?]
+  [config page-entity e page-name contents-page?]
   (util/stop e)
   (when (not (util/right-click? e))
     (let [page (or (first (:block/_alias page-entity)) page-entity)]
@@ -530,7 +530,8 @@
         (state/pub-event! [:page/create page-name])
 
         :else
-        (route-handler/redirect-to-page! (:block/uuid page)))))
+        (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
+          (apply [(:block/uuid page)])))))
   (when (and contents-page?
              (util/mobile?)
              (state/get-left-sidebar-open?))
@@ -577,11 +578,11 @@
       :on-pointer-up (fn [e]
                        (when @*mouse-down?
                          (state/clear-edit!)
-                         (open-page-ref page-entity e page-name contents-page?)
+                         (open-page-ref config page-entity e page-name contents-page?)
                          (reset! *mouse-down? false)))
       :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
                            (state/clear-edit!)
-                           (open-page-ref page-entity e page-name contents-page?)))}
+                           (open-page-ref config page-entity e page-name contents-page?)))}
      (when-not hide-icon?
        (when-let [icon (get page-entity (pu/get-pid :logseq.property/icon))]
          [:span.mr-1.inline-flex.items-center (icon/icon icon)]))
@@ -1727,7 +1728,7 @@
   (reset! *dragging-block block))
 
 (defn- bullet-on-click
-  [e block uuid]
+  [e block uuid {:keys [on-redirect-to-page]}]
   (cond
     (pu/shape-block? block)
     (route-handler/redirect-to-page! (get-in block [:block/page :block/uuid]) {:block-id uuid})
@@ -1747,7 +1748,9 @@
         (util/stop e))
 
     :else
-    (when uuid (route-handler/redirect-to-page! uuid))))
+    (when uuid
+      (-> (or on-redirect-to-page route-handler/redirect-to-page!)
+        (apply [(str uuid)])))))
 
 (declare block-list)
 (rum/defc block-children < rum/reactive
@@ -1818,7 +1821,7 @@
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
 
-     (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid)}
+     (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid config)}
                    [:span.bullet-container.cursor
                     {:id (str "dot-" uuid)
                      :draggable true
@@ -2642,7 +2645,9 @@
                (if (:block/name block) :page :block)]))
 
            :else
-           (route-handler/redirect-to-page! (:block/uuid block))))}
+           (when-let [uuid (:block/uuid block)]
+             (-> (or (:on-redirect-to-page config) route-handler/redirect-to-page!)
+               (apply [(str uuid)])))))}
    label])
 
 (rum/defc breadcrumb-separator
@@ -2652,13 +2657,13 @@
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb < rum/reactive
-  {:init (fn [state]
-           (let [args (:rum/args state)
-                 block-id (nth args 2)
-                 depth (:level-limit (last args))]
-             (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
-               (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
-             state))}
+                       {:init (fn [state]
+                                (let [args (:rum/args state)
+                                      block-id (nth args 2)
+                                      depth (:level-limit (last args))]
+                                  (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
+                                    (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
+                                  state))}
   [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}

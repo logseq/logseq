@@ -2,25 +2,14 @@
   (:require [frontend.state :as state]
             [frontend.components.page :as page]
             [frontend.util :as util]
+            [logseq.sdk.utils :as sdk-util]
             [camel-snake-kebab.core :as csk]
             [goog.object :as gobj]
             [frontend.handler.plugin :as plugin-handler]))
 
-(defn- jsx->clj
-  [^js obj]
-  (if (js/goog.isObject obj)
-    (-> (fn [result k]
-          (let [v (gobj/get obj k)
-                k (keyword (csk/->kebab-case k))]
-            (if (= "function" (goog/typeOf v))
-              (assoc result k v)
-              (assoc result k (jsx->clj v)))))
-      (reduce {} (gobj/getKeys obj)))
-    obj))
-
 (defn ^:export cp_page_editor
   [^js props]
-  (let [props1 (jsx->clj props)
+  (let [props1 (sdk-util/jsx->clj props)
         page-name (some-> props1 :page)
         linked-refs? (some-> props1 :include-linked-refs)
         unlinked-refs? (some-> props1 :include-unlinked-refs)
