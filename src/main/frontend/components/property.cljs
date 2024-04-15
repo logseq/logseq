@@ -739,8 +739,12 @@
         root-block? (= (:id opts) (str (:block/uuid block)))
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
-                                (if (or root-block? page? page-configure?)
+                                (cond
+                                  (= property-id :logseq.property/built-in?)
+                                  true
+                                  (or root-block? page? page-configure?)
                                   false
+                                  :else
                                   (boolean (:hide? (:block/schema (db/entity property-id))))))
         property-hide-f (cond
                           config/publishing?

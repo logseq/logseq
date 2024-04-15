@@ -47,30 +47,47 @@
                                        :public? true}}
    ;; number (1-6) or boolean for auto heading
    :logseq.property/heading {:schema {:type :any :hide? true}}
-   :logseq.property/created-from-block    {:schema {:type :entity}}
-   :logseq.property/created-from-property {:schema {:type :entity}}
-   :logseq.property/created-from-template {:schema {:type :entity}}
-   :logseq.property/source-page           {:schema {:type :entity}}
-   :logseq.property/built-in?             {:schema {:type :checkbox}
-                                           :hide? true}
-   :logseq.property/hide-properties?      {:schema {:type :checkbox}}
-   :logseq.property/query-table {:schema {:type :checkbox}}
+   :logseq.property/created-from-block    {:schema {:type :entity
+                                                    :hide? true}}
+   :logseq.property/created-from-property {:schema {:type :entity
+                                                    :hide? true}}
+   :logseq.property/created-from-template {:schema {:type :entity
+                                                    :hide? true}}
+   :logseq.property/source-page           {:schema {:type :entity
+                                                    :hide? true}}
+   :logseq.property/built-in?             {:schema {:type :checkbox
+                                                    :hide? true}}
+   :logseq.property/hide-properties?      {:schema {:type :checkbox
+                                                    :hide? true}}
+   :logseq.property/query-table {:schema {:type :checkbox
+                                          :hide? true}}
    ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords
-   :logseq.property/query-properties {:schema {:type :coll}}
+   :logseq.property/query-properties {:schema {:type :coll
+                                               :hide? true}}
    ;; query-sort-by is either a property uuid or a keyword where keyword is a special frontend keyword
-   :logseq.property/query-sort-by {:schema {:type :any}}
-   :logseq.property/query-sort-desc {:schema {:type :checkbox}}
-   :logseq.property/ls-type {:schema {:type :keyword}}
-   :logseq.property/hl-type {:schema {:type :keyword}}
-   :logseq.property/hl-page {:schema {:type :number}}
-   :logseq.property/hl-stamp {:schema {:type :number}}
-   :logseq.property/hl-color {:schema {:type :default}}
+   :logseq.property/query-sort-by {:schema {:type :any
+                                            :hide? true}}
+   :logseq.property/query-sort-desc {:schema {:type :checkbox
+                                              :hide? true}}
+   :logseq.property/ls-type {:schema {:type :keyword
+                                      :hide? true}}
+   :logseq.property/hl-type {:schema {:type :keyword
+                                      :hide? true}}
+   :logseq.property/hl-page {:schema {:type :number
+                                      :hide? true}}
+   :logseq.property/hl-stamp {:schema {:type :number
+                                       :hide? true}}
+   :logseq.property/hl-color {:schema {:type :default
+                                       :hide? true}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
-                                     :schema {:type :default}}
+                                     :schema {:type :default
+                                              :hide? true}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page
-                                 :schema {:type :map}}
+                                 :schema {:type :map
+                                          :hide? true}}
    :logseq.property.tldraw/shape {:name :logseq.tldraw.shape
-                                  :schema {:type :map}}
+                                  :schema {:type :map
+                                           :hide? true}}
 
    ;; Task props
    :logseq.task/status
@@ -163,7 +180,8 @@
                              :hide? true
                              :view-context :page
                              :public? true}}
-   :logseq.property/filters {:schema {:type :map}}
+   :logseq.property/filters {:schema {:type :map
+                                      :hide? true}}
    :logseq.property/exclude-from-graph-view {:schema
                                              {:type :checkbox
                                               :hide? true
