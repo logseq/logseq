@@ -53,7 +53,9 @@
                            (update :block/page
                                    (fn [id] (select-keys (d/entity db id)
                                                          [:block/name :block/type :db/id :block/created-at])))))
+               :errors errors'
                ;; Group by type to reduce verbosity
+               ;; TODO: Move/remove this to another fn if unused
                :errors-by-type
                (->> (group-by :type errors')
                     (map (fn [[type' type-errors]]

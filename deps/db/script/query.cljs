@@ -28,7 +28,7 @@
         [dir db-name] (get-dir-and-db-name graph-dir)
         conn (sqlite-db/open-db! dir db-name)
         results (if ((set args) "-e")
-                  (map #(let [ent (d/entity @conn (edn/read-string %))]
+                  (map #(when-let [ent (d/entity @conn (edn/read-string %))]
                           (into {:db/id (:db/id ent)} ent)) (drop 2 args))
                   ;; assumes no :in are in queries
                   (let [query (into (edn/read-string query*) [:in '$ '%])]

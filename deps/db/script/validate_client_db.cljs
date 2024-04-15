@@ -11,31 +11,42 @@
             [babashka.cli :as cli]
             ["path" :as node-path]
             ["os" :as os]
-            [cljs.pprint :as pprint]))
+            [cljs.pprint :as pprint]
+            [malli.error :as me]))
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
-  [db ent-maps* {:keys [verbose group-errors closed-maps]}]
+  [db ent-maps* {:keys [verbose group-errors humanize closed-maps]}]
   (let [ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
         schema (db-validate/update-schema db-malli-schema/DB db {:closed-schema? closed-maps})]
-    (if-let [errors (->> ent-maps
+    (if-let [explanation (->> ent-maps
                          (m/explain schema)
-                         :errors)]
+                         not-empty)]
       (do
         (if group-errors
-          (let [ent-errors (db-validate/group-errors-by-entity db ent-maps errors)]
+          (let [ent-errors (db-validate/group-errors-by-entity db ent-maps (:errors explanation))]
             (println "Found" (count ent-errors) "entities in errors:")
-            (if verbose
+            (cond
+              verbose
               (pprint/pprint ent-errors)
+              humanize
+              (pprint/pprint (map #(-> (dissoc % :errors-by-type)
+                                       (update :errors (fn [errs] (me/humanize {:errors errs}))))
+                                  ent-errors))
+              :else
               (pprint/pprint (map :entity ent-errors))))
-          (do
+          (let [errors (:errors explanation)]
             (println "Found" (count errors) "errors:")
-            (if verbose
+            (cond
+              verbose
               (pprint/pprint
                (map #(assoc %
                             :entity (get ent-maps (-> % :in first))
                             :schema (m/form (:schema %)))
                     errors))
+              humanize
+              (pprint/pprint (me/humanize {:errors errors}))
+              :else
               (pprint/pprint errors))))
         (js/process.exit 1))
       (println "Valid!"))))
@@ -44,6 +55,8 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
+   :humanize {:alias :H
+              :desc "Humanize errors as an alternative to -v"}
    :verbose {:alias :v
              :desc "Print more info"}
    :closed-maps {:alias :c
