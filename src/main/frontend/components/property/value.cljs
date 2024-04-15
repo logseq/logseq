@@ -657,7 +657,7 @@
                                   value
                                   opts)
 
-         (and (= type :default) (nil? value))
+         (and (= type :default) (nil? (:block/content value)))
          (property-empty-value)
 
          (= type :default)
