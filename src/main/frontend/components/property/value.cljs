@@ -27,6 +27,10 @@
             [datascript.impl.entity :as de]
             [frontend.handler.property.util :as pu]))
 
+(rum/defc property-empty-value
+  []
+  (shui/button {:class "empty-btn" :variant :text} "Empty"))
+
 (rum/defc icon-row < rum/reactive
   [block]
   (let [icon-value (:logseq.property/icon block)]
@@ -103,7 +107,6 @@
         initial-day (some-> value' (.getTime) (js/Date.))
         initial-month (when value'
                         (js/Date. (.getFullYear value') (.getMonth value')))]
-
     (rum/use-effect!
      (fn []
        (when editing?
@@ -146,7 +149,7 @@
                   (assoc :default-month initial-month)))))]
 
        (shui/button
-        {:class "jtrigger !p-1"
+        {:class (str "jtrigger " (when-not value " empty-btn"))
          :ref *trigger-ref
          :variant :text
          :size :sm
@@ -157,7 +160,9 @@
                          (util/stop e)
                          (shui/popup-show! (.-target e) content-fn
                                            {:align "start" :auto-focus? true}))))}
-        (ui/icon (if multiple-values? "calendar-plus" "calendar") {:size 16})))]))
+        (if (nil? value)
+          "Empty"
+          (ui/icon "calendar-plus" {:size 16 :class "!p-1"}))))]))
 
 
 (rum/defc property-value-date-picker
@@ -496,7 +501,7 @@
       [:div.property-block-container.w-full
        (block-cp children {:id (str (:block/uuid parent))
                            :editor-box editor-box})]
-      [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])))
+      (property-empty-value))))
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
@@ -555,7 +560,7 @@
                 :else
                 invalid-warning)
               invalid-warning))
-          [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])))))
+          (property-empty-value))))))
 
 (rum/defc closed-value-item < rum/reactive
   [value {:keys [page-cp inline-text icon?]}]
@@ -589,13 +594,13 @@
     [:div.select-item
      (cond
        (= value :logseq.property/empty-placeholder)
-       (shui/button {:class "empty-btn" :variant :text} "Empty")
+       (property-empty-value)
 
        (contains? #{:page :date} type)
        (when value
          (rum/with-key
            (page-cp {:disable-preview? true
-                    :hide-close-button? true} value)
+                     :hide-close-button? true} value)
            (:db/id value)))
 
        closed-values?
@@ -630,7 +635,7 @@
                         (do (set-open! true) (util/stop e))
                         :dune))}
       (if (string/blank? value)
-        [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"]
+        (property-empty-value)
         (value-f)))
      (shui/dropdown-menu-content
       {:align "start"
@@ -706,7 +711,7 @@
                            (util/stop e)
                            (<create-new-block-from-template! block property template))}
               (str "Use template #" (:block/original-name template))]))
-         [:div.opacity-50.pointer.text-sm.cursor-pointer "Empty"])
+         (property-empty-value))
        (cond
          (= type :template)
          (property-template-value {:editor-id editor-id}
@@ -781,7 +786,7 @@
                        (when date?
                          [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                       (when-not editing?
-                        (shui/button {:class "empty-btn" :variant :text} "Empty"))))
+                        (property-empty-value))))
         select-cp (fn [select-opts]
                     (let [select-opts (merge {:multiple-choices? true
                                               :dropdown? editing?
