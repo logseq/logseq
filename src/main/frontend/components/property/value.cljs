@@ -116,8 +116,10 @@
     [:div.flex.flex-row.gap-1.items-center
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
-         (page-cp {:disable-preview? true
-                   :hide-close-button? true} page)))
+         (rum/with-key
+           (page-cp {:disable-preview? true
+                     :hide-close-button? true} page)
+           (:db/id page))))
 
      (let [content-fn
            (fn [{:keys [id]}]
@@ -552,11 +554,13 @@
                                            opts)
                   (create-template-block! block property v-block *template-instance))
 
-              ;; page/class/etc.
+                ;; page/class/etc.
                 (:block/name v-block)
-                (page-cp {:disable-preview? true
-                          :hide-close-button? true
-                          :tag? class?} v-block)
+                (rum/with-key
+                  (page-cp {:disable-preview? true
+                           :hide-close-button? true
+                           :tag? class?} v-block)
+                  (:db/id v-block))
                 :else
                 invalid-warning)
               invalid-warning))
@@ -571,8 +575,10 @@
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
             (:block/name block)
-            (page-cp {:disable-preview? true
-                      :hide-close-button? true} block)
+            (rum/with-key
+              (page-cp {:disable-preview? true
+                       :hide-close-button? true} block)
+              (:db/id block))
 
             icon
             (if icon?
