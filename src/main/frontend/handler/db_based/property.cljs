@@ -490,7 +490,7 @@
 
 (defn block-has-viewable-properties?
   [block-entity]
-  (let [properties (->> (keys block-entity) (filter db-property/property?))]
+  (let [properties (:block/properties block-entity)]
     (or
      (seq (:block/alias block-entity))
      (and (seq properties)
