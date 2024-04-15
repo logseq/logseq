@@ -44,13 +44,18 @@
                  (let [created-from-block (get b :logseq.property/created-from-block)
                        created-from-property (get b :logseq.property/created-from-property)
                        created-block (d/entity after-db (:db/id created-from-block))
-                       pair-e (db-property/get-pair-e created-from-block (:db/ident created-from-property))]
+                       pair-e (db-property/get-pair-e created-from-block (:db/ident created-from-property))
+                       tx-id (get-in tx-report [:tempids :db/current-tx])]
                    (when (and created-block created-from-property)
                      [[:db/retractEntity (:db/id b)]
                       (when pair-e
                         (outliner-core/block-with-updated-at
                          {:db/id (:db/id pair-e)
-                          :block/tx-id (get-in tx-report [:tempids :db/current-tx])}))])))
+                          :block/tx-id tx-id}))
+                      (when pair-e
+                        (outliner-core/block-with-updated-at
+                         {:db/id (:db/id created-block)
+                          :block/tx-id tx-id}))])))
                empty-property-parents)
        (remove nil?)))))
 
