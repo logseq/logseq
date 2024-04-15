@@ -67,14 +67,6 @@
   (state/set-state! :editor/editing-property-value-id {})
   (state/clear-edit!))
 
-(defn set-editing!
-  [block property editor-id dom-id v opts]
-  (let [v (str v)
-        cursor-range (if dom-id
-                       (some-> (gdom/getElement dom-id) util/caret-range)
-                       "")]
-    (state/set-editing! editor-id v property cursor-range (assoc opts :property-block block))))
-
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value"
@@ -648,8 +640,8 @@
       :class class
       :style {:min-height 24}
       :on-click (fn []
-                  ;; FIXME:
-                  )}
+                  (when (and (= type :default) (nil? value))
+                    (<create-new-block! block property "")))}
      (if (and (string/blank? value) template?)
        (let [id (first (:classes schema))
              template (when id (db/entity [:block/uuid id]))]
@@ -664,6 +656,9 @@
          (property-template-value {:editor-id editor-id}
                                   value
                                   opts)
+
+         (and (= type :default) (nil? value))
+         (property-empty-value)
 
          (= type :default)
          (property-block-value value block property block-cp editor-box opts page-cp editor-id)

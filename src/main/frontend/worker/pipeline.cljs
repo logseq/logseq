@@ -11,7 +11,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.core :as outliner-core]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
@@ -42,9 +43,14 @@
        (mapcat (fn [b]
                  (let [created-from-block (get b :logseq.property/created-from-block)
                        created-from-property (get b :logseq.property/created-from-property)
-                       created-block (d/entity after-db (:db/id created-from-block))]
+                       created-block (d/entity after-db (:db/id created-from-block))
+                       pair-e (db-property/get-pair-e created-from-block (:db/ident created-from-property))]
                    (when (and created-block created-from-property)
-                     [[:db/retractEntity (:db/id b)]])))
+                     [[:db/retractEntity (:db/id b)]
+                      (when pair-e
+                        (outliner-core/block-with-updated-at
+                         {:db/id (:db/id pair-e)
+                          :block/tx-id (get-in tx-report [:tempids :db/current-tx])}))])))
                empty-property-parents)
        (remove nil?)))))
 
