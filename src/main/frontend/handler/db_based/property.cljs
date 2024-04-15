@@ -542,13 +542,14 @@
         last-block-id (:block/uuid (last blocks))
         class? (contains? (:block/type block) "class")
         property-id (:db/ident property)]
-    (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-    (let [result (when property-id
-                   (if (and class? class-schema?)
-                     (class-add-property! repo (:db/id block) property-id)
-                     (set-block-property! repo (:db/id block) property-id (:block/uuid first-block) {})))]
-      {:last-block-id last-block-id
-       :result result})))
+    (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})]
+      (let [result (when property-id
+                     (if (and class? class-schema?)
+                       (class-add-property! repo (:db/id block) property-id)
+                       (when-let [parent-id (:db/id (db/entity [:block/uuid (:block/uuid first-block)]))]
+                         (set-block-property! repo (:db/id block) property-id parent-id {}))))]
+        {:last-block-id last-block-id
+         :result result}))))
 
 (defn property-create-new-block-from-template
   [block property template]

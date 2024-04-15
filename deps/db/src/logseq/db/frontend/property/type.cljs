@@ -25,7 +25,7 @@
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
-(def ref-property-types #{:page :date :entity})
+(def ref-property-types #{:default :page :date :entity})
 
 (assert (set/subset? ref-property-types
                      (into internal-built-in-property-types
@@ -102,9 +102,9 @@
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
-              {:error/message "should be a text"}
-              ;; uuid check needed for property block values
-              (some-fn string? uuid?)]                     ; refs/tags will not be extracted
+              {:error/message "should be a entity"}
+              ;; entity check needed for property block values
+              entity?]
    :number   [:fn
               {:error/message "should be a number"}
               ;; TODO: Remove uuid? for :number and :url when type-or-closed-value? is used in this ns
@@ -139,7 +139,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:date :page :template :entity})
+  #{:default :date :page :template :entity})
 
 ;; Helper fns
 ;; ==========
