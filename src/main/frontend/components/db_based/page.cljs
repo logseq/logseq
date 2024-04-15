@@ -57,30 +57,6 @@
                                            (str edit-input-id-prefix "-page")
                                            (assoc configure-opts :class-schema? false :page? true)))])))
 
-(rum/defc icon-row < rum/reactive
-  [page]
-  [:div.grid.grid-cols-5.gap-1.items-center
-   [:label.col-span-2 "Icon:"]
-   (let [icon-value (:logseq.property/icon page)]
-     [:div.col-span-3.flex.flex-row.items-center.gap-2
-      (icon-component/icon-picker icon-value
-                                  {:disabled? config/publishing?
-                                   :on-chosen (fn [_e icon]
-                                                (db-property-handler/set-block-property!
-                                                 (state/get-current-repo)
-                                                 (:db/id page)
-                                                 :logseq.property/icon
-                                                 icon
-                                                 {}))})
-      (when (and icon-value (not config/publishing?))
-        [:a.fade-link.flex {:on-click (fn [_e]
-                                        (db-property-handler/remove-block-property!
-                                         (state/get-current-repo)
-                                         (:db/id page)
-                                         :logseq.property/icon))
-                            :title "Delete this icon"}
-         (ui/icon "X")])])])
-
 (rum/defc tags
   [page]
   (let [tags-property (db/entity :block/tags)]
@@ -89,13 +65,6 @@
                        {:page-cp (fn [config page]
                                    (component-block/page-cp (assoc config :tag? true) page))
                         :inline-text component-block/inline-text})))
-
-(rum/defc tags-row < rum/reactive
-  [page]
-  [:div.grid.grid-cols-5.gap-1.items-center
-   [:label.col-span-2 "Tags:"]
-   [:div.col-span-3.flex.flex-row.items-center.gap-2
-    (tags page)]])
 
 (rum/defcs page-configure < rum/reactive
   [state page *mode]
@@ -110,16 +79,15 @@
                       class? :class
                       property? :property
                       :else :page)))
-    [:div.flex.flex-col.gap-1
-     [:<>
-      (when (= mode :property)
-        (property-component/property-config page {:inline-text component-block/inline-text}))
-      (when (= mode :class)
-        (class-component/configure page {:show-title? false}))
-      (when-not config/publishing? (tags-row page))
-      (when-not config/publishing? (icon-row page))
-      [:h2 "Properties: "]
-      (page-properties page (assoc page-opts :mode mode))]]))
+    [:div.flex.flex-col.gap-1.pt-2.pb-4
+     (case mode
+       :property
+       (property-component/property-config page {:inline-text component-block/inline-text})
+
+       :class
+       (class-component/configure page {:show-title? false})
+
+       (page-properties page (assoc page-opts :mode mode)))]))
 
 (rum/defc page-properties-react < rum/reactive
   [page* page-opts]

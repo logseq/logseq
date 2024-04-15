@@ -51,7 +51,8 @@
    :logseq.property/created-from-property {:schema {:type :entity}}
    :logseq.property/created-from-template {:schema {:type :entity}}
    :logseq.property/source-page           {:schema {:type :entity}}
-   :logseq.property/built-in?             {:schema {:type :checkbox}}
+   :logseq.property/built-in?             {:schema {:type :checkbox}
+                                           :hide? true}
    :logseq.property/hide-properties?      {:schema {:type :checkbox}}
    :logseq.property/query-table {:schema {:type :checkbox}}
    ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords

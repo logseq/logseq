@@ -716,6 +716,7 @@
   [state target-block edit-input-id {:keys [in-block-container? page? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
         block (resolve-linked-block-if-exists target-block)
+        page? (db/page? block)
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
                      (->> (db-property/get-class-ordered-properties block)
@@ -725,7 +726,7 @@
                                      (remove (fn [property]
                                                (let [id (if (vector? property) (first property) property)]
                                                  (or
-                                                  (= id :block/tags)
+                                                  (when-not page? (= id :block/tags))
                                                   (when-let [ent (db/entity id)]
                                                     (and (not (get-in ent [:block/schema :public?]))
                                                          (ldb/built-in? ent))))))
@@ -792,7 +793,12 @@
                                                        (.closest (.-target %) "[blockid]"))]
                                    (state/set-selection-blocks! [block])
                                    (some-> js/document.activeElement (.blur)))))
-       (properties-section block (if class-schema? properties own-properties) opts)
+       (let [own-properties' (if (and page? (not class-schema?))
+                               (concat [[:block/tags (:block/tags block)]
+                                        [:logseq.property/icon (:logseq.property/icon block)]]
+                                       (remove (fn [[k _v]] (contains? #{:block/tags :logseq.property/icon} k)) own-properties))
+                               own-properties)]
+         (properties-section block (if class-schema? properties own-properties') opts))
 
        (rum/with-key (new-property block id keyboard-triggered? opts) (str id "-add-property"))
 
