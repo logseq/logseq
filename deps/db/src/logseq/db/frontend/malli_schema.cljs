@@ -53,11 +53,11 @@
 (defn- validate-property-value
   "Validates the value in a property tuple. The property value can be one or
   many of a value to validated"
-  [schema-fn [{:keys [type]} val]]
-  (if (and (or (sequential? val) (set? val))
-           (not= :coll type))
-    (every? schema-fn val)
-    (schema-fn val)))
+  [schema-fn [property property-val]]
+  ;; (prn :validate-val property property-val)
+  (if (= (:cardinality property) :many)
+    (every? schema-fn property-val)
+    (or (schema-fn property-val) (= :logseq.property/empty-placeholder property-val))))
 
 (defn update-properties-in-schema
   "Needs to be called on the DB schema to add the datascript db to it"
@@ -78,7 +78,8 @@
   (mapv
    #(if-let [pair (some->> (:property/pair-property %) (d/entity db))]
       (assoc % :property-tuple
-             [(select-keys (:block/schema pair) [:type :cardinality])
+             [(assoc (select-keys (:block/schema pair) [:type :cardinality])
+                     :db/ident (:db/ident pair))
               (get % (:db/ident pair))])
       %)
    ents))

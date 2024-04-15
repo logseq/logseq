@@ -17,7 +17,8 @@
                     (db-property-util/build-closed-values
                      db-ident
                      prop-name
-                     {:db/ident db-ident :block/schema schema :closed-values closed-values}
+                     ;; FIXME: Re-enable closed-values when :default is done migrating to entity
+                     {:db/ident db-ident :block/schema schema :closed-values [] #_closed-values}
                      {})
                     [(sqlite-util/build-new-property
                       db-ident
