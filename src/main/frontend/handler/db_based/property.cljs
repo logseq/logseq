@@ -201,17 +201,13 @@
                       (catch :default e
                         (notification/show! (str e) :error false)
                         nil))
-            tags-or-alias? (contains? db-property/db-attribute-properties property-id)
-            old-values (if tags-or-alias?
-                         (->> (get block property-id)
-                              (map (fn [e] (:db/id e))))
-                         (get block (:db/ident property)))]
+            old-values (get block (:db/ident property))]
         (when (not= old-values values')
           (if-let [msg (some #(validate-property-value schema %) values')]
             (let [msg' (str "\"" property-name "\"" " " (if (coll? msg) (first msg) msg))]
               (notification/show! msg' :warning))
             (do
-              (when-not tags-or-alias? (upsert-property! repo property-id (assoc property-schema :type property-type) {}))
+              (upsert-property! repo property-id (assoc property-schema :type property-type) {})
               (let [pair-id (:db/id (db-property/get-pair-e block property-id))
                     tx-data (concat
                              [(when pair-id [:db/retract pair-id property-id])]
@@ -257,9 +253,16 @@
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
         multiple-values? (= cardinality :many)
-        v (or (resolve-tag v) v)]
-    (if (and multiple-values? (coll? v))
+        v (or (resolve-tag v) v)
+        db-attribute? (contains? db-property/db-attribute-properties property-id)]
+    (cond
+      db-attribute?
+      (db/transact! repo [{:db/id (:db/id block) property-id v}]
+        {:outliner-op :save-block})
+      (and multiple-values? (coll? v))
       (reset-block-property-multiple-values! repo block-eid property-id v opts)
+
+      :else
       (let [v (if property v (or v ""))]
         (when (some? v)
           (let [infer-schema (when-not type (infer-schema-from-input-string v))
@@ -274,35 +277,29 @@
                        (catch :default e
                          (js/console.error e)
                          (notification/show! (str e) :error false)
-                         nil)))
-                tags-or-alias? (and (contains? db-property/db-attribute-properties property-id) (uuid? v*))]
-            (if tags-or-alias?
-              (let [property-value-id v*]
-                (db/transact! repo
-                              [[:db/add (:db/id block) property-id property-value-id]]
-                              {:outliner-op :save-block}))
-              (when-not (contains? (if (set? value) value #{value}) v*)
-                (if-let [msg (when-not (= v* :logseq.property/empty-placeholder) (validate-property-value schema v*))]
-                  (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
-                    (notification/show! msg' :warning))
-                  (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {:property-name property-name})
-                        status? (= :logseq.task/status (:db/ident property))
-                        value (if (= value :logseq.property/empty-placeholder) [] value)
-                        new-value (cond
-                                    multiple-values?
-                                    (let [f (if (coll? v*) concat conj)]
-                                      (f value v*))
+                         nil)))]
+            (when-not (contains? (if (set? value) value #{value}) v*)
+              (if-let [msg (when-not (= v* :logseq.property/empty-placeholder) (validate-property-value schema v*))]
+                (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
+                  (notification/show! msg' :warning))
+                (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {:property-name property-name})
+                      status? (= :logseq.task/status (:db/ident property))
+                      value (if (= value :logseq.property/empty-placeholder) [] value)
+                      new-value (cond
+                                  multiple-values?
+                                  (let [f (if (coll? v*) concat conj)]
+                                    (f value v*))
 
-                                    :else
-                                    v*)
+                                  :else
+                                  v*)
                         ;; don't modify maps
-                        new-value (if (or (sequential? new-value) (set? new-value))
-                                    (if (= :coll property-type)
-                                      (vec (remove string/blank? new-value))
-                                      (set (remove string/blank? new-value)))
-                                    new-value)
-                        tx-data (build-property-value-tx-data block property-id new-value status?)]
-                    (db/transact! repo tx-data {:outliner-op :save-block})))))))))))
+                      new-value (if (or (sequential? new-value) (set? new-value))
+                                  (if (= :coll property-type)
+                                    (vec (remove string/blank? new-value))
+                                    (set (remove string/blank? new-value)))
+                                  new-value)
+                      tx-data (build-property-value-tx-data block property-id new-value status?)]
+                  (db/transact! repo tx-data {:outliner-op :save-block}))))))))))
 
 (defn class-add-property!
   [repo class-uuid property-id]

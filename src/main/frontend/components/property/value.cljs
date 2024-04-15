@@ -27,6 +27,28 @@
             [datascript.impl.entity :as de]
             [frontend.handler.property.util :as pu]))
 
+(rum/defc icon-row < rum/reactive
+  [block]
+  (let [icon-value (:logseq.property/icon block)]
+    [:div.col-span-3.flex.flex-row.items-center.gap-2
+     (icon-component/icon-picker icon-value
+                                 {:disabled? config/publishing?
+                                  :on-chosen (fn [_e icon]
+                                               (db-property-handler/set-block-property!
+                                                (state/get-current-repo)
+                                                (:db/id block)
+                                                :logseq.property/icon
+                                                icon
+                                                {}))})
+     (when (and icon-value (not config/publishing?))
+       [:a.fade-link.flex {:on-click (fn [_e]
+                                       (db-property-handler/remove-block-property!
+                                        (state/get-current-repo)
+                                        (:db/id block)
+                                        :logseq.property/icon))
+                           :title "Delete this icon"}
+        (ui/icon "X")])]))
+
 (defn- select-type?
   [property type]
   (or (contains? #{:page :number :url :date} type)
@@ -714,32 +736,34 @@
         value (if (and (de/entity? value) (= (:db/ident value) :logseq.property/empty-placeholder))
                 nil
                 value)]
-    (if (and select-type?
-             (not (and (not closed-values?) (= type :date))))
-      (single-value-select block property value
-                           (fn []
-                             (select-item property type value opts))
-                           select-opts
-                           (assoc opts :editing? editing?))
-      (case type
-        :date
-        (property-value-date-picker block property value {:editing? editing?})
+    (if (= :logseq.property/icon (:db/ident property))
+      (icon-row block)
+      (if (and select-type?
+              (not (and (not closed-values?) (= type :date))))
+       (single-value-select block property value
+                            (fn []
+                              (select-item property type value opts))
+                            select-opts
+                            (assoc opts :editing? editing?))
+       (case type
+         :date
+         (property-value-date-picker block property value {:editing? editing?})
 
-        :checkbox
-        (let [add-property! (fn []
-                              (<add-property! block (:db/ident property) (boolean (not value))))]
-          (shui/checkbox {:class "jtrigger flex flex-row items-center"
-                          :checked value
-                          :auto-focus editing?
-                          :on-checked-change add-property!
-                          :on-key-down (fn [e]
-                                         (when (= (util/ekey e) "Enter")
-                                           (add-property!)))}))
+         :checkbox
+         (let [add-property! (fn []
+                               (<add-property! block (:db/ident property) (boolean (not value))))]
+           (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                           :checked value
+                           :auto-focus editing?
+                           :on-checked-change add-property!
+                           :on-key-down (fn [e]
+                                          (when (= (util/ekey e) "Enter")
+                                            (add-property!)))}))
         ;; :others
-        [:div.flex.flex-1
-         (if editing?
-           (property-editing block property value schema editor-box editor-args editor-id)
-           (property-value-inner block property value opts))]))))
+         [:div.flex.flex-1
+          (if editing?
+            (property-editing block property value schema editor-box editor-args editor-id)
+            (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values
   [block property v {:keys [on-chosen dropdown? editing?]
