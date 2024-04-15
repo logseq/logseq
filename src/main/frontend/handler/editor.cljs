@@ -300,8 +300,10 @@
          page (db/entity repo (:db/id page))
          block-id (when (and (not (config/db-based-graph? repo)) (map? properties))
                     (get properties :id))
-         content (-> (property-file/remove-built-in-properties-when-file-based repo format content)
-                     (drawer/remove-logbook))]
+         content (if (config/db-based-graph? repo)
+                   content
+                   (-> (property-file/remove-built-in-properties-when-file-based repo format content)
+                     (drawer/remove-logbook)))]
      (cond
        (another-block-with-same-id-exists? uuid block-id)
        (notification/show!
