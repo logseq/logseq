@@ -149,7 +149,7 @@
                   (assoc :default-month initial-month)))))]
 
        (shui/button
-        {:class (str "jtrigger " (when-not value " empty-btn"))
+        {:class (str "jtrigger h-6" (when-not value " empty-btn"))
          :ref *trigger-ref
          :variant :text
          :size :sm
@@ -160,9 +160,9 @@
                          (util/stop e)
                          (shui/popup-show! (.-target e) content-fn
                                            {:align "start" :auto-focus? true}))))}
-        (if (nil? value)
+        (if (and (nil? value) (not multiple-values?))
           "Empty"
-          (ui/icon "calendar-plus" {:size 16 :class "!p-1"}))))]))
+          (ui/icon (if multiple-values? "calendar-plus" "calendar") {:size 16}))))]))
 
 
 (rum/defc property-value-date-picker
