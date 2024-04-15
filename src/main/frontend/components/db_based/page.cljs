@@ -23,17 +23,15 @@
   (let [class? (= mode :class)
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
-                        :page-configure? true}
+                        :page-configure? configure?}
         has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
         has-class-properties? (seq (:class/schema.properties page))
-        has-tags? (seq (:block/tags page))
         hide-properties? (:logseq.property/hide-properties? page)]
     (when (or configure?
               (and
                (not hide-properties?)
                (or has-viewable-properties?
-                   has-class-properties?
-                   has-tags?)))
+                   has-class-properties?)))
       [:div.ls-page-properties
        {:class (util/classnames [{:no-mode (nil? mode)
                                   :no-properties (if class?
@@ -79,7 +77,7 @@
                       class? :class
                       property? :property
                       :else :page)))
-    [:div.flex.flex-col.gap-1.pt-2.pb-4
+    [:div.flex.flex-col.gap-1.pb-4
      (case mode
        :property
        (property-component/property-config page {:inline-text component-block/inline-text})
@@ -133,58 +131,43 @@
         types (:block/type page)
         class? (contains? types "class")
         collapsed? (not @*show-info?)
-        has-tags? (seq (:block/tags page))
         has-properties? (seq (remove (set (keys db-property/built-in-properties))
                                      (keys (:block/properties page))))
-        show-info? (or @*show-info? has-tags? has-properties?)]
+        show-info? (or @*show-info? has-properties?)]
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
             ;; as it creates a fair amount of empty vertical space
-            (or has-tags? (some? types))
-            (or show-info? has-tags? has-properties?))
+            (some? types)
+            show-info?)
       [:div.page-info
        {:class (util/classnames [{:is-collapsed collapsed?}])}
-       [:div.py-1 {:class (if (or @*hover? (not collapsed?))
-                            "border rounded"
-                            "border rounded border-transparent")}
-        [:div.info-title.cursor
-         {:on-mouse-over #(reset! *hover? true)
-          :on-mouse-leave #(when-not (state/dropdown-opened?)
-                             (reset! *hover? false))
-          :on-click (if config/publishing?
-                      (fn [_]
-                        (when (seq (set/intersection #{"class" "property"} types))
-                          (swap! *show-info? not)))
-                      #(swap! *show-info? not))}
-         (when show-info?
+       [:div {:class (if (or @*hover? (not collapsed?))
+                       "border rounded"
+                       "border rounded border-transparent")}
+        (when-not collapsed?
+          [:div.info-title.cursor.py-1
+           {:on-mouse-over #(reset! *hover? true)
+            :on-mouse-leave #(when-not (state/dropdown-opened?)
+                               (reset! *hover? false))
+            :on-click (if config/publishing?
+                        (fn [_]
+                          (when (seq (set/intersection #{"class" "property"} types))
+                            (swap! *show-info? not)))
+                        #(do
+                           (swap! *show-info? not)
+                           (swap! *hover? not)))}
            [:<>
-            [:div.flex.flex-row.items-center.gap-2
-             (if collapsed?
-               (when (or has-tags? @*hover? config/publishing?)
-                 (if (and config/publishing? (seq (set/intersection #{"class" "property"} types)))
-                   [:div
-                    [:div.opacity-50.pointer.text-sm "Expand for more info"]]
-                   (when has-tags?
-                     [:div.pl-3.page-info-tags
-                      {:style {:margin-left 2}
-                       :on-click util/stop-propagation}
-                      (tags page)])))
-               [:div.flex.flex-row.items-center.gap-1
-                [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
-                (mode-switch types *mode)])]
-            (when (or @*hover? (not collapsed?))
-              [:div.px-1.absolute.right-0.top-0
-               (shui/button
-                {:variant :ghost :size :sm}
-                (if collapsed?
-                  [:span.opacity-80.flex.items-center
-                   (ui/icon "adjustments-horizontal" {:size 16})]
-                  (ui/icon "x")))])])]
-        (when show-info?
-          (if collapsed?
-            (when (or (seq (:block/properties page))
-                      (and class? (seq (:class/schema.properties page))))
-              [:div.px-2 {:style {:margin-left 2}}
-               (page-properties page {:mode (if class? :class :page)})])
-            [:div.pt-2.px-4
-             (page-configure page *mode)]))]])))
+            [:div.flex.flex-row.items-center.gap-1
+             [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
+             (mode-switch types *mode)]
+            [:div.px-1.absolute.right-0.top-0
+             (shui/button
+              {:variant :ghost :size :sm}
+              (ui/icon "x"))]]])
+        (if collapsed?
+          (when (or (seq (:block/properties page))
+                    (and class? (seq (:class/schema.properties page))))
+            [:div.px-2 {:style {:margin-left 2}}
+             (page-properties page {:mode (if class? :class :page)})])
+          [:div.px-3
+           (page-configure page *mode)])]])))

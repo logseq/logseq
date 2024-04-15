@@ -713,7 +713,7 @@
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))))}
-  [state target-block edit-input-id {:keys [in-block-container? page? page-configure? class-schema?] :as opts}]
+  [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
         block (resolve-linked-block-if-exists target-block)
         page? (db/page? block)
@@ -797,10 +797,16 @@
                                                        (.closest (.-target %) "[blockid]"))]
                                    (state/set-selection-blocks! [block])
                                    (some-> js/document.activeElement (.blur)))))
-       (let [own-properties' (if (and page? (not class-schema?))
+       (let [own-properties' (cond
+                               (and page? page-configure?)
                                (concat [[:block/tags (:block/tags block)]
                                         [:logseq.property/icon (:logseq.property/icon block)]]
                                        (remove (fn [[k _v]] (contains? #{:block/tags :logseq.property/icon} k)) own-properties))
+
+                               page?
+                               (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) own-properties)
+
+                               :else
                                own-properties)]
          (properties-section block (if class-schema? properties own-properties') opts))
 
