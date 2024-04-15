@@ -109,7 +109,7 @@
       ;; :default
       (if (util/uuid-string? v-str) (uuid v-str) v-str))))
 
-(defn update-schema
+(defn- update-datascript-schema
   [property {:keys [type cardinality]}]
   (let [ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
@@ -151,25 +151,32 @@
   (let [db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (db/entity db-ident))]
-      (let [tx-data (->>
-                     (concat
-                      [(cond->
-                        (outliner-core/block-with-updated-at
-                         {:db/ident db-ident
-                          :block/schema schema})
-                         property-name
-                         (assoc :block/original-name property-name))]
-                      (when (seq properties)
-                        (mapcat
-                         (fn [[property-id v]]
-                           (build-property-value-tx-data property property-id v)) properties))
-                      [(update-schema property schema)])
-                     (remove nil?))
+      (let [changed-property-attrs
+            ;; Only update property if something has changed as we are updating a timestamp
+            (cond-> {}
+              (not= schema (:block/schema property))
+              (assoc :block/schema schema)
+              (and (some? property-name) (not= property-name (:block/original-name property)))
+              (assoc :block/original-name property-name))
+            property-tx-data
+            (cond-> []
+              (seq changed-property-attrs)
+              (conj (outliner-core/block-with-updated-at
+                     (merge {:db/ident db-ident} changed-property-attrs)))
+              (or (not= (:type schema) (get-in property [:block/schema :type]))
+                  (not= (:cardinality schema) (get-in property [:block/schema :cardinality])))
+              (conj (update-datascript-schema property schema)))
+            tx-data (concat property-tx-data
+                            (when (seq properties)
+                              (mapcat
+                               (fn [[property-id v]]
+                                 (build-property-value-tx-data property property-id v)) properties)))
             many->one? (and (= (:db/cardinality property) :db.cardinality/many)
                             (= :one (:cardinality schema)))]
-        (db/transact! repo tx-data {:outliner-op :update-property
-                                    :property-id (:db/id property)
-                                    :many->one? many->one?}))
+        (when (seq tx-data)
+          (db/transact! repo tx-data {:outliner-op :update-property
+                                      :property-id (:db/id property)
+                                      :many->one? many->one?})))
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
             db-ident' (ensure-unique-db-ident (db/get-db repo) db-ident)]
