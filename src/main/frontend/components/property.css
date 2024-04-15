@@ -19,9 +19,13 @@
     max-height: var(--radix-dropdown-menu-content-available-height);
 }
 
-.ls-block .ls-properties-area, .property-block-container {
+.ls-block .ls-properties-area {
     border-left: 1px solid;
     border-left-color: or(--lx-gray-04-alpha, --ls-guideline-color, #ddd) !important;
+}
+
+.property-block-container {
+    margin-left: -24px;
 }
 
 .ls-page-properties > .ls-properties-area > .property-block {

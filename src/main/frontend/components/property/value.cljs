@@ -347,18 +347,6 @@
                                    (when on-chosen (on-chosen)))))]
     (select-page property opts')))
 
-(defn- save-text!
-  [repo block property value _editor-id e]
-  (let [new-value (util/evalue e)]
-    (when (not (state/get-editor-action))
-      (util/stop e)
-      (p/do!
-       (when (not= new-value value)
-         (property-handler/set-block-property! repo (:block/uuid block)
-                                               (:db/ident property)
-                                               (string/trim new-value)))
-       (exit-edit-property)))))
-
 (defn <create-new-block!
   [block property value]
   (let [container-id (state/get-current-container-id)
@@ -380,37 +368,6 @@
     (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
             _ (<add-property! block (:db/ident property) (:block/uuid (last blocks)))]
       (last blocks))))
-
-(defn- new-text-editor-opts
-  [repo block property value editor-id]
-  {:style {:padding 0
-           :background "none"}
-   :on-blur
-   (fn [e]
-     (save-text! repo block property value editor-id e))
-   :on-key-down
-   (fn [e]
-     (let [enter? (= (util/ekey e) "Enter")
-           esc? (= (util/ekey e) "Escape")
-           backspace? (= (util/ekey e) "Backspace")
-           new-value (util/evalue e)
-           new-property? (or @(:editor/properties-container @state/state)
-                             @(:editor/new-property-input-id @state/state))]
-       (when (and (or enter? esc? backspace?)
-                  (not (state/get-editor-action)))
-         (when-not backspace? (util/stop e))
-         (cond
-           (or esc?
-               (and enter? (util/tag? new-value))
-               (and enter? new-property?)
-               (string/blank? value))
-           (save-text! repo block property value editor-id e)
-
-           enter?
-           (<create-new-block! block property new-value)
-
-           :else
-           nil))))})
 
 (rum/defcs select < rum/reactive
   {:init (fn [state]
@@ -500,7 +457,7 @@
                   (:block/_parent (db/entity (:db/id parent)))
                   parent)]
     (if (seq children)
-      [:div.property-block-container.w-full
+      [:div.property-block-container.content.w-full
        (block-cp children {:id (str (:block/uuid parent))
                            :editor-box editor-box})]
       (property-empty-value))))
@@ -517,7 +474,7 @@
       (when-let [entity (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [properties-cp (:properties-cp opts)]
           (when (and entity properties-cp)
-            [:div.property-block-container.w-full.property-template
+            [:div.property-block-container.content.w-full.property-template
              (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))]))))))
 
 (defn- create-template-block!
@@ -656,22 +613,16 @@
          (property-value-select-page block property select-opts' opts))]))))
 
 (defn- property-editing
-  [block property value schema editor-box editor-args editor-id]
-  (let [repo (state/get-current-repo)
-        multiple-values? (= :many (:cardinality schema))]
-    [:div.flex.flex-1
-    (case type
-      :template
-      (let [id (first (:classes schema))
-            template (when id (db/entity [:block/uuid id]))]
-        (when template
-          (<create-new-block-from-template! block property template)))
+  [block property schema]
+  [:div.flex.flex-1
+   (case type
+     :template
+     (let [id (first (:classes schema))
+           template (when id (db/entity [:block/uuid id]))]
+       (when template
+         (<create-new-block-from-template! block property template)))
 
-      (let [config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
-        [:div
-         (editor-box editor-args editor-id (cond-> config
-                                             multiple-values?
-                                             (assoc :property-value value)))]))]))
+     nil)])
 
 (defn- property-value-inner
   [block property value {:keys [inline-text block-cp page-cp
@@ -731,7 +682,7 @@
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query
-  [state block property value {:keys [container-id editor-id editor-box editor-args editing?
+  [state block property value {:keys [container-id editor-id editing?
                                       on-chosen]
                                :as opts}]
   (let [property (model/sub-block (:db/id property))
@@ -773,7 +724,7 @@
         ;; :others
          [:div.flex.flex-1
           (if editing?
-            (property-editing block property value schema editor-box editor-args editor-id)
+            (property-editing block property schema)
             (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values

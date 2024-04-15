@@ -499,15 +499,14 @@
 
 (defn property-create-new-block
   [block property value parse-block]
-  (let [current-page-id (:db/id (or (:block/page block) block))
-        page-name (str "$$$" current-page-id)
+  (let [page-name (str "$$$" (:db/id property))
         page-entity (db/get-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
                             :block/properties
-                            (sqlite-util/build-property-pair :logseq.property/source-page current-page-id))))
+                            (sqlite-util/build-property-pair :logseq.property/source-page (:db/id property)))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
@@ -553,15 +552,14 @@
 
 (defn property-create-new-block-from-template
   [block property template]
-  (let [current-page-id (:db/id (or (:block/page block) block))
-        page-name (str "$$$" current-page-id)
+  (let [page-name (str "$$$" (:db/id property))
         page-entity (db/get-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
                             :block/properties
-                            (sqlite-util/build-property-pair :logseq.property/source-page current-page-id))))
+                            (sqlite-util/build-property-pair :logseq.property/source-page (:db/id property)))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)

@@ -168,11 +168,12 @@
                (components-pu/update-property! property property-name schema)
                (when block
                  (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
-                   (state/set-state! :editor/editing-property-value-id
-                                     {id true}))
-                 (property-handler/set-block-property! repo (:block/uuid block)
-                                                       (:db/ident (db/entity [:block/original-name property-name]))
-                                                       (if (= type :default) "" :logseq.property/empty-placeholder)))))))}
+                   (state/set-state! :editor/editing-property-value-id {id true}))
+                 (if (= type :default)
+                   (pv/<create-new-block! block property "")
+                   (property-handler/set-block-property! repo (:block/uuid block)
+                                                         (:db/ident (db/entity [:block/original-name property-name]))
+                                                         :logseq.property/empty-placeholder)))))))}
 
         ;; only set when in property configure modal
         (and *property-name (:type property-schema))
@@ -740,9 +741,7 @@
         ;; This section produces own-properties and full-hidden-properties
         hide-with-property-id (fn [property-id]
                                 (cond
-                                  (= property-id :logseq.property/built-in?)
-                                  true
-                                  (or root-block? page? page-configure?)
+                                  (or root-block? page-configure?)
                                   false
                                   :else
                                   (boolean (:hide? (:block/schema (db/entity property-id))))))
