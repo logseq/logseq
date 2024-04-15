@@ -129,4 +129,4 @@
 (defn mark-block-as-built-in
   "Marks built-in blocks as built-in? including pages, classes, properties and closed values"
   [block]
-  (assoc block :block/properties (build-property-pair :logseq.property/built-in? true)))
+  (update block :block/properties conj (build-property-pair :logseq.property/built-in? true)))
