@@ -125,6 +125,7 @@
         (shui/dialog-open!
           (fn [] [:div.settings-modal (settings/settings settings-open?)])
           {:label "app-settings"
+           :align :top
            :id :app-settings})
         (shui/dialog-close! :app-settings))
      [settings-open?])

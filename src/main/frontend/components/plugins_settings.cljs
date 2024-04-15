@@ -116,26 +116,28 @@
      [pid])
 
     (if (seq schema)
-      [:div.cp__plugins-settings-inner
-       ;; settings.json
-       [:span.edit-file
-        (edit-settings-file pid nil)]
+      [:<>
+       [:h2.text-xl.px-2.pt-1.opacity-90 "ID: " pid]
+       [:div.cp__plugins-settings-inner
+        ;; settings.json
+        [:span.edit-file
+         (edit-settings-file pid nil)]
 
-       ;; render items
-       (for [desc schema
-             :let [key (:key desc)
-                   val (get settings (keyword key))
-                   type (keyword (:type desc))
-                   desc (update desc :description #(plugin-handler/markdown-to-html %))]]
+        ;; render items
+        (for [desc schema
+              :let [key (:key desc)
+                    val (get settings (keyword key))
+                    type (keyword (:type desc))
+                    desc (update desc :description #(plugin-handler/markdown-to-html %))]]
 
-         (condp contains? type
-           #{:string :number} (render-item-input val desc update-setting!)
-           #{:boolean} (render-item-toggle val desc update-setting!)
-           #{:enum} (render-item-enum val desc update-setting!)
-           #{:object} (render-item-object val desc pid)
-           #{:heading} (render-item-heading desc)
+          (condp contains? type
+            #{:string :number} (render-item-input val desc update-setting!)
+            #{:boolean} (render-item-toggle val desc update-setting!)
+            #{:enum} (render-item-enum val desc update-setting!)
+            #{:object} (render-item-object val desc pid)
+            #{:heading} (render-item-heading desc)
 
-           [:p (str "#Not Handled#" key)]))]
+            [:p (str "#Not Handled#" key)]))]]
 
       ;; no settings
       [:h2.font-bold.text-lg.py-4.warning "No Settings Schema!"])))

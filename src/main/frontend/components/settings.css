@@ -1,6 +1,6 @@
 .cp__settings {
   &-inner {
-    @apply flex flex-col md:flex-row;
+    @apply flex flex-col md:flex-row min-h-[50dvh] max-h-[66dvh];
 
     > header {
       padding: 10px;

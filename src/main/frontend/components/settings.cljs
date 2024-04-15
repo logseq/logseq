@@ -1185,7 +1185,7 @@
 
     [:div#settings.cp__settings-main
      (settings-effect @*active)
-     [:div.cp__settings-inner {:class "min-h-[70dvh] max-h-[70dvh]"}
+     [:div.cp__settings-inner
       [:aside.md:w-64 {:style {:min-width "10rem"}}
        [:header.cp__settings-header
         [:h1.cp__settings-modal-title (t :settings)]]
@@ -1216,7 +1216,10 @@
              {:key      text
               :data-id  id
               :class    (util/classnames [{:active (= label (first @*active))}])
-              :on-click #(reset! *active [label (first @*active)])}
+              :on-click (fn []
+                          (if (= label :plugins-setting)
+                            (state/pub-event! [:go/plugins-settings (:id (first plugins-of-settings))])
+                            (reset! *active [label (first @*active)])))}
 
              [:a.flex.items-center.settings-menu-link icon [:strong text]]]))]]
 
