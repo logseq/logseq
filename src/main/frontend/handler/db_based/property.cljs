@@ -31,7 +31,7 @@
   ([block property-id value]
    (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
   ([block property-id value status?]
-   (when value
+   (when (some? value)
      (let [property-pair-e (db-property/get-pair-e block property-id)
            property-tx-data (outliner-core/block-with-updated-at
                              (if property-pair-e
