@@ -278,7 +278,7 @@
 
 (defn get-pair-e
   [block db-ident]
-  (first (filter #(some? (db-ident %)) (:block/raw-properties block))))
+  (first (filter #(contains? (set (keys %)) db-ident) (:block/raw-properties block))))
 
 (defn get-block-property-value
   "Get the value of built-in block's property by its db-ident"
