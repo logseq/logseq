@@ -398,7 +398,8 @@
         (do (notification/show! "This is a private built-in property that can't be used." :error)
             (pv/exit-edit-property))
 
-        (= :default (get-in property [:block/schema :type]))
+        (and (= :default (get-in property [:block/schema :type]))
+             (not (seq (get-in property [:block/schema :values]))))
         (do
           (pv/<create-new-block! entity property "")
           nil)

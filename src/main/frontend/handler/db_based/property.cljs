@@ -52,7 +52,9 @@
   (into {}
         (map (fn [[property-type property-val-schema]]
                (cond
-                 (db-property-type/closed-value-property-types property-type)
+                 (and (db-property-type/closed-value-property-types property-type)
+                      ;; FIXME: Remove when closed values are done migrating to refs
+                      (not (#{:default} property-type)))
                  (let [[_ schema-opts schema-fn] property-val-schema
                        schema-fn' (if (db-property-type/property-types-with-db property-type) #(schema-fn (db/get-db) %) schema-fn)]
                    [property-type [:fn
