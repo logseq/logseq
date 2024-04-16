@@ -164,7 +164,8 @@
               (conj (outliner-core/block-with-updated-at
                      (merge {:db/ident db-ident} changed-property-attrs)))
               (or (not= (:type schema) (get-in property [:block/schema :type]))
-                  (not= (:cardinality schema) (get-in property [:block/schema :cardinality])))
+                  (not= (:cardinality schema) (get-in property [:block/schema :cardinality]))
+                  (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property))))
               (conj (update-datascript-schema property schema)))
             tx-data (concat property-tx-data
                             (when (seq properties)
@@ -508,7 +509,7 @@
 
 (defn property-create-new-block
   [block property value parse-block]
-  (let [page-name (str "$$$" (:db/id property))
+  (let [page-name (str "$$$" (:block/uuid property))
         page-entity (db/get-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
@@ -562,7 +563,7 @@
 
 (defn property-create-new-block-from-template
   [block property template]
-  (let [page-name (str "$$$" (:db/id property))
+  (let [page-name (str "$$$" (:block/uuid property))
         page-entity (db/get-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)

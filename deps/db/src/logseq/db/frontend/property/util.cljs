@@ -49,7 +49,7 @@
    the hidden page and closed value blocks as needed"
   [db-ident prop-name property {:keys [translate-closed-page-value-fn property-attributes]
                                 :or {translate-closed-page-value-fn identity}}]
-  (let [ref-type? (contains? (disj db-property-type/ref-property-types :entity)
+  (let [ref-type? (contains? (set (remove #{:default :entity} db-property-type/ref-property-types))
                              (get-in property [:block/schema :type]))
         property-schema (assoc (:block/schema property)
                                :values
