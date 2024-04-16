@@ -196,6 +196,7 @@
            (seq (ldb/get-tag-blocks @conn (:block/name page))))
       {:msg "Page content deleted but unable to delete this page because blocks are tagged with this page"}
 
+      ;; TODO: allow users to delete not built-in properties
       (contains? (:block/type page) "property")
       (cond (seq (ldb/get-classes-with-property @conn (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because classes use this property"}
@@ -217,6 +218,7 @@
                                error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
   (when (and repo page-uuid)
     (let [page (d/entity @conn [:block/uuid page-uuid])
+          property? (contains? (:block/type page) "property")
           page-name (:block/name page)
           blocks (:block/_page page)
           truncate-blocks-tx-data (mapv
@@ -234,13 +236,19 @@
                            {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
             (error-handler msg)
             false)
-          (let [file (gp-db/get-page-file @conn page-name)
+          (let [db @conn
+                file (gp-db/get-page-file db page-name)
                 file-path (:file/path file)
                 delete-file-tx (when file
                                  [[:db.fn/retractEntity [:file/path file-path]]])
                 delete-page-tx (concat (db-refs->page repo page)
                                        [[:db.fn/retractEntity (:db/id page)]])
-                tx-data (concat truncate-blocks-tx-data delete-page-tx delete-file-tx)]
+                delete-property-pairs-tx (when property?
+                                           (map (fn [d] [:db.fn/retractEntity (:e d)]) (d/datoms db :avet (:db/ident page))))
+                tx-data (concat truncate-blocks-tx-data
+                                delete-page-tx
+                                delete-file-tx
+                                delete-property-pairs-tx)]
 
             (ldb/transact! conn tx-data
                            (cond-> {:outliner-op :delete-page
