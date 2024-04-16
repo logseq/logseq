@@ -737,18 +737,21 @@
                 property-values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
                 block-values (->> property-values
                                   (remove #(uuid? (first %))))
+                id-values (filter second block-values)
+                ;; Order matters here, retract old property values first and then update the property schema
+                ;; Otherwise, the UI Datascript will throw tempid errors
                 tx-data (concat
+                         ;; retract old property values
+                         (map (fn [[id _value]] [:db/retract id property-id]) id-values)
                          (when page-tx [page-tx])
                          closed-value-blocks
                          [property-tx]
-                         (mapcat (fn [[id value]]
+                         (map (fn [[id value]]
                                 (let [value' (if (set? value)
                                                (set (map #(vector :block/uuid (value->block-id %)) value))
                                                [:block/uuid (value->block-id value)])]
-                                  [[:db/retract id property-id]
-                                   {:db/id id
-                                    property-id value'}]))
-                              (filter second block-values)))]
+                                  {:db/id id property-id value'}))
+                              id-values))]
           (db/transact! (state/get-current-repo) tx-data
                         {:outliner-op :insert-blocks})
           new-value-ids)))))
