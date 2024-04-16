@@ -9,9 +9,9 @@
   [conn & body]
   `(do
      (d/transact! ~conn [{:db/ident :logseq.kv/tx-batch-mode? :editor/tx-batch-mode? true}]
-                  {:gen-undo-op? false})
+                  {:gen-undo-ops? false})
      (frontend.worker.batch-tx/set-batch-db-before! @~conn)
      ~@body
      (d/transact! ~conn [{:db/ident :logseq.kv/tx-batch-mode? :editor/tx-batch-mode? false}]
-                  {:gen-undo-op? false})
+                  {:gen-undo-ops? false})
      (frontend.worker.batch-tx/exit-batch-txs-mode!)))

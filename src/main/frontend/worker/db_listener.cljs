@@ -60,8 +60,10 @@
 
 
 (defn listen-db-changes!
-  [repo conn]
-  (let [handlers (methods listen-db-changes)]
+  [repo conn & {:keys [handler-keys]}]
+  (let [handlers (if (seq handler-keys)
+                   (select-keys (methods listen-db-changes) handler-keys)
+                   (methods listen-db-changes))]
     (prn :listen-db-changes! (keys handlers))
     (d/unlisten! conn ::listen-db-changes!)
     (d/listen! conn ::listen-db-changes!

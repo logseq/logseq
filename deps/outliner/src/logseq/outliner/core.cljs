@@ -105,7 +105,7 @@
                                  (or (:block/name ref)
                                      (and (:db/id ref)
                                           (:block/name (d/entity db (:db/id ref)))))) new-refs))
-            old-pages (->> (map :db/id old-refs)
+            old-pages (->> (keep :db/id old-refs)
                            (d/pull-many db '[*])
                            (remove (fn [e] (contains? new-refs (:block/name e))))
                            (map :block/name)
