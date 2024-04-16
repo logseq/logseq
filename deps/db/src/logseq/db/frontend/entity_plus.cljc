@@ -35,8 +35,9 @@
            (->>
             (keep (fn [pair-e]
                     (when pair-e
-                      (let [pid (:db/ident (lookup-entity pair-e :property/pair-property nil))]
-                        {pid (lookup-entity pair-e pid nil)}))) result)
+                      (if-let [pid (:db/ident (lookup-entity pair-e :property/pair-property nil))]
+                        {pid (lookup-entity pair-e pid nil)}
+                        (prn "Error: outdated property pair entity should be deleted: " pair-e)))) result)
             (into {})))
          (lookup-entity e :block/properties nil)))
 
