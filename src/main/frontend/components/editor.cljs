@@ -517,23 +517,42 @@
                      (util/format "translate(-%spx, %s)" (+ ofx 20) (if y-overflow-vh? "calc(-100% - 2rem)" 0))))))))
      [right-sidebar? editing-key y-overflow-vh?])
 
+    ;; HACK: close when click outside for classic editing models (popup)
+    (rum/use-effect!
+      (fn []
+        (let [^js cnt js/document.body
+              handle (fn [^js e]
+                       (when-not (some->> (.-target e) (.contains (rum/deref *el)))
+                         (state/clear-editor-action!)))]
+          (.addEventListener cnt "click" handle false)
+          #(.removeEventListener cnt "click" handle)))
+      [])
+
     [:div.absolute.rounded-md.shadow-lg.absolute-modal
      {:ref             *el
       :data-modal-name modal-name
       :class           (if y-overflow-vh? "is-overflow-vh-y" "")
       :on-pointer-down   (fn [e]
                          (.stopPropagation e))
-      :style           style}
+      :on-key-down     (fn [^js e]
+                         (case (.-key e)
+                           "Escape"
+                           (do (state/clear-editor-action!)
+                               (some-> (state/get-input)
+                                 (.focus)))
+                           :dune)
+                         (util/stop-propagation e))
+      :style style}
      cp]))
 
 (rum/defc transition-cp < rum/reactive
   [cp modal-name set-default-width?]
   (when-let [pos (:pos (state/sub :editor/action-data))]
     (ui/css-transition
-     {:class-names "fade"
-      :timeout     {:enter 500
-                    :exit  300}}
-     (absolute-modal cp modal-name set-default-width? pos))))
+      {:class-names "fade"
+       :timeout {:enter 500
+                 :exit 300}}
+      (absolute-modal cp modal-name set-default-width? pos))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -715,7 +734,7 @@
       nil)))
 
 (defn- editor-on-blur
-  [_e]
+  [^js e]
   (cond
     (contains?
      #{:commands :block-commands
@@ -723,9 +742,10 @@
        :property-search :property-value-search
        :datepicker}
      (state/get-editor-action))
-    (state/clear-editor-action!) ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
+    ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
+    (util/stop e)
 
-         ;; editor/input component handles Escape directly, so just prevent handling it here
+    ;; editor/input component handles Escape directly, so just prevent handling it here
     (= :input (state/get-editor-action))
     nil
 
