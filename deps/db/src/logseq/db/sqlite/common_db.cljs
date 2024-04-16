@@ -83,7 +83,15 @@
                value-ids (when (every? map? values)
                            (->> (map :db/id values)
                                 (filter (fn [id] (or (int? id) (keyword? id))))))
-               value-blocks (when (seq value-ids) (d/pull-many db '[*] value-ids))
+               value-blocks (when (seq value-ids)
+                              (mapcat
+                               (fn [id]
+                                 (let [b (d/entity db id)]
+                                   (cons (d/pull db '[*] id)
+                                         (let [ids (map :db/id (:block/raw-properties b))]
+                                           (when (seq ids)
+                                             (d/pull-many db '[*] ids))))))
+                               value-ids))
                page (when (seq values)
                       (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
                         (d/pull db '[*] page-id)))]

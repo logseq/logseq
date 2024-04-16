@@ -18,7 +18,8 @@
             [frontend.state :as state]
             [promesa.core :as p]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db :as ldb]))
 
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
@@ -113,7 +114,8 @@
   (let [*hover? (::hover? state)
         value (db-property/closed-value-name item)
         page? (:block/original-name item)
-        date? (= :date (:type (:block/schema property)))]
+        date? (= :date (:type (:block/schema property)))
+        property-block? (:logseq.property/created-from-property item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
@@ -122,6 +124,10 @@
                                   {:on-chosen (fn [_e icon]
                                                 (update-icon icon))})
       (cond
+        property-block?
+        (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id item) (:db/id item))]
+          (:block/content first-child))
+
         date?
         [:div.flex.flex-row.items-center.gap-1
          (property-value/date-picker item
@@ -185,7 +191,10 @@
     (for [value values]
       [:li (if (uuid? value)
              (let [result (db/entity [:block/uuid value])]
-               (:block/original-name result))
+               (if (:logseq.property/created-from-property result)
+                 (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id result) (:db/id result))]
+                   (:block/content first-child))
+                 (:block/original-name result)))
              (str value))])]
    (ui/button
     "Add choices"
