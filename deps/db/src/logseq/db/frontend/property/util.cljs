@@ -23,7 +23,7 @@
   (when db
     (let [block (or (d/entity db (:db/id block)) block)]
       (if (sqlite-util/db-based-graph? repo)
-        (get (db-property/get-pair-e block db-ident) db-ident)
+        (db-property/get-property-value block db-ident)
         (lookup repo (:block/properties block) db-ident)))))
 
 (defn shape-block?

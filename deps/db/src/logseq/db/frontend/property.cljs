@@ -242,29 +242,25 @@
                 {pid (pair-e pid)})))
        (into {})))
 
+(defn get-pair-e
+  "Fetches a block's property pair entity given a property's db-ident. Iterates over a
+  block's property pairs until it finds the first match. This is nbb compatible"
+  [block db-ident]
+  (first (filter #(= (:db/ident (:property/pair-property %)) db-ident)
+                 (or (:block/raw-properties block)
+                     ;; Fallback for nbb since it can't access :block/raw-properties
+                     (:block/properties block)))))
+
 (defn get-property-value
-  "Fetches a block's property value given a property's db-ident. Iterates over a
-  block's property pairs until it finds the given ident. This is nbb compatible"
-  [e ident]
-  (some (fn [pair-e]
-          ;; This assumes the property/pair-property's entity has been loaded
-          ;; which query results don't do by default.
-          ;; Should we have another helper that just fetches by the pair-e key
-          ;; that satisfies property?
-          (let [pid (get-in pair-e [:property/pair-property :db/ident])]
-            (when-some [val (and (= ident pid) (pair-e pid))]
-              val)))
-        (:block/properties e)))
+  "Fetches a block's property value given a property's db-ident"
+  [block db-ident]
+  (get (get-pair-e block db-ident) db-ident))
 
 (defn valid-property-name?
   [s]
   {:pre [(string? s)]}
   ;; Disallow tags or page refs as they would create unreferenceable page names
   (not (re-find #"^(#|\[\[)" s)))
-
-(defn get-pair-e
-  [block db-ident]
-  (first (filter #(= (:db/ident (:property/pair-property %)) db-ident) (:block/raw-properties block))))
 
 (defn get-closed-property-values
   [db property-id]
