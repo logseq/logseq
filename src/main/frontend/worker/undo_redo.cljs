@@ -285,15 +285,15 @@ when undo this op, this original entity-map will be transacted back into db")
                                    reverse
                                    not-empty)]
       (doseq [block-entity block-entities]
-          (outliner-tx/transact!
-           {:gen-undo-ops? false
-            :outliner-op :delete-blocks
-            :transact-opts {:repo repo
-                            :conn conn}}
-           (outliner-core/delete-blocks! repo conn
-                                         (common-config/get-date-formatter (worker-state/get-config repo))
-                                         [block-entity]
-                                         {:children? false})))
+        (outliner-tx/transact!
+            {:gen-undo-ops? false
+             :outliner-op :delete-blocks
+             :transact-opts {:repo repo
+                             :conn conn}}
+            (outliner-core/delete-blocks! repo conn
+                                          (common-config/get-date-formatter (worker-state/get-config repo))
+                                          [block-entity]
+                                          {:children? false})))
       (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
         [:push-undo-redo {}]))))
 
