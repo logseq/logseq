@@ -5,7 +5,6 @@
             [frontend.components.class :as class-component]
             [frontend.components.property :as property-component]
             [frontend.components.property.value :as pv]
-            [frontend.components.icon :as icon-component]
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -83,7 +82,9 @@
        (property-component/property-config page {:inline-text component-block/inline-text})
 
        :class
-       (class-component/configure page {:show-title? false})
+       [:div.mt-2.flex.flex-col.gap-2
+        (class-component/configure page {:show-title? false})
+        (page-properties page (assoc page-opts :mode mode))]
 
        (page-properties page (assoc page-opts :mode mode)))]))
 
@@ -168,6 +169,6 @@
           (when (or (seq (:block/properties page))
                     (and class? (seq (:class/schema.properties page))))
             [:div.px-2 {:style {:margin-left 2}}
-             (page-properties page {:mode (if class? :class :page)})])
+             (page-properties page {:mode @*mode})])
           [:div.px-3
            (page-configure page *mode)])]])))
