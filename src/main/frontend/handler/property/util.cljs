@@ -6,13 +6,14 @@
             [frontend.db :as db]
             [datascript.core :as d]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.util :as db-property-util]))
 
 (defn lookup
   "Get the value of coll's (a map) by db-ident. For file and db graphs"
   [coll key]
   (let [repo (state/get-current-repo)]
-    (db-property/lookup repo coll key)))
+    (db-property-util/lookup repo coll key)))
 
 (defn lookup-by-name
   "Get the value of coll's (a map) by name. Only use this
@@ -33,13 +34,13 @@
   [block db-ident]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-block-property-value repo db block db-ident)))
+    (db-property-util/get-block-property-value repo db block db-ident)))
 
 (defn get-pid
   "Get a built-in property's id (db-ident or name) given its db-ident. For file and db graphs"
   [db-ident]
   (let [repo (state/get-current-repo)]
-    (db-property/get-pid repo db-ident)))
+    (db-property-util/get-pid repo db-ident)))
 
 (defn block->shape [block]
   (get-block-property-value block :logseq.property.tldraw/shape))
@@ -51,7 +52,7 @@
   [block]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/shape-block? repo db block)))
+    (db-property-util/shape-block? repo db block)))
 
 (defn get-closed-property-values
   [property-id]

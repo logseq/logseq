@@ -1,7 +1,7 @@
 (ns logseq.outliner.tree
   "Provides tree fns and INode protocol"
   (:require [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.util :as db-property-util]
             [datascript.core :as d]))
 
 (defprotocol INode
@@ -24,7 +24,7 @@
 (defn- blocks->vec-tree-aux
   [repo db blocks root]
   (let [root-id (:db/id root)
-        blocks (remove #(db-property/shape-block? repo db %) blocks)
+        blocks (remove #(db-property-util/shape-block? repo db %) blocks)
         parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
                   (when-let [children (get parent-blocks parent)]

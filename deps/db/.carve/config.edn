@@ -5,6 +5,7 @@
                   logseq.db.sqlite.util
                   logseq.db.sqlite.cli
                   logseq.db.frontend.property
+                  logseq.db.frontend.property.build
                   logseq.db.frontend.property.util
                   logseq.db.frontend.content
                   logseq.db.sqlite.create-graph

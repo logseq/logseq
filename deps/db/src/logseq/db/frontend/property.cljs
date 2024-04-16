@@ -262,37 +262,9 @@
   ;; Disallow tags or page refs as they would create unreferenceable page names
   (not (re-find #"^(#|\[\[)" s)))
 
-(defn get-pid
-  "Get a built-in property's id (keyword name for file graph and db-ident for db
-  graph) given its db-ident. No need to use this fn in a db graph only context"
-  [repo db-ident]
-  ;; FIXME: Use db-based-graph? when this fn moves to another ns
-  (if (string/starts-with? repo "logseq_db_")
-    db-ident
-    (get-in built-in-properties [db-ident :name])))
-
-(defn lookup
-  "Get the value of coll by db-ident. For file and db graphs"
-  [repo coll db-ident]
-  (get coll (get-pid repo db-ident)))
-
 (defn get-pair-e
   [block db-ident]
   (first (filter #(= (:db/ident (:property/pair-property %)) db-ident) (:block/raw-properties block))))
-
-(defn get-block-property-value
-  "Get the value of built-in block's property by its db-ident"
-  [repo db block db-ident]
-  (when db
-    (let [block (or (d/entity db (:db/id block)) block)]
-      ;; FIXME: Use db-based-graph? when this fn moves to another ns
-      (if (string/starts-with? repo "logseq_db_")
-        (get (get-pair-e block db-ident) db-ident)
-        (lookup repo (:block/properties block) db-ident)))))
-
-(defn shape-block?
-  [repo db block]
-  (= :whiteboard-shape (get-block-property-value repo db block :logseq.property/ls-type)))
 
 (defn get-closed-property-values
   [db property-id]

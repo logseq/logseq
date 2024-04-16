@@ -6,7 +6,7 @@
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.outliner.cli.pipeline :as cli-pipeline]
             [logseq.common.util :as common-util]
             [clojure.string :as string]
@@ -173,7 +173,7 @@
                             (fn [[prop-name]]
                               (if (get-in properties [prop-name :closed-values])
                                 (let [db-ident (db-property/create-user-property-ident-from-name (name prop-name))]
-                                  (db-property-util/build-closed-values
+                                  (db-property-build/build-closed-values
                                    db-ident
                                    prop-name
                                    (assoc (get properties prop-name) :db/ident db-ident)
