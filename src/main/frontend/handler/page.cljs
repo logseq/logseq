@@ -438,5 +438,7 @@
 
 (defn toggle-properties!
   [page-entity]
-  (db/transact! [[:db/add (:db/id page-entity) :logseq.property/hide-properties?
-                  (not (:logseq.property/hide-properties? page-entity))]]))
+  (property-handler/set-block-property! (state/get-current-repo)
+                                        (:block/uuid page-entity)
+                                        :logseq.property/hide-properties?
+                                        (not (:logseq.property/hide-properties? page-entity))))
