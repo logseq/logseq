@@ -136,6 +136,15 @@
               block-eids (mapv :e datoms)]
           (d/pull-many db pull-keys block-eids))))))
 
+(defn get-page-blocks-by-uuid
+  [db page-uuid & {:keys [pull-keys]
+                   :or {pull-keys '[*]}}]
+  (when-let [page-id (and page-uuid (:db/id (d/entity db [:block/uuid page-uuid])))]
+    (let [datoms (d/datoms db :avet :block/page page-id)
+          block-eids (mapv :e datoms)]
+      (d/pull-many db pull-keys block-eids))))
+
+
 (defn get-page-blocks-count
   [db page-id]
   (count (d/datoms db :avet :block/page page-id)))

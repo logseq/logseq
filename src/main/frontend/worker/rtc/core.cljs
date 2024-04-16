@@ -126,7 +126,7 @@
 (defmethod transact-db! :delete-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
-    :gen-undo-op? false
+    :gen-undo-ops? false
     :outliner-op :delete-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
@@ -135,7 +135,7 @@
 (defmethod transact-db! :move-blocks [_ & args]
   (outliner-tx/transact!
    {:persist-op? false
-    :gen-undo-op? false
+    :gen-undo-ops? false
     :outliner-op :move-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
@@ -144,7 +144,7 @@
 (defmethod transact-db! :move-blocks&persist-op [_ & args]
   (outliner-tx/transact!
    {:persist-op? true
-    :gen-undo-op? false
+    :gen-undo-ops? false
     :outliner-op :move-blocks
     :transact-opts {:repo (first args)
                     :conn (second args)}}
@@ -153,7 +153,7 @@
 (defmethod transact-db! :insert-blocks [_ & args]
   (outliner-tx/transact!
       {:persist-op? false
-       :gen-undo-op? false
+       :gen-undo-ops? false
        :outliner-op :insert-blocks
        :transact-opts {:repo (first args)
                        :conn (second args)}}
@@ -169,13 +169,13 @@
                           :block/type #{"closed value"}})
                        block-uuids)
                  {:persist-op? false
-                  :gen-undo-op? false}))
+                  :gen-undo-ops? false}))
 
 
 (defmethod transact-db! :save-block [_ & args]
   (outliner-tx/transact!
       {:persist-op? false
-       :gen-undo-op? false
+       :gen-undo-ops? false
        :outliner-op :save-block
        :transact-opts {:repo (first args)
                        :conn (second args)}}
@@ -185,11 +185,11 @@
   (ldb/transact! conn
                  (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
                  {:persist-op? false
-                  :gen-undo-op? false}))
+                  :gen-undo-ops? false}))
 
 (defmethod transact-db! :upsert-whiteboard-block [_ conn blocks]
   (ldb/transact! conn blocks {:persist-op? false
-                              :gen-undo-op? false}))
+                              :gen-undo-ops? false}))
 
 (defn- whiteboard-page-block?
   [block]
@@ -454,7 +454,7 @@
                      [:db/retract db-id :block/journal?]))
             (when (seq @*other-tx-data)
               (ldb/transact! conn @*other-tx-data {:persist-op? false
-                                                   :gen-undo-op? false}))
+                                                   :gen-undo-ops? false}))
             (transact-db! :save-block repo conn date-formatter new-block)))))))
 
 (defn apply-remote-move-ops
@@ -490,7 +490,7 @@
     (when (and (seq blocks) target-page-block)
       (outliner-tx/transact!
        {:persist-op? true
-        :gen-undo-op? false
+        :gen-undo-ops? false
         :transact-opts {:repo repo
                         :conn conn}}
        (outliner-core/move-blocks! repo conn blocks target-page-block false)))))

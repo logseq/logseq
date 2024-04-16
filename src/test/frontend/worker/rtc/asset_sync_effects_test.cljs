@@ -10,7 +10,7 @@
 
 (use-fixtures :each
   test-helper/db-based-start-and-destroy-db-map-fixture
-  rtc-fixture/listen-test-db-fixture
+  rtc-fixture/listen-test-db-to-gen-rtc-ops-fixture
   rtc-fixture/start-and-stop-asset-sync-loop-fixture
   rtc-fixture/clear-op-mem-stores-fixture)
 
