@@ -259,10 +259,6 @@
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
         property (db/entity property-id)
-        v (if (and (uuid? v)
-                   (= :entity (get-in property [:block/schema :type])))
-            (:db/id (db/entity [:block/uuid v]))
-            v)
         k-name (:block/original-name property)
         property-schema (:block/schema property)
         {:keys [type cardinality]} property-schema
