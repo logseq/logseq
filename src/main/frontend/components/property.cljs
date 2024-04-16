@@ -227,8 +227,7 @@
             property (db/sub-block (:db/id property))
             built-in? (ldb/built-in? property)
             disabled? (or built-in? config/publishing?)
-            property-type* (get-in property [:block/schema :type])
-            property-type (if (= property-type* :entity) :default property-type*)
+            property-type (get-in property [:block/schema :type])
             save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
             enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
         [:div.property-configure.flex.flex-1.flex-col
