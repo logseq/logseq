@@ -709,7 +709,7 @@
           (when (seq new-value-ids)
             (let [property-tx {:db/ident (:db/ident property)
                                :db/valueType :db.type/ref
-                               :db/cardinality :db.cardinality/one
+                               :db/cardinality (:db/cardinality property)
                                :block/schema (assoc property-schema :values new-value-ids)}]
               (db/transact! (state/get-current-repo) [property-tx]
                             {:outliner-op :insert-blocks})
@@ -732,7 +732,7 @@
                 new-value-ids (mapv :block/uuid closed-value-blocks)
                 property-tx {:db/ident (:db/ident property)
                              :db/valueType :db.type/ref
-                             :db/cardinality :db.cardinality/one
+                             :db/cardinality (:db/cardinality property)
                              :block/schema (assoc property-schema :values new-value-ids)}
                 property-values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
                 block-values (->> property-values
@@ -741,12 +741,13 @@
                          (when page-tx [page-tx])
                          closed-value-blocks
                          [property-tx]
-                         (map (fn [[id value]]
+                         (mapcat (fn [[id value]]
                                 (let [value' (if (set? value)
                                                (set (map #(vector :block/uuid (value->block-id %)) value))
                                                [:block/uuid (value->block-id value)])]
-                                  {:db/id id
-                                   property-id value'}))
+                                  [[:db/retract id property-id]
+                                   {:db/id id
+                                    property-id value'}]))
                               (filter second block-values)))]
           (db/transact! (state/get-current-repo) tx-data
                         {:outliner-op :insert-blocks})
