@@ -115,7 +115,7 @@
         value (db-property/closed-value-name item)
         page? (:block/original-name item)
         date? (= :date (:type (:block/schema property)))
-        property-block? (:logseq.property/created-from-property item)]
+        property-block? (db-property/property-created-block? item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
@@ -191,7 +191,7 @@
     (for [value values]
       [:li (if (uuid? value)
              (let [result (db/entity [:block/uuid value])]
-               (if (:logseq.property/created-from-property result)
+               (if (db-property/property-created-block? result)
                  (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id result) (:db/id result))]
                    (:block/content first-child))
                  (:block/original-name result)))
@@ -230,7 +230,12 @@
          :size :sm
          :on-click
          (fn [e]
-           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))]
+           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
+                   existing-values (seq (get-in property [:block/schema :values]))
+                   values (if (seq existing-values)
+                            (let [existing-ids (set (map #(:db/id (db/entity [:block/uuid %])) existing-values))]
+                              (remove (fn [[_ id]] (existing-ids id)) values))
+                            values)]
              (shui/popup-show! (.-target e)
                                (fn [{:keys [id]}]
                                  (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
@@ -238,7 +243,6 @@
                                                       (map #(:block/uuid (db/entity (second %))) values)
                                                       (map second values))
                                                     (remove string/blank?)
-                                                    (remove (set (get-in property [:block/schema :values])))
                                                     distinct)]
                                    (if (seq values')
                                      (add-existing-values property *property-schema values' opts)

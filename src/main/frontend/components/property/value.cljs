@@ -390,7 +390,7 @@
                     (keep (fn [id]
                             (when-let [block (when id (db/entity [:block/uuid id]))]
                               (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                    value (if (:logseq.property/created-from-property block)
+                                    value (if (db-property/property-created-block? block)
                                             (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id block) (:db/id block))]
                                               (:block/content first-child))
                                             (db-property/closed-value-name block))]
@@ -415,7 +415,7 @@
             add-property-f #(<add-property! block (:db/ident property) %)
             on-chosen (fn [chosen]
                         (p/do!
-                         (add-property-f (if (map? chosen) (:value chosen) chosen))
+                          (add-property-f (if (map? chosen) (:value chosen) chosen))
                          (when-let [f (:on-chosen select-opts)] (f))))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (coll? selected-choices')
@@ -457,11 +457,11 @@
 
 (rum/defc property-normal-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
-           (let [block-id (:block/uuid (first (:rum/args state)))]
+           (when-let [block-id (:block/uuid (first (:rum/args state)))]
              (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
   [parent block-cp editor-box]
-  (if (state/sub-async-query-loading (:block/uuid parent))
+  (if (and (:block/uuid parent) (state/sub-async-query-loading (:block/uuid parent)))
     [:div.text-sm.opacity-70 "loading"]
     (let [children (model/sort-by-left
                     (:block/_parent (db/entity (:db/id parent)))
@@ -474,7 +474,7 @@
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
-           (let [block-id (second (:rum/args state))]
+           (when-let [block-id (second (:rum/args state))]
              (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   [config value opts]
@@ -496,7 +496,7 @@
 (rum/defcs property-block-value < rum/reactive
   (rum/local nil ::template-instance)
   {:init (fn [state]
-           (let [block-id (:block/uuid (first (:rum/args state)))]
+           (when-let [block-id (:block/uuid (first (:rum/args state)))]
              (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
   [state value block property block-cp editor-box opts page-cp editor-id]
@@ -537,7 +537,7 @@
   (when value
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
-        (let [property-block? (:logseq.property/created-from-property block)
+        (let [property-block? (db-property/property-created-block? block)
               value' (get-in block [:block/schema :value])
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
@@ -566,8 +566,12 @@
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text _icon?] :as opts}]
-  (let [closed-values? (seq (get-in property [:block/schema :values]))]
-    [:div.select-item.w-full
+  (let [closed-values? (seq (get-in property [:block/schema :values]))
+        property-block? (db-property/property-created-block? value)]
+    [:div.select-item
+     (cond-> {}
+       property-block?
+       (assoc :class "w-full"))
      (cond
        (= value :logseq.property/empty-placeholder)
        (property-empty-value)
@@ -590,8 +594,7 @@
 
 (rum/defc single-value-select
   [block property value value-f select-opts {:keys [editing?] :as opts}]
-  (let [[hover? set-hover!] (rum/use-state false)
-        [open? set-open!] (rum/use-state editing?)
+  (let [[open? set-open!] (rum/use-state editing?)
         schema (:block/schema property)
         type (get schema :type :default)
         select-opts' (cond-> (assoc select-opts
@@ -599,10 +602,8 @@
                                     :on-chosen #(set-open! false))
                        (= type :page)
                        (assoc :classes (:classes schema)))
-        property-block? (:logseq.property/created-from-property value)]
+        property-block? (db-property/property-created-block? value)]
     [:div.flex.flex-1.flex-row
-     {:on-mouse-over #(set-hover! true)
-      :on-mouse-out #(set-hover! false)}
      (when property-block?
        [:div.flex.flex-1 (value-f)])
      (shui/dropdown-menu

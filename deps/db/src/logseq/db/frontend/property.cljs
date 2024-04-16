@@ -336,3 +336,12 @@
   (let [properties (map :db/ident (:class/schema.properties class-entity))
         ordered (get-in class-entity [:block/schema :properties])]
     (concat ordered (remove (set ordered) properties))))
+
+(defn property-created-block?
+  "`block` has been created in a property and it's not a closed value."
+  [block]
+  (and (map? block)
+       (:logseq.property/created-from-property block)
+       (:block/page block)
+       ;; not closed value
+       (not (some? (get-in block [:block/schema :value])))))

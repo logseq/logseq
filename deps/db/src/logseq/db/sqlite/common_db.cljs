@@ -170,8 +170,12 @@
                (when (contains? #{"closed value" "property" "class"} (:v datom))
                  (d/entity db (:e datom)))))
        (mapcat (fn [block]
-                 (cons (d/pull db '[*] (:db/id block))
-                       (property-with-values db block))))))
+                 (concat
+                  (cons (d/pull db '[*] (:db/id block))
+                        (property-with-values db block))
+                  (when (contains? (:block/type block) "closed value")
+                    (let [values (get-in block [:schema :values])]
+                      (d/pull-many db '[*] (map (fn [id] [:block/uuid id]) values)))))))))
 
 (defn get-favorites
   "Favorites page and its blocks"
