@@ -93,7 +93,7 @@
    :logseq.task/status
    {:original-name "Status"
     :schema
-    {:type :entity
+    {:type :default
      :public? true}
     :closed-values
     (mapv (fn [[db-ident value icon]]
@@ -110,7 +110,7 @@
    :logseq.task/priority
    {:original-name "Priority"
     :schema
-    {:type :entity
+    {:type :default
      :public? true}
     :closed-values
     (mapv (fn [[db-ident value]]
