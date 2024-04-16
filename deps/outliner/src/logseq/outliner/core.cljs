@@ -15,7 +15,7 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.db :as gp-db]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [cljs.pprint :as pprint]
             [logseq.common.marker :as common-marker]
@@ -648,8 +648,8 @@
   (let [db @conn
         tb (when target-block (block db target-block))
         target-block (if sibling? target-block (when tb (:block (otree/-get-down tb conn))))
-        list-type-fn (fn [block] (db-property/get-block-property-value repo db block :logseq.property/order-list-type))
-        k (db-property/get-pid repo :logseq.property/order-list-type)
+        list-type-fn (fn [block] (db-property-util/get-block-property-value repo db block :logseq.property/order-list-type))
+        k (db-property-util/get-pid repo :logseq.property/order-list-type)
         db-based? (sqlite-util/db-based-graph? repo)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv

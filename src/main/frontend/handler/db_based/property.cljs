@@ -12,7 +12,7 @@
             [logseq.common.util :as common-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.frontend.property.build :as db-property-build]
             [malli.util :as mu]
             [malli.error :as me]
             [logseq.common.util.page-ref :as page-ref]
@@ -592,9 +592,9 @@
 
 (defn- get-property-hidden-page
   [property]
-  (let [page-name (str db-property-util/hidden-page-name-prefix (:block/uuid property))]
+  (let [page-name (str db-property-build/hidden-page-name-prefix (:block/uuid property))]
     (or (db/get-page page-name)
-        (db-property-util/build-property-hidden-page property))))
+        (db-property-build/build-property-hidden-page property))))
 
 (defn re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
@@ -677,7 +677,7 @@
                                 (if (contains? db-property-type/ref-property-types (:type property-schema))
                                   []
                                   (let [page (get-property-hidden-page property)
-                                        new-block (db-property-util/build-closed-value-block block-id resolved-value [:block/uuid (:block/uuid page)]
+                                        new-block (db-property-build/build-closed-value-block block-id resolved-value [:block/uuid (:block/uuid page)]
                                                                                              property {:icon icon
                                                                                                        :description description})]
                                     (cond-> []
@@ -717,7 +717,7 @@
                 page-tx (when-not (e/entity? page) page)
                 page-id (:block/uuid page)
                 closed-value-blocks (map (fn [value]
-                                           (db-property-util/build-closed-value-block
+                                           (db-property-build/build-closed-value-block
                                             (db/new-block-id)
                                             value
                                             [:block/uuid page-id]

@@ -4,7 +4,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.common.util :as common-util]
             [datascript.core :as d]))
 
@@ -14,7 +14,7 @@
    (fn [[db-ident {:keys [schema original-name closed-values] :as m}]]
      (let [prop-name (or original-name (name (:name m)))
            blocks (if closed-values
-                    (db-property-util/build-closed-values
+                    (db-property-build/build-closed-values
                      db-ident
                      prop-name
                      {:db/ident db-ident :block/schema schema :closed-values closed-values}
