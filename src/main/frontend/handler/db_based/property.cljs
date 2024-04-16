@@ -110,10 +110,11 @@
       (if (util/uuid-string? v-str) (uuid v-str) v-str))))
 
 (defn- update-datascript-schema
-  [property {:keys [type cardinality]}]
+  [property {:keys [type cardinality values]}]
   (let [ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
-        type-data (when (and type (db-property-type/ref-property-types type)) ; type changes
+        type-data (when (and type (or (db-property-type/ref-property-types type)
+                                      (seq values))) ; type changes or closed values
                     {:db/ident ident
                      :db/valueType :db.type/ref
                      :db/cardinality cardinality})]
@@ -165,7 +166,8 @@
                      (merge {:db/ident db-ident} changed-property-attrs)))
               (or (not= (:type schema) (get-in property [:block/schema :type]))
                   (not= (:cardinality schema) (get-in property [:block/schema :cardinality]))
-                  (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property))))
+                  (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property)))
+                  (seq (:values schema)))
               (conj (update-datascript-schema property schema)))
             tx-data (concat property-tx-data
                             (when (seq properties)
@@ -705,7 +707,9 @@
       (if (every? uuid? values')
         (p/let [new-value-ids (vec (remove #(nil? (db/entity [:block/uuid %])) values'))]
           (when (seq new-value-ids)
-            (let [property-tx {:db/id (:db/id property)
+            (let [property-tx {:db/ident (:db/ident property)
+                               :db/valueType :db.type/ref
+                               :db/cardinality :db.cardinality/one
                                :block/schema (assoc property-schema :values new-value-ids)}]
               (db/transact! (state/get-current-repo) [property-tx]
                             {:outliner-op :insert-blocks})
@@ -726,7 +730,9 @@
                                  (map #(get-in % [:block/schema :value]) closed-value-blocks)
                                  (map :block/uuid closed-value-blocks))
                 new-value-ids (mapv :block/uuid closed-value-blocks)
-                property-tx {:db/id (:db/id property)
+                property-tx {:db/ident (:db/ident property)
+                             :db/valueType :db.type/ref
+                             :db/cardinality :db.cardinality/one
                              :block/schema (assoc property-schema :values new-value-ids)}
                 property-values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
                 block-values (->> property-values
@@ -735,13 +741,13 @@
                          (when page-tx [page-tx])
                          closed-value-blocks
                          [property-tx]
-                         (mapcat (fn [[id value]]
-                                   [[:db/retract id property-id]
-                                    {:db/id id
-                                     property-id (if (set? value)
-                                                   (set (map value->block-id value))
-                                                   (get value->block-id value))}])
-                                 (filter second block-values)))]
+                         (map (fn [[id value]]
+                                (let [value' (if (set? value)
+                                               (set (map #(vector :block/uuid (value->block-id %)) value))
+                                               [:block/uuid (value->block-id value)])]
+                                  {:db/id id
+                                   property-id value'}))
+                              (filter second block-values)))]
           (db/transact! (state/get-current-repo) tx-data
                         {:outliner-op :insert-blocks})
           new-value-ids)))))
