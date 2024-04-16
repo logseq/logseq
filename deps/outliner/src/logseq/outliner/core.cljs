@@ -948,8 +948,9 @@
 
 (defn- ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
+  `blocks` need to be sorted by left&parent(from top to bottom)
    Args:
-    `children?`: whether to replace `blocks'` children too. "
+    `children?`: whether to replace `blocks'` children too."
   [repo conn date-formatter blocks {:keys [children?]
                                     :or {children? true}
                                     :as delete-opts}]
@@ -960,18 +961,21 @@
         end-block (last blocks)
         start-node (block @conn start-block)
         end-node (block @conn end-block)
-        end-node-parents (->>
-                          (ldb/get-block-parents
-                           @conn
-                           (otree/-get-id end-node conn)
-                           {:depth 1000})
-                          (map :block/uuid)
-                          (set))
-        self-block? (contains? end-node-parents (otree/-get-id start-node conn))]
+        ;; end-node-parents (->>
+        ;;                   (ldb/get-block-parents
+        ;;                    @conn
+        ;;                    (otree/-get-id end-node conn)
+        ;;                    {:depth 1000})
+        ;;                   (map :block/uuid)
+        ;;                   (set))
+        ;; self-block? (contains? end-node-parents (otree/-get-id start-node conn))
+        ]
     (if (or
          (= 1 (count blocks))
          (= start-node end-node)
-         self-block?)
+         ;; NOTE: comment out cond `self-block?` here, will throw ex when :children? is false
+         ;; self-block?
+         )
       (delete-block repo conn txs-state start-node (assoc delete-opts :children? children?
                                                           :date-formatter date-formatter))
       (let [sibling? (= (otree/-get-parent-id start-node conn)
@@ -999,7 +1003,8 @@
                       (str "Can't find the left-node-id: "
                            (pr-str {:start (d/entity @conn [:block/uuid (otree/-get-id start-node conn)])
                                     :end (d/entity @conn [:block/uuid (otree/-get-id end-node conn)])
-                                    :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])}))))
+                                    :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])
+                                    :blocks blocks}))))
             (when left-node-id
               (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
                 (otree/-save new-right-node txs-state conn repo date-formatter {})))))
