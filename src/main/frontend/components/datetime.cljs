@@ -8,6 +8,7 @@
             [frontend.handler.repeated :as repeated]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [rum.core :as rum]
@@ -147,27 +148,32 @@
   [dom-id format _ts]
   (let [current-command @commands/*current-command
         deadline-or-schedule? (and current-command
-                                   (contains? #{"deadline" "scheduled"}
-                                              (string/lower-case current-command)))
-        date (state/sub :date-picker/date)]
-    [:div#date-time-picker.flex.flex-col.sm:flex-row {:on-click (fn [e] (util/stop e))
-                                                      :on-pointer-down (fn [e] (.stopPropagation e))}
-     (ui/datepicker
-      date
-      {:deadline-or-schedule? deadline-or-schedule?
-       :on-change
-       (fn [e date]
-         (util/stop e)
-         (let [date (t/to-default-time-zone date)
-               journal (date/journal-name date)]
-           ;; deadline-or-schedule? is handled in on-submit, not here
-           (when-not deadline-or-schedule?
-               ;; similar to page reference
-             (editor-handler/insert-command! dom-id
-                                             (page-ref/->page-ref journal)
-                                             format
-                                             {:command :page-ref})
-             (state/clear-editor-action!)
-             (reset! commands/*current-command nil))))})
+                                (contains? #{"deadline" "scheduled"}
+                                  (string/lower-case current-command)))
+        _date (state/sub :date-picker/date)
+        select-handler! (fn [^js d]
+                          (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+                                journal (date/js-date->journal-title gd)]
+                            ;; deadline-or-schedule? is handled in on-submit, not here
+                            (when-not deadline-or-schedule?
+                              ;; similar to page reference
+                              (editor-handler/insert-command! dom-id
+                                (page-ref/->page-ref journal)
+                                format
+                                {:command :page-ref})
+                              (state/clear-editor-action!)
+                              (reset! commands/*current-command nil))))]
+    [:div#date-time-picker.flex.flex-col.sm:flex-row
+     ;; inline container
+     [:div.border-red-500
+      (shui/calendar
+        {:mode "single"
+         :initial-focus true
+         :show-week-number true
+         :on-select select-handler!
+         :on-day-key-down (fn [^js d _ ^js e]
+                            (when (= "Enter" (.-key e))
+                              (select-handler! d)
+                              (util/stop e)))})]
      (when deadline-or-schedule?
        (time-repeater))]))
