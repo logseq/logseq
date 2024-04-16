@@ -15,7 +15,6 @@
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
-            [goog.dom :as gdom]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
@@ -391,13 +390,16 @@
                     (keep (fn [id]
                             (when-let [block (when id (db/entity [:block/uuid id]))]
                               (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                    value (db-property/closed-value-name block)]
+                                    value (if (:logseq.property/created-from-property block)
+                                            (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id block) (:db/id block))]
+                                              (:block/content first-child))
+                                            (db-property/closed-value-name block))]
                                 {:label (if icon
                                           [:div.flex.flex-row.gap-2
                                            (icon-component/icon icon)
                                            value]
                                           value)
-                                 :value id}))) (:values schema))
+                                 :value (:db/id block)}))) (:values schema))
                     (->> values
                          (mapcat (fn [[_id value]]
                                    (if (coll? value)
@@ -453,16 +455,22 @@
                       (not multiple-choices?)
                       (assoc :on-chosen on-chosen)))))))
 
-(rum/defc property-normal-block-value
+(rum/defc property-normal-block-value < rum/reactive db-mixins/query
+  {:init (fn [state]
+           (let [block-id (:block/uuid (first (:rum/args state)))]
+             (db-async/<get-block (state/get-current-repo) block-id :children? true))
+           state)}
   [parent block-cp editor-box]
-  (let [children (model/sort-by-left
-                  (:block/_parent (db/entity (:db/id parent)))
-                  parent)]
-    (if (seq children)
-      [:div.property-block-container.content.w-full
-       (block-cp children {:id (str (:block/uuid parent))
-                           :editor-box editor-box})]
-      (property-empty-value))))
+  (if (state/sub-async-query-loading (:block/uuid parent))
+    [:div.text-sm.opacity-70 "loading"]
+    (let [children (model/sort-by-left
+                    (:block/_parent (db/entity (:db/id parent)))
+                    parent)]
+      (if (seq children)
+        [:div.property-block-container.content.w-full
+         (block-cp children {:id (str (:block/uuid parent))
+                             :editor-box editor-box})]
+        (property-empty-value)))))
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
@@ -525,13 +533,17 @@
           (property-empty-value))))))
 
 (rum/defc closed-value-item < rum/reactive
-  [value {:keys [page-cp inline-text icon?]}]
+  [value {:keys [page-cp block-cp editor-box inline-text icon?]}]
   (when value
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
-        (let [value' (get-in block [:block/schema :value])
+        (let [property-block? (:logseq.property/created-from-property block)
+              value' (get-in block [:block/schema :value])
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
+            property-block?
+            (property-normal-block-value value block-cp editor-box)
+
             (:block/name block)
             (rum/with-key
               (page-cp {:disable-preview? true
@@ -555,7 +567,7 @@
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text _icon?] :as opts}]
   (let [closed-values? (seq (get-in property [:block/schema :values]))]
-    [:div.select-item
+    [:div.select-item.w-full
      (cond
        (= value :logseq.property/empty-placeholder)
        (property-empty-value)
@@ -578,40 +590,53 @@
 
 (rum/defc single-value-select
   [block property value value-f select-opts {:keys [editing?] :as opts}]
-  (let [[open? set-open!] (rum/use-state editing?)
+  (let [[hover? set-hover!] (rum/use-state false)
+        [open? set-open!] (rum/use-state editing?)
         schema (:block/schema property)
         type (get schema :type :default)
         select-opts' (cond-> (assoc select-opts
                                     :multiple-choices? false
                                     :on-chosen #(set-open! false))
                        (= type :page)
-                       (assoc :classes (:classes schema)))]
-    (shui/dropdown-menu
-     {:open open?}
-     (shui/dropdown-menu-trigger
-      {:class "jtrigger flex flex-1 w-full"
-       :on-click (if config/publishing?
-                   (constantly nil)
-                   #(set-open! (not open?)))
-       :on-key-down (fn [^js e]
-                      (case (util/ekey e)
-                        (" " "Enter")
-                        (do (set-open! true) (util/stop e))
-                        :dune))}
-      (if (string/blank? value)
-        (property-empty-value)
-        (value-f)))
-     (shui/dropdown-menu-content
-      {:align "start"
-       :on-interact-outside #(set-open! false)
-       :onEscapeKeyDown #(set-open! false)}
-      [:div.property-select
-       (case type
-         (:entity :number :url :default)
-         (select block property select-opts' opts)
+                       (assoc :classes (:classes schema)))
+        property-block? (:logseq.property/created-from-property value)]
+    [:div.flex.flex-1.flex-row
+     {:on-mouse-over #(set-hover! true)
+      :on-mouse-out #(set-hover! false)}
+     (when property-block?
+       [:div.flex.flex-1 (value-f)])
+     (shui/dropdown-menu
+      {:open open?}
+      (shui/dropdown-menu-trigger
+       {:class (if property-block? "jtrigger" "jtrigger flex flex-1 w-full")
+        :on-click (if config/publishing?
+                    (constantly nil)
+                    #(set-open! (not open?)))
+        :on-key-down (fn [^js e]
+                       (case (util/ekey e)
+                         (" " "Enter")
+                         (do (set-open! true) (util/stop e))
+                         :dune))}
+       (if property-block?
+         (shui/button
+          {:class "fade-in px-2 py-1"
+           :variant "ghost"
+           :size :sm}
+          (shui/tabler-icon "selector" {:size 14}))
+         (if (string/blank? value)
+           (property-empty-value)
+           (value-f))))
+      (shui/dropdown-menu-content
+       {:align "start"
+        :on-interact-outside #(set-open! false)
+        :onEscapeKeyDown #(set-open! false)}
+       [:div.property-select
+        (case type
+          (:entity :number :url :default)
+          (select block property select-opts' opts)
 
-         (:page :date)
-         (property-value-select-page block property select-opts' opts))]))))
+          (:page :date)
+          (property-value-select-page block property select-opts' opts))]))]))
 
 (defn- property-editing
   [block property schema]
