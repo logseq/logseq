@@ -29,7 +29,10 @@
         conn (sqlite-db/open-db! dir db-name)
         results (if ((set args) "-e")
                   (map #(when-let [ent (d/entity @conn (edn/read-string %))]
-                          (into {:db/id (:db/id ent)} ent)) (drop 2 args))
+                          (cond-> (into {:db/id (:db/id ent)} ent)
+                            (seq (:block/properties ent))
+                            (update :block/properties (fn [props] (map (fn [m] (into {} m)) props)))))
+                       (drop 2 args))
                   ;; assumes no :in are in queries
                   (let [query (into (edn/read-string query*) [:in '$ '%])]
                     (mapv first (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)))))]
