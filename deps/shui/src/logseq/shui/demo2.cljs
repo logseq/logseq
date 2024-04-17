@@ -367,6 +367,31 @@
         :on-context-menu #(ui/popup-show! %
                             [:h1.text-3xl.font-bold "hi x popup for custom context menu!"])}]])])
 
+(rum/defc custom-trigger-content
+  []
+  [:p
+   [:code "more content"] [:br]
+   (ui/input {:auto-focus true}) [:br]
+   (ui/button "select sth")])
+
+(rum/defc sample-dropdown-trigger
+  []
+
+  [:div.py-4
+   [:h1.text-3xl.font-bold.border-b.pb-4 "Sample dropdown/menu trigger"]
+   [:div.py-4
+    (ui/dropdown-menu
+      (ui/dropdown-menu-trigger
+        {:as-child true}
+        (ui/trigger-child-wrap
+          {:class "border p-6 border"}
+          (custom-trigger-content)))
+      (ui/dropdown-menu-content
+        (ui/dropdown-menu-item "A item")
+        (ui/dropdown-menu-item "B item")
+        (ui/dropdown-menu-item "C item")))]
+   ])
+
 (rum/defc page
   []
-  (multi-select-demo))
+  (sample-dropdown-trigger))
