@@ -273,18 +273,15 @@ when undo this op, this original entity-map will be transacted back into db")
 (defn- other-children-exist?
   "return true if there are other children existing(not included in `block-entities`)"
   [block-entities]
-  (let [block-uuid->entity (into {}
-                                 (keep (fn [ent]
-                                         (when-let [block-uuid (:block/uuid ent)]
-                                           [block-uuid ent])))
-                                 block-entities)
-        block-uuid-set (set (keys block-uuid->entity))]
-    (loop [[[block-uuid block-entity] & other-entities] block-uuid->entity]
-      (when block-uuid
-        (let [children-block-uuids (set (keep :block/uuid (:block/_parent block-entity)))]
-          (if (seq (set/difference children-block-uuids block-uuid-set))
-            true
-            (recur other-entities)))))))
+  (let [block-uuid-set (set (keep :block/uuid block-entities))]
+    (boolean
+     (some
+      (fn [block-entity]
+        (seq
+         (set/difference
+          (set (keep :block/uuid (:block/_parent block-entity)))
+          block-uuid-set)))
+      block-entities))))
 
 (defmethod reverse-apply-op ::insert-blocks
   [op conn repo]
