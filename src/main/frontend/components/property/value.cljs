@@ -468,7 +468,7 @@
                     (:block/_parent (db/entity (:db/id parent)))
                     parent)]
       (if (seq children)
-        [:div.property-block-container.content.w-full
+        [:div.property-block-container.content.flex.flex-1
          (block-cp children {:id (str (:block/uuid parent))
                              :editor-box editor-box
                              :hide-bullet? (= (count children) 1)

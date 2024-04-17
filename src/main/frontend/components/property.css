@@ -67,7 +67,7 @@
         }
 
         .property-value {
-            @apply px-1;
+            @apply pl-1;
 
             .jtrigger-id {
                 @apply left-[-34px] top-[2px];
