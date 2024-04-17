@@ -162,8 +162,7 @@
 
 (deftest undo-redo-gen-test
   (let [conn (db/get-db false)
-        all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 0 ;;100 ;;TODO: fix this ut
-                                                 ))]
+        all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 100))]
     (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid all-remove-ops)
     (prn :block-count-before-init (count (get-db-block-set @conn)))
     (loop [i 0]
@@ -174,7 +173,7 @@
     (undo-redo/clear-undo-redo-stack)
     (testing "move blocks"
       (let [origin-graph-block-set (get-db-block-set @conn)
-            ops (gen/generate (gen/vector (gen-op @conn {:move-block-op 1000 :boundary-op 500}) 0;; 300;;TODO: fix this ut
+            ops (gen/generate (gen/vector (gen-op @conn {:move-block-op 1000 :boundary-op 500}) 300
                                           ))]
         (prn :generate-move-ops (count ops))
         (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid ops)
@@ -187,8 +186,7 @@
 
     (testing "random ops"
       (let [origin-graph-block-set (get-db-block-set @conn)
-            ops (gen/generate (gen/vector (gen-op @conn) 0 ;;1000 ;;TODO: fix this ut
-                                          ))]
+            ops (gen/generate (gen/vector (gen-op @conn) 1000))]
         (prn :generate-random-ops (count ops))
         (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid ops)
 
@@ -225,8 +223,7 @@
 
 (deftest ^:wip undo-redo-outliner-op-gen-test
   (let [conn (db/get-db false)]
-    (loop [num 0 ;; 100 ;;TODO: fix this ut
-           ]
+    (loop [num 100]
       (when (> num 0)
         (if-let [op (gen/generate (t.gen/gen-insert-blocks-op @conn {:page-uuid page-uuid}))]
           (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
@@ -240,8 +237,7 @@
     (redo-all conn page-uuid)
     (print-page-stat @conn page-uuid "test")
 
-    (loop [num 0;; 1000 ;;TODO: fix this ut
-           ]
+    (loop [num 1000]
       (when (> num 0)
         (if-let [op (gen/generate (t.gen/gen-move-blocks-op @conn {:page-uuid page-uuid}))]
           (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
@@ -255,8 +251,7 @@
     (redo-all conn page-uuid)
     (print-page-stat @conn page-uuid "test")
 
-    (loop [num 0 ;;10 ;;TODO: fix this ut
-           ]
+    (loop [num 10]
       (when (> num 0)
         (if-let [op (gen/generate (t.gen/gen-delete-blocks-op @conn {:page-uuid page-uuid}))]
           (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
