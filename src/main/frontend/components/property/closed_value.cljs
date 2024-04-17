@@ -24,7 +24,7 @@
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
-  (let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property item)]
+  (p/let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property item)]
     (p/do!
      (when (seq tx-data) (db/transact! tx-data))
      (when (seq tx-data) (db-property-handler/re-init-commands! property))
