@@ -1814,53 +1814,54 @@
                      (when (and (state/developer-mode?) (.-metaKey event))
                        (js/console.debug "[block config]==" config)))}
         [:span {:class (if (or (and control-show?
-                                 (or collapsed?
-                                   (editor-handler/collapsable? uuid {:semantic? true})))
-                             (and collapsed? (or order-list? config/publishing?)))
+                                    (or collapsed?
+                                        (editor-handler/collapsable? uuid {:semantic? true})))
+                               (and collapsed? (or order-list? config/publishing?)))
                          "control-show cursor-pointer"
                          "control-hide")}
          (ui/rotating-arrow collapsed?)]])
 
-     (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid config)}
-                   [:span.bullet-container.cursor
-                    {:id (str "dot-" uuid)
-                     :draggable true
-                     :on-drag-start (fn [event]
-                                      (bullet-drag-start event block uuid block-id))
-                     :blockid (str uuid)
-                     :class (str (when collapsed? "bullet-closed")
-                                 (when (and (:document/mode? config)
-                                            (not collapsed?))
-                                   " hide-inner-bullet")
-                                 (when order-list? " as-order-list typed-list"))}
+     (when-not (:hide-bullet? config)
+       (let [bullet [:a.bullet-link-wrap {:on-click #(bullet-on-click % block uuid config)}
+                     [:span.bullet-container.cursor
+                      {:id (str "dot-" uuid)
+                       :draggable true
+                       :on-drag-start (fn [event]
+                                        (bullet-drag-start event block uuid block-id))
+                       :blockid (str uuid)
+                       :class (str (when collapsed? "bullet-closed")
+                                   (when (and (:document/mode? config)
+                                              (not collapsed?))
+                                     " hide-inner-bullet")
+                                   (when order-list? " as-order-list typed-list"))}
 
-                    [:span.bullet (cond->
-                                   {:blockid (str uuid)}
-                                    selected?
-                                    (assoc :class "selected"))
-                     (when order-list?
-                       [:label (str order-list-idx ".")])]]]]
-       (cond
-         (and (or (mobile-util/native-platform?)
-                  (:ui/show-empty-bullets? (state/get-config))
-                  collapsed?
-                  collapsable?)
-              (not doc-mode?))
-         bullet
+                      [:span.bullet (cond->
+                                     {:blockid (str uuid)}
+                                      selected?
+                                      (assoc :class "selected"))
+                       (when order-list?
+                         [:label (str order-list-idx ".")])]]]]
+         (cond
+           (and (or (mobile-util/native-platform?)
+                    (:ui/show-empty-bullets? (state/get-config))
+                    collapsed?
+                    collapsable?)
+                (not doc-mode?))
+           bullet
 
-         (or
-          (and empty-content?
-               (not edit?)
-               (not (:block.temp/top? block))
-               (not (:block.temp/bottom? block))
-               (not (util/react *control-show?)))
-          (and doc-mode?
-               (not collapsed?)
-               (not (util/react *control-show?))))
-         [:span.bullet-container]
+           (or
+            (and empty-content?
+                 (not edit?)
+                 (not (:block.temp/top? block))
+                 (not (:block.temp/bottom? block))
+                 (not (util/react *control-show?)))
+            (and doc-mode?
+                 (not collapsed?)
+                 (not (util/react *control-show?))))
+           [:span.bullet-container]
 
-         :else
-         bullet))]))
+           :else
+           bullet)))]))
 
 (rum/defc dnd-separator
   [move-to block-content?]
@@ -3035,7 +3036,7 @@
                           (block-mouse-over e *control-show? block-id doc-mode?))
          :on-mouse-leave (fn [e]
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
-        (when (and (not slide?) (not in-whiteboard?) (not (:hide-bullet? config)))
+        (when (and (not slide?) (not in-whiteboard?))
           (let [edit? (or edit?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control config block
