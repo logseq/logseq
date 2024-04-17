@@ -114,7 +114,7 @@
          (some-> (rum/deref *trigger-ref)
                  (.focus))))
      [])
-    [:div.flex.flex-row.gap-1.items-center
+    [:div.flex.flex-1.flex-row.gap-1.items-center
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
          (rum/with-key
@@ -152,7 +152,8 @@
                   (assoc :default-month initial-month)))))]
 
        (shui/button
-        {:class (str "jtrigger h-6" (when-not value " empty-btn"))
+        {:class (str "jtrigger h-6" (when-not value " empty-btn")
+                     (when-not multiple-values? " w-full justify-start"))
          :ref *trigger-ref
          :variant :text
          :size :sm
@@ -460,7 +461,7 @@
            (when-let [block-id (:block/uuid (first (:rum/args state)))]
              (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
-  [parent block-cp editor-box]
+  [parent block-cp editor-box & {:keys [closed-values?]}]
   (if (and (:block/uuid parent) (state/sub-async-query-loading (:block/uuid parent)))
     [:div.text-sm.opacity-70 "loading"]
     (let [children (model/sort-by-left
@@ -470,7 +471,8 @@
         [:div.property-block-container.content.w-full
          (block-cp children {:id (str (:block/uuid parent))
                              :editor-box editor-box
-                             :hide-bullet? (= (count children) 1)})]
+                             :hide-bullet? (= (count children) 1)
+                             :closed-values? closed-values?})]
         (property-empty-value)))))
 
 (rum/defc property-template-value < rum/reactive
@@ -534,21 +536,21 @@
           (property-empty-value))))))
 
 (rum/defc closed-value-item < rum/reactive
-  [value {:keys [page-cp block-cp editor-box inline-text icon?]}]
+  [value {:keys [page-cp inline-text icon?]}]
   (when value
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
         (let [property-block? (db-property/property-created-block? block)
-              value' (get-in block [:block/schema :value])
+              value' (or (get-in block [:block/schema :value])
+                         (when property-block?
+                           (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id value) (:db/id value))]
+                             (inline-text {} :markdown (:block/content first-child)))))
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
-            property-block?
-            (property-normal-block-value value block-cp editor-box)
-
             (:block/name block)
             (rum/with-key
               (page-cp {:disable-preview? true
-                       :hide-close-button? true} block)
+                        :hide-close-button? true} block)
               (:db/id block))
 
             icon
@@ -559,6 +561,9 @@
                (when value'
                  [:span value'])])
 
+            property-block?
+            value'
+
             (= type :number)
             [:span.number (str value')]
 
@@ -567,12 +572,8 @@
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text _icon?] :as opts}]
-  (let [closed-values? (seq (get-in property [:block/schema :values]))
-        property-block? (db-property/property-created-block? value)]
+  (let [closed-values? (seq (get-in property [:block/schema :values]))]
     [:div.select-item
-     (cond-> {}
-       property-block?
-       (assoc :class "w-full"))
      (cond
        (= value :logseq.property/empty-placeholder)
        (property-empty-value)
@@ -602,43 +603,33 @@
                                     :multiple-choices? false
                                     :on-chosen #(set-open! false))
                        (= type :page)
-                       (assoc :classes (:classes schema)))
-        property-block? (db-property/property-created-block? value)]
-    [:div.flex.flex-1.flex-row
-     (when property-block?
-       [:div.flex.flex-1 (value-f)])
-     (shui/dropdown-menu
-      {:open open?}
-      (shui/dropdown-menu-trigger
-       {:class (if property-block? "jtrigger" "jtrigger flex flex-1 w-full")
-        :on-click (if config/publishing?
-                    (constantly nil)
-                    #(set-open! (not open?)))
-        :on-key-down (fn [^js e]
-                       (case (util/ekey e)
-                         (" " "Enter")
-                         (do (set-open! true) (util/stop e))
-                         :dune))}
-       (if property-block?
-         (shui/button
-          {:class "fade-in px-2 py-1"
-           :variant "ghost"
-           :size :sm}
-          (shui/tabler-icon "selector" {:size 14}))
-         (if (string/blank? value)
-           (property-empty-value)
-           (value-f))))
-      (shui/dropdown-menu-content
-       {:align "start"
-        :on-interact-outside #(set-open! false)
-        :onEscapeKeyDown #(set-open! false)}
-       [:div.property-select
-        (case type
-          (:number :url :default)
-          (select block property select-opts' opts)
+                       (assoc :classes (:classes schema)))]
+    (shui/dropdown-menu
+     {:open open?}
+     (shui/dropdown-menu-trigger
+      {:class "jtrigger flex flex-1 w-full"
+       :on-click (if config/publishing?
+                   (constantly nil)
+                   #(set-open! (not open?)))
+       :on-key-down (fn [^js e]
+                      (case (util/ekey e)
+                        (" " "Enter")
+                        (do (set-open! true) (util/stop e))
+                        :dune))}
+      (if (string/blank? value)
+        (property-empty-value)
+        (value-f)))
+     (shui/dropdown-menu-content
+      {:align "start"
+       :on-interact-outside #(set-open! false)
+       :onEscapeKeyDown #(set-open! false)}
+      [:div.property-select
+       (case type
+         (:number :url :default)
+         (select block property select-opts' opts)
 
-          (:page :date)
-          (property-value-select-page block property select-opts' opts))]))]))
+         (:page :date)
+         (property-value-select-page block property select-opts' opts))]))))
 
 (defn- property-editing
   [block property schema]
@@ -722,31 +713,30 @@
     (if (= :logseq.property/icon (:db/ident property))
       (icon-row block)
       (if (and select-type?
-              (not (and (not closed-values?) (= type :date))))
-       (single-value-select block property value
-                            (fn []
-                              (select-item property type value opts))
-                            select-opts
-                            (assoc opts :editing? editing?))
-       (case type
-         :date
-         (property-value-date-picker block property value {:editing? editing?})
+               (not (and (not closed-values?) (= type :date))))
+        (single-value-select block property value
+                             (fn [] (select-item property type value opts))
+                             select-opts
+                             (assoc opts :editing? editing?))
+        (case type
+          :date
+          (property-value-date-picker block property value {:editing? editing?})
 
-         :checkbox
-         (let [add-property! (fn []
-                               (<add-property! block (:db/ident property) (boolean (not value))))]
-           (shui/checkbox {:class "jtrigger flex flex-row items-center"
-                           :checked value
-                           :auto-focus editing?
-                           :on-checked-change add-property!
-                           :on-key-down (fn [e]
-                                          (when (= (util/ekey e) "Enter")
-                                            (add-property!)))}))
+          :checkbox
+          (let [add-property! (fn []
+                                (<add-property! block (:db/ident property) (boolean (not value))))]
+            (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                            :checked value
+                            :auto-focus editing?
+                            :on-checked-change add-property!
+                            :on-key-down (fn [e]
+                                           (when (= (util/ekey e) "Enter")
+                                             (add-property!)))}))
         ;; :others
-         [:div.flex.flex-1
-          (if editing?
-            (property-editing block property schema)
-            (property-value-inner block property value opts))])))))
+          [:div.flex.flex-1
+           (if editing?
+             (property-editing block property schema)
+             (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values
   [block property v {:keys [on-chosen dropdown? editing?]

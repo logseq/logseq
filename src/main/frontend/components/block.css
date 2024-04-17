@@ -221,6 +221,10 @@
       @apply relative left-[-3px];
     }
   }
+
+  &.bullet-hidden {
+    padding-right: 2px;
+  }
 }
 
 .block-control, .block-control:hover {
