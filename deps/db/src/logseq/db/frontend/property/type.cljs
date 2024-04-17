@@ -71,54 +71,51 @@
   [db id]
   (some? (d/entity db id)))
 
-;; TODO: strict check on date/page/template
+(defn- url-or-closed-url?
+  [db val]
+  (or (url? val)
+      (macro-url? val)
+      (when-let [ent (d/entity db val)]
+        (url? (get-in ent [:block/schema :value])))))
 
-(defn- existing-closed-value-valid?
-  "Validates that the given existing closed value is valid"
-  [db property type-validate-fn value]
-  (boolean
-   (when-let [e (if (uuid? value)
-                  (d/entity db [:block/uuid value])
-                  (d/entity db value))]
-     (let [values (get-in property [:block/schema :values])]
-       (and
-        (contains? (set values) (:block/uuid e))
-        (if (contains? (:block/type e) "closed value")
-          (type-validate-fn (:value (:block/schema e)))
-          ;; page uuids aren't closed value types
-          (type-validate-fn value)))))))
+(defn- hidden-or-closed-block?
+  [db s]
+  (when-let [ent (d/entity db s)]
+    (or (and (:block/content ent)
+             (= #{"hidden"} (get-in ent [:block/page :block/type])))
+        (string? (get-in ent [:block/schema :value])))))
 
-(defn type-or-closed-value?
-  "The `value` could be either a closed value (when `property` has pre-defined values) or it can be validated by `type-validate-fn`.
-  Args:
-  `new-closed-value?`: a new value will be added, so we'll check it using `type-validate-fn`."
-  [type-validate-fn]
-  (fn [db property value new-closed-value?]
-    (if (and (seq (get-in property [:block/schema :values]))
-             (not new-closed-value?))
-      (existing-closed-value-valid? db property type-validate-fn value)
-      (type-validate-fn value))))
+(defn- page?
+  [db val]
+  (when-let [ent (d/entity db val)]
+    (some? (:block/original-name ent))))
+
+(defn- date?
+  [db val]
+  (when-let [ent (d/entity db val)]
+    (and (some? (:block/original-name ent))
+         (:block/journal? ent))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
               {:error/message "should be a entity"}
-              ;; entity check needed for property block values
-              entity?]
+              hidden-or-closed-block?]
    :number   [:fn
               {:error/message "should be a number"}
-              ;; TODO: Remove uuid? for :number and :url when type-or-closed-value? is used in this ns
-              (some-fn number? uuid?)]
+              ;; Also handles entity? so no need to use it
+              number?]
    :date     [:fn
               {:error/message "should be a journal date"}
-              entity?]
+              date?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
-              (some-fn url? uuid? macro-url?)]
+              url-or-closed-url?]
    :page     [:fn
               {:error/message "should be a page"}
-              entity?]
+              page?]
+   ;; TODO: strict check on template
    :template [:fn
               {:error/message "should has #template"}
               entity?]
@@ -139,7 +136,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :date :page :template :entity})
+  #{:default :url :date :page :template :entity})
 
 ;; Helper fns
 ;; ==========
