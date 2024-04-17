@@ -270,38 +270,21 @@ when undo this op, this original entity-map will be transacted back into db")
           (when (d/entity @conn [:block/uuid block-uuid])
             [:push-undo-redo r]))))))
 
-(defn- sort-block-entities
-  "return nil when there are other children existing"
-  [block-entities]
-  (let [sorted-block-entities (common-util/sort-coll-by-dependency
-                               :block/uuid (comp :block/uuid :block/parent) block-entities)
-        block-uuid-set (set (map :block/uuid sorted-block-entities))]
-    (when-not
-     (some ;; check no other children
-      (fn [ent]
-        (not-empty (set/difference (set (map :block/uuid (:block/_parent ent))) block-uuid-set)))
-      sorted-block-entities)
-
-      sorted-block-entities)))
-
 (defmethod reverse-apply-op ::insert-blocks
   [op conn repo]
   (let [[_ {:keys [block-uuids]}] op]
     (when-let [block-entities (->> block-uuids
                                    (keep #(d/entity @conn [:block/uuid %]))
-                                   sort-block-entities
-                                   reverse
                                    not-empty)]
-      (doseq [block-entity block-entities]
-        (outliner-tx/transact!
-            {:gen-undo-ops? false
-             :outliner-op :delete-blocks
-             :transact-opts {:repo repo
-                             :conn conn}}
-            (outliner-core/delete-blocks! repo conn
-                                          (common-config/get-date-formatter (worker-state/get-config repo))
-                                          [block-entity]
-                                          {:children? false})))
+      (outliner-tx/transact!
+       {:gen-undo-ops? false
+        :outliner-op :delete-blocks
+        :transact-opts {:repo repo
+                        :conn conn}}
+       (outliner-core/delete-blocks! repo conn
+                                     (common-config/get-date-formatter (worker-state/get-config repo))
+                                     block-entities
+                                     {:children? true}))
       (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
         [:push-undo-redo {}]))))
 

@@ -361,7 +361,7 @@
       (get-block-by-id @conn parent-id)))
 
   (-get-left [this conn]
-    (let [left-id (otree/-get-left-id this conn)]
+    (when-let [left-id (otree/-get-left-id this conn)]
       (get-block-by-id @conn left-id)))
 
   (-get-right [this conn]
@@ -941,9 +941,9 @@
     (let [right-node (otree/-get-right node conn)]
       (otree/-del node txs-state children? conn)
       (when (otree/satisfied-inode? right-node)
-        (let [left-node (otree/-get-left node conn)
-              new-right-node (otree/-set-left-id right-node (otree/-get-id left-node conn) conn)]
-          (otree/-save new-right-node txs-state conn repo date-formatter {})))
+        (when-let [left-node (otree/-get-left node conn)]
+          (let [new-right-node (otree/-set-left-id right-node (otree/-get-id left-node conn) conn)]
+            (otree/-save new-right-node txs-state conn repo date-formatter {}))))
       @txs-state)))
 
 (defn- ^:large-vars/cleanup-todo delete-blocks
@@ -955,10 +955,13 @@
                                     :or {children? true}
                                     :as delete-opts}]
   [:pre [(seq blocks)]]
-  (let [txs-state (ds/new-outliner-txs-state)
-        block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) blocks)
-        start-block (first blocks)
-        end-block (last blocks)
+  (let [parent-ids (set/intersection (set (map (comp :db/id :block/parent) blocks))
+                                     (set (map :db/id blocks)))
+        top-level-blocks (remove (fn [e] (contains? parent-ids (:db/id (:block/parent e)))) blocks)
+        txs-state (ds/new-outliner-txs-state)
+        block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
+        start-block (first top-level-blocks)
+        end-block (last top-level-blocks)
         start-node (block @conn start-block)
         end-node (block @conn end-block)
         ;; end-node-parents (->>
@@ -971,7 +974,7 @@
         ;; self-block? (contains? end-node-parents (otree/-get-id start-node conn))
         ]
     (if (or
-         (= 1 (count blocks))
+         (= 1 (count top-level-blocks))
          (= start-node end-node)
          ;; NOTE: comment out cond `self-block?` here, will throw ex when :children? is false
          ;; self-block?
@@ -982,7 +985,7 @@
                         (otree/-get-parent-id end-node conn))
             right-node (otree/-get-right end-node conn)]
         (when (otree/satisfied-inode? right-node)
-          (let [non-consecutive? (seq (ldb/get-non-consecutive-blocks @conn blocks))
+          (let [non-consecutive? (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks))
                 left-node-id (if sibling?
                                (otree/-get-id (otree/-get-left start-node conn) conn)
                                (let [end-node-left-nodes (get-left-nodes conn end-node (count block-ids))
@@ -1004,14 +1007,14 @@
                            (pr-str {:start (d/entity @conn [:block/uuid (otree/-get-id start-node conn)])
                                     :end (d/entity @conn [:block/uuid (otree/-get-id end-node conn)])
                                     :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])
-                                    :blocks blocks}))))
+                                    :blocks top-level-blocks}))))
             (when left-node-id
               (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
                 (otree/-save new-right-node txs-state conn repo date-formatter {})))))
         (doseq [id block-ids]
           (let [node (block @conn (d/entity @conn id))]
             (otree/-del node txs-state true conn)))
-        (let [fix-non-consecutive-tx (fix-non-consecutive-blocks @conn blocks nil false)]
+        (let [fix-non-consecutive-tx (fix-non-consecutive-blocks @conn top-level-blocks nil false)]
           (swap! txs-state concat fix-non-consecutive-tx))))
     {:tx-data @txs-state}))
 
