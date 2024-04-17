@@ -44,28 +44,28 @@
                            (assoc :block/tags :logseq.class/task))]
        [property-tx-data block-tx-data]))))
 
-(defn built-in-validation-schemas
-  "A frontend version of built-in-validation-schemas that adds the current database to
-   schema fns"
-  [property & {:keys [new-closed-value?]
-               :or {new-closed-value? false}}]
-  (into {}
-        (map (fn [[property-type property-val-schema]]
-               (cond
-                 (and (db-property-type/closed-value-property-types property-type)
-                      ;; FIXME: Remove when closed values are done migrating to refs
-                      (not (#{:default} property-type)))
-                 (let [[_ schema-opts schema-fn] property-val-schema
-                       schema-fn' (if (db-property-type/property-types-with-db property-type) #(schema-fn (db/get-db) %) schema-fn)]
-                   [property-type [:fn
-                                   schema-opts
-                                   #((db-property-type/type-or-closed-value? schema-fn') (db/get-db) property % new-closed-value?)]])
-                 (db-property-type/property-types-with-db property-type)
-                 (let [[_ schema-opts schema-fn] property-val-schema]
-                   [property-type [:fn schema-opts #(schema-fn (db/get-db) %)]])
-                 :else
-                 [property-type property-val-schema]))
-             db-property-type/built-in-validation-schemas)))
+(defn- get-property-value-schema
+  "Gets a malli schema to validate the property value for the given property type. Optionally
+   wraps the validation with db and property as needed"
+  [property-type property & {:keys [new-closed-value?]
+                             :or {new-closed-value? false}}]
+  (let [property-val-schema (or (get db-property-type/built-in-validation-schemas property-type)
+                                (throw (ex-info (str "No validation for property type " (pr-str property-type)) {})))]
+    (if (vector? property-val-schema)
+      (let [[_ schema-opts schema-fn] property-val-schema
+            schema-fn' (if (db-property-type/property-types-with-db property-type)
+                         (partial schema-fn (db/get-db)) schema-fn)
+            ;; TODO: Move this validation into malli-schema
+            schema-fn'' (if (and (db-property-type/closed-value-property-types property-type)
+                                 (not new-closed-value?)
+                                 (seq (get-in property [:block/schema :values])))
+                          (fn closed-value-validate [val]
+                            (and (schema-fn' val)
+                                 (contains? (set (get-in property [:block/schema :values]))
+                                            (:block/uuid (db/entity val)))))
+                          schema-fn')]
+        [:fn schema-opts schema-fn''])
+      property-val-schema)))
 
 (defn- fail-parse-long
   [v-str]
@@ -207,7 +207,7 @@
     (when (and multiple-values? (seq values))
       (let [infer-schema (when-not type (infer-schema-from-input-string (first values)))
             property-type (or type infer-schema :default)
-            schema (get (built-in-validation-schemas property) property-type)
+            schema (get-property-value-schema property-type property)
             values' (try
                       (set (map #(convert-property-input-string property-type %) values))
                       (catch :default e
@@ -278,7 +278,7 @@
         (when (some? v)
           (let [infer-schema (when-not type (infer-schema-from-input-string v))
                 property-type (or type infer-schema :default)
-                schema (get (built-in-validation-schemas property) property-type)
+                schema (get-property-value-schema property-type property)
                 value (when-let [id (:db/ident property)]
                         (get block id))
                 v* (if (= v :logseq.property/empty-placeholder)
@@ -641,7 +641,7 @@
               block (when id (db/entity [:block/uuid id]))
               value-block (when (uuid? value) (db/entity [:block/uuid value]))
               validate-message (validate-property-value
-                                (get (built-in-validation-schemas property {:new-closed-value? true}) property-type)
+                                (get-property-value-schema property-type property {:new-closed-value? true})
                                 resolved-value)]
         (cond
           (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)

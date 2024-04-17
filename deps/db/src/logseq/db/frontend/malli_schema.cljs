@@ -54,7 +54,8 @@
   "Validates the value in a property tuple. The property value can be one or
   many of a value to validated"
   [schema-fn [property property-val]]
-  ;; (prn :validate-val property property-val)
+  ;; For debugging
+  ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val property property-val))
   (if (= (:cardinality property) :many)
     (every? schema-fn property-val)
     (or (schema-fn property-val) (= :logseq.property/empty-placeholder property-val))))
