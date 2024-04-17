@@ -78,7 +78,8 @@ when undo this op, this original entity-map will be transacted back into db")
          [:block/created-at {:optional true} :int]
          [:block/updated-at {:optional true} :int]
          [:block/format {:optional true} :any]
-         [:block/tags {:optional true} [:sequential :uuid]]]]]]]
+         [:block/tags {:optional true} [:sequential :uuid]]
+         [:block/link {:optional true} [:maybe :uuid]]]]]]]
     [::update-block
      [:cat :keyword
       [:map
@@ -86,6 +87,7 @@ when undo this op, this original entity-map will be transacted back into db")
        [:block-origin-content {:optional true} :string]
        [:block-origin-tags {:optional true} [:sequential :uuid]]
        [:block-origin-collapsed {:optional true} :boolean]
+       [:block-origin-link {:optional true} [:maybe :uuid]]
        ;; TODO: add more attrs
        ]]]]))
 
@@ -103,7 +105,8 @@ when undo this op, this original entity-map will be transacted back into db")
    :block/created-at
    :block/updated-at
    :block/format
-   {:block/tags [:block/uuid]}])
+   {:block/tags [:block/uuid]}
+   {:block/link [:block/uuid]}])
 
 (defn- ->block-entity-map
   [db eid]
@@ -112,7 +115,8 @@ when undo this op, this original entity-map will be transacted back into db")
     (cond-> m
       true                  (update :block/left :block/uuid)
       true                  (update :block/parent :block/uuid)
-      (seq (:block/tags m)) (update :block/tags (partial mapv :block/uuid)))))
+      (seq (:block/tags m)) (update :block/tags (partial mapv :block/uuid))
+      (:block/link m)       (update :block/link :block/uuid))))
 
 
 (defn- reverse-op
@@ -148,12 +152,16 @@ when undo this op, this original entity-map will be transacted back into db")
             block-origin-tags      (when (contains? value-keys :block-origin-tags)
                                      (mapv :block/uuid (:block/tags block-entity)))
             block-origin-collapsed (when (contains? value-keys :block-origin-collapsed)
-                                     (boolean (:block/collapsed? block-entity)))]
+                                     (boolean (:block/collapsed? block-entity)))
+            block-origin-link      (when (contains? value-keys :block-origin-link)
+                                     (:block/uuid (:block/link block-entity)))]
         [[::update-block
           (cond-> {:block-uuid block-uuid}
-            (some? block-origin-content)   (assoc :block-origin-content block-origin-content)
-            (some? block-origin-tags)      (assoc :block-origin-tags block-origin-tags)
-            (some? block-origin-collapsed) (assoc :block-origin-collapsed block-origin-collapsed))]]))))
+            (some? block-origin-content)              (assoc :block-origin-content block-origin-content)
+            (some? block-origin-tags)                 (assoc :block-origin-tags block-origin-tags)
+            (some? block-origin-collapsed)            (assoc :block-origin-collapsed block-origin-collapsed)
+            ;; block-origin-link's value maybe nil, so use contains as cond
+            (contains? value-keys :block-origin-link) (assoc :block-origin-link block-origin-link))]]))))
 
 (def ^:private apply-conj-vec (partial apply (fnil conj [])))
 
@@ -313,12 +321,22 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defmethod reverse-apply-op ::update-block
   [op conn repo]
-  (let [[_ {:keys [block-uuid block-origin-content block-origin-tags block-origin-collapsed]}] op]
+  (let [[_ {:keys [block-uuid block-origin-content
+                   block-origin-tags block-origin-collapsed
+                   block-origin-link]
+            :as origin-value-map}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when (normal-block? block-entity)
         (let [db-id (:db/id block-entity)
-              _ (when (some? block-origin-tags)
-                  (d/transact! conn [[:db/retract db-id :block/tags]] {:gen-undo-ops? false}))
+              retract-attrs-tx-data (cond-> []
+                                      (some? block-origin-tags)
+                                      (conj [:db/retract db-id :block/tags])
+
+                                      (and (contains? origin-value-map :block-origin-link)
+                                           (nil? block-origin-link))
+                                      (conj [:db/retract db-id :block/link]))
+              _ (when (seq retract-attrs-tx-data)
+                  (d/transact! conn retract-attrs-tx-data {:gen-undo-ops? false}))
               new-block (cond-> block-entity
                           (some? block-origin-content)
                           (assoc :block/content block-origin-content)
@@ -328,7 +346,9 @@ when undo this op, this original entity-map will be transacted back into db")
                                                       (d/pull-many @conn [:db/id])
                                                       (keep :db/id)))
                           (some? block-origin-collapsed)
-                          (assoc :block/collapsed? (boolean block-origin-collapsed)))
+                          (assoc :block/collapsed? (boolean block-origin-collapsed))
+                          (some? block-origin-link)
+                          (assoc :block/link [:block/uuid block-origin-link]))
               r2 (outliner-tx/transact!
                   {:gen-undo-ops? false
                    :outliner-op :save-block
@@ -342,20 +362,23 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defn- sort&merge-ops
   [ops]
-  (let [groups (group-by first ops)
-        remove-ops (groups ::remove-block)
-        insert-ops (groups ::insert-blocks)
-        other-ops (apply concat (vals (dissoc groups ::remove-block ::insert-blocks)))
+  (let [groups            (group-by first ops)
+        remove-ops        (groups ::remove-block)
+        insert-ops        (groups ::insert-blocks)
+        other-ops         (apply concat (vals (dissoc groups ::remove-block ::insert-blocks)))
         sorted-remove-ops (reverse
                            (common-util/sort-coll-by-dependency (comp :block-uuid second)
                                                                 (comp :block/left :block-entity-map second)
                                                                 remove-ops))
-        insert-op (some->> (seq insert-ops)
-                           (mapcat (fn [op] (:block-uuids (second op))))
-                           (hash-map :block-uuids)
-                           (vector ::insert-blocks))]
-    (cond-> (concat sorted-remove-ops other-ops)
-      insert-op (conj insert-op))))
+        insert-op         (some->> (seq insert-ops)
+                                   (mapcat (fn [op] (:block-uuids (second op))))
+                                   (hash-map :block-uuids)
+                                   (vector ::insert-blocks))
+        conj-vec          (partial apply conj)]
+    (cond-> []
+      insert-op               (conj insert-op)
+      (seq other-ops)         (conj-vec other-ops)
+      (seq sorted-remove-ops) (conj-vec sorted-remove-ops))))
 
 
 (defn undo
@@ -444,7 +467,7 @@ when undo this op, this original entity-map will be transacted back into db")
               other-ops
               (let [updated-attrs (seq (set/intersection
                                         updated-key-set
-                                        #{:block/content :block/tags :block/collapsed?}))]
+                                        #{:block/content :block/tags :block/collapsed? :block/link}))]
                 (when-let [update-block-op-value
                            (when (normal-block? entity-after)
                              (some->> updated-attrs
@@ -460,6 +483,9 @@ when undo this op, this original entity-map will be transacted back into db")
 
                                            :block/collapsed?
                                            [:block-origin-collapsed (boolean (:block/collapsed? entity-before))]
+
+                                           :block/link
+                                           [:block-origin-link (:block/uuid (:block/link entity-before))]
 
                                            nil)))
                                       seq
