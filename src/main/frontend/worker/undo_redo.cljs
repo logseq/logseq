@@ -174,7 +174,7 @@ when undo this op, this original entity-map will be transacted back into db")
   (assert (and (undo-ops-validator ops)
                (uuid? page-block-uuid))
           {:ops ops :page-block-uuid page-block-uuid})
-  (swap! (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
+  (swap! (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
          update-in [repo page-block-uuid]
          apply-conj-vec ops))
 
@@ -200,36 +200,36 @@ when undo this op, this original entity-map will be transacted back into db")
 (defn- pop-undo-ops
   [repo page-block-uuid]
   (assert (uuid? page-block-uuid) page-block-uuid)
-  (let [repo->pege-block-uuid->undo-ops (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
-        undo-stack (get-in @repo->pege-block-uuid->undo-ops [repo page-block-uuid])
+  (let [repo->page-block-uuid->undo-ops (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
+        undo-stack (get-in @repo->page-block-uuid->undo-ops [repo page-block-uuid])
         [ops undo-stack*] (pop-ops-helper undo-stack)]
-    (swap! repo->pege-block-uuid->undo-ops assoc-in [repo page-block-uuid] undo-stack*)
+    (swap! repo->page-block-uuid->undo-ops assoc-in [repo page-block-uuid] undo-stack*)
     ops))
 
 (defn- empty-undo-stack?
   [repo page-block-uuid]
-  (empty? (get-in @(:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) [repo page-block-uuid])))
+  (empty? (get-in @(:undo/repo->page-block-uuid->undo-ops @worker-state/*state) [repo page-block-uuid])))
 
 (defn- empty-redo-stack?
   [repo page-block-uuid]
-  (empty? (get-in @(:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) [repo page-block-uuid])))
+  (empty? (get-in @(:undo/repo->page-block-uuid->redo-ops @worker-state/*state) [repo page-block-uuid])))
 
 (defn- push-redo-ops
   [repo page-block-uuid ops]
   (assert (and (undo-ops-validator ops)
                (uuid? page-block-uuid))
           {:ops ops :page-block-uuid page-block-uuid})
-  (swap! (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
+  (swap! (:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
          update-in [repo page-block-uuid]
          apply-conj-vec ops))
 
 (defn- pop-redo-ops
   [repo page-block-uuid]
   (assert (uuid? page-block-uuid) page-block-uuid)
-  (let [repo->pege-block-uuid->redo-ops (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
-        undo-stack (get-in @repo->pege-block-uuid->redo-ops [repo page-block-uuid])
+  (let [repo->page-block-uuid->redo-ops (:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
+        undo-stack (get-in @repo->page-block-uuid->redo-ops [repo page-block-uuid])
         [ops undo-stack*] (pop-ops-helper undo-stack)]
-    (swap! repo->pege-block-uuid->redo-ops assoc-in [repo page-block-uuid] undo-stack*)
+    (swap! repo->page-block-uuid->redo-ops assoc-in [repo page-block-uuid] undo-stack*)
     ops))
 
 (defn- normal-block?
@@ -521,26 +521,26 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defn clear-undo-redo-stack
   []
-  (reset! (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) {})
-  (reset! (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) {}))
+  (reset! (:undo/repo->page-block-uuid->redo-ops @worker-state/*state) {})
+  (reset! (:undo/repo->page-block-uuid->undo-ops @worker-state/*state) {}))
 
 (comment
 
   (clear-undo-redo-stack)
-  (add-watch (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
+  (add-watch (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
              :xxx
              (fn [_ _ o n]
                (cljs.pprint/pprint {:k :undo
                                     :o o
                                     :n n})))
 
-  (add-watch (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
+  (add-watch (:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
              :xxx
              (fn [_ _ o n]
                (cljs.pprint/pprint {:k :redo
                                     :o o
                                     :n n})))
 
-  (remove-watch (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) :xxx)
-  (remove-watch (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) :xxx)
+  (remove-watch (:undo/repo->page-block-uuid->undo-ops @worker-state/*state) :xxx)
+  (remove-watch (:undo/repo->page-block-uuid->redo-ops @worker-state/*state) :xxx)
   )

@@ -203,9 +203,9 @@
   (let [blocks (ldb/get-page-blocks db page-name {})]
     (pp/pprint
      {:block-count (count blocks)
-      :undo-op-count (count (get-in @(:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
+      :undo-op-count (count (get-in @(:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
                                     [test-helper/test-db-name-db-version page-uuid]))
-      :redo-op-count (count (get-in @(:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
+      :redo-op-count (count (get-in @(:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
                                     [test-helper/test-db-name-db-version page-uuid]))})))
 
 (defn- print-page-blocks-tree
