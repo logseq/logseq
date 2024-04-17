@@ -49,19 +49,19 @@
     conn))
 
 (defn- translate-property-value
-  "Translates a property value as needed. A value wrapped in vector indicates a reference type
-   e.g. [:page \"some page\"]"
+  "Translates a property value for create-graph edn. A value wrapped in vector
+  may indicate a reference type e.g. [:page \"some page\"]"
   [val {:keys [page-uuids block-uuids]}]
   (if (vector? val)
     (case (first val)
+      ;; Converts a page name to block/uuid
       :page
       (if-let [page-uuid (page-uuids (second val))]
         [:block/uuid page-uuid]
         (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
-      :page-uuid
-      (if-let [page-uuid (page-uuids (second val))]
-        page-uuid
-        (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
+      :block/uuid
+      val
+      ;; TODO: Remove if not used by :default
       :block
       (or (block-uuids (second val))
           (throw (ex-info (str "No uuid for block '" (second val) "'") {:name (second val)})))
@@ -177,9 +177,7 @@
                                    db-ident
                                    prop-name
                                    (assoc (get properties prop-name) :db/ident db-ident)
-                                   {:translate-closed-page-value-fn
-                                    #(translate-property-value (:value %) uuid-maps)
-                                    :property-attributes
+                                   {:property-attributes
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
                                 [(merge
