@@ -132,7 +132,7 @@
                              (outliner-core/delete-blocks! test-db
                                                            (db/get-db test-db false)
                                                            (state/get-date-formatter)
-                                                           [block] {:children? true}))
+                                                           [block] {}))
       (is (= [3 9] (get-children 2))))))
 
 (deftest test-move-block-as-sibling

@@ -298,7 +298,7 @@ when undo this op, this original entity-map will be transacted back into db")
          (outliner-core/delete-blocks! repo conn
                                        (common-config/get-date-formatter (worker-state/get-config repo))
                                        block-entities
-                                       {:children? true})))
+                                       {})))
       (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
         [:push-undo-redo {}]))))
 

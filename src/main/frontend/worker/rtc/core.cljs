@@ -241,7 +241,7 @@
         (transact-db! :delete-blocks
                       repo conn date-formatter
                       [(d/entity @conn [:block/uuid block-uuid])]
-                      {:children? true})))))
+                      {})))))
 
 
 (defn- insert-or-move-block
