@@ -320,7 +320,7 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
             (if-let [dep-id (id->dep-id id)]
               (let [next-id (get rest-ids dep-id)]
                 (if (and next-id
-                         ;; ensure no dep-cycle
+                         ;; if found dep-cycle, break it
                          (not (contains? @seen-ids next-id)))
                   (do (vswap! seen-ids conj next-id)
                       (recur r rest-ids next-id))
