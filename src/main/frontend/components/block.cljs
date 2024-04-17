@@ -1798,7 +1798,8 @@
         collapsable?       (editor-handler/collapsable? uuid {:semantic? true})]
     [:div.block-control-wrap.flex.flex-row.items-center
      {:class (util/classnames [{:is-order-list order-list?
-                                :bullet-closed collapsed?}])}
+                                :bullet-closed collapsed?
+                                :bullet-hidden (:hide-bullet? config)}])}
      (when (or (not fold-button-right?) collapsable?)
        [:a.block-control
         {:id       (str "control-" uuid)
@@ -2205,7 +2206,9 @@
 
 (defn- block-content-on-pointer-down
   [e block block-id content edit-input-id config]
-  (when-not (> (count content) (state/block-content-max-length (state/get-current-repo)))
+  (when-not (or
+             (:closed-values? config)
+             (> (count content) (state/block-content-max-length (state/get-current-repo))))
     (let [target (gobj/get e "target")
           button (gobj/get e "buttons")
           shift? (gobj/get e "shiftKey")
