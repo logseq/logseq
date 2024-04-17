@@ -19,6 +19,7 @@
             [frontend.mixins :as mixins]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
@@ -686,62 +687,156 @@
         set-default-width?
         pos)))))
 
+(rum/defc editor-action-query-wrap
+  [trigger children & {:keys [on-input-keydown sub-input-keydown?]}]
+  (let [[q set-q!] (rum/use-state "")
+        [keydown-e set-keydown-e!] (rum/use-state nil)]
+
+    (rum/use-effect!
+      (fn []
+        (when-let [^js input (state/get-input)]
+          (let [keyup-handle (fn []
+                               (let [content (.-value input)
+                                     pos (some-> (cursor/get-caret-pos input) :pos)
+                                     content (subs content 0 pos)
+                                     pos (string/last-index-of content trigger)
+                                     content (subs content (inc pos))]
+                                 (-> (p/delay 300)
+                                   (p/then #(set-q! content)))))
+                keydown-handle (fn [^js e]
+                                 (when-not (false? (when (fn? on-input-keydown)
+                                                     (on-input-keydown e)))
+                                   (case (.-key e)
+                                     ("ArrowUp" "ArrowDown")
+                                     (.preventDefault e)
+                                     :dune))
+                                 (when sub-input-keydown?
+                                   (set-keydown-e! e)))]
+            (doto input
+              (.addEventListener "keyup" keyup-handle false)
+              (.addEventListener "keydown" keydown-handle false))
+            #(doto input
+               (.removeEventListener "keyup" keyup-handle)
+               (.removeEventListener "keydown" keydown-handle)))))
+      [])
+
+    (children q keydown-e)))
+
+;; TODO: [WIP]
+(rum/defc shui-models
+  [id format action _data]
+  (rum/use-effect!
+    (fn []
+      (let [{:keys [left top rect]} (cursor/get-caret-pos (state/get-input))
+            pos [(+ left (:left rect) -20) (+ top (:top rect) 20)]]
+        (let [pid (case action
+                    :editor.action/ask-ai
+                    (shui/popup-show!
+                      pos (editor-action-query-wrap
+                            commands/command-ask
+                            (rum/defc ask-ai-content
+                              [query ^js keydown-e]
+                              (let [*el (rum/use-ref nil)]
+                                (rum/use-effect!
+                                  (fn []
+                                    (when keydown-e
+                                      (when (contains? #{"ArrowUp" "ArrowDown"} (.-key keydown-e))
+                                        (some-> (rum/deref *el)
+                                          (.querySelector ".ui__button")
+                                          (.focus)))))
+                                  [keydown-e])
+
+                                [:h1
+                                 {:ref *el}
+                                 [:p.text-sm [:blockquote id]]
+                                 [:p "TODO: " (str action) [:code query]]
+                                 [:p (shui/button
+                                       {:size :sm
+                                        :on-click (fn []
+                                                    (editor-handler/insert-command!
+                                                      id #(util/format " [[%s]] " query)
+                                                      format
+                                                      {:restore? true
+                                                       :backward-truncate-number (inc (count query))
+                                                       :command action})
+                                                    )} query)]
+                                 [:p "input key: " (shui/badge (some-> keydown-e (.-key)))]]))
+                            {:sub-input-keydown? true})
+                      {:align :start
+                       :root-props {:onOpenChange
+                                    #(when-not %
+                                       (state/clear-editor-action!))}
+                       :content-props {:onOpenAutoFocus
+                                       #(.preventDefault %)}
+                       :force-popover? true})
+
+                    ;; TODO: try remove local model state
+                    false)]
+          #(when pid
+             (shui/popup-hide! pid)))))
+    [action])
+  [:<>])
+
 (rum/defc modals < rum/reactive
   "React to atom changes, find and render the correct modal"
   [id format]
   (let [action (state/sub :editor/action)]
-    (cond
-      (= action :commands)
-      (animated-modal "commands" (commands id format) true)
+    [:<>
+     (shui-models id format action nil)
+     (cond
+       (= action :commands)
+       (animated-modal "commands" (commands id format) true)
 
-      (= action :block-commands)
-      (animated-modal "block-commands" (block-commands id format) true)
+       (= action :block-commands)
+       (animated-modal "block-commands" (block-commands id format) true)
 
-      (contains? #{:page-search :page-search-hashtag} action)
-      (animated-modal "page-search" (page-search id format) true)
+       (contains? #{:page-search :page-search-hashtag} action)
+       (animated-modal "page-search" (page-search id format) true)
 
-      (= :block-search action)
-      (animated-modal "block-search" (block-search id format) true)
+       (= :block-search action)
+       (animated-modal "block-search" (block-search id format) true)
 
-      (= :template-search action)
-      (animated-modal "template-search" (template-search id format) true)
+       (= :template-search action)
+       (animated-modal "template-search" (template-search id format) true)
 
-      (= :property-search action)
-      (animated-modal "property-search" (property-search id) true)
+       (= :property-search action)
+       (animated-modal "property-search" (property-search id) true)
 
-      (= :property-value-search action)
-      (animated-modal "property-value-search" (property-value-search id) true)
+       (= :property-value-search action)
+       (animated-modal "property-value-search" (property-value-search id) true)
 
-      ;; date-picker in editing-mode
-      (= :datepicker action)
-      (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
+       ;; date-picker in editing-mode
+       (= :datepicker action)
+       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 
-      (= :select-code-block-mode action)
-      (animated-modal "select-code-block-mode" (code-block-mode-picker id format) true)
+       (= :select-code-block-mode action)
+       (animated-modal "select-code-block-mode" (code-block-mode-picker id format) true)
 
-      (= :input action)
-      (animated-modal "input" (input id
-                                     (fn [command m]
-                                       (editor-handler/handle-command-input command id format m))
-                                     (fn []
-                                       (editor-handler/handle-command-input-close id)))
-                      true)
+       (= :input action)
+       (animated-modal "input" (input id
+                                 (fn [command m]
+                                   (editor-handler/handle-command-input command id format m))
+                                 (fn []
+                                   (editor-handler/handle-command-input-close id)))
+         true)
 
-      (= :zotero action)
-      (animated-modal "zotero-search" (zotero/zotero-search id) false)
+       (= :zotero action)
+       (animated-modal "zotero-search" (zotero/zotero-search id) false)
 
-      :else
-      nil)))
+       :else
+       nil)]))
 
 (defn- editor-on-blur
   [^js e]
   (cond
-    (contains?
-     #{:commands :block-commands
-       :page-search :page-search-hashtag :block-search :template-search
-       :property-search :property-value-search
-       :datepicker}
-     (state/get-editor-action))
+    (let [action (state/get-editor-action)]
+      (or (contains?
+            #{:commands :block-commands
+              :page-search :page-search-hashtag :block-search :template-search
+              :property-search :property-value-search
+              :datepicker} action)
+        (and (keyword? action)
+          (= (namespace action) "editor.action"))))
     ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
     (util/stop e)
 
