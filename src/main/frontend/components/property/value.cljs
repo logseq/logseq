@@ -469,7 +469,8 @@
       (if (seq children)
         [:div.property-block-container.content.w-full
          (block-cp children {:id (str (:block/uuid parent))
-                             :editor-box editor-box})]
+                             :editor-box editor-box
+                             :hide-bullet? (= (count children) 1)})]
         (property-empty-value)))))
 
 (rum/defc property-template-value < rum/reactive
