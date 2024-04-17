@@ -1949,6 +1949,9 @@
         (state/set-editor-last-pos! pos)
         (state/set-editor-action! :page-search-hashtag))
 
+      (= last-input-char commands/command-ask)
+      (state/set-editor-action! :editor.action/ask-ai)
+
       :else
       nil)))
 
@@ -2817,15 +2820,9 @@
              (remove-block-own-order-list-type! block))
             (delete-block! repo false))))
 
-      (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) commands/command-trigger))
-      (do
-        (util/stop e)
-        (commands/restore-state)
-        (delete-and-update input (dec current-pos) current-pos))
-
-      (and (> current-pos 1)
-           (= (util/nth-safe value (dec current-pos)) commands/angle-bracket))
+      (and (> current-pos 0)
+        (contains? #{commands/command-trigger commands/angle-bracket commands/command-ask}
+          (util/nth-safe value (dec current-pos))))
       (do
         (util/stop e)
         (commands/restore-state)
