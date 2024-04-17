@@ -270,21 +270,38 @@ when undo this op, this original entity-map will be transacted back into db")
           (when (d/entity @conn [:block/uuid block-uuid])
             [:push-undo-redo r]))))))
 
+(defn- other-children-exist?
+  "return true if there are other children existing(not included in `block-entities`)"
+  [block-entities]
+  (let [block-uuid->entity (into {}
+                                 (keep (fn [ent]
+                                         (when-let [block-uuid (:block/uuid ent)]
+                                           [block-uuid ent])))
+                                 block-entities)
+        block-uuid-set (set (keys block-uuid->entity))]
+    (loop [[[block-uuid block-entity] & other-entities] block-uuid->entity]
+      (when block-uuid
+        (let [children-block-uuids (set (keep :block/uuid (:block/_parent block-entity)))]
+          (if (seq (set/difference children-block-uuids block-uuid-set))
+            true
+            (recur other-entities)))))))
+
 (defmethod reverse-apply-op ::insert-blocks
   [op conn repo]
   (let [[_ {:keys [block-uuids]}] op]
     (when-let [block-entities (->> block-uuids
                                    (keep #(d/entity @conn [:block/uuid %]))
                                    not-empty)]
-      (outliner-tx/transact!
-       {:gen-undo-ops? false
-        :outliner-op :delete-blocks
-        :transact-opts {:repo repo
-                        :conn conn}}
-       (outliner-core/delete-blocks! repo conn
-                                     (common-config/get-date-formatter (worker-state/get-config repo))
-                                     block-entities
-                                     {:children? true}))
+      (when-not (other-children-exist? block-entities)
+        (outliner-tx/transact!
+         {:gen-undo-ops? false
+          :outliner-op :delete-blocks
+          :transact-opts {:repo repo
+                          :conn conn}}
+         (outliner-core/delete-blocks! repo conn
+                                       (common-config/get-date-formatter (worker-state/get-config repo))
+                                       block-entities
+                                       {:children? true})))
       (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
         [:push-undo-redo {}]))))
 
