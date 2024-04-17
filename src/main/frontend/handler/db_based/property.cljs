@@ -432,13 +432,12 @@
                              retract-blocks-tx (when (and property-block
                                                           (some? (get-in property-block [:block/properties created-from-block-uuid]))
                                                           (some? (get-in property-block [:block/properties created-from-property-uuid])))
-                                                 (let [txs-state (atom [])]
-                                                   (outliner-core/delete-block repo
+                                                 (:tx-data
+                                                  (outliner-core/delete-blocks repo
                                                                                (db/get-db false)
-                                                                               txs-state
-                                                                               (outliner-core/->Block property-block)
-                                                                               {:children? true})
-                                                   @txs-state))]
+                                                                               (state/get-date-formatter)
+                                                                               [property-block]
+                                                                               {})))]
                          (concat
                           [[:db/retract (:db/id block) :block/refs]
                            {:block/uuid (:block/uuid block)

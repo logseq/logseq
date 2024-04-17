@@ -220,7 +220,7 @@
   #_:clj-kondo/ignore
   (when-let [repo (state/get-current-repo)]
     (when-let [block (db-model/get-block-by-uuid id)]
-      (editor-handler/delete-block-aux! block true))))
+      (editor-handler/delete-block-aux! block))))
 
 (defn copy-hl-ref!
   [highlight ^js viewer]

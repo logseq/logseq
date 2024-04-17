@@ -242,7 +242,7 @@
 
          (ui/menu-link
           {:key      "delete"
-           :on-click #(editor-handler/delete-block-aux! block true)
+           :on-click #(editor-handler/delete-block-aux! block)
            :shortcut (ui/keyboard-shortcut-from-config :editor/delete)}
           (t :editor/delete-selection))
 
