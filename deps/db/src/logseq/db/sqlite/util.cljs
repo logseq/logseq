@@ -72,7 +72,7 @@
    * :original-name - Case sensitive property name. Defaults to deriving this from db-ident
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [original-name block-uuid]}]
+  ([db-ident prop-schema {:keys [original-name block-uuid ref-type?]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
@@ -92,7 +92,7 @@
         :db/cardinality (if (= :many (:cardinality prop-schema))
                           :db.cardinality/many
                           :db.cardinality/one)}
-        (contains? db-property-type/ref-property-types (:type prop-schema))
+        (or ref-type? (contains? db-property-type/ref-property-types (:type prop-schema)))
         (assoc :db/valueType :db.type/ref))))))
 
 
