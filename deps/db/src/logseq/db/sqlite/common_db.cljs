@@ -163,19 +163,32 @@
      (reverse)
      (take n))))
 
+(defn- block-with-properties
+  [db e]
+  (cons (d/pull db '[*] (:db/id e))
+        (property-with-values db e)))
+
 (defn get-structured-blocks
   [db]
-  (->> (d/datoms db :avet :block/type)
-       (keep (fn [datom]
-               (when (contains? #{"closed value" "property" "class"} (:v datom))
-                 (d/entity db (:e datom)))))
-       (mapcat (fn [block]
-                 (concat
-                  (cons (d/pull db '[*] (:db/id block))
-                        (property-with-values db block))
-                  (when (contains? (:block/type block) "closed value")
-                    (let [values (get-in block [:schema :values])]
-                      (d/pull-many db '[*] (map (fn [id] [:block/uuid id]) values)))))))))
+  (let [blocks (->> (d/datoms db :avet :block/type)
+                    (keep (fn [datom]
+                            (when (contains? #{"closed value" "property" "class"} (:v datom))
+                              (d/entity db (:e datom))))))
+        blocks-data (mapcat (fn [block] (block-with-properties db block)) blocks)
+        default-block-values (mapcat (fn [block]
+                                       (when (and (contains? (:block/type block) "property")
+                                                  (= :default (get-in block [:block/schema :type]))
+                                                  (not (:logseq.property/built-in? block)))
+                                         (let [values (get-in block [:block/schema :values])]
+                                           (mapcat (fn [id]
+                                                     (when (uuid? id)
+                                                       (let [e (d/entity db [:block/uuid id])
+                                                             children (:block/_parent e)]
+                                                         (concat
+                                                          (block-with-properties db e)
+                                                          (mapcat #(block-with-properties db %) children))))) values))))
+                                     blocks)]
+    (concat blocks-data default-block-values)))
 
 (defn get-favorites
   "Favorites page and its blocks"

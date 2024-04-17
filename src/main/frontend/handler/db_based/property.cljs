@@ -509,7 +509,8 @@
 
 (defn property-create-new-block
   [block property value parse-block]
-  (let [page-name (str "$$$" (:block/uuid property))
+  (let [parse-block (if (fn? parse-block) parse-block identity)
+        page-name (str "$$$" (:block/uuid property))
         page-entity (db/get-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
@@ -520,6 +521,8 @@
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
+        from-block-pair (when (:db/id block) (sqlite-util/build-property-pair :logseq.property/created-from-block (:db/id block)))
+        from-property-pair (when (:db/id property) (sqlite-util/build-property-pair :logseq.property/created-from-property (:db/id property)))
         parent (-> {:block/uuid parent-id
                     :block/format :markdown
                     :block/content ""
@@ -527,9 +530,7 @@
                     :block/parent page-id
                     :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
-                    :block/properties
-                    [(sqlite-util/build-property-pair :logseq.property/created-from-block (:db/id block))
-                     (sqlite-util/build-property-pair :logseq.property/created-from-property (:db/id property))]}
+                    :block/properties (remove nil? [from-block-pair from-property-pair])}
                    sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -558,7 +559,8 @@
                        (class-add-property! repo (:db/id block) property-id)
                        (when-let [parent-id (:db/id (db/entity [:block/uuid (:block/uuid first-block)]))]
                          (set-block-property! repo (:db/id block) property-id parent-id {}))))]
-        {:last-block-id last-block-id
+        {:parent-block-id (:block/uuid first-block)
+         :last-block-id last-block-id
          :result result}))))
 
 (defn property-create-new-block-from-template
@@ -620,22 +622,27 @@
   (assert (or (nil? id) (uuid? id)))
   (let [property-type (get-in property [:block/schema :type] :default)]
     (when (contains? db-property-type/closed-value-property-types property-type)
-      (let [property (db/entity (:db/id property))
-            value (if (string? value) (string/trim value) value)
-            property-schema (:block/schema property)
-            closed-values (:values property-schema)
-            block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
-            resolved-value (try
-                             (convert-property-input-string (:type property-schema) value)
-                             (catch :default e
-                               (js/console.error e)
-                               (notification/show! (str e) :error false)
-                               nil))
-            block (when id (db/entity [:block/uuid id]))
-            value-block (when (uuid? value) (db/entity [:block/uuid value]))
-            validate-message (validate-property-value
-                              (get (built-in-validation-schemas property {:new-closed-value? true}) property-type)
-                              resolved-value)]
+      (p/let [property (db/entity (:db/id property))
+              value (if (string? value) (string/trim value) value)
+              property-schema (:block/schema property)
+              closed-values (:values property-schema)
+              default-closed-values? (and (= :default property-type) (seq closed-values))
+              value (if (and default-closed-values? (string? value) (not (string/blank? value)))
+                      (p/let [result (create-property-text-block! nil property value nil {})]
+                        (:db/id (db/entity [:block/uuid (:parent-block-id result)])))
+                      value)
+              block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
+              resolved-value (try
+                               (convert-property-input-string (:type property-schema) value)
+                               (catch :default e
+                                 (js/console.error e)
+                                 (notification/show! (str e) :error false)
+                                 nil))
+              block (when id (db/entity [:block/uuid id]))
+              value-block (when (uuid? value) (db/entity [:block/uuid value]))
+              validate-message (validate-property-value
+                                (get (built-in-validation-schemas property {:new-closed-value? true}) property-type)
+                                resolved-value)]
         (cond
           (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)
                                                    (:block/uuid b)))
@@ -652,7 +659,7 @@
           (nil? resolved-value)
           nil
 
-          (:block/name value-block)             ; page
+          (db/page? value-block)             ; page
           (let [new-values (vec (conj closed-values value))]
             {:block-id value
              :tx-data [{:db/id (:db/id property)
@@ -678,8 +685,8 @@
                                   []
                                   (let [page (get-property-hidden-page property)
                                         new-block (db-property-build/build-closed-value-block block-id resolved-value [:block/uuid (:block/uuid page)]
-                                                                                             property {:icon icon
-                                                                                                       :description description})]
+                                                                                              property {:icon icon
+                                                                                                        :description description})]
                                     (cond-> []
                                       (not (e/entity? page))
                                       (conj page)
