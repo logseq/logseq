@@ -3035,7 +3035,7 @@
                           (block-mouse-over e *control-show? block-id doc-mode?))
          :on-mouse-leave (fn [e]
                            (block-mouse-leave e *control-show? block-id doc-mode?))}
-        (when (and (not slide?) (not in-whiteboard?))
+        (when (and (not slide?) (not in-whiteboard?) (not (:hide-bullet? config)))
           (let [edit? (or edit?
                           (= uuid (:block/uuid (state/get-edit-block))))]
             (block-control config block
@@ -3498,7 +3498,7 @@
 
 (rum/defc block-item <
   {:should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :selected? :edit?]
+                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :selected? :edit? :hide-bullet?]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or
