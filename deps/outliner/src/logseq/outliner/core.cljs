@@ -891,9 +891,8 @@
                         (if (contains? top-level-blocks-ids (:db/id block))
                           (recur (:block/left (d/entity db (:db/id block))))
                           (:db/id block)))]
-        (when-not (and (= left (:db/id target-block)) sibling?)
-          {:db/id (:db/id right-block)
-           :block/left left})))))
+        {:db/id (:db/id right-block)
+         :block/left left}))))
 
 (defn- find-new-left
   [db block moved-ids target-block current-block sibling? near-by?]
@@ -910,7 +909,8 @@
   [db blocks target-block sibling?]
   (when (> (count blocks) 1)
     (let [page-blocks (group-by :block/page blocks)
-          near-by? (= (:db/id target-block) (:db/id (:block/left (first blocks))))]
+          near-by? (= (:db/id target-block) (:db/id (:block/left (first blocks))))
+          parent-of-first-block? (= (:db/id target-block) (:db/id (:block/parent (first blocks))))]
       (->>
        (mapcat (fn [[_page blocks]]
                  (let [blocks (ldb/sort-page-random-blocks db blocks)
@@ -919,9 +919,14 @@
                    (when (seq non-consecutive-blocks)
                      (map-indexed (fn [idx block]
                                     (when-let [right (get-right-sibling db (:db/id block))]
-                                      (if (and (zero? idx) near-by? sibling?)
+                                      (cond
+                                        (and (zero? idx) parent-of-first-block? sibling?)
+                                        {:db/id (:db/id right)
+                                         :block/left (:db/id target-block)}
+                                        (and (zero? idx) near-by? sibling?)
                                         {:db/id (:db/id right)
                                          :block/left (:db/id (last blocks))}
+                                        :else
                                         (when-let [new-left (find-new-left db right (distinct (map :db/id blocks)) target-block block sibling? near-by?)]
                                           {:db/id      (:db/id right)
                                            :block/left (:db/id new-left)}))))
@@ -1029,7 +1034,8 @@
                     target-page (or (:db/id (:block/page target-block))
                                     (:db/id target-block))
                     not-same-page? (not= first-block-page target-page)
-                    move-blocks-next-tx [(build-move-blocks-next-tx db target-block blocks {:sibling? sibling?})]
+                    move-blocks-next-tx (when-not non-consecutive-blocks?
+                                          [(build-move-blocks-next-tx db target-block blocks {:sibling? sibling?})])
                     children-page-tx (when not-same-page?
                                        (let [children-ids (mapcat #(ldb/get-block-children-ids db (:block/uuid %))
                                                                   blocks)]
