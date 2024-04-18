@@ -39,8 +39,9 @@
                                         :public? true
                                         :view-context :page
                                         :cardinality :many}}
-   :logseq.property/background-color {:schema {:type :default :hide? true}}
+   :logseq.property/background-color {:schema {:type :string :hide? true}}
    :logseq.property/background-image {:schema
+                                      ;; FIXME: Convert to :string when it's user facing
                                       {:type :default
                                        :hide? true
                                        :view-context :block
@@ -77,10 +78,10 @@
                                       :hide? true}}
    :logseq.property/hl-stamp {:schema {:type :number
                                        :hide? true}}
-   :logseq.property/hl-color {:schema {:type :default
+   :logseq.property/hl-color {:schema {:type :string
                                        :hide? true}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
-                                     :schema {:type :default
+                                     :schema {:type :string
                                               :hide? true}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page
                                  :schema {:type :map
