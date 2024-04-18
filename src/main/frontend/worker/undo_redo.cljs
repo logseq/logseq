@@ -11,8 +11,7 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
-            [malli.util :as mu]
-            [frontend.util :as util]))
+            [malli.util :as mu]))
 
 (sr/defkeyword :gen-undo-ops?
   "tx-meta option, generate undo ops from tx-data when true (default true)")
@@ -240,35 +239,6 @@ when undo this op, this original entity-map will be transacted back into db")
        (:block/left entity)))
 
 
-(defn- node-test-check
-  [origin-db db other-info]
-  (let [seen (volatile! #{})
-        datoms (d/datoms db :eavt)]
-    (doseq [e (map :e datoms)]
-      (when-not (contains? @seen e)
-        (when-let [ent (d/entity db e)]
-          (when (and (:block/uuid ent)
-                     (:block/parent ent)
-                     (:block/left ent))
-            (let [rightmost-ent (loop [ent ent]
-                                  (if-let [right (:block/_left ent)]
-                                    (recur right)
-                                    ent))]
-              (loop [ent rightmost-ent]
-                (let [left-ent (:block/left ent)
-                      parent-ent (:block/parent ent)]
-                  (when (and left-ent parent-ent
-                             (not= left-ent parent-ent)
-                             (not= (:block/parent left-ent) parent-ent))
-                    (throw (ex-info "debug" {:origin-db origin-db
-                                             :db db
-                                             :illegal-entity (:db/id ent)
-                                             :other other-info})))
-
-                  (when (and left-ent (not= left-ent parent-ent))
-                    (vswap! seen conj (:db/id ent))
-                    (recur left-ent)))))))))))
-
 (defmulti ^:private reverse-apply-op (fn [op _conn _repo] (first op)))
 (defmethod reverse-apply-op ::remove-block
   [op conn repo]
@@ -277,7 +247,6 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-not block-entity ;; this block shouldn't exist now
       (when-let [left-entity (d/entity @conn [:block/uuid (:block/left block-entity-map)])]
         (let [sibling? (not= (:block/left block-entity-map) (:block/parent block-entity-map))
-              origin-db (when util/node-test? @conn)
               r (outliner-tx/transact!
                  {:gen-undo-ops? false
                   :outliner-op :insert-blocks
@@ -299,11 +268,6 @@ when undo this op, this original entity-map will be transacted back into db")
                                                                               (d/pull-many @conn [:db/id])
                                                                               (keep :db/id))))]
                                                left-entity {:sibling? sibling? :keep-uuid? true}))]
-          (when util/node-test?
-            (node-test-check origin-db @conn {:type :insert
-                                              :insert-blocks [block-uuid]
-                                              :target-block (:db/id left-entity)
-                                              :sibling? sibling?}))
           (when (d/entity @conn [:block/uuid block-uuid])
             [:push-undo-redo r]))))))
 
@@ -328,20 +292,15 @@ when undo this op, this original entity-map will be transacted back into db")
                                    (keep #(d/entity @conn [:block/uuid %]))
                                    not-empty)]
       (when-not (other-children-exist? block-entities)
-        (let [origin-db (when util/node-test? @conn)
-              _
-              (outliner-tx/transact!
-               {:gen-undo-ops? false
-                :outliner-op :delete-blocks
-                :transact-opts {:repo repo
-                                :conn conn}}
-               (outliner-core/delete-blocks! repo conn
-                                             (common-config/get-date-formatter (worker-state/get-config repo))
-                                             block-entities
-                                             {}))]
-          (when util/node-test?
-            (node-test-check origin-db @conn {:type :delete
-                                              :delete-blocks (map :db/id block-entities)}))))
+        (outliner-tx/transact!
+         {:gen-undo-ops? false
+          :outliner-op :delete-blocks
+          :transact-opts {:repo repo
+                          :conn conn}}
+         (outliner-core/delete-blocks! repo conn
+                                       (common-config/get-date-formatter (worker-state/get-config repo))
+                                       block-entities
+                                       {})))
 
       (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
         [:push-undo-redo {}]))))
@@ -352,18 +311,12 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when-let [left-entity (d/entity @conn [:block/uuid block-origin-left])]
         (let [sibling? (not= block-origin-left block-origin-parent)
-              origin-db (when util/node-test? @conn)
               r (outliner-tx/transact!
                     {:gen-undo-ops? false
                      :outliner-op :move-blocks
                      :transact-opts {:repo repo
                                      :conn conn}}
                     (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))]
-          (when util/node-test?
-            (node-test-check origin-db @conn {:type :move
-                                              :move-blocks [(:db/id block-entity)]
-                                              :target-block (:db/id left-entity)
-                                              :sibling? sibling?}))
           (when r [:push-undo-redo r]))))))
 
 (defmethod reverse-apply-op ::update-block

@@ -9,7 +9,7 @@
             [frontend.worker.util :as worker-util]))
 
 (defn- fix-parent-broken-chain
-  [db parent-id tx-report]
+  [db parent-id tx-report from-fix-test?]
   (let [parent (d/entity db parent-id)
         parent-id (:db/id parent)
         blocks (:block/_parent parent)]
@@ -20,7 +20,7 @@
             broken-chain? (or (not= (count sorted) (count blocks))
                               ;; :block/left points to other blocks that're not current parent or its children
                               (not (every? (fn [b] (contains? valid-left-ids (:db/id (:block/left b)))) blocks)))]
-        (when (and (exists? js/process) broken-chain?)
+        (when (and (not from-fix-test?) (exists? js/process) broken-chain?)
           (throw (ex-info "outliner broken chain" {:tx-meta (:tx-meta tx-report)
                                                    :tx-data (:tx-data tx-report)
                                                    :db-before (:db-before tx-report)})))
@@ -99,9 +99,9 @@
              (apply concat))))))))
 
 (defn- fix-broken-chain
-  [db parent-left->es tx-report]
+  [db parent-left->es tx-report from-fix-test?]
   (let [parents (distinct (map first (keys parent-left->es)))]
-    (mapcat #(fix-parent-broken-chain db % tx-report) parents)))
+    (mapcat #(fix-parent-broken-chain db % tx-report from-fix-test?) parents)))
 
 (defn- build-parent-left->es
   [db page-id]
@@ -146,10 +146,10 @@
     (filter #(> (count (second %)) 1) parent-left->es)))
 
 (defn- loop-fix-conflicts
-  [conn page-id transact-opts *fix-tx-data]
+  [conn page-id transact-opts *fix-tx-data from-fix-test?]
   (let [db @conn
         conflicts (get-conflicts db page-id)
-        _ (when (and (exists? js/process) (seq conflicts))
+        _ (when (and (not from-fix-test?) (exists? js/process) (seq conflicts))
             (throw (ex-info "outliner core conflicts" {:conflicts conflicts})))
         fix-conflicts-tx (when (seq conflicts)
                            (fix-parent-left-conflicts db conflicts page-id))]
@@ -159,11 +159,11 @@
       (let [tx-data (:tx-data (ldb/transact! conn fix-conflicts-tx transact-opts))]
         (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data))))
       (when (seq (get-conflicts @conn page-id))
-        (loop-fix-conflicts conn page-id transact-opts *fix-tx-data)))))
+        (loop-fix-conflicts conn page-id transact-opts *fix-tx-data from-fix-test?)))))
 
 (defn fix-page-if-broken!
   "Fix the page if it has either parent-left conflicts or broken chains."
-  [conn page-id {:keys [fix-parent-left? fix-broken-chain? replace-tx? tx-report]
+  [conn page-id {:keys [fix-parent-left? fix-broken-chain? replace-tx? tx-report from-fix-test?]
                  :or {fix-parent-left? true
                       fix-broken-chain? true
                       replace-tx? false}
@@ -175,11 +175,11 @@
       (let [transact-opts (if replace-tx? {:replace? true} {})
             *fix-tx-data (atom [])]
         (when fix-parent-left?
-          (loop-fix-conflicts conn page-id transact-opts *fix-tx-data))
+          (loop-fix-conflicts conn page-id transact-opts *fix-tx-data from-fix-test?))
         (when fix-broken-chain?
           (let [db' @conn
                 parent-left->es' (build-parent-left->es db page-id)
-                fix-broken-chain-tx (fix-broken-chain db' parent-left->es' tx-report)]
+                fix-broken-chain-tx (fix-broken-chain db' parent-left->es' tx-report from-fix-test?)]
             (when (seq fix-broken-chain-tx)
               (let [tx-data (:tx-data (ldb/transact! conn fix-broken-chain-tx transact-opts))]
                 (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data)))))))

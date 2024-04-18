@@ -15,9 +15,7 @@
             [frontend.worker.state :as worker-state]
             ["fs" :as fs-node]
             [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.transit :as dt]
-            [logseq.outliner.transaction :as outliner-tx]
-            [logseq.outliner.core :as outliner-core]))
+            [datascript.transit :as dt]))
 
 (def ^:private page-uuid (random-uuid))
 (def ^:private init-data (test-helper/initial-test-page-and-blocks {:page-uuid page-uuid}))
