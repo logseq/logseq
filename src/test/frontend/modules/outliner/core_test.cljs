@@ -180,6 +180,34 @@
       (is (= [6 9] (get-children 2)))
       (is (= [3 13 14 15] (get-children 12))))))
 
+(deftest test-move-child-as-first-sibling
+  (testing "Move 3 as sibling of 2."
+    (transact-tree! [[22 [[2 [[3]
+                              [4]]]
+                          [5]]]])
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! test-db
+                                 (db/get-db test-db false)
+                                 [(get-block 3)] (get-block 2) true))
+    (is (= [4] (get-children 2)))
+    (is (= [2 3 5] (get-children 22)))))
+
+(deftest test-move-non-consecutive-blocks
+  (testing "Move 3 as sibling of 2."
+    (transact-tree! [[22 [[2 [[3]
+                              [4]]]
+                          [5]
+                          [6]
+                          [7]]]])
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! test-db
+                                 (db/get-db test-db false)
+                                 [(get-block 3) (get-block 6)] (get-block 2) true))
+    (is (= [4] (get-children 2)))
+    (is (= [2 3 6 5 7] (get-children 22)))))
+
 (deftest test-indent-blocks
   (testing "
   [1 [[2 [[3
