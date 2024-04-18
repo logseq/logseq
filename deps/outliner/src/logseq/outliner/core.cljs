@@ -1146,6 +1146,35 @@
 
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
+(defn- validate-tx-data
+  "Ensure :block/left and :block/parent not point to itself"
+  [db tx-data tx-meta args]
+  (let [blocks (filter (fn [data] (and (map? data)
+                                       (or (:block/left data) (:block/parent data)))) tx-data)]
+    (every?
+     (fn left-parent-not-self
+       [{:block/keys [left parent] :as block}]
+       (let [eid (or (:db/id block) [:block/uuid (:block/uuid block)])]
+         (when-not (and (number? eid) (neg? eid))
+           (let [block-db-id (:db/id (d/entity db eid))
+                 left-id (some->> (when left (or (and (map? left) (:db/id left)) left))
+                                  (d/entity db)
+                                  :db/id)
+                 parent-id (some->> (when parent (or (and (map? parent) (:db/id parent)) parent))
+                                    (d/entity db)
+                                    :db/id)
+                 not-point-to-self? (every? #(not= block-db-id %) (remove nil? [left-id parent-id]))]
+             (when-not not-point-to-self?
+               (prn :error ":block/parent or :block/left points to self"
+                    {:block-id block-db-id
+                     :left-id left-id
+                     :parent-id parent-id
+                     :db db
+                     :tx-data tx-data
+                     :tx-meta tx-meta
+                     :args (drop 2 args)}))
+             (assert not-point-to-self? ":block/parent or :block/left points to self")))))
+     blocks)))
 
 (defn- op-transact!
   [fn-var & args]
@@ -1153,6 +1182,7 @@
   (when (nil? *transaction-data*)
     (throw (js/Error. (str (:name (meta fn-var)) " is not used in (transact! ...)"))))
   (let [result (apply @fn-var args)]
+    (validate-tx-data @(nth args 1) (:tx-data result) (:tx-meta result) args)
     (conj! *transaction-data* (select-keys result [:tx-data :tx-meta]))
     result))
 
