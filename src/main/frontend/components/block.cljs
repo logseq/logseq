@@ -1998,9 +1998,9 @@
                  (pu/lookup properties :logseq.property/heading))
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
-               (keyword (str "h" heading
+               (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".inline")))
-               :span.inline)]
+               :span.block-title-wrap)]
     (->elem
      elem
      (merge
@@ -2008,7 +2008,7 @@
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
-        {:class (str (string/lower-case marker))})
+        {:data-marker (str (string/lower-case marker))})
       (when bg-color
         (let [built-in-color? (ui/built-in-color? bg-color)]
           {:style {:background-color (if built-in-color?

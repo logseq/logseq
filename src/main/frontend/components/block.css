@@ -217,6 +217,14 @@
   }
 }
 
+.block-title-wrap {
+  @apply inline-flex items-center;
+
+  &.as-heading {
+    @apply flex w-full;
+  }
+}
+
 .block-control, .block-control:hover {
   text-decoration: none;
   cursor: default;
