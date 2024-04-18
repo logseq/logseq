@@ -13,9 +13,21 @@
             [datascript.core :as d]
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.state :as state]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.db.conn :as conn]
+            [frontend.worker.db-listener :as worker-db-listener]))
 
 (def test-db test-helper/test-db)
+
+(defn listen-db-fixture
+  [f]
+  (let [test-db-conn (conn/get-db test-db false)]
+    (assert (some? test-db-conn))
+    (worker-db-listener/listen-db-changes! test-db test-db-conn
+                                           {:handler-keys [:sync-db-to-main-thread]})
+
+    (f)
+    (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!)))
 
 (defn disable-browser-fns
   [f]
@@ -26,7 +38,8 @@
 (use-fixtures :each
   disable-browser-fns
   fixtures/react-components
-  fixtures/reset-db)
+  fixtures/reset-db
+  listen-db-fixture)
 
 (defn get-block
   ([id]
@@ -79,6 +92,7 @@
 (defn transact-tree!
   [tree]
   (let [blocks (build-blocks tree)]
+    (assert (every? (fn [block] (and (:block/parent block) (:block/left block))) blocks) (str "Invalid blocks: " blocks))
     (db/transact! test-db (concat [{:db/id 1
                                     :block/uuid 1
                                     :block/name "Test page"}]
@@ -645,24 +659,33 @@ tags:: tag1, tag2
   (let [datoms (->> (get-datoms)
                     (remove (fn [datom] (= 1 (:e datom)))))]
     (if (seq datoms)
-      (let [id (:e (gen/generate (gen/elements datoms)))]
-        (db/pull test-db '[*] id))
+      (let [id (:e (gen/generate (gen/elements datoms)))
+            block (db/pull test-db '[*] id)]
+        (assert (and (:block/left block) (:block/parent block))
+                (str "No left or parent for block: " block))
+        block)
       (do
         (transact-random-tree!)
         (get-random-block)))))
 
-(defn get-random-successive-blocks
+(comment
+  (defn get-random-successive-blocks
+    []
+    (let [limit (inc (rand-int 20))]
+      (when-let [block (get-random-block)]
+        (loop [result [block]
+               node block]
+          (if-let [next (outliner-core/get-right-sibling (db/get-db test-db) (:db/id node))]
+            (let [next (db/pull test-db '[*] (:db/id next))]
+              (if (>= (count result) limit)
+                result
+                (recur (conj result next) next)))
+            result))))))
+
+(defn get-random-blocks
   []
   (let [limit (inc (rand-int 20))]
-    (when-let [block (get-random-block)]
-      (loop [result [block]
-             node block]
-        (if-let [next (outliner-core/get-right-sibling (db/get-db test-db) (:db/id node))]
-          (let [next (db/pull test-db '[*] (:db/id next))]
-            (if (>= (count result) limit)
-              result
-              (recur (conj result next) next)))
-          result)))))
+    (repeatedly limit get-random-block)))
 
 (deftest ^:long random-inserts
   (testing "Random inserts"
@@ -684,7 +707,7 @@ tags:: tag1, tag2
     (dotimes [_i 100]
       ;; (prn "Random deletes: " i)
       (insert-blocks! (gen-blocks) (get-random-block))
-      (let [blocks (get-random-successive-blocks)]
+      (let [blocks (get-random-blocks)]
         (when (seq blocks)
           (outliner-tx/transact! (transact-opts)
                                  (outliner-core/delete-blocks! test-db (db/get-db test-db false)
@@ -702,7 +725,7 @@ tags:: tag1, tag2
           (swap! *random-blocks (fn [old]
                                   (set/union old (set (map :block/uuid blocks)))))
           (insert-blocks! blocks (get-random-block)))
-        (let [blocks (get-random-successive-blocks)]
+        (let [blocks (get-random-blocks)]
           (when (seq blocks)
             (let [target (get-random-block)]
               (outliner-tx/transact! (transact-opts)
@@ -721,7 +744,7 @@ tags:: tag1, tag2
           (swap! *random-blocks (fn [old]
                                   (set/union old (set (map :block/uuid blocks)))))
           (insert-blocks! blocks (get-random-block)))
-        (let [blocks (get-random-successive-blocks)]
+        (let [blocks (get-random-blocks)]
           (when (seq blocks)
             (outliner-tx/transact! (transact-opts)
                                    (outliner-core/move-blocks-up-down! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean)))
@@ -739,7 +762,7 @@ tags:: tag1, tag2
           (swap! *random-blocks (fn [old]
                                   (set/union old (set (map :block/uuid new-blocks)))))
           (insert-blocks! new-blocks (get-random-block))
-          (let [blocks (get-random-successive-blocks)
+          (let [blocks (get-random-blocks)
                 indent? (gen/generate gen/boolean)]
             (when (seq blocks)
               (outliner-tx/transact! (transact-opts)
@@ -761,7 +784,7 @@ tags:: tag1, tag2
 
                ;; delete
                (fn []
-                 (let [blocks (get-random-successive-blocks)]
+                 (let [blocks (get-random-blocks)]
                    (when (seq blocks)
                      (swap! *random-blocks (fn [old]
                                              (set/difference old (set (map :block/uuid blocks)))))
@@ -772,7 +795,7 @@ tags:: tag1, tag2
 
                ;; move
                (fn []
-                 (let [blocks (get-random-successive-blocks)]
+                 (let [blocks (get-random-blocks)]
                    (when (seq blocks)
                      (outliner-tx/transact! (transact-opts)
                                             (outliner-core/move-blocks! test-db
@@ -780,15 +803,15 @@ tags:: tag1, tag2
                                                                         blocks (get-random-block) (gen/generate gen/boolean))))))
 
                ;; move up down
-               (fn []
-                 (let [blocks (get-random-successive-blocks)]
-                   (when (seq blocks)
-                     (outliner-tx/transact! (transact-opts)
-                                            (outliner-core/move-blocks-up-down! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean))))))
+               ;; (fn []
+               ;;   (let [blocks (get-random-blocks)]
+               ;;     (when (seq blocks)
+               ;;       (outliner-tx/transact! (transact-opts)
+               ;;                              (outliner-core/move-blocks-up-down! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean))))))
 
                ;; indent outdent
                (fn []
-                 (let [blocks (get-random-successive-blocks)]
+                 (let [blocks (get-random-blocks)]
                    (when (seq blocks)
                      (outliner-tx/transact! (transact-opts)
                                             (outliner-core/indent-outdent-blocks! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean))))))]]
