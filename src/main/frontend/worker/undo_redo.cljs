@@ -239,6 +239,36 @@ when undo this op, this original entity-map will be transacted back into db")
        (:block/parent entity)
        (:block/left entity)))
 
+
+(defn- node-test-check
+  [origin-db db other-info]
+  (let [seen (volatile! #{})
+        datoms (d/datoms db :eavt)]
+    (doseq [e (map :e datoms)]
+      (when-not (contains? @seen e)
+        (when-let [ent (d/entity db e)]
+          (when (and (:block/uuid ent)
+                     (:block/parent ent)
+                     (:block/left ent))
+            (let [rightmost-ent (loop [ent ent]
+                                  (if-let [right (:block/_left ent)]
+                                    (recur right)
+                                    ent))]
+              (loop [ent rightmost-ent]
+                (let [left-ent (:block/left ent)
+                      parent-ent (:block/parent ent)]
+                  (when (and left-ent parent-ent
+                             (not= left-ent parent-ent)
+                             (not= (:block/parent left-ent) parent-ent))
+                    (throw (ex-info "debug" {:origin-db origin-db
+                                             :db db
+                                             :illegal-entity (:db/id ent)
+                                             :other other-info})))
+
+                  (when (and left-ent (not= left-ent parent-ent))
+                    (vswap! seen conj (:db/id ent))
+                    (recur left-ent)))))))))))
+
 (defmulti ^:private reverse-apply-op (fn [op _conn _repo] (first op)))
 (defmethod reverse-apply-op ::remove-block
   [op conn repo]
@@ -247,6 +277,7 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-not block-entity ;; this block shouldn't exist now
       (when-let [left-entity (d/entity @conn [:block/uuid (:block/left block-entity-map)])]
         (let [sibling? (not= (:block/left block-entity-map) (:block/parent block-entity-map))
+              origin-db (when util/node-test? @conn)
               r (outliner-tx/transact!
                  {:gen-undo-ops? false
                   :outliner-op :insert-blocks
@@ -268,6 +299,11 @@ when undo this op, this original entity-map will be transacted back into db")
                                                                               (d/pull-many @conn [:db/id])
                                                                               (keep :db/id))))]
                                                left-entity {:sibling? sibling? :keep-uuid? true}))]
+          (when util/node-test?
+            (node-test-check origin-db @conn {:type :insert
+                                              :insert-blocks [block-uuid]
+                                              :target-block (:db/id left-entity)
+                                              :sibling? sibling?}))
           (when (d/entity @conn [:block/uuid block-uuid])
             [:push-undo-redo r]))))))
 
@@ -284,6 +320,7 @@ when undo this op, this original entity-map will be transacted back into db")
           block-uuid-set)))
       block-entities))))
 
+
 (defmethod reverse-apply-op ::insert-blocks
   [op conn repo]
   (let [[_ {:keys [block-uuids]}] op]
@@ -292,7 +329,7 @@ when undo this op, this original entity-map will be transacted back into db")
                                    not-empty)]
       (when-not (other-children-exist? block-entities)
         (let [origin-db (when util/node-test? @conn)
-              {:keys [tx-data]}
+              _
               (outliner-tx/transact!
                {:gen-undo-ops? false
                 :outliner-op :delete-blocks
@@ -303,19 +340,8 @@ when undo this op, this original entity-map will be transacted back into db")
                                              block-entities
                                              {}))]
           (when util/node-test?
-            (doseq [e (distinct (keep :e tx-data))]
-              (when-let [ent (d/entity @conn e)]
-                (when-not (:block/name ent)
-                  (let [self (:db/id ent)
-                        left (:db/id (:block/left ent))
-                        parent (:db/id (:block/parent ent))]
-                    (when (or (nil? left)
-                              (nil? parent)
-                              (= left self)
-                              (= parent self))
-                      (throw (ex-info "debug" {:origin-db origin-db
-                                               :illegal-entity (:db/id ent)
-                                               :blocks-to-delete (map :db/id block-entities)}))))))))))
+            (node-test-check origin-db @conn {:type :delete
+                                              :delete-blocks (map :db/id block-entities)}))))
 
       (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
         [:push-undo-redo {}]))))
@@ -328,27 +354,16 @@ when undo this op, this original entity-map will be transacted back into db")
         (let [sibling? (not= block-origin-left block-origin-parent)
               origin-db (when util/node-test? @conn)
               r (outliner-tx/transact!
-                 {:gen-undo-ops? false
-                  :outliner-op :move-blocks
-                  :transact-opts {:repo repo
-                                  :conn conn}}
-                 (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))]
+                    {:gen-undo-ops? false
+                     :outliner-op :move-blocks
+                     :transact-opts {:repo repo
+                                     :conn conn}}
+                    (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))]
           (when util/node-test?
-            (doseq [e (distinct (keep :e (:tx-data r)))]
-              (when-let [ent (d/entity @conn e)]
-                (when-not (:block/name ent)
-                  (let [self (:db/id ent)
-                        left (:db/id (:block/left ent))
-                        parent (:db/id (:block/parent ent))]
-                    (when (or (nil? left)
-                              (nil? parent)
-                              (= left self)
-                              (= parent self))
-                      (throw (ex-info "debug" {:origin-db origin-db
-                                               :illegal-entity (:db/id ent)
-                                               :blocks-to-move [(:db/id block-entity)]
-                                               :target-block (:db/id left-entity)
-                                               :sibling? sibling?}))))))))
+            (node-test-check origin-db @conn {:type :move
+                                              :move-blocks [(:db/id block-entity)]
+                                              :target-block (:db/id left-entity)
+                                              :sibling? sibling?}))
           (when r [:push-undo-redo r]))))))
 
 (defmethod reverse-apply-op ::update-block
