@@ -11,7 +11,8 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [frontend.util :as util]))
 
 (sr/defkeyword :gen-undo-ops?
   "tx-meta option, generate undo ops from tx-data when true (default true)")
@@ -290,15 +291,32 @@ when undo this op, this original entity-map will be transacted back into db")
                                    (keep #(d/entity @conn [:block/uuid %]))
                                    not-empty)]
       (when-not (other-children-exist? block-entities)
-        (outliner-tx/transact!
-         {:gen-undo-ops? false
-          :outliner-op :delete-blocks
-          :transact-opts {:repo repo
-                          :conn conn}}
-         (outliner-core/delete-blocks! repo conn
-                                       (common-config/get-date-formatter (worker-state/get-config repo))
-                                       block-entities
-                                       {})))
+        (let [origin-db (when util/node-test? @conn)
+              {:keys [tx-data]}
+              (outliner-tx/transact!
+               {:gen-undo-ops? false
+                :outliner-op :delete-blocks
+                :transact-opts {:repo repo
+                                :conn conn}}
+               (outliner-core/delete-blocks! repo conn
+                                             (common-config/get-date-formatter (worker-state/get-config repo))
+                                             block-entities
+                                             {}))]
+          (when util/node-test?
+            (doseq [e (distinct (keep :e tx-data))]
+              (when-let [ent (d/entity @conn e)]
+                (when-not (:block/name ent)
+                  (let [self (:db/id ent)
+                        left (:db/id (:block/left ent))
+                        parent (:db/id (:block/parent ent))]
+                    (when (or (nil? left)
+                              (nil? parent)
+                              (= left self)
+                              (= parent self))
+                      (throw (ex-info "debug" {:origin-db origin-db
+                                               :illegal-entity (:db/id ent)
+                                               :blocks-to-delete (map :db/id block-entities)}))))))))))
+
       (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
         [:push-undo-redo {}]))))
 
@@ -308,12 +326,29 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when-let [left-entity (d/entity @conn [:block/uuid block-origin-left])]
         (let [sibling? (not= block-origin-left block-origin-parent)
+              origin-db (when util/node-test? @conn)
               r (outliner-tx/transact!
                  {:gen-undo-ops? false
                   :outliner-op :move-blocks
                   :transact-opts {:repo repo
                                   :conn conn}}
                  (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))]
+          (when util/node-test?
+            (doseq [e (distinct (keep :e (:tx-data r)))]
+              (when-let [ent (d/entity @conn e)]
+                (when-not (:block/name ent)
+                  (let [self (:db/id ent)
+                        left (:db/id (:block/left ent))
+                        parent (:db/id (:block/parent ent))]
+                    (when (or (nil? left)
+                              (nil? parent)
+                              (= left self)
+                              (= parent self))
+                      (throw (ex-info "debug" {:origin-db origin-db
+                                               :illegal-entity (:db/id ent)
+                                               :blocks-to-move [(:db/id block-entity)]
+                                               :target-block (:db/id left-entity)
+                                               :sibling? sibling?}))))))))
           (when r [:push-undo-redo r]))))))
 
 (defmethod reverse-apply-op ::update-block
