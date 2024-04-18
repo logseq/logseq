@@ -12,7 +12,9 @@
     (assert (some? test-db-conn))
     (worker-undo-redo/clear-undo-redo-stack)
     (worker-db-listener/listen-db-changes! test-helper/test-db-name-db-version test-db-conn
-                                           {:handler-keys [:gen-undo-ops :sync-db-to-main-thread]})
+                                           {:handler-keys [:gen-undo-ops
+                                                           ;; :sync-db-to-main-thread
+                                                           ]})
 
     (f)
     (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!)))

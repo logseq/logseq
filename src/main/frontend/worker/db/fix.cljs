@@ -21,9 +21,10 @@
             invalid-left? (not (every? (fn [b] (contains? valid-left-ids (:db/id (:block/left b)))) blocks))
             broken-chain? (or (not= (count sorted) (count blocks)) invalid-left?)]
         (when (and (not from-fix-test?) (exists? js/process) broken-chain?)
-          (throw (ex-info "outliner broken chain" {:tx-meta (:tx-meta tx-report)
+          (throw (ex-info "outliner broken chain" {:type (if invalid-left? :invalid-left :broken-chain)
+                                                   :tx-meta (:tx-meta tx-report)
                                                    :tx-data (:tx-data tx-report)
-                                                   :db-before (:db-before tx-report)})))
+                                                   :db-before (ldb/write-transit-str (:db-before tx-report))})))
         (when broken-chain?
           (let [parent-data {:db/id parent-id
                              :block/uuid (:block/uuid parent)
@@ -157,7 +158,7 @@
         conflicts (get-conflicts db page-id)
         _ (when (and (not from-fix-test?) (exists? js/process) (seq conflicts))
             (throw (ex-info "outliner core conflicts" {:conflicts conflicts
-                                                       :db-before (:db-before tx-report)
+                                                       :db-before (ldb/write-transit-str (:db-before tx-report))
                                                        :tx-data (:tx-data tx-report)
                                                        :tx-meta (:tx-meta tx-report)})))
         fix-conflicts-tx (when (seq conflicts)
