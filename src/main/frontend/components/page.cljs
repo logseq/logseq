@@ -549,7 +549,7 @@
                        [:div.mb-4
                         (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-                   (when (and db-based? (not block?) (not preview?))
+                   (when (and db-based? (not block?) (not preview?) (not (::show-page-info? state)))
                      (db-page/page-properties-react page {:configure? false}))
 
                    ;; blocks
