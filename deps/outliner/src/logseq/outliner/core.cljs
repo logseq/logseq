@@ -20,6 +20,7 @@
             [cljs.pprint :as pprint]
             [logseq.common.marker :as common-marker]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (def ^:private block-map
@@ -302,20 +303,22 @@
 
 ;; TODO: don't parse marker and deprecate typing marker to set status
 (defn- db-marker-handle
-  [conn m]
+  [conn block-entity txs-state m]
   (or
    (let [marker (:block/marker m)
          property (d/entity @conn :logseq.task/status)
          matched-status-id (when marker
                              (->> (get-in property [:block/schema :values])
-                                 (some (fn [id]
-                                         (let [value-e (d/entity @conn [:block/uuid id])
-                                               value (get-in value-e [:block/schema :value])]
-                                           (when (= (string/lower-case marker) (string/lower-case value))
-                                             id))))))]
+                                  (some (fn [id]
+                                          (let [value-e (d/entity @conn [:block/uuid id])
+                                                value (get-in value-e [:block/schema :value])]
+                                            (when (= (string/lower-case marker) (string/lower-case value))
+                                              (:db/id value-e)))))))]
+     (when-let [pair (and marker (db-property/get-pair-e block-entity :logseq.task/status))]
+       (swap! txs-state into [[:db/retractEntity (:db/id pair)]]))
      (cond-> m
        matched-status-id
-       (assoc (:db/ident property) matched-status-id)
+       (update :block/properties conj (sqlite-util/build-property-pair (:db/ident property) matched-status-id))
 
        matched-status-id
        (update :block/content (fn [content]
@@ -397,7 +400,7 @@
           block-entity (d/entity db eid)
           m (cond->> m
               db-based?
-              (db-marker-handle conn))
+              (db-marker-handle conn block-entity txs-state))
           m (if db-based?
               (update m :block/tags (fn [tags]
                                       (concat (keep :db/id (:block/tags block-entity))
