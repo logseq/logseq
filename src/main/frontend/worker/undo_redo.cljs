@@ -404,10 +404,7 @@ when undo this op, this original entity-map will be transacted back into db")
       (batch-tx/with-batch-tx-mode conn
         (doseq [op ops]
           (let [rev-ops (reverse-op @conn op)
-                r (try (reverse-apply-op op conn repo)
-                       (catch :default e
-                         (prn ::op op)
-                         (throw e)))]
+                r (reverse-apply-op op conn repo)]
             (when (= :push-undo-redo (first r))
               (some-> *undo-redo-info-for-test* (reset! {:op op :tx (second r)}))
               (apply conj! undo-ops-to-push rev-ops)))))
