@@ -12,7 +12,12 @@
             [logseq.db :as ldb]
             [logseq.outliner.op :as outliner-op]
             [logseq.outliner.tree :as otree]
-            [frontend.worker.state :as worker-state]))
+            [frontend.worker.state :as worker-state]
+            ["fs" :as fs-node]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [datascript.transit :as dt]
+            [logseq.outliner.transaction :as outliner-tx]
+            [logseq.outliner.core :as outliner-core]))
 
 (def ^:private page-uuid (random-uuid))
 (def ^:private init-data (test-helper/initial-test-page-and-blocks {:page-uuid page-uuid}))
@@ -221,48 +226,88 @@
                               blocks page-uuid)))))
 
 (deftest ^:wip undo-redo-outliner-op-gen-test
-  (let [conn (db/get-db false)]
-    (loop [num 1000]
-      (when (> num 0)
-        (if-let [op (gen/generate (t.gen/gen-insert-blocks-op @conn {:page-uuid page-uuid}))]
-          (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
-                                      [op] "MMM do, yyyy" nil)
-              (recur (dec num)))
-          (recur (dec num)))))
-    (println "================ random inserts ================")
-    (print-page-stat @conn page-uuid "test")
-    (undo-all conn page-uuid)
-    (print-page-stat @conn page-uuid "test")
-    (redo-all conn page-uuid)
-    (print-page-stat @conn page-uuid "test")
+  (try
+    (let [conn (db/get-db false)]
+      (loop [num 100]
+        (when (> num 0)
+          (if-let [op (gen/generate (t.gen/gen-insert-blocks-op @conn {:page-uuid page-uuid}))]
+            (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
+                                        [op] "MMM do, yyyy" nil)
+                (recur (dec num)))
+            (recur (dec num)))))
+      (println "================ random inserts ================")
+      (print-page-stat @conn page-uuid "test")
+      (undo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+      (redo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
 
-    (loop [num 1000]
-      (when (> num 0)
-        (if-let [op (gen/generate (t.gen/gen-move-blocks-op @conn {:page-uuid page-uuid}))]
-          (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
-                                      [op] "MMM do, yyyy" nil)
-              (recur (dec num)))
-          (recur (dec num)))))
-    (println "================ random moves ================")
-    (print-page-stat @conn page-uuid "test")
-    (undo-all conn page-uuid)
-    (print-page-stat @conn page-uuid "test")
-    (redo-all conn page-uuid)
-    (print-page-stat @conn page-uuid "test")
+      (loop [num 1000]
+        (when (> num 0)
+          (if-let [op (gen/generate (t.gen/gen-move-blocks-op @conn {:page-uuid page-uuid}))]
+            (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
+                                        [op] "MMM do, yyyy" nil)
+                (recur (dec num)))
+            (recur (dec num)))))
+      (println "================ random moves ================")
+      (print-page-stat @conn page-uuid "test")
+      (undo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+      (redo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
 
-    (loop [num 1000]
-      (when (> num 0)
-        (if-let [op (gen/generate (t.gen/gen-delete-blocks-op @conn {:page-uuid page-uuid}))]
-          (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
-                                      [op] "MMM do, yyyy" nil)
-              (recur (dec num)))
-          (recur (dec num)))))
-    (println "================ random deletes ================")
-    (print-page-stat @conn page-uuid "test")
-    (undo-all conn page-uuid)
-    (print-page-stat @conn page-uuid "test")
-    (try (redo-all conn page-uuid)
-         (catch :default e
-           (print-page-blocks-tree @conn page-uuid "test")
-           (throw e)))
-    (print-page-stat @conn page-uuid "test")))
+      (loop [num 100]
+        (when (> num 0)
+          (if-let [op (gen/generate (t.gen/gen-delete-blocks-op @conn {:page-uuid page-uuid}))]
+            (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
+                                        [op] "MMM do, yyyy" nil)
+                (recur (dec num)))
+            (recur (dec num)))))
+      (println "================ random deletes ================")
+      (print-page-stat @conn page-uuid "test")
+      (undo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+      (try (redo-all conn page-uuid)
+           (catch :default e
+             (print-page-blocks-tree @conn page-uuid "test")
+             (throw e)))
+      (print-page-stat @conn page-uuid "test"))
+    (catch :default e
+      (let [data (ex-data e)]
+        (fs-node/writeFileSync "debug.json" (sqlite-util/write-transit-str data))
+        (throw (ex-info "stop now" {}))))))
+
+
+
+(deftest ^:wip2 debug-test
+  (let [{:keys [origin-db illegal-entity blocks-to-delete blocks-to-move target-block sibling?]}
+        (dt/read-transit-str (str (fs-node/readFileSync "debug.json")))
+        conn (d/conn-from-db origin-db)
+        _ (prn :blocks-to-move blocks-to-move :blocks-to-delete blocks-to-delete)
+        block-entities (map #(d/entity @conn %) blocks-to-delete)
+        blocks-to-move (map #(d/entity @conn %) blocks-to-move)]
+    (prn "before transact" (d/pull origin-db '[*] illegal-entity))
+    (when (seq blocks-to-delete)
+      (prn :delete-blocks block-entities)
+      (outliner-tx/transact!
+       {:gen-undo-ops? false
+        :outliner-op :delete-blocks
+        :transact-opts {:repo test-helper/test-db-name-db-version
+                        :conn conn}}
+       (outliner-core/delete-blocks! test-helper/test-db-name-db-version conn
+                                     "MMM do, yyyy"
+                                     block-entities
+                                     {})))
+    (when (seq blocks-to-move)
+      (prn :move-blocks blocks-to-move :target target-block)
+      (outliner-tx/transact!
+       {:gen-undo-ops? false
+        :outliner-op :delete-blocks
+        :transact-opts {:repo test-helper/test-db-name-db-version
+                        :conn conn}}
+       (outliner-core/move-blocks! test-helper/test-db-name-db-version conn
+                                   blocks-to-move
+                                   (d/entity @conn target-block)
+                                   sibling?)))
+
+    (prn "after transact" (d/pull @conn '[*] illegal-entity))))
