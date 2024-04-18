@@ -41,9 +41,7 @@
                                         :cardinality :many}}
    :logseq.property/background-color {:schema {:type :string :hide? true}}
    :logseq.property/background-image {:schema
-                                      ;; FIXME: Convert to :string when it's user facing
-                                      {:type :default
-                                       :hide? true
+                                      {:type :string
                                        :view-context :block
                                        :public? true}}
    ;; number (1-6) or boolean for auto heading
