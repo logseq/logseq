@@ -1170,10 +1170,10 @@
                     {:block-id block-db-id
                      :left-id left-id
                      :parent-id parent-id
-                     :db db
                      :tx-data tx-data
                      :tx-meta tx-meta
-                     :args (drop 2 args)}))
+                     :args (drop 2 args)})
+               (prn :datascript-db (ldb/write-transit-str db)))
              (assert (not point-to-self?) ":block/parent or :block/left points to self")))))
      blocks)))
 
