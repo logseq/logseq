@@ -273,26 +273,27 @@
     (catch :default e
       (let [data (ex-data e)]
         (fs-node/writeFileSync "debug.json" (sqlite-util/write-transit-str data))
-        (throw e)))))
+        (throw (ex-info "stop now" {}))))))
 
 
 
-(deftest ^:wip2 debug-test
-  (let [{:keys [origin-db db illegal-entity other]}
-        (dt/read-transit-str (str (fs-node/readFileSync "debug.json")))
-        _ (prn :illegal-entity illegal-entity :other other)
-        illegal-entity1 (d/entity origin-db illegal-entity)
-        illegal-entity-left1 (:block/left illegal-entity1)
-        illegal-entity-parent1 (:block/parent illegal-entity1)]
-    (prn "before transact"
-         (select-keys illegal-entity1 [:db/id :block/left :block/parent])
-         (select-keys illegal-entity-left1 [:db/id :block/left :block/parent])
-         (select-keys illegal-entity-parent1 [:db/id :block/left :block/parent]))
+(comment
+  (deftest ^:wip2 debug-test
+    (let [{:keys [origin-db db illegal-entity other]}
+          (dt/read-transit-str (str (fs-node/readFileSync "debug.json")))
+          _ (prn :illegal-entity illegal-entity :other other)
+          illegal-entity1 (d/entity origin-db illegal-entity)
+          illegal-entity-left1 (:block/left illegal-entity1)
+          illegal-entity-parent1 (:block/parent illegal-entity1)]
+      (prn "before transact"
+           (select-keys illegal-entity1 [:db/id :block/left :block/parent])
+           (select-keys illegal-entity-left1 [:db/id :block/left :block/parent])
+           (select-keys illegal-entity-parent1 [:db/id :block/left :block/parent]))
 
-    (let [illegal-entity2 (d/entity db illegal-entity)
-          illegal-entity-left2 (:block/left illegal-entity2)
-          illegal-entity-parent2 (:block/parent illegal-entity2)]
-      (prn "after transact"
-           (select-keys illegal-entity2 [:db/id :block/left :block/parent])
-           (select-keys illegal-entity-left2 [:db/id :block/left :block/parent])
-           (select-keys illegal-entity-parent2 [:db/id :block/left :block/parent])))))
+      (let [illegal-entity2 (d/entity db illegal-entity)
+            illegal-entity-left2 (:block/left illegal-entity2)
+            illegal-entity-parent2 (:block/parent illegal-entity2)]
+        (prn "after transact"
+             (select-keys illegal-entity2 [:db/id :block/left :block/parent])
+             (select-keys illegal-entity-left2 [:db/id :block/left :block/parent])
+             (select-keys illegal-entity-parent2 [:db/id :block/left :block/parent]))))))

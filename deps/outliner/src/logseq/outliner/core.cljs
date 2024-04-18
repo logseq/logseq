@@ -881,7 +881,7 @@
          :blocks  tx}))))
 
 (defn- build-move-blocks-next-tx
-  [db target-block blocks {:keys [sibling?]}]
+  [db blocks]
   (let [top-level-blocks blocks
         top-level-blocks-ids (set (map :db/id top-level-blocks))
         right-block (get-right-sibling db (:db/id (last top-level-blocks)))]
@@ -895,18 +895,24 @@
          :block/left left}))))
 
 (defn- find-new-left
-  [db block moved-ids target-block current-block sibling? near-by?]
+  [db block moved-ids target-block current-block {:keys [sibling? delete-blocks?] :as opts}]
   (if (= (:db/id target-block) (:db/id (:block/left current-block)))
-    (if sibling?
-      (d/entity db (last moved-ids))
-      target-block)
+    (if delete-blocks?
+      (if sibling?
+        (d/entity db (last moved-ids))
+        target-block)
+      ;; move blocks
+      (let [parent-of-first-block? (= (:db/id target-block) (:db/id (:block/parent current-block)))]
+        (if (or sibling? parent-of-first-block?)
+          (d/entity db (last moved-ids))
+          target-block)))
     (let [left (d/entity db (:db/id (:block/left block)))]
       (if (contains? (set moved-ids) (:db/id left))
-        (find-new-left db left moved-ids target-block current-block sibling? near-by?)
+        (find-new-left db left moved-ids target-block current-block opts)
         left))))
 
 (defn- fix-non-consecutive-blocks
-  [db blocks target-block sibling?]
+  [db blocks target-block sibling? delete-blocks?]
   (when (> (count blocks) 1)
     (let [page-blocks (group-by :block/page blocks)
           near-by? (= (:db/id target-block) (:db/id (:block/left (first blocks))))
@@ -927,7 +933,10 @@
                                         {:db/id (:db/id right)
                                          :block/left (:db/id (last blocks))}
                                         :else
-                                        (when-let [new-left (find-new-left db right (distinct (map :db/id blocks)) target-block block sibling? near-by?)]
+                                        (when-let [new-left (find-new-left db right (distinct (map :db/id blocks)) target-block block
+                                                                           {:sibling? sibling?
+                                                                            :delete-blocks? delete-blocks?
+                                                                            :idx idx})]
                                           {:db/id      (:db/id right)
                                            :block/left (:db/id new-left)}))))
                                   non-consecutive-blocks)))) page-blocks)
@@ -996,7 +1005,7 @@
           (let [node (block @conn (d/entity @conn id))]
             (otree/-del node txs-state conn)))
         (when non-consecutive?
-          (let [fix-non-consecutive-tx (fix-non-consecutive-blocks @conn top-level-blocks nil false)]
+          (let [fix-non-consecutive-tx (fix-non-consecutive-blocks @conn top-level-blocks nil false true)]
             (swap! txs-state concat fix-non-consecutive-tx)))))
     {:tx-data @txs-state}))
 
@@ -1035,14 +1044,14 @@
                                     (:db/id target-block))
                     not-same-page? (not= first-block-page target-page)
                     move-blocks-next-tx (when-not non-consecutive-blocks?
-                                          [(build-move-blocks-next-tx db target-block blocks {:sibling? sibling?})])
+                                          [(build-move-blocks-next-tx db blocks)])
                     children-page-tx (when not-same-page?
                                        (let [children-ids (mapcat #(ldb/get-block-children-ids db (:block/uuid %))
                                                                   blocks)]
                                          (map (fn [id] {:block/uuid id
                                                         :block/page target-page}) children-ids)))
                     fix-non-consecutive-tx (when non-consecutive-blocks?
-                                             (->> (fix-non-consecutive-blocks db blocks target-block sibling?)
+                                             (->> (fix-non-consecutive-blocks db blocks target-block sibling? false)
                                                   (remove (fn [b]
                                                             (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b))))))
                     full-tx (common-util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
