@@ -12,7 +12,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity})
+  #{:keyword :map :coll :any :entity :string})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -25,11 +25,12 @@
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
-(def ref-property-types #{:default :page :date :entity})
+(def ref-property-types
+  "User facing ref types"
+  #{:default :page :date})
 
 (assert (set/subset? ref-property-types
-                     (into internal-built-in-property-types
-                           user-built-in-property-types))
+                     (set user-built-in-property-types))
         "All ref types are valid property types")
 
 (def ^:private user-built-in-allowed-schema-attributes
@@ -119,10 +120,11 @@
    :template [:fn
               {:error/message "should has #template"}
               entity?]
-   :entity   [:fn
-              {:error/message "should be a db entity"}
-              entity?]
-   ;; internal usage
+
+   ;; Internal usage
+   ;; ==============
+   :string   string?
+   :entity   entity?
    :keyword  keyword?
    :map      map?
    ;; coll elements are ordered as it's saved as a vec
