@@ -19,6 +19,7 @@
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [promesa.core :as p]
+            [goog.dom :as gdom]
             [frontend.db.async :as db-async]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
@@ -631,17 +632,60 @@
          (:page :date)
          (property-value-select-page block property select-opts' opts))]))))
 
+(defn- save-text!
+  [repo block property value _editor-id e]
+  (let [new-value (util/evalue e)]
+    (when (not (state/get-editor-action))
+      (util/stop e)
+      (p/do!
+       (when (not= new-value value)
+         (property-handler/set-block-property! repo (:block/uuid block)
+                                               (:db/ident property)
+                                               (string/trim new-value)))
+       (exit-edit-property)))))
+
+(defn- new-text-editor-opts
+  [repo block property value editor-id]
+  {:style {:padding 0
+           :background "none"}
+   :on-blur
+   (fn [e]
+     (save-text! repo block property value editor-id e))
+   :on-key-down
+   (fn [e]
+     (let [enter? (= (util/ekey e) "Enter")
+           esc? (= (util/ekey e) "Escape")
+           backspace? (= (util/ekey e) "Backspace")]
+       ;; FIXME: backspace not working
+       (when (and (or enter? esc? backspace?)
+                  (not (state/get-editor-action)))
+         (when-not backspace? (util/stop e))
+         (when (or esc? enter?)
+           (save-text! repo block property value editor-id e)))))})
+
 (defn- property-editing
-  [block property schema]
+  [block property value schema editor-box editor-args editor-id]
   [:div.flex.flex-1
-   (case type
+   (case (:type schema)
      :template
      (let [id (first (:classes schema))
            template (when id (db/entity [:block/uuid id]))]
        (when template
          (<create-new-block-from-template! block property template)))
-
+     :string
+     (let [repo (state/get-current-repo)
+           config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
+       [:div
+        (editor-box editor-args editor-id config)])
      nil)])
+
+(defn- set-editing!
+  [block property editor-id dom-id v opts]
+  (let [v (str v)
+        cursor-range (if dom-id
+                       (some-> (gdom/getElement dom-id) util/caret-range)
+                       "")]
+    (state/set-editing! editor-id v property cursor-range (assoc opts :property-block block))))
 
 (defn- property-value-inner
   [block property value {:keys [inline-text block-cp page-cp
@@ -668,7 +712,9 @@
       :style {:min-height 24}
       :on-click (fn []
                   (when (and (= type :default) (nil? value))
-                    (<create-new-block! block property "")))}
+                    (<create-new-block! block property ""))
+                  (when (and (= type :string) (nil? value))
+                    (set-editing! block property editor-id dom-id value opts)))}
      (if (and (string/blank? value) template?)
        (let [id (first (:classes schema))
              template (when id (db/entity [:block/uuid id]))]
@@ -694,14 +740,13 @@
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query
-  [state block property value {:keys [container-id editor-id editing?
+  [state block property value {:keys [container-id editor-id editing? editor-box editor-args
                                       on-chosen]
                                :as opts}]
   (let [property (model/sub-block (:db/id property))
         schema (:block/schema property)
         type (get schema :type :default)
-
-        editing? (or editing?
+        editing? (or (and editing? (not= :string type))
                      (state/sub-property-value-editing? editor-id)
                      (state/sub-editing? [container-id (:block/uuid block) (:block/uuid property)]))
         select-type? (select-type? property type)
@@ -735,8 +780,8 @@
         ;; :others
           [:div.flex.flex-1
            (if editing?
-             (property-editing block property schema)
-             (property-value-inner block property value opts))])))))
+               (property-editing block property value schema editor-box editor-args editor-id)
+               (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values
   [block property v {:keys [on-chosen dropdown? editing?]
