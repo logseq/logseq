@@ -17,7 +17,10 @@
             [clojure.string :as string]
             [logseq.db.frontend.property :as db-property]))
 
-(rum/defc page-properties < rum/reactive
+(rum/defc page-properties
+  "This component is called by page-inner and within configure/info modal. This should not
+   be displaying properties from both components at the same time"
+  < rum/reactive
   [page {:keys [mode configure?]}]
   (let [class? (= mode :class)
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
@@ -32,23 +35,23 @@
                (or has-viewable-properties?
                    has-class-properties?)))
       [:div.ls-page-properties
-       {:class (util/classnames [{:no-mode (nil? mode)
-                                  :no-properties (if class?
+       {:class (util/classnames [{:no-properties (if class?
                                                    (not has-class-properties?)
                                                    (not has-viewable-properties?))}])}
-       (cond
-         (= mode :class)
-         (if (and config/publishing? (not configure?))
-           (component-block/db-properties-cp {:editor-box editor/box}
-                                             page
-                                             (str edit-input-id-prefix "-page")
-                                             (assoc configure-opts :class-schema? false))
+       (if configure?
+         (cond
+           (= mode :class)
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
                                              (str edit-input-id-prefix "-schema")
-                                             (assoc configure-opts :class-schema? true)))
+                                             (assoc configure-opts :class-schema? true))
 
-         (= mode :page)
+           (= mode :page)
+           (component-block/db-properties-cp {:editor-box editor/box}
+                                             page
+                                             (str edit-input-id-prefix "-page")
+                                             (assoc configure-opts :class-schema? false :page? true)))
+         ;; default view for page-inner
          (component-block/db-properties-cp {:editor-box editor/box}
                                            page
                                            (str edit-input-id-prefix "-page")
