@@ -208,6 +208,22 @@
     (is (= [4] (get-children 2)))
     (is (= [2 3 6 5 7] (get-children 22)))))
 
+(deftest test-move-non-consecutive-blocks-2
+  (testing "Move 3 as sibling of 2."
+    (transact-tree! [[22 [[2 [[3]
+                              [4]
+                              [5]]]
+                          [6]
+                          [7]
+                          [8]]]])
+    (outliner-tx/transact!
+     (transact-opts)
+     (outliner-core/move-blocks! test-db
+                                 (db/get-db test-db false)
+                                 [(get-block 3) (get-block 5)] (get-block 2) false))
+    (is (= [3 5 4] (get-children 2)))
+    (is (= [2 6 7 8] (get-children 22)))))
+
 (deftest test-indent-blocks
   (testing "
   [1 [[2 [[3
