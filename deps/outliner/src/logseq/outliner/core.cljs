@@ -1163,8 +1163,9 @@
                  parent-id (some->> (when parent (or (and (map? parent) (:db/id parent)) parent))
                                     (d/entity db)
                                     :db/id)
-                 not-point-to-self? (every? #(not= block-db-id %) (remove nil? [left-id parent-id]))]
-             (when-not not-point-to-self?
+                 point-to-self? (some #(= block-db-id %) (remove nil? [left-id parent-id]))]
+             (when point-to-self?
+               (js/console.trace)
                (prn :error ":block/parent or :block/left points to self"
                     {:block-id block-db-id
                      :left-id left-id
@@ -1173,7 +1174,7 @@
                      :tx-data tx-data
                      :tx-meta tx-meta
                      :args (drop 2 args)}))
-             (assert not-point-to-self? ":block/parent or :block/left points to self")))))
+             (assert (not point-to-self?) ":block/parent or :block/left points to self")))))
      blocks)))
 
 (defn- op-transact!
