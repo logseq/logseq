@@ -881,7 +881,7 @@
          :blocks  tx}))))
 
 (defn- build-move-blocks-next-tx
-  [db target-block blocks {:keys [sibling? _non-consecutive-blocks?]}]
+  [db target-block blocks {:keys [sibling?]}]
   (let [top-level-blocks blocks
         top-level-blocks-ids (set (map :db/id top-level-blocks))
         right-block (get-right-sibling db (:db/id (last top-level-blocks)))]
@@ -1029,16 +1029,16 @@
                     target-page (or (:db/id (:block/page target-block))
                                     (:db/id target-block))
                     not-same-page? (not= first-block-page target-page)
-                    move-blocks-next-tx [(build-move-blocks-next-tx db target-block blocks {:sibling? sibling?
-                                                                                            :non-consecutive-blocks? non-consecutive-blocks?})]
+                    move-blocks-next-tx [(build-move-blocks-next-tx db target-block blocks {:sibling? sibling?})]
                     children-page-tx (when not-same-page?
                                        (let [children-ids (mapcat #(ldb/get-block-children-ids db (:block/uuid %))
                                                                   blocks)]
                                          (map (fn [id] {:block/uuid id
                                                         :block/page target-page}) children-ids)))
-                    fix-non-consecutive-tx (->> (fix-non-consecutive-blocks db blocks target-block sibling?)
-                                                (remove (fn [b]
-                                                          (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b)))))
+                    fix-non-consecutive-tx (when non-consecutive-blocks?
+                                             (->> (fix-non-consecutive-blocks db blocks target-block sibling?)
+                                                  (remove (fn [b]
+                                                            (contains? (set (map :db/id move-blocks-next-tx)) (:db/id b))))))
                     full-tx (common-util/concat-without-nil tx-data move-blocks-next-tx children-page-tx fix-non-consecutive-tx)
                     tx-meta (cond-> {:move-blocks (mapv :db/id blocks)
                                      :move-op outliner-op
