@@ -17,21 +17,27 @@
       (let [children-ids (set (map :db/id blocks))
             sorted (ldb/sort-by-left blocks parent)
             valid-left-ids (set (cons (:db/id parent) (map :db/id blocks)))
-            broken-chain? (or (not= (count sorted) (count blocks))
-                              ;; :block/left points to other blocks that're not current parent or its children
-                              (not (every? (fn [b] (contains? valid-left-ids (:db/id (:block/left b)))) blocks)))]
+            ;; :block/left points to other blocks that're not current parent or its children
+            invalid-left? (not (every? (fn [b] (contains? valid-left-ids (:db/id (:block/left b)))) blocks))
+            broken-chain? (or (not= (count sorted) (count blocks)) invalid-left?)]
         (when (and (not from-fix-test?) (exists? js/process) broken-chain?)
           (throw (ex-info "outliner broken chain" {:tx-meta (:tx-meta tx-report)
                                                    :tx-data (:tx-data tx-report)
                                                    :db-before (:db-before tx-report)})))
         (when broken-chain?
-          (let [error-data {:parent {:db/id parent-id
-                                     :block/uuid (:block/uuid parent)
-                                     :block/content (:block/content parent)}
-                            :children (mapv (fn [b]
-                                              {:db/id (:db/id b)
-                                               :block/content (:block/content b)
-                                               :block/left (:db/id (:block/left b))}) blocks)}]
+          (let [parent-data {:db/id parent-id
+                             :block/uuid (:block/uuid parent)
+                             :block/content (:block/content parent)}
+                error-data (if invalid-left?
+                             {:type :invalid-left
+                              :parent parent-data
+                              :children (remove (fn [b] (contains? valid-left-ids (:db/id (:block/left b)))) blocks)}
+                             {:type :broken-chain
+                              :parent parent-data
+                              :children (mapv (fn [b]
+                                                {:db/id (:db/id b)
+                                                 :block/content (:block/content b)
+                                                 :block/left (:db/id (:block/left b))}) blocks)})]
             (prn :debug "Broken chain:")
             (pprint/pprint error-data)
             (worker-util/post-message :notification
