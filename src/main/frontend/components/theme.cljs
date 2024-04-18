@@ -32,6 +32,8 @@
      {:ref   *el
       :class "top-1/2 -left-1/2 z-[-999]"}]))
 
+(defonce *once-theme-loaded? (volatile! false))
+
 (rum/defc ^:large-vars/cleanup-todo container
   [{:keys [route theme accent-color on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
@@ -63,8 +65,11 @@
         (.setAttribute doc "lang" preferred-language)))
 
     (rum/use-effect!
-     #(js/setTimeout (fn [] (ipc/ipc "theme-loaded")) 100) ; Wait for the theme to be applied
-     [])
+      #(js/setTimeout
+         (fn [] (when-not @*once-theme-loaded?
+                  (ipc/ipc :theme-loaded)
+                  (vreset! *once-theme-loaded? true))) 100) ; Wait for the theme to be applied
+      [])
 
     (rum/use-effect!
      #(when (and restored-sidebar?
