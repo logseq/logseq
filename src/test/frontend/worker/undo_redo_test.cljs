@@ -280,34 +280,21 @@
 
 
 (deftest ^:wip2 debug-test
-  (let [{:keys [origin-db illegal-entity blocks-to-delete blocks-to-move target-block sibling?]}
+  (let [{:keys [origin-db db illegal-entity other]}
         (dt/read-transit-str (str (fs-node/readFileSync "debug.json")))
-        conn (d/conn-from-db origin-db)
-        _ (prn :blocks-to-move blocks-to-move :blocks-to-delete blocks-to-delete)
-        block-entities (map #(d/entity @conn %) blocks-to-delete)
-        blocks-to-move (map #(d/entity @conn %) blocks-to-move)]
-    (prn "before transact" (d/pull origin-db '[*] illegal-entity))
-    (when (seq blocks-to-delete)
-      (prn :delete-blocks block-entities)
-      (outliner-tx/transact!
-       {:gen-undo-ops? false
-        :outliner-op :delete-blocks
-        :transact-opts {:repo test-helper/test-db-name-db-version
-                        :conn conn}}
-       (outliner-core/delete-blocks! test-helper/test-db-name-db-version conn
-                                     "MMM do, yyyy"
-                                     block-entities
-                                     {})))
-    (when (seq blocks-to-move)
-      (prn :move-blocks blocks-to-move :target target-block)
-      (outliner-tx/transact!
-       {:gen-undo-ops? false
-        :outliner-op :delete-blocks
-        :transact-opts {:repo test-helper/test-db-name-db-version
-                        :conn conn}}
-       (outliner-core/move-blocks! test-helper/test-db-name-db-version conn
-                                   blocks-to-move
-                                   (d/entity @conn target-block)
-                                   sibling?)))
+        _ (prn :illegal-entity illegal-entity :other other)
+        illegal-entity1 (d/entity origin-db illegal-entity)
+        illegal-entity-left1 (:block/left illegal-entity1)
+        illegal-entity-parent1 (:block/parent illegal-entity1)]
+    (prn "before transact"
+         (select-keys illegal-entity1 [:db/id :block/left :block/parent])
+         (select-keys illegal-entity-left1 [:db/id :block/left :block/parent])
+         (select-keys illegal-entity-parent1 [:db/id :block/left :block/parent]))
 
-    (prn "after transact" (d/pull @conn '[*] illegal-entity))))
+    (let [illegal-entity2 (d/entity db illegal-entity)
+          illegal-entity-left2 (:block/left illegal-entity2)
+          illegal-entity-parent2 (:block/parent illegal-entity2)]
+      (prn "after transact"
+           (select-keys illegal-entity2 [:db/id :block/left :block/parent])
+           (select-keys illegal-entity-left2 [:db/id :block/left :block/parent])
+           (select-keys illegal-entity-parent2 [:db/id :block/left :block/parent])))))
