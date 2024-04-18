@@ -146,11 +146,14 @@
     (filter #(> (count (second %)) 1) parent-left->es)))
 
 (defn- loop-fix-conflicts
-  [conn page-id transact-opts *fix-tx-data from-fix-test?]
+  [conn page-id transact-opts *fix-tx-data tx-report from-fix-test?]
   (let [db @conn
         conflicts (get-conflicts db page-id)
         _ (when (and (not from-fix-test?) (exists? js/process) (seq conflicts))
-            (throw (ex-info "outliner core conflicts" {:conflicts conflicts})))
+            (throw (ex-info "outliner core conflicts" {:conflicts conflicts
+                                                       :db-before (:db-before tx-report)
+                                                       :tx-data (:tx-data tx-report)
+                                                       :tx-meta (:tx-meta tx-report)})))
         fix-conflicts-tx (when (seq conflicts)
                            (fix-parent-left-conflicts db conflicts page-id))]
     (when (seq fix-conflicts-tx)
@@ -159,7 +162,7 @@
       (let [tx-data (:tx-data (ldb/transact! conn fix-conflicts-tx transact-opts))]
         (swap! *fix-tx-data (fn [old-data] (concat old-data tx-data))))
       (when (seq (get-conflicts @conn page-id))
-        (loop-fix-conflicts conn page-id transact-opts *fix-tx-data from-fix-test?)))))
+        (loop-fix-conflicts conn page-id transact-opts *fix-tx-data tx-report from-fix-test?)))))
 
 (defn fix-page-if-broken!
   "Fix the page if it has either parent-left conflicts or broken chains."
@@ -175,7 +178,7 @@
       (let [transact-opts (if replace-tx? {:replace? true} {})
             *fix-tx-data (atom [])]
         (when fix-parent-left?
-          (loop-fix-conflicts conn page-id transact-opts *fix-tx-data from-fix-test?))
+          (loop-fix-conflicts conn page-id transact-opts *fix-tx-data tx-report from-fix-test?))
         (when fix-broken-chain?
           (let [db' @conn
                 parent-left->es' (build-parent-left->es db page-id)

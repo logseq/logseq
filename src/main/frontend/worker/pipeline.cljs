@@ -49,7 +49,7 @@
        (remove nil?)))))
 
 (defn fix-db!
-  [conn {:keys [db-before db-after tx-data] :as tx-report}]
+  [conn {:keys [db-before db-after tx-data] :as tx-report} context]
   (let [changed-pages (->> (filter (fn [d] (contains? #{:block/left :block/parent} (:a d))) tx-data)
                            (map :e)
                            distinct
@@ -61,7 +61,8 @@
                            (remove nil?)
                            (distinct))]
     (doseq [changed-page-id changed-pages]
-      (db-fix/fix-page-if-broken! conn changed-page-id {:tx-report tx-report}))))
+      (db-fix/fix-page-if-broken! conn changed-page-id {:tx-report tx-report
+                                                        :context context}))))
 
 (defn validate-and-fix-db!
   [repo conn tx-report context]
@@ -70,9 +71,8 @@
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
         (worker-util/post-message :notification
                                   [["Invalid DB!"] :error]))))
-  (when (or (:dev? context)
-            (exists? js/process))
-    (fix-db! conn tx-report)))
+  (when (or (:dev? context) (exists? js/process))
+    (fix-db! conn tx-report context)))
 
 (defn invoke-hooks
   [repo conn {:keys [db-before db-after] :as tx-report} context]
