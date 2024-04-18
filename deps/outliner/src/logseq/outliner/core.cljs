@@ -956,41 +956,43 @@
          (= 1 (count top-level-blocks))
          (= start-node end-node))
       (delete-block repo conn txs-state start-node (assoc delete-opts :date-formatter date-formatter))
-      (let [sibling? (= (otree/-get-parent-id start-node conn)
-                        (otree/-get-parent-id end-node conn))
-            right-node (otree/-get-right end-node conn)]
-        (when (otree/satisfied-inode? right-node)
-          (let [non-consecutive? (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks))
-                left-node-id (if sibling?
-                               (otree/-get-id (otree/-get-left start-node conn) conn)
-                               (let [end-node-left-nodes (get-left-nodes conn end-node (count block-ids))
-                                     parents (->>
-                                              (ldb/get-block-parents
-                                               @conn
-                                               (otree/-get-id start-node conn)
-                                               {:depth 1000})
-                                              (map :block/uuid)
-                                              (set))
-                                     result (first (set/intersection (set end-node-left-nodes) parents))]
-                                 (when (and (not non-consecutive?) (not result))
-                                   (pprint/pprint {:parents parents
-                                                   :end-node-left-nodes end-node-left-nodes}))
-                                 result))]
-            (when (and (nil? left-node-id) (not non-consecutive?))
-              (assert left-node-id
-                      (str "Can't find the left-node-id: "
-                           (pr-str {:start (d/entity @conn [:block/uuid (otree/-get-id start-node conn)])
-                                    :end (d/entity @conn [:block/uuid (otree/-get-id end-node conn)])
-                                    :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])
-                                    :blocks top-level-blocks}))))
-            (when left-node-id
-              (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
-                (otree/-save new-right-node txs-state conn repo date-formatter {})))))
+      (let [non-consecutive? (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks))]
+        (when-not non-consecutive?
+          (let [sibling? (= (otree/-get-parent-id start-node conn)
+                            (otree/-get-parent-id end-node conn))
+                right-node (otree/-get-right end-node conn)]
+            (when (otree/satisfied-inode? right-node)
+              (let [left-node-id (if sibling?
+                                   (otree/-get-id (otree/-get-left start-node conn) conn)
+                                   (let [end-node-left-nodes (get-left-nodes conn end-node (count block-ids))
+                                         parents (->>
+                                                  (ldb/get-block-parents
+                                                   @conn
+                                                   (otree/-get-id start-node conn)
+                                                   {:depth 1000})
+                                                  (map :block/uuid)
+                                                  (set))
+                                         result (first (set/intersection (set end-node-left-nodes) parents))]
+                                     (when (and (not non-consecutive?) (not result))
+                                       (pprint/pprint {:parents parents
+                                                       :end-node-left-nodes end-node-left-nodes}))
+                                     result))]
+                (when (nil? left-node-id)
+                  (assert left-node-id
+                          (str "Can't find the left-node-id: "
+                               (pr-str {:start (d/entity @conn [:block/uuid (otree/-get-id start-node conn)])
+                                        :end (d/entity @conn [:block/uuid (otree/-get-id end-node conn)])
+                                        :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])
+                                        :blocks top-level-blocks}))))
+                (when left-node-id
+                  (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
+                    (otree/-save new-right-node txs-state conn repo date-formatter {})))))))
         (doseq [id block-ids]
           (let [node (block @conn (d/entity @conn id))]
             (otree/-del node txs-state conn)))
-        (let [fix-non-consecutive-tx (fix-non-consecutive-blocks @conn top-level-blocks nil false)]
-          (swap! txs-state concat fix-non-consecutive-tx))))
+        (when non-consecutive?
+          (let [fix-non-consecutive-tx (fix-non-consecutive-blocks @conn top-level-blocks nil false)]
+            (swap! txs-state concat fix-non-consecutive-tx)))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
@@ -1165,7 +1167,6 @@
                                     :db/id)
                  point-to-self? (some #(= block-db-id %) (remove nil? [left-id parent-id]))]
              (when point-to-self?
-               (js/console.trace)
                (prn :error ":block/parent or :block/left points to self"
                     {:block-id block-db-id
                      :left-id left-id
