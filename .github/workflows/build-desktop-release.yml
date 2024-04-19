@@ -222,7 +222,7 @@ jobs:
           DEBUG: "pw:api"
           RELEASE: true # skip dev only test
 
-  build-linux:
+  build-linux-x64:
     runs-on: ubuntu-20.04
     needs: [ compile-cljs ]
     steps:
@@ -265,7 +265,61 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v3
         with:
-          name: logseq-linux-builds
+          name: logseq-linux-x64-builds
+          path: builds
+
+  build-linux-arm64:
+    runs-on: ubuntu-20.04
+    needs: [ compile-cljs ]
+    steps:
+      - name: Download The Static Asset
+        uses: actions/download-artifact@v3
+        with:
+          name: static
+          path: static
+
+      - name: Retrieve tag version
+        id: ref
+        run: |
+          pkgver=$(cat ./static/VERSION)
+          echo "version=$pkgver" >> $GITHUB_OUTPUT
+
+      - name: Install Node.js, NPM and Yarn
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Fetch deps
+        env:
+          npm_config_arch: arm64
+        run: |
+          yarn install --target_arch=arm64 --target_platform=linux
+          rsapi_version=`node -e 'console.log(require("@logseq/rsapi/package.json").optionalDependencies["@logseq/rsapi-linux-arm64-gnu"])'`
+          temp_dir=`mktemp -d`
+          cd "$temp_dir"
+          echo '{"dependencies": {"@logseq/rsapi-linux-arm64-gnu": "'"$rsapi_version"'"}}' > package.json
+          yarn install --ignore-platform
+          cd -
+          mv "$temp_dir/node_modules/@logseq/rsapi-linux-arm64-gnu" node_modules/@logseq/rsapi-linux-arm64-gnu
+          rm -rf "$temp_dir" "node_modules/@logseq/rsapi-linux-x64-gnu"
+        working-directory: ./static
+
+      - name: Build/Release Electron App
+        run: yarn electron:make-linux-arm64
+        working-directory: ./static
+
+      - name: Save artifacts
+        run: |
+          mkdir -p builds
+          # NOTE: save VERSION file to builds directory
+          cp static/VERSION ./builds/VERSION
+          # mv static/out/make/*-*.AppImage ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.AppImage
+          mv static/out/make/zip/linux/arm64/*-linux-arm64-*.zip ./builds/Logseq-linux-arm64-${{ steps.ref.outputs.version }}.zip
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-linux-arm64-builds
           path: builds
 
   build-windows:
@@ -302,13 +356,6 @@ jobs:
         run: yarn run postinstall
         working-directory: ./static/node_modules/dugite/
 
-      - name: Prepare Code Sign
-        if: ${{ github.repository == 'logseq/logseq' }}
-        run: |
-          [IO.File]::WriteAllBytes($(Get-Location).Path + "\codesign.pfx", [Convert]::FromBase64String($env:CERTIFICATE))
-        env:
-          CERTIFICATE: ${{ secrets.CODE_SIGN_CERTIFICATE }}
-
       - name: Build/Release Electron app
         run: yarn electron:make
         working-directory: ./static
@@ -316,10 +363,20 @@ jobs:
         #  CODE_SIGN_CERTIFICATE_FILE: ../codesign.pfx
         #  CODE_SIGN_CERTIFICATE_PASSWORD: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
 
-      - name: Save Artifact
+      - name: Save Artifact for Code Signing
         run: |
           mkdir builds
           mv static\out\make\squirrel.windows\x64\*.exe    builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.exe
+
+      - name: Upload Artifact for Code Signing
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-win64-unsigned-builds
+          path: builds
+
+      - name: Save Artifact
+        run: |
+          rm builds\*.exe
           mv static\out\make\squirrel.windows\x64\*.nupkg  builds\Logseq-win-x64-${{ steps.ref.outputs.version }}-full.nupkg
           mv static\out\make\zip\win32\x64\*.zip           builds\Logseq-win-x64-${{ steps.ref.outputs.version }}.zip
           mv static\out\make\squirrel.windows\x64\RELEASES builds\RELEASES
@@ -392,7 +449,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Save x64 artifacts
         run: |
@@ -469,7 +526,7 @@ jobs:
         env:
           APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_ASC_PROVIDER: ${{ secrets.APPLE_ASC_PROVIDER }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Save arm64 artifacts
         run: |
@@ -496,9 +553,33 @@ jobs:
       ANDROID_KEYSTORE_PASSWORD: "${{ secrets.ANDROID_KEYSTORE_PASSWORD }}"
       SENTRY_AUTH_TOKEN: "${{ secrets.SENTRY_AUTH_TOKEN }}"
 
+  codesign-windows:
+    if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' || github.event.inputs.build-target == 'beta' }}
+    needs: [ build-windows ]
+    runs-on: [self-hosted, macos, token]
+    steps:
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win64-unsigned-builds
+          path: ./builds
+
+      - name: Sign Windows Executable
+        run: |
+          ls -lah ./builds
+          jsign --storetype ETOKEN --storepass "${PASS}" -t http://timestamp.digicert.com ./builds/*.exe
+        env:
+          PASS: ${{ secrets.CODE_SIGN_CERTIFICATE_PASSWORD }}
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: logseq-win64-signed-builds
+          path: builds
+
   nightly-release:
     if: ${{ github.event_name == 'schedule' || github.event.inputs.build-target == 'nightly' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, build-android, e2e-test ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
     runs-on: ubuntu-20.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -513,10 +594,22 @@ jobs:
           name: logseq-darwin-arm64-builds
           path: ./
 
-      - name: Download The Linux Artifacts
+      - name: Download The Linux x64 Artifacts
         uses: actions/download-artifact@v3
         with:
-          name: logseq-linux-builds
+          name: logseq-linux-x64-builds
+          path: ./
+
+      - name: Download The Linux arm64 Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-linux-arm64-builds
+          path: ./
+
+      - name: Download The Windows Artifact (Signed)
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win64-signed-builds
           path: ./
 
       - name: Download The Windows Artifact
@@ -565,7 +658,7 @@ jobs:
   release:
     # NOTE: For now, we only have beta channel to be released on Github
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.build-target == 'beta' }}
-    needs: [ build-macos-x64, build-macos-arm64, build-linux, build-windows, e2e-test ]
+    needs: [ build-macos-x64, build-macos-arm64, build-linux-x64, build-linux-arm64, codesign-windows, build-android, e2e-test ]
     runs-on: ubuntu-20.04
     steps:
       - name: Download MacOS x64 Artifacts
@@ -580,10 +673,22 @@ jobs:
           name: logseq-darwin-arm64-builds
           path: ./
 
-      - name: Download The Linux Artifacts
+      - name: Download The Linux x64 Artifacts
         uses: actions/download-artifact@v3
         with:
-          name: logseq-linux-builds
+          name: logseq-linux-x64-builds
+          path: ./
+
+      - name: Download The Linux arm64 Artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-linux-arm64-builds
+          path: ./
+
+      - name: Download The Windows Artifact (Signed)
+        uses: actions/download-artifact@v3
+        with:
+          name: logseq-win64-signed-builds
           path: ./
 
       - name: Download The Windows Artifact

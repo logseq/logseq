@@ -415,7 +415,7 @@
                                     (when (and (not (.contains (.-classList target) "extensions__pdf-hls-area-region"))
                                                (.closest target ".page"))
                                       (and e (or (.-metaKey e)
-                                                 (and util/win32? (.-shiftKey e))
+                                                 (.-shiftKey e)
                                                  @*area-mode?)))))
 
         reset-coords!           #(do
