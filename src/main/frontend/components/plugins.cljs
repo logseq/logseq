@@ -209,7 +209,7 @@
   []
   (ui/admonition
     :warning
-    [:p.text-md
+    [:p.text-sm
      (t :plugin/security-warning)]))
 
 (rum/defc card-ctls-of-market < rum/static
