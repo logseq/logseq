@@ -385,7 +385,7 @@ when undo this op, this original entity-map will be transacted back into db")
   [repo page-block-uuid conn]
   (if-let [ops (not-empty (pop-undo-ops repo page-block-uuid))]
     (let [redo-ops-to-push (transient [])]
-      (batch-tx/with-batch-tx-mode conn
+      (batch-tx/with-batch-tx-mode conn {:undo? true}
         (doseq [op ops]
           (let [rev-ops (reverse-op @conn op)
                 r (reverse-apply-op op conn repo)]
@@ -404,7 +404,7 @@ when undo this op, this original entity-map will be transacted back into db")
   [repo page-block-uuid conn]
   (if-let [ops (not-empty (pop-redo-ops repo page-block-uuid))]
     (let [undo-ops-to-push (transient [])]
-      (batch-tx/with-batch-tx-mode conn
+      (batch-tx/with-batch-tx-mode conn {:redo? true}
         (doseq [op ops]
           (let [rev-ops (reverse-op @conn op)
                 r (reverse-apply-op op conn repo)]
@@ -510,7 +510,8 @@ when undo this op, this original entity-map will be transacted back into db")
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
              repo id->attr->datom same-entity-datoms-coll]}]
-  (when (:gen-undo-ops? tx-meta true)
+  (when (and (:gen-undo-ops? tx-meta true)
+             (not (or (:undo? tx-meta) (:redo? tx-meta))))
     (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom
                        (:gen-undo-boundary-op? tx-meta true))))
 

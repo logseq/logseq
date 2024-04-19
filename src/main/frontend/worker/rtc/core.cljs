@@ -642,7 +642,7 @@
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
 
-          (batch-tx/with-batch-tx-mode conn
+          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true}
             (js/console.groupCollapsed "rtc/apply-remote-ops-log")
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
             (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))

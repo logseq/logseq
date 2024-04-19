@@ -46,7 +46,7 @@
   [repo conn ops date-formatter opts]
   (assert (ops-validator ops) ops)
   (let [opts' (assoc opts
-                     :transact-opts {:repo repo :conn conn}
+                     :transact-opts {:conn conn}
                      :local-tx? true)
         *insert-result (atom nil)]
     (outliner-tx/transact!

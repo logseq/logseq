@@ -1,7 +1,6 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
-            [frontend.worker.batch-tx :as batch-tx]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
@@ -75,31 +74,15 @@
     (fix-db! conn tx-report context)))
 
 (defn invoke-hooks
-  [repo conn {:keys [db-before db-after] :as tx-report} context]
+  [repo conn tx-report context]
   (let [tx-meta (:tx-meta tx-report)
-        {:keys [from-disk? new-graph?]} tx-meta
-        now-batch-processing? (:editor/tx-batch-mode? (d/entity db-after :logseq.kv/tx-batch-mode?))]
+        {:keys [from-disk? new-graph?]} tx-meta]
     (cond
-      now-batch-processing?
-      (do
-        (batch-tx/conj-batch-txs! (:tx-data tx-report))
-        nil)
-
       (or from-disk? new-graph?)
       {:tx-report tx-report}
 
       :else
-      (let [exiting-batch-mode? (:editor/tx-batch-mode? (d/entity db-before :logseq.kv/tx-batch-mode?))
-            db-before (if exiting-batch-mode?
-                        (batch-tx/get-batch-db-before)
-                        (:db-before tx-report))
-            tx-data (if exiting-batch-mode?
-                      (batch-tx/get-batch-txs)
-                      (:tx-data tx-report))
-            tx-report (assoc tx-report
-                             :db-before db-before
-                             :tx-data tx-data)
-            {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
+      (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
             _ (when (sqlite-util/local-file-based-graph? repo)
                 (let [page-ids (distinct (map :db/id pages))]
                   (doseq [page-id page-ids]
@@ -130,14 +113,13 @@
                           (ldb/transact! conn replace-tx {:replace? true
                                                           :pipeline-replace? true}))
                         (do
-                          (d/store @conn)
+                          (when-not (exists? js/process)
+                            (d/store @conn))
                           tx-report))
             fix-tx-data (validate-and-fix-db! repo conn tx-report context)
-            full-tx-data (if exiting-batch-mode?
-                           (:tx-data tx-report)
-                           (concat (:tx-data tx-report)
-                                   fix-tx-data
-                                   (:tx-data tx-report')))
+            full-tx-data (concat (:tx-data tx-report)
+                                 fix-tx-data
+                                 (:tx-data tx-report'))
             final-tx-report (assoc tx-report' :tx-data full-tx-data)
             affected-query-keys (when-not (:importing? context)
                                   (worker-react/get-affected-queries-keys final-tx-report))]
