@@ -90,6 +90,11 @@
   }
 }
 
+.block-head-wrap {
+  @apply flex flex-1 w-full flex-row flex-wrap;
+  @apply justify-between items-center;
+}
+
 .breadcrumb {
   .asset-container > img {
     height: 18px;
@@ -428,9 +433,7 @@
 
 .ls-block :is(h1, h2),
 .editor-inner .uniline-block:is(.h1, .h2) {
-  border-bottom: 1px solid var(--ls-quaternary-background-color);
-  margin: 0.125em 0;
-  padding-bottom: 0.125em;
+  @apply border-b border-gray-06 mt-1 mb-2 pb-1;
 }
 
 .block-ref .ls-block :is(h1, h2),
