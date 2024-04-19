@@ -14,8 +14,7 @@
             [logseq.outliner.tree :as otree]
             [frontend.worker.state :as worker-state]
             ["fs" :as fs-node]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.transit :as dt]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (def ^:private page-uuid (random-uuid))
 (def ^:private init-data (test-helper/initial-test-page-and-blocks {:page-uuid page-uuid}))
@@ -223,7 +222,7 @@
       (otree/blocks->vec-tree test-helper/test-db-name-db-version db
                               blocks page-uuid)))))
 
-(deftest ^:wip undo-redo-outliner-op-gen-test
+(deftest undo-redo-outliner-op-gen-test
   (try
     (let [conn (db/get-db false)]
       (loop [num 100]
@@ -278,7 +277,7 @@
 
 
 (comment
-  (deftest ^:wip2 debug-test
+  (deftest debug-test
     (let [{:keys [origin-db db illegal-entity other]}
           (dt/read-transit-str (str (fs-node/readFileSync "debug.json")))
           _ (prn :illegal-entity illegal-entity :other other)
