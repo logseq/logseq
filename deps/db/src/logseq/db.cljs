@@ -9,7 +9,8 @@
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.delete-blocks :as delete-blocks]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -54,8 +55,18 @@
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
-   (let [tx-data (->> (common-util/fast-remove-nils tx-data)
-                      (remove empty?))]
+   (let [tx-data (map (fn [m]
+                        (if (map? m)
+                          (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                  :block/title :block/body :block/level :block/container :db/other-tx
+                                  :block/unordered)
+                          m)) tx-data)
+         tx-data (->> (common-util/fast-remove-nils tx-data)
+                      (remove empty?))
+         delete-blocks-tx (when-not (string? repo-or-conn)
+                            (delete-blocks/update-refs-and-macros @repo-or-conn tx-data))
+         tx-data (concat tx-data delete-blocks-tx)]
+
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
      (when (seq tx-data)
