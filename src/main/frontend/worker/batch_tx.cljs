@@ -37,10 +37,10 @@
 
 (defn conj-batch-txs!
   [tx-data]
-  (swap! worker-state/*state update :batch/txs (fn [data] (into data tx-data))))
+  (swap! worker-state/*state update :batch/txs (fn [data] ((fnil into []) data tx-data))))
 
 (defn exit-batch-txs-mode!
   []
-  (swap! worker-state/*state assoc :batch/txs nil)
+  (swap! worker-state/*state assoc :batch/txs [])
   (swap! worker-state/*state assoc :batch/db-before nil)
   (swap! worker-state/*state assoc :batch/opts nil))

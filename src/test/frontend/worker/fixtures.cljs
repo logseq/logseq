@@ -18,3 +18,16 @@
 
     (f)
     (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!)))
+
+
+(defn listen-test-db-fixture
+  [handler-keys]
+  (fn [f]
+    (let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
+      (assert (some? test-db-conn))
+      (worker-undo-redo/clear-undo-redo-stack)
+      (worker-db-listener/listen-db-changes! test-helper/test-db-name-db-version test-db-conn
+                                             {:handler-keys handler-keys})
+
+      (f)
+      (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!))))

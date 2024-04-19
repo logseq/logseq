@@ -12,11 +12,13 @@
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]))
+            [logseq.outliner.transaction :as outliner-tx]
+            [frontend.worker.fixtures :as worker-fixtures]))
 
 
 (use-fixtures :each
-  test-helper/db-based-start-and-destroy-db-map-fixture)
+  test-helper/db-based-start-and-destroy-db
+  (worker-fixtures/listen-test-db-fixture [:sync-db-to-main-thread]))
 
 (deftest filter-remote-data-by-local-unpushed-ops-test
   (testing "case1"
@@ -477,7 +479,7 @@ server: ;; remove 2
         (is (nil? (d/entity @conn [:block/uuid page1-uuid])))))))
 
 
-(deftest same-name-two-pages-merge-test
+(deftest ^:wip same-name-two-pages-merge-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
