@@ -2342,7 +2342,8 @@
                               (some? (mldoc/extract-first-query-from-ast body))))))
         [:div.block-body
          ;; TODO: consistent id instead of the idx (since it could be changed later)
-         (let [body (block/trim-break-lines! (:block/body block))]
+         (let [body (block/trim-break-lines! (:block/body block))
+               uuid (:block/uuid block)]
            (for [[idx child] (medley/indexed body)]
              (when-let [block (markup-element-cp config child)]
                (rum/with-key (block-child block)
