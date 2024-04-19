@@ -743,33 +743,34 @@
     [block sibling?]
     (let [linked (:block/link block)
           up-down? (= outliner-op :move-blocks-up-down)
-          result (cond
-                   up-down?
-                   (if sibling?
-                     [block sibling?]
-                     (let [target (or linked block)]
-                       (if (and up?
+          [block sibling?] (cond
+                             up-down?
+                             (if sibling?
+                               [block sibling?]
+                               (let [target (or linked block)]
+                                 (if (and up?
                                 ;; target is not any parent of the first block
-                                (not= (:db/id (:block/parent (first blocks)))
-                                      (:db/id target))
-                                (not= (:db/id (:block/parent
-                                               (d/entity db (:db/id (:block/parent (first blocks))))))
-                                      (:db/id target)))
-                         (get-last-child-or-self db target)
-                         [target false])))
+                                          (not= (:db/id (:block/parent (first blocks)))
+                                                (:db/id target))
+                                          (not= (:db/id (:block/parent
+                                                         (d/entity db (:db/id (:block/parent (first blocks))))))
+                                                (:db/id target)))
+                                   (get-last-child-or-self db target)
+                                   [target false])))
 
-                   (and (= outliner-op :indent-outdent-blocks) (not indent?))
-                   [block sibling?]
+                             (and (= outliner-op :indent-outdent-blocks) (not indent?))
+                             [block sibling?]
 
-                   (contains? #{:insert-blocks :move-blocks} outliner-op)
-                   [block sibling?]
+                             (contains? #{:insert-blocks :move-blocks} outliner-op)
+                             [block sibling?]
 
-                   linked
-                   (get-last-child-or-self db linked)
+                             linked
+                             (get-last-child-or-self db linked)
 
-                   :else
-                   [block sibling?])]
-      result)))
+                             :else
+                             [block sibling?])
+          sibling? (if (ldb/page? block) false sibling?)]
+      [block sibling?])))
 
 
 (defn ^:api blocks-with-level
@@ -1018,12 +1019,15 @@
 (defn- move-block
   [db block target-block sibling?]
   (let [target-block (d/entity db (:db/id target-block))
+        block (d/entity db (:db/id block))
         first-block-page (:db/id (:block/page block))
         target-page (or (:db/id (:block/page target-block))
                         (:db/id target-block))
         tx-data [{:db/id (:db/id block)
                   :block/left (:db/id target-block)
-                  :block/parent (if sibling? (:db/id (:block/parent target-block)) (:db/id target-block))}]
+                  :block/parent (if sibling?
+                                  (:db/id (:block/parent target-block))
+                                  (:db/id target-block))}]
         not-same-page? (not= first-block-page target-page)
         move-blocks-next-tx (build-move-block-next-tx db block target-block sibling?)
         children-page-tx (when not-same-page?
@@ -1068,6 +1072,7 @@
                                  (= (:db/id (:block/parent block)) (:db/id (:block/parent target-block)))
                                  (= (:db/id (:block/parent block)) (:db/id target-block))))
                   (let [tx-data (move-block @conn block target-block sibling?)]
+                    (prn :debug :tx-data tx-data)
                     (ldb/transact! conn tx-data {:sibling? sibling?
                                                  :outliner-op (or outliner-op :move-blocks)}))))))
           nil)))))

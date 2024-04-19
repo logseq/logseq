@@ -565,6 +565,12 @@
   [db]
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
 
+(defn page?
+  "Whether `block` is a page"
+  [block]
+  (and (:block/name block)
+       (not (:block/page block))))
+
 (comment
   (defn db-based-graph?
     "Whether the current graph is db-only"
