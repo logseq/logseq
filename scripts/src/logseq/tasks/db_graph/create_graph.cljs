@@ -138,7 +138,7 @@
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
                                 [(merge
-                                  (sqlite-util/build-new-property prop-name
+                                  (sqlite-util/build-new-property (get-ident all-idents prop-name)
                                                                   (:block/schema prop-m)
                                                                   {:block-uuid (:block/uuid prop-m)})
                                   {:db/id (or (property-db-ids (name prop-name))
@@ -185,14 +185,15 @@
      and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
      An additional key `:closed-values` is available to define closed values. The key takes
      a vec of maps containing keys :uuid, :value and :icon.
+  * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
 
-   The :properties for :pages-and-blocks is a map of property names to property
+   The :properties in :pages-and-blocks is a map of property names to property
    values.  Multiple property values for a many cardinality property are defined
    as a set. The following property types are supported: :default, :url,
    :checkbox, :number, :page and :date. :checkbox and :number values are written
-   as booleans and integers. :page and :block are references that are written as
-   vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`"
-  [{:keys [pages-and-blocks properties] :as options}]
+   as booleans and integers/floats. :page references are written as
+   vectors e.g. `[:page \"PAGE NAME\"]`"
+  [{:keys [pages-and-blocks properties graph-namespace] :as options}]
   (let [_ (validate-options options)
         ;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
@@ -203,7 +204,11 @@
         uuid-maps (create-uuid-maps pages-and-blocks')
         ;; TODO: How to detect these idents don't conflict with existing? :db/add?
         all-idents (->> (keys properties)
-                        (map #(vector % (db-property/create-user-property-ident-from-name (name %))))
+                        (map #(vector %
+                                      (if graph-namespace
+                                        (db-property/create-db-ident-from-name (str (name graph-namespace) ".property")
+                                                                               (name %))
+                                        (db-property/create-user-property-ident-from-name (name %)))))
                         (into {}))
         _ (assert (= (count (set (vals all-idents))) (count properties))
                   "All db-idents must be unique")

@@ -23,9 +23,9 @@
   [:or logseq-property-ident db-attribute-ident])
 
 (defn- user-property?
-  "Determines if keyword is a user property"
+  "Determines if keyword/ident is a user property"
   [kw]
-  (contains? db-property/user-property-namespaces (namespace kw)))
+  (db-property/user-property-namespace? (namespace kw)))
 
 (def user-property-ident
   [:and :keyword [:fn
@@ -357,7 +357,7 @@
    (map (fn [[prop-type value-schema]]
           [prop-type
            (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
-             [:fn (with-meta #(validate-property-value %1 schema-fn %2) {:add-db true})])])
+             [:fn (with-meta (fn [db tuple] (validate-property-value db schema-fn tuple)) {:add-db true})])])
         db-property-type/built-in-validation-schemas)))
 
 (def property-pair
