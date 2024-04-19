@@ -68,10 +68,9 @@
     (d/unlisten! conn ::listen-db-changes!)
     (d/listen! conn ::listen-db-changes!
                (fn [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
-                 (let [pipeline-replace? (:pipeline-replace? tx-meta)
-                       batch-processing? (some? (batch-tx/get-batch-db-before))]
+                 (let [pipeline-replace? (:pipeline-replace? tx-meta)]
                    (when-not pipeline-replace?
-                     (if batch-processing?
+                     (if-not (:batch-tx/exit? tx-meta)
                        (batch-tx/conj-batch-txs! tx-data)
                        (let [;; exiting-batch-mode? (> (:batch-tx/counter (d/entity db-before :logseq.kv/tx-batch-counter)) 0)
                              db-before (batch-tx/get-batch-db-before)
@@ -79,9 +78,9 @@
 
                              ;;   (:db-before tx-report))
 
-                             tx-data (batch-tx/get-batch-txs);; (if exiting-batch-mode?
+                             tx-data (batch-tx/get-batch-txs) ;; (if exiting-batch-mode?
 
-                                       ;; (concat (:tx-data tx-report) tx-data))
+                             ;; (concat (:tx-data tx-report) tx-data))
                              tx-report (assoc tx-report
                                               :db-before db-before
                                               :tx-data tx-data)
