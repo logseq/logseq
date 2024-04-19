@@ -486,14 +486,16 @@
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
   (let [blocks (ldb/get-page-blocks @conn from-page-name {})
+        from-page-block (some-> (first blocks) :block/page)
         target-page-block (d/entity @conn [:block/name to-page-name])]
     (when (and (seq blocks) target-page-block)
-      (outliner-tx/transact!
-       {:persist-op? true
-        :gen-undo-ops? false
-        :transact-opts {:repo repo
-                        :conn conn}}
-       (outliner-core/move-blocks! repo conn blocks target-page-block false)))))
+      (let [blocks* (ldb/sort-by-left blocks from-page-block)]
+        (outliner-tx/transact!
+         {:persist-op? true
+          :gen-undo-ops? false
+          :transact-opts {:repo repo
+                          :conn conn}}
+         (outliner-core/move-blocks! repo conn blocks* target-page-block false))))))
 
 (defn- empty-page?
   "1. page has no child-block

@@ -7,7 +7,8 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [promesa.core :as p]
-            [frontend.worker.batch-tx :as batch-tx]))
+            [frontend.worker.batch-tx :as batch-tx]
+            [frontend.schema-register :as sr]))
 
 
 (defn- entity-datoms=>attr->datom
@@ -34,6 +35,18 @@
 (defmulti listen-db-changes
   (fn [listen-key & _] listen-key))
 
+(sr/defkeyword :sync-db-to-main-thread
+  "DB-listener key.
+sync worker-db changes to main-thread")
+
+(sr/defkeyword :gen-rtc-ops
+  "DB-listener key.
+generate rtc ops.")
+
+(sr/defkeyword :gen-undo-ops
+  "DB-listener key.
+generate undo ops.")
+
 (defmethod listen-db-changes :sync-db-to-main-thread
   [_ {:keys [tx-meta repo conn] :as tx-report}]
   (let [{:keys [from-disk?]} tx-meta
@@ -50,13 +63,13 @@
 
       (when-not from-disk?
         (p/do!
-         (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
-               ^js wo (worker-state/get-worker-object)]
-           (when wo
-             (when (seq blocks-to-remove-set)
-               (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
-             (when (seq blocks-to-add)
-               (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))))
+          (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
+                ^js wo (worker-state/get-worker-object)]
+            (when wo
+              (when (seq blocks-to-remove-set)
+                (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
+              (when (seq blocks-to-add)
+                (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))))
 
 
 (defn listen-db-changes!
