@@ -68,7 +68,8 @@
     (d/unlisten! conn ::listen-db-changes!)
     (d/listen! conn ::listen-db-changes!
                (fn [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
-                 (let [pipeline-replace? (:pipeline-replace? tx-meta)]
+                 (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
+                       pipeline-replace? (:pipeline-replace? tx-meta)]
                    (when-not pipeline-replace?
                      (if-not (:batch-tx/exit? tx-meta)
                        (batch-tx/conj-batch-txs! tx-data)
@@ -90,6 +91,7 @@
                              same-entity-datoms-coll (map id->same-entity-datoms id-order)
                              id->attr->datom (update-vals id->same-entity-datoms entity-datoms=>attr->datom)
                              args* (assoc tx-report
+                                          :tx-meta tx-meta
                                           :repo repo
                                           :conn conn
                                           :id->attr->datom id->attr->datom

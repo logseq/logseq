@@ -9,6 +9,7 @@
   `(if (some? (frontend.worker.batch-tx/get-batch-db-before))
      (do ~@body)
      (let [tx-meta# (dissoc ~opts :additional-tx :transact-opts)]
+       (frontend.worker.batch-tx/set-batch-opts tx-meta#)
        (frontend.worker.batch-tx/set-batch-db-before! @~conn)
        ~@body
        (when (seq ~additional-tx)
