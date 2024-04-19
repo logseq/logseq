@@ -13,4 +13,5 @@
        ~@body
        (when (seq ~additional-tx)
          (logseq.db/transact! ~conn ~additional-tx {}))
+       (datascript.core/transact! ~conn [] {:batch-tx/exit? true})
        (frontend.worker.batch-tx/exit-batch-txs-mode!))))
