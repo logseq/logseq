@@ -89,16 +89,16 @@
                                 (if-let [parent (:class/parent (last parents))]
                                   (recur (conj parents parent))
                                   parents))
-               class-ancestors (map :block/original-name (reverse ancestor-pages))]
+               class-ancestors (reverse ancestor-pages)]
            (when (> (count class-ancestors) 2)
              [:div.grid.grid-cols-5.gap-1.items-center.class-ancestors
               [:div.col-span-2 "Ancestor classes:"]
               [:div.col-span-3
                (interpose [:span.opacity-50.text-sm " > "]
-                          (map (fn [class-name]
+                          (map (fn [{class-name :block/original-name :as ancestor}]
                                  (if (= class-name (:block/original-name page))
                                    [:span class-name]
-                                   [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid page))} class-name]))
+                                   [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} class-name]))
                                class-ancestors))]])))])))
 
 (defn class-children-aux
