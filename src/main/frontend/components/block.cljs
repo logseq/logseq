@@ -2425,24 +2425,26 @@
        (when-not plugin-slotted?
          (let [block-tags (:block/tags block)
                db-based? (config/db-based-graph? (state/get-current-repo))]
-           [:div.flex-1.w-full
-            [:div.flex.flex-1.w-full.flex-row.flex-wrap.justify-between.items-center
-             (cond
-               (:block/name block)
-               [:div.flex.flex-row.items-center.gap-1
-                (icon/get-page-icon block {})
-                (page-cp config block)]
 
-               :else
-               [:div.flex-1 (build-block-title config block)])
+           [:div.block-head-wrap
+            (cond
+              (:block/name block)
+              [:div.flex.flex-row.items-center.gap-1
+               (icon/get-page-icon block {})
+               (page-cp config block)]
 
-             [:div.flex.flex-row.items-center.gap-1
-              (when (and db-based? (seq block-tags))
-                (tags config block))
-              (when (and (:original-block config) (not (:block/name block)))
-                [:a.fade-link {:title "Embed block"
-                               :href (rfe/href :page {:name (str (:block/uuid block))})}
-                 (ui/icon "link")])]]]))
+              :else
+              (build-block-title config block))
+
+            [:div.flex.flex-row.items-center.gap-1
+             (when (and db-based? (seq block-tags))
+               (tags config block))
+
+             (when (and (:original-block config) (not (:block/name block)))
+               [:a.fade-link {:title "Embed block"
+                              :href (rfe/href :page {:name (str (:block/uuid block))})}
+                (ui/icon "link")])]]
+           ))
 
        (clock-summary-cp block body)]
 
