@@ -61,19 +61,22 @@
         (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
       :block/uuid
       val
-      ;; TODO: Remove if not used by :default
+      ;; TODO: If not used by :default and replace uuid-maps with just page-uuids everywhere
       :block
       (or (block-uuids (second val))
           (throw (ex-info (str "No uuid for block '" (second val) "'") {:name (second val)})))
       (throw (ex-info "Invalid property value type. Valid values are :block and :page" {})))
     val))
 
-;; TODO: Remove unused property-uuids
-(defn- ->block-properties-tx [properties {:keys [property-uuids] :as uuid-maps}]
+(defn- get-ident [all-idents kw]
+  (or (get all-idents kw)
+      (throw (ex-info (str "No ident found for " kw) {}))))
+
+(defn- ->block-properties-tx [properties uuid-maps all-idents]
   (mapv
    (fn [[prop-name val]]
      (sqlite-util/build-property-pair
-      (db-property/create-user-property-ident-from-name (name prop-name))
+      (get-ident all-idents prop-name)
       ;; set indicates a :many value
       (if (set? val)
         (set (map #(translate-property-value % uuid-maps) val))
@@ -82,17 +85,8 @@
 
 (defn- create-uuid-maps
   "Creates maps of unique page names, block contents and property names to their uuids"
-  [pages-and-blocks properties]
-  (let [property-uuids (->> pages-and-blocks
-                            (map #(-> (:blocks %) vec (conj (:page %))))
-                            (mapcat #(->> % (map :properties) (mapcat keys)))
-                            ((fn [x] (set/difference (set x) (set (keys properties)))))
-                            (map #(vector % (random-uuid)))
-                            (concat (map (fn [[k v]]
-                                           [k (or (:block/uuid v) (random-uuid))])
-                                         properties))
-                            (into {}))
-        page-uuids (->> pages-and-blocks
+  [pages-and-blocks]
+  (let [page-uuids (->> pages-and-blocks
                         (map :page)
                         (map (juxt #(or (:block/name %) (common-util/page-name-sanity-lc (:block/original-name %)))
                                    :block/uuid))
@@ -101,15 +95,13 @@
                          (mapcat :blocks)
                          (map (juxt :block/content :block/uuid))
                          (into {}))]
-    {:property-uuids property-uuids
-     :page-uuids page-uuids
+    {:page-uuids page-uuids
      :block-uuids block-uuids}))
 
-;; TODO: Remove unused property-db-ids
-(defn- build-property-refs [properties property-db-ids]
+(defn- build-property-refs [properties all-idents]
   (mapv
    (fn [prop-name]
-     {:db/ident (db-property/create-user-property-ident-from-name (name prop-name))})
+     {:db/ident (get-ident all-idents prop-name)})
    (keys properties)))
 
 (def current-db-id (atom 0))
@@ -117,7 +109,7 @@
   "Provides the next temp :db/id to use in a create-graph transact!"
   #(swap! current-db-id dec))
 
-(defn- ->block-tx [m uuid-maps property-db-ids page-id last-block]
+(defn- ->block-tx [m uuid-maps all-idents page-id last-block]
   (merge (dissoc m :properties)
          (sqlite-util/block-with-timestamps
           {:db/id (new-db-id)
@@ -126,8 +118,51 @@
            :block/left {:db/id (or (:db/id last-block) page-id)}
            :block/parent {:db/id page-id}})
          (when (seq (:properties m))
-           {:block/properties (->block-properties-tx (:properties m) uuid-maps)
-            :block/refs (build-property-refs (:properties m) property-db-ids)})))
+           {:block/properties (->block-properties-tx (:properties m) uuid-maps all-idents)
+            :block/refs (build-property-refs (:properties m) all-idents)})))
+
+(defn- build-properties-tx [properties uuid-maps all-idents]
+  (let [property-db-ids (->> (keys properties)
+                             (map #(vector (name %) (new-db-id)))
+                             (into {}))
+        new-properties-tx (vec
+                           (mapcat
+                            (fn [[prop-name prop-m]]
+                              (if (:closed-values prop-m)
+                                (let [db-ident (get-ident all-idents prop-name)]
+                                  (db-property-build/build-closed-values
+                                   db-ident
+                                   prop-name
+                                   (assoc prop-m :db/ident db-ident)
+                                   {:property-attributes
+                                    {:db/id (or (property-db-ids (name prop-name))
+                                                (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
+                                [(merge
+                                  (sqlite-util/build-new-property prop-name
+                                                                  (:block/schema prop-m)
+                                                                  {:block-uuid (:block/uuid prop-m)})
+                                  {:db/id (or (property-db-ids (name prop-name))
+                                              (throw (ex-info "No :db/id for property" {:property prop-name})))}
+                                  (when-let [props (not-empty (:properties prop-m))]
+                                    {:block/properties (->block-properties-tx props uuid-maps all-idents)
+                                     :block/refs (build-property-refs props all-idents)}))]))
+                            properties))]
+    new-properties-tx))
+
+(defn- validate-options
+  [{:keys [pages-and-blocks properties]}]
+  (let [undeclared-properties (->> pages-and-blocks
+                                   (map #(-> (:blocks %) vec (conj (:page %))))
+                                   (mapcat #(->> % (map :properties) (mapcat keys)))
+                                   ((fn [x] (set/difference (set x) (set (keys properties))))))
+        invalid-pages (remove #(or (:block/original-name %) (:block/name %))
+                              (map :page pages-and-blocks))]
+    (assert (empty? invalid-pages)
+            (str "The following pages did not have a name attribute: " invalid-pages))
+    (assert (every? :block/schema (vals properties))
+            "All properties must have :block/schema")
+    (assert (empty? undeclared-properties)
+            (str "The following properties used in EDN were not declared in :properties: " undeclared-properties))))
 
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
@@ -157,39 +192,22 @@
    :checkbox, :number, :page and :date. :checkbox and :number values are written
    as booleans and integers. :page and :block are references that are written as
    vectors e.g. `[:page \"PAGE NAME\"]` and `[:block \"block content\"]`"
-  [{:keys [pages-and-blocks properties]}]
-  (let [;; add uuids before tx for refs in :properties
+  [{:keys [pages-and-blocks properties] :as options}]
+  (let [_ (validate-options options)
+        ;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
                                   (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
                                     (seq blocks)
                                     (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
                                 pages-and-blocks)
-        {:keys [property-uuids] :as uuid-maps} (create-uuid-maps pages-and-blocks' properties)
-        property-db-ids (->> property-uuids
-                             (map #(vector (name (first %)) (new-db-id)))
-                             (into {}))
-        new-properties-tx (vec
-                           (mapcat
-                            (fn [[prop-name]]
-                              (if (get-in properties [prop-name :closed-values])
-                                (let [db-ident (db-property/create-user-property-ident-from-name (name prop-name))]
-                                  (db-property-build/build-closed-values
-                                   db-ident
-                                   prop-name
-                                   (assoc (get properties prop-name) :db/ident db-ident)
-                                   {:property-attributes
-                                    {:db/id (or (property-db-ids (name prop-name))
-                                                (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
-                                [(merge
-                                  (sqlite-util/build-new-property prop-name
-                                                                  (get-in properties [prop-name :block/schema])
-                                                                  {:block-uuid (get-in properties [prop-name :block/uuid])})
-                                  {:db/id (or (property-db-ids (name prop-name))
-                                              (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                                  (when-let [props (not-empty (get-in properties [prop-name :properties]))]
-                                    {:block/properties (->block-properties-tx props uuid-maps)
-                                     :block/refs (build-property-refs props property-db-ids)}))]))
-                            property-uuids))
+        uuid-maps (create-uuid-maps pages-and-blocks')
+        ;; TODO: How to detect these idents don't conflict with existing? :db/add?
+        all-idents (->> (keys properties)
+                        (map #(vector % (db-property/create-user-property-ident-from-name (name %))))
+                        (into {}))
+        _ (assert (= (count (set (vals all-idents))) (count properties))
+                  "All db-idents must be unique")
+        new-properties-tx (build-properties-tx properties uuid-maps all-idents)
         pages-and-blocks-tx
         (vec
          (mapcat
@@ -206,15 +224,15 @@
                    :block/format :markdown}
                   (dissoc page :properties)
                   (when (seq (:properties page))
-                    {:block/properties (->block-properties-tx (:properties page) uuid-maps)})
+                    {:block/properties (->block-properties-tx (:properties page) uuid-maps all-idents)})
                   (when (seq (:properties page))
-                    {:block/refs (build-property-refs (:properties page) property-db-ids)
+                    {:block/refs (build-property-refs (:properties page) all-idents)
                      ;; app doesn't do this yet but it should to link property to page
-                     :block/path-refs (build-property-refs (:properties page) property-db-ids)})))]
+                     :block/path-refs (build-property-refs (:properties page) all-idents)})))]
                ;; blocks tx
                (reduce (fn [acc m]
                          (conj acc
-                               (->block-tx m uuid-maps property-db-ids page-id (last acc))))
+                               (->block-tx m uuid-maps all-idents page-id (last acc))))
                        []
                        blocks))))
           pages-and-blocks'))]
