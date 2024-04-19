@@ -163,7 +163,7 @@
                              :db/ident :logseq.kv/graph-uuid
                              :graph/uuid id}
                             {:db/ident :logseq.kv/tx-batch-counter
-                             :editor/counter 0}])))
+                             :batch-tx/counter 0}])))
         favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
