@@ -216,8 +216,10 @@
   [kw]
   (contains? logseq-property-namespaces (namespace kw)))
 
-(def user-property-namespaces
-  #{"user.property"})
+(defn user-property-namespace?
+  "Determines if namespace string is a user property"
+  [s]
+  (string/includes? s ".property"))
 
 (defn property?
   "Determines if ident kw is a property"
@@ -225,7 +227,7 @@
   (let [k-name (namespace k)]
     (and k-name
          (or (contains? logseq-property-namespaces k-name)
-             (contains? user-property-namespaces k-name)
+             (user-property-namespace? k-name)
              (and (keyword? k) (contains? db-attribute-properties k))))))
 
 ;; Helper fns
@@ -282,13 +284,13 @@
                 e))) values)))
 
 ;; TODO: db ident should obey clojure's rules for keywords
-(defn create-user-property-ident-from-name
-  "Creates a user property :db/ident from a name by sanitizing the given name.
+(defn create-db-ident-from-name
+  "Creates a :db/ident by sanitizing the given name.
 
-   NOTE: Only use this when creating a db-ident for a property name. Using this
+   NOTE: Only use this when creating a db-ident for a string name. Using this
    in read-only contexts like querying can result in db-ident conflicts"
-  [property-name]
-  (let [n (-> property-name
+  [user-namespace name-string]
+  (let [n (-> name-string
               (string/replace #"(^:\s*|\s*:$)" "")
               (string/replace #"\s*:\s*$" "")
               (string/replace-first #"^\d+" "")
@@ -296,7 +298,12 @@
               (string/replace "#" "")
               (string/trim))]
     (assert (seq n) "name is not empty")
-    (keyword "user.property" n)))
+    (keyword user-namespace n)))
+
+(defn create-user-property-ident-from-name
+  "Creates a property :db/ident for a default user namespace"
+  [property-name]
+  (create-db-ident-from-name "user.property" property-name))
 
 (defn get-class-ordered-properties
   [class-entity]

@@ -713,7 +713,7 @@
       :on-click (fn []
                   (when (and (= type :default) (nil? value))
                     (<create-new-block! block property ""))
-                  (when (and (= type :string))
+                  (when (= type :string)
                     (set-editing! block property editor-id dom-id value opts)))}
      (if (and (string/blank? value) template?)
        (let [id (first (:classes schema))

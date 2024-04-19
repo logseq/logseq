@@ -345,7 +345,8 @@
         pages (generate-pages
                (map #(class-map %) select-class-ids)
                class-uuids class-to-properties property-uuids options')]
-    {:pages-and-blocks pages
+    {:graph-namespace :schema
+     :pages-and-blocks pages
      :properties properties}))
 
 (def spec
