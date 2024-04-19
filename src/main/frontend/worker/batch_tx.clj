@@ -8,7 +8,8 @@
   [conn {:keys [additional-tx] :as opts} & body]
   `(if (some? (frontend.worker.batch-tx/get-batch-db-before))
      (do ~@body)
-     (let [tx-meta# (dissoc ~opts :additional-tx :transact-opts)]
+     (let [tx-meta# (assoc (dissoc ~opts :additional-tx :transact-opts)
+                           :batch-tx/batch-tx-mode? true)]
        (frontend.worker.batch-tx/set-batch-opts tx-meta#)
        (frontend.worker.batch-tx/set-batch-db-before! @~conn)
        ~@body

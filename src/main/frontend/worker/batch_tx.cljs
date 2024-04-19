@@ -9,8 +9,7 @@
   "store all tx-data when batch-processing")
 
 (sr/defkeyword :batch/db-before
-  "store db before batch-tx.
-It can be used to judge if it is batch-processing.")
+  "store db before batch-tx.")
 
 (sr/defkeyword :batch/opts
   "Opts for with-batch-tx-mode")

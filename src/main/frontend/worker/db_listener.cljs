@@ -69,29 +69,28 @@
     (d/listen! conn ::listen-db-changes!
                (fn [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
                  (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
-                       pipeline-replace? (:pipeline-replace? tx-meta)]
+                       pipeline-replace? (:pipeline-replace? tx-meta)
+                       in-batch-tx-mode? (:batch-tx/batch-tx-mode? tx-meta)]
                    (when-not pipeline-replace?
-                     (if-not (:batch-tx/exit? tx-meta)
+                     (if (and in-batch-tx-mode?
+                              (not (:batch-tx/exit? tx-meta)))
                        (batch-tx/conj-batch-txs! tx-data)
-                       (let [;; exiting-batch-mode? (> (:batch-tx/counter (d/entity db-before :logseq.kv/tx-batch-counter)) 0)
-                             db-before (batch-tx/get-batch-db-before)
-                             ;; (if exiting-batch-mode?
-
-                             ;;   (:db-before tx-report))
-
-                             tx-data (batch-tx/get-batch-txs) ;; (if exiting-batch-mode?
-
-                             ;; (concat (:tx-data tx-report) tx-data))
+                       (let [db-before (if in-batch-tx-mode?
+                                         (batch-tx/get-batch-db-before)
+                                         (:db-before tx-report))
+                             tx-data (if in-batch-tx-mode?
+                                       (batch-tx/get-batch-txs)
+                                       tx-data)
                              tx-report (assoc tx-report
-                                              :db-before db-before
-                                              :tx-data tx-data)
+                                              :tx-meta tx-meta
+                                              :tx-data tx-data
+                                              :db-before db-before)
                              datom-vec-coll (map vec tx-data)
                              id->same-entity-datoms (group-by first datom-vec-coll)
                              id-order (distinct (map first datom-vec-coll))
                              same-entity-datoms-coll (map id->same-entity-datoms id-order)
                              id->attr->datom (update-vals id->same-entity-datoms entity-datoms=>attr->datom)
                              args* (assoc tx-report
-                                          :tx-meta tx-meta
                                           :repo repo
                                           :conn conn
                                           :id->attr->datom id->attr->datom
