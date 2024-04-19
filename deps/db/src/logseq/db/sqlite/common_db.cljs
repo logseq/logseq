@@ -161,9 +161,7 @@
                          (when id
                            [{:db/id (:db/id e)
                              :db/ident :logseq.kv/graph-uuid
-                             :graph/uuid id}
-                            {:db/ident :logseq.kv/tx-batch-counter
-                             :batch-tx/counter 0}])))
+                             :graph/uuid id}])))
         favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)

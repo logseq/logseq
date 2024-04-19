@@ -8,6 +8,10 @@
 (sr/defkeyword :batch/txs
   "store all tx-data when batch-processing")
 
+(sr/defkeyword :batch/db-before
+  "store db before batch-tx.
+It can be used to judge if it is batch-processing.")
+
 (defn get-batch-txs
   []
   (->> (:batch/txs @worker-state/*state)

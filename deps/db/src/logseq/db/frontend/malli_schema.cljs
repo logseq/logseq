@@ -287,8 +287,7 @@
   [[:db/type :string]
    [:schema/version :int]
    [:graph/uuid :string]
-   [:graph/local-tx :string]
-   [:batch-tx/counter :int]])
+   [:graph/local-tx :string]])
 
 (def db-ident-key-val
   "A key-val map consists of a :db/ident and a specific key val"
