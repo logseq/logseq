@@ -85,7 +85,7 @@
   {"schema:Integer" :number
    "schema:Float" :number
    "schema:Number" :number
-   "schema:Text_Class" :default
+   "schema:Text_Class" :string
    "schema:URL_Class" :url
    "schema:Boolean" :checkbox
    "schema:Date" :date})

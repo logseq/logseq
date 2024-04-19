@@ -234,7 +234,8 @@
          property-common-schema-attrs
          (remove #(not (db-property-type/property-type-allows-schema-attribute? prop-type (first %)))
                  property-type-schema-attrs)))])
-    db-property-type/user-built-in-property-types)))
+    ;; TODO: Remove :string once it is user facing
+    (conj db-property-type/user-built-in-property-types :string))))
 
 (def user-property
   (vec
