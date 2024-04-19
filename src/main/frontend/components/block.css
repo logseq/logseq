@@ -190,19 +190,10 @@
 .block-children {
   border-left: 1px solid;
   border-left-color: var(--lx-gray-04-alpha, var(--ls-guideline-color, var(--rx-gray-04-alpha))) !important;
-
-  padding-top: 2px;
-  padding-bottom: 3px;
-
-  > .ls-block {
-    &:last-child {
-      margin-bottom: -5px;
-    }
-  }
 }
 
 .hidden-block .block-children {
-  border-left: 0px;
+  border-left: 0;
 }
 
 .block-control-wrap {
@@ -377,28 +368,20 @@
   }
 }
 
+.block-main-container {
+  min-height: 26px;
+}
+
 .ls-block {
-  position: relative;
-  min-height: 30px;
-  padding: 2px 0;
-  border-bottom: 1px solid transparent;
-  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  @apply relative py-0.5 transition-[background-color] mx-auto;
 
   &.selected {
-    border-radius: 2px;
+    @apply rounded;
   }
 }
 
 .block-children {
-  > .ls-block:first-child {
-    padding-top: 2px;
-    border-top: 1px solid transparent;
-  }
-}
-
-.ls-block {
-  margin-right: auto;
-  margin-left: auto;
+  > .ls-block:first-child {}
 }
 
 .ls-block h1,
