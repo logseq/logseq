@@ -99,6 +99,10 @@
    [:h2 title]
    (html-content description)])
 
+(rum/defc render-item-not-handled
+  [s]
+  [:p.text-red-500 (str "#Not Handled# " s)])
+
 (rum/defc settings-container
   [schema ^js pl]
   (let [^js plugin-settings (.-settings pl)
@@ -130,14 +134,16 @@
                     type (keyword (:type desc))
                     desc (update desc :description #(plugin-handler/markdown-to-html %))]]
 
-          (condp contains? type
-            #{:string :number} (render-item-input val desc update-setting!)
-            #{:boolean} (render-item-toggle val desc update-setting!)
-            #{:enum} (render-item-enum val desc update-setting!)
-            #{:object} (render-item-object val desc pid)
-            #{:heading} (render-item-heading desc)
+          (rum/with-key
+            (condp contains? type
+              #{:string :number} (render-item-input val desc update-setting!)
+              #{:boolean} (render-item-toggle val desc update-setting!)
+              #{:enum} (render-item-enum val desc update-setting!)
+              #{:object} (render-item-object val desc pid)
+              #{:heading} (render-item-heading desc)
 
-            [:p (str "#Not Handled#" key)]))]]
+              (render-item-not-handled key))
+            key))]]
 
       ;; no settings
       [:h2.font-bold.text-lg.py-4.warning "No Settings Schema!"])))
