@@ -12,6 +12,9 @@
   "store db before batch-tx.
 It can be used to judge if it is batch-processing.")
 
+(sr/defkeyword :batch/opts
+  "Opts for with-batch-tx-mode")
+
 (defn get-batch-txs
   []
   (->> (:batch/txs @worker-state/*state)
@@ -25,6 +28,14 @@ It can be used to judge if it is batch-processing.")
   []
   (:batch/db-before @worker-state/*state))
 
+(defn set-batch-opts
+  [opts]
+  (swap! worker-state/*state assoc :batch/opts opts))
+
+(defn get-batch-opts
+  []
+  (:batch/opts @worker-state/*state))
+
 (defn conj-batch-txs!
   [tx-data]
   (swap! worker-state/*state update :batch/txs (fn [data] (into data tx-data))))
@@ -32,4 +43,5 @@ It can be used to judge if it is batch-processing.")
 (defn exit-batch-txs-mode!
   []
   (swap! worker-state/*state assoc :batch/txs nil)
-  (swap! worker-state/*state assoc :batch/db-before nil))
+  (swap! worker-state/*state assoc :batch/db-before nil)
+  (swap! worker-state/*state assoc :batch/opts nil))

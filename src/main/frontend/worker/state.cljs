@@ -21,6 +21,7 @@
 
                        :batch/txs []
                        :batch/db-before nil
+                       :batch/opts nil
 
                        :rtc/downloading-graph? false
 
