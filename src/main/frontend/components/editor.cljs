@@ -722,6 +722,34 @@
 
     (children q keydown-e)))
 
+(rum/defc ask-ai-content
+  [query  {:keys [id format action ^js keydown-e]}]
+  (let [*el (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (when keydown-e
+          (when (contains? #{"ArrowUp" "ArrowDown"} (.-key keydown-e))
+            (some-> (rum/deref *el)
+              (.querySelector ".ui__button")
+              (.focus)))))
+      [keydown-e])
+
+    [:h1
+     {:ref *el}
+     [:p.text-sm [:blockquote id]]
+     [:p "TODO: " (str action) [:code query]]
+     [:p (shui/button
+           {:size :sm
+            :on-click (fn []
+                        (editor-handler/insert-command!
+                          id #(util/format " [[%s]] " query)
+                          format
+                          {:restore? true
+                           :backward-truncate-number (inc (count query))
+                           :command action})
+                        )} query)]
+     [:p "input key: " (shui/badge (some-> keydown-e (.-key)))]]))
+
 ;; TODO: [WIP]
 (rum/defc shui-models
   [id format action _data]
@@ -734,33 +762,9 @@
                     (shui/popup-show!
                       pos (editor-action-query-wrap
                             commands/command-ask
-                            (rum/defc ask-ai-content
-                              [query ^js keydown-e]
-                              (let [*el (rum/use-ref nil)]
-                                (rum/use-effect!
-                                  (fn []
-                                    (when keydown-e
-                                      (when (contains? #{"ArrowUp" "ArrowDown"} (.-key keydown-e))
-                                        (some-> (rum/deref *el)
-                                          (.querySelector ".ui__button")
-                                          (.focus)))))
-                                  [keydown-e])
-
-                                [:h1
-                                 {:ref *el}
-                                 [:p.text-sm [:blockquote id]]
-                                 [:p "TODO: " (str action) [:code query]]
-                                 [:p (shui/button
-                                       {:size :sm
-                                        :on-click (fn []
-                                                    (editor-handler/insert-command!
-                                                      id #(util/format " [[%s]] " query)
-                                                      format
-                                                      {:restore? true
-                                                       :backward-truncate-number (inc (count query))
-                                                       :command action})
-                                                    )} query)]
-                                 [:p "input key: " (shui/badge (some-> keydown-e (.-key)))]]))
+                            (fn [query ^js keydown-e]
+                              (ask-ai-content query
+                                {:id id :format format :action action :keydown-e keydown-e}))
                             {:sub-input-keydown? true})
                       {:align :start
                        :root-props {:onOpenChange
