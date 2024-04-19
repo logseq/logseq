@@ -1075,7 +1075,6 @@
                                  (= (:db/id (:block/parent block)) (:db/id (:block/parent target-block)))
                                  (= (:db/id (:block/parent block)) (:db/id target-block))))
                   (let [tx-data (move-block @conn block target-block sibling?)]
-                    (prn :debug :tx-data tx-data)
                     (ldb/transact! conn tx-data {:sibling? sibling?
                                                  :outliner-op (or outliner-op :move-blocks)}))))))
           nil)))))
