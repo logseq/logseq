@@ -22,7 +22,8 @@
             [frontend.handler.property.util :as pu]
             [promesa.core :as p]
             [frontend.db.async :as db-async]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -45,27 +46,19 @@
        [property-tx-data block-tx-data]))))
 
 (defn- get-property-value-schema
-  "Gets a malli schema to validate the property value for the given property type. Optionally
-   wraps the validation with db and property as needed"
+  "Gets a malli schema to validate the property value for the given property type and builds
+   it with additional args like datascript db"
   [property-type property & {:keys [new-closed-value?]
                              :or {new-closed-value? false}}]
   (let [property-val-schema (or (get db-property-type/built-in-validation-schemas property-type)
-                                (throw (ex-info (str "No validation for property type " (pr-str property-type)) {})))]
-    (if (vector? property-val-schema)
-      (let [[_ schema-opts schema-fn] property-val-schema
-            schema-fn' (if (db-property-type/property-types-with-db property-type)
-                         (partial schema-fn (db/get-db)) schema-fn)
-            ;; TODO: Move this validation into malli-schema
-            schema-fn'' (if (and (db-property-type/closed-value-property-types property-type)
-                                 (not new-closed-value?)
-                                 (seq (get-in property [:block/schema :values])))
-                          (fn closed-value-validate [val]
-                            (and (schema-fn' val)
-                                 (contains? (set (get-in property [:block/schema :values]))
-                                            (:block/uuid (db/entity val)))))
-                          schema-fn')]
-        [:fn schema-opts schema-fn''])
-      property-val-schema)))
+                                (throw (ex-info (str "No validation for property type " (pr-str property-type)) {})))
+        [schema-opts schema-fn] (if (vector? property-val-schema)
+                                  (rest property-val-schema)
+                                  [{} property-val-schema])]
+    [:fn
+     schema-opts
+     (fn validate-property-value [property-val]
+       (db-malli-schema/validate-property-value (db/get-db) schema-fn [property property-val] {:new-closed-value? new-closed-value?}))]))
 
 (defn- fail-parse-long
   [v-str]

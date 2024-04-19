@@ -50,27 +50,34 @@
 
 ;; Helper fns
 ;; ==========
-(defn- validate-property-value
-  "Validates the value in a property tuple. The property value can be one or
-  many of a value to validated"
-  [schema-fn [property property-val]]
+(defn validate-property-value
+  "Validates the property value in a property tuple. The property value can be
+  one or many of a value to validated. validate-fn is a fn that is called
+  directly on each value to return a truthy value. validate-fn varies by
+  property type"
+  [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
   ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val property property-val))
-  (if (= (:cardinality property) :many)
-    (every? schema-fn property-val)
-    (or (schema-fn property-val) (= :logseq.property/empty-placeholder property-val))))
+  (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema)) (partial validate-fn db) validate-fn)
+        validate-fn'' (if (and (db-property-type/closed-value-property-types (:type schema))
+                               ;; new closed values aren't associated with the property yet
+                               (not new-closed-value?)
+                               (seq (:values schema)))
+                        (fn closed-value-valid? [val]
+                          (and (validate-fn' val)
+                               (contains? (set (:values schema))
+                                          (:block/uuid (d/entity db val)))))
+                        validate-fn')]
+    (if (= (get-in property [:block/schema :cardinality]) :many)
+      (every? validate-fn'' property-val)
+      (or (validate-fn'' property-val) (= :logseq.property/empty-placeholder property-val)))))
 
 (defn update-properties-in-schema
   "Needs to be called on the DB schema to add the datascript db to it"
   [db-schema db]
   (walk/postwalk (fn [e]
                    (let [meta' (meta e)]
-                     (if (:property-value meta')
-                       (let [[property-type schema-fn] e
-                             schema-fn' (if (db-property-type/property-types-with-db property-type) (partial schema-fn db) schema-fn)
-                             validation-fn #(validate-property-value schema-fn' %)]
-                         [property-type [:fn validation-fn]])
-                       e)))
+                     (if (:add-db meta') (partial e db) e)))
                  db-schema))
 
 (defn update-properties-in-ents
@@ -79,8 +86,8 @@
   (mapv
    #(if-let [pair (some->> (:property/pair-property %) (d/entity db))]
       (assoc % :property-tuple
-             [(assoc (select-keys (:block/schema pair) [:type :cardinality])
-                     :db/ident (:db/ident pair))
+             [(hash-map :block/schema (select-keys (:block/schema pair) [:type :cardinality :values])
+                        :db/ident (:db/ident pair))
               (get % (:db/ident pair))])
       %)
    ents))
@@ -346,9 +353,11 @@
   "A tuple of a property map and a property value. This schema
    has 1 metadata hook which is used to inject a datascript db later"
   (into
-   [:multi {:dispatch (comp :type first)}]
+   [:multi {:dispatch #(-> % first :block/schema :type)}]
    (map (fn [[prop-type value-schema]]
-          ^:property-value [prop-type (if (vector? value-schema) (last value-schema) value-schema)])
+          [prop-type
+           (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
+             [:fn (with-meta #(validate-property-value %1 schema-fn %2) {:add-db true})])])
         db-property-type/built-in-validation-schemas)))
 
 (def property-pair

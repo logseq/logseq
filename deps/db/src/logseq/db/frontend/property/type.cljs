@@ -100,10 +100,10 @@
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
-              {:error/message "should be a entity"}
+              {:error/message "should be a string or an entity"}
               hidden-or-closed-block?]
    :number   [:fn
-              {:error/message "should be a number"}
+              {:error/message "should be a number or an entity"}
               ;; Also handles entity? so no need to use it
               number?]
    :date     [:fn
