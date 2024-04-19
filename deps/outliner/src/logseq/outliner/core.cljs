@@ -1023,12 +1023,15 @@
         first-block-page (:db/id (:block/page block))
         target-page (or (:db/id (:block/page target-block))
                         (:db/id target-block))
-        tx-data [{:db/id (:db/id block)
-                  :block/left (:db/id target-block)
-                  :block/parent (if sibling?
-                                  (:db/id (:block/parent target-block))
-                                  (:db/id target-block))}]
         not-same-page? (not= first-block-page target-page)
+        tx-data [(cond->
+                  {:db/id (:db/id block)
+                   :block/left (:db/id target-block)
+                   :block/parent (if sibling?
+                                   (:db/id (:block/parent target-block))
+                                   (:db/id target-block))}
+                   not-same-page?
+                   (assoc :block/page target-page))]
         move-blocks-next-tx (build-move-block-next-tx db block target-block sibling?)
         children-page-tx (when not-same-page?
                            (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]
