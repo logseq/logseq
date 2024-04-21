@@ -247,7 +247,7 @@
 (defn set-block-property!
   "Updates a block property's value for the an existing property-id. If possibly
   creating a new property, use upsert-property!"
-  [repo block-eid property-id v {:keys [property-name] :as opts}]
+  [repo block-eid property-id v {:keys [property-name property-type] :as opts}]
   (let [block-eid (->eid block-eid)
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (db/entity repo block-eid)
@@ -261,7 +261,7 @@
     (cond
       db-attribute?
       (db/transact! repo [{:db/id (:db/id block) property-id v}]
-        {:outliner-op :save-block})
+                    {:outliner-op :save-block})
 
       (and multiple-values? (coll? v))
       (reset-block-property-multiple-values! repo block-eid property-id v opts)
@@ -270,14 +270,14 @@
       (let [v (if property v (or v ""))]
         (when (some? v)
           (let [infer-schema (when-not type (infer-schema-from-input-string v))
-                property-type (or type infer-schema :default)
-                schema (get-property-value-schema property-type property)
+                property-type' (or type property-type infer-schema :default)
+                schema (get-property-value-schema property-type' property)
                 value (when-let [id (:db/ident property)]
                         (get block id))
                 v* (if (= v :logseq.property/empty-placeholder)
                      v
                      (try
-                       (convert-property-input-string property-type v)
+                       (convert-property-input-string property-type' v)
                        (catch :default e
                          (js/console.error e)
                          (notification/show! (str e) :error false)
@@ -286,7 +286,7 @@
               (if-let [msg (when-not (= v* :logseq.property/empty-placeholder) (validate-property-value schema v*))]
                 (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                   (notification/show! msg' :warning))
-                (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type) {:property-name property-name})
+                (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type') {:property-name property-name})
                       status? (= :logseq.task/status (:db/ident property))
                       value (if (= value :logseq.property/empty-placeholder) [] value)
                       new-value (cond
@@ -298,7 +298,7 @@
                                   v*)
                         ;; don't modify maps
                       new-value (if (or (sequential? new-value) (set? new-value))
-                                  (if (= :coll property-type)
+                                  (if (= :coll property-type')
                                     (vec (remove string/blank? new-value))
                                     (set (remove string/blank? new-value)))
                                   new-value)
