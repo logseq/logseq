@@ -69,7 +69,8 @@
                                           (:block/uuid (d/entity db val)))))
                         validate-fn')]
     (if (= (get-in property [:block/schema :cardinality]) :many)
-      (every? validate-fn'' property-val)
+      (let [property-val (if (coll? property-val) property-val [property-val])]
+        (every? validate-fn'' property-val))
       (or (validate-fn'' property-val) (= :logseq.property/empty-placeholder property-val)))))
 
 (defn update-properties-in-schema

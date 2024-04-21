@@ -6,7 +6,8 @@
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.handler.editor :as editor-handler]
+            [promesa.core :as p]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -32,16 +33,16 @@
 ;; batch-remove-property!
 ;; upsert-property!
 ;; update-property!
-(deftest ^:large-vars/cleanup-todo block-property-test
+(deftest ^:large-vars/cleanup-todo ^:wip block-property-test
   (testing "Add a property to a block"
-    (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value" {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value" {:property-type :string})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity :user.property/property-1)]
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
-        {:type :default}
+        {:type :string}
         (:block/type property)
         #{"property"})
       ;; check block's properties
@@ -130,7 +131,7 @@
   (testing "Batch set properties"
     (let [k :user.property/property-4
           v "batch value"]
-      (db-property-handler/upsert-property! repo :user.property/property-4 {:type :default} {})
+      (db-property-handler/upsert-property! repo :user.property/property-4 {:type :string} {})
       (db-property-handler/batch-set-property! repo [fbid sbid] k v)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
@@ -214,9 +215,9 @@
           k :user.property/property-1]
       ;; add property
       (db-property-handler/upsert-property! repo k {:type :default} {})
-      (let [property (db/entity k)
-            {:keys [last-block-id]} (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
-            {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
+      (p/let [property (db/entity k)
+              {:keys [last-block-id]} (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
+              {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
         (is (= from-block-id (:db/id fb)))
         (is (= from-property-id (:db/id property)))))))
 
