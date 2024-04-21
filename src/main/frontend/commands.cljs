@@ -34,6 +34,7 @@
 (defonce hashtag "#")
 (defonce colon ":")
 (defonce command-trigger "/")
+(defonce command-ask "\\")
 (defonce *current-command (atom nil))
 
 (def query-doc

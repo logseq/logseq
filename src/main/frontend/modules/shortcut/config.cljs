@@ -353,7 +353,7 @@
    :editor/select-parent                    {:binding "mod+a"
                                              :fn      editor-handler/select-parent}
 
-   :editor/zoom-in                          {:binding (if mac? "mod+." "alt+right")
+   :editor/zoom-in                          {:binding (if mac? ["mod+." "mod+shift+."] "alt+right") ; FIXME: mod+. not works on Chrome
                                              :fn      editor-handler/zoom-in!}
 
    :editor/zoom-out                         {:binding (if mac? "mod+," "alt+left")

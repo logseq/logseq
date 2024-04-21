@@ -9,7 +9,6 @@
             [frontend.worker.db-listener :as worker-db-listener]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [frontend.worker.rtc.core :as rtc-core]
-            [frontend.worker.rtc.db-listener :as db-listener]
             [frontend.worker.rtc.mock :as rtc-mock]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
 
@@ -88,26 +87,15 @@
         (done)))})
 
 
-(def listen-test-db-fixture
+(def listen-test-db-to-gen-rtc-ops-fixture
   {:before
    #(let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
       (assert (some? test-db-conn))
-      (d/listen! test-db-conn
-                 ::gen-ops
-                 (fn [{:keys [tx-data tx-meta db-before db-after]}]
-                   (let [datom-vec-coll (map vec tx-data)
-                         id->same-entity-datoms (group-by first datom-vec-coll)
-                         id-order (distinct (map first datom-vec-coll))
-                         same-entity-datoms-coll (map id->same-entity-datoms id-order)
-                         id->attr->datom (update-vals
-                                          id->same-entity-datoms
-                                          #'worker-db-listener/entity-datoms=>attr->datom)]
-                     (when (:persist-op? tx-meta true)
-                       (db-listener/generate-rtc-ops test-helper/test-db-name-db-version db-before db-after
-                                                     same-entity-datoms-coll id->attr->datom))))))
+      (worker-db-listener/listen-db-changes! test-helper/test-db-name-db-version test-db-conn
+                                             {:handler-keys [:gen-rtc-ops]}))
    :after
    #(when-let [test-db-conn (conn/get-db test-helper/test-db-name-db-version false)]
-      (d/unlisten! test-db-conn ::gen-ops))})
+      (d/unlisten! test-db-conn :frontend.worker.db-listener/listen-db-changes!))})
 
 
 (def clear-op-mem-stores-fixture

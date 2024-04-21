@@ -301,16 +301,14 @@ html.is-mobile {
 }
 
 .form-select {
-  @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
-  border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
+  @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded border-gray-06;
+  @apply focus:border-gray-04 focus:ring-2 focus:ring-ring focus:ring-offset-2 sm:text-sm sm:leading-5;
 
   background-color: var(--lx-gray-03, var(--ls-primary-background-color, transparent));
   background-repeat: no-repeat;
-  border-width: 1px;
-  border-color: var(--lx-gray-07, var(--ls-border-color));
 
   &.is-small {
-    @apply pl-2 py-1.5 sm:leading-4 sm:text-xs;
+    @apply pl-2 py-1.5 sm:leading-[15px] sm:text-xs;
   }
 }
 

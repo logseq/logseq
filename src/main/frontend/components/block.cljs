@@ -1989,9 +1989,9 @@
                  (pu/lookup properties :logseq.property/heading))
         heading (if (true? heading) (min (inc level) 6) heading)
         elem (if heading
-               (keyword (str "h" heading
+               (keyword (str "h" heading ".block-title-wrap.as-heading"
                              (when block-ref? ".inline")))
-               :span.inline)]
+               :span.block-title-wrap)]
     (->elem
      elem
      (merge
@@ -1999,7 +1999,7 @@
       (when (and marker
                  (not (string/blank? marker))
                  (not= "nil" marker))
-        {:class (str (string/lower-case marker))})
+        {:data-marker (str (string/lower-case marker))})
       (when bg-color
         (let [built-in-color? (ui/built-in-color? bg-color)]
           {:style {:background-color (if built-in-color?
@@ -2341,7 +2341,8 @@
                               (some? (mldoc/extract-first-query-from-ast body))))))
         [:div.block-body
          ;; TODO: consistent id instead of the idx (since it could be changed later)
-         (let [body (block/trim-break-lines! (:block/body block))]
+         (let [body (block/trim-break-lines! (:block/body block))
+               uuid (:block/uuid block)]
            (for [[idx child] (medley/indexed body)]
              (when-let [block (markup-element-cp config child)]
                (rum/with-key (block-child block)
@@ -2422,24 +2423,26 @@
        (when-not plugin-slotted?
          (let [block-tags (:block/tags block)
                db-based? (config/db-based-graph? (state/get-current-repo))]
-           [:div.flex-1.w-full
-            [:div.flex.flex-1.w-full.flex-row.flex-wrap.justify-between.items-center
-             (cond
-               (:block/name block)
-               [:div.flex.flex-row.items-center.gap-1
-                (icon/get-page-icon block {})
-                (page-cp config block)]
 
-               :else
-               [:div.flex-1 (build-block-title config block)])
+           [:div.block-head-wrap
+            (cond
+              (:block/name block)
+              [:div.flex.flex-row.items-center.gap-1
+               (icon/get-page-icon block {})
+               (page-cp config block)]
 
-             [:div.flex.flex-row.items-center.gap-1
-              (when (and db-based? (seq block-tags))
-                (tags config block))
-              (when (and (:original-block config) (not (:block/name block)))
-                [:a.fade-link {:title "Embed block"
-                               :href (rfe/href :page {:name (str (:block/uuid block))})}
-                 (ui/icon "link")])]]]))
+              :else
+              (build-block-title config block))
+
+            [:div.flex.flex-row.items-center.gap-1
+             (when (and db-based? (seq block-tags))
+               (tags config block))
+
+             (when (and (:original-block config) (not (:block/name block)))
+               [:a.fade-link {:title "Embed block"
+                              :href (rfe/href :page {:name (str (:block/uuid block))})}
+                (ui/icon "link")])]]
+           ))
 
        (clock-summary-cp block body)]
 

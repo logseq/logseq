@@ -310,6 +310,7 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
   (let [id->elem (into {} (keep (juxt get-elem-id-fn identity)) coll)
         id->dep-id (into {} (keep (juxt get-elem-id-fn get-elem-dep-id-fn)) coll)
         all-ids (set (keys id->dep-id))
+        seen-ids (volatile! #{})        ; to check dep-cycle
         sorted-ids
         (loop [r []
                rest-ids all-ids
@@ -317,12 +318,17 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
           (if-not id
             r
             (if-let [dep-id (id->dep-id id)]
-              ;; TODO: check no dep-cycle
-              (if-let [next-id (get rest-ids dep-id)]
-                (recur r rest-ids next-id)
-                (let [rest-ids* (disj rest-ids id)]
-                  (recur (conj r id) rest-ids* (first rest-ids*))))
+              (let [next-id (get rest-ids dep-id)]
+                (if (and next-id
+                         ;; if found dep-cycle, break it
+                         (not (contains? @seen-ids next-id)))
+                  (do (vswap! seen-ids conj next-id)
+                      (recur r rest-ids next-id))
+                  (let [rest-ids* (disj rest-ids id)]
+                    (vreset! seen-ids #{})
+                    (recur (conj r id) rest-ids* (first rest-ids*)))))
               ;; not found dep-id, so this id can be put into result now
               (let [rest-ids* (disj rest-ids id)]
+                (vreset! seen-ids #{})
                 (recur (conj r id) rest-ids* (first rest-ids*))))))]
     (mapv id->elem sorted-ids)))

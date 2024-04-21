@@ -18,11 +18,15 @@
     :block/parent [:block/uuid "1"]
     :block/left [:block/uuid "1"]}])
 
+(defn fix-page-if-broken!
+  [conn page-id opts]
+  (db-fix/fix-page-if-broken! conn page-id (merge opts {:from-fix-test? true})))
+
 (deftest test-conflicts
   (let [conn (core-test/get-current-conn)
         _ (d/transact! conn init-conflicts)
         page-id (:db/id (d/entity @conn 1))
-        _ (db-fix/fix-page-if-broken! conn page-id {})]
+        _ (fix-page-if-broken! conn page-id {})]
     (is (= 2 (:db/id (:block/left (d/entity @conn 3)))))))
 
 (deftest test-conflicts-with-right
@@ -34,7 +38,7 @@
                        :block/left [:block/uuid "2"]}])
         _ (d/transact! conn data)
         page-id (:db/id (d/entity @conn 1))
-        _ (db-fix/fix-page-if-broken! conn page-id {})]
+        _ (fix-page-if-broken! conn page-id {})]
     (is (= 3 (:db/id (:block/left (d/entity @conn 4)))))))
 
 (def init-broken-chain
@@ -58,7 +62,7 @@
         data init-broken-chain
         _ (d/transact! conn data)
         page-id (:db/id (d/entity @conn 1))
-        _ (db-fix/fix-page-if-broken! conn page-id {})]
+        _ (fix-page-if-broken! conn page-id {})]
     (is
      (=
       (set [{:db/id 2, :block/left 1}
@@ -84,7 +88,7 @@
                :block/left [:block/uuid "2"]}]
         _ (d/transact! conn data)
         page-id (:db/id (d/entity @conn 1))
-        _ (db-fix/fix-page-if-broken! conn page-id {})]
+        _ (fix-page-if-broken! conn page-id {})]
     (is
      (=
       (set [{:db/id 3, :block/left 1}
@@ -112,7 +116,7 @@
                :block/left [:block/uuid "3"]}]
         _ (d/transact! conn data)
         page-id (:db/id (d/entity @conn 1))
-        _ (db-fix/fix-page-if-broken! conn page-id {})]
+        _ (fix-page-if-broken! conn page-id {})]
     (is
      (=
       (set [{:db/id 2, :block/left 1}
@@ -150,7 +154,7 @@
                :block/left [:block/uuid "2"]}]
         _ (d/transact! conn data)
         page-id (:db/id (d/entity @conn 1))
-        _ (db-fix/fix-page-if-broken! conn page-id {})]
+        _ (fix-page-if-broken! conn page-id {})]
     (is
      (=
       #{{:db/id 3, :block/left 1}
@@ -190,7 +194,7 @@
                :block/left [:block/uuid "5"]}]
         _ (d/transact! conn data)
         page-id (:db/id (d/entity @conn 1))
-        _ (db-fix/fix-page-if-broken! conn page-id {})]
+        _ (fix-page-if-broken! conn page-id {})]
     (is
      (=
       #{{:db/id 2, :block/left 1}

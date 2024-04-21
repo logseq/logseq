@@ -1,6 +1,6 @@
 .cp__settings {
   &-inner {
-    @apply flex flex-col md:flex-row;
+    @apply flex flex-col md:flex-row min-h-[55dvh] max-h-[75dvh];
 
     > header {
       padding: 10px;
@@ -83,8 +83,7 @@
     }
 
     .settings-menu-link {
-      @apply px-2 py-1.5 select-none;
-      color: var(--ls-primary-text-color);
+      @apply px-2 py-1.5 select-none text-gray-12;
     }
 
 

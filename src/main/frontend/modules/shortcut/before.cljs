@@ -10,6 +10,7 @@
     (f e)
     ;; return false to prevent default browser behavior
     ;; and stop event from bubbling
+    (.preventDefault e)
     false))
 
 (defn enable-when-not-editing-mode!
@@ -18,6 +19,7 @@
     (when-not (or (state/editing?)
                   (util/input? (.-target e)))
       (f e)
+      (.preventDefault e)
       false)))
 
 (defn enable-when-editing-mode!
