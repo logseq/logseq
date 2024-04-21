@@ -22,8 +22,8 @@
 (use-fixtures :each start-and-destroy-db)
 
 (deftest get-block-property-values-test
-  (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value 1" {})
-  (db-property-handler/set-block-property! repo sbid :user.property/property-1 "value 2" {})
+  (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value 1" {:property-type :string})
+  (db-property-handler/set-block-property! repo sbid :user.property/property-1 "value 2" {:property-type :string})
   (is (= (model/get-block-property-values :user.property/property-1)
          ["value 1" "value 2"])))
 
