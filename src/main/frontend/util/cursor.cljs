@@ -64,6 +64,7 @@
   (.setSelectionRange input n m))
 
 (defn move-cursor-to [input n]
+  (.focus input)
   (.setSelectionRange input n n))
 
 (defn move-cursor-forward

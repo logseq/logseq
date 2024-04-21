@@ -8,6 +8,12 @@
 (sr/defkeyword :batch/txs
   "store all tx-data when batch-processing")
 
+(sr/defkeyword :batch/db-before
+  "store db before batch-tx.")
+
+(sr/defkeyword :batch/opts
+  "Opts for with-batch-tx-mode")
+
 (defn get-batch-txs
   []
   (->> (:batch/txs @worker-state/*state)
@@ -21,11 +27,20 @@
   []
   (:batch/db-before @worker-state/*state))
 
+(defn set-batch-opts
+  [opts]
+  (swap! worker-state/*state assoc :batch/opts opts))
+
+(defn get-batch-opts
+  []
+  (:batch/opts @worker-state/*state))
+
 (defn conj-batch-txs!
   [tx-data]
-  (swap! worker-state/*state update :batch/txs (fn [data] (into data tx-data))))
+  (swap! worker-state/*state update :batch/txs (fn [data] ((fnil into []) data tx-data))))
 
 (defn exit-batch-txs-mode!
   []
-  (swap! worker-state/*state assoc :batch/txs nil)
-  (swap! worker-state/*state assoc :batch/db-before nil))
+  (swap! worker-state/*state assoc :batch/txs [])
+  (swap! worker-state/*state assoc :batch/db-before nil)
+  (swap! worker-state/*state assoc :batch/opts nil))

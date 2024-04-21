@@ -346,8 +346,7 @@
   [[:db/type :string]
    [:schema/version :int]
    [:graph/uuid :string]
-   [:graph/local-tx :string]
-   [:editor/tx-batch-mode? :boolean]])
+   [:graph/local-tx :string]])
 
 (def property-tuple
   "A tuple of a property map and a property value. This schema

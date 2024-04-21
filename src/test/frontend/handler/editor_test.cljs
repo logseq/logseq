@@ -284,7 +284,7 @@
                                                              :block-uuid (:block/uuid sibling-block)}
                                                             {:id block-dom-id
                                                              :block-uuid (:block/uuid block)}]))]
-      (editor/delete-block! test-helper/test-db false))))
+      (editor/delete-block! test-helper/test-db))))
 
 (deftest delete-block!
   (testing "backspace deletes empty block"

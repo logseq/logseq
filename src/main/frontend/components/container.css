@@ -531,7 +531,7 @@
 }
 
 .ui__dialog-content[label=app-settings] {
-  @apply w-auto md:max-w-4xl overflow-hidden;
+  @apply w-auto md:max-w-5xl overflow-hidden;
 
   .settings-modal {
     @apply -mx-6 -mt-6 -mb-6 rounded-xl;

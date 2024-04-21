@@ -1,7 +1,6 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
-            [frontend.worker.batch-tx :as batch-tx]
             [frontend.worker.db.fix :as db-fix]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
@@ -60,7 +59,7 @@
        (remove nil?)))))
 
 (defn fix-db!
-  [conn {:keys [db-before db-after tx-data]}]
+  [conn {:keys [db-before db-after tx-data] :as tx-report} context]
   (let [changed-pages (->> (filter (fn [d] (contains? #{:block/left :block/parent} (:a d))) tx-data)
                            (map :e)
                            distinct
@@ -72,7 +71,8 @@
                            (remove nil?)
                            (distinct))]
     (doseq [changed-page-id changed-pages]
-      (db-fix/fix-page-if-broken! conn changed-page-id {}))))
+      (db-fix/fix-page-if-broken! conn changed-page-id {:tx-report tx-report
+                                                        :context context}))))
 
 (defn validate-and-fix-db!
   [repo conn tx-report context]
@@ -81,92 +81,72 @@
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
         (worker-util/post-message :notification
                                   [["Invalid DB!"] :error]))))
-  (when (and (:dev? context)
-             (not (:node-test? context)))
-    (fix-db! conn tx-report)))
+  (when (or (:dev? context) (exists? js/process))
+    (fix-db! conn tx-report context)))
 
 (defn invoke-hooks
-  [repo conn {:keys [db-before db-after tx-meta] :as tx-report} context]
-  (let [{:keys [from-disk? new-graph?]} tx-meta
-        now-batch-processing? (:editor/tx-batch-mode? (d/entity db-after :logseq.kv/tx-batch-mode?))]
-    (when-not (:pipeline-replace? tx-meta)
-      (cond
-        now-batch-processing?
-        (do
-          (batch-tx/conj-batch-txs! (:tx-data tx-report))
-          nil)
+  [repo conn {:keys [tx-meta] :as tx-report} context]
+  (let [{:keys [from-disk? new-graph?]} tx-meta]
+    (cond
+      (or from-disk? new-graph?)
+      (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
+            path-refs (set (compute-block-path-refs-tx tx-report blocks))
+            tx-report' (or
+                        (when (seq path-refs)
+                          (ldb/transact! conn path-refs {:replace? true
+                                                         :pipeline-replace? true}))
+                        (do
+                          (when-not (exists? js/process) (d/store @conn))
+                          tx-report))
+            full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
+            final-tx-report (assoc tx-report'
+                                   :tx-meta (:tx-meta tx-report)
+                                   :tx-data full-tx-data
+                                   :db-before (:db-before tx-report))]
+        {:tx-report final-tx-report})
 
-        (or from-disk? new-graph?)
-        (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-              path-refs (set (compute-block-path-refs-tx tx-report blocks))
-              tx-report' (or
-                          (when (seq path-refs)
-                            (ldb/transact! conn path-refs {:replace? true
-                                                           :pipeline-replace? true}))
-                          (do
-                            (when-not (exists? js/process) (d/store @conn))
-                            tx-report))
-              full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
-              final-tx-report (assoc tx-report'
-                                     :tx-meta (:tx-meta tx-report)
-                                     :tx-data full-tx-data
-                                     :db-before (:db-before tx-report))]
-          {:tx-report final-tx-report})
-
-        :else
-        (let [exiting-batch-mode? (:editor/tx-batch-mode? (d/entity db-before :logseq.kv/tx-batch-mode?))
-              db-before (if exiting-batch-mode?
-                          (batch-tx/get-batch-db-before)
-                          (:db-before tx-report))
-              tx-data (if exiting-batch-mode?
-                        (batch-tx/get-batch-txs)
-                        (:tx-data tx-report))
-              tx-report (assoc tx-report
-                               :db-before db-before
-                               :tx-data tx-data)
-              {:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
-              _ (when (sqlite-util/local-file-based-graph? repo)
-                  (let [page-ids (distinct (map :db/id pages))]
-                    (doseq [page-id page-ids]
-                      (when (d/entity @conn page-id)
-                        (file/sync-to-file repo page-id tx-meta)))))
-              deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
-              replace-tx (concat
+      :else
+      (let [{:keys [pages blocks]} (ds-report/get-blocks-and-pages tx-report)
+            _ (when (sqlite-util/local-file-based-graph? repo)
+                (let [page-ids (distinct (map :db/id pages))]
+                  (doseq [page-id page-ids]
+                    (when (d/entity @conn page-id)
+                      (file/sync-to-file repo page-id tx-meta)))))
+            deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+            replace-tx (concat
                         ;; block path refs
-                          (set (compute-block-path-refs-tx tx-report blocks))
+                        (set (compute-block-path-refs-tx tx-report blocks))
 
                         ;; delete empty property parent block
-                          (when (seq deleted-block-uuids)
-                            (delete-property-parent-block-if-empty tx-report deleted-block-uuids))
+                        (when (seq deleted-block-uuids)
+                          (delete-property-parent-block-if-empty tx-report deleted-block-uuids))
 
                         ;; update block/tx-id
-                          (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
-                                                       (concat pages blocks))
-                                tx-id (get-in tx-report [:tempids :db/current-tx])]
-                            (keep (fn [b]
-                                    (when-let [db-id (:db/id b)]
-                                      (when-not (:property/pair-property b)
-                                        {:db/id db-id
-                                         :block/tx-id tx-id}))) updated-blocks)))
-              tx-report' (or
-                          (when (seq replace-tx)
+                        (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
+                                                     (concat pages blocks))
+                              tx-id (get-in tx-report [:tempids :db/current-tx])]
+                          (keep (fn [b]
+                                  (when-let [db-id (:db/id b)]
+                                    (when-not (:property/pair-property b)
+                                      {:db/id db-id
+                                       :block/tx-id tx-id}))) updated-blocks)))
+            tx-report' (or
+                        (when (seq replace-tx)
                           ;; TODO: remove this since transact! is really slow
-                            (ldb/transact! conn replace-tx {:replace? true
-                                                            :pipeline-replace? true}))
-                          (do
-                            (when-not (exists? js/process) (d/store @conn))
-                            tx-report))
-              fix-tx-data (validate-and-fix-db! repo conn tx-report context)
-              full-tx-data (if exiting-batch-mode?
-                             (:tx-data tx-report)
-                             (concat (:tx-data tx-report)
-                                     fix-tx-data
-                                     (:tx-data tx-report')))
-              final-tx-report (assoc tx-report' :tx-data full-tx-data)
-              affected-query-keys (when-not (:importing? context)
-                                    (worker-react/get-affected-queries-keys final-tx-report))]
-          {:tx-report final-tx-report
-           :affected-keys affected-query-keys
-           :deleted-block-uuids deleted-block-uuids
-           :pages pages
-           :blocks blocks})))))
+                          (ldb/transact! conn replace-tx {:replace? true
+                                                          :pipeline-replace? true}))
+                        (do
+                          (when-not (exists? js/process) (d/store @conn))
+                          tx-report))
+            fix-tx-data (validate-and-fix-db! repo conn tx-report context)
+            full-tx-data (concat (:tx-data tx-report)
+                                 fix-tx-data
+                                 (:tx-data tx-report'))
+            final-tx-report (assoc tx-report' :tx-data full-tx-data)
+            affected-query-keys (when-not (:importing? context)
+                                  (worker-react/get-affected-queries-keys final-tx-report))]
+        {:tx-report final-tx-report
+         :affected-keys affected-query-keys
+         :deleted-block-uuids deleted-block-uuids
+         :pages pages
+         :blocks blocks}))))

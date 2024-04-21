@@ -713,7 +713,7 @@
     (p/let [repo            (state/get-current-repo)
             _ (<pull-block  block-uuid)]
       (editor-handler/delete-block-aux!
-       {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo} true))))
+       {:block/uuid (sdk-utils/uuid-or-throw-error block-uuid) :repo repo}))))
 
 (def ^:export update_block
   (fn [block-uuid content ^js opts]

@@ -468,15 +468,6 @@
   }
 
   &-settings {
-    > header {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--ls-quaternary-background-color);
-
-      h1 {
-        @apply flex items-center text-[22px] m-0 space-x-1;
-      }
-    }
-
     &-inner {
       position: relative;
       padding: 10px 0 20px;
@@ -595,10 +586,10 @@
 
     .cp__settings-inner {
       aside {
-        @apply max-h-[70vh] overflow-auto p-3;
+        @apply max-h-[70vh] overflow-auto;
 
         ul {
-          @apply list-none p-0 m-0;
+          @apply list-none pt-1.5 m-0;
 
           img.icon {
             @apply w-[20px] h-[20px];
@@ -608,7 +599,7 @@
             @apply p-1.5 rounded;
 
             a {
-              @apply mb-0 text-gray-11;
+              @apply mb-0 text-gray-12 opacity-90;
             }
 
             strong {

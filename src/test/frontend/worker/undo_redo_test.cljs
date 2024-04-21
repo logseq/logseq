@@ -1,11 +1,20 @@
 (ns frontend.worker.undo-redo-test
-  (:require [clojure.test :as t :refer [deftest is testing use-fixtures]]
+  (:require [cljs.pprint :as pp]
+            [clojure.test :as t :refer [deftest is testing use-fixtures]]
             [clojure.test.check.generators :as gen]
+            [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.db :as db]
             [frontend.test.generators :as t.gen]
             [frontend.test.helper :as test-helper]
-            [frontend.worker.undo-redo :as undo-redo]))
+            [frontend.worker.fixtures :as worker-fixtures]
+            [frontend.worker.undo-redo :as undo-redo]
+            [logseq.db :as ldb]
+            [logseq.outliner.op :as outliner-op]
+            [logseq.outliner.tree :as otree]
+            [frontend.worker.state :as worker-state]
+            ["fs" :as fs-node]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (def ^:private page-uuid (random-uuid))
 (def ^:private init-data (test-helper/initial-test-page-and-blocks {:page-uuid page-uuid}))
@@ -14,9 +23,12 @@
   [f]
   (test-helper/db-based-start-and-destroy-db
    f
-   {:init-data (fn [conn] (d/transact! conn init-data))}))
+   {:init-data (fn [conn] (d/transact! conn init-data {:gen-undo-ops? false}))}))
 
-(use-fixtures :each start-and-destroy-db)
+(use-fixtures :each
+  start-and-destroy-db
+  worker-fixtures/listen-test-db-to-gen-undo-ops-fixture)
+
 
 (def ^:private gen-non-exist-block-uuid gen/uuid)
 
@@ -123,8 +135,8 @@
     ;; else
     nil))
 
-(defn- undo-all-then-redo-all
-  [conn]
+(defn- undo-all
+  [conn page-uuid]
   (binding [undo-redo/*undo-redo-info-for-test* (atom nil)]
     (loop [i 0]
       (let [r (undo-redo/undo test-helper/test-db-name-db-version page-uuid conn)
@@ -132,18 +144,27 @@
         (check-block-count @undo-redo/*undo-redo-info-for-test* current-db)
         (if (not= :frontend.worker.undo-redo/empty-undo-stack r)
           (recur (inc i))
-          (prn :undo-count i))))
+          (prn :undo-count i))))))
 
-    (loop []
+(defn- redo-all
+  [conn page-uuid]
+  (binding [undo-redo/*undo-redo-info-for-test* (atom nil)]
+    (loop [i 0]
       (let [r (undo-redo/redo test-helper/test-db-name-db-version page-uuid conn)
             current-db @conn]
         (check-block-count @undo-redo/*undo-redo-info-for-test* current-db)
-        (when (not= :frontend.worker.undo-redo/empty-redo-stack r)
-          (recur))))))
+        (if (not= :frontend.worker.undo-redo/empty-redo-stack r)
+          (recur (inc i))
+          (prn :redo-count i))))))
+
+(defn- undo-all-then-redo-all
+  [conn]
+  (undo-all conn page-uuid)
+  (redo-all conn page-uuid))
 
 (deftest undo-redo-gen-test
   (let [conn (db/get-db false)
-        all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 100))]
+        all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 1000))]
     (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid all-remove-ops)
     (prn :block-count-before-init (count (get-db-block-set @conn)))
     (loop [i 0]
@@ -154,8 +175,8 @@
     (undo-redo/clear-undo-redo-stack)
     (testing "move blocks"
       (let [origin-graph-block-set (get-db-block-set @conn)
-            ops (gen/generate (gen/vector (gen-op @conn {:move-block-op 1000 :boundary-op 500}) 300))]
-        (prn :ops (count ops))
+            ops (gen/generate (gen/vector (gen-op @conn {:move-block-op 1000 :boundary-op 500}) 1000))]
+        (prn :generate-move-ops (count ops))
         (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid ops)
 
         (undo-all-then-redo-all conn)
@@ -167,25 +188,111 @@
     (testing "random ops"
       (let [origin-graph-block-set (get-db-block-set @conn)
             ops (gen/generate (gen/vector (gen-op @conn) 1000))]
-        (prn :ops (count ops))
+        (prn :generate-random-ops (count ops))
         (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid ops)
 
         (undo-all-then-redo-all conn)
         (undo-all-then-redo-all conn)
         (undo-all-then-redo-all conn)
 
-        (is (= origin-graph-block-set (get-db-block-set @conn)))))
-    ))
+        (is (= origin-graph-block-set (get-db-block-set @conn)))))))
 
-;;; TODO: generate outliner-ops then undo/redo/validate
-;; (deftest undo-redo-single-step-check-gen-test
-;;   (let [conn (db/get-db false)
-;;         all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 20))]
-;;     (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid all-remove-ops)
-;;     (loop []
-;;       (when (not= :frontend.worker.undo-redo/empty-undo-stack
-;;                   (undo-redo/undo test-helper/test-db-name-db-version page-uuid conn))
-;;         (recur)))
-;;     (prn :init-blocks (d/entity @conn ))
+(defn- print-page-stat
+  [db page-uuid page-name]
+  (let [blocks (ldb/get-page-blocks db page-name {})]
+    (pp/pprint
+     {:block-count (count blocks)
+      :undo-op-count (count (get-in @(:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
+                                    [test-helper/test-db-name-db-version page-uuid]))
+      :redo-op-count (count (get-in @(:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
+                                    [test-helper/test-db-name-db-version page-uuid]))})))
 
-;;     ))
+(defn- print-page-blocks-tree
+  [db page-uuid page-name]
+  (let [blocks (ldb/get-page-blocks db page-name {})]
+    (prn ::page-block-tree)
+    (pp/pprint
+     (walk/postwalk
+      (fn [x]
+        (if (map? x)
+          (cond-> (select-keys x [:db/id])
+            (seq (:block/children x))
+            (assoc :block/children (:block/children x)))
+          x))
+      (otree/blocks->vec-tree test-helper/test-db-name-db-version db
+                              blocks page-uuid)))))
+
+(deftest undo-redo-outliner-op-gen-test
+  (try
+    (let [conn (db/get-db false)]
+      (loop [num 100]
+        (when (> num 0)
+          (if-let [op (gen/generate (t.gen/gen-insert-blocks-op @conn {:page-uuid page-uuid}))]
+            (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
+                                        [op] "MMM do, yyyy" nil)
+                (recur (dec num)))
+            (recur (dec num)))))
+      (println "================ random inserts ================")
+      (print-page-stat @conn page-uuid "test")
+      (undo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+      (redo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+
+      (loop [num 1000]
+        (when (> num 0)
+          (if-let [op (gen/generate (t.gen/gen-move-blocks-op @conn {:page-uuid page-uuid}))]
+            (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
+                                        [op] "MMM do, yyyy" nil)
+                (recur (dec num)))
+            (recur (dec num)))))
+      (println "================ random moves ================")
+      (print-page-stat @conn page-uuid "test")
+      (undo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+      (redo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+
+      (loop [num 100]
+        (when (> num 0)
+          (if-let [op (gen/generate (t.gen/gen-delete-blocks-op @conn {:page-uuid page-uuid}))]
+            (do (outliner-op/apply-ops! test-helper/test-db-name-db-version conn
+                                        [op] "MMM do, yyyy" nil)
+                (recur (dec num)))
+            (recur (dec num)))))
+      (println "================ random deletes ================")
+      (print-page-stat @conn page-uuid "test")
+      (undo-all conn page-uuid)
+      (print-page-stat @conn page-uuid "test")
+      (try (redo-all conn page-uuid)
+           (catch :default e
+             (print-page-blocks-tree @conn page-uuid "test")
+             (throw e)))
+      (print-page-stat @conn page-uuid "test"))
+    (catch :default e
+      (let [data (ex-data e)]
+        (fs-node/writeFileSync "debug.json" (sqlite-util/write-transit-str data))
+        (throw (ex-info "stop now" {}))))))
+
+
+
+(comment
+  (deftest debug-test
+    (let [{:keys [origin-db db illegal-entity other]}
+          (dt/read-transit-str (str (fs-node/readFileSync "debug.json")))
+          _ (prn :illegal-entity illegal-entity :other other)
+          illegal-entity1 (d/entity origin-db illegal-entity)
+          illegal-entity-left1 (:block/left illegal-entity1)
+          illegal-entity-parent1 (:block/parent illegal-entity1)]
+      (prn "before transact"
+           (select-keys illegal-entity1 [:db/id :block/left :block/parent])
+           (select-keys illegal-entity-left1 [:db/id :block/left :block/parent])
+           (select-keys illegal-entity-parent1 [:db/id :block/left :block/parent]))
+
+      (let [illegal-entity2 (d/entity db illegal-entity)
+            illegal-entity-left2 (:block/left illegal-entity2)
+            illegal-entity-parent2 (:block/parent illegal-entity2)]
+        (prn "after transact"
+             (select-keys illegal-entity2 [:db/id :block/left :block/parent])
+             (select-keys illegal-entity-left2 [:db/id :block/left :block/parent])
+             (select-keys illegal-entity-parent2 [:db/id :block/left :block/parent]))))))

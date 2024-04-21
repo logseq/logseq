@@ -209,7 +209,7 @@
   []
   (ui/admonition
     :warning
-    [:p.text-md
+    [:p.text-sm
      (t :plugin/security-warning)]))
 
 (rum/defc card-ctls-of-market < rum/static
@@ -1334,14 +1334,12 @@
         _       (js/setTimeout #(reset! *cache focused) 100)]
 
     [:div.cp__plugins-settings.cp__settings-main
-     [:header
-      [:h1.title (ui/icon "puzzle" {:size 22})
-       [:strong (or title (t :settings-of-plugins))]]]
-
      [:div.cp__settings-inner.md:flex
       {:class (util/classnames [{:no-aside (not nav?)}])}
       (when nav?
         [:aside.md:w-64 {:style {:min-width "10rem"}}
+         [:header.cp__settings-header
+          [:h1.cp__settings-modal-title (or title (t :settings-of-plugins))]]
          (let [plugins (plugin-handler/get-enabled-plugins-if-setting-schema)]
            [:ul.settings-plugin-list
             (for [{:keys [id name title icon]} plugins]

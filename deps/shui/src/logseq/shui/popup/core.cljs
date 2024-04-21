@@ -47,7 +47,7 @@
   (when-let [id (:id config)]
     (if-let [[index config'] (get-popup id)]
       (swap! *popups assoc index (merge config' config))
-      (swap! *popups conj config))))
+      (swap! *popups conj config)) id))
 
 (defn update-popup!
   [id ks val]

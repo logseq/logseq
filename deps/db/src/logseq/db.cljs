@@ -11,7 +11,8 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]))
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.frontend.delete-blocks :as delete-blocks]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -56,8 +57,18 @@
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
-   (let [tx-data (->> (common-util/fast-remove-nils tx-data)
-                      (remove empty?))]
+   (let [tx-data (map (fn [m]
+                        (if (map? m)
+                          (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
+                                  :block/title :block/body :block/level :block/container :db/other-tx
+                                  :block/unordered)
+                          m)) tx-data)
+         tx-data (->> (common-util/fast-remove-nils tx-data)
+                      (remove empty?))
+         delete-blocks-tx (when-not (string? repo-or-conn)
+                            (delete-blocks/update-refs-and-macros @repo-or-conn tx-data))
+         tx-data (concat tx-data delete-blocks-tx)]
+
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
      (when (seq tx-data)
@@ -122,6 +133,15 @@
     (let [datoms (d/datoms db :avet :block/page page-id)
           block-eids (mapv :e datoms)]
       (d/pull-many db pull-keys block-eids))))
+
+(defn get-page-blocks-by-uuid
+  [db page-uuid & {:keys [pull-keys]
+                   :or {pull-keys '[*]}}]
+  (when-let [page-id (and page-uuid (:db/id (d/entity db [:block/uuid page-uuid])))]
+    (let [datoms (d/datoms db :avet :block/page page-id)
+          block-eids (mapv :e datoms)]
+      (d/pull-many db pull-keys block-eids))))
+
 
 (defn get-page-blocks-count
   [db page-id]
@@ -495,8 +515,7 @@
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
 
 (def page? sqlite-util/page?)
-
-
+(def db-based-graph? entity-plus/db-based-graph?)
 
 ;; File based fns
 (defn get-namespace-pages
@@ -530,5 +549,3 @@
         (d/pull-many db
                      '[:db/id :block/name :block/original-name]
                      ids)))))
-
-(def db-based-graph? entity-plus/db-based-graph?)

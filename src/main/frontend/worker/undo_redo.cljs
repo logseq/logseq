@@ -13,7 +13,7 @@
             [malli.core :as m]
             [malli.util :as mu]))
 
-(sr/defkeyword :gen-undo-op?
+(sr/defkeyword :gen-undo-ops?
   "tx-meta option, generate undo ops from tx-data when true (default true)")
 
 (sr/defkeyword :gen-undo-boundary-op?
@@ -78,7 +78,8 @@ when undo this op, this original entity-map will be transacted back into db")
          [:block/created-at {:optional true} :int]
          [:block/updated-at {:optional true} :int]
          [:block/format {:optional true} :any]
-         [:block/tags {:optional true} [:sequential :uuid]]]]]]]
+         [:block/tags {:optional true} [:sequential :uuid]]
+         [:block/link {:optional true} [:maybe :uuid]]]]]]]
     [::update-block
      [:cat :keyword
       [:map
@@ -86,6 +87,7 @@ when undo this op, this original entity-map will be transacted back into db")
        [:block-origin-content {:optional true} :string]
        [:block-origin-tags {:optional true} [:sequential :uuid]]
        [:block-origin-collapsed {:optional true} :boolean]
+       [:block-origin-link {:optional true} [:maybe :uuid]]
        ;; TODO: add more attrs
        ]]]]))
 
@@ -103,15 +105,19 @@ when undo this op, this original entity-map will be transacted back into db")
    :block/created-at
    :block/updated-at
    :block/format
-   {:block/tags [:block/uuid]}])
+   {:block/tags [:block/uuid]}
+   {:block/link [:block/uuid]}])
 
 (defn- ->block-entity-map
   [db eid]
+  (assert (some? eid))
   (let [m (d/pull db entity-map-pull-pattern eid)]
     (cond-> m
       true                  (update :block/left :block/uuid)
       true                  (update :block/parent :block/uuid)
-      (seq (:block/tags m)) (update :block/tags (partial mapv :block/uuid)))))
+      (seq (:block/tags m)) (update :block/tags (partial mapv :block/uuid))
+      (:block/link m)       (update :block/link :block/uuid))))
+
 
 (defn- reverse-op
   "return ops"
@@ -121,7 +127,7 @@ when undo this op, this original entity-map will be transacted back into db")
       ::boundary [op]
 
       ::insert-blocks
-      (mapv
+      (keep
        (fn [block-uuid]
          [::remove-block
           {:block-uuid       block-uuid
@@ -146,12 +152,16 @@ when undo this op, this original entity-map will be transacted back into db")
             block-origin-tags      (when (contains? value-keys :block-origin-tags)
                                      (mapv :block/uuid (:block/tags block-entity)))
             block-origin-collapsed (when (contains? value-keys :block-origin-collapsed)
-                                     (boolean (:block/collapsed? block-entity)))]
+                                     (boolean (:block/collapsed? block-entity)))
+            block-origin-link      (when (contains? value-keys :block-origin-link)
+                                     (:block/uuid (:block/link block-entity)))]
         [[::update-block
           (cond-> {:block-uuid block-uuid}
-            (some? block-origin-content)   (assoc :block-origin-content block-origin-content)
-            (some? block-origin-tags)      (assoc :block-origin-tags block-origin-tags)
-            (some? block-origin-collapsed) (assoc :block-origin-collapsed block-origin-collapsed))]]))))
+            (some? block-origin-content)              (assoc :block-origin-content block-origin-content)
+            (some? block-origin-tags)                 (assoc :block-origin-tags block-origin-tags)
+            (some? block-origin-collapsed)            (assoc :block-origin-collapsed block-origin-collapsed)
+            ;; block-origin-link's value maybe nil, so use contains as cond
+            (contains? value-keys :block-origin-link) (assoc :block-origin-link block-origin-link))]]))))
 
 (def ^:private apply-conj-vec (partial apply (fnil conj [])))
 
@@ -164,7 +174,7 @@ when undo this op, this original entity-map will be transacted back into db")
   (assert (and (undo-ops-validator ops)
                (uuid? page-block-uuid))
           {:ops ops :page-block-uuid page-block-uuid})
-  (swap! (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
+  (swap! (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
          update-in [repo page-block-uuid]
          apply-conj-vec ops))
 
@@ -190,36 +200,36 @@ when undo this op, this original entity-map will be transacted back into db")
 (defn- pop-undo-ops
   [repo page-block-uuid]
   (assert (uuid? page-block-uuid) page-block-uuid)
-  (let [repo->pege-block-uuid->undo-ops (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
-        undo-stack (get-in @repo->pege-block-uuid->undo-ops [repo page-block-uuid])
+  (let [repo->page-block-uuid->undo-ops (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
+        undo-stack (get-in @repo->page-block-uuid->undo-ops [repo page-block-uuid])
         [ops undo-stack*] (pop-ops-helper undo-stack)]
-    (swap! repo->pege-block-uuid->undo-ops assoc-in [repo page-block-uuid] undo-stack*)
+    (swap! repo->page-block-uuid->undo-ops assoc-in [repo page-block-uuid] undo-stack*)
     ops))
 
 (defn- empty-undo-stack?
   [repo page-block-uuid]
-  (empty? (get-in @(:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) [repo page-block-uuid])))
+  (empty? (get-in @(:undo/repo->page-block-uuid->undo-ops @worker-state/*state) [repo page-block-uuid])))
 
 (defn- empty-redo-stack?
   [repo page-block-uuid]
-  (empty? (get-in @(:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) [repo page-block-uuid])))
+  (empty? (get-in @(:undo/repo->page-block-uuid->redo-ops @worker-state/*state) [repo page-block-uuid])))
 
 (defn- push-redo-ops
   [repo page-block-uuid ops]
   (assert (and (undo-ops-validator ops)
                (uuid? page-block-uuid))
           {:ops ops :page-block-uuid page-block-uuid})
-  (swap! (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
+  (swap! (:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
          update-in [repo page-block-uuid]
          apply-conj-vec ops))
 
 (defn- pop-redo-ops
   [repo page-block-uuid]
   (assert (uuid? page-block-uuid) page-block-uuid)
-  (let [repo->pege-block-uuid->redo-ops (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
-        undo-stack (get-in @repo->pege-block-uuid->redo-ops [repo page-block-uuid])
+  (let [repo->page-block-uuid->redo-ops (:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
+        undo-stack (get-in @repo->page-block-uuid->redo-ops [repo page-block-uuid])
         [ops undo-stack*] (pop-ops-helper undo-stack)]
-    (swap! repo->pege-block-uuid->redo-ops assoc-in [repo page-block-uuid] undo-stack*)
+    (swap! repo->page-block-uuid->redo-ops assoc-in [repo page-block-uuid] undo-stack*)
     ops))
 
 (defn- normal-block?
@@ -227,6 +237,7 @@ when undo this op, this original entity-map will be transacted back into db")
   (and (:block/uuid entity)
        (:block/parent entity)
        (:block/left entity)))
+
 
 (defmulti ^:private reverse-apply-op (fn [op _conn _repo] (first op)))
 (defmethod reverse-apply-op ::remove-block
@@ -236,63 +247,63 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-not block-entity ;; this block shouldn't exist now
       (when-let [left-entity (d/entity @conn [:block/uuid (:block/left block-entity-map)])]
         (let [sibling? (not= (:block/left block-entity-map) (:block/parent block-entity-map))]
-          (some->>
-           (outliner-tx/transact!
-            {:gen-undo-op? false
-             :outliner-op :insert-blocks
-             :transact-opts {:repo repo
-                             :conn conn}}
-            (outliner-core/insert-blocks! repo conn
-                                          [(cond-> {:block/uuid block-uuid
-                                                    :block/content (:block/content block-entity-map)
-                                                    :block/format :markdown}
-                                             (:block/created-at block-entity-map)
-                                             (assoc :block/created-at (:block/created-at block-entity-map))
+          (outliner-tx/transact!
+           {:gen-undo-ops? false
+            :outliner-op :insert-blocks
+            :transact-opts {:repo repo
+                            :conn conn}}
+           (outliner-core/insert-blocks! repo conn
+                                         [(cond-> {:block/uuid block-uuid
+                                                   :block/content (:block/content block-entity-map)
+                                                   :block/format :markdown}
+                                            (:block/created-at block-entity-map)
+                                            (assoc :block/created-at (:block/created-at block-entity-map))
 
-                                             (:block/updated-at block-entity-map)
-                                             (assoc :block/updated-at (:block/updated-at block-entity-map))
+                                            (:block/updated-at block-entity-map)
+                                            (assoc :block/updated-at (:block/updated-at block-entity-map))
 
-                                             (seq (:block/tags block-entity-map))
-                                             (assoc :block/tags (some->> (:block/tags block-entity-map)
-                                                                         (map (partial vector :block/uuid))
-                                                                         (d/pull-many @conn [:db/id])
-                                                                         (keep :db/id))))]
-                                          left-entity {:sibling? sibling? :keep-uuid? true}))
-           (conj [:push-undo-redo])))))))
+                                            (seq (:block/tags block-entity-map))
+                                            (assoc :block/tags (some->> (:block/tags block-entity-map)
+                                                                        (map (partial vector :block/uuid))
+                                                                        (d/pull-many @conn [:db/id])
+                                                                        (keep :db/id))))]
+                                         left-entity {:sibling? sibling? :keep-uuid? true}))
+          (when (d/entity @conn [:block/uuid block-uuid])
+            [:push-undo-redo {}]))))))
 
-(defn- sort-block-entities
-  "return nil when there are other children existing"
+(defn- other-children-exist?
+  "return true if there are other children existing(not included in `block-entities`)"
   [block-entities]
-  (let [sorted-block-entities (common-util/sort-coll-by-dependency
-                               :block/uuid (comp :block/uuid :block/parent) block-entities)
-        block-uuid-set (set (map :block/uuid sorted-block-entities))]
-    (when-not
-     (some ;; check no other children
-      (fn [ent]
-        (not-empty (set/difference (set (map :block/uuid (:block/_parent ent))) block-uuid-set)))
-      sorted-block-entities)
+  (let [block-uuid-set (set (keep :block/uuid block-entities))]
+    (boolean
+     (some
+      (fn [block-entity]
+        (seq
+         (set/difference
+          (set (keep :block/uuid (:block/_parent block-entity)))
+          block-uuid-set)))
+      block-entities))))
 
-      sorted-block-entities)))
 
 (defmethod reverse-apply-op ::insert-blocks
   [op conn repo]
   (let [[_ {:keys [block-uuids]}] op]
     (when-let [block-entities (->> block-uuids
                                    (keep #(d/entity @conn [:block/uuid %]))
-                                   sort-block-entities
-                                   reverse
                                    not-empty)]
-      (some->>
-       (outliner-tx/transact!
-        {:gen-undo-op? false
-         :outliner-op :delete-blocks
-         :transact-opts {:repo repo
-                         :conn conn}}
-        (outliner-core/delete-blocks! repo conn
-                                      (common-config/get-date-formatter (worker-state/get-config repo))
-                                      block-entities
-                                      {:children? false}))
-       (conj [:push-undo-redo])))))
+      (when-not (other-children-exist? block-entities)
+        (outliner-tx/transact!
+         {:gen-undo-ops? false
+          :outliner-op :delete-blocks
+          :transact-opts {:repo repo
+                          :conn conn}}
+         (outliner-core/delete-blocks! repo conn
+                                       (common-config/get-date-formatter (worker-state/get-config repo))
+                                       block-entities
+                                       {})))
+
+      (when (every? nil? (map #(d/entity @conn [:block/uuid %]) block-uuids))
+        [:push-undo-redo {}]))))
 
 (defmethod reverse-apply-op ::move-block
   [op conn repo]
@@ -300,23 +311,32 @@ when undo this op, this original entity-map will be transacted back into db")
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when-let [left-entity (d/entity @conn [:block/uuid block-origin-left])]
         (let [sibling? (not= block-origin-left block-origin-parent)]
-          (some->>
-           (outliner-tx/transact!
-            {:gen-undo-op? false
-             :outliner-op :move-blocks
-             :transact-opts {:repo repo
-                             :conn conn}}
-            (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))
-           (conj [:push-undo-redo])))))))
+          (outliner-tx/transact!
+           {:gen-undo-ops? false
+            :outliner-op :move-blocks
+            :transact-opts {:repo repo
+                            :conn conn}}
+           (outliner-core/move-blocks! repo conn [block-entity] left-entity sibling?))
+          [:push-undo-redo {}])))))
 
 (defmethod reverse-apply-op ::update-block
   [op conn repo]
-  (let [[_ {:keys [block-uuid block-origin-content block-origin-tags block-origin-collapsed]}] op]
+  (let [[_ {:keys [block-uuid block-origin-content
+                   block-origin-tags block-origin-collapsed
+                   block-origin-link]
+            :as origin-value-map}] op]
     (when-let [block-entity (d/entity @conn [:block/uuid block-uuid])]
       (when (normal-block? block-entity)
         (let [db-id (:db/id block-entity)
-              _ (when (some? block-origin-tags)
-                  (d/transact! conn [[:db/retract db-id :block/tags]] {:gen-undo-op? false}))
+              retract-attrs-tx-data (cond-> []
+                                      (some? block-origin-tags)
+                                      (conj [:db/retract db-id :block/tags])
+
+                                      (and (contains? origin-value-map :block-origin-link)
+                                           (nil? block-origin-link))
+                                      (conj [:db/retract db-id :block/link]))
+              _ (when (seq retract-attrs-tx-data)
+                  (d/transact! conn retract-attrs-tx-data {:gen-undo-ops? false}))
               new-block (cond-> block-entity
                           (some? block-origin-content)
                           (assoc :block/content block-origin-content)
@@ -326,40 +346,47 @@ when undo this op, this original entity-map will be transacted back into db")
                                                       (d/pull-many @conn [:db/id])
                                                       (keep :db/id)))
                           (some? block-origin-collapsed)
-                          (assoc :block/collapsed? (boolean block-origin-collapsed)))
-              r2 (outliner-tx/transact!
-                  {:gen-undo-op? false
-                   :outliner-op :save-block
-                   :transact-opts {:repo repo
-                                   :conn conn}}
-                  (outliner-core/save-block! repo conn
-                                             (common-config/get-date-formatter (worker-state/get-config repo))
-                                             new-block))]
+                          (assoc :block/collapsed? (boolean block-origin-collapsed))
+                          (some? block-origin-link)
+                          (assoc :block/link [:block/uuid block-origin-link]))
+              _ (outliner-tx/transact!
+                 {:gen-undo-ops? false
+                  :outliner-op :save-block
+                  :transact-opts {:repo repo
+                                  :conn conn}}
+                 (outliner-core/save-block! repo conn
+                                            (common-config/get-date-formatter (worker-state/get-config repo))
+                                            new-block))]
 
-          (when r2 [:push-undo-redo r2]))))))
+          [:push-undo-redo {}])))))
 
 (defn- sort&merge-ops
   [ops]
-  (let [groups (group-by first ops)
-        remove-ops (groups ::remove-block)
-        insert-ops (groups ::insert-blocks)
-        other-ops (apply concat (vals (dissoc groups ::remove-block ::insert-blocks)))
+  (let [groups            (group-by first ops)
+        remove-ops        (groups ::remove-block)
+        insert-ops        (groups ::insert-blocks)
+        other-ops         (apply concat (vals (dissoc groups ::remove-block ::insert-blocks)))
         sorted-remove-ops (reverse
                            (common-util/sort-coll-by-dependency (comp :block-uuid second)
                                                                 (comp :block/left :block-entity-map second)
                                                                 remove-ops))
-        insert-op (some->> (seq insert-ops)
-                           (mapcat (fn [op] (:block-uuids (second op))))
-                           (hash-map :block-uuids)
-                           (vector ::insert-blocks))]
-    (cond-> (concat sorted-remove-ops other-ops)
-      insert-op (conj insert-op))))
+        insert-op         (some->> (seq insert-ops)
+                                   (mapcat (fn [op] (:block-uuids (second op))))
+                                   (hash-map :block-uuids)
+                                   (vector ::insert-blocks))
+        conj-vec          (partial apply conj)]
+    (cond-> []
+      insert-op               (conj insert-op)
+      (seq other-ops)         (conj-vec other-ops)
+      (seq sorted-remove-ops) (conj-vec sorted-remove-ops))))
+
 
 (defn undo
   [repo page-block-uuid conn]
   (if-let [ops (not-empty (pop-undo-ops repo page-block-uuid))]
     (let [redo-ops-to-push (transient [])]
-      (batch-tx/with-batch-tx-mode conn
+      (batch-tx/with-batch-tx-mode conn {:gen-undo-ops? false
+                                         :undo? true}
         (doseq [op ops]
           (let [rev-ops (reverse-op @conn op)
                 r (reverse-apply-op op conn repo)]
@@ -378,7 +405,8 @@ when undo this op, this original entity-map will be transacted back into db")
   [repo page-block-uuid conn]
   (if-let [ops (not-empty (pop-redo-ops repo page-block-uuid))]
     (let [undo-ops-to-push (transient [])]
-      (batch-tx/with-batch-tx-mode conn
+      (batch-tx/with-batch-tx-mode conn {:gen-undo-ops? false
+                                         :redo? true}
         (doseq [op ops]
           (let [rev-ops (reverse-op @conn op)
                 r (reverse-apply-op op conn repo)]
@@ -438,7 +466,7 @@ when undo this op, this original entity-map will be transacted back into db")
               other-ops
               (let [updated-attrs (seq (set/intersection
                                         updated-key-set
-                                        #{:block/content :block/tags :block/collapsed?}))]
+                                        #{:block/content :block/tags :block/collapsed? :block/link}))]
                 (when-let [update-block-op-value
                            (when (normal-block? entity-after)
                              (some->> updated-attrs
@@ -454,6 +482,9 @@ when undo this op, this original entity-map will be transacted back into db")
 
                                            :block/collapsed?
                                            [:block-origin-collapsed (boolean (:block/collapsed? entity-before))]
+
+                                           :block/link
+                                           [:block-origin-link (:block/uuid (:block/link entity-before))]
 
                                            nil)))
                                       seq
@@ -481,7 +512,7 @@ when undo this op, this original entity-map will be transacted back into db")
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
              repo id->attr->datom same-entity-datoms-coll]}]
-  (when (:gen-undo-op? tx-meta true)
+  (when (:gen-undo-ops? tx-meta true)
     (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom
                        (:gen-undo-boundary-op? tx-meta true))))
 
@@ -489,26 +520,26 @@ when undo this op, this original entity-map will be transacted back into db")
 
 (defn clear-undo-redo-stack
   []
-  (reset! (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) {})
-  (reset! (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) {}))
+  (reset! (:undo/repo->page-block-uuid->redo-ops @worker-state/*state) {})
+  (reset! (:undo/repo->page-block-uuid->undo-ops @worker-state/*state) {}))
 
 (comment
 
   (clear-undo-redo-stack)
-  (add-watch (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state)
+  (add-watch (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
              :xxx
              (fn [_ _ o n]
                (cljs.pprint/pprint {:k :undo
                                     :o o
                                     :n n})))
 
-  (add-watch (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state)
+  (add-watch (:undo/repo->page-block-uuid->redo-ops @worker-state/*state)
              :xxx
              (fn [_ _ o n]
                (cljs.pprint/pprint {:k :redo
                                     :o o
                                     :n n})))
 
-  (remove-watch (:undo/repo->pege-block-uuid->undo-ops @worker-state/*state) :xxx)
-  (remove-watch (:undo/repo->pege-block-uuid->redo-ops @worker-state/*state) :xxx)
+  (remove-watch (:undo/repo->page-block-uuid->undo-ops @worker-state/*state) :xxx)
+  (remove-watch (:undo/repo->page-block-uuid->redo-ops @worker-state/*state) :xxx)
   )
