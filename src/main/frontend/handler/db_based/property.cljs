@@ -57,7 +57,7 @@
                                   [{} property-val-schema])]
     [:fn
      schema-opts
-     (fn validate-property-value [property-val]
+     (fn property-value-schema [property-val]
        (db-malli-schema/validate-property-value (db/get-db) schema-fn [property property-val] {:new-closed-value? new-closed-value?}))]))
 
 (defn- fail-parse-long
@@ -78,7 +78,6 @@
     (cond
       (fail-parse-long v-str) :number
       (fail-parse-double v-str) :number
-      (util/uuid-string? v-str) :page
       (common-util/url? v-str) :url
       (contains? #{"true" "false"} (string/lower-case v-str)) :checkbox
       :else :default)
@@ -87,22 +86,9 @@
 
 (defn convert-property-input-string
   [schema-type v-str]
-  (if (and (not (string? v-str)) (not (object? v-str)))
-    v-str
-    (case schema-type
-      :number
-      (fail-parse-double v-str)
-
-      :page
-      (uuid v-str)
-
-      ;; these types don't need to be translated. :date expects uuid and other
-      ;; types usually expect text
-      (:url :date :any)
-      v-str
-
-      ;; :default
-      (if (util/uuid-string? v-str) (uuid v-str) v-str))))
+  (if (and (= :number schema-type) (string? v-str))
+    (fail-parse-double v-str)
+    v-str))
 
 (defn- update-datascript-schema
   [property {:keys [type cardinality values]}]
