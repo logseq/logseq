@@ -469,19 +469,24 @@
   (rum/local false ::show-page-info?)
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
-                 page-name' (get-sanity-page-name state page-name)]
+                 page-name' (get-sanity-page-name state page-name)
+                 *loading? (atom true)]
              (p/do!
               (db-async/<get-block (state/get-current-repo) page-name')
+              (reset! *loading? false)
               (route-handler/update-page-title-and-label! (state/get-route-match)))
-             (assoc state ::page-name page-name')))}
+             (assoc state
+                    ::page-name page-name'
+                    ::loading? *loading?)))}
   [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
-  (let [loading? (when (::page-name state)  (state/sub-async-query-loading (::page-name state)))]
+  (let [loading? (or (rum/react (::loading? state))
+                     (when (::page-name state) (state/sub-async-query-loading (::page-name state))))]
     (when-let [path-page-name (get-path-page-name state page-name)]
       (let [current-repo (state/sub :git/current-repo)
             repo (or repo current-repo)
             page-name (util/page-name-sanity-lc path-page-name)
             page (get-page-entity page-name)]
-        (when-not (and loading? (nil? page))
+        (when-not loading?
           (let [block-id (:block/uuid page)
                 block? (some? (:block/page page))
                 journal? (db/journal-page? page-name)
