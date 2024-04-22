@@ -18,6 +18,13 @@
                                   :repeater {}})
 (defonce *timestamp (atom default-timestamp-value))
 
+(defn- date->goog-date
+  [d]
+  (cond
+    (some->> d (instance? js/Date))
+    (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+    :else d))
+
 (defonce *show-time? (atom false))
 (rum/defc time-input < rum/reactive
   [default-value]
@@ -46,7 +53,7 @@
   [{:keys [num duration kind]}]
   (let [show? (rum/react *show-repeater?)]
     (if (or show? (and num duration kind))
-      [:div.w.full.flex.flex-row.justify-left
+      [:div.w.full.flex.flex-row.justify-left.items-center
        [:input#repeater-num.form-input.w-8.mr-2.px-1.sm:w-20.sm:px-2.text-center
         {:default-value num
          :on-change (fn [event]
@@ -90,7 +97,7 @@
   [e]
   (when e (util/stop e))
   (let [{:keys [repeater] :as timestamp} @*timestamp
-        date (:date-picker/date @state/state)
+        date (-> (:date-picker/date @state/state) date->goog-date)
         timestamp (assoc timestamp :date (or date (t/today)))
         kind (if (= "w" (:duration repeater)) "++" ".+")
         timestamp (assoc-in timestamp [:repeater :kind] kind)
@@ -162,7 +169,8 @@
                                 format
                                 {:command :page-ref})
                               (state/clear-editor-action!)
-                              (reset! commands/*current-command nil))))]
+                              (reset! commands/*current-command nil))
+                            (state/set-state! :date-picker/date d)))]
     [:div#date-time-picker.flex.flex-col.sm:flex-row
      ;; inline container
      [:div.border-red-500
@@ -170,6 +178,7 @@
         {:mode "single"
          :initial-focus true
          :show-week-number true
+         :selected _date
          :on-select select-handler!
          :on-day-key-down (fn [^js d _ ^js e]
                             (when (= "Enter" (.-key e))
