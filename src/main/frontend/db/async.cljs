@@ -111,10 +111,10 @@
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)
                 _ (d/transact! conn block-and-children)]
-          (state/update-state! :db/async-queries (fn [s] (disj s name')))
           (react/refresh-affected-queries!
            graph
            [[:frontend.worker.react/block (:db/id block)]])
+          (state/update-state! :db/async-queries (fn [s] (disj s name')))
           (if children?
             block
             result'))))))
