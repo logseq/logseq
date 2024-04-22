@@ -184,11 +184,9 @@
                           (map :db/id)
                           (into #{:block/tags :block/alias}))
         properties (d/pull-many db '[*] property-ids)
-        closed-values (->> properties
-                           (mapcat (fn [block]
-                                     (let [values (get-in block [:block/schema :values])]
-                                       (when (seq values)
-                                         (d/pull-many db '[*] (map #(vector :block/uuid %) values))))))
+        closed-values (->> (d/datoms db :avet :block/type "closed value")
+                           (map :e)
+                           (d/pull-many db '[*])
                            (mapcat (fn [block] (cons block (property-with-values db block))))
                            (map (fn [block]
                                   (let [val (:logseq.property/created-from-property block)]
