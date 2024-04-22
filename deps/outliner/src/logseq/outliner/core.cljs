@@ -954,7 +954,7 @@
           (otree/-save new-right-node txs-state conn repo date-formatter {}))))
     @txs-state))
 
-(defn ^:large-vars/cleanup-todo delete-blocks
+(defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
   [repo conn date-formatter blocks delete-opts]
