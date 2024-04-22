@@ -17,6 +17,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [frontend.extensions.graph :as graph]
@@ -47,7 +48,6 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.extensions.graph.pixi :as pixi]
-            [frontend.db.async :as db-async]
             [logseq.db :as ldb]
             [frontend.handler.property.util :as pu]
             [frontend.components.hierarchy :as hierarchy]))
@@ -221,19 +221,24 @@
                  query))
              (str repo "-custom-query-" (:query query))))]))))
 
-(defn tagged-pages
+(rum/defc tagged-pages
   [repo tag tag-original-name]
-  (let [pages (db/get-tag-pages repo tag)]
+  (let [[pages set-pages!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [result (db-async/<get-tag-pages repo (:db/id tag))]
+         (set-pages! result)))
+     [tag])
     (when (seq pages)
       [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
-          [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-original-name)]
-          [:ul.mt-2
-           (for [[original-name name] (sort-by last pages)]
-             [:li {:key (str "tagged-page-" name)}
-              (component-block/page-cp {} {:block/name name :block/original-name original-name})])]
-          {:default-collapsed? false})]])))
+         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-original-name)]
+         [:ul.mt-2
+          (for [page (sort-by :block/original-name pages)]
+            [:li {:key (str "tagged-page-" (:db/id page))}
+             (component-block/page-cp {} page)])]
+         {:default-collapsed? false})]])))
 
 (rum/defc page-title-editor < rum/reactive
   [page {:keys [*input-value *title-value *edit? untitled? page-name old-name whiteboard-page?]}]
@@ -498,8 +503,9 @@
             (when (or page-name block-or-whiteboard?)
               [:div.flex-1.page.relative
                (merge (if (seq (:block/tags page))
-                        (let [page-names (model/get-page-names-by-ids (map :db/id (:block/tags page)))]
-                          {:data-page-tags (text-util/build-data-value page-names)})
+                        (let [page-names (map :block/original-name (:block/tags page))]
+                          (when (seq page-names)
+                            {:data-page-tags (text-util/build-data-value page-names)}))
                         {})
 
                       {:key path-page-name
@@ -566,7 +572,7 @@
                  (scheduled/scheduled-and-deadlines page-name))
 
                (when-not block?
-                 (tagged-pages repo page-name page-original-name))
+                 (tagged-pages repo page page-original-name))
 
                ;; referenced blocks
                (when-not block-or-whiteboard?

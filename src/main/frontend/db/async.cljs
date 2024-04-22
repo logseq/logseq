@@ -25,16 +25,17 @@
 
 (defn <get-files
   [graph]
-  (p/let [result (<q
-                  graph
-                  '[:find [(pull ?file [:file/path :file/last-modified-at]) ...]
-                    :where
-                    [?file :file/path ?path]])]
+  (p/let [result (<q graph
+                     {:transact-db? false}
+                     '[:find [(pull ?file [:file/path :file/last-modified-at]) ...]
+                       :where
+                       [?file :file/path ?path]])]
     (->> result seq reverse (map #(vector (:file/path %) (or (:file/last-modified-at %) 0))))))
 
 (defn <get-all-templates
   [graph]
   (p/let [result (<q graph
+                     {:transact-db? true}
                      '[:find ?t (pull ?b [*])
                        :where
                        [?b :block/properties ?p]
@@ -51,7 +52,8 @@
   "Return seq of all property names except for private built-in properties."
   [graph]
   (p/let [result (<q graph
-                     '[:find [(pull ?e [:block/original-name :block/schema :db/ident]) ...]
+                     {:transact-db? false}
+                     '[:find [(pull ?e [:block/uuid :db/ident :block/original-name :block/schema]) ...]
                        :where
                        [?e :block/type "property"]
                        [?e :block/original-name]])]
@@ -77,7 +79,7 @@
 
 (defn <get-block-property-values
   [graph property-id]
-  (<q graph
+  (<q graph {:transact-db? false}
       '[:find ?b ?v
         :in $ ?property-id
         :where
@@ -97,15 +99,17 @@
             (db/entity [:block/uuid (uuid name')])
             :else
             (db/get-page name'))
-        uuid-str (or (and (:block/uuid e) (str (:block/uuid e))) name')]
+        id (or (and (:block/uuid e) (str (:block/uuid e)))
+               (and (util/uuid-string? name') name')
+               name-or-uuid)]
     (if (:block.temp/fully-loaded? e)
       e
       (when-let [^Object sqlite @db-browser/*worker]
         (state/update-state! :db/async-queries (fn [s] (conj s name')))
-        (p/let [result (.get-block-and-children sqlite graph uuid-str children?)
-                {:keys [property-pairs block children] :as result'} (ldb/read-transit-str result)
+        (p/let [result (.get-block-and-children sqlite graph id children?)
+                {:keys [properties block children] :as result'} (ldb/read-transit-str result)
                 conn (db/get-db graph false)
-                block-and-children (concat property-pairs [block] children)
+                block-and-children (concat properties [block] children)
                 _ (d/transact! conn block-and-children)]
           (state/update-state! :db/async-queries (fn [s] (disj s name')))
           (react/refresh-affected-queries!
@@ -159,7 +163,7 @@
 (defn <get-all-referenced-blocks-uuid
   "Get all uuids of blocks with any back link exists."
   [graph]
-  (<q graph
+  (<q graph {:transact-db? false}
       '[:find [?refed-uuid ...]
         :where
            ;; ?referee-b is block with ref towards ?refed-b
@@ -183,7 +187,7 @@
                               (parse-long))]
       (when future-day
         (when-let [repo (state/get-current-repo)]
-          (p/let [result (<q repo
+          (p/let [result (<q repo {}
                              '[:find [(pull ?block ?block-attrs) ...]
                                :in $ ?day ?future ?block-attrs
                                :where
@@ -206,7 +210,28 @@
                  db-model/sort-by-left-recursive
                  db-utils/group-by-page)))))))
 
+(defn <get-tag-pages
+  [graph tag-id]
+  (<q graph {:transact-db? true}
+      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/original-name :block/created-at :block/updated-at])]
+        :in $ ?tag-id
+        :where
+        [?page :block/tags ?tag-id]]
+      tag-id))
+
+(defn <get-tags
+  [graph]
+  (<q graph {:transact-db? false}
+      '[:find [(pull ?tag-id [:db/id :block/original-name])]
+        :in $ ?tag-id
+        :where
+        [?page :block/tags ?tag-id]]))
+
 (defn <fetch-all-pages
   [graph]
   (when-let [^Object worker @db-browser/*worker]
-    (.fetch-all-pages worker graph)))
+    (let [db (db/get-db graph)
+          exclude-ids (->> (d/datoms db :avet :block/name)
+                           (map :db/id)
+                           (ldb/write-transit-str))]
+      (.fetch-all-pages worker graph exclude-ids))))

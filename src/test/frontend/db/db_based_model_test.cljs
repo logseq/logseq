@@ -5,7 +5,8 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.handler.db-based.property :as db-property-handler]
-            [frontend.handler.page :as page-handler]))
+            [frontend.handler.page :as page-handler]
+            [logseq.db :as ldb]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -88,7 +89,7 @@
         _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})
         _ (test-helper/save-block! repo sbid "Block 2" {:tags ["class1"]})]
     (is
-     (= (model/get-tag-blocks repo "class1")
+     (= (ldb/get-tag-blocks (db/get-db) "class1")
         [(:db/id (db/entity [:block/uuid fbid]))
          (:db/id (db/entity [:block/uuid sbid]))]))))
 

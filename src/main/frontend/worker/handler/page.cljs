@@ -192,10 +192,6 @@
   [conn page]
   (try
     (cond
-      (and (contains? (:block/type page) "class")
-           (seq (ldb/get-tag-blocks @conn (:block/name page))))
-      {:msg "Page content deleted but unable to delete this page because blocks are tagged with this page"}
-
       ;; TODO: allow users to delete not built-in properties
       (contains? (:block/type page) "property")
       (cond (seq (ldb/get-classes-with-property @conn (:block/uuid page)))
