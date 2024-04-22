@@ -31,7 +31,7 @@
 ;; batch-remove-property!
 ;; upsert-property!
 ;; update-property!
-(deftest ^:large-vars/cleanup-todo ^:wip block-property-test
+(deftest ^:large-vars/cleanup-todo block-property-test
   (testing "Add a property to a block"
     (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value" {:property-type :string})
     (let [block (db/entity [:block/uuid fbid])
