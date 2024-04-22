@@ -110,10 +110,10 @@
         #{"property"})
       ;; check block's properties
       (are [x y] (= x y)
-        (count properties)
         3
-        (get properties :user.property/property-3)
-        #{1 2 3})))
+        (count properties)
+        #{1 2 3}
+        (get properties :user.property/property-3))))
 
   (testing "Remove a property"
     (db-property-handler/remove-block-property! repo fbid :user.property/property-3)
