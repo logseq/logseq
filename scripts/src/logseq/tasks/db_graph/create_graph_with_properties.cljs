@@ -197,6 +197,7 @@
     (when (seq conflicting-names)
       (println "Error: Following names conflict -" (string/join "," conflicting-names))
       (js/process.exit 1))
+    (println "DB dir: " (node-path/join dir db-name))
     (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
     (d/transact! conn blocks-tx)
