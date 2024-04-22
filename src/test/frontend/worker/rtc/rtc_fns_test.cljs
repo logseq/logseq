@@ -451,7 +451,7 @@ server: ;; remove 2
 
 ;; TODO: add back once page merge get supported
 (comment
-  (deftest ^:wip same-name-two-pages-merge-test
+  (deftest same-name-two-pages-merge-test
     (let [repo (state/get-current-repo)
           conn (conn/get-db repo false)
           date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
