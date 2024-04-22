@@ -238,10 +238,6 @@
                       @current-idx))
           (on-chosen-open-link (nth matched @current-idx) false))))))
 
-;; date-picker
-;; TODO: find a better way
-(def *internal-model (rum/cursor state/state :date-picker/date))
-
 (defn- non-edit-input?
   []
   (when-let [elem js/document.activeElement]
@@ -254,42 +250,6 @@
   (when-let [elem js/document.activeElement]
     (or (non-edit-input?)
         (util/select? elem))))
-
-(defn- inc-date [date n] (plus date (days n)))
-
-(defn- inc-week [date n] (plus date (weeks n)))
-
-(defn shortcut-complete
-  [state e]
-  (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
-    (when (and on-change
-               (not (input-or-select?)))
-      (when-not deadline-or-schedule?
-        (on-change e @*internal-model)))))
-
-(defn shortcut-prev-day
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-date -1)))
-
-(defn shortcut-next-day
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-date 1)))
-
-(defn shortcut-prev-week
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-week -1)))
-
-(defn shortcut-next-week
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-week 1)))
 
 (defn toggle-cards!
   []
