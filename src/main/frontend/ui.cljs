@@ -27,7 +27,6 @@
             [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.ui.date-picker]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
@@ -582,8 +581,6 @@
                item-cp))])]
        (when empty-placeholder
          empty-placeholder))]))
-
-(def datepicker frontend.ui.date-picker/date-picker)
 
 (defn toggle
   ([on? on-click] (toggle on? on-click false))

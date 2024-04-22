@@ -18,13 +18,6 @@
                                   :repeater {}})
 (defonce *timestamp (atom default-timestamp-value))
 
-(defn- date->goog-date
-  [d]
-  (cond
-    (some->> d (instance? js/Date))
-    (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
-    :else d))
-
 (defonce *show-time? (atom false))
 (rum/defc time-input < rum/reactive
   [default-value]
@@ -97,7 +90,7 @@
   [e]
   (when e (util/stop e))
   (let [{:keys [repeater] :as timestamp} @*timestamp
-        date (-> (:date-picker/date @state/state) date->goog-date)
+        date (-> (:date-picker/date @state/state) date/js-date->goog-date)
         timestamp (assoc timestamp :date (or date (t/today)))
         kind (if (= "w" (:duration repeater)) "++" ".+")
         timestamp (assoc-in timestamp [:repeater :kind] kind)

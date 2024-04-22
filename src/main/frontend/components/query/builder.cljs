@@ -11,6 +11,7 @@
             [frontend.components.select :as component-select]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [frontend.search :as search]
             [frontend.mixins :as mixins]
             [logseq.graph-parser.db :as gp-db]
@@ -74,50 +75,58 @@
       :aria-label "Full text search"
       :on-change #(reset! *input-value (util/evalue %))}]))
 
-(defonce *shown-datepicker (atom nil))
 (defonce *between-dates (atom {}))
 (rum/defcs datepicker < rum/reactive
-  (rum/local nil ::input-value)
-  {:init (fn [state]
-           (when (:auto-focus (last (:rum/args state)))
-             (reset! *shown-datepicker (first (:rum/args state))))
-           state)
-   :will-unmount (fn [state]
-                   (swap! *between-dates dissoc (first (:rum/args state)))
-                   state)}
+                        (rum/local nil ::input-value)
+                        {:will-unmount (fn [state]
+                                         (swap! *between-dates dissoc (first (:rum/args state)))
+                                         state)}
   [state id placeholder {:keys [auto-focus]}]
-  (let [*input-value (::input-value state)
-        show? (= id (rum/react *shown-datepicker))]
+  (let [*input-value (::input-value state)]
     [:div.ml-4
      [:input.query-builder-datepicker.form-input.block.sm:text-sm.sm:leading-5
       {:auto-focus (or auto-focus false)
        :placeholder placeholder
        :aria-label placeholder
-       :value @*input-value
-       :on-click #(reset! *shown-datepicker id)}]
-     (when show?
-       (ui/datepicker nil {:on-change (fn [_e date]
-                                        (let [journal-date (date/journal-name date)]
-                                          (reset! *input-value journal-date)
-                                          (reset! *shown-datepicker nil)
-                                          (swap! *between-dates assoc id journal-date)))}))]))
+       :value (some-> @*input-value (first))
+       :on-focus (fn [^js e]
+                   (js/setTimeout
+                     #(shui/popup-show! (.-target e)
+                        (let [select-handle! (fn [^js d]
+                                               (let [gd (date/js-date->goog-date d)
+                                                     journal-date (date/js-date->journal-title gd)]
+                                                 (reset! *input-value [journal-date d])
+                                                 (swap! *between-dates assoc id journal-date))
+                                               (shui/popup-hide!))]
+                          (shui/calendar
+                            {:mode "single"
+                             :initial-focus true
+                             :selected (some-> @*input-value (second))
+                             :on-select select-handle!
+                             :on-day-key-down (fn [^js d _ ^js e]
+                                                (when (= "Enter" (.-key e))
+                                                  (select-handle! d)
+                                                  (util/stop e)))}))
+                        {:id :query-datepicker
+                         :align :start}) 16))}]]))
 
 (rum/defcs between <
   (rum/local nil ::start)
   (rum/local nil ::end)
   [state {:keys [tree loc] :as opts}]
-  [:div.between-date {:on-pointer-down (fn [e] (util/stop-propagation e))}
+  [:div.between-date.p-4 {:on-pointer-down (fn [e] (util/stop-propagation e))}
    [:div.flex.flex-row
     [:div.font-medium.mt-2 "Between: "]
     (datepicker :start "Start date" (merge opts {:auto-focus true}))
     (datepicker :end "End date" opts)]
-   (ui/button "Submit"
-     :on-click (fn []
-                 (let [{:keys [start end]} @*between-dates]
-                   (when (and start end)
-                     (let [clause [:between [:page-ref start] [:page-ref end]]]
-                       (append-tree! tree opts loc clause)
-                       (reset! *between-dates {}))))))])
+   [:p.pt-2
+    (ui/button "Submit"
+      :on-click (fn []
+                  (let [{:keys [start end]} @*between-dates]
+                    (when (and start end)
+                      (let [clause [:between [:page-ref start] [:page-ref end]]]
+                        (append-tree! tree opts loc clause)
+                        (reset! *between-dates {}))))))]])
 
 (rum/defc property-select
   [*mode *property]
@@ -266,21 +275,19 @@
              (append-tree! *tree opts loc [(keyword value)])
 
              :else
-             (do (reset! *mode value)
-                 ((:toggle-fn opts)))))
+             (reset! *mode value)))
          {:input-default-placeholder "Add filter/operator"})])]))
 
 (rum/defc add-filter
   [*find *tree loc clause]
-  (ui/dropdown
-   (fn [{:keys [toggle-fn]}]
-     [:a.flex.add-filter {:title "Add clause"
-                          :on-click toggle-fn}
-      (ui/icon "plus" {:style {:font-size 20}})])
-   (fn [{:keys [toggle-fn]}]
-     (picker *find *tree loc clause {:toggle-fn toggle-fn}))
-   {:modal-class (util/hiccup->class
-                  "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg")}))
+  [:a.flex.add-filter
+   {:title "Add clause"
+    :on-click (fn [^js e]
+                (shui/popup-show! (.-target e)
+                  (fn [{:keys [id]}]
+                    (picker *find *tree loc clause {:toggle-fn #(shui/popup-hide! id)}))
+                  {}))}
+   (ui/icon "plus" {:style {:font-size 20}})])
 
 (declare clauses-group)
 
