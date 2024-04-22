@@ -162,7 +162,7 @@
   (undo-all conn page-uuid)
   (redo-all conn page-uuid))
 
-(deftest undo-redo-gen-test
+(deftest ^:long undo-redo-gen-test
   (let [conn (db/get-db false)
         all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 1000))]
     (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid all-remove-ops)
@@ -224,7 +224,7 @@
       (otree/blocks->vec-tree test-helper/test-db-name-db-version db
                               blocks page-uuid)))))
 
-(deftest ^:wip undo-redo-outliner-op-gen-test
+(deftest ^:long ^:wip undo-redo-outliner-op-gen-test
   (try
     (let [conn (db/get-db false)]
       (loop [num 100]
