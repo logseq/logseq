@@ -51,25 +51,7 @@
 ;;  * :file-graph? - Optional boolean to identify a command to only be run in file graphs
 ;;    and warned gracefully in db graphs
 (def ^:large-vars/data-var all-built-in-keyboard-shortcuts
-  ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
-  ;; So this setting item does not cover all cases.
-  ;; See-also: frontend.components.datetime/time-repeater
-  {:date-picker/complete                    {:binding "enter"
-                                             :fn      ui-handler/shortcut-complete}
-
-   :date-picker/prev-day                    {:binding "left"
-                                             :fn      ui-handler/shortcut-prev-day}
-
-   :date-picker/next-day                    {:binding "right"
-                                             :fn      ui-handler/shortcut-next-day}
-
-   :date-picker/prev-week                   {:binding ["up" "ctrl+p"]
-                                             :fn      ui-handler/shortcut-prev-week}
-
-   :date-picker/next-week                   {:binding ["down" "ctrl+n"]
-                                             :fn      ui-handler/shortcut-next-week}
-
-   :pdf/previous-page                       {:binding "alt+p"
+  {:pdf/previous-page                       {:binding "alt+p"
                                              :fn      pdf-utils/prev-page}
 
    :pdf/next-page                           {:binding "alt+n"
@@ -953,11 +935,6 @@
       :auto-complete/shift-complete
       :auto-complete/meta-complete
       :auto-complete/open-link
-      :date-picker/prev-day
-      :date-picker/next-day
-      :date-picker/prev-week
-      :date-picker/next-week
-      :date-picker/complete
       :git/commit
       :dev/show-block-data
       :dev/show-block-ast

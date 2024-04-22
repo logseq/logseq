@@ -60,6 +60,7 @@
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.clock :as clock]
@@ -78,7 +79,7 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.util.macro :as macro-util]
-            [logseq.shui.core :as shui]
+            [logseq.shui.core :as shui-core]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -2153,12 +2154,30 @@
         [:button.p-1.mr-2 p])]
      [:code "Property name begins with a non-numeric character and can contain alphanumeric characters and . * + ! - _ ? $ % & = < >. If -, + or . are the first character, the second character (if any) must be non-numeric."]]))
 
+(rum/defc timestamp-editor
+  [ast *show-datapicker?]
+
+  (let [*trigger-ref (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (let [pid (shui/popup-show!
+                    (.closest (rum/deref *trigger-ref) "a")
+                    (datetime-comp/date-picker nil nil (repeated/timestamp->map ast))
+                    {:id :timestamp-editor
+                     :align :start
+                     :root-props {:onOpenChange #(reset! *show-datapicker? %)}
+                     :content-props {:onEscapeKeyDown #(reset! *show-datapicker? false)}})]
+          #(do (shui/popup-hide! pid)
+               (reset! *show-datapicker? false))))
+      [])
+    [:i {:ref *trigger-ref}]))
+
 (rum/defcs timestamp-cp
   < rum/reactive
   (rum/local false ::show-datepicker?)
   [state block typ ast]
   (let [ts-block-id (get-in (state/sub [:editor/set-timestamp-block]) [:block :block/uuid])
-        active? (= (get block :block/uuid) ts-block-id)
+        _active? (= (get block :block/uuid) ts-block-id)
         *show-datapicker? (get state ::show-datepicker?)]
     [:div.flex.flex-col.gap-4.timestamp
      [:div.text-sm.flex.flex-row
@@ -2166,24 +2185,16 @@
        (str typ ": ")]
       [:a.opacity-80.hover:opacity-100
        {:on-pointer-down (fn [e]
-                         (util/stop e)
-                         (state/clear-editor-action!)
-                         (editor-handler/escape-editing false)
-                         (if active?
-                           (do
-                             (reset! *show-datapicker? false)
-                             (reset! commands/*current-command nil)
-                             (state/set-timestamp-block! nil))
-                           (do
-                             (reset! *show-datapicker? true)
-                             (reset! commands/*current-command typ)
-                             (state/set-timestamp-block! {:block block
-                                                          :typ typ}))))}
-       [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]]]
-     ;; date-picker in rendering-mode
-     (if (and active? @*show-datapicker?)
-       (datetime-comp/date-picker nil nil (repeated/timestamp->map ast))
-       (reset! *show-datapicker? false))]))
+                           (util/stop e)
+                           (state/clear-editor-action!)
+                           (editor-handler/escape-editing false)
+                           (reset! *show-datapicker? true)
+                           (reset! commands/*current-command typ)
+                           (state/set-timestamp-block! {:block block
+                                                        :typ typ}))}
+       [:span.time-start "<"] [:time (repeated/timestamp->text ast)] [:span.time-stop ">"]
+       (when (and _active? @*show-datapicker?)
+         (timestamp-editor ast *show-datapicker?))]]]))
 
 (defn- target-forbidden-edit?
   [target]
@@ -3218,7 +3229,7 @@
                         (config/db-based-graph? (state/get-current-repo))
                         (assoc-in [:block :properties]
                                   (db-pu/readable-properties (get-in config [:block :block/properties]))))]
-        (shui/table-v2 {:data (concat [[header]] groups)}
+        (shui-core/table-v2 {:data (concat [[header]] groups)}
                        (make-shui-context v2-config inline)))
     1 (let [tr (fn [elm cols]
                  (->elem

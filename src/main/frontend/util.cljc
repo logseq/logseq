@@ -592,12 +592,6 @@
         (gobj/get node "tagName")))))
 
 #?(:cljs
-   (defn select?
-     [node]
-     (when node
-       (= "SELECT" (gobj/get node "tagName")))))
-
-#?(:cljs
    (defn details-or-summary?
      [node]
      (when node
@@ -761,30 +755,6 @@
      (let [start (get-selection-start input)
            end   (get-selection-end input)]
        (safe-set-range-text! input text start end "end"))))
-
-;; copied from re_com
-#?(:cljs
-   (defn deref-or-value
-     "Takes a value or an atom
-      If it's a value, returns it
-      If it's a Reagent object that supports IDeref, returns the value inside it by derefing
-      "
-     [val-or-atom]
-     (if (satisfies? IDeref val-or-atom)
-       @val-or-atom
-       val-or-atom)))
-
-;; copied from re_com
-#?(:cljs
-   (defn now->utc
-     "Return a goog.date.UtcDateTime based on local date/time."
-     []
-     (let [local-date-time (js/goog.date.DateTime.)]
-       (js/goog.date.UtcDateTime.
-        (.getYear local-date-time)
-        (.getMonth local-date-time)
-        (.getDate local-date-time)
-        0 0 0 0))))
 
 (defn safe-subvec [xs start end]
   (if (or (neg? start)
