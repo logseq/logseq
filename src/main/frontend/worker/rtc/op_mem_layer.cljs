@@ -8,8 +8,7 @@
             [malli.core :as m]
             [malli.transform :as mt]
             [promesa.core :as p]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [frontend.util :as util]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (def op-schema
   [:multi {:dispatch first}
@@ -544,5 +543,5 @@
   "Is db-graph & RTC enabled"
   [repo]
   (and (sqlite-util/db-based-graph? repo)
-       (or util/node-test?
+       (or (exists? js/process)
            (some? (get-local-tx repo)))))
