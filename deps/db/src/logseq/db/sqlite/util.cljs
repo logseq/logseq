@@ -92,7 +92,7 @@
         :db/cardinality (if (= :many (:cardinality prop-schema))
                           :db.cardinality/many
                           :db.cardinality/one)}
-        (or ref-type? (contains? db-property-type/ref-property-types (:type prop-schema)))
+        (or ref-type? (contains? (conj db-property-type/ref-property-types :entity) (:type prop-schema)))
         (assoc :db/valueType :db.type/ref))))))
 
 

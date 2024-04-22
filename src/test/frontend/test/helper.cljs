@@ -12,7 +12,7 @@
             [frontend.handler.page :as page-handler]
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph :refer [kv]]
             [frontend.config :as config]
             [frontend.worker.pipeline :as worker-pipeline]))
 
@@ -25,12 +25,13 @@
 
 (defn start-test-db!
   [& {:as opts}]
-  (let [test-db (if (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
-                  test-db-name-db-version
-                  test-db-name)]
+  (let [db-graph? (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
+        test-db (if db-graph? test-db-name-db-version test-db-name)]
     (state/set-current-repo! test-db)
     (conn/start! test-db opts)
     (let [conn (conn/get-db test-db false)]
+      (when db-graph?
+        (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]
                    (worker-pipeline/invoke-hooks test-db conn tx-report {}))))))

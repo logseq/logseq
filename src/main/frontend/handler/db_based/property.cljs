@@ -546,7 +546,7 @@
         last-block-id (:block/uuid (last blocks))
         class? (contains? (:block/type block) "class")
         property-id (:db/ident property)]
-    (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})]
+    (p/let [_tx-report (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})]
       (let [result (when property-id
                      (if (and class? class-schema?)
                        (class-add-property! repo (:db/id block) property-id)
@@ -790,7 +790,7 @@
                       from-property (:logseq.property/created-from-property block)]
                   (when (and from-block from-property)
                     [from-block from-property]))) (reverse parents))]
-    {:from-block-id (or (:db/id created-from-block) (:db/id b))
+    {:from-block-id (:db/id created-from-block)
      :from-property-id (:db/id created-from-property)}))
 
 (defn batch-set-property-closed-value!
