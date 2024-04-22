@@ -85,7 +85,7 @@
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
-(defn filter-top-level-blocks
+(defn- filter-top-level-blocks
   [blocks]
   (let [parent-ids (set/intersection (set (map (comp :db/id :block/parent) blocks))
                                      (set (map :db/id blocks)))]
