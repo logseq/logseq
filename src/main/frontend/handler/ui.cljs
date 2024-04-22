@@ -1,6 +1,5 @@
 (ns ^:no-doc frontend.handler.ui
-  (:require [cljs-time.core :refer [days plus weeks]]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [dommy.core :as dom]
             [electron.ipc :as ipc]
             [frontend.config :as config]
@@ -237,19 +236,6 @@
                    (> (count matched)
                       @current-idx))
           (on-chosen-open-link (nth matched @current-idx) false))))))
-
-(defn- non-edit-input?
-  []
-  (when-let [elem js/document.activeElement]
-    (and (util/input? elem)
-         (when-let [id (gobj/get elem "id")]
-           (not (string/starts-with? id "edit-block-"))))))
-
-(defn- input-or-select?
-  []
-  (when-let [elem js/document.activeElement]
-    (or (non-edit-input?)
-        (util/select? elem))))
 
 (defn toggle-cards!
   []
