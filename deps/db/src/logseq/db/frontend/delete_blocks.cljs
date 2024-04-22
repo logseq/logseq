@@ -2,7 +2,6 @@
   "Delete refs/macros when deleting blocks"
   (:require [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
-            [logseq.graph-parser.property :as gp-property]
             [datascript.core :as d]
             [clojure.string :as string]))
 
@@ -19,8 +18,7 @@
                                 (let [refs (:block/_refs block)]
                                   (map (fn [ref]
                                          (let [id (:db/id ref)
-                                               block-content (gp-property/remove-properties
-                                                              (:block/format block) (:block/content block))
+                                               block-content (:block/content ref)
                                                new-content (some-> (:block/content ref)
                                                                    (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                                    block-content)

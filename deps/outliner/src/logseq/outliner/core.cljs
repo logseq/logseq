@@ -85,7 +85,7 @@
   (let [updated-at (common-util/time-ms)]
     (assoc block :block/updated-at updated-at)))
 
-(defn filter-top-level-blocks
+(defn- filter-top-level-blocks
   [blocks]
   (let [parent-ids (set/intersection (set (map (comp :db/id :block/parent) blocks))
                                      (set (map :db/id blocks)))]
@@ -964,7 +964,7 @@
           (otree/-save new-right-node txs-state conn repo date-formatter {}))))
     @txs-state))
 
-(defn- ^:large-vars/cleanup-todo delete-blocks
+(defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
   [repo conn date-formatter blocks delete-opts]

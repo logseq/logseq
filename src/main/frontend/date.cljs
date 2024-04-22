@@ -172,6 +172,13 @@
   [date]
   (journal-name (tc/to-local-date date)))
 
+(defn js-date->goog-date
+  [d]
+  (cond
+    (some->> d (instance? js/Date))
+    (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+    :else d))
+
 (comment
   (def default-formatter (tf/formatter "MMM do, yyyy"))
   (def zh-formatter (tf/formatter "YYYY年MM月dd日"))

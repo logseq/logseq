@@ -223,6 +223,14 @@
   &.as-heading {
     @apply flex w-full;
   }
+
+  &:has(.dsl-query) {
+    @apply flex flex-row w-full;
+  }
+
+  .dsl-query {
+    @apply w-full;
+  }
 }
 
 .block-control, .block-control:hover {
