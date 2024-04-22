@@ -1,8 +1,7 @@
 (ns frontend.util-test
   (:require [cljs.test :refer [deftest is testing]]
             [frontend.util :as util]
-            [frontend.config :as config]
-            [frontend.modules.shortcut.data-helper :as shortcut-data-helper]))
+            [frontend.config :as config]))
 
 (deftest test-find-first
   (testing "find-first"
