@@ -27,10 +27,11 @@
       (map #(d/pull db '[*] [:file/path %]) files))))
 
 (defn get-all-pages
-  [db]
+  [db exclude-page-ids]
   (->> (d/datoms db :avet :block/name)
-       (map (fn [e]
-              (d/pull db '[*] (:e e))))))
+       (keep (fn [e]
+               (when-not (contains? exclude-page-ids (:e e))
+                 (d/pull db '[:db/id :block/uuid :block/name :block/original-name :block/alias :block/type] (:e e)))))))
 
 (defn get-all-files
   [db]
@@ -71,33 +72,47 @@
   [b]
   (assoc b :block.temp/fully-loaded? true))
 
+(comment
+  (defn- property-without-db-attrs
+    [property]
+    (dissoc property :db/index :db/valueType :db/cardinality)))
+
 (defn- property-with-values
   [db block]
-  (when (seq (:block/raw-properties block))
-    (let [pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block)))]
-      (mapcat
-       (fn [pair]
-         (let [property (d/entity db (:db/id (:property/pair-property pair)))
-               property-values (get pair (:db/ident property))
-               values (if (set? property-values) property-values #{property-values})
-               value-ids (when (every? map? values)
-                           (->> (map :db/id values)
-                                (filter (fn [id] (or (int? id) (keyword? id))))))
-               value-blocks (when (seq value-ids)
-                              (mapcat
-                               (fn [id]
-                                 (let [b (d/entity db id)]
-                                   (cons (d/pull db '[*] id)
-                                         (let [ids (map :db/id (:block/raw-properties b))]
-                                           (when (seq ids)
-                                             (d/pull-many db '[*] ids))))))
-                               value-ids))
-               page (when (seq values)
-                      (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
-                        (d/pull db '[*] page-id)))]
-
-           (remove nil? (concat [page] value-blocks [pair]))))
-       pairs))))
+  (let [block (d/entity db (:db/id block))
+        class-properties (when (contains? (:block/type block) "class")
+                           (let [property-ids (map :db/id (:class/schema.properties block))]
+                             (when (seq property-ids)
+                               (d/pull-many db '[*] property-ids))))
+        block-properties (when (seq (:block/raw-properties block))
+                           (let [pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block)))]
+                             (mapcat
+                              (fn [pair]
+                                (let [property (d/entity db (:db/id (:property/pair-property pair)))
+                                      property-values (get pair (:db/ident property))
+                                      values (if (coll? property-values) property-values #{property-values})
+                                      value-ids (when (every? map? values)
+                                                  (->> (map :db/id values)
+                                                       (filter (fn [id] (or (int? id) (keyword? id))))))
+                                      value-blocks (when (seq value-ids)
+                                                     (mapcat
+                                                      (fn [id]
+                                                        (let [b (d/entity db id)]
+                                                          (cons (d/pull db '[*] id)
+                                                                (let [ids (map :db/id (:block/raw-properties b))]
+                                                                  (when (seq ids)
+                                                                    (d/pull-many db '[*] ids))))))
+                                                      value-ids))
+                                      page (when (seq values)
+                                             (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
+                                               (d/pull db '[*] page-id)))
+                                      property' (d/pull db '[*] (:db/id property))]
+                                  (remove nil? (concat [page]
+                                                       [property']
+                                                       value-blocks
+                                                       [pair]))))
+                              pairs)))]
+    (concat class-properties block-properties)))
 
 (defn get-block-and-children
   [db id children?]
@@ -127,17 +142,15 @@
                           (with-block-refs db)
                           mark-block-fully-loaded)]
           (cond->
-           {:block block'}
-            (seq (:block/raw-properties block))
-            (assoc :property-pairs (property-with-values db block))
+           {:block block'
+            :properties (property-with-values db block)}
             children?
             (assoc :children (get-children (:block/_parent block)))))
         (cond->
          {:block (->> (d/pull db '[*] (:db/id block))
                       (with-tags db)
-                      mark-block-fully-loaded)}
-          (seq (:block/raw-properties block))
-          (assoc :property-pairs (property-with-values db block))
+                      mark-block-fully-loaded)
+          :properties (property-with-values db block)}
           children?
           (assoc :children
                  (if (contains? (:block/type block) "whiteboard")
@@ -163,32 +176,26 @@
      (reverse)
      (take n))))
 
-(defn- block-with-properties
-  [db e]
-  (cons (d/pull db '[*] (:db/id e))
-        (property-with-values db e)))
-
 (defn get-structured-blocks
   [db]
-  (let [blocks (->> (d/datoms db :avet :block/type)
-                    (keep (fn [datom]
-                            (when (contains? #{"closed value" "property" "class"} (:v datom))
-                              (d/entity db (:e datom))))))
-        blocks-data (mapcat (fn [block] (block-with-properties db block)) blocks)
-        default-block-values (mapcat (fn [block]
-                                       (when (and (contains? (:block/type block) "property")
-                                                  (= :default (get-in block [:block/schema :type]))
-                                                  (not (:logseq.property/built-in? block)))
-                                         (let [values (get-in block [:block/schema :values])]
-                                           (mapcat (fn [id]
-                                                     (when (uuid? id)
-                                                       (let [e (d/entity db [:block/uuid id])
-                                                             children (:block/_parent e)]
-                                                         (concat
-                                                          (block-with-properties db e)
-                                                          (mapcat #(block-with-properties db %) children))))) values))))
-                                     blocks)]
-    (concat blocks-data default-block-values)))
+  (let [classes (d/pull-many db '[*] [:logseq.class/task :logseq.class/card])
+        property-ids (->> classes
+                          (mapcat :class/schema.properties)
+                          (map :db/id)
+                          (into #{:block/tags :block/alias}))
+        properties (d/pull-many db '[*] property-ids)
+        closed-values (->> properties
+                           (mapcat (fn [block]
+                                     (let [values (get-in block [:block/schema :values])]
+                                       (when (seq values)
+                                         (d/pull-many db '[*] (map #(vector :block/uuid %) values))))))
+                           (mapcat (fn [block] (cons block (property-with-values db block))))
+                           (map (fn [block]
+                                  (let [val (:logseq.property/created-from-property block)]
+                                    (if (keyword? (:db/id val))
+                                      (assoc block :logseq.property/created-from-property {:db/id (:db/id (d/entity db (:db/id val)))})
+                                      block)))))]
+    (concat closed-values properties classes)))
 
 (defn get-favorites
   "Favorites page and its blocks"
@@ -224,10 +231,7 @@
   [db]
   (let [schema (->> (:schema db)
                     (remove (fn [[k _v]]
-                              (or (integer? k)
-                                  (and (keyword? k)
-                                       ;; filters out all logseq-ident-namespaces
-                                       (string/starts-with? (namespace k) "logseq.")))))
+                              (integer? k)))
                     (into {}))
         db-type-ident (when (d/entity db :logseq.kv/db-type)
                         (d/pull db '[*] :logseq.kv/db-type))

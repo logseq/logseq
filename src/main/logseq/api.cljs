@@ -935,7 +935,8 @@
 
                                       :else %)
                                    inputs)
-              result          (apply db-async/<q repo (cons query resolved-inputs))]
+              result          (apply db-async/<q repo {:transact-db? false}
+                                (cons query resolved-inputs))]
         (bean/->js (sdk-utils/normalize-keyword-for-json result false))))))
 
 (defn ^:export custom_query

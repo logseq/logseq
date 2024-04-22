@@ -150,6 +150,21 @@
                   (reset! *property nil)
                   (append-tree! *tree opts loc x)))))))
 
+(rum/defc tags
+  [repo *tree opts loc]
+  (let [[values set-values!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [result (db-async/<get-tags repo)]
+         (set-values! result)))
+     [])
+    (let [items (->> values
+                     (map :block/original-name)
+                     sort)]
+      (select items
+              (fn [{:keys [value]}]
+                (append-tree! *tree opts loc [:page-tags value]))))))
+
 (defn- query-filter-picker
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
@@ -164,12 +179,7 @@
                    (append-tree! *tree opts loc [:namespace value]))))
 
        "tags"
-       (let [items (->> (db-model/get-all-tagged-pages repo)
-                        (map second)
-                        sort)]
-         (select items
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page-tags value]))))
+       (tags repo *tree opts loc)
 
        "property"
        (property-select *mode *property)

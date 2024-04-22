@@ -3,6 +3,7 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.handler.property.util :as pu]
@@ -91,7 +92,7 @@
         current-page (or (:block/name (db/get-current-page)) "")]
     (when-let [repo (state/get-current-repo)]
       (let [relation (db/get-pages-relation repo journal?)
-            tagged-pages (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-tagged-pages repo))
+            tagged-pages (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db-model/get-all-tagged-pages repo))
             namespaces (map (fn [[x y]] [x (common-util/page-name-sanity-lc y)]) (db/get-all-namespace-relation repo))
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)

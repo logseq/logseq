@@ -27,22 +27,7 @@
 
 (def block-attrs ldb/block-attrs)
 
-(defn get-tag-pages
-  [repo tag-name]
-  (when tag-name
-    (d/q '[:find ?original-name ?name
-           :in $ ?tag
-           :where
-           [?e :block/name ?tag]
-           [?page :block/tags ?e]
-           [?page :block/original-name ?original-name]
-           [?page :block/name ?name]]
-         (conn/get-db repo)
-         (util/page-name-sanity-lc tag-name))))
-
-(defn get-tag-blocks
-  [repo tag-name]
-  (ldb/get-tag-blocks (conn/get-db repo) tag-name))
+(def hidden-page? ldb/hidden-page?)
 
 (defn get-all-tagged-pages
   [repo]
@@ -52,8 +37,6 @@
          [?e :block/original-name ?tag]
          [?page :block/name ?page-name]]
        (conn/get-db repo)))
-
-(def hidden-page? ldb/hidden-page?)
 
 (defn get-all-pages
   [repo]
@@ -73,16 +56,6 @@
      (map #(:block/original-name (d/entity db (:e %))))
      (remove hidden-page?)
      (remove nil?))))
-
-(defn get-pages-with-file
-  "Return full file entity for calling file renaming"
-  [repo]
-  (d/q
-   '[:find (pull ?page [:block/name :block/properties :block/journal?]) (pull ?file [*])
-     :where
-     [?page :block/name ?page-name]
-     [?page :block/file ?file]]
-   (conn/get-db repo)))
 
 (defn get-page-alias
   [repo page-name]
@@ -252,15 +225,6 @@ independent of format as format specific heading characters are stripped"
    (ldb/get-page-alias (conn/get-db repo-url) page-id)
    (set)
    (set/union #{page-id})))
-
-(defn get-page-names-by-ids
-  ([ids]
-   (get-page-names-by-ids (state/get-current-repo) ids))
-  ([repo ids]
-   (let [ids (remove nil? ids)]
-     (when repo
-       (->> (db-utils/pull-many repo '[:block/name] ids)
-            (map :block/name))))))
 
 (defn get-page-alias-names
   [repo page-id]

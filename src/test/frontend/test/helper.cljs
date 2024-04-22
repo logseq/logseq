@@ -12,7 +12,7 @@
             [frontend.handler.page :as page-handler]
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph :refer [kv]]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.config :as config]
             [frontend.worker.pipeline :as worker-pipeline]))
 

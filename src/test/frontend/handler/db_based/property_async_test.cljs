@@ -45,19 +45,18 @@
     (let [repo (state/get-current-repo)
           fb (db/entity [:block/uuid fbid])
           k :user.property/property-1]
-      (let []
-        (p/do!
-         ;; add property
-         (db-property-handler/upsert-property! repo k {:type :default} {})
-         (let [property (db/entity k)]
-           (p/do!
-            (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
+      (p/do!
+       ;; add property
+       (db-property-handler/upsert-property! repo k {:type :default} {})
+       (let [property (db/entity k)]
+         (p/do!
+          (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
             ;; collapse property-1
-            (db-property-handler/collapse-expand-property! repo fb property true)
-            (is (=
-                 [(:db/id property)]
-                 (map :db/id (:block/collapsed-properties (db/entity [:block/uuid fbid])))))
+          (db-property-handler/collapse-expand-property! repo fb property true)
+          (is (=
+               [(:db/id property)]
+               (map :db/id (:block/collapsed-properties (db/entity [:block/uuid fbid])))))
 
             ;; expand property-1
-            (db-property-handler/collapse-expand-property! repo fb property false)
-            (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid])))))))))))
+          (db-property-handler/collapse-expand-property! repo fb property false)
+          (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid]))))))))))

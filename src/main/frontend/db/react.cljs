@@ -96,7 +96,7 @@
         journals? (and (vector? k) (= :frontend.worker.react/journals (last k)))
         q (if (or journals? util/node-test?)
             (fn [query inputs] (apply d/q query db inputs))
-            (fn [query inputs] (apply db-async-util/<q repo (cons query inputs))))]
+            (fn [query inputs] (apply db-async-util/<q repo {} (cons query inputs))))]
     (when (or query-fn query kv?)
       (cond
         query-fn

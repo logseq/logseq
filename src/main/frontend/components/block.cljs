@@ -707,9 +707,8 @@
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [html-export? label children contents-page? preview? disable-preview?] :as config} page]
   (let [page-entity (::page-entity state)]
-    (when (:db/id page-entity)
-      (let [page-entity (when page-entity (db/sub-block (:db/id page-entity)))
-            page-name (or (:block/name page-entity)
+    (when-let [page-entity (when page-entity (db/sub-block (:db/id page-entity)))]
+      (let [page-name (or (:block/name page-entity)
                           (:block/name page))
             whiteboard-page? (model/whiteboard-page? page-name)
             inner (page-inner config page-entity contents-page? children html-export? label whiteboard-page?)

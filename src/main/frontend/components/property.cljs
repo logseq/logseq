@@ -387,10 +387,13 @@
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
-  [entity property-name {:keys [class-schema? page-configure?]}]
-  (let [repo (state/get-current-repo)]
+  [entity property-id {:keys [class-schema? page-configure?]}]
+  (p/let [repo (state/get-current-repo)
+          result (when (uuid? property-id)
+                   (db-async/<get-block repo property-id {:children? false}))
+          property (some-> (:db/id (:block result)) db/entity)]
     ;; existing property selected or entered
-    (if-let [property (db/entity [:block/original-name property-name])]
+    (if property
       (cond
         (and (not (get-in property [:block/schema :public?]))
              (ldb/built-in? property))
@@ -406,16 +409,16 @@
         :else
         ;; Both conditions necessary so that a class can add its own page properties
         (when (and (contains? (:block/type entity) "class") class-schema?)
-          (pv/<add-property! entity property-name "" {:class-schema? class-schema?
+          (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
                                                      ;; Only enter property names from sub-modal as inputting
                                                      ;; property values is buggy in sub-modal
-                                                      :exit-edit? page-configure?})))
+                                                             :exit-edit? page-configure?})))
       ;; new property entered
-      (if (db-property/valid-property-name? property-name)
+      (if (db-property/valid-property-name? property-id)
         (if (and (contains? (:block/type entity) "class") page-configure?)
-          (pv/<add-property! entity property-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
+          (pv/<add-property! entity property-id "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (p/do!
-           (db-property-handler/upsert-property! repo nil {} {:property-name property-name})
+           (db-property-handler/upsert-property! repo nil {} {:property-name property-id})
            true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
@@ -427,7 +430,7 @@
     (rum/use-effect!
      (fn []
        (p/let [properties (db-async/<db-based-get-all-properties (state/get-current-repo))]
-         (set-properties! (map :block/original-name (remove exclude-properties properties)))
+         (set-properties! (remove exclude-properties properties))
          (set-excluded-properties! (->> properties
                                         (filter exclude-properties)
                                         ;; lower case b/c of case insensitive name lookups
@@ -435,17 +438,20 @@
                                         set))))
      [])
     [:div.ls-property-add.flex.flex-row.items-center
-    [:span.bullet-container.cursor [:span.bullet]]
-    [:div.ls-property-key {:style {:padding-left 9
-                                   :height "1.5em"}} ; TODO: ugly
-     (select/select {:items (map (fn [x] {:value x}) properties)
-                     :dropdown? true
-                     :close-modal? false
-                     :show-new-when-not-exact-match? true
-                     :exact-match-exclude-items (fn [s] (contains? excluded-properties (string/lower-case s)))
-                     :input-default-placeholder "Add property"
-                     :on-chosen on-chosen
-                     :input-opts input-opts})]]))
+     [:span.bullet-container.cursor [:span.bullet]]
+     [:div.ls-property-key {:style {:padding-left 9
+                                    :height "1.5em"}} ; TODO: ugly
+      (select/select {:items (map (fn [x]
+                                    {:label (:block/original-name x)
+                                     :value (:block/uuid x)}) properties)
+                      :extract-fn :label
+                      :dropdown? true
+                      :close-modal? false
+                      :show-new-when-not-exact-match? true
+                      :exact-match-exclude-items (fn [s] (contains? excluded-properties (string/lower-case s)))
+                      :input-default-placeholder "Add property"
+                      :on-chosen on-chosen
+                      :input-opts input-opts})]]))
 
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
@@ -489,8 +495,8 @@
                                         :*show-new-property-config? *show-new-property-config?})
                  (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
 
-       (let [on-chosen (fn [{:keys [value]}]
-                         (reset! *property-key value)
+       (let [on-chosen (fn [{:keys [value label]}]
+                         (reset! *property-key (if (uuid? value) label value))
                          (p/let [result (add-property-from-dropdown entity value opts)]
                            (when (and (true? result) *show-new-property-config?)
                              (reset! *show-new-property-config? true))))
@@ -719,12 +725,21 @@
           (property-cp block k v opts))))))
 
 ;; TODO: Remove :page-configure? as it only ever seems to be set to true
-(rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   {:init (fn [state]
-           (assoc state ::id (str (random-uuid))))}
+           (assoc state
+                  ::id (str (random-uuid))
+                  ::tags-requested? (atom false)))}
   [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
+        *tags-requested? (::tags-requested? state)
+        repo (state/get-current-repo)
         block (resolve-linked-block-if-exists target-block)
+        _ (when (and (not @*tags-requested?) (:block/tags block))
+            (doseq [tag (:block/tags block)]
+              (db-async/<get-block repo (:block/uuid tag) {:children? false})
+              (reset! *tags-requested? true)
+              (db/sub-block (:db/id tag))))
         page? (db/page? block)
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)

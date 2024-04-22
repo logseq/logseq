@@ -406,10 +406,10 @@
      (ldb/write-transit-str (sqlite-common-db/get-initial-data @conn))))
 
   (fetch-all-pages
-   [_this repo]
+   [_this repo exclude-page-ids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (async/go
-       (let [all-pages (sqlite-common-db/get-all-pages @conn)
+       (let [all-pages (sqlite-common-db/get-all-pages @conn (ldb/read-transit-str exclude-page-ids-str))
              partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
          (doseq [[idx tx-data] partitioned-data]
            (worker-util/post-message :sync-db-changes {:repo repo
