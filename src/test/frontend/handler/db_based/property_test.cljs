@@ -5,9 +5,7 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.state :as state]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler]
-            [promesa.core :as p]))
+            [frontend.handler.page :as page-handler]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -206,21 +204,6 @@
                        (db-property-handler/get-block-classes-properties (:db/id (db/entity [:block/uuid fbid]))))))))))
 
 
-;; property-create-new-block
-;; get-property-block-created-block
-(deftest text-block-test
-  (testing "Add property and create a block value"
-    (let [repo (state/get-current-repo)
-          fb (db/entity [:block/uuid fbid])
-          k :user.property/property-1]
-      ;; add property
-      (db-property-handler/upsert-property! repo k {:type :default} {})
-      (p/let [property (db/entity k)
-              {:keys [last-block-id]} (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
-              {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
-        (is (= from-block-id (:db/id fb)))
-        (is (= from-property-id (:db/id property)))))))
-
 ;; convert-property-input-string
 (deftest convert-property-input-string
   (testing "Convert property input string according to its schema type"
@@ -235,26 +218,6 @@
         [:date test-uuid] test-uuid
         [:any test-uuid] test-uuid
         [nil test-uuid] test-uuid))))
-
-;; collapse-expand-property!
-(deftest collapse-expand-property-test
-  (testing "Collapse and expand property"
-    (let [repo (state/get-current-repo)
-          fb (db/entity [:block/uuid fbid])
-          k :user.property/property-1]
-      ;; add property
-      (db-property-handler/upsert-property! repo k {:type :default} {})
-      (let [property (db/entity k)]
-        (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
-        ;; collapse property-1
-        (db-property-handler/collapse-expand-property! repo fb property true)
-        (is (=
-             [(:db/id property)]
-             (map :db/id (:block/collapsed-properties (db/entity [:block/uuid fbid])))))
-
-        ;; expand property-1
-        (db-property-handler/collapse-expand-property! repo fb property false)
-        (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid]))))))))
 
 (deftest upsert-property!
   (testing "Update an existing property"

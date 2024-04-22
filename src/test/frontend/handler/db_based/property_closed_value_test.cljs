@@ -67,22 +67,21 @@
            (db/transact! tx-data)
            (let [b (db/entity [:block/uuid block-id])]
              (is (= 3 (:value (:block/schema b))))
-             (is (contains? (:block/type b) "closed value")))
-           (let [values (get-value-ids k)]
-             (is (= #{1 2 3} (get-closed-values values))))
+             (is (contains? (:block/type b) "closed value"))
+             (let [values (get-value-ids k)]
+               (is (= #{1 2 3} (get-closed-values values))))
 
-           (testing "Update closed value"
-             (p/let [{:keys [tx-data]} (db-property-handler/upsert-closed-value property {:id block-id
-                                                                                        :value 4
-                                                                                        :description "choice 4"})]
-               (db/transact! tx-data)
-               (let [b (db/entity [:block/uuid block-id])]
-                 (is (= 4 (:value (:block/schema b))))
-                 (is (= "choice 4" (:description (:block/schema b))))
-                 (is (contains? (:block/type b) "closed value")))))
+             (testing "Update closed value"
+               (p/let [{:keys [tx-data]} (db-property-handler/upsert-closed-value property {:id block-id
+                                                                                            :value 4
+                                                                                            :description "choice 4"})]
+                 (db/transact! tx-data)
+                 (let [b (db/entity [:block/uuid block-id])]
+                   (is (= 4 (:value (:block/schema b))))
+                   (is (= "choice 4" (:description (:block/schema b))))
+                   (is (contains? (:block/type b) "closed value"))
+                   (p/let [_ (db-property-handler/delete-closed-value! property (db/entity [:block/uuid block-id]))]
 
-           (p/do!
-            (db-property-handler/delete-closed-value! property (db/entity [:block/uuid block-id]))
-            (testing "Delete closed value"
-              (is (nil? (db/entity [:block/uuid block-id])))
-              (is (= 2 (count (:values (:block/schema (db/entity k))))))))))))))
+                     (testing "Delete closed value"
+                       (is (nil? (db/entity [:block/uuid block-id])))
+                       (is (= 2 (count (:values (:block/schema (db/entity k))))))))))))))))))
