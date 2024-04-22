@@ -151,7 +151,12 @@
 (rum/defc add-button
   [args]
   [:div.flex-1.flex-col.rounded-sm.add-button-link-wrap
-   {:on-click (fn [] (editor-handler/api-insert-new-block! "" args))}
+   {:on-click (fn [] (editor-handler/api-insert-new-block! "" args))
+    :on-key-down (fn [e]
+                    (when (= "Enter" (util/ekey e))
+                      (editor-handler/api-insert-new-block! "" args))
+                    (util/stop e))
+    :tab-index 0}
    [:div.flex.flex-row
     [:div.block {:style {:height      20
                          :width       20
