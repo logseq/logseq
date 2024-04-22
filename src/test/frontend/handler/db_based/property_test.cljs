@@ -213,7 +213,6 @@
                 (db-property-handler/convert-property-input-string schema-type value)) y)
         [:number "1"] 1
         [:number "1.2"] 1.2
-        [:page (str test-uuid)] test-uuid
         [:url test-uuid] test-uuid
         [:date test-uuid] test-uuid
         [:any test-uuid] test-uuid
