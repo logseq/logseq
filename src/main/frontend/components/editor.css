@@ -93,18 +93,24 @@ pre {
 
 .ui__popover-content {
   &[data-editor-popup-ref] {
-    @apply p-1 w-auto;
+    @apply p-1 w-72;
   }
 
   &[data-editor-popup-ref=commands] {
-    @apply px-1 py-1 w-72;
+    @apply px-1 py-1 w-72 data-[state=closed]:animate-none;
 
     &[data-side=top] {
-      max-height: min(calc(var(--radix-popover-content-available-height) - 40px), 460px);
+      max-height: min(calc(var(--radix-popover-content-available-height) - 60px), 460px);
+      position: relative;
+      top: -18px;
     }
 
     &[data-side=bottom] {
       max-height: min(calc(var(--radix-popover-content-available-height) - 20px), 480px);
     }
+  }
+
+  &[data-editor-popup-ref=datepicker] {
+    @apply w-auto;
   }
 }
