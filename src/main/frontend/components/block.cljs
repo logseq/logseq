@@ -702,7 +702,8 @@
              (assoc state ::page-entity
                     (if (e/entity? page)
                       page
-                      (db/get-page (:block/name page))))))}
+                      ;; Use uuid when available to uniquely identify case sensitive contexts
+                      (db/get-page (or (:block/uuid page) (:block/name page)))))))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"

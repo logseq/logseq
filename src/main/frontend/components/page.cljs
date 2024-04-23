@@ -1001,10 +1001,7 @@
 
 (defn- sort-pages-by
   [by-item desc? pages]
-  (let [comp (if desc? > <)
-        by-item (if (= by-item :block/name)
-                  (fn [x] (string/lower-case (:block/name x)))
-                  by-item)]
+  (let [comp (if desc? > <)]
     (sort-by by-item comp pages)))
 
 (rum/defc checkbox-opt
@@ -1212,9 +1209,9 @@
 
                ;; search key
                pages (if-not (string/blank? @*search-key)
-                       (search/fuzzy-search pages (util/page-name-sanity-lc @*search-key)
+                       (search/fuzzy-search pages @*search-key
                                             :limit 20
-                                            :extract-fn :block/name)
+                                            :extract-fn :block/original-name)
                        pages)
 
                _ (reset! *results-all pages)
@@ -1339,16 +1336,16 @@
                                                 (swap! *checks assoc idx (or indeterminate? (not all?))))))
                            :indeterminate (when (= -1 @*indeterminate) "indeterminate")})]
            [:th.icon ""]
-           (sortable-title (t :block/name) :block/name *sort-by-item *desc?)
+           (sortable-title (t :block/name) :block/original-name *sort-by-item *desc?)
            (when-not mobile?
              [(sortable-title (t :page/backlinks) :block/backlinks *sort-by-item *desc?)
               (sortable-title (t :page/created-at) :block/created-at *sort-by-item *desc?)
               (sortable-title (t :page/updated-at) :block/updated-at *sort-by-item *desc?)])]]
 
          [:tbody
-          (for [{:block/keys [idx name created-at updated-at backlinks] :as page} @*results]
-            (when-not (string/blank? name)
-              [:tr {:key name}
+          (for [{:block/keys [idx original-name created-at updated-at backlinks] :as page} @*results]
+            (when-not (string/blank? original-name)
+              [:tr {:key original-name}
                [:td.selector
                 (checkbox-opt (str "label-" idx)
                               (get @*checks idx)
