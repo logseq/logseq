@@ -170,7 +170,7 @@
       (shui/calendar
         {:mode "single"
          :initial-focus true
-         :show-week-number true
+         :show-week-number false
          :selected _date
          :on-select select-handler!
          :on-day-key-down (fn [^js d _ ^js e]
