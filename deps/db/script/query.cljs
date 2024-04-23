@@ -34,8 +34,10 @@
                             (update :block/properties (fn [props] (map (fn [m] (into {} m)) props)))))
                        (drop 2 args))
                   ;; assumes no :in are in queries
-                  (let [query (into (edn/read-string query*) [:in '$ '%])]
-                    (mapv first (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules)))))]
+                  (let [query (into (edn/read-string query*) [:in '$ '%])
+                        res (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules))]
+                    ;; Remove nesting for most queries which just have one :find binding
+                    (if (= 1 (count (first res))) (mapv first res) res)))]
     (when ((set args) "-v") (println "DB contains" (count (d/datoms @conn :eavt)) "datoms"))
     (prn results)))
 

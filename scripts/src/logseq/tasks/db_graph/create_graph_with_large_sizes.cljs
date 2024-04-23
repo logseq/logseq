@@ -24,7 +24,7 @@
     (map-indexed
      (fn [idx id]
        {:block/uuid id
-        :block/name (str "page-" (+ start-idx idx))})
+        :block/original-name (str "Page-" (+ start-idx idx))})
      ids)))
 
 (defn build-blocks
@@ -40,7 +40,10 @@
   (let [pages (build-pages 0 (:pages options))]
     {:pages-and-blocks
      (mapv #(hash-map :page % :blocks (build-blocks (:blocks options)))
-           pages)}))
+           pages)
+     ;; Custom id fns because transaction chunks may separate blocks and pages from each other
+     :page-id-fn (fn [b] [:block/original-name (:block/original-name b)])
+     :block-id-fn (fn [b] [:block/uuid (:block/uuid b)])}))
 
 (def spec
   "Options spec"
@@ -66,7 +69,7 @@
         conn (create-graph/init-conn dir db-name)
         _ (println "Building tx ...")
         blocks-tx (create-graph/create-blocks-tx (create-init-data options))]
-    (println "Built" (count blocks-tx) "tx," (count (filter :block/name blocks-tx)) "pages and"
+    (println "Built" (count blocks-tx) "tx," (count (filter :block/original-name blocks-tx)) "pages and"
              (count (filter :block/content blocks-tx)) "blocks ...")
     ;; Vary the chunking with page size up to a max to avoid OOM
     (let [tx-chunks (partition-all (min (:pages options) 30000) blocks-tx)]
@@ -74,7 +77,7 @@
              chunk-num 1]
         (when-let [chunk (first chunks)]
           (println "Transacting chunk" chunk-num  "of" (count tx-chunks)
-                   "starting with block:" (pr-str (select-keys (first chunk) [:block/content :block/name])))
+                   "starting with block:" (pr-str (select-keys (first chunk) [:block/content :block/original-name])))
           (d/transact! conn chunk)
           (recur (rest chunks) (inc chunk-num)))))
     #_(d/transact! conn blocks-tx)

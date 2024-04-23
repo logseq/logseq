@@ -109,13 +109,13 @@
   "Provides the next temp :db/id to use in a create-graph transact!"
   #(swap! current-db-id dec))
 
-(defn- ->block-tx [m uuid-maps all-idents page-id last-block]
+(defn- ->block-tx [m uuid-maps all-idents page-id last-block block-id-fn]
   (merge (dissoc m :properties)
          (sqlite-util/block-with-timestamps
           {:db/id (new-db-id)
            :block/format :markdown
            :block/page {:db/id page-id}
-           :block/left {:db/id (or (:db/id last-block) page-id)}
+           :block/left {:db/id (if last-block (block-id-fn last-block) page-id)}
            :block/parent {:db/id page-id}})
          (when (seq (:properties m))
            {:block/properties (->block-properties-tx (:properties m) uuid-maps all-idents)
@@ -186,6 +186,10 @@
      An additional key `:closed-values` is available to define closed values. The key takes
      a vec of maps containing keys :uuid, :value and :icon.
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
+  * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/original-name X]`
+    Default is :db/id
+  * :block-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
+    Default is :db/id
 
    The :properties in :pages-and-blocks is a map of property names to property
    values.  Multiple property values for a many cardinality property are defined
@@ -193,7 +197,9 @@
    :checkbox, :number, :page and :date. :checkbox and :number values are written
    as booleans and integers/floats. :page references are written as
    vectors e.g. `[:page \"PAGE NAME\"]`"
-  [{:keys [pages-and-blocks properties graph-namespace] :as options}]
+  [{:keys [pages-and-blocks properties graph-namespace page-id-fn block-id-fn]
+    :or {page-id-fn :db/id block-id-fn :db/id}
+    :as options}]
   (let [_ (validate-options options)
         ;; add uuids before tx for refs in :properties
         pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
@@ -217,16 +223,16 @@
         (vec
          (mapcat
           (fn [{:keys [page blocks]}]
-            (let [page-id (or (:db/id page) (new-db-id))]
+            (let [new-page {:db/id (or (:db/id page) (new-db-id))
+                            :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
+                            :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
+                            :block/journal? false
+                            :block/format :markdown}]
               (into
                ;; page tx
                [(sqlite-util/block-with-timestamps
                  (merge
-                  {:db/id page-id
-                   :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
-                   :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
-                   :block/journal? false
-                   :block/format :markdown}
+                  new-page
                   (dissoc page :properties)
                   (when (seq (:properties page))
                     {:block/properties (->block-properties-tx (:properties page) uuid-maps all-idents)})
@@ -237,7 +243,7 @@
                ;; blocks tx
                (reduce (fn [acc m]
                          (conj acc
-                               (->block-tx m uuid-maps all-idents page-id (last acc))))
+                               (->block-tx m uuid-maps all-idents (page-id-fn new-page) (last acc) block-id-fn)))
                        []
                        blocks))))
           pages-and-blocks'))]
