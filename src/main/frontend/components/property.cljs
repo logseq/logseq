@@ -389,9 +389,13 @@
    For pages, used to add both schema properties or properties for a page"
   [entity property-id {:keys [class-schema? page-configure?]}]
   (p/let [repo (state/get-current-repo)
+          ;; Both conditions necessary so that a class can add its own page properties
+          add-class-property? (and (contains? (:block/type entity) "class") class-schema?)
           result (when (uuid? property-id)
                    (db-async/<get-block repo property-id {:children? false}))
-          property (some-> (:db/id (:block result)) db/entity)]
+          ;; In block context result is in :block
+          property (some-> (if (:block result) (:db/id (:block result)) (:db/id result))
+                           db/entity)]
     ;; existing property selected or entered
     (if property
       (cond
@@ -400,18 +404,18 @@
         (do (notification/show! "This is a private built-in property that can't be used." :error)
             (pv/exit-edit-property))
 
-        (and (= :default (get-in property [:block/schema :type]))
+        (and (not add-class-property?)
+             (= :default (get-in property [:block/schema :type]))
              (not (seq (get-in property [:block/schema :values]))))
         (do
           (pv/<create-new-block! entity property "")
           nil)
 
         :else
-        ;; Both conditions necessary so that a class can add its own page properties
-        (when (and (contains? (:block/type entity) "class") class-schema?)
+        (when add-class-property?
           (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
-                                                     ;; Only enter property names from sub-modal as inputting
-                                                     ;; property values is buggy in sub-modal
+                                                             ;; Only enter property names from sub-modal as inputting
+                                                             ;; property values is buggy in sub-modal
                                                              :exit-edit? page-configure?})))
       ;; new property entered
       (if (db-property/valid-property-name? property-id)
