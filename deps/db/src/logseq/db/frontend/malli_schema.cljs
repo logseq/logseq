@@ -256,8 +256,8 @@
 
 (def property-page
   [:multi {:dispatch (fn [m]
-                       (or (db-property/logseq-property? (m :db/ident))
-                           (contains? db-property/db-attribute-properties (m :db/ident))))}
+                       (or (some->> (:db/ident m) db-property/logseq-property?)
+                           (contains? db-property/db-attribute-properties (:db/ident m))))}
    [true internal-property]
    [:malli.core/default user-property]])
 
