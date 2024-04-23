@@ -34,58 +34,57 @@
 
 (rum/defc commands < rum/reactive
   [id format]
-  (when (= :commands (state/sub :editor/action))
-    (let [matched (util/react *matched-commands)]
-      (ui/auto-complete
-       matched
-       {:get-group-name
-        (fn [item]
-          (when (= (count item) 4) (last item)))
+  (let [matched (util/react *matched-commands)]
+    (ui/auto-complete
+      matched
+      {:get-group-name
+       (fn [item]
+         (when (= (count item) 4) (last item)))
 
-        :item-render
-        (fn [item]
-          (let [command-name (first item)
-                command-doc  (get item 2)
-                plugin-id    (get-in item [1 1 1 :pid])
-                doc          (when (state/show-command-doc?) command-doc)]
-            (cond
-              (or plugin-id (vector? doc))
-              [:div.has-help
-               command-name
-               (when doc (ui/tippy
-                          {:html            doc
-                           :interactive     true
+       :item-render
+       (fn [item]
+         (let [command-name (first item)
+               command-doc (get item 2)
+               plugin-id (get-in item [1 1 1 :pid])
+               doc (when (state/show-command-doc?) command-doc)]
+           (cond
+             (or plugin-id (vector? doc))
+             [:div.has-help
+              command-name
+              (when doc (ui/tippy
+                          {:html doc
+                           :interactive true
                            :fixed-position? true
-                           :position        "right"}
+                           :position "right"}
 
                           [:small (svg/help-circle)]))
-               (when plugin-id
-                 [:small {:title (str plugin-id)} (ui/icon "puzzle")])]
+              (when plugin-id
+                [:small {:title (str plugin-id)} (ui/icon "puzzle")])]
 
-              (string? doc)
-              [:div {:title doc}
-               command-name]
+             (string? doc)
+             [:div {:title doc}
+              command-name]
 
-              :else
-              [:div command-name])))
+             :else
+             [:div command-name])))
 
-        :on-chosen
-        (fn [chosen-item]
-          (let [command (first chosen-item)]
-            (reset! commands/*current-command command)
-            (let [command-steps  (get (into {} matched) command)
-                  restore-slash? (or
+       :on-chosen
+       (fn [chosen-item]
+         (let [command (first chosen-item)]
+           (reset! commands/*current-command command)
+           (let [command-steps (get (into {} matched) command)
+                 restore-slash? (or
                                   (contains? #{"Today" "Yesterday" "Tomorrow" "Current time"} command)
                                   (and
-                                   (not (fn? command-steps))
-                                   (not (contains? (set (map first command-steps)) :editor/input))
-                                   (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
-              (editor-handler/insert-command! id command-steps
-                                              format
-                                              {:restore? restore-slash?
-                                               :command  command}))))
-        :class
-        "black"}))))
+                                    (not (fn? command-steps))
+                                    (not (contains? (set (map first command-steps)) :editor/input))
+                                    (not (contains? #{"Date picker" "Template" "Deadline" "Scheduled" "Upload an image"} command))))]
+             (editor-handler/insert-command! id command-steps
+               format
+               {:restore? restore-slash?
+                :command command}))))
+       :class
+       "black"})))
 
 (rum/defc block-commands < rum/reactive
   [id format]
@@ -758,6 +757,32 @@
       (let [{:keys [left top rect]} (cursor/get-caret-pos (state/get-input))
             pos [(+ left (:left rect) -20) (+ top (:top rect) 20)]]
         (let [pid (case action
+                    :commands
+                    (shui/popup-show!
+                      pos
+                      (commands id format)
+                      {:id :editor.commands/all
+                       :align :start
+                       :root-props {:onOpenChange
+                                    #(when-not %
+                                       (when (= :commands (state/get-editor-action))
+                                         (state/clear-editor-action!)))}
+                       :content-props {:onOpenAutoFocus #(.preventDefault %)
+                                       :data-editor-popup-ref "commands"}
+                       :force-popover? true})
+
+                    :datepicker
+                    (shui/popup-show!
+                      pos (datetime-comp/date-picker id format nil)
+                      {:id :editor.commands/datepicker
+                       :align :start
+                       :root-props {:onOpenChange
+                                    #(when-not %
+                                       (state/clear-editor-action!))}
+                       :content-props {:onOpenAutoFocus #(.preventDefault %)
+                                       :data-editor-popup-ref "datepicker"}
+                       :force-popover? true})
+
                     :editor.action/ask-ai
                     (shui/popup-show!
                       pos (editor-action-query-wrap
@@ -788,7 +813,7 @@
     [:<>
      (shui-models id format action nil)
      (cond
-       (= action :commands)
+       (= action :commands-classic)
        (animated-modal "commands" (commands id format) true)
 
        (= action :block-commands)
@@ -810,7 +835,7 @@
        (animated-modal "property-value-search" (property-value-search id) true)
 
        ;; date-picker in editing-mode
-       (= :datepicker action)
+       (= :datepicker-classic action)
        (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 
        (= :select-code-block-mode action)
