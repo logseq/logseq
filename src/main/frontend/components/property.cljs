@@ -387,12 +387,12 @@
 (defn- add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
    For pages, used to add both schema properties or properties for a page"
-  [entity property-id {:keys [class-schema? page-configure?]}]
+  [entity property-uuid-or-name {:keys [class-schema? page-configure?]}]
   (p/let [repo (state/get-current-repo)
           ;; Both conditions necessary so that a class can add its own page properties
           add-class-property? (and (contains? (:block/type entity) "class") class-schema?)
-          result (when (uuid? property-id)
-                   (db-async/<get-block repo property-id {:children? false}))
+          result (when (uuid? property-uuid-or-name)
+                   (db-async/<get-block repo property-uuid-or-name {:children? false}))
           ;; In block context result is in :block
           property (some-> (if (:block result) (:db/id (:block result)) (:db/id result))
                            db/entity)]
@@ -418,11 +418,11 @@
                                                              ;; property values is buggy in sub-modal
                                                              :exit-edit? page-configure?})))
       ;; new property entered
-      (if (db-property/valid-property-name? property-id)
+      (if (db-property/valid-property-name? property-uuid-or-name)
         (if (and (contains? (:block/type entity) "class") page-configure?)
-          (pv/<add-property! entity property-id "" {:class-schema? class-schema? :exit-edit? page-configure?})
+          (pv/<add-property! entity property-uuid-or-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (p/do!
-           (db-property-handler/upsert-property! repo nil {} {:property-name property-id})
+           (db-property-handler/upsert-property! repo nil {} {:property-name property-uuid-or-name})
            true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
@@ -437,8 +437,7 @@
          (set-properties! (remove exclude-properties properties))
          (set-excluded-properties! (->> properties
                                         (filter exclude-properties)
-                                        ;; lower case b/c of case insensitive name lookups
-                                        (map (comp string/lower-case :block/original-name))
+                                        (map :block/original-name)
                                         set))))
      [])
     [:div.ls-property-add.flex.flex-row.items-center
@@ -452,7 +451,7 @@
                       :dropdown? true
                       :close-modal? false
                       :show-new-when-not-exact-match? true
-                      :exact-match-exclude-items (fn [s] (contains? excluded-properties (string/lower-case s)))
+                      :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
                       :input-default-placeholder "Add property"
                       :on-chosen on-chosen
                       :input-opts input-opts})]]))
