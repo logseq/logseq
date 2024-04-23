@@ -120,7 +120,8 @@ necessary db filtering"
           }
         }
       }(window.location))"]
-            (map  #(identity [:script {:src %}]) scripts)
+            (map  #(identity  (let [{:keys [src,content]}  %]
+                                [:script {:src src}   (str content)])) scripts)
             [:script {:src "static/js/react.production.min.js"}]
             [:script {:src "static/js/react-dom.production.min.js"}]
             [:script {:src "static/js/ui.js"}]
