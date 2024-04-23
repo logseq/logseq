@@ -20,6 +20,7 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
+            [logseq.shui.popup.core :as shui-popup]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.util.keycode :as keycode]
@@ -749,6 +750,11 @@
                         )} query)]
      [:p "input key: " (shui/badge (some-> keydown-e (.-key)))]]))
 
+(defn- exist-editor-commands-popup?
+  []
+  (some->> (shui-popup/get-popups)
+    (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
+
 ;; TODO: [WIP]
 (rum/defc shui-models
   [id format action _data]
@@ -761,13 +767,14 @@
                     (shui/popup-show!
                       pos
                       (commands id format)
-                      {:id :editor.commands/all
+                      {:id :editor.commands/commands
                        :align :start
                        :root-props {:onOpenChange
                                     #(when-not %
                                        (when (= :commands (state/get-editor-action))
                                          (state/clear-editor-action!)))}
                        :content-props {:onOpenAutoFocus #(.preventDefault %)
+                                       :onCloseAutoFocus #(.preventDefault %)
                                        :data-editor-popup-ref "commands"}
                        :force-popover? true})
 
@@ -776,11 +783,19 @@
                       pos (datetime-comp/date-picker id format nil)
                       {:id :editor.commands/datepicker
                        :align :start
-                       :root-props {:onOpenChange
-                                    #(when-not %
-                                       (state/clear-editor-action!))}
+                       :root-props {:onOpenChange #(when-not % (state/clear-editor-action!))}
                        :content-props {:onOpenAutoFocus #(.preventDefault %)
                                        :data-editor-popup-ref "datepicker"}
+                       :force-popover? true})
+
+                    :select-code-block-mode
+                    (shui/popup-show!
+                      pos (code-block-mode-picker id format)
+                      {:id :editor.commands/code-block-mode-picker
+                       :align :start
+                       :root-props {:onOpenChange #(when-not % (state/clear-editor-action!))}
+                       :content-props {:onOpenAutoFocus #(.preventDefault %)
+                                       :data-editor-popup-ref "code-block-mode-picker"}
                        :force-popover? true})
 
                     :editor.action/ask-ai
@@ -791,12 +806,10 @@
                               (ask-ai-content query
                                 {:id id :format format :action action :keydown-e keydown-e}))
                             {:sub-input-keydown? true})
-                      {:align :start
-                       :root-props {:onOpenChange
-                                    #(when-not %
-                                       (state/clear-editor-action!))}
-                       :content-props {:onOpenAutoFocus
-                                       #(.preventDefault %)}
+                      {:id :editor.commands/ask-ai
+                       :align :start
+                       :root-props {:onOpenChange #(when-not % (state/clear-editor-action!))}
+                       :content-props {:onOpenAutoFocus #(.preventDefault %)}
                        :force-popover? true})
 
                     ;; TODO: try remove local model state
@@ -838,7 +851,7 @@
        (= :datepicker-classic action)
        (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
 
-       (= :select-code-block-mode action)
+       (= :select-code-block-mode-classic action)
        (animated-modal "select-code-block-mode" (code-block-mode-picker id format) true)
 
        (= :input action)
@@ -905,9 +918,10 @@
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (and (= (util/ekey e) "Escape") on-hide)
-                                        (on-hide content :esc))))
-               :auto-focus        true
-               :class             heading-class}
+                                        (when-not (exist-editor-commands-popup?)
+                                          (on-hide content :esc)))))
+               :auto-focus true
+               :class heading-class}
                (some? parent-block)
                (assoc :parentblockid (str (:block/uuid parent-block)))
 
