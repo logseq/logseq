@@ -90,7 +90,10 @@
                               (fn [pair]
                                 (let [property (d/entity db (:db/id (:property/pair-property pair)))
                                       property-values (get pair (:db/ident property))
-                                      values (if (coll? property-values) property-values #{property-values})
+                                      values (if (and (coll? property-values)
+                                                      (map? (first property-values)))
+                                               property-values
+                                               #{property-values})
                                       value-ids (when (every? map? values)
                                                   (->> (map :db/id values)
                                                        (filter (fn [id] (or (int? id) (keyword? id))))))
