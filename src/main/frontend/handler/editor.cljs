@@ -741,13 +741,15 @@
                        (gobj/get (utf8/encode original-content) "length")
                        0)
                      0)
-                edit-target (if edit-block-has-refs?
-                              (db/pull (:db/id edit-block))
-                              (db/pull (:db/id block)))]
+                [edit-target container-id] (if edit-block-has-refs?
+                                             [(db/pull (:db/id edit-block)) (:editor/container-id @state/state)]
+                                             [(db/pull (:db/id block)) (some-> (dom/attr sibling-block "containerid")
+                                                                               util/safe-parse-int)])]
             (edit-block! edit-target
                          pos
                          {:custom-content new-value
-                          :tail-len tail-len})
+                          :tail-len tail-len
+                          :container-id container-id})
 
             {:prev-block block
              :new-content new-value
