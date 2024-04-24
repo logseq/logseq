@@ -113,7 +113,6 @@
                               {:db/id (new-db-id)
                                :block/uuid (random-uuid)
                                :block/format :markdown
-                               :block/path-refs [{:db/id page-id}]
                                :block/page {:db/id page-id}
                                :block/left {:db/id page-id}
                                :block/parent {:db/id page-id}

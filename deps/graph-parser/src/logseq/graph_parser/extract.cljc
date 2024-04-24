@@ -217,6 +217,7 @@
                                        :or {extracted-block-ids (atom #{})
                                             resolve-uuid-fn (constantly nil)}
                                        :as options}]
+  (assert db "Datascript DB is required")
   (try
     (let [db-based? (ldb/db-based-graph? db)
           page (get-page-name file ast false filename-format)
