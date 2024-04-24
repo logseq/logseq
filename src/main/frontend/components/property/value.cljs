@@ -81,13 +81,13 @@
           (db-property-handler/class-add-property! repo (:block/uuid block) property-key)
           (let [[property-id property-value']
                 (if (string? property-key)
-                 (if-let [ent (db/entity [:block/original-name property-key])]
-                   [(:db/ident ent) property-value]
+                  (if-let [ent (ldb/get-page (db/get-db repo) property-key)]
+                    [(:db/ident ent) property-value]
                   ;; This is a new property. Create a new property id to use of set-block-property!
-                   [(db-property-handler/ensure-unique-db-ident
-                     (db/get-db (state/get-current-repo))
-                     (db-property/create-user-property-ident-from-name property-key))
-                    :logseq.property/empty-placeholder])
+                    [(db-property-handler/ensure-unique-db-ident
+                      (db/get-db (state/get-current-repo))
+                      (db-property/create-user-property-ident-from-name property-key))
+                     :logseq.property/empty-placeholder])
                   [property-key property-value])]
             (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?

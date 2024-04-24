@@ -380,7 +380,7 @@
   [state]
   (let [highlighted-item (some-> state state->highlighted-item)]
     (or (:block/uuid (:source-block highlighted-item))
-        (or (:block/uuid (db/entity [:block/original-name (:source-page highlighted-item)]))
+        (or (:block/uuid (db/get-page (:source-page highlighted-item)))
             (:source-page highlighted-item)))))
 
 (defmethod handle-action :open-page [_ state _event]

@@ -4,7 +4,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db :as ldb]))
 
 (defn- new-db-conn []
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
@@ -113,7 +114,7 @@
       (is (= #{[:user.property/number-many 10]
                [:user.property/number-many 5]
                [:user.property/foo "bar"]
-               [:user.property/page-many (:db/id (d/entity @conn [:block/original-name "Page A"]))]}
+               [:user.property/page-many (:db/id (ldb/get-page @conn "Page A"))]}
              (->> (q-with-rules '[:find ?p ?v
                                   :where (page-property ?b ?p ?v) [?b :block/original-name "Page"]]
                                 @conn)
