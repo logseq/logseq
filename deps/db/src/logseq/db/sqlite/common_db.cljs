@@ -178,8 +178,10 @@
 
 (defn get-structured-blocks
   [db]
-  (let [classes (d/pull-many db '[*] [:logseq.class/task :logseq.class/card])
-        property-ids (->> classes
+  (let [all-classes (->> (d/datoms db :avet :block/type "class")
+                         (map :e)
+                         (d/pull-many db '[*]))
+        property-ids (->> (map #(d/entity db %) [:logseq.class/task :logseq.class/card])
                           (mapcat :class/schema.properties)
                           (map :db/id)
                           (into #{:block/tags :block/alias}))
@@ -193,7 +195,7 @@
                                     (if (keyword? (:db/id val))
                                       (assoc block :logseq.property/created-from-property {:db/id (:db/id (d/entity db (:db/id val)))})
                                       block)))))]
-    (concat closed-values properties classes)))
+    (concat closed-values properties all-classes)))
 
 (defn get-favorites
   "Favorites page and its blocks"
