@@ -97,36 +97,38 @@
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
       [:move
        (apply conj
-              [:map {:closed true}
+              [:map
                [:op :keyword]
                [:self :uuid]
                [:parents [:sequential :uuid]]
                [:left [:maybe :uuid]]   ;nil when it's :no-order block
-               [:content {:optional true} :string]]
+               [:content {:optional true} :string]
+               [:hash {:optional true} :int]]
               general-attrs-schema-coll)]
       [:remove
-       [:map {:closed true}
+       [:map
         [:op :keyword]
         [:block-uuid :uuid]]]
       [:update-attrs
        (apply conj
-              [:map {:closed true}
+              [:map
                [:op :keyword]
                [:self :uuid]
                [:parents {:optional true} [:sequential :uuid]]
                [:left {:optional true} [:maybe :uuid]] ;nil when it's :no-order block
-               [:content {:optional true} :string]]
+               [:content {:optional true} :string]
+               [:hash {:optional true} :int]]
               general-attrs-schema-coll)]
       [:update-page
        (apply conj
-              [:map {:closed true}
+              [:map
                [:op :keyword]
                [:self :uuid]
                [:page-name :string]
                [:original-name :string]]
               general-attrs-schema-coll)]
       [:remove-page
-       [:map {:closed true}
+       [:map
         [:op :keyword]
         [:block-uuid :uuid]]]]]]
    [:ex-data {:optional true} [:map [:type :keyword]]]
