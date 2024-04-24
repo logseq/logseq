@@ -8,15 +8,22 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]))
 
-(defn get-pages-by-name
+(defn- get-pages-by-name
   [db page-name]
   (d/datoms db :avet :block/name (common-util/page-name-sanity-lc page-name)))
 
 (defn get-first-page-by-name
-  "Return the oldest page's db id"
+  "Return the oldest page's db id for :block/name"
   [db page-name]
   (when (and db (string? page-name))
     (first (sort (map :e (get-pages-by-name db page-name))))))
+
+(defn get-first-page-by-original-name
+  "Return the oldest page's db id for :block/original-name"
+  [db page-name]
+  {:pre [(string? page-name)]}
+  (first (sort (map :e
+                    (d/datoms db :avet :block/original-name page-name)))))
 
 (comment
   (defn- get-built-in-files
