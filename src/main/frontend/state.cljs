@@ -2361,10 +2361,6 @@ Similar to re-frame subscriptions"
 (def get-worker-next-request-id db-transact/get-next-request-id)
 (def add-worker-request! db-transact/add-request!)
 
-(defn get-current-container-id
-  []
-  @(:ui/container-id @state))
-
 (defn get-next-container-id
   []
   (swap! (:ui/container-id @state) inc))
