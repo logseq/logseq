@@ -2344,7 +2344,7 @@
       (-> block (dissoc :block/children :block/page)))]
 
     (if (and (:property-block? config) (:hide-bullet? config) (string/blank? (:block/content block)))
-      [:div.opacity-50.text-sm "Empty"]
+      [:div.opacity-50.text-sm.h-6 "Empty"]
       (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
         (when (and (not block-ref-with-title?)
                    (seq body)
