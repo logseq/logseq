@@ -150,7 +150,8 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/original-name :string]
-   [:block/type {:optional true} [:enum #{"class"} #{"property"} #{"whiteboard"} #{"hidden"}]]
+   ;; FIXME: a class can also be a property?
+   [:block/type {:optional true} [:enum #{"class"} #{"property"} #{"whiteboard"} #{"journal"} #{"hidden"}]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]
