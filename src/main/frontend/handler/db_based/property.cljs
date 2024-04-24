@@ -293,7 +293,7 @@
       (let [[db-ident property options]
             ;; strings come from user
             (if (string? property-id)
-              (if-let [ent (db/entity [:block/original-name property-id])]
+              (if-let [ent (ldb/get-page (db/get-db repo) property-id)]
                 [(:db/ident ent) ent {}]
                 ;; creates ident beforehand b/c needed in later transact and this avoids
                 ;; making this whole fn async for now

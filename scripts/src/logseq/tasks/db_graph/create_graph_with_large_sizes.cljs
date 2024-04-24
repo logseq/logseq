@@ -42,7 +42,7 @@
      (mapv #(hash-map :page % :blocks (build-blocks (:blocks options)))
            pages)
      ;; Custom id fns because transaction chunks may separate blocks and pages from each other
-     :page-id-fn (fn [b] [:block/original-name (:block/original-name b)])
+     :page-id-fn (fn [b] [:block/uuid (:block/uuid b)])
      :block-id-fn (fn [b] [:block/uuid (:block/uuid b)])}))
 
 (def spec

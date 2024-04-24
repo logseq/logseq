@@ -187,7 +187,7 @@
      An additional key `:closed-values` is available to define closed values. The key takes
      a vec of maps containing keys :uuid, :value and :icon.
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
-  * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/original-name X]`
+  * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
   * :block-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id

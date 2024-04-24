@@ -90,7 +90,7 @@
    :block/name {:db/unique :db.unique/identity}
 
    ;; page's original name
-   :block/original-name {:db/unique :db.unique/identity}
+   :block/original-name {}
 
    ;; page's journal day
    :block/journal-day {}
