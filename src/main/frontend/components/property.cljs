@@ -742,7 +742,7 @@
                     ::classes all-classes)))}
   [state _target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
-        block (::block state)
+        block (db/sub-block (:db/id (::block state)))
         _ (doseq [class (::classes state)]
             (db/sub-block (:db/id class)))
         page? (db/page? block)
