@@ -471,6 +471,7 @@
         [:div.property-block-container.content.flex.flex-1
          (block-cp children {:id (str (:block/uuid parent))
                              :editor-box editor-box
+                             :property-block? true
                              :hide-bullet? (= (count children) 1)
                              :closed-values? closed-values?})]
         (property-empty-value)))))
