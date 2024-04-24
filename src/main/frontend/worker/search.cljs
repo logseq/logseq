@@ -410,7 +410,7 @@
               result (->> (.search indice q (clj->js {:limit limit}))
                           (bean/->clj))]
           (->> result
-               (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :name]))))
+               (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :original-name]))))
                (map
                 (fn [{:keys [item]}]
                   (:original-name item)))

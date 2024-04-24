@@ -376,15 +376,15 @@
 
 (defmulti handle-action (fn [action _state _event] action))
 
-(defn- get-highlighted-page-name
+(defn- get-highlighted-page-uuid-or-name
   [state]
   (let [highlighted-item (some-> state state->highlighted-item)]
-    (or (when-let [id (:block/uuid (:source-block highlighted-item))]
-          (:block/name (db/entity [:block/uuid id])))
-        (:source-page highlighted-item))))
+    (or (:block/uuid (:source-block highlighted-item))
+        (or (:block/uuid (db/entity [:block/original-name (:source-page highlighted-item)]))
+            (:source-page highlighted-item)))))
 
 (defmethod handle-action :open-page [_ state _event]
-  (when-let [page-name (get-highlighted-page-name state)]
+  (when-let [page-name (get-highlighted-page-uuid-or-name state)]
     (let [page (db/get-page page-name)]
       (route-handler/redirect-to-page! (:block/uuid page)))
     (state/close-modal!)))
@@ -407,7 +407,7 @@
             (state/close-modal!)))))))
 
 (defmethod handle-action :open-page-right [_ state _event]
-  (when-let [page-name (get-highlighted-page-name state)]
+  (when-let [page-name (get-highlighted-page-uuid-or-name state)]
     (let [page (db/get-page page-name)]
       (when page
         (editor-handler/open-block-in-sidebar! (:block/uuid page))))
