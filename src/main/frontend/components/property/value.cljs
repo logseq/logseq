@@ -731,7 +731,7 @@
                                   opts)
 
          (and (= type :default) (nil? (:block/content value)))
-         (property-empty-value)
+         [:div.jtrigger (property-empty-value)]
 
          (= type :default)
          (property-block-value value block property block-cp editor-box opts page-cp editor-id)
