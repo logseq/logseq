@@ -430,7 +430,7 @@
                   [[f (:db/id block) :block/collapsed-properties (:db/id property)]]
                   {:outliner-op :save-block})))
 
-(defn- get-class-parents
+(defn get-class-parents
   [tags]
   (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
         *classes (atom #{})]

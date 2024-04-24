@@ -730,19 +730,21 @@
 ;; TODO: Remove :page-configure? as it only ever seems to be set to true
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   {:init (fn [state]
-           (assoc state
-                  ::id (str (random-uuid))
-                  ::tags-requested? (atom false)))}
-  [state target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
+           (let [repo (state/get-current-repo)
+                 target-block (first (:rum/args state))
+                 block (resolve-linked-block-if-exists target-block)
+                 all-classes (concat (:block/tags block) (db-property-handler/get-class-parents (:block/tags block)))]
+             (doseq [class all-classes]
+               (db-async/<get-block repo (:db/id class) :children? false))
+             (assoc state
+                    ::id (str (random-uuid))
+                    ::block block
+                    ::classes all-classes)))}
+  [state _target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
-        *tags-requested? (::tags-requested? state)
-        repo (state/get-current-repo)
-        block (resolve-linked-block-if-exists target-block)
-        _ (when (and (not @*tags-requested?) (:block/tags block))
-            (doseq [tag (:block/tags block)]
-              (db-async/<get-block repo (:block/uuid tag) {:children? false})
-              (reset! *tags-requested? true)
-              (db/sub-block (:db/id tag))))
+        block (::block state)
+        _ (doseq [class (::classes state)]
+            (db/sub-block (:db/id class)))
         page? (db/page? block)
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)

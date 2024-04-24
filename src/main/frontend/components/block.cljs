@@ -2941,10 +2941,10 @@
   {:init (fn [state]
            (let [id (random-uuid)
                  *ref (atom nil)
-                 <load-block (fn []
-                               (let [block-id (:block/uuid (nth (:rum/args state) 3))]
-                                 (db-async/<get-block (state/get-current-repo) block-id :children? false)))]
-             (<load-block)
+                 block (nth (:rum/args state) 3)
+                 block-id (:block/uuid block)
+                 repo (state/get-current-repo)]
+             (db-async/<get-block repo block-id :children? false)
              (assoc state
                     ::sub-id id
                     ::ref *ref)))}
