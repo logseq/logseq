@@ -220,7 +220,7 @@
 (rum/defc tldraw-app-inner < rum/reactive
   {:init (fn [state]
            (let [page-uuid (first (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) (str page-uuid))
+             (db-async/<get-block (state/get-current-repo) page-uuid)
              state))}
   [page-uuid block-id loaded-app set-loaded-app]
   (when-not (state/sub-async-query-loading (str page-uuid))

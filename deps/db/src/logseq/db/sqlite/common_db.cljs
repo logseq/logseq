@@ -122,8 +122,8 @@
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        get-children (fn [children]
-                       (let [long-page? (> (count children) 500)]
+        get-children (fn [block children]
+                       (let [long-page? (and (> (count children) 500) (not (contains? (:block/type block) "whiteboard")))]
                          (if long-page?
                            (map (fn [e]
                                   (select-keys e [:db/id :block/uuid :block/page :block/left :block/parent :block/collapsed?]))
@@ -148,7 +148,7 @@
            {:block block'
             :properties (property-with-values db block)}
             children?
-            (assoc :children (get-children (:block/_parent block)))))
+            (assoc :children (get-children block (:block/_parent block)))))
         (cond->
          {:block (->> (d/pull db '[*] (:db/id block))
                       (with-tags db)
@@ -156,11 +156,7 @@
           :properties (property-with-values db block)}
           children?
           (assoc :children
-                 (if (contains? (:block/type block) "whiteboard")
-                   (->> (d/pull-many db '[*] (map :db/id (:block/_page block)))
-                        (map #(with-block-refs db %))
-                        (map mark-block-fully-loaded))
-                   (get-children (:block/_page block)))))))))
+                 (get-children block (:block/_page block))))))))
 
 (defn get-latest-journals
   [db n]
