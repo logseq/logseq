@@ -727,19 +727,26 @@
         (for [[k v] properties]
           (property-cp block k v opts))))))
 
+(defn- async-load-classes!
+  [block]
+  (let [repo (state/get-current-repo)
+        classes (concat (:block/tags block) (db-property-handler/get-class-parents (:block/tags block)))]
+    (doseq [class classes]
+      (db-async/<get-block repo (:db/id class) :children? false))
+    classes))
+
 ;; TODO: Remove :page-configure? as it only ever seems to be set to true
 (rum/defcs ^:large-vars/cleanup-todo properties-area < rum/reactive db-mixins/query
   {:init (fn [state]
-           (let [repo (state/get-current-repo)
-                 target-block (first (:rum/args state))
-                 block (resolve-linked-block-if-exists target-block)
-                 all-classes (concat (:block/tags block) (db-property-handler/get-class-parents (:block/tags block)))]
-             (doseq [class all-classes]
-               (db-async/<get-block repo (:db/id class) :children? false))
+           (let [target-block (first (:rum/args state))
+                 block (resolve-linked-block-if-exists target-block)]
              (assoc state
                     ::id (str (random-uuid))
                     ::block block
-                    ::classes all-classes)))}
+                    ::classes (async-load-classes! block))))
+   :will-remount (fn [state]
+                   (let [block (db/entity (:db/id (::block state)))]
+                     (assoc state ::classes (async-load-classes! block))))}
   [state _target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
         block (db/sub-block (:db/id (::block state)))
