@@ -532,7 +532,7 @@
         last-block-id (:block/uuid (last blocks))
         class? (contains? (:block/type block) "class")
         property-id (:db/ident property)]
-    (p/let [_tx-report (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})]
+    (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})]
       (let [result (when property-id
                      (if (and class? class-schema?)
                        (class-add-property! repo (:db/id block) property-id)
