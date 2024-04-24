@@ -168,7 +168,7 @@
             :in $ ?today
             :where
             [?page :block/name ?page-name]
-            [?page :block/type "journal"]
+            ;; [?page :block/type "journal"]
             [?page :block/journal-day ?journal-day]
             [(<= ?journal-day ?today)]]
           db
