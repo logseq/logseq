@@ -125,7 +125,7 @@
 
        ;; step 1
        :new-graph
-       [:div.flex.flex-col.w-full.space-y-3.faster-fade-in
+       [:div.flex.flex-col.w-full.space-y-3.faster.fade-in
         [:input.form-input.block
          {:auto-focus  true
           :ref         *input-ref
