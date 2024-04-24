@@ -534,13 +534,12 @@ independent of format as format specific heading characters are stripped"
     (d/q '[:find (count ?page) .
            :in $ ?today
            :where
-           [?page :block/journal? true]
+           [?page :block/type "journal"]
            [?page :block/journal-day ?journal-day]
            [(<= ?journal-day ?today)]]
          (conn/get-db (state/get-current-repo))
          today)))
 
-;; FIXME: [?page :block/type "journal"]
 (defn get-latest-journals
   ([n]
    (get-latest-journals (state/get-current-repo) n))
@@ -555,7 +554,6 @@ independent of format as format specific heading characters are stripped"
                    :in $ ?today
                    :where
                    [?page :block/name ?page-name]
-                   [?page :block/journal? true]
                    [?page :block/journal-day ?journal-day]
                    [(<= ?journal-day ?today)]]
                  today)
@@ -601,7 +599,7 @@ independent of format as format specific heading characters are stripped"
                                react)]
       (->> mentioned-pages
            (keep (fn [page]
-                   (when-not (and (not include-journals?) (:block/journal? page))
+                   (when-not (and (not include-journals?) (ldb/journal-page? page))
                      page)))
            (mapv (fn [page]
                    [(:block/name page) (get-page-alias-names repo (:db/id page))]))))))
@@ -686,7 +684,7 @@ independent of format as format specific heading characters are stripped"
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
-  (:block/journal? (ldb/get-page (conn/get-db) page-name)))
+  (ldb/journal-page? (ldb/get-page (conn/get-db) page-name)))
 
 (defn get-block-property-values
   "Get blocks which have this property."
@@ -916,7 +914,8 @@ independent of format as format specific heading characters are stripped"
                 [?ref-page :block/name ?ref-page-name]]
               '[:find ?page ?ref-page-name
                 :where
-                [?p :block/journal? false]
+                [(get-else $ ?p :block/type "N/A") ?type]
+                (not= ?type "journal")
                 [?p :block/name ?page]
                 [?block :block/page ?p]
                 [?block :block/refs ?ref-page]

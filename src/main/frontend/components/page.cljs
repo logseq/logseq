@@ -325,7 +325,7 @@
     (let [page (db/sub-block (:db/id page))
           title (:block/original-name page)]
       (when title
-        (let [journal? (:block/journal? page)
+        (let [journal? (ldb/journal-page? page)
               icon (get page (pu/get-pid :logseq.property/icon))
               *title-value (get state ::title-value)
               *edit? (get state ::edit?)
@@ -1197,7 +1197,7 @@
                               (->> pages
                                    (filter #(and
                                              (or (boolean journal?)
-                                                 (= false (boolean (:block/journal? %))))
+                                                 (= false (boolean (ldb/journal-page? %))))
                                              (or (empty? page-type)
                                                  (contains? (set (:block/type %)) page-type))))
                                    (sort-pages-by sort-by-item desc?)))))

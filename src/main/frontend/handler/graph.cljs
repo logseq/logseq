@@ -10,7 +10,8 @@
             [frontend.config :as config]
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]))
 
 (defn- build-links
   [links]
@@ -107,7 +108,7 @@
               created-at-filter
               (filter #(<= (:block/created-at %) (+ (apply min created-ats) created-at-filter)))
               (not journal?)
-              (remove :block/journal?)
+              (remove ldb/journal-page?)
               (not excluded-pages?)
               (remove (fn [p] (true? (pu/get-block-property-value p :logseq.property/exclude-from-graph-view)))))
             links (concat (seq relation)

@@ -12,7 +12,8 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.handler.db-based.property.util :as db-pu]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db :as ldb]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -91,7 +92,7 @@
   [page]
   (let [page-name (:block/original-name page)
         loading? (rum/react *loading?)
-        journal? (:block/journal? page)
+        journal? (ldb/journal-page? page)
         repo (state/get-current-repo)
         blocks (-> (db/get-page-blocks-no-cache repo
                                                 (:db/id page)

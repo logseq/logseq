@@ -82,7 +82,6 @@
       (cond->
        {:db/ident db-ident'
         :block/type "property"
-        :block/journal? false
         :block/format :markdown
         :block/schema (merge {:type :default} prop-schema)
         :block/name (common-util/page-name-sanity-lc (name prop-name))
@@ -101,7 +100,6 @@
   [block]
   (block-with-timestamps
    (merge {:block/type "class"
-           :block/journal? false
            :block/format :markdown}
           block)))
 
@@ -111,7 +109,6 @@
   (block-with-timestamps
    {:block/name (common-util/page-name-sanity-lc page-name)
     :block/original-name page-name
-    :block/journal? false
     :block/uuid (d/squuid)
     :block/format :markdown}))
 

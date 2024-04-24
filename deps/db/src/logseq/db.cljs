@@ -124,6 +124,11 @@
   [page]
   (contains? (set (:block/type page)) "whiteboard"))
 
+(defn journal-page?
+  "Given a page entity or map, check if it is a journal page"
+  [page]
+  (contains? (set (:block/type page)) "journal"))
+
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
    page-id - eid"
@@ -133,15 +138,6 @@
     (let [datoms (d/datoms db :avet :block/page page-id)
           block-eids (mapv :e datoms)]
       (d/pull-many db pull-keys block-eids))))
-
-(defn get-page-blocks-by-uuid
-  [db page-uuid & {:keys [pull-keys]
-                   :or {pull-keys '[*]}}]
-  (when-let [page-id (and page-uuid (:db/id (d/entity db [:block/uuid page-uuid])))]
-    (let [datoms (d/datoms db :avet :block/page page-id)
-          block-eids (mapv :e datoms)]
-      (d/pull-many db pull-keys block-eids))))
-
 
 (defn get-page-blocks-count
   [db page-id]
@@ -240,7 +236,7 @@
                                 (not (contains? (:block/type page) "property"))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
-                                          (not (:block/journal? page))))
+                                          (not (journal-page? page))))
                                 page))))
                          pages)
                         (remove false?)
@@ -499,7 +495,6 @@
      {:block/uuid (d/squuid)
       :block/name common-config/favorites-page-name
       :block/original-name common-config/favorites-page-name
-      :block/journal? false
       :block/type #{"hidden"}
       :block/format :markdown})]))
 

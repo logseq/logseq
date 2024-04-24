@@ -54,7 +54,7 @@
   (let [journal-name (date-journal-title date)]
     {:block/name journal-name
      :block/uuid (or (journal-name-uuid-map journal-name) (throw (ex-info "No uuid for journal name" {})))
-     :block/journal? true
+     :block/type "journal"
      :block/journal-day (date-journal-day date)}))
 
 (defn- create-init-data

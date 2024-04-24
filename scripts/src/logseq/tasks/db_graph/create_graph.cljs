@@ -227,7 +227,6 @@
             (let [new-page {:db/id (or (:db/id page) (new-db-id))
                             :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
                             :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
-                            :block/journal? false
                             :block/format :markdown}]
               (into
                ;; page tx

@@ -69,7 +69,7 @@
                                    (when journal-title
                                      (let [page-name (util/page-name-sanity-lc journal-title)]
                                        {:block/name page-name
-                                        :block/journal? true
+                                        :block/type "journal"
                                         :block/journal-day day}))))
                                titles))]
       (when (seq journal-pages-tx)

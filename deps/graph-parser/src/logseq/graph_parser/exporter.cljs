@@ -49,8 +49,7 @@
       (-> tag-block
           add-missing-timestamps
           ;; don't use build-new-class b/c of timestamps
-          (merge {:block/journal? false
-                  :block/format :markdown
+          (merge {:block/format :markdown
                   :block/type "class"})))))
 
 (defn- update-page-tags
@@ -182,7 +181,7 @@
                             ;; don't create different uuids and thus an invalid page
                             (assoc (sqlite-util/build-new-page
                                     (date-time-util/int->journal-title deadline (common-config/get-date-formatter user-config)))
-                                   :block/journal? true
+                                   :block/type "journal"
                                    :block/journal-day deadline))]
       (-> block
           (update :block/properties assoc deadline-prop (:block/uuid deadline-page))
@@ -202,7 +201,7 @@
                                          db scheduled))
                             (assoc (sqlite-util/build-new-page
                                     (date-time-util/int->journal-title scheduled (common-config/get-date-formatter user-config)))
-                                   :block/journal? true
+                                   :block/type "journal"
                                    :block/journal-day scheduled))]
       (-> block
           (update :block/properties assoc scheduled-prop (:block/uuid scheduled-page))
@@ -244,7 +243,8 @@
   (let [prop-type (cond (and (coll? prop-val)
                              (seq prop-val)
                              (set/subset? prop-val
-                                          (set (keep #(when (:block/journal? %) (:block/original-name %)) refs))))
+                                          (set (keep #(when (contains? (:block/type %) "journal")
+                                                        (:block/original-name %)) refs))))
                         :date
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
                         :default
@@ -575,7 +575,7 @@
 
 (defn- build-new-page
   [m new-property-schemas tag-classes page-names-to-uuids page-tags-uuid]
-  (-> (merge {:block/journal? false} m)
+  (-> m
       ;; Fix pages missing :block/original-name. Shouldn't happen
       ((fn [m']
          (if-not (:block/original-name m')
@@ -614,7 +614,7 @@
                           (let [schema (get new-property-schemas (keyword (:block/name %)))
                                 ;; These attributes are not allowed to be transacted because they must not change across files
                                 ;; block/uuid was particularly bad as it actually changed the page's identity across files
-                                disallowed-attributes [:block/name :block/uuid :block/format :block/journal? :block/original-name :block/journal-day
+                                disallowed-attributes [:block/name :block/uuid :block/format :block/original-name :block/journal-day
                                                        :block/created-at :block/updated-at]
                                 allowed-attributes [:block/properties :block/tags :block/alias :class/parent :block/type :block/namespace]
                                 block-changes (select-keys % allowed-attributes)]
@@ -746,8 +746,7 @@
                               (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
                               (map (fn [page-block]
                                      (-> page-block
-                                         (assoc :block/journal? false
-                                                :block/format :markdown
+                                         (assoc :block/format :markdown
                                                  ;; fixme: missing properties
                                                 :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)

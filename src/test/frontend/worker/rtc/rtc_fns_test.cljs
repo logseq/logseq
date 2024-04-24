@@ -288,7 +288,6 @@
                         (:update-ops-map
                          (#'rtc-core/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (d/transact! conn [{:block/uuid tag1-uuid
-                            :block/journal? false,
                             :block/type #{"class"},
                             :block/name "task",
                             :block/original-name "Task"}])

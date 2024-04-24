@@ -369,10 +369,7 @@
         input-text-selected? (util/input-text-selected? input)
         new-m {:block/uuid (db/new-block-id)
                :block/content ""}
-        prev-block (-> (merge (if (config/db-based-graph? (state/get-current-repo))
-                                (select-keys block [:block/parent :block/left :block/format :block/page])
-                                (select-keys block [:block/parent :block/left :block/format
-                                                    :block/page :block/journal?]))
+        prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format :block/page])
                               new-m)
                        (wrap-parse-block))
         left-block (db/pull (:db/id (:block/left block)))]
@@ -400,10 +397,7 @@
         current-block (apply dissoc current-block db-schema/retract-attributes)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
-        next-block (-> (merge (if (config/db-based-graph? (state/get-current-repo))
-                                (select-keys block [:block/parent :block/left :block/format :block/page])
-                                (select-keys block [:block/parent :block/left :block/format
-                                                    :block/page :block/journal?]))
+        next-block (-> (merge (select-keys block [:block/parent :block/left :block/format :block/page])
                               new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)]
@@ -507,10 +501,7 @@
               content (if (seq properties)
                         (property-file/insert-properties-when-file-based repo format content properties)
                         content)
-              new-block (-> (if db-based?
-                              (select-keys block [:block/page])
-                              ;; TODO: Figure out if journal attributes in this ns for file graphs is a bug
-                              (select-keys block [:block/page :block/journal? :block/journal-day]))
+              new-block (-> (select-keys block [:block/page])
                             (assoc :block/content content
                                    :block/format format))
               new-block (assoc new-block :block/page
@@ -2147,7 +2138,7 @@
                        (db-async/<pull repo db-id)
                        (db-async/<get-template-by-name (name db-id)))]
          (when-let [db-id (:db/id block)]
-           (let [journal? (:block/journal? target)
+           (let [journal? (ldb/journal-page? target)
                  target (or target (state/get-edit-block))
                  format (:block/format block)
                  block-uuid (:block/uuid block)
