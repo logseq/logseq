@@ -99,15 +99,22 @@
                                       value-ids (when (every? map? values)
                                                   (->> (map :db/id values)
                                                        (filter (fn [id] (or (int? id) (keyword? id))))))
-                                      value-blocks (when (seq value-ids)
-                                                     (mapcat
-                                                      (fn [id]
-                                                        (let [b (d/entity db id)]
-                                                          (cons (d/pull db '[*] id)
-                                                                (let [ids (map :db/id (:block/raw-properties b))]
-                                                                  (when (seq ids)
-                                                                    (d/pull-many db '[*] ids))))))
-                                                      value-ids))
+                                      value-blocks (->>
+                                                    (when (seq value-ids)
+                                                      (mapcat
+                                                       (fn [id]
+                                                         (let [b (d/entity db id)]
+                                                           (cons (d/pull db '[*] id)
+                                                                 (let [ids (map :db/id (:block/raw-properties b))]
+                                                                   (when (seq ids)
+                                                                     (d/pull-many db '[*] ids))))))
+                                                       value-ids))
+                                                    ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
+                                                    (map (fn [block]
+                                                           (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
+                                                             (if (keyword? from-property-id)
+                                                               (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
+                                                               block)))))
                                       page (when (seq values)
                                              (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
                                                (d/pull db '[*] page-id)))
@@ -179,14 +186,14 @@
 
 (defn get-structured-blocks
   [db]
-  (let [all-classes (->> (d/datoms db :avet :block/type "class")
-                         (map :e)
-                         (d/pull-many db '[*]))
-        property-ids (->> (map #(d/entity db %) [:logseq.class/task :logseq.class/card])
+  (let [property-ids (->> (map #(d/entity db %) [:logseq.class/task :logseq.class/card])
                           (mapcat :class/schema.properties)
                           (map :db/id)
                           (into #{:block/tags :block/alias}))
         properties (d/pull-many db '[*] property-ids)
+        all-classes (->> (d/datoms db :avet :block/type "class")
+                         (map :e)
+                         (d/pull-many db '[*]))
         closed-values (->> (d/datoms db :avet :block/type "closed value")
                            (map :e)
                            (d/pull-many db '[*])
@@ -248,7 +255,7 @@
         all-files (get-all-files db)
         home-page-data (get-home-page db all-files)
         structured-blocks (get-structured-blocks db)
-        data (concat idents favorites latest-journals all-files home-page-data structured-blocks)]
+        data (concat idents structured-blocks favorites latest-journals all-files home-page-data)]
     {:schema schema
      :initial-data data}))
 

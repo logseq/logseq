@@ -110,10 +110,10 @@
                 {:keys [properties block children] :as result'} (ldb/read-transit-str result)
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)
-                _ (d/transact! conn block-and-children)]
-          (react/refresh-affected-queries!
-           graph
-           [[:frontend.worker.react/block (:db/id block)]])
+                _ (d/transact! conn block-and-children)
+                affected-keys (->> (keep :db/id block-and-children)
+                                   (map #(vector :frontend.worker.react/block %)))]
+          (react/refresh-affected-queries! graph affected-keys)
           (state/update-state! :db/async-queries (fn [s] (disj s name')))
           (if children?
             block
