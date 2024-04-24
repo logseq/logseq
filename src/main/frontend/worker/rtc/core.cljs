@@ -432,7 +432,7 @@
                   (and (contains? key-set :journal-day)
                        (some? (:journal-day op-value)))
                   (assoc :block/journal-day (:journal-day op-value)
-                         :block/journal? true))
+                         :block/type "journal"))
                 *other-tx-data (atom [])]
             ;; 'save-block' dont handle card-many attrs well?
             (when (contains? key-set :alias)
@@ -449,8 +449,7 @@
               (swap! *other-tx-data conj [:db/retract db-id :block/properties]))
             (when (and (contains? key-set :journal-day) (nil? (:journal-day op-value)))
               (swap! *other-tx-data conj
-                     [:db/retract db-id :block/journal-day]
-                     [:db/retract db-id :block/journal?]))
+                     [:db/retract db-id :block/journal-day]))
             (when (seq @*other-tx-data)
               (ldb/transact! conn @*other-tx-data {:persist-op? false
                                                    :gen-undo-ops? false}))

@@ -92,8 +92,7 @@
    ;; page's original name
    :block/original-name {:db/unique :db.unique/identity}
 
-   ;; whether page's is a journal
-   :block/journal? {}
+   ;; page's journal day
    :block/journal-day {}
 
    ;; macros in block

@@ -151,7 +151,6 @@
   [[:block/name :string]
    [:block/original-name :string]
    [:block/type {:optional true} [:enum #{"class"} #{"property"} #{"whiteboard"} #{"hidden"}]]
-   [:block/journal? :boolean]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]

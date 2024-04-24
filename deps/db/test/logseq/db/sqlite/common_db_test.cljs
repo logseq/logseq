@@ -51,7 +51,6 @@
           date-title (date-time-util/int->journal-title date-int "MMM do, yyyy")
           blocks [{:db/id 100001
                    :block/uuid page-uuid
-                   :block/journal? true
                    :block/journal-day date-int
                    :block/name (string/lower-case date-title)
                    :block/original-name date-title

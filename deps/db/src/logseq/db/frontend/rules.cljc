@@ -107,7 +107,7 @@
    :between
    '[(between ?b ?start ?end)
      [?b :block/page ?p]
-     [?p :block/journal? true]
+     [?p :block/type "journal"]
      [?p :block/journal-day ?d]
      [(>= ?d ?start)]
      [(<= ?d ?end)]]

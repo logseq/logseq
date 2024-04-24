@@ -23,7 +23,6 @@
   [title]
   {:block/name (string/lower-case title)
    :block/original-name title
-   :block/journal? false
    :block/uuid (random-uuid)})
 
 (def built-in-pages

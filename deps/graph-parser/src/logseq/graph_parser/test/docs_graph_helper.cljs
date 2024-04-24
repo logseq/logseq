@@ -62,7 +62,7 @@
 (defn- get-journal-page-count [db]
   (->> (d/q '[:find (count ?b)
               :where
-              [?b :block/journal? true]
+              [?b :block/type "journal"]
               [?b :block/name]
               [?b :block/file]]
             db)

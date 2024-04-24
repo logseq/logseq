@@ -66,7 +66,7 @@
 (defn- update-file-tx
   [page new-page-name]
   (let [file (:block/file page)]
-    (when (and file (not (:block/journal? page)))
+    (when (and file (not (ldb/journal-page? page)))
       (let [old-path (:file/path file)
             new-file-name (wfu/file-name-sanity new-page-name) ;; w/o file extension
             new-path (compute-new-file-path old-path new-file-name)]

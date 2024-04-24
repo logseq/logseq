@@ -31,8 +31,7 @@
         (db/transact! repo
                       [{:file/path path
                         :block/name (util/page-name-sanity-lc file)
-                        :block/file {:file/path path}
-                        :block/journal? false}]))
+                        :block/file {:file/path path}}]))
        (p/catch (fn [error]
                   (prn "Write file failed, path: " path ", data: " data)
                   (js/console.dir error)))))))

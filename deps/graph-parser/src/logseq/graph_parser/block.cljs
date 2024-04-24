@@ -331,9 +331,9 @@
             {:block/created-at current-ms
              :block/updated-at current-ms}))
         (if journal-day
-          {:block/journal? true
+          {:block/type "journal"
            :block/journal-day journal-day}
-          {:block/journal? false})))
+          {})))
 
      (and (map? original-page-name) (:block/uuid original-page-name))
      original-page-name
