@@ -323,14 +323,15 @@
           (p/do!
            (when db-based?
              (let [tag (string/trim chosen)
-                   edit-block (state/get-edit-block)]
+                   edit-block (state/get-edit-block)
+                   get-page-fn (if class? db/get-case-page db/get-page)]
                (when (and (not (string/blank? tag)) (:block/uuid edit-block))
-                 (p/let [tag-entity (db/get-page tag)
+                 (p/let [tag-entity (get-page-fn tag)
                          _ (when-not tag-entity
                              (<create! tag {:redirect? false
                                             :create-first-block? false
                                             :class? class?}))
-                         tag-entity (db/get-page tag)]
+                         tag-entity (get-page-fn tag)]
                    (when class?
                      (add-tag (state/get-current-repo) (:block/uuid edit-block) tag {:tag-entity tag-entity}))))))
            (editor-handler/insert-command! id

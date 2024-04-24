@@ -188,12 +188,12 @@
   (let [page* (string/trim page)
         [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
                                   [nil page* nil])
-        id (:db/id (ldb/get-page (db/get-db) page))
+        id (:db/id (ldb/get-case-page (db/get-db) page))
         class? (= :block/tags (:block/ident property))]
     (if (nil? id)
       (let [inline-class-uuid
             (when inline-class
-              (or (:block/uuid (ldb/get-page (db/get-db) inline-class))
+              (or (:block/uuid (ldb/get-case-page (db/get-db) inline-class))
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))]
         (p/let [page (page-handler/<create! page {:redirect? false
