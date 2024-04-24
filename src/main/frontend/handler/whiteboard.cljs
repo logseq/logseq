@@ -26,7 +26,7 @@
 
 (defn- shape->block [shape page-id]
   (let [repo (state/get-current-repo)]
-    (gp-whiteboard/shape->block repo shape page-id)))
+    (gp-whiteboard/shape->block repo (db/get-db repo) shape page-id)))
 
 (defn- build-shapes
   [page-block blocks]
@@ -66,8 +66,9 @@
     {:block/original-name page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
-     :block/properties [(sqlite-util/build-property-pair :logseq.property/ls-type :whiteboard-page)
-                        (sqlite-util/build-property-pair :logseq.property.tldraw/page tldraw-page)]
+     :block/properties (sqlite-util/build-properties page-entity
+                        {:logseq.property/ls-type :whiteboard-page
+                         :logseq.property.tldraw/page tldraw-page})
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -127,14 +128,6 @@
                               (remove nil?)))
         deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
         upserted-blocks (->> upsert-shapes
-                             (remove (fn [shape]
-                                       (when-let [id (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))]
-                                         (let [block (db/entity [:block/uuid id])]
-                                           (= (:nonce shape)
-                                              (:nonce
-                                               (pu/get-block-property-value
-                                                block
-                                                :logseq.property.tldraw/shape)))))))
                              (map #(shape->block % (:db/id page-entity)))
                              (map sqlite-util/block-with-timestamps))
         page-name (or (:block/original-name page-entity) (str page-uuid))
@@ -159,15 +152,10 @@
   (let [tl-page ^js (second (first (.-pages app)))
         shapes (.-shapes ^js tl-page)
         page-block (model/get-page page-uuid)
-        prev-page-metadata (pu/get-block-property-value page-block :logseq.property.tldraw/page)
-        prev-shapes-index (:shapes-index prev-page-metadata)
-        shape-id->prev-index (zipmap prev-shapes-index (range (count prev-shapes-index)))
-        new-id-nonces (set (map-indexed (fn [idx shape]
+        new-id-nonces (set (map-indexed (fn [_idx shape]
                                           (let [id (.-id shape)]
                                             {:id id
-                                             :nonce (if (= idx (get shape-id->prev-index id))
-                                                      (.-nonce shape)
-                                                      (js/Date.now))})) shapes))
+                                             :nonce (or (.-nonce shape) (js/Date.now))})) shapes))
         repo (state/get-current-repo)
         db-id-nonces (or
                       (get-in @*last-shapes-nonce [repo page-uuid])
@@ -213,11 +201,11 @@
                      :bindings {},
                      :nonce 1,
                      :assets []}
+        properties-map {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
+                        (pu/get-pid :logseq.property.tldraw/page) tldraw-page}
         properties (if db-based?
-                     [(sqlite-util/build-property-pair :logseq.property/ls-type :whiteboard-page)
-                      (sqlite-util/build-property-pair :logseq.property.tldraw/page tldraw-page)]
-                     {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
-                      (pu/get-pid :logseq.property.tldraw/page) tldraw-page})
+                     (sqlite-util/build-properties nil properties-map)
+                     properties-map)
         m #:block{:uuid id
                   :name (util/page-name-sanity-lc page-name),
                   :original-name page-name

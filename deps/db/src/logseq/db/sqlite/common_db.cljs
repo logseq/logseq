@@ -31,7 +31,9 @@
   (->> (d/datoms db :avet :block/name)
        (keep (fn [e]
                (when-not (contains? exclude-page-ids (:e e))
-                 (d/pull db '[:db/id :db/ident :block/uuid :block/name :block/original-name :block/alias :block/type] (:e e)))))))
+                 (d/pull db '[:db/id :db/ident :block/uuid :block/name :block/original-name :block/alias :block/type
+                              :block/created-at :block/updated-at]
+                         (:e e)))))))
 
 (defn get-all-files
   [db]
