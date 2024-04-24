@@ -914,9 +914,9 @@ independent of format as format specific heading characters are stripped"
                 [?ref-page :block/name ?ref-page-name]]
               '[:find ?page ?ref-page-name
                 :where
-                [(get-else $ ?p :block/type "N/A") ?type]
-                (not= ?type "journal")
                 [?p :block/name ?page]
+                [(get-else $ ?p :block/type "N/A") ?type]
+                [(not= ?type "journal")]
                 [?block :block/page ?p]
                 [?block :block/refs ?ref-page]
                 [?ref-page :block/name ?ref-page-name]])]
