@@ -219,12 +219,12 @@
       [:action :string]
       [:graph-uuid :string]
       [:block-uuids [:sequential :uuid]]]]
-    ["query-blocks"
+    ["query-block-tree"
      [:map
       [:req-id :string]
       [:action :string]
-      [:graph-uuid :uuid]
-      [:block-uuids [:sequential :uuid]]]]
+      [:graph-uuid :string]
+      [:root-block-uuid :uuid]]]
     ["update-assets"
      [:map
       [:req-id :string]
