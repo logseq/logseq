@@ -427,35 +427,34 @@
             (let [[id _on-submit on-cancel] (:rum/args state)]
               (on-cancel id)))})))
   [state _id on-submit _on-cancel]
-  (when (= :input (state/sub :editor/action))
-    (when-let [action-data (state/sub :editor/action-data)]
-      (let [{:keys [pos options]} action-data
-            input-value (get state ::input-value)]
-        (when (seq options)
-          (let [command (:command (first options))]
-            [:div.p-2.rounded-md.shadow-lg
-             (for [{:keys [id placeholder type autoFocus] :as input-item} options]
-               [:div.my-3 {:key id}
-                [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
-                 (merge
-                  (cond->
-                    {:key           (str "modal-input-" (name id))
-                     :id            (str "modal-input-" (name id))
-                     :type          (or type "text")
-                     :on-change     (fn [e]
-                                      (swap! input-value assoc id (util/evalue e)))
-                     :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                    placeholder
-                    (assoc :placeholder placeholder)
-                    autoFocus
-                    (assoc :auto-focus true))
-                  (dissoc input-item :id))]])
-             (ui/button
-               "Submit"
-               :on-click
-               (fn [e]
-                 (util/stop e)
-                 (on-submit command @input-value pos)))]))))))
+  (when-let [action-data (state/get-editor-action-data)]
+    (let [{:keys [pos options]} action-data
+          input-value (get state ::input-value)]
+      (when (seq options)
+        (let [command (:command (first options))]
+          [:div.p-2.rounded-md
+           (for [{:keys [id placeholder type autoFocus] :as input-item} options]
+             [:div.my-3 {:key id}
+              [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
+               (merge
+                 (cond->
+                   {:key (str "modal-input-" (name id))
+                    :id (str "modal-input-" (name id))
+                    :type (or type "text")
+                    :on-change (fn [e]
+                                 (swap! input-value assoc id (util/evalue e)))
+                    :auto-complete (if (util/chrome?) "chrome-off" "off")}
+                   placeholder
+                   (assoc :placeholder placeholder)
+                   autoFocus
+                   (assoc :auto-focus true))
+                 (dissoc input-item :id))]])
+           (ui/button
+             "Submit"
+             :on-click
+             (fn [e]
+               (util/stop e)
+               (on-submit command @input-value pos)))])))))
 
 (rum/defc absolute-modal < rum/static
   [cp modal-name set-default-width? {:keys [top left rect]}]
@@ -788,6 +787,20 @@
                                        :data-editor-popup-ref "datepicker"}
                        :force-popover? true})
 
+                    :input
+                    (shui/popup-show!
+                      pos (input id
+                            (fn [command m]
+                              (editor-handler/handle-command-input command id format m))
+                            (fn []
+                              (editor-handler/handle-command-input-close id)))
+                      {:id :editor.commands/input
+                       :align :start
+                       :root-props {:onOpenChange #(when-not % (state/clear-editor-action!))}
+                       :content-props {:onOpenAutoFocus #(.preventDefault %)
+                                       :onCloseAutoFocus #(.preventDefault %)
+                                       :data-editor-popup-ref "input"}})
+
                     :select-code-block-mode
                     (shui/popup-show!
                       pos (code-block-mode-picker id format)
@@ -854,7 +867,7 @@
        (= :select-code-block-mode-classic action)
        (animated-modal "select-code-block-mode" (code-block-mode-picker id format) true)
 
-       (= :input action)
+       (= :input-classic action)
        (animated-modal "input" (input id
                                  (fn [command m]
                                    (editor-handler/handle-command-input command id format m))

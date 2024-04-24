@@ -91,7 +91,7 @@ pre {
   }
 }
 
-.ui__popover-content {
+.ui__popover-content, .ui__dropdown-menu-content {
   &[data-editor-popup-ref] {
     @apply p-1 w-72;
   }
