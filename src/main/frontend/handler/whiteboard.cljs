@@ -126,16 +126,17 @@
                               (mapv (fn [b] (pu/get-block-property-value b :logseq.property.tldraw/shape)))
                               (remove nil?)))
         deleted-shapes-tx (mapv (fn [id] [:db/retractEntity [:block/uuid (uuid id)]]) deleted-ids)
-        upserted-blocks (->> (map #(shape->block % (:db/id page-entity)) upsert-shapes)
-                             (remove (fn [b]
-                                       (= (:nonce
-                                           (pu/get-block-property-value
-                                            (db/entity [:block/uuid (:block/uuid b)])
-                                            :logseq.property.tldraw/shape))
-                                          (:nonce
-                                           (pu/get-block-property-value
-                                            b
-                                            :logseq.property.tldraw/shape))))))
+        upserted-blocks (->> upsert-shapes
+                             (remove (fn [shape]
+                                       (when-let [id (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))]
+                                         (let [block (db/entity [:block/uuid id])]
+                                           (= (:nonce shape)
+                                              (:nonce
+                                               (pu/get-block-property-value
+                                                block
+                                                :logseq.property.tldraw/shape)))))))
+                             (map #(shape->block % (:db/id page-entity)))
+                             (map sqlite-util/block-with-timestamps))
         page-name (or (:block/original-name page-entity) (str page-uuid))
         page-block (build-page-block page-entity page-name tl-page assets shapes-index)]
     (when (or (seq upserted-blocks)
@@ -143,7 +144,7 @@
               (not= (:block/properties page-block)
                     (:block/properties page-entity)))
       {:page-block page-block
-       :upserted-blocks (map sqlite-util/block-with-timestamps upserted-blocks)
+       :upserted-blocks upserted-blocks
        :delete-blocks deleted-shapes-tx
        :deleted-shapes deleted-shapes
        :new-shapes created-shapes
