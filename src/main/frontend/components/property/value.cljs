@@ -193,7 +193,7 @@
     (if (nil? id)
       (let [inline-class-uuid
             (when inline-class
-              (or (ldb/get-page (db/get-db) inline-class)
+              (or (:block/uuid (ldb/get-page (db/get-db) inline-class))
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))]
         (p/let [page (page-handler/<create! page {:redirect? false
@@ -300,11 +300,11 @@
                  :transform-fn (fn [results input]
                                  (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
                                    (let [repo (state/get-current-repo)
-                                         class-names (map #(:block/original-name (db/entity repo [:block/uuid %])) string-classes)
-                                         descendent-classes (->> class-names
-                                                                 ;; FIXME:
-                                                                 ;; (mapcat #(db/get-namespace-pages repo %))
-                                                                 (map :block/original-name))]
+                                         class-ents (map #(db/entity repo [:block/uuid %]) string-classes)
+                                         class-names (map :block/original-name class-ents)
+                                         descendent-classes (->> class-ents
+                                                                 (mapcat #(model/get-class-children repo (:db/id %)))
+                                                                 (map #(:block/original-name (db/entity repo %))))]
                                      (->> (concat class-names descendent-classes)
                                           (filter #(string/includes? % class-input))
                                           (mapv #(hash-map :value (str new-page "#" %)))))
