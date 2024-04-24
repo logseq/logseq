@@ -325,7 +325,7 @@
        (swap! txs-state into [[:db/retractEntity (:db/id pair)]]))
      (cond-> m
        matched-status-id
-       (update :block/properties conj (sqlite-util/build-property-pair (:db/ident property) matched-status-id))
+       (update :block/properties conj (sqlite-util/build-property-pair block-entity (:db/ident property) matched-status-id))
 
        matched-status-id
        (update :block/content (fn [content]
@@ -652,7 +652,7 @@
              list?
              ((fn [b]
                 (if db-based?
-                  (update b :block/properties conj (sqlite-util/build-property-pair :logseq.property/order-list-type list-type))
+                  (update b :block/properties conj (sqlite-util/build-property-pair block :logseq.property/order-list-type list-type))
                   (update b :block/properties assoc (db-property-util/get-pid repo :logseq.property/order-list-type) list-type))))
 
              (not db-based?)

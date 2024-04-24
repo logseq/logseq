@@ -1,7 +1,8 @@
 (ns logseq.graph-parser.whiteboard
   "Whiteboard related parser utilities"
   (:require [logseq.db.frontend.property.util :as db-property-util]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [datascript.core :as d]))
 
 (defn block->shape [block]
   (get-in block [:block/properties :logseq.tldraw.shape]))
@@ -79,13 +80,15 @@
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
            {:block/page page-id})))
 
-(defn shape->block [repo shape page-id]
-  (let [properties (if (sqlite-util/db-based-graph? repo)
-                     [(sqlite-util/build-property-pair :logseq.property/ls-type :whiteboard-shape)
-                      (sqlite-util/build-property-pair :logseq.property.tldraw/shape shape)]
-                     {(db-property-util/get-pid repo :logseq.property/ls-type) :whiteboard-shape
-                      (db-property-util/get-pid repo :logseq.property.tldraw/shape) shape})
-        block {:block/uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
+(defn shape->block [repo db shape page-id]
+  (let [block-uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
+        block (when block-uuid (d/entity db [:block/uuid block-uuid]))
+        properties-map {(db-property-util/get-pid repo :logseq.property/ls-type) :whiteboard-shape
+                        (db-property-util/get-pid repo :logseq.property.tldraw/shape) shape}
+        properties (if (sqlite-util/db-based-graph? repo)
+                     (sqlite-util/build-properties block properties-map)
+                     properties-map)
+        block {:block/uuid block-uuid
                :block/page page-id
                :block/parent page-id}
         block' (assoc block :block/properties properties)

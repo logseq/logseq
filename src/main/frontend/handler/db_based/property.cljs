@@ -33,13 +33,7 @@
    (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
   ([block property-id value status?]
    (when (some? value)
-     (let [property-pair-e (db-property/get-pair-e block property-id)
-           property-tx-data (outliner-core/block-with-updated-at
-                             (if property-pair-e
-                               {:db/id (:db/id property-pair-e)
-                                property-id value}
-                               {:db/id (:db/id block)
-                                :block/properties (sqlite-util/build-property-pair property-id value)}))
+     (let [property-tx-data (sqlite-util/build-property-pair block property-id value)
            block-tx-data (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                            status?
                            (assoc :block/tags :logseq.class/task))]
@@ -496,12 +490,12 @@
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
                             :block/properties
-                            (sqlite-util/build-property-pair :logseq.property/source-page (:db/id property)))))
+                            (sqlite-util/build-property-pair nil :logseq.property/source-page (:db/id property)))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
-        from-block-pair (when (:db/id block) (sqlite-util/build-property-pair :logseq.property/created-from-block (:db/id block)))
-        from-property-pair (when (:db/id property) (sqlite-util/build-property-pair :logseq.property/created-from-property (:db/id property)))
+        from-block-pair (when (:db/id block) (sqlite-util/build-property-pair block :logseq.property/created-from-block (:db/id block)))
+        from-property-pair (when (:db/id property) (sqlite-util/build-property-pair block :logseq.property/created-from-property (:db/id property)))
         parent (-> {:block/uuid parent-id
                     :block/format :markdown
                     :block/content ""
@@ -551,7 +545,7 @@
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
                             :block/properties
-                            (sqlite-util/build-property-pair :logseq.property/source-page (:db/id property)))))
+                            (sqlite-util/build-property-pair nil :logseq.property/source-page (:db/id property)))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)
@@ -564,9 +558,10 @@
                        :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                        page-id)
                        :block/properties
-                       [(sqlite-util/build-property-pair :logseq.property/created-from-block [:block/uuid (:block/uuid block)])
-                        (sqlite-util/build-property-pair :logseq.property/created-from-property (:db/id property))
-                        (sqlite-util/build-property-pair :logseq.property/created-from-template [:block/uuid (:block/uuid template)])]}
+                       (sqlite-util/build-properties nil
+                        {:logseq.property/created-from-block [:block/uuid (:block/uuid block)]
+                         :logseq.property/created-from-property (:db/id property)
+                         :logseq.property/created-from-template [:block/uuid (:block/uuid template)]})}
                       sqlite-util/block-with-timestamps)]
     {:page page-tx
      :blocks [new-block]}))

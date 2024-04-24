@@ -76,6 +76,7 @@
   (mapv
    (fn [[prop-name val]]
      (sqlite-util/build-property-pair
+      nil
       (get-ident all-idents prop-name)
       ;; set indicates a :many value
       (if (set? val)
