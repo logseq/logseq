@@ -79,7 +79,7 @@
       (if trigger
         (if (d/has-class? trigger "block-content")
           (let [block-id (some-> (d/attr trigger "blockid") uuid)
-                container-id (some-> (d/attr trigger "data-container-id")
+                container-id (some-> (d/attr trigger "containerid")
                                      util/safe-parse-int)
                 block (when block-id (db/entity [:block/uuid block-id]))]
             (when block (editor-handler/edit-block! block :max {:container-id container-id})))
