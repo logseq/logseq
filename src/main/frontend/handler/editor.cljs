@@ -1805,8 +1805,7 @@
   (state/set-editor-show-input! nil)
   (when-let [saved-cursor (state/get-editor-last-pos)]
     (when-let [input (gdom/getElement id)]
-      (.focus input)
-      (cursor/move-cursor-to input saved-cursor))))
+      (cursor/move-cursor-to input saved-cursor true))))
 
 (defn handle-command-input [command id format m]
   ;; TODO: Add error handling for when user doesn't provide a required field.
