@@ -33,9 +33,14 @@
             [rum.core :as rum]
             [frontend.config :as config]))
 
-(rum/defc commands < rum/reactive
-  [id format]
-  (let [matched (util/react *matched-commands)]
+(rum/defcs commands < rum/reactive
+  (rum/local [] ::matched-commands)
+  [s id format]
+  (let [matched' (util/react *matched-commands)
+        *matched (::matched-commands s)
+        _ (when (state/get-editor-action)
+            (reset! *matched matched'))
+        matched @*matched]
     (ui/auto-complete
       matched
       {:get-group-name
