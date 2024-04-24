@@ -216,16 +216,16 @@
       '[:find [(pull ?page [:db/id :block/uuid :block/name :block/original-name :block/created-at :block/updated-at])]
         :in $ ?tag-id
         :where
-        [?page :block/tags ?tag-id]]
+        [?page :block/tags ?tag-id]
+        [?page :block/name]]
       tag-id))
 
 (defn <get-tags
   [graph]
   (<q graph {:transact-db? false}
-      '[:find [(pull ?tag-id [:db/id :block/original-name])]
-        :in $ ?tag-id
+      '[:find [(pull ?tag [:db/id :block/original-name])]
         :where
-        [?page :block/tags ?tag-id]]))
+        [?tag :block/type "class"]]))
 
 (defn <fetch-all-pages
   [graph]
