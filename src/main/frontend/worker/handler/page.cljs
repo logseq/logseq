@@ -91,7 +91,7 @@
                                    format   (or format (common-config/get-preferred-format config))
                                    pages    (map (fn [page]
                                                    ;; only apply uuid to the deepest hierarchy of page to create if provided.
-                                                   (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter)
+                                                   (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter :class? class?)
                                                        (assoc :block/format format)))
                                                  pages)
                                    txs      (when-not db-based?

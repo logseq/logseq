@@ -302,7 +302,7 @@
     Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
   [original-page-name with-id? db with-timestamp? date-formatter
-   & {:keys [from-page]}]
+   & {:keys [from-page class?]}]
   (let [db-based? (ldb/db-based-graph? db)]
     (cond
      (and original-page-name (string? original-page-name))
@@ -311,7 +311,10 @@
            namespace? (and (not db-based?)
                            (not (boolean (text/get-nested-page-name original-page-name)))
                            (text/namespace-page? original-page-name))
-           page-entity (some-> db (ldb/get-page original-page-name))
+           page-entity (when db
+                         (if class?
+                           (ldb/get-case-page db original-page-name)
+                           (ldb/get-page db original-page-name)))
            original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
        (merge
         {:block/name page-name
