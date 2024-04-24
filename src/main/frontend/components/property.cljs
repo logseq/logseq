@@ -172,7 +172,7 @@
                  (if (= type :default)
                    (pv/<create-new-block! block property "")
                    (property-handler/set-block-property! repo (:block/uuid block)
-                                                         (:db/ident (db/get-page property-name))
+                                                         (:db/ident (db/get-case-page property-name))
                                                          :logseq.property/empty-placeholder)))))))}
 
         ;; only set when in property configure modal
@@ -483,7 +483,7 @@
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      (if in-block-container? {:style {:padding-left 22}} {})
      (if @*property-key
-       (let [property (db/get-page @*property-key)]
+       (let [property (db/get-case-page @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
           [:div.flex.flex-row.items-center.col-span-2
            [:span.bullet-container.cursor [:span.bullet]]

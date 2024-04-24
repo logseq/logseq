@@ -380,7 +380,8 @@
   [state]
   (let [highlighted-item (some-> state state->highlighted-item)]
     (or (:block/uuid (:source-block highlighted-item))
-        (or (:block/uuid (db/get-page (:source-page highlighted-item)))
+        (or (:block/uuid (db/get-case-page (:source-page highlighted-item)))
+            ;; fallback for file graphs
             (:source-page highlighted-item)))))
 
 (defmethod handle-action :open-page [_ state _event]
