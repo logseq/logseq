@@ -450,6 +450,7 @@
                       :extract-fn :label
                       :dropdown? true
                       :close-modal? false
+                      :new-case-sensitive? true
                       :show-new-when-not-exact-match? true
                       :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
                       :input-default-placeholder "Add property"
