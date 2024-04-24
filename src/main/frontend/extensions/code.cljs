@@ -448,14 +448,26 @@
 
         (.addEventListener element "keydown" (fn [e]
                                                (let [key-code (.-code e)
-                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))]
-                                                 (when meta-or-ctrl-pressed?
+                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
+                                                     shifted? (.-shiftKey e)]
+                                                 (cond
+                                                   meta-or-ctrl-pressed?
                                                    ;; prevent default behavior of browser
                                                    ;; Cmd + [ => Go back in browser, outdent in CodeMirror
                                                    ;; Cmd + ] => Go forward in browser, indent in CodeMirror
                                                    (case key-code
                                                      "BracketLeft" (util/stop e)
                                                      "BracketRight" (util/stop e)
+                                                     nil)
+                                                   shifted?
+                                                   (case key-code
+                                                     "Enter"
+                                                    (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
+                                                      (code-handler/save-code-editor!)
+                                                      (js/setTimeout
+                                                        #(editor-handler/api-insert-new-block! ""
+                                                           {:block-uuid (uuid blockid)
+                                                            :sibling? true}) 32))
                                                      nil)))))
         (.addEventListener element "pointerdown"
                            (fn [e]
