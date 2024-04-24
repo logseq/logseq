@@ -20,13 +20,11 @@
             [cljs-bean.core :as bean]
             [logseq.db.sqlite.util :as sqlite-util]))
 
-;; FIXME: no need to store :logseq.property/ls-type since it's stored already in `:block/type`
-
 (defn js->clj-keywordize
   [obj]
   (js->clj obj :keywordize-keys true))
 
-(defn shape->block [shape page-id]
+(defn- shape->block [shape page-id]
   (let [repo (state/get-current-repo)]
     (gp-whiteboard/shape->block repo shape page-id)))
 
@@ -58,17 +56,18 @@
 
 (defn db-build-page-block
   [page-entity page-name tldraw-page assets shapes-index]
-  (let [get-k #(gobj/get tldraw-page %)]
+  (let [get-k #(gobj/get tldraw-page %)
+        tldraw-page {:id (get-k "id")
+                     :name (get-k "name")
+                     :bindings (js->clj-keywordize (get-k "bindings"))
+                     :nonce (get-k "nonce")
+                     :assets (js->clj-keywordize assets)
+                     :shapes-index shapes-index}]
     {:block/original-name page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
-     :logseq.property/ls-type :whiteboard-page
-     :logseq.property.tldraw/page {:id (get-k "id")
-                                   :name (get-k "name")
-                                   :bindings (js->clj-keywordize (get-k "bindings"))
-                                   :nonce (get-k "nonce")
-                                   :assets (js->clj-keywordize assets)
-                                   :shapes-index shapes-index}
+     :block/properties [(sqlite-util/build-property-pair :logseq.property/ls-type :whiteboard-page)
+                        (sqlite-util/build-property-pair :logseq.property.tldraw/page tldraw-page)]
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -206,14 +205,18 @@
 
 (defn get-default-new-whiteboard-tx
   [page-name id]
-  (let [properties {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
-                    (pu/get-pid :logseq.property.tldraw/page)
-                    {:id (str id),
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        tldraw-page {:id (str id),
                      :name page-name,
                      :ls-type :whiteboard-page,
                      :bindings {},
                      :nonce 1,
-                     :assets []}}
+                     :assets []}
+        properties (if db-based?
+                     [(sqlite-util/build-property-pair :logseq.property/ls-type :whiteboard-page)
+                      (sqlite-util/build-property-pair :logseq.property.tldraw/page tldraw-page)]
+                     {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
+                      (pu/get-pid :logseq.property.tldraw/page) tldraw-page})
         m #:block{:uuid id
                   :name (util/page-name-sanity-lc page-name),
                   :original-name page-name
@@ -222,9 +225,7 @@
                   :format :markdown
                   :updated-at (util/time-ms),
                   :created-at (util/time-ms)}]
-    (if (config/db-based-graph? (state/get-current-repo))
-      [(merge m properties)]
-      [(assoc m :block/properties properties)])))
+    [(assoc m :block/properties properties)]))
 
 (defn <create-new-whiteboard-page!
   ([]
