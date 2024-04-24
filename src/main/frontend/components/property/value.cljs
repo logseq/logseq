@@ -466,13 +466,15 @@
     [:div.text-sm.opacity-70 "loading"]
     (let [children (model/sort-by-left
                     (:block/_parent (db/entity (:db/id parent)))
-                    parent)]
+                    parent)
+          hide-bullet? (and (= (count children) 1)
+                            (not (editor-handler/collapsable? (:block/uuid (first children)))))]
       (if (seq children)
         [:div.property-block-container.content.flex.flex-1
          (block-cp children {:id (str (:block/uuid parent))
                              :editor-box editor-box
                              :property-block? true
-                             :hide-bullet? (= (count children) 1)
+                             :hide-bullet? hide-bullet?
                              :closed-values? closed-values?})]
         (property-empty-value)))))
 
