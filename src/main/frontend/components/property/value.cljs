@@ -705,10 +705,10 @@
                 type)
                type)
         template? (= :template type)]
-    [:div.cursor-text.jtrigger
+    [:div.cursor-text
      {:id (or dom-id (random-uuid))
       :tabIndex 0
-      :class class
+      :class (str class " " (when-not (= type :default) "jtrigger"))
       :style {:min-height 24}
       :on-click (fn []
                   (when (and (= type :default) (nil? value))

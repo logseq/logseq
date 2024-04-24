@@ -4,7 +4,9 @@
             [dommy.core :as d]
             [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.handler.notification :as notification]))
+            [frontend.handler.notification :as notification]
+            [frontend.handler.editor :as editor-handler]
+            [frontend.db :as db]))
 
 (defonce *current-keys (atom nil))
 (defonce *jump-data (atom {}))
@@ -75,7 +77,13 @@
       (state/clear-selection!)
       (exit!)
       (if trigger
-        (.click trigger)
+        (if (d/has-class? trigger "block-content")
+          (let [block-id (some-> (d/attr trigger "blockid") uuid)
+                container-id (some-> (d/attr trigger "data-container-id")
+                                     util/safe-parse-int)
+                block (when block-id (db/entity [:block/uuid block-id]))]
+            (when block (editor-handler/edit-block! block :max {:container-id container-id})))
+          (.click trigger))
         (notification/show! "Invalid jump" :error true)))))
 
 (defn jump-to

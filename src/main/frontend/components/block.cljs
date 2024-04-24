@@ -2403,6 +2403,8 @@
 
         attrs (cond->
                {:blockid       (str uuid)
+                :class (when (:property-block? config) "jtrigger")
+                :data-container-id (:container-id config)
                 :data-type (name block-type)
                 :style {:width "100%" :pointer-events (when stop-events? "none")}}
 
