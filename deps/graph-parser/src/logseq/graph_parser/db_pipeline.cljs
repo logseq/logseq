@@ -92,8 +92,9 @@
   [conn tx-report]
   (when (not (get-in tx-report [:tx-meta :pipeline-replace?]))
     (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-          block-path-refs-tx (compute-block-path-refs-tx tx-report blocks)]
-      (d/transact! conn block-path-refs-tx {:pipeline-replace? true}))))
+          block-path-refs-tx (distinct (compute-block-path-refs-tx tx-report blocks))]
+      (when (seq block-path-refs-tx)
+        (d/transact! conn block-path-refs-tx {:pipeline-replace? true})))))
 
 (defn add-listener
   "Adds a listener to the datascript connection to add additional changes from outliner.pipeline"
