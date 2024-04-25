@@ -91,7 +91,7 @@
       (cond
         (or from-disk? new-graph?)
         (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-              path-refs (set (compute-block-path-refs-tx tx-report blocks))
+              path-refs (distinct (compute-block-path-refs-tx tx-report blocks))
               tx-report' (or
                           (when (seq path-refs)
                             (ldb/transact! conn path-refs {:pipeline-replace? true}))
