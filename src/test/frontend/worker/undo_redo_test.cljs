@@ -27,7 +27,8 @@
 
 (use-fixtures :each
   start-and-destroy-db
-  worker-fixtures/listen-test-db-to-gen-undo-ops-fixture)
+  (worker-fixtures/listen-test-db-fixture [:gen-undo-ops])
+  worker-fixtures/listen-test-db-to-write-tx-log-json-file)
 
 
 (def ^:private gen-non-exist-block-uuid gen/uuid)
@@ -118,7 +119,7 @@
     :frontend.worker.undo-redo/move-block
     (assert (= (:block-origin-left (second op))
                (:block/uuid (:block/left (d/entity current-db [:block/uuid (:block-uuid (second op))]))))
-            {:op op :tx-data (:tx-data tx) :x (keys tx)})
+            {:op op :entity (into {} (d/entity current-db [:block/uuid (:block-uuid (second op))]))})
 
     :frontend.worker.undo-redo/update-block
     (assert (some? (d/entity current-db [:block/uuid (:block-uuid (second op))]))
