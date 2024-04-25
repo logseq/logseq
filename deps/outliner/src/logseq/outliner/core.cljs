@@ -960,6 +960,11 @@
   [repo conn date-formatter blocks delete-opts]
   [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks blocks)
+        non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
+        reversed? (and non-consecutive?
+                       (= (:db/id (:block/left (first top-level-blocks)))
+                          (:db/id (second top-level-blocks))))
+        top-level-blocks (if reversed? (reverse top-level-blocks) top-level-blocks)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
@@ -970,7 +975,7 @@
          (= 1 (count top-level-blocks))
          (= start-node end-node))
       (delete-block repo conn txs-state start-node (assoc delete-opts :date-formatter date-formatter))
-      (let [non-consecutive? (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks))]
+      (do
         (when-not non-consecutive?
           (let [sibling? (= (otree/-get-parent-id start-node conn)
                             (otree/-get-parent-id end-node conn))
