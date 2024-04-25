@@ -770,7 +770,9 @@
                                              properties))
         {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
         one-class? (= 1 (count classes))
-        block-own-properties (->> (concat (seq properties))
+        block-own-properties (->> (concat (when (seq (:block/alias block))
+                                            [[:block/alias (:block/alias block)]])
+                                          (seq properties))
                                   remove-built-in-properties
                                   (remove (fn [[id _]] ((set classes-properties) id))))
         root-block? (= (:id opts) (str (:block/uuid block)))
