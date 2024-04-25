@@ -8,8 +8,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.datascript-report :as ds-report]
-            [logseq.graph-parser.db-pipeline :as outliner-pipeline]
+            [logseq.outliner.datascript-report :as ds-report]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.core :as outliner-core]))
 

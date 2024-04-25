@@ -30,6 +30,9 @@
 
     (docs-graph-helper/docs-graph-assertions @conn graph-dir files)
 
+    (testing "Additional counts"
+      (is (= 48225 (count (d/datoms @conn :eavt))) "Correct datoms count"))
+
     (testing "Asts"
       (is (seq asts) "Asts returned are non-zero")
       (is (= files (map :file asts))
@@ -158,7 +161,7 @@
                        datoms->entity-maps
                        (map #(assoc (or (not-empty (select-keys % [:block/content :block/name]))
                                         %)
-                                    :attributes (disj (set (keys %)) :block/file :block/format :block/path-refs)))
+                                    :attributes (disj (set (keys %)) :block/file :block/format)))
                        set)
         db-ents (->> (d/datoms graph-db :eavt)
                      datoms->entity-maps
@@ -167,8 +170,7 @@
                                   :attributes (cond-> (disj (set (keys %))
                                                             ;; Don't compare :block/format as db graphs
                                                             ;; are purposely different
-                                                            :block/format
-                                                            :block/path-refs)
+                                                            :block/format)
                                                 (seq (:block/content %))
                                                 (set/difference #{:block/created-at :block/updated-at}))))
                      set)]

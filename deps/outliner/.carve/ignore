@@ -1,5 +1,5 @@
 ;; API fn
-logseq.outliner.cli.pipeline/add-listener
+logseq.outliner.db-pipeline/add-listener
 ;; private
 logseq.outliner.core/*transaction-opts*
 ;; API fn

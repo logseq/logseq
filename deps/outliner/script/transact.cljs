@@ -1,6 +1,6 @@
 (ns transact
   "This script generically runs transactions against the queried blocks"
-  (:require [logseq.graph-parser.db-pipeline :as db-pipeline]
+  (:require [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.rules :as rules]
             [datascript.core :as d]

@@ -7,7 +7,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.graph-parser.db-pipeline :as db-pipeline]
+            [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.common.util :as common-util]
             [clojure.string :as string]
             [clojure.set :as set]
