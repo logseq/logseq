@@ -353,32 +353,32 @@
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]
   (when (and block block-ref-id)
-    [:.menu-links-wrapper
-     (ui/menu-link
-      {:key "open-in-sidebar"
-       :on-click (fn []
-                   (state/sidebar-add-block!
-                    (state/get-current-repo)
-                    block-ref-id
-                    :block-ref))
-       :shortcut ["⇧+click"]}
-      (t :content/open-in-sidebar))
-     (ui/menu-link
-      {:key "copy"
-       :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}
-      (t :content/copy-ref))
-     (ui/menu-link
-      {:key "delete"
-       :on-click (fn [] (editor-handler/delete-current-ref! block block-ref-id))}
-      (t :content/delete-ref))
-     (ui/menu-link
-      {:key "replace-with-text"
-       :on-click (fn [] (editor-handler/replace-ref-with-text! block block-ref-id))}
-      (t :content/replace-with-text))
-     (ui/menu-link
-      {:key "replace-with-embed"
-       :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
-      (t :content/replace-with-embed))]))
+    [:<>
+     (shui/dropdown-menu-item
+       {:key "open-in-sidebar"
+        :on-click (fn []
+                    (state/sidebar-add-block!
+                      (state/get-current-repo)
+                      block-ref-id
+                      :block-ref))}
+       (t :content/open-in-sidebar)
+       (shui/dropdown-menu-shortcut ["⇧+click"]))
+     (shui/dropdown-menu-item
+       {:key "copy"
+        :on-click (fn [] (editor-handler/copy-current-ref block-ref-id))}
+       (t :content/copy-ref))
+     (shui/dropdown-menu-item
+       {:key "delete"
+        :on-click (fn [] (editor-handler/delete-current-ref! block block-ref-id))}
+       (t :content/delete-ref))
+     (shui/dropdown-menu-item
+       {:key "replace-with-text"
+        :on-click (fn [] (editor-handler/replace-ref-with-text! block block-ref-id))}
+       (t :content/replace-with-text))
+     (shui/dropdown-menu-item
+       {:key "replace-with-embed"
+        :on-click (fn [] (editor-handler/replace-ref-with-embed! block block-ref-id))}
+       (t :content/replace-with-embed))]))
 
 (rum/defc page-title-custom-context-menu-content
   [page]
