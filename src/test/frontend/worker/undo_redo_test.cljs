@@ -65,7 +65,7 @@
 (defn- gen-remove-block-op
   [db]
   (gen/let [block-uuid (gen-block-uuid db {:non-exist-frequency 90})
-            [parent left] (gen-parent-left-pair db)
+            [parent left] (gen-parent-left-pair db block-uuid)
             content gen/string-alphanumeric]
     [:frontend.worker.undo-redo/remove-block
      {:block-uuid block-uuid
