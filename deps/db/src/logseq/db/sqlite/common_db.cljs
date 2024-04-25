@@ -196,7 +196,7 @@
   (let [property-ids (->> (map #(d/entity db %) [:logseq.class/task :logseq.class/card])
                           (mapcat :class/schema.properties)
                           (map :db/id)
-                          (into #{:block/tags :block/alias}))
+                          (into #{:block/tags :block/alias :logseq.property/built-in?}))
         properties (d/pull-many db '[*] property-ids)
         all-classes (->> (d/datoms db :avet :block/type "class")
                          (map :e)
