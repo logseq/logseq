@@ -39,14 +39,18 @@
                   [non-exist-frequency gen-non-exist-block-uuid]]))
 
 (defn- gen-parent-left-pair
-  [db]
-  (gen/frequency [[9 (t.gen/gen-available-parent-left-pair db {:page-uuid page-uuid})]
-                  [1 (gen/vector gen-non-exist-block-uuid 2)]]))
+  [db self-uuid]
+  (gen/such-that
+   (fn [[parent left]]
+     (and (not= self-uuid left)
+          (not= self-uuid parent)))
+   (gen/frequency [[9 (t.gen/gen-available-parent-left-pair db {:page-uuid page-uuid})]
+                   [1 (gen/vector gen-non-exist-block-uuid 2)]])))
 
 (defn- gen-move-block-op
   [db]
   (gen/let [block-uuid (gen-block-uuid db)
-            [parent left] (gen-parent-left-pair db)]
+            [parent left] (gen-parent-left-pair db block-uuid)]
     [:frontend.worker.undo-redo/move-block
      {:block-uuid block-uuid
       :block-origin-left left
