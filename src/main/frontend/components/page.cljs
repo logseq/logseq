@@ -1284,7 +1284,9 @@
                                    :disabled config/publishing?
                                    :value block-type})))
                       (fn [_e value]
-                        (swap! *filters assoc :page-type value)))]
+                        (swap! *filters assoc :page-type value)
+                        (when (= "journal" value)
+                          (swap! *filters assoc :journal? true))))]
           [:div
            (ui/tippy
             {:html  [:small (t :page/show-journals)]
