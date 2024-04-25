@@ -961,7 +961,7 @@
   [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
-        reversed? (and non-consecutive?
+        reversed? (and (not non-consecutive?)
                        (= (:db/id (:block/left (first top-level-blocks)))
                           (:db/id (second top-level-blocks))))
         top-level-blocks (if reversed? (reverse top-level-blocks) top-level-blocks)
@@ -1054,13 +1054,17 @@
           (str "Invalid blocks (without either parent or left): "
                (remove (fn [block] (and (:db/id (:block/parent block)) (:db/id (:block/left block)))) blocks)))
   (let [db @conn
-        blocks (filter-top-level-blocks blocks)
-        [target-block sibling?] (get-target-block db blocks target-block opts)
-        non-consecutive-blocks? (seq (ldb/get-non-consecutive-blocks db blocks))
-        blocks (if non-consecutive-blocks?
-                 (sort-non-consecutive-blocks db blocks)
-                 blocks)
-        original-position? (move-to-original-position? blocks target-block sibling? non-consecutive-blocks?)]
+        top-level-blocks (filter-top-level-blocks blocks)
+        [target-block sibling?] (get-target-block db top-level-blocks target-block opts)
+        non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
+        reversed? (and (not non-consecutive?)
+                       (= (:db/id (:block/left (first top-level-blocks)))
+                          (:db/id (second top-level-blocks))))
+        top-level-blocks (if reversed? (reverse top-level-blocks) top-level-blocks)
+        blocks (if non-consecutive?
+                 (sort-non-consecutive-blocks db top-level-blocks)
+                 top-level-blocks)
+        original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))
       (let [parents (->> (ldb/get-block-parents db (:block/uuid target-block) {})
@@ -1125,8 +1129,12 @@
   (let [db @conn
         top-level-blocks (->> (map (fn [b] (d/entity db (:db/id b))) blocks)
                               filter-top-level-blocks)
-        non-consecutive-blocks (ldb/get-non-consecutive-blocks db top-level-blocks)]
-    (when (empty? non-consecutive-blocks)
+        non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
+        reversed? (and (not non-consecutive?)
+                       (= (:db/id (:block/left (first top-level-blocks)))
+                          (:db/id (second top-level-blocks))))
+        top-level-blocks (if reversed? (reverse top-level-blocks) top-level-blocks)]
+    (when-not non-consecutive?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             left (d/entity db (:db/id (:block/left first-block)))
             parent (:block/parent first-block)
