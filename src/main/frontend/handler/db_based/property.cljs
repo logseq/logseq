@@ -217,7 +217,7 @@
     (let [tag-without-hash (common-util/safe-subs (string/trim v) 1)
           tag (or (page-ref/get-page-name tag-without-hash) tag-without-hash)]
       (when-not (string/blank? tag)
-        (let [e (db/get-page tag)
+        (let [e (db/get-case-page tag)
               e' (if e
                    (do
                      (when-not (contains? (:block/type e) "tag")
@@ -485,7 +485,7 @@
   [block property value parse-block]
   (let [parse-block (if (fn? parse-block) parse-block identity)
         page-name (str "$$$" (:block/uuid property))
-        page-entity (db/get-page page-name)
+        page-entity (db/get-case-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
@@ -540,7 +540,7 @@
 (defn property-create-new-block-from-template
   [block property template]
   (let [page-name (str "$$$" (:block/uuid property))
-        page-entity (db/get-page page-name)
+        page-entity (db/get-case-page page-name)
         page (or page-entity
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
@@ -560,9 +560,9 @@
                                        page-id)
                        :block/properties
                        (sqlite-util/build-properties nil
-                        {:logseq.property/created-from-block [:block/uuid (:block/uuid block)]
-                         :logseq.property/created-from-property (:db/id property)
-                         :logseq.property/created-from-template [:block/uuid (:block/uuid template)]})}
+                                                     {:logseq.property/created-from-block [:block/uuid (:block/uuid block)]
+                                                      :logseq.property/created-from-property (:db/id property)
+                                                      :logseq.property/created-from-template [:block/uuid (:block/uuid template)]})}
                       sqlite-util/block-with-timestamps)]
     {:page page-tx
      :blocks [new-block]}))
@@ -570,7 +570,7 @@
 (defn- get-property-hidden-page
   [property]
   (let [page-name (str db-property-build/hidden-page-name-prefix (:block/uuid property))]
-    (or (db/get-page page-name)
+    (or (db/get-case-page page-name)
         (db-property-build/build-property-hidden-page property))))
 
 (defn re-init-commands!

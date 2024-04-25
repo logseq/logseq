@@ -82,7 +82,8 @@
                        (into [;; e.g. block/properties :title
                               "block/properties :"
                               ;; anything org mode
-                              "org"]))
+                              "org"
+                              "db/get-page"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]

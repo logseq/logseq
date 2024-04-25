@@ -133,11 +133,11 @@
                          (let [journal (date/js-date->journal-title gd)]
                            (p/do!
                             (shui/popup-hide! id)
-                            (when-not (db/get-page journal)
+                            (when-not (db/get-case-page journal)
                               (page-handler/<create! journal {:redirect? false
                                                               :create-first-block? false}))
                             (when (fn? on-change)
-                              (on-change (db/get-page journal)))
+                              (on-change (db/get-case-page journal)))
                             (exit-edit-property))))))]
                (shui/calendar
                 (cond->
