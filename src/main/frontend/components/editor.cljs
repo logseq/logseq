@@ -248,10 +248,9 @@
       :on-enter    non-exist-block-handler
       :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
-                     (let [page (or (:block/original-name page)
-                                    (:block/name page))
+                     (let [page-entity (db/entity [:block/uuid page])
                            repo (state/sub :git/current-repo)
-                           format (db/get-page-format page)
+                           format (get page-entity :block/format :markdown)
                            block (db-model/query-block-by-uuid uuid)
                            content (:block/content block)]
                        (when-not (string/blank? content)
