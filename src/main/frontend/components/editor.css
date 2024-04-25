@@ -11,15 +11,11 @@
 }
 
 .editor-inner {
-  position: relative;
-  display: flex;
+  @apply relative flex;
 
   textarea {
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
-    resize: none;
+    @apply border-none rounded-none bg-transparent p-0 resize-none;
+
     box-shadow: none;
   }
 }
