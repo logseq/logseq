@@ -66,9 +66,11 @@
     {:block/original-name page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
+     :block/uuid (d/squuid)
+     :block/format :markdown
      :block/properties (sqlite-util/build-properties page-entity
-                        {:logseq.property/ls-type :whiteboard-page
-                         :logseq.property.tldraw/page tldraw-page})
+                                                     {:logseq.property/ls-type :whiteboard-page
+                                                      :logseq.property.tldraw/page tldraw-page})
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -210,7 +212,6 @@
                   :name (util/page-name-sanity-lc page-name),
                   :original-name page-name
                   :type "whiteboard",
-                  :journal? false
                   :format :markdown
                   :updated-at (util/time-ms),
                   :created-at (util/time-ms)}]
