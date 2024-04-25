@@ -6,7 +6,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 (defn- get-pages-by-name
   [db page-name]
@@ -88,50 +89,51 @@
 
 (defn- property-with-values
   [db block]
-  (let [block (d/entity db (:db/id block))
-        class-properties (when (contains? (:block/type block) "class")
-                           (let [property-ids (map :db/id (:class/schema.properties block))]
-                             (when (seq property-ids)
-                               (d/pull-many db '[*] property-ids))))
-        block-properties (when (seq (:block/raw-properties block))
-                           (let [pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block)))]
-                             (mapcat
-                              (fn [pair]
-                                (let [property (d/entity db (:db/id (:property/pair-property pair)))
-                                      property-values (get pair (:db/ident property))
-                                      values (if (and (coll? property-values)
-                                                      (map? (first property-values)))
-                                               property-values
-                                               #{property-values})
-                                      value-ids (when (every? map? values)
-                                                  (->> (map :db/id values)
-                                                       (filter (fn [id] (or (int? id) (keyword? id))))))
-                                      value-blocks (->>
-                                                    (when (seq value-ids)
-                                                      (mapcat
-                                                       (fn [id]
-                                                         (let [b (d/entity db id)]
-                                                           (cons (d/pull db '[*] id)
-                                                                 (let [ids (map :db/id (:block/raw-properties b))]
-                                                                   (when (seq ids)
-                                                                     (d/pull-many db '[*] ids))))))
-                                                       value-ids))
+  (when (entity-plus/db-based-graph? db)
+    (let [block (d/entity db (:db/id block))
+          class-properties (when (contains? (:block/type block) "class")
+                             (let [property-ids (map :db/id (:class/schema.properties block))]
+                               (when (seq property-ids)
+                                 (d/pull-many db '[*] property-ids))))
+          block-properties (when (seq (:block/raw-properties block))
+                             (let [pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block)))]
+                               (mapcat
+                                (fn [pair]
+                                  (let [property (d/entity db (:db/id (:property/pair-property pair)))
+                                        property-values (get pair (:db/ident property))
+                                        values (if (and (coll? property-values)
+                                                        (map? (first property-values)))
+                                                 property-values
+                                                 #{property-values})
+                                        value-ids (when (every? map? values)
+                                                    (->> (map :db/id values)
+                                                         (filter (fn [id] (or (int? id) (keyword? id))))))
+                                        value-blocks (->>
+                                                      (when (seq value-ids)
+                                                        (mapcat
+                                                         (fn [id]
+                                                           (let [b (d/entity db id)]
+                                                             (cons (d/pull db '[*] id)
+                                                                   (let [ids (map :db/id (:block/raw-properties b))]
+                                                                     (when (seq ids)
+                                                                       (d/pull-many db '[*] ids))))))
+                                                         value-ids))
                                                     ;; FIXME: why d/pull returns {:db/id db-ident} instead of {:db/id number-eid}?
-                                                    (map (fn [block]
-                                                           (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
-                                                             (if (keyword? from-property-id)
-                                                               (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
-                                                               block)))))
-                                      page (when (seq values)
-                                             (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
-                                               (d/pull db '[*] page-id)))
-                                      property' (d/pull db '[*] (:db/id property))]
-                                  (remove nil? (concat [page]
-                                                       [property']
-                                                       value-blocks
-                                                       [pair]))))
-                              pairs)))]
-    (concat class-properties block-properties)))
+                                                      (map (fn [block]
+                                                             (let [from-property-id (get-in block [:logseq.property/created-from-property :db/id])]
+                                                               (if (keyword? from-property-id)
+                                                                 (assoc-in block [:logseq.property/created-from-property :db/id] (:db/id (d/entity db from-property-id)))
+                                                                 block)))))
+                                        page (when (seq values)
+                                               (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
+                                                 (d/pull db '[*] page-id)))
+                                        property' (d/pull db '[*] (:db/id property))]
+                                    (remove nil? (concat [page]
+                                                         [property']
+                                                         value-blocks
+                                                         [pair]))))
+                                pairs)))]
+      (concat class-properties block-properties))))
 
 (defn get-block-and-children
   [db id children?]
@@ -261,7 +263,8 @@
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
         home-page-data (get-home-page db all-files)
-        structured-blocks (get-structured-blocks db)
+        structured-blocks (when (entity-plus/db-based-graph? db)
+                            (get-structured-blocks db))
         data (concat idents structured-blocks favorites latest-journals all-files home-page-data)]
     {:schema schema
      :initial-data data}))

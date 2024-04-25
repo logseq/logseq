@@ -17,7 +17,8 @@
       (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))
               result (bean/->clj result)]
         (keep (fn [{:keys [content page] :as block}]
-                {:block/uuid (uuid (:uuid block))
+                {:page? (= (:uuid block) page)
+                 :block/uuid (uuid (:uuid block))
                  :block/content content
                  :block/page (uuid page)}) result))
       (p/resolved nil)))

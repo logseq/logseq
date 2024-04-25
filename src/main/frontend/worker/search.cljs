@@ -10,7 +10,8 @@
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [cljs-bean.core :as bean]))
 
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))
@@ -81,10 +82,14 @@
   [^Object db blocks]
   (.transaction db (fn [tx]
                      (doseq [item blocks]
-                       (.exec tx #js {:sql "INSERT INTO blocks (id, content, page) VALUES ($id, $content, $page) ON CONFLICT (id) DO UPDATE SET (content, page) = ($content, $page)"
-                                      :bind #js {:$id (.-id item)
-                                                 :$content (.-content item)
-                                                 :$page (.-page item)}})))))
+                       (if (and (common-util/uuid-string? (.-id item))
+                                (common-util/uuid-string? (.-page item)))
+                         (.exec tx #js {:sql "INSERT INTO blocks (id, content, page) VALUES ($id, $content, $page) ON CONFLICT (id) DO UPDATE SET (content, page) = ($content, $page)"
+                                        :bind #js {:$id (.-id item)
+                                                   :$content (.-content item)
+                                                   :$page (.-page item)}})
+                         (throw (ex-info "Search upsert-blocks wrong data: "
+                                         (bean/->clj item))))))))
 
 (defn delete-blocks!
   [db ids]
@@ -158,10 +163,11 @@
             matched-result (search-blocks-aux db match-sql match-input page limit)
             non-match-result (search-blocks-aux db non-match-sql non-match-input page limit)
             all-result (->> (concat matched-result non-match-result)
-                            (map (fn [[id page _content snippet]]
-                                   {:uuid id
-                                    :content snippet
-                                    :page page})))]
+                            (map (fn [result]
+                                   (let [[id page _content snippet] result]
+                                     {:uuid id
+                                      :content snippet
+                                      :page page}))))]
       (->>
        all-result
        (common-util/distinct-by :uuid)
@@ -252,8 +258,9 @@
                        (str content (when (not= content "") "\n") (get-db-properties-str db properties))
                        content)]
         (when-not (string/blank? content')
+          (assert (or (:block/uuid page) uuid))
           {:id (str uuid)
-           :page (str (:block/uuid page))
+           :page (str (or (:block/uuid page) uuid))
            :content (sanitize content')
            :format format})))))
 
@@ -264,7 +271,7 @@
       {:db/id (:db/id e)
        :block/name (:block/name e)
        :block/uuid id
-       :block/page (:db/id (:block/page e))
+       :block/page (:block/page e)
        :block/content (:block/content e)
        :block/format (:block/format e)
        :block/properties (:block/properties e)})))
