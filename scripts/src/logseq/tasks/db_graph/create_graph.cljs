@@ -7,7 +7,7 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.outliner.cli.pipeline :as cli-pipeline]
+            [logseq.graph-parser.db-pipeline :as db-pipeline]
             [logseq.common.util :as common-util]
             [clojure.string :as string]
             [clojure.set :as set]
@@ -44,7 +44,7 @@
   (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true})
   ;; Same order as frontend.db.conn/start!
   (let [conn (sqlite-db/open-db! dir db-name)]
-    (cli-pipeline/add-listener conn)
+    (db-pipeline/add-listener conn)
     (setup-init-data conn additional-config)
     conn))
 

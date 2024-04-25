@@ -182,7 +182,7 @@
         page (d/entity db page-id)]
     (when-not (or (ldb/whiteboard-page? page)
                   (ldb/hidden-page? page))
-      (let [transact-opts (if replace-tx? {:replace? true} {})
+      (let [transact-opts (if replace-tx? {:pipeline-replace? true} {})
             *fix-tx-data (atom [])]
         (when fix-parent-left?
           (loop-fix-conflicts conn page-id transact-opts *fix-tx-data tx-report from-fix-test?))

@@ -1,4 +1,4 @@
-(ns logseq.outliner.datascript-report
+(ns logseq.graph-parser.datascript-report
   "Datascript fns related to getting data from a connection listener's tx-report"
   (:require [clojure.set :as set]
             [datascript.core :as d]))

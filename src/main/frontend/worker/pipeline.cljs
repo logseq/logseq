@@ -8,8 +8,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.graph-parser.datascript-report :as ds-report]
+            [logseq.graph-parser.db-pipeline :as outliner-pipeline]
             [logseq.db.frontend.property :as db-property]
             [logseq.outliner.core :as outliner-core]))
 
@@ -94,8 +94,7 @@
               path-refs (set (compute-block-path-refs-tx tx-report blocks))
               tx-report' (or
                           (when (seq path-refs)
-                            (ldb/transact! conn path-refs {:replace? true
-                                                           :pipeline-replace? true}))
+                            (ldb/transact! conn path-refs {:pipeline-replace? true}))
                           (do
                             (when-not (exists? js/process) (d/store @conn))
                             tx-report))
@@ -134,8 +133,7 @@
               tx-report' (or
                           (when (seq replace-tx)
                           ;; TODO: remove this since transact! is really slow
-                            (ldb/transact! conn replace-tx {:replace? true
-                                                            :pipeline-replace? true}))
+                            (ldb/transact! conn replace-tx {:pipeline-replace? true}))
                           (do
                             (when-not (exists? js/process) (d/store @conn))
                             tx-report))
