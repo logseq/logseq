@@ -1,5 +1,5 @@
 (ns logseq.outliner.pipeline
-  "Core fns for use with frontend.modules.outliner.pipeline"
+  "Core fns for use with frontend worker and node"
   (:require [datascript.core :as d]
             [clojure.set :as set]
             [logseq.db :as ldb]))
@@ -77,6 +77,7 @@
             blocks)))
 
 (defn compute-block-path-refs-tx
+  "Main fn for computing path-refs"
   [tx-report blocks]
   (let [refs-tx (compute-block-path-refs tx-report blocks)
         truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)]

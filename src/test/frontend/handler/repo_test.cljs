@@ -7,6 +7,7 @@
             [logseq.common.util.block-ref :as block-ref]
             [frontend.db.model :as model]
             [frontend.db.conn :as conn]
+            [datascript.core :as d]
             [clojure.edn :as edn]
             ["path" :as node-path]
             ["fs" :as fs]))
@@ -22,7 +23,15 @@
             (file-repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
         db (conn/get-db test-helper/test-db)]
 
-    (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))))
+    (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))
+    (testing "Additional Counts"
+      (is (= 63926 (count (d/datoms db :eavt))) "Correct datoms count")
+
+      (is (= 5946
+             (ffirst
+              (d/q '[:find (count ?b)
+                     :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
+          "Correct referenced blocks count"))))
 
 (deftest parse-files-and-load-to-db-with-block-refs-on-reload
   (testing "Refs to blocks on a page are retained if that page is reloaded"

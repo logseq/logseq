@@ -65,4 +65,4 @@ Created graph schema!
 #### Update graph scripts
 
 For database graphs, it is recommended to use
-`logseq.graph-parser.db-pipeline/add-listener!` when updating graphs.  TODO
+`logseq.outliner.db-pipeline/add-listener!` when updating graphs.  TODO
