@@ -68,9 +68,13 @@
                                (contains? (set (:values schema))
                                           (:block/uuid (d/entity db val)))))
                         validate-fn')]
-    (if (= (get-in property [:block/schema :cardinality]) :many)
+    (if (= (:cardinality schema) :many)
       (every? validate-fn'' property-val)
-      (or (validate-fn'' property-val) (= :logseq.property/empty-placeholder property-val)))))
+      (or (validate-fn'' property-val)
+          (if (= :db.type/ref (:db/valueType property))
+            (and (integer? property-val)
+                 (= :logseq.property/empty-placeholder (:db/ident (d/entity db property-val))))
+            (= :logseq.property/empty-placeholder property-val))))))
 
 (defn update-properties-in-schema
   "Needs to be called on the DB schema to add the datascript db to it"
@@ -84,11 +88,12 @@
   "Prepares properties in entities to be validated by DB schema"
   [db ents]
   (mapv
-   #(if-let [pair (some->> (:property/pair-property %) (d/entity db))]
+   #(if-let [property (some->> (:property/pair-property %) (d/entity db))]
       (assoc % :property-tuple
-             [(hash-map :block/schema (select-keys (:block/schema pair) [:type :cardinality :values])
-                        :db/ident (:db/ident pair))
-              (get % (:db/ident pair))])
+             [(assoc (select-keys property [:db/ident :db/valueType])
+                     :block/schema
+                     (select-keys (:block/schema property) [:type :cardinality :values]))
+              (get % (:db/ident property))])
       %)
    ents))
 
