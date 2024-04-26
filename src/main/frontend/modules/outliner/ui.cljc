@@ -8,9 +8,8 @@
   [opts & body]
   `(let [test?# frontend.util/node-test?]
      (when (or test?# (db/request-finished?))
-       (when (nil? @(:history/tx-before-editor-cursor @state/state))
-         (state/set-state! :history/tx-before-editor-cursor (state/get-current-edit-block-and-position)))
-       (let [ops# frontend.modules.outliner.op/*outliner-ops*]
+       (let [ops# frontend.modules.outliner.op/*outliner-ops*
+             editor-info# (state/get-editor-info)]
          (if ops#
            (do ~@body)                    ; nested transact!
            (binding [frontend.modules.outliner.op/*outliner-ops* (transient [])]
@@ -27,7 +26,9 @@
                    (let [request-id# (state/get-worker-next-request-id)
                          request# #(.apply-outliner-ops ^Object worker# (state/get-current-repo)
                                                         (pr-str r#)
-                                                        (pr-str (assoc ~opts :request-id request-id#)))
+                                                        (pr-str (assoc ~opts
+                                                                       :request-id request-id#
+                                                                       :editor-info editor-info#)))
                          response# (state/add-worker-request! request-id# request#)]
 
                      response#))))))))))

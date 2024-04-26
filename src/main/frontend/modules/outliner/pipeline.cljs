@@ -4,7 +4,6 @@
             [frontend.state :as state]
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.history :as history]
             [frontend.handler.editor :as editor-handler]
             [frontend.util :as util]))
 
@@ -19,11 +18,6 @@
     (state/update-state! :history/tx->editor-cursor
                          (fn [m] (assoc-in m [tx-id :before] editor-cursor)))
     (state/set-state! :history/tx-before-editor-cursor nil)))
-
-(defn restore-cursor-and-app-state!
-  [{:keys [editor-cursor app-state]} undo?]
-  (history/restore-cursor! editor-cursor undo?)
-  (history/restore-app-state! app-state))
 
 (defn invoke-hooks
   [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
@@ -72,10 +66,10 @@
               (state/set-state! :editor/next-edit-block nil)))
 
           (react/refresh! repo affected-keys)
-          (when-let [state (:ui/restore-cursor-state @state/state)]
-            (when (or undo? redo?)
-              (restore-cursor-and-app-state! state undo?)
-              (state/set-state! :ui/restore-cursor-state nil)))
+          ;; (when-let [state (:ui/restore-cursor-state @state/state)]
+          ;;   (when (or undo? redo?)
+          ;;     (restore-cursor-and-app-state! state undo?)
+          ;;     (state/set-state! :ui/restore-cursor-state nil)))
 
           (state/set-state! :editor/start-pos nil)
 

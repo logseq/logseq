@@ -1966,7 +1966,7 @@ Similar to re-frame subscriptions"
    (set-selection-blocks! blocks direction)))
 
 (defn set-editing!
-  [edit-input-id content block cursor-range & {:keys [move-cursor? ref container-id property-block]
+  [edit-input-id content block cursor-range & {:keys [move-cursor? container-id property-block]
                                                :or {move-cursor? true}}]
   (when-not (exists? js/process)
     (if (> (count content)
@@ -1975,11 +1975,7 @@ Similar to re-frame subscriptions"
         (when (first elements)
           (util/scroll-to-element (gobj/get (first elements) "id")))
         (exit-editing-and-set-selected-blocks! elements))
-      (let [edit-input-id (if ref
-                            (or (some-> (gobj/get ref "id") (string/replace "ls-block" "edit-block"))
-                                edit-input-id)
-                            edit-input-id)]
-        (when (and edit-input-id block
+      (when (and edit-input-id block
                    (or
                     (publishing-enable-editing?)
                     (not @publishing?)))
@@ -1995,12 +1991,12 @@ Similar to re-frame subscriptions"
             (if property-block
               (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
               (set-editing-block-id! [container-id (:block/uuid block)]))
+            (set-state! :editor/container-id container-id)
             (set-state! :editor/block block)
             (set-state! :editor/content content :path-in-sub-atom (:block/uuid block))
             (set-state! :editor/last-key-code nil)
             (set-state! :editor/set-timestamp-block nil)
             (set-state! :editor/cursor-range cursor-range)
-            (set-state! :editor/container-id container-id)
 
             (when-let [input (gdom/getElement edit-input-id)]
               (let [pos (count cursor-range)]
@@ -2011,7 +2007,7 @@ Similar to re-frame subscriptions"
                   (cursor/move-cursor-to input pos))
 
                 (when (or (util/mobile?) (mobile-util/native-platform?))
-                  (set-state! :mobile/show-action-bar? false))))))))))
+                  (set-state! :mobile/show-action-bar? false)))))))))
 
 (defn action-bar-open?
   []
@@ -2364,3 +2360,11 @@ Similar to re-frame subscriptions"
 (defn get-next-container-id
   []
   (swap! (:ui/container-id @state) inc))
+
+(defn get-editor-info
+  []
+  (when-let [edit-block (get-edit-block)]
+    {:block-uuid (:block/uuid edit-block)
+     :container-id @(:editor/container-id @state)
+     :start-pos @(:editor/start-pos @state)
+     :end-pos (get-edit-pos)}))
