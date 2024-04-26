@@ -7,7 +7,6 @@
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
             ["@emoji-mart/data" :as emoji-data]
-            ;; ["@emoji-mart/react" :as Picker]
             ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
@@ -33,10 +32,10 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.shui.icon.v2 :as shui.icon.v2]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.core :as shui-core]
             [logseq.shui.ui :as shui]))
 
 (declare icon)
@@ -195,7 +194,7 @@
                        (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (shui-core/shortcut sequence opts)]))
+     (shui/shortcut sequence opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
@@ -1033,7 +1032,7 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(def icon shui-core/icon)
+(def icon shui.icon.v2/root)
 
 (rum/defc button-inner
   [text & {:keys [theme background variant href size class intent small? icon icon-props disabled? button-props]

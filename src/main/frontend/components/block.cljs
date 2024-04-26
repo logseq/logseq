@@ -56,7 +56,6 @@
             [frontend.mobile.intent :as mobile-intent]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
-            [frontend.shui :refer [get-shui-component-version make-shui-context]]
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.ui :as ui]
@@ -79,7 +78,6 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.util.macro :as macro-util]
-            [logseq.shui.core :as shui-core]
             [medley.core :as medley]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
@@ -3290,51 +3288,44 @@
 (defn table
   [config {:keys [header groups col_groups]}]
 
-  (case (get-shui-component-version :table config)
-    2 (let [v2-config (cond-> config
-                        (config/db-based-graph? (state/get-current-repo))
-                        (assoc-in [:block :properties]
-                                  (db-pu/readable-properties (get-in config [:block :block/properties]))))]
-        (shui-core/table-v2 {:data (concat [[header]] groups)}
-                       (make-shui-context v2-config inline)))
-    1 (let [tr (fn [elm cols]
-                 (->elem
-                  :tr
-                  (mapv (fn [col]
-                          (->elem
-                           elm
-                           {:scope "col"
-                            :class "org-left"}
-                           (map-inline config col)))
-                        cols)))
-            tb-col-groups (try
-                            (mapv (fn [number]
-                                    (let [col-elem [:col {:class "org-left"}]]
-                                      (->elem
-                                       :colgroup
-                                       (repeat number col-elem))))
-                                  col_groups)
-                            (catch :default _e
-                              []))
-            head (when header
-                   [:thead (tr :th header)])
-            groups (mapv (fn [group]
-                           (->elem
-                            :tbody
-                            (mapv #(tr :td %) group)))
-                         groups)]
-        [:div.table-wrapper
-         (->elem
-          :table
-          {:class "table-auto"
-           :border 2
-           :cell-spacing 0
-           :cell-padding 6
-           :rules "groups"
-           :frame "hsides"}
-          (vec-cat
-           tb-col-groups
-           (cons head groups)))])))
+  (let [tr (fn [elm cols]
+             (->elem
+               :tr
+               (mapv (fn [col]
+                       (->elem
+                         elm
+                         {:scope "col"
+                          :class "org-left"}
+                         (map-inline config col)))
+                 cols)))
+        tb-col-groups (try
+                        (mapv (fn [number]
+                                (let [col-elem [:col {:class "org-left"}]]
+                                  (->elem
+                                    :colgroup
+                                    (repeat number col-elem))))
+                          col_groups)
+                        (catch :default _e
+                          []))
+        head (when header
+               [:thead (tr :th header)])
+        groups (mapv (fn [group]
+                       (->elem
+                         :tbody
+                         (mapv #(tr :td %) group)))
+                 groups)]
+    [:div.table-wrapper
+     (->elem
+       :table
+       {:class "table-auto"
+        :border 2
+        :cell-spacing 0
+        :cell-padding 6
+        :rules "groups"
+        :frame "hsides"}
+       (vec-cat
+         tb-col-groups
+         (cons head groups)))]))
 
 (defn logbook-cp
   [log]

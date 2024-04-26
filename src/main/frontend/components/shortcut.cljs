@@ -15,8 +15,7 @@
             [frontend.modules.shortcut.data-helper :as dh]
             [frontend.util :as util]
             [frontend.modules.shortcut.utils :as shortcut-utils]
-            [frontend.modules.shortcut.config :as shortcut-config]
-            [logseq.shui.core :as shui-core])
+            [frontend.modules.shortcut.config :as shortcut-config])
   (:import [goog.events KeyHandler]))
 
 (defonce categories
@@ -477,6 +476,6 @@
 
                         (not unset?)
                         [:code.flex.items-center.bg-transparent
-                         (shui-core/shortcut
+                         (shui/shortcut
                            (string/join " | " (map #(dh/binding-for-display id %) binding))
                            {:size :md :interactive? true})])]]))))])])]]))
