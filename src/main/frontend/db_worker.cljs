@@ -688,18 +688,22 @@
 
   (rtc-get-block-update-log
    [_this block-uuid]
-   (transit/write transit-w (rtc-core/get-block-update-log (uuid block-uuid))))
+   (ldb/write-transit-str (rtc-core/get-block-update-log (uuid block-uuid))))
 
   (undo
    [_this repo page-block-uuid-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (undo-redo/undo repo (uuid page-block-uuid-str) conn))
-   nil)
+     (ldb/write-transit-str (undo-redo/undo repo (uuid page-block-uuid-str) conn))))
 
   (redo
    [_this repo page-block-uuid-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (undo-redo/redo repo (uuid page-block-uuid-str) conn)))
+     (ldb/write-transit-str (undo-redo/redo repo (uuid page-block-uuid-str) conn))))
+
+  (record-editor-info
+   [_this repo page-block-uuid-str editor-info-str]
+   (undo-redo/record-editor-info! repo (uuid page-block-uuid-str) (ldb/read-transit-str editor-info-str))
+   nil)
 
   (keep-alive
    [_this]

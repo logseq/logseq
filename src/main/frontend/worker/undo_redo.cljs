@@ -42,6 +42,9 @@ when undo this op, this original entity-map will be transacted back into db")
 (sr/defkeyword ::update-block
   "when a block is updated, generate a ::update-block undo-op.")
 
+(sr/defkeyword ::record-editor-info
+  "record current editor and cursor")
+
 (sr/defkeyword ::empty-undo-stack
   "return by undo, when no more undo ops")
 
@@ -89,7 +92,14 @@ when undo this op, this original entity-map will be transacted back into db")
        [:block-origin-collapsed {:optional true} :boolean]
        [:block-origin-link {:optional true} [:maybe :uuid]]
        ;; TODO: add more attrs
-       ]]]]))
+       ]]]
+    [::record-editor-info
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:container-id :int]
+       [:start-pos [:maybe :int]]
+       [:end-pos [:maybe :int]]]]]]))
 
 (def ^:private undo-ops-validator (m/validator [:sequential undo-op-schema]))
 
@@ -126,6 +136,8 @@ when undo this op, this original entity-map will be transacted back into db")
     (case (first op)
       ::boundary [op]
 
+      ::record-editor-info [op]
+
       ::insert-blocks
       (keep
        (fn [block-uuid]
@@ -161,7 +173,8 @@ when undo this op, this original entity-map will be transacted back into db")
             (some? block-origin-tags)                 (assoc :block-origin-tags block-origin-tags)
             (some? block-origin-collapsed)            (assoc :block-origin-collapsed block-origin-collapsed)
             ;; block-origin-link's value maybe nil, so use contains as cond
-            (contains? value-keys :block-origin-link) (assoc :block-origin-link block-origin-link))]]))))
+            (contains? value-keys :block-origin-link) (assoc :block-origin-link block-origin-link))]])
+      nil)))
 
 (def ^:private apply-conj-vec (partial apply (fnil conj [])))
 
@@ -240,6 +253,10 @@ when undo this op, this original entity-map will be transacted back into db")
 
 
 (defmulti ^:private reverse-apply-op (fn [op _conn _repo] (first op)))
+(defmethod reverse-apply-op :default
+  [_ _ _]
+  nil)
+
 (defmethod reverse-apply-op ::remove-block
   [op conn repo]
   (let [[_ {:keys [block-uuid block-entity-map]}] op
@@ -360,6 +377,10 @@ when undo this op, this original entity-map will be transacted back into db")
 
           [:push-undo-redo {}])))))
 
+(defmethod reverse-apply-op ::record-editor-info
+  [_op _conn _repo]
+  [:push-undo-redo {}])
+
 (defn- sort&merge-ops
   [ops]
   (let [groups            (group-by first ops)
@@ -394,8 +415,10 @@ when undo this op, this original entity-map will be transacted back into db")
               (some-> *undo-redo-info-for-test* (reset! {:op op :tx (second r)}))
               (apply conj! redo-ops-to-push rev-ops)))))
       (when-let [rev-ops (not-empty (sort&merge-ops (persistent! redo-ops-to-push)))]
-        (push-redo-ops repo page-block-uuid (cons boundary rev-ops)))
-      nil)
+        (push-redo-ops repo page-block-uuid (vec (cons boundary rev-ops))))
+      (let [editor-infos (filter #(= ::record-editor-info (first %)) ops)]
+        {:undo? true
+         :editor-cursors (map second editor-infos)}))
 
     (when (empty-undo-stack? repo page-block-uuid)
       (prn "No further undo information")
@@ -414,8 +437,10 @@ when undo this op, this original entity-map will be transacted back into db")
               (some-> *undo-redo-info-for-test* (reset! {:op op :tx (second r)}))
               (apply conj! undo-ops-to-push rev-ops)))))
       (when-let [rev-ops (not-empty (sort&merge-ops (persistent! undo-ops-to-push)))]
-        (push-undo-ops repo page-block-uuid (cons boundary rev-ops)))
-      nil)
+        (push-undo-ops repo page-block-uuid (vec (cons boundary rev-ops))))
+      (let [editor-infos (filter #(= ::record-editor-info (first %)) ops)]
+        {:redo? true
+         :editor-cursors (map second editor-infos)}))
 
     (when (empty-redo-stack? repo page-block-uuid)
       (prn "No further redo information")
@@ -502,19 +527,32 @@ when undo this op, this original entity-map will be transacted back into db")
    same-entity-datoms-coll))
 
 (defn- generate-undo-ops
-  [repo db-before db-after same-entity-datoms-coll id->attr->datom gen-boundary-op?]
+  [repo db-before db-after same-entity-datoms-coll id->attr->datom gen-boundary-op? tx-meta]
   (when-let [page-block-uuid (find-page-block-uuid db-before db-after same-entity-datoms-coll)]
     (let [ops (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll)
-          ops (sort&merge-ops ops)]
+          ops (sort&merge-ops ops)
+          editor-info (:editor-info tx-meta)
+          ops' (if editor-info
+                 (cons [::record-editor-info editor-info] ops)
+                 ops)]
       (when (seq ops)
-        (push-undo-ops repo page-block-uuid (if gen-boundary-op? (cons boundary ops) ops))))))
+        (push-undo-ops repo page-block-uuid (if gen-boundary-op? (vec (cons boundary ops')) ops'))))))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
              repo id->attr->datom same-entity-datoms-coll]}]
   (when (:gen-undo-ops? tx-meta true)
     (generate-undo-ops repo db-before db-after same-entity-datoms-coll id->attr->datom
-                       (:gen-undo-boundary-op? tx-meta true))))
+                       (:gen-undo-boundary-op? tx-meta true)
+                       tx-meta)))
+
+(defn record-editor-info!
+  [repo page-block-uuid editor-info]
+  (swap! (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
+         update-in [repo page-block-uuid]
+         (fn [stack]
+           (when (seq stack)
+             (conj (vec stack) [::record-editor-info editor-info])))))
 
 ;;; listen db changes and push undo-ops (ends)
 

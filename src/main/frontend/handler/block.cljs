@@ -169,14 +169,13 @@
   (when repo
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
-;; TODO: remove retry
 (defn- edit-block-aux
   [repo block content text-range {:keys [container-id]}]
   (when block
     (state/clear-edit!)
     (let [container-id (or container-id
                            @(:editor/container-id @state/state))]
-      (state/set-editing! "" content block text-range {:container-id container-id}))
+      (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range {:container-id container-id}))
     (mark-last-input-time! repo)))
 
 (defn sanity-block-content

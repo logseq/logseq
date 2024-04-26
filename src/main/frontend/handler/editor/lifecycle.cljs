@@ -3,7 +3,8 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
-            [frontend.db :as db]))
+            [frontend.db :as db]
+            [logseq.db :as ldb]))
 
 (defn did-mount!
   [state]
@@ -18,7 +19,12 @@
     (when-let [element (gdom/getElement id)]
       ;; TODO: check whether editor is visible, do less work
       (js/setTimeout #(util/scroll-editor-cursor element) 50))
-    (state/update-tx-after-cursor-state!))
+
+    (let [^js worker @state/*db-worker
+          page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
+          repo (state/get-current-repo)]
+      (when page-id
+        (.record-editor-info worker repo (str page-id) (ldb/write-transit-str (state/get-editor-info))))))
   state)
 
 ;; (defn will-remount!
