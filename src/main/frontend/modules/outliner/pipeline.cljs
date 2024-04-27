@@ -7,25 +7,13 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.util :as util]))
 
-(defn- get-tx-id
-  [tx-report]
-  (get-in tx-report [:tempids :db/current-tx]))
-
-(defn- update-current-tx-editor-cursor!
-  [tx-report]
-  (let [tx-id (get-tx-id tx-report)
-        editor-cursor @(:history/tx-before-editor-cursor @state/state)]
-    (state/update-state! :history/tx->editor-cursor
-                         (fn [m] (assoc-in m [tx-id :before] editor-cursor)))
-    (state/set-state! :history/tx-before-editor-cursor nil)))
-
 (defn invoke-hooks
   [{:keys [_request-id tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
   ;; (prn :debug
   ;;      :request-id request-id
   ;;      :tx-meta tx-meta
   ;;      :tx-data tx-data)
-  (let [{:keys [from-disk? new-graph? undo? redo? initial-pages? end?]} tx-meta
+  (let [{:keys [from-disk? new-graph? initial-pages? end?]} tx-meta
         repo (state/get-current-repo)
         tx-report {:tx-meta tx-meta
                    :tx-data tx-data}
@@ -52,10 +40,8 @@
                                                                               {:db/id (:e datom)
                                                                                :block.temp/fully-loaded? true})) tx-data)]
                            (concat update-blocks-fully-loaded tx-data))
-                         tx-data)
-              tx-report (d/transact! conn tx-data' tx-meta)]
-          (when-not (or undo? redo?)
-            (update-current-tx-editor-cursor! tx-report)))
+                         tx-data)]
+          (d/transact! conn tx-data' tx-meta))
 
         (when-not (:graph/importing @state/state)
           ;; safe to edit the next block now since other blocks (e.g. prev editing block)

@@ -308,9 +308,6 @@
       :whiteboard/onboarding-tour?           (or (storage/get :whiteboard-onboarding-tour?) false)
       :whiteboard/last-persisted-at          {}
       :whiteboard/pending-tx-data            {}
-      :history/tx-before-editor-cursor       (atom nil)
-      ;; db tx-id -> editor cursor
-      :history/tx->editor-cursor             (atom {})
       :system/info                           {}
       ;; Whether block is selected
       :ui/select-query-cache                 (atom {})
@@ -2341,14 +2338,6 @@ Similar to re-frame subscriptions"
   [page-name]
   (when-not (string/blank? page-name)
     (sub [:db/properties-changed-pages page-name])))
-
-(defn update-tx-after-cursor-state!
-  []
-  (let [editor-cursor (get-current-edit-block-and-position)
-        max-tx-id (apply max (keys @(:history/tx->editor-cursor @state)))]
-    (when (and max-tx-id (nil? (:after (get @(:history/tx->editor-cursor @state) max-tx-id))))
-      (update-state! :history/tx->editor-cursor
-                     (fn [m] (assoc-in m [max-tx-id :after] editor-cursor))))))
 
 (defn update-favorites-updated!
   []

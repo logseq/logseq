@@ -416,9 +416,13 @@ when undo this op, this original entity-map will be transacted back into db")
               (apply conj! redo-ops-to-push rev-ops)))))
       (when-let [rev-ops (not-empty (sort&merge-ops (persistent! redo-ops-to-push)))]
         (push-redo-ops repo page-block-uuid (vec (cons boundary rev-ops))))
-      (let [editor-infos (filter #(= ::record-editor-info (first %)) ops)]
+      (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) ops)
+                                (map second)
+                                (reverse))
+            block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (first editor-cursors))]))]
         {:undo? true
-         :editor-cursors (map second editor-infos)}))
+         :editor-cursors editor-cursors
+         :block-content block-content}))
 
     (when (empty-undo-stack? repo page-block-uuid)
       (prn "No further undo information")
@@ -438,9 +442,12 @@ when undo this op, this original entity-map will be transacted back into db")
               (apply conj! undo-ops-to-push rev-ops)))))
       (when-let [rev-ops (not-empty (sort&merge-ops (persistent! undo-ops-to-push)))]
         (push-undo-ops repo page-block-uuid (vec (cons boundary rev-ops))))
-      (let [editor-infos (filter #(= ::record-editor-info (first %)) ops)]
+      (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) ops)
+                                (map second))
+            block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (last editor-cursors))]))]
         {:redo? true
-         :editor-cursors (map second editor-infos)}))
+         :editor-cursors editor-cursors
+         :block-content block-content}))
 
     (when (empty-redo-stack? repo page-block-uuid)
       (prn "No further redo information")
