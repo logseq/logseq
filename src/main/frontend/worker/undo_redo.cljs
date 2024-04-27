@@ -97,7 +97,7 @@ when undo this op, this original entity-map will be transacted back into db")
      [:cat :keyword
       [:map
        [:block-uuid :uuid]
-       [:container-id :int]
+       [:container-id [:or :int [:enum :unknown-container]]]
        [:start-pos [:maybe :int]]
        [:end-pos [:maybe :int]]]]]]))
 
