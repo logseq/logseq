@@ -9,12 +9,13 @@
             [logseq.db :as ldb]))
 
 (defn restore-cursor!
-  [{:keys [editor-cursors undo?]}]
-  (let [{:keys [block-uuid container-id start-pos end-pos]} (if undo? (first editor-cursors) (last editor-cursors))]
+  [{:keys [editor-cursors block-content undo?]}]
+  (let [{:keys [block-uuid container-id start-pos end-pos]} (if undo? (first editor-cursors) (or (last editor-cursors) (first editor-cursors)))
+        pos (if undo? (or start-pos end-pos) (or end-pos start-pos))]
     (when-let [block (db/pull [:block/uuid block-uuid])]
-      (editor/edit-block! block (or (when undo? start-pos) end-pos)
+      (editor/edit-block! block pos
                           {:container-id container-id
-                           :custom-content (:block/content block)}))))
+                           :custom-content block-content}))))
 
 (comment
   (defn- get-route-data
@@ -47,12 +48,12 @@
                                                  :block/uuid
                                                  str)]
          (when (db-transact/request-finished?)
+           (state/set-editor-op! :undo)
            (util/stop e)
            (p/do!
             (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
             (editor/save-current-block!)
             (state/clear-editor-action!)
-            (state/set-block-op-type! nil)
             (let [^js worker @state/*db-worker]
               (reset! *last-request (.undo worker repo current-page-uuid-str))
               (p/let [result @*last-request]
@@ -69,6 +70,7 @@
                                                  :block/uuid
                                                  str)]
          (when (db-transact/request-finished?)
+           (state/set-editor-op! :redo)
            (util/stop e)
            (state/clear-editor-action!)
            (let [^js worker @state/*db-worker]
