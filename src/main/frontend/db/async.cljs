@@ -89,8 +89,9 @@
 
 ;; TODO: batch queries for better performance and UX
 (defn <get-block
-  [graph name-or-uuid & {:keys [children?]
-                         :or {children? true}}]
+  [graph name-or-uuid & {:keys [children? nested-children?]
+                         :or {children? true
+                              nested-children? false}}]
   (let [name' (str name-or-uuid)
         e (cond
             (number? name-or-uuid)
@@ -106,7 +107,9 @@
       e
       (when-let [^Object sqlite @db-browser/*worker]
         (state/update-state! :db/async-queries (fn [s] (conj s name')))
-        (p/let [result (.get-block-and-children sqlite graph id children?)
+        (p/let [result (.get-block-and-children sqlite graph id (ldb/write-transit-str
+                                                                 {:children? children?
+                                                                  :nested-children? nested-children?}))
                 {:keys [properties block children] :as result'} (ldb/read-transit-str result)
                 conn (db/get-db graph false)
                 block-and-children (concat properties [block] children)

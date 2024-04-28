@@ -415,7 +415,8 @@
         (let [indice (or (get-in @indices [repo :pages])
                          (build-page-indice repo db))
               result (->> (.search indice q (clj->js {:limit limit}))
-                          (bean/->clj))]
+                          (bean/->clj)
+                          (remove #(nil? (get-in % [:item :original-name]))))]
           (->> result
                (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :original-name]))))
                (map

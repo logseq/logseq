@@ -326,10 +326,10 @@
        (ldb/write-transit-str result))))
 
   (get-block-and-children
-   [_this repo id children?]
+   [_this repo id opts]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [id (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
-       (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn id children?)))))
+       (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn id (ldb/read-transit-str opts))))))
 
   (get-block-refs
    [_this repo id]
