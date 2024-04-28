@@ -217,7 +217,7 @@
   @apply inline-flex items-center flex-wrap;
 
   &.as-heading {
-    @apply flex w-full;
+    @apply flex flex-1;
   }
 
   &:has(.dsl-query) {
