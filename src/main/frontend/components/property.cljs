@@ -107,7 +107,10 @@
 
 (defn- property-type-label
   [property-type]
-  (if (= property-type :default)
+  (case property-type
+    :default
+    "Text block"
+    :string
     "Text"
     ((comp string/capitalize name) property-type)))
 
@@ -131,7 +134,7 @@
                     default-open?]}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
-        schema-types (->> (concat (remove #{:string} db-property-type/user-built-in-property-types)
+        schema-types (->> (concat db-property-type/user-built-in-property-types
                                   (when built-in?
                                     db-property-type/internal-built-in-property-types))
                           (map (fn [type]
