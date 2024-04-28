@@ -620,8 +620,7 @@
                                      (js/apis.openPath root))}}])
 
                     [{:hr true :key "dropdown-more"}
-                     {:title (auto-check-for-updates-control)
-                      :options {:no-padding? true}}])]
+                     {:title (auto-check-for-updates-control)}])]
 
         (ui/button
           (ui/icon "dots-vertical")
@@ -1081,8 +1080,7 @@
                            :icon (ui/icon "download")})]
 
                        [{:hr true :key "dropdown-more"}
-                        {:title (auto-check-for-updates-control)
-                         :options {:no-padding? true}}])
+                        {:title (auto-check-for-updates-control)}])
                   (remove nil?)))]
 
     [:div.toolbar-plugins-manager
