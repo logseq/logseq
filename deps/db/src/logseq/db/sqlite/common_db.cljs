@@ -46,10 +46,7 @@
 (defn get-all-files
   [db]
   (->> (d/datoms db :avet :file/path)
-       (map (fn [e]
-              {:db/id (:e e)
-               :file/path (:v e)
-               :file/content (:file/content (d/entity db (:e e)))}))))
+       (mapcat (fn [e] (d/datoms db :eavt (:e e))))))
 
 (defn- with-block-refs
   [db block]
@@ -91,10 +88,6 @@
   [db block]
   (when (entity-plus/db-based-graph? db)
     (let [block (d/entity db (:db/id block))
-          class-properties (when (contains? (:block/type block) "class")
-                             (let [property-ids (map :db/id (:class/schema.properties block))]
-                               (when (seq property-ids)
-                                 (d/pull-many db '[*] property-ids))))
           block-properties (when (seq (:block/raw-properties block))
                              (let [pairs (d/pull-many db '[*] (map :db/id (:block/raw-properties block)))]
                                (mapcat
@@ -126,14 +119,12 @@
                                                                  block)))))
                                         page (when (seq values)
                                                (when-let [page-id (:db/id (:block/page (d/entity db (:db/id (first values)))))]
-                                                 (d/pull db '[*] page-id)))
-                                        property' (d/pull db '[*] (:db/id property))]
+                                                 (d/pull db '[*] page-id)))]
                                     (remove nil? (concat [page]
-                                                         [property']
                                                          value-blocks
                                                          [pair]))))
                                 pairs)))]
-      (concat class-properties block-properties))))
+      block-properties)))
 
 (defn get-block-and-children
   [db id children?]
@@ -180,7 +171,7 @@
   [db n]
   (let [today (date-time-util/date->int (js/Date.))]
     (->>
-     (d/q '[:find [(pull ?page [*]) ...]
+     (d/q '[:find [(pull ?page [:db/id :block/journal-day]) ...]
             :in $ ?today
             :where
             [?page :block/name ?page-name]
@@ -191,28 +182,17 @@
           today)
      (sort-by :block/journal-day)
      (reverse)
-     (take n))))
+     (take n)
+     (mapcat (fn [p]
+               (d/datoms db :eavt (:db/id p)))))))
 
-(defn get-structured-blocks
+(defn get-structured-datoms
   [db]
-  (let [property-ids (->> (map #(d/entity db %) [:logseq.class/task :logseq.class/card])
-                          (mapcat :class/schema.properties)
-                          (map :db/id)
-                          (into #{:block/tags :block/alias :logseq.property/built-in?}))
-        properties (d/pull-many db '[*] property-ids)
-        all-classes (->> (d/datoms db :avet :block/type "class")
-                         (map :e)
-                         (d/pull-many db '[*]))
-        closed-values (->> (d/datoms db :avet :block/type "closed value")
-                           (map :e)
-                           (d/pull-many db '[*])
-                           (mapcat (fn [block] (cons block (property-with-values db block))))
-                           (map (fn [block]
-                                  (let [val (:logseq.property/created-from-property block)]
-                                    (if (keyword? (:db/id val))
-                                      (assoc block :logseq.property/created-from-property {:db/id (:db/id (d/entity db (:db/id val)))})
-                                      block)))))]
-    (concat closed-values properties all-classes)))
+  (mapcat (fn [type]
+            (->> (d/datoms db :avet :block/type type)
+                 (mapcat (fn [d]
+                           (d/datoms db :eavt (:e d))))))
+          ["property" "class" "closed value"]))
 
 (defn get-favorites
   "Favorites page and its blocks"
@@ -220,61 +200,39 @@
   (let [page-id (get-first-page-by-name db common-config/favorites-page-name)
         {:keys [block children]} (get-block-and-children db page-id true)]
     (when block
-      (concat [block]
+      (concat (d/datoms db :eavt (:db/id block))
               (->> (keep :block/link children)
-                   (map (fn [l]
-                          (d/pull db '[*] (:db/id l)))))
-              children))))
-
-(defn get-full-page-and-blocks
-  [db page-name]
-  (let [page-id (get-first-page-by-name db page-name)
-        data (get-block-and-children db page-id true)
-        result (first (tree-seq map? :children data))]
-    (cons (:block result)
-          (map #(dissoc % :children) (:children result)))))
-
-(defn get-home-page
-  [db files]
-  (let [config (->> (some (fn [m] (when (= (:file/path m) "logseq/config.edn")
-                                    (:file/content m))) files)
-                    (common-util/safe-read-string {}))
-        home-page (get-in config [:default-home :page])]
-    (when home-page
-      (get-full-page-and-blocks db (common-util/page-name-sanity-lc home-page)))))
+                   (mapcat (fn [l]
+                             (d/datoms db :eavt (:db/id l)))))
+              (mapcat (fn [child]
+                        (d/datoms db :eavt (:db/id child)))
+                      children)))))
 
 (defn get-initial-data
   "Returns current database schema and initial data"
   [db]
-  (let [schema (->> (:schema db)
-                    (remove (fn [[k _v]]
-                              (integer? k)))
-                    (into {}))
-        db-type-ident (when (d/entity db :logseq.kv/db-type)
-                        (d/pull db '[*] :logseq.kv/db-type))
-        graph-id-ident (let [e (d/entity db :logseq.kv/graph-uuid)
-                             id (:graph/uuid e)]
-                         (when id
-                           {:db/id (:db/id e)
-                            :db/ident :logseq.kv/graph-uuid
-                            :graph/uuid id}))
-        idents (remove nil? [db-type-ident graph-id-ident])
+  (let [schema (:schema db)
+        idents (mapcat (fn [id]
+                         (when-let [e (d/entity db id)]
+                           (d/datoms db :eavt (:db/id e))))
+                       [:logseq.kv/db-type :logseq.kv/graph-uuid])
         favorites (get-favorites db)
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
-        home-page-data (get-home-page db all-files)
-        structured-blocks (when (entity-plus/db-based-graph? db)
-                            (get-structured-blocks db))
-        data (concat idents structured-blocks favorites latest-journals all-files home-page-data)]
+        structured-datoms (when (entity-plus/db-based-graph? db)
+                            (get-structured-datoms db))
+        data (concat idents
+                     structured-datoms
+                     favorites
+                     latest-journals
+                     all-files)]
     {:schema schema
      :initial-data data}))
 
 (defn restore-initial-data
-  "Given initial sqlite data and schema, returns a datascript connection"
+  "Given initial Datascript datoms and schema, returns a datascript connection"
   [data schema]
-  (let [conn (d/create-conn schema)]
-    (d/transact! conn data)
-    conn))
+  (d/conn-from-datoms data schema))
 
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"
