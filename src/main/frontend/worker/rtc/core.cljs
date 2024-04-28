@@ -29,7 +29,8 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [frontend.worker.rtc.ws2]))
 
 ;;                     +-------------+
 ;;                     |             |
