@@ -33,12 +33,12 @@
    (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
   ([block property-id value status?]
    (when (some? value)
-     (let [property-tx-data {:db/id (:db/id block)
-                             :block/properties (sqlite-util/build-property-pair block property-id value)}
-           block-tx-data (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
-                           status?
+     (let [block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
+                        property-id value)
+           block-tx-data (cond-> block
+                          status?
                            (assoc :block/tags :logseq.class/task))]
-       [property-tx-data block-tx-data]))))
+       [block-tx-data]))))
 
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
@@ -203,10 +203,7 @@
               (notification/show! msg' :warning))
             (do
               (upsert-property! repo property-id (assoc property-schema :type property-type) {})
-              (let [pair-id (:db/id (db-property/get-pair-e block property-id))
-                    tx-data (concat
-                             (when pair-id [[:db/retract pair-id property-id]])
-                             (build-property-value-tx-data block property-id values' false))]
+              (let [tx-data (build-property-value-tx-data block property-id values' false)]
                 (db/transact! repo tx-data {:outliner-op :save-block})))))))))
 
 (defn- resolve-tag
@@ -260,7 +257,8 @@
         (when (some? v'')
           (let [infer-schema (when-not type (infer-schema-from-input-string v''))
                 property-type' (or type property-type infer-schema :default)
-                schema (get-property-value-schema property-type' property)
+                schema (get-property-value-schema property-type' (or property
+                                                                     {:block/schema {:type property-type'}}))
                 existing-value (when-let [id (:db/ident property)]
                                  (get block id))
                 new-value* (if (= v'' :logseq.property/empty-placeholder)
@@ -379,11 +377,9 @@
                                                                              txs-state
                                                                              (outliner-core/->Block property-block)
                                                                              {:children? true})
-                                                 @txs-state))
-                           pair-id (:db/id (db-property/get-pair-e block property-id))]
+                                                 @txs-state))]
                        (concat
-                        (when pair-id
-                          [[:db/retractEntity pair-id]])
+                        [[:db/retract eid (:db/ident property)]]
                         retract-blocks-tx))))
                  block-eids)]
         (when (seq txs)
@@ -490,13 +486,10 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :block/properties
-                            (sqlite-util/build-property-pair nil :logseq.property/source-page (:db/id property)))))
+                            :logseq.property/source-page (:db/id property))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         parent-id (db/new-block-id)
-        from-block-pair (when (:db/id block) (sqlite-util/build-property-pair block :logseq.property/created-from-block (:db/id block)))
-        from-property-pair (when (:db/id property) (sqlite-util/build-property-pair block :logseq.property/created-from-property (:db/id property)))
         parent (-> {:block/uuid parent-id
                     :block/format :markdown
                     :block/content ""
@@ -504,7 +497,8 @@
                     :block/parent page-id
                     :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                     page-id)
-                    :block/properties (remove nil? [from-block-pair from-property-pair])}
+                    :logseq.property/created-from-block (:db/id block)
+                    :logseq.property/created-from-property (:db/id property)}
                    sqlite-util/block-with-timestamps)
         child-1-id (db/new-block-id)
         child-1 (-> {:block/uuid child-1-id
@@ -545,8 +539,7 @@
                  (-> (block/page-name->map page-name true)
                      (assoc :block/type #{"hidden"}
                             :block/format :markdown
-                            :block/properties
-                            (sqlite-util/build-property-pair nil :logseq.property/source-page (:db/id property)))))
+                            :logseq.property/source-page (:db/id property))))
         page-tx (when-not page-entity page)
         page-id [:block/uuid (:block/uuid page)]
         block-id (db/new-block-id)
@@ -558,11 +551,9 @@
                        :block/parent page-id
                        :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
                                        page-id)
-                       :block/properties
-                       (sqlite-util/build-properties nil
-                                                     {:logseq.property/created-from-block [:block/uuid (:block/uuid block)]
-                                                      :logseq.property/created-from-property (:db/id property)
-                                                      :logseq.property/created-from-template [:block/uuid (:block/uuid template)]})}
+                       :logseq.property/created-from-block [:block/uuid (:block/uuid block)]
+                       :logseq.property/created-from-property (:db/id property)
+                       :logseq.property/created-from-template [:block/uuid (:block/uuid template)]}
                       sqlite-util/block-with-timestamps)]
     {:page page-tx
      :blocks [new-block]}))

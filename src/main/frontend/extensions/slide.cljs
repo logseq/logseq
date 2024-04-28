@@ -12,7 +12,6 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.handler.db-based.property.util :as db-pu]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db :as ldb]))
 
 (defn loaded? []
@@ -21,7 +20,7 @@
 (defn- with-properties
   [m block]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
-        properties (if db-based? (db-property/properties block) (:block/properties block))]
+        properties (:block/properties block)]
     (if (seq properties)
       (merge m
              (update-keys

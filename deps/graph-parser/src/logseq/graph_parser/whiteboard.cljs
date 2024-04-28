@@ -82,15 +82,13 @@
 
 (defn shape->block [repo db shape page-id]
   (let [block-uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
-        block (when block-uuid (d/entity db [:block/uuid block-uuid]))
-        properties-map {(db-property-util/get-pid repo :logseq.property/ls-type) :whiteboard-shape
-                        (db-property-util/get-pid repo :logseq.property.tldraw/shape) shape}
-        properties (if (sqlite-util/db-based-graph? repo)
-                     (sqlite-util/build-properties block properties-map)
-                     properties-map)
+        properties {(db-property-util/get-pid repo :logseq.property/ls-type) :whiteboard-shape
+                    (db-property-util/get-pid repo :logseq.property.tldraw/shape) shape}
         block {:block/uuid block-uuid
                :block/page page-id
                :block/parent page-id}
-        block' (assoc block :block/properties properties)
+        block' (if (sqlite-util/db-based-graph? repo)
+                 (merge block properties)
+                 (assoc block :block/properties properties))
         additional-props (with-whiteboard-block-props block' page-id)]
     (merge block' additional-props)))

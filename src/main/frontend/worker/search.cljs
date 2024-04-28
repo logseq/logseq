@@ -10,8 +10,7 @@
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [cljs-bean.core :as bean]))
+            [logseq.db :as ldb]))
 
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))

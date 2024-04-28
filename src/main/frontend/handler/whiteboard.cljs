@@ -68,9 +68,8 @@
      :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
      :block/format :markdown
-     :block/properties (sqlite-util/build-properties page-entity
-                                                     {:logseq.property/ls-type :whiteboard-page
-                                                      :logseq.property.tldraw/page tldraw-page})
+     :logseq.property/ls-type :whiteboard-page
+     :logseq.property.tldraw/page tldraw-page
      :block/updated-at (util/time-ms)
      :block/created-at (or (:block/created-at page-entity)
                            (util/time-ms))}))
@@ -203,19 +202,19 @@
                      :bindings {},
                      :nonce 1,
                      :assets []}
-        properties-map {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
-                        (pu/get-pid :logseq.property.tldraw/page) tldraw-page}
-        properties (if db-based?
-                     (sqlite-util/build-properties nil properties-map)
-                     properties-map)
+        properties {(pu/get-pid :logseq.property/ls-type) :whiteboard-page,
+                    (pu/get-pid :logseq.property.tldraw/page) tldraw-page}
         m #:block{:uuid id
                   :name (util/page-name-sanity-lc page-name),
                   :original-name page-name
                   :type "whiteboard",
                   :format :markdown
                   :updated-at (util/time-ms),
-                  :created-at (util/time-ms)}]
-    [(assoc m :block/properties properties)]))
+                  :created-at (util/time-ms)}
+        m' (if db-based?
+             (merge m properties)
+             (assoc m :block/properties properties))]
+    [m']))
 
 (defn <create-new-whiteboard-page!
   ([]

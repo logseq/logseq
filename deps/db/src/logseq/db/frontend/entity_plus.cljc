@@ -25,20 +25,13 @@
      :block/raw-content
      (lookup-entity e :block/content default-value)
 
-     :block/raw-properties
-     (lookup-entity e :block/properties default-value)
-
      :block/properties
      (let [db (.-db e)]
        (if (db-based-graph? db)
-         (let [result (lookup-entity e k default-value)]
-           (->>
-            (keep (fn [pair-e]
-                    (when pair-e
-                      (if-let [pid (:db/ident (lookup-entity pair-e :property/pair-property nil))]
-                        {pid (lookup-entity pair-e pid nil)}
-                        (prn "Error: outdated property pair entity should be deleted: " pair-e)))) result)
-            (into {})))
+         (lookup-entity e :block/properties
+                    (->> (into {} e)
+                         (filter (fn [[k _]] (db-property/property? k)))
+                         (into {})))
          (lookup-entity e :block/properties nil)))
 
      :block/content
@@ -53,12 +46,7 @@
          default-value)))
 
      (or (get (.-kv e) k)
-         (if (and (not (db-property/db-attribute-properties k))
-                  (db-property/property? k)
-                  (db-based-graph? (.-db e))
-                  (not (:property/pair-property e))) ; property pair will be direct access
-           (k (first (filter #(some? (k %)) (lookup-entity e :block/properties nil))))
-           (lookup-entity e k default-value))))))
+         (lookup-entity e k default-value)))))
 
 #?(:org.babashka/nbb
    nil

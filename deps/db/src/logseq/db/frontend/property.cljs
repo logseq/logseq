@@ -237,25 +237,9 @@
   "Returns a block's properties as a map indexed by property's db-ident.
    Use this in deps because nbb can't use :block/properties from entity-plus"
   [e]
-  (->> (:block/properties e)
-       (map (fn [pair-e]
-              (let [pid (:db/ident (:property/pair-property pair-e))]
-                {pid (pair-e pid)})))
+  (->> (into {} e)
+       (filter (fn [[k _]] (property? k)))
        (into {})))
-
-(defn get-pair-e
-  "Fetches a block's property pair entity given a property's db-ident. Iterates over a
-  block's property pairs until it finds the first match. This is nbb compatible"
-  [block db-ident]
-  (first (filter #(= (:db/ident (:property/pair-property %)) db-ident)
-                 (or (:block/raw-properties block)
-                     ;; Fallback for nbb since it can't access :block/raw-properties
-                     (:block/properties block)))))
-
-(defn get-property-value
-  "Fetches a block's property value given a property's db-ident"
-  [block db-ident]
-  (get (get-pair-e block db-ident) db-ident))
 
 (defn valid-property-name?
   [s]

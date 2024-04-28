@@ -11,7 +11,7 @@
    :block/format :markdown
    :block/uuid block-id
    :block/page page-id
-   :block/properties [(sqlite-util/build-property-pair nil :logseq.property/created-from-property (:db/ident property))]
+   :logseq.property/created-from-property (:db/ident property)
    :block/schema {:value value}
    :block/parent page-id})
 
@@ -25,7 +25,7 @@
     (assoc :db/ident db-ident)
 
     icon
-    (update :block/properties conj (sqlite-util/build-property-pair nil :logseq.property/icon icon))
+    (assoc :logseq.property/icon icon)
 
     ;; For now, only closed values with :db/ident are built-in?
     (and db-ident (keyword? db-ident))

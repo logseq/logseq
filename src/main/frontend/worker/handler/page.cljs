@@ -239,6 +239,8 @@
                                  [[:db.fn/retractEntity [:file/path file-path]]])
                 delete-page-tx (concat (db-refs->page repo page)
                                        [[:db.fn/retractEntity (:db/id page)]])
+
+                ;; TODO: is this still needed?
                 delete-property-pairs-tx (when property?
                                            (map (fn [d] [:db.fn/retractEntity (:e d)]) (d/datoms db :avet (:db/ident page))))
                 tx-data (concat truncate-blocks-tx-data
