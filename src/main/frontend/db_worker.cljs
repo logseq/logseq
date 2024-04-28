@@ -6,7 +6,6 @@
             [cljs.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [cognitect.transit :as transit]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [frontend.worker.async-util :include-macros true :refer [<?] :as async-util]
@@ -40,8 +39,6 @@
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
-
-(defonce transit-w (transit/writer :json))
 
 (defn- <get-opfs-pool
   [graph]

@@ -117,25 +117,7 @@
   (and (:block/name block)
        (nil? (:block/page block))))
 
-(defn build-property-pair
-  [block db-ident value]
-  (assert (or (de/entity? block) (nil? block)) "build-property-pair `block` should be a db entity or nil")
-  (if-let [pair (when block (db-property/get-pair-e block db-ident))]
-    {:db/id (:db/id pair)
-     db-ident value
-     :block/updated-at (common-util/time-ms)}
-    (block-with-timestamps
-     {:property/pair-property {:db/ident db-ident}
-      db-ident value})))
-
-(defn build-properties
-  [block properties-map]
-  (assert (or (de/entity? block) (nil? block)) "build-property-pair `block` should be a db entity or nil")
-  (mapv (fn [[db-ident value]] (build-property-pair block db-ident value)) properties-map))
-
 (defn mark-block-as-built-in
   "Marks built-in blocks as built-in? including pages, classes, properties and closed values"
   [block]
-  (update block :block/properties conj
-          (let [e (when (de/entity? block) block)]
-            (build-property-pair e :logseq.property/built-in? true))))
+  (assoc block :logseq.property/built-in? true))

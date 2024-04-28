@@ -10,7 +10,6 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.datascript-report :as ds-report]
             [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.db.frontend.property :as db-property]
             [logseq.outliner.core :as outliner-core]))
 
 (defn- path-refs-need-recalculated?
@@ -42,19 +41,11 @@
        (mapcat (fn [b]
                  (let [created-from-block (get b :logseq.property/created-from-block)
                        created-from-property (get b :logseq.property/created-from-property)
-                       created-block (d/entity after-db (:db/id created-from-block))
-                       pair-e (db-property/get-pair-e created-from-block (:db/ident created-from-property))
-                       tx-id (get-in tx-report [:tempids :db/current-tx])]
+                       created-block (d/entity after-db (:db/id created-from-block))]
                    (when (and created-block created-from-property)
                      [[:db/retractEntity (:db/id b)]
-                      (when pair-e
-                        (outliner-core/block-with-updated-at
-                         {:db/id (:db/id pair-e)
-                          :block/tx-id tx-id}))
-                      (when pair-e
-                        (outliner-core/block-with-updated-at
-                         {:db/id (:db/id created-block)
-                          :block/tx-id tx-id}))])))
+                      (outliner-core/block-with-updated-at
+                       {:db/id (:db/id created-block)})])))
                empty-property-parents)
        (remove nil?)))))
 
@@ -127,9 +118,8 @@
                                 tx-id (get-in tx-report [:tempids :db/current-tx])]
                             (keep (fn [b]
                                     (when-let [db-id (:db/id b)]
-                                      (when-not (:property/pair-property b)
-                                        {:db/id db-id
-                                         :block/tx-id tx-id}))) updated-blocks)))
+                                      {:db/id db-id
+                                       :block/tx-id tx-id})) updated-blocks)))
               tx-report' (or
                           (when (seq replace-tx)
                           ;; TODO: remove this since transact! is really slow

@@ -101,7 +101,7 @@
   "Returns entity maps for given :eavt datoms indexed by db/id. Optional keys:
    * :entity-fn - Optional fn that given an entity id, returns entity. Defaults
      to just doing a lookup within entity-maps to be as performant as possible"
-  [datoms & {:keys [entity-fn]}]
+  [datoms & {:keys [_entity-fn]}]
   (let [ent-maps
         (reduce (fn [acc {:keys [a e v]}]
                   (if (contains? db-schema/card-many-attributes a)
@@ -114,20 +114,23 @@
                       (update acc e assoc a v))))
                 {}
                 datoms)
-        entity-fn' (or entity-fn #(get ent-maps %))]
-    (-> ent-maps
-        (update-vals
-         (fn [v]
-           (let [pair-ent (when (:property/pair-property v) (entity-fn' (:property/pair-property v)))]
-             (if-let [prop-value
-                      (and pair-ent
-                           (= :db.cardinality/many (:db/cardinality pair-ent))
-                           (get v (:db/ident pair-ent)))]
-               (if-not (set? prop-value)
-                 ;; Fix :many property values that only had one value
-                 (assoc v (:db/ident pair-ent) #{prop-value})
-                 v)
-               v)))))))
+        ;; entity-fn' (or entity-fn #(get ent-maps %))
+        ]
+    ent-maps
+    ;; (-> ent-maps
+    ;;     (update-vals
+    ;;      (fn [v]
+    ;;        (let [pair-ent (when (:property/pair-property v) (entity-fn' (:property/pair-property v)))]
+    ;;          (if-let [prop-value
+    ;;                   (and pair-ent
+    ;;                        (= :db.cardinality/many (:db/cardinality pair-ent))
+    ;;                        (get v (:db/ident pair-ent)))]
+    ;;            (if-not (set? prop-value)
+    ;;              ;; Fix :many property values that only had one value
+    ;;              (assoc v (:db/ident pair-ent) #{prop-value})
+    ;;              v)
+    ;;            v)))))
+    ))
 
 (defn datoms->entities
   "Returns a vec of entity maps given :eavt datoms"
@@ -145,7 +148,6 @@
    [:block/created-at :int]
    [:block/updated-at :int]
    [:block/format [:enum :markdown]]
-   [:block/properties {:optional true} [:set :int]]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/collapsed-properties {:optional true} [:set :int]]

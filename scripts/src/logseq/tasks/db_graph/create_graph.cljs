@@ -72,17 +72,17 @@
   (or (get all-idents kw)
       (throw (ex-info (str "No ident found for " kw) {}))))
 
-(defn- ->block-properties-tx [properties uuid-maps all-idents]
-  (mapv
-   (fn [[prop-name val]]
-     (sqlite-util/build-property-pair
-      nil
-      (get-ident all-idents prop-name)
-      ;; set indicates a :many value
-      (if (set? val)
-        (set (map #(translate-property-value % uuid-maps) val))
-        (translate-property-value val uuid-maps))))
-   properties))
+(defn- ->block-properties [properties uuid-maps all-idents]
+  (->>
+   (map
+    (fn [[prop-name val]]
+      [(get-ident all-idents prop-name)
+       ;; set indicates a :many value
+       (if (set? val)
+         (set (map #(translate-property-value % uuid-maps) val))
+         (translate-property-value val uuid-maps))])
+    properties)
+   (into {})))
 
 (defn- create-uuid-maps
   "Creates maps of unique page names, block contents and property names to their uuids"
@@ -119,8 +119,8 @@
            :block/left {:db/id (if last-block (block-id-fn last-block) page-id)}
            :block/parent {:db/id page-id}})
          (when (seq (:properties m))
-           {:block/properties (->block-properties-tx (:properties m) uuid-maps all-idents)
-            :block/refs (build-property-refs (:properties m) all-idents)})))
+           (merge (->block-properties (:properties m) uuid-maps all-idents)
+                  {:block/refs (build-property-refs (:properties m) all-idents)}))))
 
 (defn- build-properties-tx [properties uuid-maps all-idents]
   (let [property-db-ids (->> (keys properties)
@@ -145,8 +145,9 @@
                                   {:db/id (or (property-db-ids (name prop-name))
                                               (throw (ex-info "No :db/id for property" {:property prop-name})))}
                                   (when-let [props (not-empty (:properties prop-m))]
-                                    {:block/properties (->block-properties-tx props uuid-maps all-idents)
-                                     :block/refs (build-property-refs props all-idents)}))]))
+                                    (merge
+                                     (->block-properties props uuid-maps all-idents)
+                                     {:block/refs (build-property-refs props all-idents)})))]))
                             properties))]
     new-properties-tx))
 
@@ -235,7 +236,7 @@
                   new-page
                   (dissoc page :properties)
                   (when (seq (:properties page))
-                    {:block/properties (->block-properties-tx (:properties page) uuid-maps all-idents)})
+                    (->block-properties (:properties page) uuid-maps all-idents))
                   (when (seq (:properties page))
                     {:block/refs (build-property-refs (:properties page) all-idents)
                      ;; app doesn't do this yet but it should to link property to page

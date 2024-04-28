@@ -39,6 +39,7 @@
               (zipmap closed-value-property-types (repeat #{:values}))
               (zipmap #{:string :number :url} (repeat #{:position}))
               {:default #{}
+               :string #{:cardinality}
                :number #{:cardinality}
                :date #{:cardinality}
                :url #{:cardinality}

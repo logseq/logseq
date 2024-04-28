@@ -121,11 +121,8 @@
   (merge
    (dissoc schema
            :block/namespace :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
-           :block/properties-order)
+           :block/properties :block/properties-order)
    {:block/name {:db/index true}        ; remove db/unique for :block/name
-    :block/properties {:db/valueType :db.type/ref
-                       :db/cardinality :db.cardinality/many}
-    :property/pair-property {:db/valueType :db.type/ref}
     ;; class properties
     :class/parent {:db/valueType :db.type/ref
                    :db/index true}
