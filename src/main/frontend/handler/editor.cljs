@@ -2138,7 +2138,11 @@
      (when-not db?
        (p/let [block (if (integer? db-id)
                        (db-async/<pull repo db-id)
-                       (db-async/<get-template-by-name (name db-id)))]
+                       (db-async/<get-template-by-name (name db-id)))
+               block (when (:block/uuid block)
+                       (db-async/<get-block repo (:block/uuid block)
+                                            {:children? true
+                                             :nested-children? true}))]
          (when-let [db-id (:db/id block)]
            (let [journal? (ldb/journal-page? target)
                  target (or target (state/get-edit-block))
@@ -2181,21 +2185,22 @@
 
                                :else
                                true)]
-               (try
-                 (p/let [result (ui-outliner-tx/transact!
-                                 {:outliner-op :insert-blocks
-                                  :created-from-journal-template? journal?}
-                                 (when-not (string/blank? (state/get-edit-content))
-                                   (save-current-block!))
-                                 (outliner-op/insert-blocks! blocks' target
-                                                             (assoc opts :sibling? sibling?')))]
-                   (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))
+               (when (seq blocks')
+                 (try
+                   (p/let [result (ui-outliner-tx/transact!
+                                   {:outliner-op :insert-blocks
+                                    :created-from-journal-template? journal?}
+                                   (when-not (string/blank? (state/get-edit-content))
+                                     (save-current-block!))
+                                   (outliner-op/insert-blocks! blocks' target
+                                                               (assoc opts :sibling? sibling?')))]
+                     (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))
 
-                 (catch :default ^js/Error e
-                   (notification/show!
-                    [:p.content
-                     (util/format "Template insert error: %s" (.-message e))]
-                    :error)))))))))))
+                   (catch :default ^js/Error e
+                     (notification/show!
+                      [:p.content
+                       (util/format "Template insert error: %s" (.-message e))]
+                      :error))))))))))))
 
 (defn template-on-chosen-handler
   [element-id]

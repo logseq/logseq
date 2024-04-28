@@ -7,7 +7,8 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db.frontend.entity-plus :as entity-plus]))
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [clojure.set :as set]))
 
 (defn- get-pages-by-name
   [db page-name]
@@ -126,8 +127,35 @@
                                 pairs)))]
       block-properties)))
 
+(defn get-block-children-ids
+  "Returns children UUIDs"
+  [db block-uuid]
+  (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
+    (let [seen   (volatile! [])]
+      (loop [steps          100      ;check result every 100 steps
+             eids-to-expand [eid]]
+        (when (seq eids-to-expand)
+          (let [eids-to-expand*
+                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
+                uuids-to-add (remove nil? (map #(:block/uuid (d/entity db %)) eids-to-expand*))]
+            (when (and (zero? steps)
+                       (seq (set/intersection (set @seen) (set uuids-to-add))))
+              (throw (ex-info "bad outliner data, need to re-index to fix"
+                              {:seen @seen :eids-to-expand eids-to-expand})))
+            (vswap! seen (partial apply conj) uuids-to-add)
+            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
+      @seen)))
+
+(defn get-block-children
+  "Including nested children."
+  [db block-uuid]
+  (let [ids (get-block-children-ids db block-uuid)]
+    (when (seq ids)
+      (let [ids' (map (fn [id] [:block/uuid id]) ids)]
+        (d/pull-many db '[*] ids')))))
+
 (defn get-block-and-children
-  [db id children?]
+  [db id {:keys [children? nested-children?]}]
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
@@ -157,7 +185,10 @@
            {:block block'
             :properties (property-with-values db block)}
             children?
-            (assoc :children (get-children block (:block/_parent block)))))
+            (assoc :children (get-children block
+                                           (if nested-children?
+                                             (get-block-children db (:block/uuid block))
+                                             (:block/_parent block))))))
         (cond->
          {:block (->> (d/pull db '[*] (:db/id block))
                       (with-tags db)
@@ -198,7 +229,7 @@
   "Favorites page and its blocks"
   [db]
   (let [page-id (get-first-page-by-name db common-config/favorites-page-name)
-        {:keys [block children]} (get-block-and-children db page-id true)]
+        {:keys [block children]} (get-block-and-children db page-id {:children? true})]
     (when block
       (concat (d/datoms db :eavt (:db/id block))
               (->> (keep :block/link children)
