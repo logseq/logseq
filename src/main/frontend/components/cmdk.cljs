@@ -393,9 +393,15 @@
 (defmethod handle-action :open-block [_ state _event]
   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
     (p/let [repo (state/get-current-repo)
-            _ (db-async/<get-block repo block-id :children? false)]
-      (let [get-block-page (partial model/get-block-page repo)
-            block (db/entity [:block/uuid block-id])]
+            _ (db-async/<get-block repo block-id :children? false)
+            block (db/entity [:block/uuid block-id])
+            parents (db-async/<get-block-parents (state/get-current-repo) (:db/id block) 1000)
+            created-from-block (some #(:logseq.property/created-from-block (db/entity (:db/id %))) parents)
+            [block-id block] (if created-from-block
+                               (let [block (db/entity (:db/id created-from-block))]
+                                 [(:block/uuid block) block])
+                               [block-id block])]
+      (let [get-block-page (partial model/get-block-page repo)]
         (when block
           (when-let [page (some-> block-id get-block-page)]
             (cond
