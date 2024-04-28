@@ -628,7 +628,7 @@
        :onEscapeKeyDown #(set-open! false)}
       [:div.property-select
        (case type
-         (:number :url :default)
+         (:string :number :url)
          (select block property select-opts' opts)
 
          (:page :date)
