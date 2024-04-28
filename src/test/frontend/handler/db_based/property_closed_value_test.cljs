@@ -53,17 +53,17 @@
            (is (every? #(contains? (:block/type (db/entity [:block/uuid %])) "closed value")
                        values))))
        (testing "Add non-numbers shouldn't work"
-         (p/let [result (db-property-handler/upsert-closed-value property {:value "not a number"})]
+         (p/let [result (db-property-handler/<upsert-closed-value property {:value "not a number"})]
            (is (= result :value-invalid))
            (let [values (get-value-ids k)]
              (is (= #{1 2} (get-closed-values values))))))
 
        (testing "Add existing value"
-         (p/let [result (db-property-handler/upsert-closed-value property {:value 2})]
+         (p/let [result (db-property-handler/<upsert-closed-value property {:value 2})]
            (is (= result :value-exists))))
 
        (testing "Add new value"
-         (p/let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property {:value 3})]
+         (p/let [{:keys [block-id tx-data]} (db-property-handler/<upsert-closed-value property {:value 3})]
            (db/transact! tx-data)
            (let [b (db/entity [:block/uuid block-id])]
              (is (= 3 (:value (:block/schema b))))
@@ -72,7 +72,7 @@
                (is (= #{1 2 3} (get-closed-values values))))
 
              (testing "Update closed value"
-               (p/let [{:keys [tx-data]} (db-property-handler/upsert-closed-value property {:id block-id
+               (p/let [{:keys [tx-data]} (db-property-handler/<upsert-closed-value property {:id block-id
                                                                                             :value 4
                                                                                             :description "choice 4"})]
                  (db/transact! tx-data)

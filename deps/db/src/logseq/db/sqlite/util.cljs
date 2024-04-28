@@ -9,7 +9,8 @@
             [datascript.core :as d]
             [cljs-bean.transit]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.order :as db-order]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -70,14 +71,16 @@
   "Build a standard new property so that it is is consistent across contexts. Takes
    an optional map with following keys:
    * :original-name - Case sensitive property name. Defaults to deriving this from db-ident
-   * :block-uuid - :block/uuid for property"
+   * :block-uuid - :block/uuid for property
+   * :from-ui-thread? - whether calls from the UI thread"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [original-name block-uuid ref-type?]}]
+  ([db-ident prop-schema {:keys [original-name block-uuid ref-type? from-ui-thread?]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
-         prop-name (or original-name (name db-ident'))]
+         prop-name (or original-name (name db-ident'))
+         block-order (when-not from-ui-thread? (db-order/gen-key nil))]
      (block-with-timestamps
       (cond->
        {:db/ident db-ident'
@@ -91,6 +94,8 @@
         :db/cardinality (if (= :many (:cardinality prop-schema))
                           :db.cardinality/many
                           :db.cardinality/one)}
+        block-order
+        (assoc :block/order block-order)
         (or ref-type? (contains? (conj db-property-type/ref-property-types :entity) (:type prop-schema)))
         (assoc :db/valueType :db.type/ref))))))
 

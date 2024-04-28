@@ -279,6 +279,7 @@
   [[:block/content :string]
    [:block/left :int]
    [:block/parent :int]
+   [:block/order {:optional true} :string]
    ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
