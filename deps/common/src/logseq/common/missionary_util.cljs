@@ -19,7 +19,7 @@
                  (if (and (some-> e ex-data :missionary/retry)
                           (pos-int? delay))
                    (do (m/? (m/sleep delay))
-                       (prn :missionary/retry delay)
+                       (println :missionary/retry "after" delay "ms (" (ex-message e) ")")
                        retry-sentinel)
                    (throw e))))]
        (if (identical? r retry-sentinel)
