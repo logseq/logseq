@@ -131,7 +131,7 @@
                     default-open?]}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
-        schema-types (->> (concat db-property-type/user-built-in-property-types
+        schema-types (->> (concat (remove #{:string} db-property-type/user-built-in-property-types)
                                   (when built-in?
                                     db-property-type/internal-built-in-property-types))
                           (map (fn [type]

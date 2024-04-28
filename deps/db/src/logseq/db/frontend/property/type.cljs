@@ -12,15 +12,15 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity :string})
+  #{:keyword :map :coll :any :entity})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :number :date :checkbox :url :page :template])
+  [:default :string :number :date :checkbox :url :page :template])
 
 (def closed-value-property-types
   "Valid schema :type for closed values"
-  #{:default :number :url :page :date})
+  #{:default :string :number :url :page :date})
 
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
@@ -37,7 +37,7 @@
   "Map of types to their set of allowed :schema attributes"
   (merge-with into
               (zipmap closed-value-property-types (repeat #{:values}))
-              (zipmap #{:default :number :url} (repeat #{:position}))
+              (zipmap #{:default :string :number :url} (repeat #{:position}))
               {:number #{:cardinality}
                :date #{:cardinality}
                :url #{:cardinality}
@@ -102,6 +102,9 @@
   {:default  [:fn
               {:error/message "should be a string or an entity"}
               hidden-or-closed-block?]
+   :string   [:fn
+              {:error/message "should be a string"}
+              string?]
    :number   [:fn
               {:error/message "should be a number or an entity"}
               ;; Also handles entity? so no need to use it
@@ -123,7 +126,7 @@
 
    ;; Internal usage
    ;; ==============
-   :string   string?
+
    :entity   entity?
    :keyword  keyword?
    :map      map?
