@@ -8,7 +8,8 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn- get-pages-by-name
   [db page-name]
@@ -232,6 +233,8 @@
 (defn get-initial-data
   "Returns current database schema and initial data"
   [db]
+  (let [max-key (db-order/get-max-order db)]
+    (db-order/reset-max-key! max-key))
   (let [schema (:schema db)
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]

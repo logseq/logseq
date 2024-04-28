@@ -717,19 +717,23 @@
   [block properties opts]
   (let [class? (:class-schema? opts)]
     (when (seq properties)
-      (if class?
-        (let [choices (map (fn [[k v]]
-                             {:id (str k)
-                              :value k
-                              :content (property-cp block k v opts)}) properties)]
-          (dnd/items choices
-                     {:on-drag-end (fn [properties]
-                                     (let [schema (assoc (:block/schema block)
-                                                         :properties properties)]
-                                       (when (seq properties)
-                                         (db-property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))}))
-        (for [[k v] properties]
-          (property-cp block k v opts))))))
+      ;; Sort properties by :block/order
+      (let [properties' (sort-by (fn [[k _v]]
+                                   (:block/order (db/entity k))) properties)]
+        (if class?
+          (let [choices (map (fn [[k v]]
+                               {:id (str k)
+                                :value k
+                                :content (property-cp block k v opts)}) properties')]
+            (dnd/items choices
+                       {:on-drag-end (fn [properties]
+                                       (let [schema (assoc (:block/schema block)
+                                                           :properties properties)]
+                                         (when (seq properties)
+                                           (db-property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))}))
+          ;; TODO: support drag && drop
+          (for [[k v] properties']
+            (property-cp block k v opts)))))))
 
 (defn- async-load-classes!
   [block]

@@ -32,7 +32,8 @@
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]
             [logseq.common.util :as common-util]
-            [frontend.worker.db.fix :as db-fix]))
+            [frontend.worker.db.fix :as db-fix]
+            [logseq.db.frontend.order :as db-order]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -368,6 +369,12 @@
                         (concat tx-data
                                 (db-fix/fix-cardinality-many->one @conn (:property-id tx-meta)))
                         tx-data)
+             tx-data' (if (= :new-property (:outliner-op tx-meta))
+                        (map (fn [m]
+                               (if (and (map? m))
+                                 (assoc m :block/order (db-order/gen-key nil))
+                                 m)) tx-data')
+                        tx-data')
              context (if (string? context)
                        (ldb/read-transit-str context)
                        context)

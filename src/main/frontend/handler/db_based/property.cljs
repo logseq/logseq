@@ -162,7 +162,8 @@
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
         (db/transact! repo
-                      [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
+                      [(sqlite-util/build-new-property db-ident' schema {:original-name k-name
+                                                                         :from-ui-thread? true})]
                       {:outliner-op :new-property})))))
 
 (defn validate-property-value
@@ -581,7 +582,7 @@
                     :block/schema schema}]
                   {:outliner-op :save-block})))
 
-(defn upsert-closed-value
+(defn <upsert-closed-value
   "id should be a block UUID or nil"
   [property {:keys [id value icon description]
              :or {description ""}}]
