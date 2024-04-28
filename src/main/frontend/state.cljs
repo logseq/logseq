@@ -987,7 +987,9 @@ Similar to re-frame subscriptions"
   []
   (when-not (exists? js/process)
     (or
-     (when-let [node @*editor-editing-ref]
+     (when-let [node (and (some-> @*editor-editing-ref
+                            ;; check editing input is visible
+                            (.closest "body")) @*editor-editing-ref)]
        (some-> (dom/sel1 node "textarea")
                (gobj/get "id")))
      (try
