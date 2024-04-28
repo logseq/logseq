@@ -98,6 +98,12 @@
     (and (some? (:block/original-name ent))
          (contains? (:block/type ent) "journal"))))
 
+(defn- string-or-closed-block?
+  [db s]
+  (let [entity (when (int? s) (d/entity db s))]
+    (or (string? (get-in entity [:block/schema :value]))
+        (string? s))))
+
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
@@ -105,7 +111,7 @@
               hidden-or-closed-block?]
    :string   [:fn
               {:error/message "should be a string"}
-              string?]
+              string-or-closed-block?]
    :number   [:fn
               {:error/message "should be a number or an entity"}
               ;; Also handles entity? so no need to use it
@@ -142,7 +148,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :url :date :page :template :entity})
+  #{:default :string :url :date :page :template :entity})
 
 ;; Helper fns
 ;; ==========
