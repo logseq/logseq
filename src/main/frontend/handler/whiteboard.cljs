@@ -63,10 +63,10 @@
                      :nonce (get-k "nonce")
                      :assets (js->clj-keywordize assets)
                      :shapes-index shapes-index}]
-    {:block/original-name page-name
+    {:db/id (:db/id page-entity)
+     :block/original-name page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type "whiteboard"
-     :block/uuid (d/squuid)
      :block/format :markdown
      :block/properties (sqlite-util/build-properties page-entity
                                                      {:logseq.property/ls-type :whiteboard-page
