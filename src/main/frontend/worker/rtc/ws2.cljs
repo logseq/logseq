@@ -2,7 +2,6 @@
   "Websocket wrapped by missionary.
   based on
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
-  {:clj-kondo/ignore true}
   (:require [frontend.worker.rtc.const :as rtc-const]
             [logseq.common.missionary-util :as c.m]
             [missionary.core :as m]))
@@ -54,35 +53,32 @@
 (defn- create-mws*
   [url]
   (m/sp
-   (if-let [[mbx ws close-dfv] (m/? (open-ws-task url))]
-     {:raw-ws ws
-      :send (fn [data]
-              (m/sp
-               (handle-close
-                (m/?
-                 (m/race close-dfv
-                         (m/sp (while (< 4096 (.-bufferedAmount ws))
-                                 (m/? (m/sleep 50)))
-                               (.send ws data)))))))
-      :recv-flow
-      (m/stream
-       (m/ap
-        (loop []
-          (m/amb
-           (handle-close
-            (m/? (m/race close-dfv mbx)))
-           (recur)))))}
-     (throw (ex-info "open ws timeout(10s)" {:missionary/retry true})))))
-
-
+    (if-let [[mbx ws close-dfv] (m/? (open-ws-task url))]
+      {:raw-ws ws
+       :send (fn [data]
+               (m/sp
+                 (handle-close
+                  (m/?
+                   (m/race close-dfv
+                           (m/sp (while (< 4096 (.-bufferedAmount ws))
+                                   (m/? (m/sleep 50)))
+                                 (.send ws data)))))))
+       :recv-flow
+       (m/stream
+        (m/ap
+          (loop []
+            (m/amb
+             (handle-close
+              (m/? (m/race close-dfv mbx)))
+             (recur)))))}
+      (throw (ex-info "open ws timeout(10s)" {:missionary/retry true})))))
 
 (defn- closed?
   [m-ws]
   (contains? #{:closing :closed} (get-state (:raw-ws m-ws))))
 
-
 (defn get-mws-create
-  "Returns a task :get a mws(missionary-websocket), creating one if needed.
+  "Returns a task to get a mws(missionary-websocket), creating one if needed.
   Always try to produce NOT-closed websocket.
   When failed to open websocket, retry with backoff.
   TODO: retry ASAP once network condition changed"
@@ -109,10 +105,10 @@
         (if (and m-ws (not (closed? m-ws)))
           m-ws
           (m/? backoff-create-ws-task))))))
-
-(defn close
-  [m-ws]
-  (.close (:raw-ws m-ws)))
+(comment
+  (defn close
+    [m-ws]
+    (.close (:raw-ws m-ws))))
 
 (defn send
   "Returns a task: send message and return mws"
@@ -159,7 +155,4 @@
                    (m/? (send&recv get-mws-task {:action "list-graphs"} :timeout-ms 1000))
                    (m/? (send&recv get-mws-task {:action "list-graphs"})))
                  #(prn :s %) #(js/console.log :f %)))
-    (cancel)
-    )
-
-)
+    (cancel)))
