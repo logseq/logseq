@@ -8,7 +8,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [rum.core :as rum]
             [frontend.components.shortcut :as shortcut]
-            [logseq.shui.core :as shui]))
+            [logseq.shui.ui :as shui]))
 
 (rum/defc trigger-table []
   [:table

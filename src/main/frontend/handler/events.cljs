@@ -295,9 +295,9 @@
                    state)}
   [block shown-properties all-properties]
   (let [query-properties (rum/react *query-properties)]
-    [:div.p-4
-     [:div.font-bold (t :query/config-property-settings)]
-     [:div.flex
+    [:div
+     [:h1.font-semibold.-mt-2.mb-2.text-lg (t :query/config-property-settings)]
+     [:a.flex
       {:title "Refresh list of columns"
        :on-click
        (fn []
@@ -310,8 +310,8 @@
              shown? (if (nil? property-value)
                       (contains? shown-properties property)
                       property-value)]
-         [:div.flex.flex-row.m-2.justify-between.align-items
-          [:div (if (keyword? property) (db-pu/get-property-name property) (name property))]
+         [:div.flex.flex-row.my-2.justify-between.align-items
+          [:div (if (uuid? property) (db-pu/get-property-name property) (name property))]
           [:div.mt-1 (ui/toggle shown?
                                 (fn []
                                   (let [value (not shown?)]
@@ -339,8 +339,9 @@
                            (set block-properties)
                            (set all-properties))
         shown-properties (set/intersection (set all-properties) shown-properties)]
-    (state/set-modal! (query-properties-settings block shown-properties all-properties)
-      {:center? true})))
+    (shui/dialog-open!
+      (query-properties-settings block shown-properties all-properties)
+      {})))
 
 (defmethod handle :modal/show-cards [_]
   (state/set-modal! srs/global-cards {:id :srs

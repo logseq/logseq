@@ -27,7 +27,8 @@
 
 (use-fixtures :each
   start-and-destroy-db
-  worker-fixtures/listen-test-db-to-gen-undo-ops-fixture)
+  (worker-fixtures/listen-test-db-fixture [:gen-undo-ops])
+  worker-fixtures/listen-test-db-to-write-tx-log-json-file)
 
 
 (def ^:private gen-non-exist-block-uuid gen/uuid)
@@ -38,14 +39,18 @@
                   [non-exist-frequency gen-non-exist-block-uuid]]))
 
 (defn- gen-parent-left-pair
-  [db]
-  (gen/frequency [[9 (t.gen/gen-available-parent-left-pair db {:page-uuid page-uuid})]
-                  [1 (gen/vector gen-non-exist-block-uuid 2)]]))
+  [db self-uuid]
+  (gen/such-that
+   (fn [[parent left]]
+     (and (not= self-uuid left)
+          (not= self-uuid parent)))
+   (gen/frequency [[9 (t.gen/gen-available-parent-left-pair db {:page-uuid page-uuid})]
+                   [1 (gen/vector gen-non-exist-block-uuid 2)]])))
 
 (defn- gen-move-block-op
   [db]
   (gen/let [block-uuid (gen-block-uuid db)
-            [parent left] (gen-parent-left-pair db)]
+            [parent left] (gen-parent-left-pair db block-uuid)]
     [:frontend.worker.undo-redo/move-block
      {:block-uuid block-uuid
       :block-origin-left left
@@ -60,7 +65,7 @@
 (defn- gen-remove-block-op
   [db]
   (gen/let [block-uuid (gen-block-uuid db {:non-exist-frequency 90})
-            [parent left] (gen-parent-left-pair db)
+            [parent left] (gen-parent-left-pair db block-uuid)
             content gen/string-alphanumeric]
     [:frontend.worker.undo-redo/remove-block
      {:block-uuid block-uuid
@@ -118,7 +123,7 @@
     :frontend.worker.undo-redo/move-block
     (assert (= (:block-origin-left (second op))
                (:block/uuid (:block/left (d/entity current-db [:block/uuid (:block-uuid (second op))]))))
-            {:op op :tx-data (:tx-data tx) :x (keys tx)})
+            {:op op :entity (into {} (d/entity current-db [:block/uuid (:block-uuid (second op))]))})
 
     :frontend.worker.undo-redo/update-block
     (assert (some? (d/entity current-db [:block/uuid (:block-uuid (second op))]))

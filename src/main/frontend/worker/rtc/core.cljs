@@ -28,7 +28,8 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [frontend.worker.rtc.ws2]))
 
 ;;                     +-------------+
 ;;                     |             |
@@ -1115,13 +1116,6 @@
         (if ex-data
           (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
           (bean/->js versions))))))
-
-;; (defn- <query-page-blocks
-;;   [state page-block-uuid]
-;;   (go
-;;     (when (some-> state :*graph-uuid deref)
-;;       (<! (ws/<send&receive state {:action "query-blocks" :graph-uuid @(:*graph-uuid state)
-;;                                    :block-uuids [page-block-uuid]})))))
 
 (defn init-state
   [ws data-from-ws-chan token user-uuid dev-mode?]

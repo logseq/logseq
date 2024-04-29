@@ -126,7 +126,7 @@
 
 (rum/defc references-inner
   [page-name filters filtered-ref-blocks]
-  [:div.references-blocks.faster-fade-in
+  [:div.references-blocks.faster.fade-in
    (let [ref-hiccup (block/->hiccup filtered-ref-blocks
                                     {:id page-name
                                      :ref? true
@@ -293,7 +293,7 @@
   [state page]
   (let [n-ref (get state ::n-ref)]
     (when page
-      [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster-fade-in
+      [:div.references.page-unlinked.mt-6.flex-1.flex-row.faster.fade-in
        [:div.content.flex-1
         (ui/foldable
          [:h2.font-medium (t :unlinked-references/reference-count @n-ref)]

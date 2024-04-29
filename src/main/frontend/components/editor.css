@@ -11,15 +11,11 @@
 }
 
 .editor-inner {
-  position: relative;
-  display: flex;
+  @apply relative flex;
 
   textarea {
-    border: none;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
-    resize: none;
+    @apply border-none rounded-none bg-transparent p-0 resize-none;
+
     box-shadow: none;
   }
 }
@@ -88,5 +84,32 @@ pre {
 
   @screen sm {
     width: 135px;
+  }
+}
+
+.ui__popover-content, .ui__dropdown-menu-content {
+  &[data-editor-popup-ref] {
+    @apply p-1 w-72;
+
+    &[data-side=top] {
+      position: relative;
+      top: -18px;
+    }
+  }
+
+  &[data-editor-popup-ref=commands] {
+    @apply px-1 py-1 w-72;
+
+    &[data-side=top] {
+      max-height: min(calc(var(--radix-popover-content-available-height) - 60px), 460px);
+    }
+
+    &[data-side=bottom] {
+      max-height: min(calc(var(--radix-popover-content-available-height) - 20px), 480px);
+    }
+  }
+
+  &[data-editor-popup-ref=datepicker] {
+    @apply w-auto;
   }
 }

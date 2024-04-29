@@ -19,9 +19,11 @@
 }
 
 .ls-context-menu-content {
-  @apply p-0;
-
   .menu-links-wrapper {
-    @apply border-none shadow-none;
+    @apply border-none shadow-none overflow-visible;
+  }
+
+  [role=separator] {
+    @apply opacity-80;
   }
 }
