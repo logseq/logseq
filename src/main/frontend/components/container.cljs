@@ -838,7 +838,8 @@
                       (shui/popup-show! e
                         (fn [{:keys [id]}]
                           [:div {:on-click #(shui/popup-hide! id)} content])
-                        {:content-props {:class "w-[280px] ls-context-menu-content"}}))
+                        {:content-props {:class "w-[280px] ls-context-menu-content"}
+                         :as-dropdown? true}))
 
                     handled
                     (cond

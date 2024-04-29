@@ -253,8 +253,27 @@ html[data-theme=dark] {
 }
 
 .ui__dropdown-menu-content {
-  max-height: var(--radix-dropdown-menu-content-available-height);
-  overflow-y: auto;
+  @apply overflow-y-auto;
+
+  &[data-side=top] {
+    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 40px);
+  }
+
+  &[data-side=bottom] {
+    max-height: calc(var(--radix-dropdown-menu-content-available-height) - 20px);
+  }
+}
+
+.ui__popover-content {
+  @apply overflow-y-auto;
+
+  &[data-side=top] {
+    max-height: calc(var(--radix-popover-content-available-height) - 40px);
+  }
+
+  &[data-side=bottom] {
+    max-height: calc(var(--radix-popover-content-available-height) - 20px);
+  }
 }
 
 .ui__popover-content {

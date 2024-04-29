@@ -51,7 +51,7 @@
            view-f
            result
            group-by-page?]}]
-  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline inline]} config
+  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline]} config
         *query-error query-error-atom
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and group-by-page?
@@ -78,10 +78,10 @@
            (util/hiccup-keywordize result))
 
          page-list?
-         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text inline)
+         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
          table?
-         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text inline)
+         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result

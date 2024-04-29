@@ -1788,8 +1788,7 @@
   (state/set-editor-show-input! nil)
   (when-let [saved-cursor (state/get-editor-last-pos)]
     (when-let [input (gdom/getElement id)]
-      (.focus input)
-      (cursor/move-cursor-to input saved-cursor))))
+      (cursor/move-cursor-to input saved-cursor true))))
 
 (defn handle-command-input [command id format m]
   ;; TODO: Add error handling for when user doesn't provide a required field.
@@ -3263,7 +3262,8 @@
         (state/selection?)
         (select-up-down direction)
 
-        ;; if there is an edit-input-id set, we are probably still on editing mode, that is not fully initialized
+        ;; if there is an edit-input-id set, we are probably still on editing mode,
+        ;; that is not fully initialized
         (not (state/get-edit-input-id))
         (select-first-last direction)))
     nil))

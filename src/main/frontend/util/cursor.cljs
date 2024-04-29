@@ -63,9 +63,12 @@
 (defn set-selection-to [input n m]
   (.setSelectionRange input n m))
 
-(defn move-cursor-to [input n]
-  (.focus input)
-  (.setSelectionRange input n n))
+(defn move-cursor-to
+  ([input n] (move-cursor-to input n false))
+  ([input n delay?]
+   (.setSelectionRange input n n)
+   (let [focus #(.focus input)]
+     (if delay? (js/setTimeout focus 16) (focus)))))
 
 (defn move-cursor-forward
   ([input]

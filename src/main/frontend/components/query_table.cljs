@@ -8,19 +8,16 @@
             [frontend.format.block :as block]
             [frontend.handler.common :as common-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.shui :refer [get-shui-component-version make-shui-context]]
             [frontend.state :as state]
             [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.handler.file-based.property :as file-property-handler]
-            [logseq.shui.core :as shui]
             [medley.core :as medley]
             [rum.core :as rum]
             [promesa.core :as p]
             [logseq.graph-parser.text :as text]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]
             [logseq.db.frontend.content :as db-content]))
 
 ;; Util fns
@@ -290,7 +287,7 @@
                                          :db-graph? db-graph?}))]))]))]]]))
 
 (rum/defc result-table < rum/reactive
-  [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text inline]
+  [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text]
   (when current-block
     (let [db-graph? (config/db-based-graph? (state/get-current-repo))
           result' (cond-> (if page? result (attach-clock-property result))
@@ -298,27 +295,15 @@
                     ((fn [res]
                        (map #(if (:block/content %)
                                (update % :block/content
-                                       db-content/special-id-ref->page-ref
-                                       ;; Lookup here instead of initial query as advanced queries
-                                       ;; won't usually have a ref's name
-                                       (map (fn [m] (db/entity (:db/id m))) (:block/refs %)))
+                                 db-content/special-id-ref->page-ref
+                                 ;; Lookup here instead of initial query as advanced queries
+                                 ;; won't usually have a ref's name
+                                 (map (fn [m] (db/entity (:db/id m))) (:block/refs %)))
                                %)
-                            res))))
+                         res))))
           columns (get-columns current-block result' {:page? page?})
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
           sort-state (get-sort-state current-block {:db-graph? db-graph?})
-          sort-result (sort-result result' (assoc sort-state :page? page?))
-          table-version (get-shui-component-version :table config)]
-      (case table-version
-        2 (let [v2-columns (mapv #(if (uuid? %) (db-pu/get-property-name %) %) columns)
-                v2-config (cond-> config
-                            db-graph?
-                            (assoc-in [:block :properties]
-                                      (db-pu/readable-properties (get-in config [:block :block/properties]))))
-                result-as-text (for [row result']
-                                 (for [column columns]
-                                   (build-column-text row column)))]
-            (shui/table-v2 {:data (conj [[v2-columns]] result-as-text)}
-                           (make-shui-context v2-config inline)))
-        1 (result-table-v1 config current-block sort-result sort-state columns options map-inline page-cp ->elem inline-text)))))
+          sort-result (sort-result result' (assoc sort-state :page? page?))]
+      (result-table-v1 config current-block sort-result sort-state columns options map-inline page-cp ->elem inline-text))))
