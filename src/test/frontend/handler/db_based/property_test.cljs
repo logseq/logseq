@@ -153,7 +153,6 @@
 ;; class related
 ;; class-add-property!
 ;; class-remove-property!
-;; class-set-schema!
 ;; get-block-classes-properties
 (deftest property-class-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
