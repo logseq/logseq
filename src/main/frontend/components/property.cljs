@@ -28,7 +28,9 @@
             [frontend.components.property.closed-value :as closed-value]
             [frontend.components.property.util :as components-pu]
             [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.outliner.core :as outliner-core]))
 
 (defn- <create-class-if-not-exists!
   [value]
@@ -719,21 +721,31 @@
     (when (seq properties)
       ;; Sort properties by :block/order
       (let [properties' (sort-by (fn [[k _v]]
-                                   (:block/order (db/entity k))) properties)]
+                                   (:block/order (db/entity k))) properties)
+            choices (map (fn [[k v]]
+                           {:id (subs (str k) 1)
+                            :value k
+                            :content (property-cp block k v opts)}) properties')]
         (if class?
-          (let [choices (map (fn [[k v]]
-                               {:id (str k)
-                                :value k
-                                :content (property-cp block k v opts)}) properties')]
-            (dnd/items choices
-                       {:on-drag-end (fn [properties]
-                                       (let [schema (assoc (:block/schema block)
-                                                           :properties properties)]
-                                         (when (seq properties)
-                                           (db-property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))}))
-          ;; TODO: support drag && drop
-          (for [[k v] properties']
-            (property-cp block k v opts)))))))
+          (dnd/items choices
+                     {:on-drag-end (fn [properties _]
+                                     (let [schema (assoc (:block/schema block)
+                                                         :properties properties)]
+                                       (when (seq properties)
+                                         (db-property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))})
+          (dnd/items choices
+                     {:on-drag-end (fn [_ {:keys [active-id over-id]}]
+                                     (let [over (db/entity (keyword over-id))
+                                           active (db/entity (keyword active-id))
+                                           over-order (:block/order over)
+                                           prev-order (db-order/get-prev-order (db/get-db) over-order)
+                                           new-order (db-order/gen-key prev-order over-order)]
+                                       (db/transact! (state/get-current-repo)
+                                                     [{:db/id (:db/id active)
+                                                       :block/order new-order}
+                                                      (outliner-core/block-with-updated-at
+                                                       {:db/id (:db/id block)})]
+                                                     {:outliner-op :save-block})))}))))))
 
 (defn- async-load-classes!
   [block]

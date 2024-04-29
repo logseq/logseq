@@ -17,11 +17,17 @@
    (gen-key @*max-key end))
   ([start end]
    (let [k ((gobj/get index "generateKeyBetween") start end)]
-    (reset-max-key! k))))
+    (reset-max-key! k)
+    k)))
 
 (defn get-max-order
   [db]
   (:v (first (d/rseek-datoms db :avet :block/order))))
+
+(defn get-prev-order
+  [db current-key]
+  (:v (second (d/rseek-datoms db :avet :block/order current-key))))
+
 
 (comment
   (defn gen-n-keys

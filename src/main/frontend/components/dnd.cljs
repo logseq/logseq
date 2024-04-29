@@ -61,7 +61,8 @@
                                               :new-items new-items})
                                            (do
                                              (set-items new-items)
-                                             (on-drag-end new-values)))))))
+                                             (on-drag-end new-values {:active-id active-id
+                                                                      :over-id over-id})))))))
                                  (set-active-id nil)))}
         sortable-opts {:items items
                        :strategy verticalListSortingStrategy}
