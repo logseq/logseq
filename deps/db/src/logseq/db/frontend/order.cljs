@@ -1,7 +1,6 @@
 (ns logseq.db.frontend.order
   "Use fractional-indexing order for blocks/properties/closed values/etc."
-  (:require ["fractional-indexing" :as index]
-            [goog.object :as gobj]
+  (:require [logseq.common.fractional-index :as index]
             [datascript.core :as d]))
 
 (defonce *max-key (atom nil))
@@ -16,7 +15,7 @@
   ([end]
    (gen-key @*max-key end))
   ([start end]
-   (let [k ((gobj/get index "generateKeyBetween") start end)]
+   (let [k (index/generate-key-between start end)]
     (reset-max-key! k)
     k)))
 
@@ -35,8 +34,6 @@
 (comment
   (defn gen-n-keys
     [n start end]
-    (let [ks (js->clj ((gobj/get index "generateNKeysBetween") start end n))]
+    (let [ks (index/generate-n-keys-between start end n)]
       (reset! *max-key (last ks))
-      ks))
-
-  )
+      ks)))
