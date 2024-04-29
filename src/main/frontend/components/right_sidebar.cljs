@@ -183,33 +183,29 @@
 (defonce *drag-from
   (atom nil))
 
-(rum/defc x-menu-content
-  [db-id idx type collapsed? block-count toggle-fn as-dropdown?]
-  (let [menu-content (if as-dropdown? shui/dropdown-menu-content shui/context-menu-content)
-        menu-item (if as-dropdown? shui/dropdown-menu-item shui/context-menu-content)
-        multi-items? (> block-count 1)]
-
-    (menu-content
-      {:on-click toggle-fn :class "w-48" :align "end"}
-
-      (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
-      (when multi-items? (menu-item {:on-click (fn []
-                                                 (state/clear-sidebar-blocks!)
-                                                 (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
-      (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
-      (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
-      (when (and collapsed? multi-items?) [:hr.menu-separator])
-      (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
-      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
-      (when (= type :page) [:hr.menu-separator])
-      (when (= type :page)
-        (let [name (:block/name (db/entity db-id))]
-          (menu-item {:href (if (db-model/whiteboard-page? name)
-                              (rfe/href :whiteboard {:name name})
-                              (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page)))))))
+(rum/defc actions-menu-content
+  [db-id idx type collapsed? block-count]
+  (let [multi-items? (> block-count 1)
+        menu-item shui/dropdown-menu-item]
+    [:<>
+     (menu-item {:on-click #(state/sidebar-remove-block! idx)} (t :right-side-bar/pane-close))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-remove-rest! db-id)} (t :right-side-bar/pane-close-others)))
+     (when multi-items? (menu-item {:on-click (fn []
+                                                (state/clear-sidebar-blocks!)
+                                                (state/hide-right-sidebar!))} (t :right-side-bar/pane-close-all)))
+     (when (and (not collapsed?) multi-items?) [:hr.menu-separator])
+     (when-not collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-collapse)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-collapse-rest! db-id)} (t :right-side-bar/pane-collapse-others)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! true)} (t :right-side-bar/pane-collapse-all)))
+     (when (and collapsed? multi-items?) [:hr.menu-separator])
+     (when collapsed? (menu-item {:on-click #(state/sidebar-block-toggle-collapse! db-id)} (t :right-side-bar/pane-expand)))
+     (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
+     (when (= type :page) [:hr.menu-separator])
+     (when (= type :page)
+       (let [name (:block/name (db/entity db-id))]
+         (menu-item {:href (if (db-model/whiteboard-page? name)
+                             (rfe/href :whiteboard {:name name})
+                             (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page))))]))
 
 (rum/defc drop-indicator
   [idx drag-to]
@@ -253,6 +249,10 @@
              [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level.rounded-t-md
               {:class         (when collapsed? "rounded-b-md")
                :draggable     true
+               :on-context-menu #(shui/popup-show! %
+                                   (actions-menu-content db-id idx block-type collapsed? block-count)
+                                   {:as-dropdown? true
+                                    :content-props {:on-click (fn [] (shui/popup-hide!))}})
                :on-drag-start (fn [event]
                                 (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
                                 (reset! *drag-from idx))
@@ -276,25 +276,26 @@
                [:div.ml-1.font-medium.overflow-hidden.whitespace-nowrap
                 title]]
               [:.item-actions.flex.items-center
-               (shui/dropdown-menu
-                 (shui/dropdown-menu-trigger
-                   {:as-child true}
-                   (shui/button
-                     {:title   (t :right-side-bar/pane-more)
-                      :class   "px-3"
-                      :variant :text}
-                     (ui/icon "dots")))
-                 (x-menu-content db-id idx block-type collapsed? block-count #() true))
+               (shui/button
+                 {:title (t :right-side-bar/pane-more)
+                  :class "px-3"
+                  :variant :text
+                  :on-click #(shui/popup-show!
+                               (.-target %)
+                               (actions-menu-content db-id idx block-type collapsed? block-count)
+                               {:as-dropdown? true
+                                :content-props {:on-click (fn [] (shui/popup-hide!))}})}
+                 (ui/icon "dots"))
 
                (shui/button
-                 {:title    (t :right-side-bar/pane-close)
-                  :variant  :text
+                 {:title (t :right-side-bar/pane-close)
+                  :variant :text
                   :class "px-3"
                   :on-click #(state/sidebar-remove-block! idx)}
                  (ui/icon "x"))]]
 
-             [:div {:role            "region"
-                    :id              (str "sidebar-panel-content-" idx)
+             [:div {:role "region"
+                    :id (str "sidebar-panel-content-" idx)
                     :aria-labelledby (str "sidebar-panel-header-" idx)
                     :class           (util/classnames [{:hidden  collapsed?
                                                         :initial (not collapsed?)
