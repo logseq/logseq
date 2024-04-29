@@ -322,14 +322,6 @@
           (db/transact! repo [[:db/retract (:db/id class) :class/schema.properties property-id]]
                         {:outliner-op :save-block}))))))
 
-(defn class-set-schema!
-  [repo class-uuid schema]
-  (when-let [class (db/entity repo [:block/uuid class-uuid])]
-    (when (contains? (:block/type class) "class")
-      (db/transact! repo [{:db/id (:db/id class)
-                           :block/schema schema}]
-                    {:outliner-op :save-block}))))
-
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
   [repo block-ids property-id v]
