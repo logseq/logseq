@@ -28,6 +28,9 @@
   [db current-key]
   (:v (second (d/rseek-datoms db :avet :block/order current-key))))
 
+(defn get-next-order
+  [db current-key]
+  (:v (second (d/seek-datoms db :avet :block/order current-key))))
 
 (comment
   (defn gen-n-keys
@@ -36,6 +39,4 @@
       (reset! *max-key (last ks))
       ks))
 
-  (defn get-next-order
-    [db current-key]
-    (:v (first (d/seek-datoms db :avet :block/order current-key)))))
+  )

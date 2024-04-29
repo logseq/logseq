@@ -1,7 +1,8 @@
 (ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
   (:require [datascript.core :as d]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [flatland.ordered.map :refer [ordered-map]]))
 
 ;; Main property vars
 ;; ==================
@@ -22,7 +23,8 @@
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :closed-values - Vec of closed-value maps for properties with choices. Map
      has keys :value, :db-ident, :uuid and :icon"
-  {:block/alias           {:original-name "Alias"
+  (ordered-map
+   :block/alias           {:original-name "Alias"
                            :attribute :block/alias
                            :schema {:type :page
                                     :cardinality :many
@@ -185,7 +187,7 @@
                                              {:type :checkbox
                                               :hide? true
                                               :view-context :page
-                                              :public? true}}})
+                                              :public? true}}))
 
 (def built-in-properties
   (->> built-in-properties*
@@ -196,7 +198,7 @@
                (if (:name v)
                  v
                  (assoc v :name (keyword (string/lower-case (name k)))))]))
-       (into {})))
+       (into (ordered-map))))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"
@@ -291,9 +293,8 @@
 
 (defn get-class-ordered-properties
   [class-entity]
-  (let [properties (map :db/ident (:class/schema.properties class-entity))
-        ordered (get-in class-entity [:block/schema :properties])]
-    (concat ordered (remove (set ordered) properties))))
+  (->> (:class/schema.properties class-entity)
+       (sort-by :block/order)))
 
 (defn property-created-block?
   "`block` has been created in a property and it's not a closed value."
