@@ -717,35 +717,31 @@
 
 (rum/defc properties-section < rum/reactive db-mixins/query
   [block properties opts]
-  (let [class? (:class-schema? opts)]
-    (when (seq properties)
+  (when (seq properties)
       ;; Sort properties by :block/order
-      (let [properties' (sort-by (fn [[k _v]]
-                                   (:block/order (db/entity k))) properties)
-            choices (map (fn [[k v]]
-                           {:id (subs (str k) 1)
-                            :value k
-                            :content (property-cp block k v opts)}) properties')]
-        (if class?
-          (dnd/items choices
-                     {:on-drag-end (fn [properties _]
-                                     (let [schema (assoc (:block/schema block)
-                                                         :properties properties)]
-                                       (when (seq properties)
-                                         (db-property-handler/class-set-schema! (state/get-current-repo) (:block/uuid block) schema))))})
-          (dnd/items choices
-                     {:on-drag-end (fn [_ {:keys [active-id over-id]}]
-                                     (let [over (db/entity (keyword over-id))
-                                           active (db/entity (keyword active-id))
-                                           over-order (:block/order over)
-                                           prev-order (db-order/get-prev-order (db/get-db) over-order)
-                                           new-order (db-order/gen-key prev-order over-order)]
-                                       (db/transact! (state/get-current-repo)
-                                                     [{:db/id (:db/id active)
-                                                       :block/order new-order}
-                                                      (outliner-core/block-with-updated-at
-                                                       {:db/id (:db/id block)})]
-                                                     {:outliner-op :save-block})))}))))))
+    (let [properties' (sort-by (fn [[k _v]]
+                                 (:block/order (db/entity k))) properties)
+          choices (map (fn [[k v]]
+                         {:id (subs (str k) 1)
+                          :value k
+                          :content (property-cp block k v opts)}) properties')]
+      (dnd/items choices
+                 {:on-drag-end (fn [_ {:keys [active-id over-id direction]}]
+                                 (let [move-down? (= direction :down)
+                                       over (db/entity (keyword over-id))
+                                       active (db/entity (keyword active-id))
+                                       over-order (:block/order over)
+                                       new-order (if move-down?
+                                                   (let [next-order (db-order/get-next-order (db/get-db) over-order)]
+                                                     (db-order/gen-key over-order next-order))
+                                                   (let [prev-order (db-order/get-prev-order (db/get-db) over-order)]
+                                                     (db-order/gen-key prev-order over-order)))]
+                                   (db/transact! (state/get-current-repo)
+                                                 [{:db/id (:db/id active)
+                                                   :block/order new-order}
+                                                  (outliner-core/block-with-updated-at
+                                                   {:db/id (:db/id block)})]
+                                                 {:outliner-op :save-block})))}))))
 
 (defn- async-load-classes!
   [block]
@@ -776,8 +772,9 @@
         block-properties (:block/properties block)
         properties (if (and class-schema? page-configure?)
                      (->> (db-property/get-class-ordered-properties block)
+                          (map :db/ident)
                           (map #(vector % %)))
-                     (sort-by first block-properties))
+                     block-properties)
         remove-built-in-properties (fn [properties]
                                      (remove (fn [property]
                                                (let [id (if (vector? property) (first property) property)]
@@ -831,6 +828,7 @@
                                  result []]
                             (if-let [class (first classes)]
                               (let [cur-properties (->> (db-property/get-class-ordered-properties class)
+                                                        (map :db/ident)
                                                         (remove properties)
                                                         (remove hide-with-property-id))]
                                 (recur (rest classes)
