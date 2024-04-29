@@ -40,19 +40,17 @@
        [:h3#modal-headline.text-lg.leading-6.font-medium
         (t :page/delete-confirmation)]]]
 
-     [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-      [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
-         :class "ui__modal-enter"
-         :on-click (fn []
-                     (delete-page! page-name))}
-        (t :yes)]]
-      [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type "button"
-         :on-click close-fn}
-        (t :cancel)]]]]))
+     [:div.mt-5.sm:mt-4.flex.gap-4
+      (ui/button
+       (t :cancel)
+       {:theme :gray
+        :on-click close-fn})
+      (ui/button
+       (t :yes)
+       {:class "ui__modal-enter"
+        :on-click (fn []
+                    (delete-page! page-name))
+        :button-props {:autoFocus "on"}})]]))
 
 (defn ^:large-vars/cleanup-todo page-menu
   [page-name]
@@ -77,6 +75,8 @@
           _ (state/sub :auth/id-token)
           file-sync-graph-uuid (and (user-handler/logged-in?)
                                     (file-sync-handler/enable-sync?)
+                                    ;; FIXME: Sync state is not cleared when switching to a new graph
+                                    (file-sync-handler/current-graph-sync-on?)
                                     (file-sync-handler/get-current-graph-uuid))]
       (when (and page (not block?))
         (->>
@@ -132,7 +132,7 @@
             (let [repo-dir (config/get-repo-dir repo)
                   file-fpath (path/path-join repo-dir file-rpath)]
               [{:title   (t :page/open-in-finder)
-                :options {:on-click #(js/window.apis.showItemInFolder file-fpath)}}
+                :options {:on-click #(ipc/ipc "openFileInFolder" file-fpath)}}
                {:title   (t :page/open-with-default-app)
                 :options {:on-click #(js/window.apis.openPath file-fpath)}}]))
 

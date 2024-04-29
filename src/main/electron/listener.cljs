@@ -83,10 +83,10 @@
                  (fn []
                    (state/pub-event! [:modal/set-git-username-and-email])))
 
-  (safe-api-call "getCurrentGraph"
+  (safe-api-call "setCurrentGraph"
                  (fn []
                    (when-let [graph (state/get-current-repo)]
-                     (ipc/ipc "setCurrentGraph" graph))))
+                     (ipc/ipc :setCurrentGraph graph))))
 
   (safe-api-call "redirect"
                  (fn [data]
@@ -188,7 +188,13 @@
 
   (safe-api-call "syncAPIServerState"
                  (fn [^js data]
-                   (state/set-state! :electron/server (bean/->clj data)))))
+                   (state/set-state! :electron/server (bean/->clj data))))
+
+
+  (safe-api-call "handbook"
+                 (fn [^js data]
+                   (when-let [k (and data (.-key data))]
+                     (state/open-handbook-pane! k)))))
 
 (defn listen!
   []

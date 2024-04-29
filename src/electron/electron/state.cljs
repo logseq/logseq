@@ -6,12 +6,7 @@
 (defonce persistent-dbs-chan (async/chan 1))
 
 (defonce state
-  (atom {:git/auto-commit-interval nil
-
-         :config (config/get-config)
-
-         ;; FIXME: replace with :window/graph
-         :graph/current nil
+  (atom {:config (config/get-config)
 
          ;; window -> current graph
          :window/graph {}
@@ -28,31 +23,38 @@
     (swap! state assoc-in path value)
     (swap! state assoc path value)))
 
-(defn set-git-commit-interval!
-  [v]
-  (set-state! :git/auto-commit-interval v))
-
-(defn clear-git-commit-interval!
-  []
-  (when-let [interval (get @state :git/auto-commit-interval)]
-    (js/clearInterval interval)))
-
 (defn get-git-commit-seconds
   []
   (get-in @state [:config :git/auto-commit-seconds] 60))
 
-(defn git-auto-commit-disabled?
+(defn git-auto-commit-enabled?
   []
-  (get-in @state [:config :git/disable-auto-commit?] true))
+  ;; For backward compatibility, use negative logic
+  (false? (get-in @state [:config :git/disable-auto-commit?] true)))
 
-(defn get-graph-path
+(defn git-commit-on-close-enabled?
   []
-  (:graph/current @state))
+  (get-in @state [:config :git/commit-on-close?] false))
 
 (defn get-window-graph-path
   "Get the path of the graph of a window (might be `nil`)"
   [window]
   (get (:window/graph @state) window))
+
+(defn get-all-graph-paths
+  "Get the paths of all graphs currently open in all windows."
+  []
+  (set (vals (:window/graph @state))))
+
+(defn get-active-window-graph-path
+  "Get the path of the graph of the currently focused window (might be `nil`)"
+  []
+  (let [windows (:window/graph @state)
+        active-windows-pairs (filter #(.isFocused (first %)) windows)
+        active-window-pair (first active-windows-pairs)
+        path (second active-window-pair)]
+    path)
+  )
 
 (defn close-window!
   [window]

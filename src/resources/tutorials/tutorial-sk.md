@@ -1,12 +1,12 @@
 ## Ahoj, vitaj v Logseq!
-- Logseq je [open-source](https://github.com/logseq/logseq) platforma určená na zdielanie _znalostí_ a spoluprácu s dôrazom na _súkromie_.
-- Toto je trojminutový návod ako používať Logseq. Poďme na to!
+- Logseq je [open-source](https://github.com/logseq/logseq) platforma určená na zdieľanie _znalostí_ a spoluprácu s dôrazom na _ochranu súkromia_.
+- Toto je trojminútový návod ako používať Logseq. Poďme na to!
 - Tu je niekoľko tipov, ktoré môžu byť užitočné.
   #+BEGIN_TIP
   Kliknutím upravíte ľubovoľný blok.
-  Stlačním klávesi `Enter` vytvoríš nový blok.
-  Stlačním klávesovej kombinácie `Shift+Enter` vytvoríš nový riadok.
-  Stlačením `/` zobrazíš všetky príkazy.
+  Stlačením klávesu `Enter` vytvoríte nový blok.
+  Stlačením klávesovej kombinácie `Shift+Enter` vytvoríte nový riadok.
+  Stlačením `/` zobrazíte všetky príkazy.
   #+END_TIP
 - 1. Vytvorme stránku [[Ako vytvoriť poznámky?]]. Môžete na ňu kliknúť a prejsť na danú stránku, alebo ju môžete otvoriť pomocou klávesovej skratky `Shift+Click` na pravom bočnom paneli! Teraz by ste mali vidieť _Prepojené referencie_ aj _Neprepojené referencie_.
 - 2. Vytvorme referenciu na nejaké bloky na stránke [[Ako vytvoriť poznámky?]]. Pomocou klávesovej skratky `Shift+Click` môžete otvoriť referenciu na ľubovoľný blok na pravom bočnom paneli. Skúste čokoľvek zmeniť v pravom paneli a tieto zmeny sa premietnu do referencovaného bloku!
@@ -23,4 +23,4 @@
     - DONE Vytvoriť stránku
     - CANCELED [#C] Napísať stránku s viac ako tisíc blokmi
 - A to je všetko! Teraz môžete vytvoriť viac odrážok alebo otvoriť lokálny adresár a importovať nejaké poznámky!
-- Takisto môžeš stiahnúť našu desktopovú aplikáciu z https://github.com/logseq/logseq/releases
+- Môžete si tiež stiahnúť našu desktopovú aplikáciu z https://github.com/logseq/logseq/releases

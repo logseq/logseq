@@ -66,22 +66,22 @@ const css = (strings: TemplateStringsArray, ...args: unknown[]) =>
   )
 
 const defaultTheme: TLTheme = {
-  accent: 'rgb(255, 0, 0)',
+  accent: 'var(--lx-accent-09, hsl(var(--primary)))',
   brushFill: 'var(--ls-scrollbar-background-color, rgba(0, 0, 0, .05))',
   brushStroke: 'var(--ls-scrollbar-thumb-hover-color, rgba(0, 0, 0, .05))',
-  selectStroke: 'var(--color-selectedFill)',
-  selectFill: 'rgba(65, 132, 244, 0.05)',
-  binding: 'rgba(65, 132, 244, 0.5)',
-  background: 'var(--ls-primary-background-color)',
-  foreground: 'var(--ls-primary-text-color)',
-  grid: 'var(--ls-quaternary-background-color)',
+  selectStroke: 'var(--color-selectedStroke)',
+  selectFill: 'var(--color-selectedFill)',
+  binding: 'var(--color-binding, rgba(65, 132, 244, 0.5))',
+  background: 'var(--ls-primary-background-color, hsl(var(--background)))',
+  foreground: 'var(--ls-primary-text-color, hsl(var(--foreground)))',
+  grid: 'var(--ls-quaternary-background-color, hsl(var(--secondary)))',
 }
 
 const tlcss = css`
   .tl-container {
     --tl-zoom: 1;
     --tl-scale: calc(1 / var(--tl-zoom));
-    --tl-padding: 64px;
+    --tl-padding: calc(64px / var(--tl-zoom));;
     --tl-shadow-color: 0deg 0% 0%;
     --tl-binding-distance: ${BINDING_DISTANCE}px;
     --tl-shadow-elevation-low: 0px 0.4px 0.5px hsl(var(--tl-shadow-color) / 0.04),
@@ -224,6 +224,21 @@ const tlcss = css`
     stroke: var(--tl-selectStroke);
     fill: var(--tl-background);
     stroke-width: calc(1.5px * var(--tl-scale));
+  }
+
+  .tl-clone-handle {
+    stroke: var(--tl-selectStroke);
+    fill: var(--tl-background);
+    stroke-width: calc(1.5px * var(--tl-scale));
+  }
+
+  .tl-clone-handle:hover {
+    fill: var(--tl-selectStroke);
+    cursor: pointer;
+  }
+
+  .tl-clone-handle:hover line {
+    stroke: var(--tl-background);
   }
 
   .tl-user {

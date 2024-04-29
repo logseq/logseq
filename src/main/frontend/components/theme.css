@@ -1,6 +1,6 @@
 :root {
   scrollbar-width: thin;
-  scrollbar-color: var(--ls-scrollbar-foreground-color) var(--ls-scrollbar-background-color);
+  scrollbar-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color)) var(--lx-gray-02, var(--ls-scrollbar-background-color));
 
   --ls-z-index-level-0: 0;
   --ls-z-index-level-1: 9;
@@ -10,64 +10,57 @@
   --ls-z-index-level-5: 99999;
 }
 
-html {
-  ::-webkit-scrollbar-thumb {
-    background-color: var(--ls-scrollbar-foreground-color);
-  }
-
-  ::-webkit-scrollbar {
-    background-color: var(--ls-scrollbar-background-color);
-    width: var(--ls-scrollbar-width);
-    height: 8px;
-  }
-
-  ::-webkit-scrollbar-thumb:active {
-    background-color: var(--ls-scrollbar-thumb-hover-color);
-  }
-  
-  ::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-}
-
 @media (prefers-color-scheme: dark) {
   .preboot-loading {
     color: lightgray;
   }
 }
 
+.visible-scrollbar , html.custom-scrollbar {
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--lx-gray-05, var(--ls-scrollbar-foreground-color, var(--rx-gray-05)));
+  }
+
+  ::-webkit-scrollbar {
+    background-color: var(--lx-gray-02, var(--ls-scrollbar-background-color, var(--rx-gray-02)));
+    width: var(--ls-scrollbar-width, 6px);
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background-color: var(--lx-gray-06, var(--ls-scrollbar-thumb-hover-color, var(--rx-gray-06)));
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+.hide-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none !important; /* Firefox */
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .form-checkbox, .form-radio {
-  color: var(--ls-page-checkbox-color, #6093a0);
-  background-color: var(--ls-page-checkbox-color, #6093a0);
-  border-color: var(--ls-page-checkbox-border-color, #6093a0);
+  color: var(--ls-page-checkbox-color, hsl(var(--primary)/.4));
+  background-color: var(--ls-page-checkbox-color, var(--rx-gray-06));
+  border-color: var(--ls-page-checkbox-border-color, hsl(var(--border)));
   border: none;
   position: relative;
-  top: -1px;
-  margin-right: 2px;
 }
 
 .form-checkbox:hover {
   transform: scale(1.1);
 }
 
-html[data-theme='dark'] {
-  background-color: var(--ls-primary-background-color);
-
-  input.form-input {
-    background: none;
-  }
-}
-
-html[data-theme='light'] {
+html[data-theme='light'] .theme-container {
   .form-checkbox {
     &:focus {
       border-color: var(--ls-page-checkbox-border-color);
-    }
-  }
-
-  .cp__header {
-    a {
-      color: var(--ls-primary-text-color);
     }
   }
 
@@ -80,14 +73,7 @@ html[data-theme='light'] {
   }
 }
 
-.hide-scrollbar {
-  -ms-overflow-style: none; /* IE and Edge */
-  scrollbar-width: none !important; /* Firefox */
-
-  &::-webkit-scrollbar {
-    display: none;
-  }
-}
+html[data-theme='dark'] .theme-container {}
 
 html.locked-scroll {
   overflow: hidden !important;
@@ -163,4 +149,8 @@ main.ls-fold-button-on-right {
       padding-left: 10px;
     }
   }
+}
+
+main.theme-inner {
+  --left-sidebar-bg-color: var(--lx-gray-02, hsl(var(--secondary, var(--rx-gray-03-hsl))));
 }

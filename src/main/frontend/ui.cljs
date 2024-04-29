@@ -6,7 +6,6 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            [camel-snake-kebab.core :as csk]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -21,7 +20,7 @@
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.config :as shortcut-config]
             [frontend.modules.shortcut.core :as shortcut]
-            [frontend.modules.shortcut.data-helper :as shortcut-helper]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.storage :as storage]
@@ -34,7 +33,9 @@
             [lambdaisland.glogi :as log]
             [medley.core :as medley]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.shui.core :as shui]
+            [logseq.shui.ui :as shui-ui]))
 
 (declare icon)
 
@@ -64,6 +65,12 @@
    "purple"
    "gray"])
 
+(defn ->block-background-color
+ [color]
+ (if (some #{color} built-in-colors)
+   (str "var(--ls-highlight-color-" color ")")
+   color))
+
 (defn built-in-color?
   [color]
   (some #{color} built-in-colors))
@@ -86,20 +93,24 @@
 (rum/defc ls-textarea
   < rum/reactive
   {:did-mount (fn [state]
-                (let [^js el (rum/dom-node state)]
+                (let [^js el (rum/dom-node state)
+                      *mouse-point (volatile! nil)]
                   ;; Passing aria-label as a prop to TextareaAutosize removes the dash
                   (.setAttribute el "aria-label" "editing block")
-                  (. el addEventListener "mouseup"
-                     #(let [start (util/get-selection-start el)
-                            end (util/get-selection-end el)]
-                        (when (and start end)
-                          (when-let [e (and (not= start end)
-                                            {:caret (cursor/get-caret-pos el)
-                                             :start start :end end
-                                             :text  (. (.-value el) substring start end)
-                                             :point {:x (.-x %) :y (.-y %)}})]
-
-                            (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e)))))))
+                  (doto el
+                    (.addEventListener "select"
+                       #(let [start (util/get-selection-start el)
+                              end (util/get-selection-end el)]
+                          (when (and start end)
+                            (when-let [e (and (not= start end)
+                                              (let [caret-pos (cursor/get-caret-pos el)]
+                                                {:caret caret-pos
+                                                 :start start :end end
+                                                 :text  (. (.-value el) substring start end)
+                                                 :point (select-keys (or @*mouse-point caret-pos) [:x :y])}))]
+                              (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))
+                              (vreset! *mouse-point nil)))))
+                    (.addEventListener "mouseup" #(vreset! *mouse-point {:x (.-x %) :y (.-y %)}))))
                 state)}
   [{:keys [on-change] :as props}]
   (let [skip-composition? (state/sub :editor/action)
@@ -112,16 +123,16 @@
                                                 (on-change e))
                              (state/set-editor-in-composition! true))))
         props (assoc props
-                     :on-change (fn [e] (when-not (state/editor-in-composition?)
-                                          (on-change e)))
-                     :on-composition-start on-composition
-                     :on-composition-update on-composition
-                     :on-composition-end on-composition)]
+                :on-change (fn [e] (when-not (state/editor-in-composition?)
+                                     (on-change e)))
+                :on-composition-start on-composition
+                :on-composition-update on-composition
+                :on-composition-end on-composition)]
     (textarea props)))
 
 (rum/defc dropdown-content-wrapper
   < {:did-mount    (fn [state]
-                     (let [k    (inc (count (state/sub :modal/dropdowns)))
+                     (let [k (inc (count (state/sub :modal/dropdowns)))
                            args (:rum/args state)]
                        (state/set-state! [:modal/dropdowns k] (second args))
                        (assoc state ::k k)))
@@ -158,30 +169,22 @@
           (dropdown-content-wrapper dropdown-state close-fn modal-content modal-class {:z-index z-index}))))]))
 
 ;; `sequence` can be a list of symbols, a list of strings, or a string
-(defn render-keyboard-shortcut [sequence]
+(defn render-keyboard-shortcut [sequence & {:as opts}]
   (let [sequence (if (string? sequence)
                    (-> sequence ;; turn string into sequence
                        (string/trim)
                        (string/lower-case)
-                       (string/split  #" "))
+                       (string/split #" "))
                    sequence)]
     [:span.keyboard-shortcut
-     (map-indexed (fn [i key]
-                    (let [key' (shortcut-helper/decorate-binding (str key))]
-                      [:code {:key i}
-                      ;; Display "cmd" rather than "meta" to the user to describe the Mac
-                      ;; mod key, because that's what the Mac keyboards actually say.
-                       (if (= "meta" key')
-                        (util/meta-key-name)
-                        key')]))
-                  sequence)]))
+     (shui/shortcut sequence opts)]))
 
 (rum/defc menu-link
   [{:keys [only-child? no-padding? class shortcut] :as options} child]
   (if only-child?
     [:div.menu-link
      (dissoc options :only-child?) child]
-    [:a.flex.justify-between.px-4.py-2.text-sm.transition.ease-in-out.duration-150.cursor.menu-link
+    [:a.flex.justify-between.menu-link
      (cond-> options
              (true? no-padding?)
              (assoc :class (str class " no-padding"))
@@ -191,7 +194,7 @@
 
      [:span.flex-1 child]
      (when shortcut
-       [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
+       [:span.ml-1 (render-keyboard-shortcut shortcut {:interactive? false})])]))
 
 (rum/defc dropdown-with-links
   [content-fn links
@@ -239,6 +242,7 @@
          wrapper-children)))
    opts))
 
+(declare button)
 (rum/defc notification-content
   [state content status uid]
   (when (and content status)
@@ -272,25 +276,27 @@
                                             :overflow-x "hidden"}}
          [:div.p-4
           [:div.flex.items-start
-           [:div.flex-shrink-0
+           [:div.flex-shrink-0.pt-2
             svg]
-           [:div.ml-3.w-0.flex-1
+           [:div.ml-3.w-0.flex-1.pt-2
             [:div.text-sm.leading-5.font-medium.whitespace-pre-line {:style {:margin 0}}
              content]]
-           [:div.ml-4.flex-shrink-0.flex
-            [:button.inline-flex.text-gray-400.focus:outline-none.focus:text-gray-500.transition.ease-in-out.duration-150.notification-close-button
-             {:aria-label "Close"
-              :on-click (fn []
-                          (notification/clear! uid))}
-
-             (icon "x" {:fill "currentColor"})]]]]]]])))
+           [:div.flex-shrink-0.flex {:style {:margin-top -9
+                                             :margin-right -18}}
+            (button
+              {:button-props {:aria-label "Close"}
+               :variant :ghost
+               :class "hover:bg-transparent hover:text-foreground"
+               :on-click (fn []
+                           (notification/clear! uid))
+               :icon "x"})]]]]]])))
 
 (declare button)
 
 (rum/defc notification-clear-all
   []
   [:div.ui__notifications-content
-   [:div.pointer-events-auto
+   [:div.pointer-events-auto.notification-clear
     (button (t :notification/clear-all)
      :intent "logseq"
      :on-click (fn []
@@ -385,8 +391,9 @@
         (.on js/window.apis event function))
 
       (p/then (ipc/ipc :getAppBaseInfo) #(let [{:keys [isFullScreen isMaximized]} (js->clj % :keywordize-keys true)]
-                                           (when isFullScreen ((.add cl "is-fullscreen")
-                                                               (state/set-state! :electron/window-fullscreen? true)))
+                                           (when isFullScreen
+                                             (.add cl "is-fullscreen")
+                                             (state/set-state! :electron/window-fullscreen? true))
                                            (when isMaximized (state/set-state! :electron/window-maximized? true)))))))
 
 (defn inject-dynamic-style-node!
@@ -507,7 +514,7 @@
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
-  (shortcut/mixin :shortcut.handler/auto-complete)
+  (shortcut/mixin* :shortcut.handler/auto-complete)
   [state
    matched
    {:keys [on-chosen
@@ -561,15 +568,18 @@
                    :class (if small? "is-small" "")}
     [:span.wrapper.transition-colors.ease-in-out.duration-200
      {:aria-checked (if on? "true" "false"), :tab-index "0", :role "checkbox"
-      :class        (if on? "bg-indigo-600" "bg-gray-300")}
+      :class        (if on? "ui__toggle-background-on" "ui__toggle-background-off")}
      [:span.switcher.transform.transition.ease-in-out.duration-200
       {:class       (if on? (if small? "translate-x-4" "translate-x-5") "translate-x-0")
        :aria-hidden "true"}]]]))
 
-(defn keyboard-shortcut-from-config [shortcut-name]
-  (let [default-binding (:binding (get shortcut-config/all-default-keyboard-shortcuts shortcut-name))
-        custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))]
-    (or custom-binding default-binding)))
+(defn keyboard-shortcut-from-config [shortcut-name & {:keys [pick-first?]}]
+  (let [built-in-binding (:binding (get shortcut-config/all-built-in-keyboard-shortcuts shortcut-name))
+        custom-binding  (when (state/shortcuts) (get (state/shortcuts) shortcut-name))
+        binding         (or custom-binding built-in-binding)]
+    (if (and pick-first? (coll? binding))
+      (first binding)
+      (shortcut-utils/decorate-binding binding))))
 
 (rum/defc modal-overlay
   [state close-fn close-backdrop?]
@@ -595,8 +605,8 @@
              "entered" "ease-out duration-300 opacity-100 translate-y-0 sm:scale-100"
              "exiting" "ease-in duration-200 opacity-100 translate-y-0 sm:scale-100"
              "exited" "ease-in duration-200 opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95")}
-   [:div.ui__modal-close-wrap
-    (when-not (false? close-btn?)
+   (when-not (false? close-btn?)
+     [:div.ui__modal-close-wrap
       [:a.ui__modal-close
        {:aria-label "Close"
         :type       "button"
@@ -607,8 +617,7 @@
          {:d               "M6 18L18 6M6 6l12 12"
           :stroke-width    "2"
           :stroke-linejoin "round"
-          :stroke-linecap  "round"}]]])]
-
+          :stroke-linecap  "round"}]]]])
    (when show?
      [:div {:class (if fullscreen? "" "panel-content")}
       (modal-panel-content panel-content close-fn)])])
@@ -626,7 +635,8 @@
      (mixins/on-key-down
       state
       {;; enter
-       13 (fn [state _e]
+       13 (fn [state e]
+            (.preventDefault e)
             (some->
              (.querySelector (rum/dom-node state) "button.ui__modal-enter")
              (.click)))})))
@@ -637,13 +647,16 @@
         close-backdrop? (state/sub :modal/close-backdrop?)
         show? (state/sub :modal/show?)
         label (state/sub :modal/label)
+        class (state/sub :modal/class)
         close-fn (fn []
                    (state/close-modal!)
                    (state/close-settings!))
         modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
     [:div.ui__modal
-     {:style {:z-index (if show? 999 -1)}
-      :label label}
+     {:style {:z-index (if show? 999 -1)
+              :display (if show? "flex" "none")}
+      :label label
+      :class class}
      (css-transition
       {:in show? :timeout 0}
       (fn [state]
@@ -685,21 +698,18 @@
              (t sub-title)
              sub-title)]]]]
 
-       [:div.mt-5.sm:mt-4.sm:flex.sm:flex-row-reverse
-        [:span.flex.w-full.rounded-md.shadow-sm.sm:ml-3.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-transparent.px-4.py-2.bg-indigo-600.text-base.leading-6.font-medium.text-white.shadow-sm.hover:bg-indigo-500.focus:outline-none.focus:border-indigo-700.focus:shadow-outline-indigo.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type     "button"
-           :autoFocus "on"
-           :class "ui__modal-enter"
+       [:div.mt-5.sm:mt-4.flex.gap-4
+        (button
+          (t :cancel)
+          {:theme :gray
+           :on-click (comp on-cancel close-fn)})
+        (button
+          (t :yes)
+          {:class "ui__modal-enter"
            :on-click #(and (fn? on-confirm)
                            (on-confirm % {:close-fn close-fn
-                                          :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))}
-          (t :yes)]]
-        [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-         [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-          {:type     "button"
-           :on-click (comp on-cancel close-fn)}
-          (t :cancel)]]]])))
+                                          :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))
+           :button-props {:autoFocus "on"}})]])))
 
 (rum/defc sub-modal < rum/reactive
   []
@@ -711,12 +721,14 @@
             close-backdrop? (:modal/close-backdrop? modal)
             show? (:modal/show? modal)
             label (:modal/label modal)
+            class (:modal/class modal)
             close-fn (fn []
                        (state/close-sub-modal! id))
             modal-panel-content (or modal-panel-content (fn [_close] [:div]))]
         [:div.ui__modal.is-sub-modal
          {:style {:z-index (if show? (+ 999 idx) -1)}
-          :label label}
+          :label label
+          :class class}
          (css-transition
           {:in show? :timeout 0}
           (fn [state]
@@ -790,7 +802,7 @@
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
                 state)}
-  [state header content {:keys [title-trigger? on-mouse-down
+  [state header content {:keys [title-trigger? on-mouse-down class
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
         on-mouse-down (fn [e]
@@ -799,6 +811,7 @@
                         (when on-mouse-down
                           (on-mouse-down @collapsed?)))]
     [:div.flex.flex-col
+     {:class class}
      (foldable-title {:on-mouse-down on-mouse-down
                       :header header
                       :title-trigger? title-trigger?
@@ -978,16 +991,24 @@
                           [:div {:key "tippy"} ""])))
            (rum/fragment {:key "tippy-children"} child))))
 
-(rum/defc slider
-  [default-value {:keys [min max on-change]}]
-  [:input.cursor-pointer
-   {:type      "range"
-    :value     (int default-value)
-    :min       min
-    :max       max
-    :style     {:width "100%"}
-    :on-change #(let [value (util/evalue %)]
-                  (on-change value))}])
+(rum/defcs slider < rum/reactive
+  {:init (fn [state]
+           (assoc state ::value (atom (first (:rum/args state)))))}
+  [state _default-value {:keys [min max on-change]}]
+  (let [*value (::value state)
+        value (rum/react *value)
+        value' (int value)]
+    (assert (int? value'))
+    [:input.cursor-pointer
+     {:type      "range"
+      :value     value'
+      :min       min
+      :max       max
+      :style     {:width "100%"}
+      :on-change #(let [value (util/evalue %)]
+                    (reset! *value value))
+      :on-mouse-up #(let [value (util/evalue %)]
+                      (on-change value))}]))
 
 (rum/defcs tweet-embed < (rum/local true :loading?)
   [state id]
@@ -999,56 +1020,47 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(def get-adapt-icon-class
-  (memoize (fn [klass] (r/adapt-class klass))))
+(def icon shui/icon)
 
-(defn tabler-icon
-  [name]
-  (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name))))
+(rum/defc button-inner
+  [text & {:keys [theme background variant href size class intent small? icon icon-props disabled? button-props]
+           :or   {small? false}
+           :as   opts}]
+  (let [button-props (merge
+                       (dissoc opts
+                         :theme :background :href :variant :class :intent :small? :icon :icon-props :disabled? :button-props)
+                       button-props)
+        props (merge {:variant (cond
+                                 (= theme :gray) :ghost
+                                 (= background "gray") :secondary
+                                 (= background "red") :destructive
+                                 (= intent "link") :ghost
+                                 :else (or variant :default))
+                      :href    href
+                      :size    (if small? :xs (or size :sm))
+                      :icon    icon
+                      :class   (if (and (string? background)
+                                     (not (contains? #{"gray" "red"} background)))
+                                 (str class " primary-" background) class)
+                      :muted   disabled?}
+                button-props)
 
-(rum/defc icon
-  ([name] (icon name nil))
-  ([name {:keys [extension? font? class] :as opts}]
-   (when-not (string/blank? name)
-     (let [^js jsTablerIcons (gobj/get js/window "tablerIcons")]
-       (if (or extension? font? (not jsTablerIcons))
-         [:span.ui__icon (merge {:class
-                                 (util/format
-                                   (str "%s-" name
-                                        (when (:class opts)
-                                          (str " " (string/trim (:class opts)))))
-                                   (if extension? "tie tie" "ti ti"))}
-                                (dissoc opts :class :extension? :font?))]
+        icon (when icon (shui-ui/tabler-icon icon icon-props))
+        href? (not (string/blank? href))
+        text (cond
+               href? [:a {:href href :target "_blank"
+                          :style {:color "inherit"}} text]
+               :else text)
+        children [icon text]]
 
-         ;; tabler svg react
-         (when-let [klass (tabler-icon name)]
-           (let [f (get-adapt-icon-class klass)]
-             [:span.ui__icon.ti
-              {:class (str "ls-icon-" name " " class)}
-              (f (merge {:size 18} (r/map-keys->camel-case (dissoc opts :class))))])))))))
+    (shui-ui/button props children)))
 
-(rum/defc button
-  [text & {:keys [background href class intent on-click small? large? title icon icon-props disabled?]
-           :or   {small? false large? false}
-           :as   option}]
-  (let [klass (if-not intent ".bg-indigo-600.hover:bg-indigo-700.focus:border-indigo-700.active:bg-indigo-700.text-center" intent)
-        klass (if background (string/replace klass "indigo" background) klass)
-        klass (if small? (str klass ".px-2.py-1") klass)
-        klass (if large? (str klass ".text-base") klass)
-        klass (if disabled? (str klass "disabled:opacity-75") klass)]
-    [:button.ui__button
-     (merge
-      {:type  "button"
-       :title title
-       :disabled disabled?
-       :class (str (util/hiccup->class klass) " " class)}
-      (dissoc option :background :class :small? :large? :disabled?)
-      (when href
-        {:on-click (fn []
-                     (util/open-url href)
-                     (when (fn? on-click) (on-click)))}))
-     (when icon (frontend.ui/icon icon (merge icon-props {:class (when-not (empty? text) "mr-1")})))
-     text]))
+(defn button
+  [text & {:keys []
+           :as   opts}]
+  (if (map? text)
+    (button-inner nil text)
+    (button-inner text opts)))
 
 (rum/defc point
   ([] (point "bg-red-600" 5 nil))
@@ -1056,7 +1068,7 @@
    [:span.ui__point.overflow-hidden.rounded-full.inline-block
     (merge {:class (str (util/hiccup->class klass) " " class)
             :style (merge {:width size :height size} style)}
-           (dissoc opts :style :class))]))
+      (dissoc opts :style :class))]))
 
 (rum/defc type-icon
   [{:keys [name class title extension?]}]
@@ -1082,9 +1094,9 @@
 (rum/defc progress-bar
   [width]
   {:pre (integer? width)}
-  [:div.w-full.bg-indigo-200.rounded-full.h-2.5.animate-pulse
-   [:div.bg-indigo-600.h-2.5.rounded-full {:style {:width (str width "%")}
-                                           :transition "width 1s"}]])
+  [:div.w-full.rounded-full.h-2.5.animate-pulse.bg-gray-06-alpha
+   [:div.bg-gray-09-alpha.h-2.5.rounded-full {:style {:width (str width "%")}
+                                              :transition "width 1s"}]])
 
 (rum/defc progress-bar-with-label
   [width label-left label-right]
@@ -1127,7 +1139,7 @@
   ([content-fn]
    (lazy-visible content-fn nil))
   ([content-fn {:keys [trigger-once? _debug-id]
-                :or {trigger-once? false}}]
+                :or {trigger-once? true}}]
    (let [[visible? set-visible!] (rum/use-state false)
          root-margin 100
          inViewState (useInView #js {:rootMargin (str root-margin "px")

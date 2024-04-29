@@ -21,7 +21,7 @@ test('should display onboarding tour', async ({ page }) => {
   await page.click('.nav-header .whiteboard')
 
   await expect(page.locator('.cp__whiteboard-welcome')).toBeVisible()
-  await page.click('.cp__whiteboard-welcome button.bg-gray-600')
+  await page.click('.cp__whiteboard-welcome button.skip-welcome')
   await expect(page.locator('.cp__whiteboard-welcome')).toBeHidden()
 })
 
@@ -68,12 +68,7 @@ test('update whiteboard title', async ({ page }) => {
   await page.fill('.whiteboard-page-title input', title + '-2')
   await page.keyboard.press('Enter')
 
-  // Updating non-default title should pop up a confirmation dialog
-  await expect(page.locator('.ui__confirm-modal >> .headline')).toContainText(
-    `Do you really want to change the page name to “${title}-2”?`
-  )
-
-  await page.click('.ui__confirm-modal button')
+  await page.click('.ui__modal-enter')
   await expect(page.locator('.whiteboard-page-title .title')).toContainText(
     title + '-2'
   )

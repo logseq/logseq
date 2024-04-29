@@ -178,21 +178,12 @@
 }
 
 .button {
-  @apply h-8 px-2.5 py-1 rounded-md opacity-60;
-  display: block;
-  user-select: none;
+  @apply h-8 px-2.5 py-1 rounded-md opacity-90 block select-none hover:opacity-100 active:opacity-80;
 
-  &:hover, &.active {
-    opacity: 1;
-    background: none;
-
+  &:hover {
     @screen md {
-      background: var(--ls-tertiary-background-color);
+      background: var(--lx-gray-04, var(--ls-tertiary-background-color, var(--rx-gray-04)));
     }
-  }
-
-  &:active {
-    opacity: .7;
   }
 }
 

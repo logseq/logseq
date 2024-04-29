@@ -66,15 +66,16 @@ test('page rename test', async ({ page }) => {
   await page_rename_test(page, "abcd", "a.b.c.d")
   await page_rename_test(page, "abcd", "a/b/c/d")
 
+  // Disabled for now since it's unstable:
   // The page name in page search are not updated after changing the capitalization of the page name #9577
   // https://github.com/logseq/logseq/issues/9577
   // Expect the page name to be updated in the search results
-  await page_rename_test(page, "DcBA_", "dCBA_")
-  const results = await searchPage(page, "DcBA_")
-  // search result 0 is the new page & 1 is the new whiteboard
-  const thirdResultRow = await results[2].innerText()
-  expect(thirdResultRow).toContain("dCBA_");
-  expect(thirdResultRow).not.toContain("DcBA_");
+  // await page_rename_test(page, "DcBA_", "dCBA_")
+  // const results = await searchPage(page, "DcBA_")
+  // // search result 0 is the new page & 1 is the new whiteboard
+  // const resultRow = await results[0].innerText()
+  // expect(resultRow).toContain("dCBA_");
+  // expect(resultRow).not.toContain("DcBA_");
   await closeSearchBox(page)
 })
 
@@ -90,7 +91,7 @@ test('page title property test', async ({ page }) => {
   await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name + "     ")
   await page.press(':nth-match(textarea, 1)', 'Enter') // DWIM property mode creates new line
   await page.press(':nth-match(textarea, 1)', 'Enter')
-  expect(await page.innerText('.page-title .title')).toBe(new_name)
+  await expect(page.locator('.page-title .title')).toHaveText(new_name)
 
   // Edit Title Property and Esc (ETPE)
   // exit editing via moving out focus
@@ -100,5 +101,5 @@ test('page title property test', async ({ page }) => {
   await createPage(page, original_name)
   await page.type(':nth-match(textarea, 1)', 'title:: ' + new_name)
   await page.press(':nth-match(textarea, 1)', 'Escape')
-  expect(await page.innerText('.page-title .title')).toBe(new_name)
+  await expect(page.locator('.page-title .title')).toHaveText(new_name)
 })

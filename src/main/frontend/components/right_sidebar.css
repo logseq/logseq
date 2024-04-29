@@ -16,31 +16,29 @@ html[data-theme=light] {
 }
 
 .sidebar-item-list {
-  margin-top: -8px;
-  padding-bottom: 150px;
+  @apply ml-1 mt-[-8px] pb-[150px];
+
   height: calc(100vh - 48px);
 }
-
 
 html[data-theme=light] a.toggle:hover {
   color: var(--ls-primary-text-color);
 }
 
-.cp__header a, .cp__header button {
-    opacity: 1;
-    color: var(--ls-header-button-background);
-}
+.cp__header {
+  > .r > div:not(.ui__dropdown-trigger) a, button {
+    color: var(--lx-gray-11, var(--ls-header-button-background, var(--rx-gray-11)));
 
-.cp__right-sidebar-topbar {
-  background-color: var(--ls-primary-background-color);
-
-  button {
-    opacity: 1;
+    &:hover {
+      color: var(--lx-gray-12, var(--ls-header-button-background, var(--rx-gray-12)));
+    }
   }
 }
 
-html[data-theme=dark] {
-    .cp__header a, .cp__header button {
-        opacity: 0.7;
-    }
+.cp__right-sidebar-topbar {
+  @apply px-1 h-12 bg-transparent;
+
+  button {
+    @apply opacity-100;
+  }
 }

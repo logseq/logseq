@@ -49,13 +49,13 @@
   (set! js/window.onerror
         (fn [message, _source, _lineno, _colno, error]
           (when-not (error/ignored? message)
-            (log/error :exception error)
+            (js/console.error message)
+            (log/error :exception error)))))
             ;; (notification/show!
             ;;  (str "message=" message "\nsource=" source "\nlineno=" lineno "\ncolno=" colno "\nerror=" error)
             ;;  :error
             ;;  ;; Don't auto-hide
             ;;  false)
-            ))))
 
 
 (defn- watch-for-date!
@@ -189,6 +189,8 @@
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/embed block/block-embed)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 

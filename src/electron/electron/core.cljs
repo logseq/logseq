@@ -16,7 +16,6 @@
             ["os" :as os]
             ["electron" :refer [BrowserWindow Menu app protocol ipcMain dialog shell] :as electron]
             ["electron-deeplink" :refer [Deeplink]]
-            [clojure.core.async :as async]
             [electron.state :as state]
             [electron.git :as git]
             [electron.window :as win]
@@ -70,7 +69,19 @@
            url (decode-protected-assets-schema-path url)
            path (string/replace url "assets://" "")
            path (js/decodeURIComponent path)]
-       (callback #js {:path path}))))
+       (cond (or (string/starts-with? path "/")
+                 (re-find #"(?i)^/[a-zA-Z]:" path))
+             (callback #js {:path path})
+
+             ;; assume winwdows unc path
+             utils/win32?
+             (do (logger/debug :resolve-assets-url url)
+                 (callback #js {:path (str "//" path)}))
+
+             :else
+             (do
+               (logger/warn ::resolve-assets-url "Unknown assets url" url)
+               (callback #js {:path path}))))))
 
   (.registerFileProtocol
    protocol FILE_LSP_SCHEME
@@ -175,7 +186,7 @@
                        {:role "fileMenu"
                         :submenu [{:label "New Window"
                                    :click (fn []
-                                            (p/let [graph-name (get-graph-name (state/get-graph-path))
+                                            (p/let [graph-name (get-graph-name (state/get-active-window-graph-path))
                                                     _ (handler/broadcast-persist-graph! graph-name)]
                                               (handler/open-new-window!)))
                                    :accelerator (if mac?
@@ -183,11 +194,18 @@
                                                   ;; Avoid conflict with `Control+N` shortcut to move down in the text editor on Windows/Linux
                                                   "Shift+CommandOrControl+N")}
                                   (if mac?
-                                    {:role "close"}
+                                    ;; Disable Command+W shortcut
+                                    {:role "close"
+                                     :accelerator false}
                                     {:role "quit"})]}
                        {:role "editMenu"}
                        {:role "viewMenu"}
-                       {:role "windowMenu"})
+                       {:role "windowMenu"
+                        :submenu (when-not mac? [{:role "minimize"}
+                                                 {:role "zoom"}
+                                                 ;; Disable Control+W shortcut
+                                                 {:role "close"
+                                                  :accelerator false}])})
         ;; Windows has no about role
         template (conj template
                        (if mac?
@@ -200,6 +218,10 @@
                                     {:role "about"
                                      :label "About Logseq"
                                      :click about-fn}]}))
+        ;; Enable Cmd/Ctrl+= Zoom In
+        template (conj template
+                       {:role "zoomin"
+                        :accelerator "CommandOrControl+="})
         menu (.buildFromTemplate Menu (clj->js template))]
     (.setApplicationMenu Menu menu)))
 
@@ -228,15 +250,15 @@
                       :bypassCSP       true
                       :supportFetchAPI true}]
       (.registerSchemesAsPrivileged
-        protocol (bean/->js [{:scheme     LSP_SCHEME
-                              :privileges privileges}
-                             {:scheme     FILE_LSP_SCHEME
-                              :privileges privileges}
-                             {:scheme     FILE_ASSETS_SCHEME
-                              :privileges {:standard        false
-                                           :secure          false
-                                           :bypassCSP       false
-                                           :supportFetchAPI false}}]))
+       protocol (bean/->js [{:scheme     LSP_SCHEME
+                             :privileges privileges}
+                            {:scheme     FILE_LSP_SCHEME
+                             :privileges privileges}
+                            {:scheme     FILE_ASSETS_SCHEME
+                             :privileges {:standard        false
+                                          :secure          false
+                                          :bypassCSP       false
+                                          :supportFetchAPI false}}]))
 
       (set-app-menu!)
       (setup-deeplink!)
@@ -269,7 +291,7 @@
 
                (search/open-dbs!)
 
-               (git/auto-commit-current-graph!)
+               (git/configure-auto-commit!)
 
                (vreset! *setup-fn
                         (fn []
@@ -287,33 +309,29 @@
                (@*setup-fn)
 
                ;; main window events
-               ;; TODO merge with window/on-close-actions!
-               ;; TODO elimilate the difference between main and non-main windows
                (.on win "close" (fn [e]
+                                  (git/before-graph-close-hook!)
                                   (when @*quit-dirty? ;; when not updating
                                     (.preventDefault e)
-                                    (let [web-contents (. win -webContents)]
-                                      (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
-                                      (.send web-contents "persistent-dbs"))
-                                    (async/go
-                                      (let [_ (async/<! state/persistent-dbs-chan)]
-                                        (if (or @win/*quitting? (not mac?))
-                                          ;; MacOS: only cmd+q quitting will trigger actual closing
-                                          ;; otherwise, it's just hiding - don't do any actual closing in that case
-                                          ;; except saving transit
-                                          (when-let [win @*win]
-                                            (when-let [dir (state/get-window-graph-path win)]
-                                              (handler/close-watcher-when-orphaned! win dir))
-                                            (state/close-window! win)
-                                            (win/destroy-window! win)
-                                            ;; FIXME: what happens when closing main window on Windows?
-                                            (reset! *win nil))
-                                          ;; Just hiding - don't do any actual closing operation
-                                          (do (.preventDefault ^js/Event e)
-                                              (if (and mac? (.isFullScreen win))
-                                                (do (.once win "leave-full-screen" #(.hide win))
-                                                    (.setFullScreen win false))
-                                                (.hide win)))))))))
+
+                                    (let [windows (win/get-all-windows)
+                                          window @*win
+                                          multiple-windows? (> (count windows) 1)]
+                                      (cond
+                                        (or multiple-windows? (not mac?) @win/*quitting?)
+                                        (when window
+                                          (win/close-handler win handler/close-watcher-when-orphaned! e)
+                                          (reset! *win nil))
+
+                                        (and mac? (not multiple-windows?))
+                                        ;; Just hiding - don't do any actual closing operation
+                                        (do (.preventDefault ^js/Event e)
+                                            (if (and mac? (.isFullScreen win))
+                                              (do (.once win "leave-full-screen" #(.hide win))
+                                                  (.setFullScreen win false))
+                                              (.hide win)))
+                                        :else
+                                        nil)))))
                (.on app "before-quit" (fn [_e]
                                         (reset! win/*quitting? true)))
 

@@ -1,79 +1,97 @@
-div.table-wrapper {
-  overflow: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
-  margin: 1rem 0;
-}
-
-th {
-  font-size: 14px;
-  font-weight: 400;
-  color: var(--ls-primary-text-color);
-  border-bottom: 2px solid var(--ls-border-color);
-  padding: 10px 8px;
-}
-
-td {
-  padding: 6px 8px;
-  text-align: left;
-}
-
-tr:nth-child(even) {
-  background: var(--ls-table-tr-even-background-color);
-}
-
-tr:nth-child(odd) {
-  background: var(--ls-primary-background-color);
-}
-
-caption {
-  margin-bottom: 0.3em;
-
-  &.t-above {
-    caption-side: top;
+.cp__shortcut-page, .cp__all_pages-content, .block-content {
+  div.table-wrapper {
+    overflow: auto;
   }
 
-  &.t-bottom {
-    caption-side: bottom;
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    margin: 1rem 0;
   }
-}
 
-figcaption {
-  margin-top: 0.3em;
-}
-
-.org-right {
-  text-align: right;
-}
-
-.org-left {
-  text-align: left;
-}
-
-.org-center {
-  text-align: center;
-}
-
-.dark-theme {
   th {
+    font-size: 14px;
+    font-weight: 400;
     color: var(--ls-primary-text-color);
-    border-bottom: 2px solid var(--ls-border-color);
+    border-bottom: 2px solid var(--ls-border-color, var(--rx-gray-05));
+    padding: 10px 8px;
+  }
+
+  td {
+    padding: 6px 8px;
+    text-align: left;
   }
 
   tr:nth-child(even) {
-    background: var(--ls-table-tr-even-background-color);
+    background: var(--ls-table-tr-even-background-color, var(--rx-gray-03));
   }
 
   tr:nth-child(odd) {
-    background: var(--ls-primary-background-color);
+    background: var(--ls-primary-background-color, var(--rx-gray-01));
   }
 
-  td,
-  tr {
-    border-bottom: none;
+  caption {
+    margin-bottom: 0.3em;
+
+    &.t-above {
+      caption-side: top;
+    }
+
+    &.t-bottom {
+      caption-side: bottom;
+    }
+  }
+
+  figcaption {
+    margin-top: 0.3em;
+  }
+
+  .org-right {
+    text-align: right;
+  }
+
+  .org-left {
+    text-align: left;
+  }
+
+  .org-center {
+    text-align: center;
+  }
+}
+
+.cp__all_pages_table {
+  td {
+    @apply whitespace-nowrap;
+
+    &.name {
+      @apply whitespace-pre-wrap;
+    }
+
+    &.backlinks {
+      @apply text-center;
+    }
+  }
+}
+
+.dark-theme {
+  .cp__shortcut-page, .cp__all_pages-content, .block-content {
+    th {
+      color: var(--ls-primary-text-color);
+      border-bottom: 2px solid var(--ls-border-color);
+    }
+
+    tr:nth-child(even) {
+      background: var(--ls-table-tr-even-background-color);
+    }
+
+    tr:nth-child(odd) {
+      background: var(--ls-primary-background-color);
+    }
+
+    td,
+    tr {
+      border-bottom: none;
+    }
   }
 }

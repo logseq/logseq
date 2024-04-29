@@ -147,43 +147,42 @@
 
       (fs/unlink! repo-cur fpath {}))))
 
-(defn resolve-ref-page
+(defn ensure-ref-page!
   [pdf-current]
-  (let [page-name (:key pdf-current)
-        page-name (string/trim page-name)
-        page-name (str "hls__" page-name)
-        page      (db-model/get-page page-name)
-        file-path (:original-path pdf-current)
-        format    (state/get-preferred-format)
-        repo-dir  (config/get-repo-dir (state/get-current-repo))
-        asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
-        url       (if (string/includes? file-path asset-dir)
-                    (str ".." (last (string/split file-path repo-dir)))
-                    file-path)]
-    (if-not page
-      (let [label (:filename pdf-current)]
-        (page-handler/create! page-name {:redirect?        false :create-first-block? false
-                                         :split-namespace? false
-                                         :format           format
-                                         :properties       {:file      (case format
-                                                                         :markdown
-                                                                         (util/format "[%s](%s)" label url)
+  (when-let [page-name (util/trim-safe (:key pdf-current))]
+    (let [page-name (str "hls__" page-name)
+          page (db-model/get-page page-name)
+          file-path (:original-path pdf-current)
+          format (state/get-preferred-format)
+          repo-dir (config/get-repo-dir (state/get-current-repo))
+          asset-dir (util/node-path.join repo-dir gp-config/local-assets-dir)
+          url (if (string/includes? file-path asset-dir)
+                (str ".." (last (string/split file-path repo-dir)))
+                file-path)]
+      (if-not page
+        (let [label (:filename pdf-current)]
+          (page-handler/create! page-name {:redirect?        false :create-first-block? false
+                                           :split-namespace? false
+                                           :format           format
+                                           :properties       {:file      (case format
+                                                                           :markdown
+                                                                           (util/format "[%s](%s)" label url)
 
-                                                                         :org
-                                                                         (util/format "[[%s][%s]]" url label)
+                                                                           :org
+                                                                           (util/format "[[%s][%s]]" url label)
 
-                                                                         url)
-                                                            :file-path url}})
-        (db-model/get-page page-name))
+                                                                           url)
+                                                              :file-path url}})
+          (db-model/get-page page-name))
 
-      ;; try to update file path
-      (page-property/add-property! page-name :file-path url))
-    page))
+        ;; try to update file path
+        (page-property/add-property! page-name :file-path url))
+      page)))
 
 (defn ensure-ref-block!
   ([pdf hl] (ensure-ref-block! pdf hl nil))
   ([pdf-current {:keys [id content page properties]} insert-opts]
-   (when-let [ref-page (and pdf-current (resolve-ref-page pdf-current))]
+   (when-let [ref-page (and pdf-current (ensure-ref-page! pdf-current))]
      (let [ref-block (db-model/query-block-by-uuid id)]
        (if-not (nil? (:block/content ref-block))
          (do

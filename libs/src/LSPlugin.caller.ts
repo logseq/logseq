@@ -243,18 +243,23 @@ class LSPluginCaller extends EventEmitter {
         let { width, height, left, top, vw, vh } = mainLayoutInfo
 
         left = Math.max(left, 0)
-        left = (typeof vw === 'number') ?
-          `${Math.min(left * 100 / vw, 99)}%` : `${left}px`
+        left =
+          typeof vw === 'number'
+            ? `${Math.min((left * 100) / vw, 99)}%`
+            : `${left}px`
 
         // 45 is height of headbar
         top = Math.max(top, 45)
-        top = (typeof vh === 'number') ?
-          `${Math.min(top * 100 / vh, 99)}%` : `${top}px`
+        top =
+          typeof vh === 'number'
+            ? `${Math.min((top * 100) / vh, 99)}%`
+            : `${top}px`
 
         Object.assign(cnt.style, {
           width: width + 'px',
           height: height + 'px',
-          left, top
+          left,
+          top,
         })
       }
     } catch (e) {
@@ -281,7 +286,7 @@ class LSPluginCaller extends EventEmitter {
       timer = setTimeout(() => {
         reject(new Error(`handshake Timeout`))
         pt.destroy()
-      }, 4 * 1000) // 4 secs
+      }, 8 * 1000) // 8 secs
 
       handshake
         .then((refChild: ParentAPI) => {

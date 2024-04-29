@@ -246,8 +246,8 @@
           point (-> (.getShapeById app source-shape)
                     (.-bounds)
                     ((fn [bounds] (if bottom?
-                                    [(.-minX bounds) (+ 64 (.-maxY bounds))]
-                                    [(+ 64 (.-maxX bounds)) (.-minY bounds)]))))
+                                    [(.-minX ^js bounds) (+ 64 (.-maxY ^js bounds))]
+                                    [(+ 64 (.-maxX ^js bounds)) (.-minY ^js bounds)]))))
           shape (->logseq-portal-shape block-uuid point)]
       (when (uuid? block-uuid) (editor-handler/set-blocks-id! [block-uuid]))
       (.createShapes api (clj->js shape))

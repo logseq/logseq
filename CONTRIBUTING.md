@@ -22,7 +22,7 @@ Please read and follow our [Code of Conduct][coc].
 
 There are many ways you can help. Here are some ways to help without coding:
 
-- You can be help others on [Discord][discord] or [Reddit](https://www.reddit.com/r/logseq).
+- You can help others on [Discord][discord] or [Reddit](https://www.reddit.com/r/logseq).
 - You can [contribute to the official docs](https://github.com/logseq/docs/blob/master/CONTRIBUTING.md).
 - You can confirm bugs on the [issue tracker][issue-tracker] and mention reproducible steps. It helps the core team to get more reports so we can fix the highest priority bugs.
 - You can contribute [translations][translations] with a [pull request](#submit-pr).
@@ -40,7 +40,7 @@ tasks. We also have a project board to keep track of community contributions
 [Logseq - Develop Together
 💪](https://github.com/orgs/logseq/projects/5?query=is%3Aopen+sort%3Aupdated-desc).
 Another way to help with coding is by extending Logseq with
-[plugins](https://docs.logseq.com/#/page/Plugins) and submit them to the [marketplace](https://github.com/logseq/marketplace) so that the
+[plugins](https://docs.logseq.com/#/page/Plugins) and submitting them to the [marketplace](https://github.com/logseq/marketplace) so that the
 whole community can benefit.
 
 ## <a name="question"></a> Got a Question or a Problem?
@@ -91,7 +91,7 @@ The template will ask you to include the following with each issue:
 
 Before working on your pull request, please check the following:
 
-1. Search [GitHub][search-pr] for related PRs that may effect your submission.
+1. Search [GitHub][search-pr] for related PRs that may affect your submission.
 
 2. Be sure that an issue describes the problem you're fixing or the feature
 behavior and design you'd like to add.
@@ -101,7 +101,7 @@ code without a signed CLA.
 
 After doing the above, you are ready to work on your PR! To create a PR, fork
 this repository and then create a branch for the fix. Once you push your code to
-your fork, you'll be able to open a PR to the Logseq repository. For more info
+your fork, you'll be able to open a PR to the Logseq repository. For more info,
 you can follow this [GitHub
 guide](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request-from-a-fork).
 For more github PR guides, see [these
@@ -111,7 +111,7 @@ guides](https://docs.github.com/en/pull-requests).
 
 When submitting a Pull Request (PR) or expecting a subsequent review, please follow these guidelines:
 
-1. The PR is ready for review. If you you have work you know how to do, then please keep your changes local until they are ready. If you need help with your PR, feel free to submit with questions.
+1. The PR is ready for review. If you have work you know how to do, then please keep your changes local until they are ready. If you need help with your PR, feel free to submit with questions.
 
 2. The PR checks which include tests and [lint checks](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md#linting) are passing.
 
@@ -119,7 +119,7 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 
 4. The PR has [test(s)](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md#testing) for features or enhancements. Tests for bug fixes are also appreciated as they help prevent regressions.
 
-5. The PR has a descriptive title that a user can understand. We use these titles to generate changelogs for the user. Most titles use one these prefixes to categorize the PR e.g. `PREFIX: DESCRIPTION ...`:
+5. The PR has a descriptive title that a user can understand. We use these titles to generate changelogs for the user. Most titles use one of these prefixes to categorize the PR e.g. `PREFIX: DESCRIPTION ...`:
    * `chore` - Misc changes that aren't dev, feat or fix
    * `dev` - Developer related changes
    * `enhance` - Enhancements i.e. changes to existing features
@@ -132,12 +132,12 @@ When submitting a Pull Request (PR) or expecting a subsequent review, please fol
 7. The PR avoids the following changes that are not helpful to the core team:
    * Unrelated refactoring or heavy refactoring
    * Code or doc formatting changes including whitespace changes
-   * Dependency updates e.g. in package.json
+   * Dependency updates e.g. in `package.json`
    * Changes that contain multiple unverified resources. This is risky for our users and is a lot of work to verify. A change with one resource that can be verified is acceptable.
 
 ### PR Additional Links
 
-* To run Logseq locally, see [this doc](https://github.com/logseq/logseq/blob/master/docs/develop-logseq.md) or [this doc for windows](https://github.com/logseq/logseq/blob/master/docs/develop-logseq-on-windows.md).
+* To run Logseq locally, see [this doc](https://github.com/logseq/logseq/blob/master/docs/develop-logseq.md) or [this doc for Windows](https://github.com/logseq/logseq/blob/master/docs/develop-logseq-on-windows.md).
 * To contribute to translations, please read our [translation contribution guidelines][translations].
 * See [our development practices doc](https://github.com/logseq/logseq/blob/master/docs/dev-practices.md) to learn how we develop.
 * See [the overview doc](CODEBASE_OVERVIEW.md) to get an overview of the codebase.
@@ -150,7 +150,7 @@ changes to be accepted, the CLA must be signed. It's a quick process, we promise
 - For individuals, we have a [simple click-through form][individual-cla].
 - For corporations, please contact us.
 
-If you have more than one GitHub accounts or multiple email addresses associated with a single GitHub account, you must sign the CLA using the primary email address of the GitHub account used to author Git commits and send pull requests.
+If you have more than one GitHub account or multiple email addresses associated with a single GitHub account, you must sign the CLA using the primary email address of the GitHub account used to author Git commits and send pull requests.
 
 The following documents can help you sort out issues with GitHub accounts and multiple email addresses:
 
@@ -168,7 +168,7 @@ Your contributions to open source, large or small, make great projects like this
 [github]: https://github.com/logseq/logseq "Logseq Repo"
 [discord]: https://discord.gg/KpN4eHY "Logseq Discord Server"
 [individual-cla]: https://cla-assistant.io/logseq/logseq "Individual CLA"
-[feature-request]: https://discuss.logseq.com/c/feature-requests/ "Submit Feature Request"
+[feature-request]: https://discuss.logseq.com/c/feedback/feature-requests/ "Submit Feature Request"
 [forum]: https://discuss.logseq.com "Logseq Forum"
 [search-pr]: https://github.com/logseq/logseq/pulls "Search open PRs"
 [new-issue]: https://github.com/logseq/logseq/issues/new?assignees=&labels=&template=bug_report.yaml "Submit a New issue"

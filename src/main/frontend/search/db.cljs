@@ -4,30 +4,50 @@
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.util :as util]
-            ["fuse.js" :as fuse]))
+            ["fuse.js" :as fuse]
+            [frontend.util.property :as property]))
 
 ;; Notice: When breaking changes happen, bump version in src/electron/electron/search.cljs
 
 (defonce indices (atom nil))
+
+(defn- max-len
+  []
+  (state/block-content-max-length (state/get-current-repo)))
 
 (defn- sanitize
   [content]
   (some-> content
           (util/search-normalize (state/enable-search-remove-accents?))))
 
-(defn- max-len
-  []
-  (state/block-content-max-length (state/get-current-repo)))
+(defn- strict-block->index
+  "Convert a block to the index for searching.
 
-(defn block->index
-  "Convert a block to the index for searching"
-  [{:block/keys [uuid page content] :as block}]
+   Applies full text preprocessing to the content, including removing built-in properties"
+  [{:block/keys [uuid page content format] :as block
+    :or {format :markdown}}]
   (when-not (> (count content) (max-len))
-    (when-not (string/blank? content)
-      {:id (:db/id block)
-       :uuid (str uuid)
-       :page page
-       :content (sanitize content)})))
+    (let [content (property/remove-built-in-properties format content)]
+      (when-not (string/blank? content)
+        {:id (:db/id block)
+         :uuid (str uuid)
+         :page page
+         :content (sanitize content)}))))
+
+(defn- loose-block->index
+  "Convert a block to the index for searching
+
+   For speed, applies no preprocessing to the content"
+  [{:block/keys [uuid page content] :as block}]
+  (when-not (string/blank? content)
+    {:id (:db/id block)
+     :uuid (str uuid)
+     :page page
+     :content content}))
+
+(defonce block->index (if (util/electron?)
+                        strict-block->index
+                        loose-block->index))
 
 (defn page->index
   "Convert a page name to the index for searching (page content level)
@@ -60,17 +80,17 @@
        (bean/->js)))
 
 (defn make-blocks-indice!
-  [repo]
-  (let [blocks (build-blocks-indice repo)
-        indice (fuse. blocks
-                      (clj->js {:keys ["uuid" "content" "page"]
-                                :shouldSort true
-                                :tokenize true
-                                :minMatchCharLength 1
-                                :distance 1000
-                                :threshold 0.35}))]
-    (swap! indices assoc-in [repo :blocks] indice)
-    indice))
+  ([repo] (make-blocks-indice! repo (build-blocks-indice repo)))
+  ([repo blocks]
+   (let [indice (fuse. blocks
+                       (clj->js {:keys ["uuid" "content" "page"]
+                                 :shouldSort true
+                                 :tokenize true
+                                 :minMatchCharLength 1
+                                 :distance 1000
+                                 :threshold 0.35}))]
+     (swap! indices assoc-in [repo :blocks] indice)
+     indice)))
 
 (defn original-page-name->index
   [p]
@@ -93,6 +113,8 @@
                         (clj->js {:keys ["name"]
                                   :shouldSort true
                                   :tokenize true
+                                  :distance 1024
+                                  :threshold 0.5 ;; search for 50% match from the start
                                   :minMatchCharLength 1}))]
       (swap! indices assoc-in [repo :pages] indice)
       indice)))

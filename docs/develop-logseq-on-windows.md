@@ -2,6 +2,17 @@
 
 This is a guide on setting up Logseq development dependencies on Windows.  Once these dependencies are installed, you can follow the  [develop-logseq](develop-logseq.md) docs for build instructions.
 
+## [scoop](https://scoop.sh/)
+
+Scoop provides a `clojure.exe` shim which works in Command Prompt and Powershell windows.
+
+```
+scoop bucket add scoop-clojure https://github.com/littleli/scoop-clojure
+scoop bucket add extras
+scoop bucket add java
+scoop install java/openjdk clj-deps babashka leiningen nodejs-lts
+```
+
 ## Winget
 
 Winget is a package manager installed by default on windows.
@@ -19,6 +30,10 @@ An installer for clojure is available from [casselc/clj-msi](https://github.com/
 
 ## [chocolatey](https://chocolatey.org/)
 
+Chocolatey installs Clojure as a PowerShell module and alias, and does not provide `clojure` for `cmd.exe`.
+
+[@andelf has written a wrapper utility](https://github.com/andelf/clojure-cli) which you can install with `cargo install --git https://github.com/andelf/clojure-cli.git` instead.
+
 ```
 choco install nvm
 nvm install 18
@@ -27,16 +42,6 @@ npm install -g yarn
 choco install visualstudio2022community
 choco install javaruntime
 choco install clojure
-```
-
-
-## [scoop](https://scoop.sh/)
-
-```
-scoop bucket add scoop-clojure https://github.com/littleli/scoop-clojure
-scoop bucket add extras
-scoop bucket add java
-scoop install java/openjdk clojure clj-deps babashka leiningen nodejs-lts
 ```
 
 ## Troubleshooting

@@ -531,7 +531,7 @@
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
     ``"
-  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target?] :as opts}]
+  [blocks target-block {:keys [sibling? keep-uuid? outliner-op replace-empty-target? ordered-list?] :as opts}]
   {:pre [(seq blocks)
          (s/valid? ::block-map-or-entity target-block)]}
   (let [target-block' (get-target-block target-block)
@@ -549,7 +549,8 @@
                                      (> (count blocks) 1)
                                      (not move?)))
         blocks' (blocks-with-level blocks)
-        blocks' (blocks-with-ordered-list-props blocks' target-block sibling?)
+        blocks' (if (false? ordered-list?) blocks'
+                  (blocks-with-ordered-list-props blocks' target-block sibling?))
         blocks' (if (= outliner-op :paste)
                   (fix-top-level-blocks blocks')
                   blocks')

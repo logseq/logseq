@@ -29,7 +29,7 @@
 
 (goog-define ENABLE-FILE-SYNC-PRODUCTION false)
 
-;; this is a feature flag to enable the account tab 
+;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
 (def ENABLE-SETTINGS-ACCOUNT-TAB false)
 
@@ -44,7 +44,9 @@
       (def REGION "us-east-1")
       (def USER-POOL-ID "us-east-1_dtagLnju8")
       (def IDENTITY-POOL-ID "us-east-1:d6d3b034-1631-402b-b838-b44513e93ee0")
-      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com"))
+      (def OAUTH-DOMAIN "logseq-prod.auth.us-east-1.amazoncognito.com")
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")
+      )
 
   (do (def FILE-SYNC-PROD? false)
       (def LOGIN-URL
@@ -56,7 +58,8 @@
       (def REGION "us-east-2")
       (def USER-POOL-ID "us-east-2_kAqZcxIeM")
       (def IDENTITY-POOL-ID "us-east-2:cc7d2ad3-84d0-4faf-98fe-628f6b52c0a5")
-      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")))
+      (def OAUTH-DOMAIN "logseq-test2.auth.us-east-2.amazoncognito.com")
+      (def CONNECTIVITY-TESTING-S3-URL "https://logseq-connectivity-testing-prod.s3.us-east-1.amazonaws.com/logseq-connectivity-testing")))
 
 ;; Feature flags
 ;; =============
@@ -113,7 +116,7 @@
   #{:doc :docx :xls :xlsx :ppt :pptx :one :pdf :epub})
 
 (def image-formats
-  #{:png :jpg :jpeg :bmp :gif :webp :svg})
+  #{:png :jpg :jpeg :bmp :gif :webp :svg :heic})
 
 (def audio-formats
   #{:mp3 :ogg :mpeg :wav :m4a :flac :wma :aac})
@@ -121,7 +124,7 @@
 (def video-formats
   #{:mp4 :webm :mov :flv :avi :mkv})
 
-(def media-formats (set/union (gp-config/img-formats) audio-formats))
+(def media-formats (set/union (gp-config/img-formats) audio-formats video-formats))
 
 (defn extname-of-supported?
   ([input] (extname-of-supported?
@@ -435,10 +438,7 @@
 
 (defn get-repo-fpath
   [repo-url path]
-  (if (and (or (util/electron?) (mobile-util/native-platform?))
-           (local-db? repo-url))
-    (path/path-join (get-repo-dir repo-url) path)
-    (util/node-path.join (get-repo-dir repo-url) path)))
+  (path/path-join (get-repo-dir repo-url) path))
 
 (defn get-repo-config-path
   []
@@ -462,16 +462,20 @@
   "Resolve all relative links in custom.css to assets:// URL"
   ;; ../assets/xxx -> {assets|file}://{current-graph-root-path}/xxx
   [source]
-  (let [protocol (and (string? source)
-                      (not (string/blank? source))
-                      (if (util/electron?) "assets://" "file://"))
-        ;; BUG: use "assets" as fake current directory
-        assets-link-fn (fn [_]
-                         (str (path/path-join protocol
-                                              (get-repo-dir (state/get-current-repo)) "assets") "/"))]
-    (when (not-empty source)
-      (string/replace source #"\.\./assets/"
-                      assets-link-fn))))
+  (when-not (string/blank? source)
+    (let [protocol (and (string? source)
+                        (not (string/blank? source))
+                        (if (util/electron?) "assets://" "file://"))
+          ;; BUG: use "assets" as fake current directory
+          assets-link-fn (fn [_]
+                           (let [graph-root (get-repo-dir (state/get-current-repo))
+                                 protocol (if (string/starts-with? graph-root "file:") "" protocol)
+                                 full-path (path/path-join protocol graph-root "assets")]
+                             (str (cond-> full-path
+                                          (mobile-util/native-platform?)
+                                          (mobile-util/convert-file-src))
+                                  "/")))]
+      (string/replace source #"\.\./assets/" assets-link-fn))))
 
 (defn get-current-repo-assets-root
   []
