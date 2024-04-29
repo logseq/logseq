@@ -90,6 +90,10 @@
   }
 }
 
+.block-content-or-editor-wrap {
+  @apply flex flex-1 flex-row flex-wrap gap-1 items-center;
+}
+
 .block-head-wrap {
   @apply flex flex-1 w-full flex-row flex-wrap;
   @apply justify-between items-center;
@@ -382,7 +386,37 @@
 }
 
 .block-main-container {
-  min-height: 26px;
+  @apply min-h-[26px];
+
+  &:has(h1.as-heading) {
+    .block-control-wrap {
+      @apply relative top-4;
+    }
+  }
+
+  &:has(h2.as-heading) {
+    .block-control-wrap {
+      @apply relative top-3;
+    }
+  }
+
+  &:has(h3.as-heading) {
+    .block-control-wrap {
+      @apply relative top-1;
+    }
+  }
+
+  &:has(h4.as-heading) {
+    .block-control-wrap {
+      @apply relative top-0.5;
+    }
+  }
+
+  &:has(h6.as-heading) {
+    .block-control-wrap {
+      @apply relative -top-0.5;
+    }
+  }
 }
 
 .ls-block {
