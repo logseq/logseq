@@ -4,6 +4,7 @@
   (:require [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.frontend.property :as db-property]
             [datascript.core :as d]
             [clojure.string :as string]
             [nbb.core :as nbb]
@@ -83,7 +84,7 @@
                                (count (filter #(contains? (:block/type %) "class") ent-maps)) " classes, "
                                (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
                                (count (filter #(contains? (:block/type %) "property") ent-maps)) " properties and "
-                               (count (filter :property/pair-property ent-maps)) " property pairs"))
+                               (count (mapcat db-property/properties ent-maps)) " property pairs"))
     (validate-client-db @conn ent-maps options)))
 
 (defn -main [argv]
