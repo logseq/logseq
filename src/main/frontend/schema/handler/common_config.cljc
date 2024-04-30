@@ -29,6 +29,16 @@
     [:export/bullet-indentation
      [:enum :eight-spaces :four-spaces :two-spaces :tab]]
     [:publishing/all-pages-public? :boolean]
+    [:publishing/html-options? (mu/optional-keys [:map
+                                                  [:icon :string]
+                                                  [:name :string]
+                                                  [:alias :string]
+                                                  [:title :string]
+                                                  [:description :string]
+                                                  [:url :string]
+                                                  [:scripts-before  [:vector [:map [:src {:optional true} :string
+                                                                                    :content {:optional true} :string]]]]])]
+
     [:default-home [:map
                     [:page {:optional true} :string]
                     [:sidebar {:optional true} [:or :string [:vector :string]]]]]

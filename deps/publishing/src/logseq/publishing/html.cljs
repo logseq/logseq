@@ -41,7 +41,7 @@ necessary db filtering"
 
 (defn- ^:large-vars/html publishing-html
   [transit-db app-state options]
-  (let [{:keys [icon name alias title description url scripts]} options
+  (let [{:keys [icon name alias title description url  scripts-before]} options
         icon (or icon "static/img/logo.png")
         project (or alias name)]
     (str "<!DOCTYPE html>\n"
@@ -121,7 +121,7 @@ necessary db filtering"
         }
       }(window.location))"]
             (map  #(identity  (let [{:keys [src,content]}  %]
-                                [:script {:src src}   (str content)])) scripts)
+                                [:script {:src src}   (str content)]))  scripts-before)
             [:script {:src "static/js/react.production.min.js"}]
             [:script {:src "static/js/react-dom.production.min.js"}]
             [:script {:src "static/js/ui.js"}]
@@ -133,10 +133,11 @@ necessary db filtering"
             [:script {:src "static/js/code-editor.js"}]
             [:script {:src "static/js/custom.js"}]])))))
 
+
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [app-state repo-config html-options]}]
+  [db* {:keys [app-state repo-config]}]
   (let [all-pages-public? (if-let [val (:publishing/all-pages-public? repo-config)]
                             val
                             (:all-pages-public? repo-config))
@@ -147,6 +148,6 @@ generated index.html string and assets used by the html"
         db-str (dt/write-transit-str db)
         state (assoc app-state
                      :config {"local" repo-config})
-        raw-html-str (publishing-html db-str state html-options)]
+        raw-html-str (publishing-html db-str state  (:publishing/html-options  repo-config))]
     {:html raw-html-str
      :asset-filenames asset-filenames}))
