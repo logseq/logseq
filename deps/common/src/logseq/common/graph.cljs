@@ -2,7 +2,8 @@
   "This ns provides common fns for a graph directory and only runs in a node environment"
   (:require ["fs" :as fs]
             ["path" :as node-path]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.common.path :as path]))
 
 (def ^:private win32?
   "Copy of electron.utils/win32? . Too basic to couple the two libraries"
@@ -41,20 +42,34 @@
 (defn ignored-path?
   "Given a graph directory and path, returns truthy value on whether the path is
   ignored. Useful for contexts like reading a graph's directory and file watcher
-  notifications"
+  notifications
+
+Rules:
+
+- Paths starting with '.' are ignored
+- Paths ending with '.DS_Store' are ignored
+- Dynamic caches used by Logseq are ignored: graph-txid.edn and pages-metadata.edn
+- Contents in '**/node_modules/' are ignored
+- Contents in '/logseq/.recycle/' are ignored
+- Contents in '/logseq/bak/' are ignored
+- Contents in  with '/logseq/version-files/' are ignored
+"
   [dir path]
-  (when (string? path)
-    (or
-     (some #(string/starts-with? path (str dir "/" %))
-           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
-     (some #(string/includes? path (str "/" % "/"))
-           ["." ".recycle" "node_modules" "logseq/bak" "version-files"])
-     (some #(string/ends-with? path %)
-           [".DS_Store" "logseq/graphs-txid.edn"])
-     ;; hidden directory or file
-     (let [relpath (node-path/relative dir path)]
-       (or (re-find #"/\.[^.]+" relpath)
-           (re-find #"^\.[^.]+" relpath))))))
+  (let [dir (path/path-normalize dir)
+        path (path/path-normalize path)
+        rpath (path/trim-dir-prefix dir path)]
+    (when (string? path)
+      (or
+       (some #(string/starts-with? rpath %)
+             ["." "logseq/.recycle" "logseq/bak" "logseq/version-files"])
+       (contains? #{"logseq/graphs-txid.edn" "logseq/pages-metadata.edn"} rpath)
+       (some #(string/includes? rpath (str "/" % "/"))
+             ["node_modules"])
+       (some #(string/ends-with? rpath %)
+             [".DS_Store"])
+         ;; hidden directory or file
+       (or (re-find #"/\.[^.]+" rpath)
+           (re-find #"^\.[^.]+" rpath))))))
 
 (def ^:private allowed-formats
   #{:org :markdown :md :edn :json :js :css :excalidraw :tldr})
