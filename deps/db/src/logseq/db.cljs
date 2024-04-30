@@ -6,7 +6,6 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
             [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus :as entity-plus]

@@ -193,7 +193,8 @@
   "Common attributes for properties"
   [[:db/index {:optional true} :boolean]
    [:db/valueType {:optional true} [:enum :db.type/ref]]
-   [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]])
+   [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
+   [:block/order {:optional true} :string]])
 
 (def normal-page
   (vec
