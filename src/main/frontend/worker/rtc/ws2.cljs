@@ -73,38 +73,83 @@
              (recur)))))}
       (throw (ex-info "open ws timeout(10s)" {:missionary/retry true})))))
 
-(defn- closed?
-  [m-ws]
-  (contains? #{:closing :closed} (get-state (:raw-ws m-ws))))
+(defn closed?
+  [mws]
+  (contains? #{:closing :closed} (get-state (:raw-ws mws))))
 
-(defn get-mws-create
-  "Returns a task to get a mws(missionary-websocket), creating one if needed.
-  Always try to produce NOT-closed websocket.
+(defn mws-create
+  "Return a task that create a mws (missionary wrapped websocket).
   When failed to open websocket, retry with backoff.
   TODO: retry ASAP once network condition changed"
-  [url & {:keys [retry-count open-ws-timeout] :or {retry-count 10 open-ws-timeout 10000}}]
+  [url & {:keys [retry-count open-ws-timeout]
+          :or {retry-count 10 open-ws-timeout 10000}}]
   (assert (and (pos-int? retry-count)
                (pos-int? open-ws-timeout))
           [retry-count open-ws-timeout])
-  (let [*last-m-ws (atom nil)
-        backoff-create-ws-task
-        (c.m/backoff
-         (take retry-count c.m/delays)
-         (m/sp
-           (let [m-ws
-                 (try
-                   (m/? (m/timeout (create-mws* url) open-ws-timeout))
-                   (catch js/CloseEvent e
-                     (throw (ex-info "failed to open websocket conn"
-                                     {:missionary/retry true}
-                                     e))))]
-             (reset! *last-m-ws m-ws)
-             m-ws)))]
-    (m/sp
-      (let [m-ws @*last-m-ws]
-        (if (and m-ws (not (closed? m-ws)))
-          m-ws
-          (m/? backoff-create-ws-task))))))
+  (c.m/backoff
+   (take retry-count c.m/delays)
+   (m/sp
+    (try
+      (m/? (m/timeout (create-mws* url) open-ws-timeout))
+      (catch js/CloseEvent e
+        (throw (ex-info "failed to open websocket conn"
+                        {:missionary/retry true}
+                        e)))))))
+(comment
+  (defn get-mws-create
+    "Returns a task to get a mws(missionary-websocket), creating one if needed.
+  Always try to produce NOT-closed websocket.
+  When failed to open websocket, retry with backoff.
+  TODO: retry ASAP once network condition changed"
+    [url & {:keys [retry-count open-ws-timeout]
+            :or {retry-count 10 open-ws-timeout 10000}}]
+    (assert (and (pos-int? retry-count)
+                 (pos-int? open-ws-timeout))
+            [retry-count open-ws-timeout])
+    (let [*last-m-ws (atom nil)
+          backoff-create-ws-task
+          (c.m/backoff
+           (take retry-count c.m/delays)
+           (m/sp
+             (let [m-ws
+                   (try
+                     (m/? (m/timeout (create-mws* url) open-ws-timeout))
+                     (catch js/CloseEvent e
+                       (throw (ex-info "failed to open websocket conn"
+                                       {:missionary/retry true}
+                                       e))))]
+               (reset! *last-m-ws m-ws)
+               m-ws)))]
+      (m/sp
+        (let [m-ws @*last-m-ws]
+          (if (and m-ws (not (closed? m-ws)))
+            m-ws
+            (m/? backoff-create-ws-task)))))))
+
+(defn create-mws-state-flow
+  [mws]
+  (m/relieve
+   (m/observe
+    (fn ctor [emit!]
+      (let [ws (:raw-ws mws)
+            old-onclose (.-onclose ws)
+            old-onerror (.-onerror ws)
+            old-onopen (.-onopen ws)]
+        (set! (.-onclose ws) (fn [e]
+                               (when old-onclose (old-onclose e))
+                               (emit! (get-state ws))))
+        (set! (.-onerror ws) (fn [e]
+                               (when old-onerror (old-onerror e))
+                               (emit! (get-state ws))))
+        (set! (.-onopen ws) (fn [e]
+                              (when old-onopen (old-onopen e))
+                              (emit! (get-state ws))))
+        (emit! (get-state ws))
+        (fn dtor []
+          (set! (.-onclose ws) old-onclose)
+          (set! (.-onerror ws) old-onerror)
+          (set! (.-onopen ws) old-onopen)))))))
+
 (comment
   (defn close
     [m-ws]
@@ -112,10 +157,9 @@
 
 (defn send
   "Returns a task: send message and return mws"
-  [get-mws-task message]
+  [mws message]
   (m/sp
-    (let [mws (m/? get-mws-task)
-          decoded-message (rtc-const/data-to-ws-coercer message)
+    (let [decoded-message (rtc-const/data-to-ws-coercer message)
           message-str (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message)))]
       (m/? ((:send mws) message-str))
       mws)))
@@ -128,12 +172,12 @@
 
 (defn send&recv
   "Return a task: send message wait to recv its response and return it"
-  [get-mws-task message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
+  [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
   (assert (pos-int? timeout-ms))
   (let [req-id (str (random-uuid))
         message (assoc message :req-id req-id)]
     (m/sp
-      (let [mws (m/? (send get-mws-task message))]
+      (let [mws (m/? (send mws message))]
         (m/? (m/timeout
               (m/reduce
                (fn [_ v]
@@ -141,18 +185,3 @@
                    (reduced v)))
                (recv-flow mws))
               timeout-ms))))))
-
-(comment
-  (do
-    (def url "wss://ws-dev.logseq.com/rtc-sync?token=????")
-    (def get-mws-task (get-mws-create url)))
-  (def cancel1
-    (get-mws-task #(prn :s %) #(js/console.log %)))
-  (cancel1)
-
-  (do
-    (def cancel ((m/sp
-                   (m/? (send&recv get-mws-task {:action "list-graphs"} :timeout-ms 1000))
-                   (m/? (send&recv get-mws-task {:action "list-graphs"})))
-                 #(prn :s %) #(js/console.log :f %)))
-    (cancel)))

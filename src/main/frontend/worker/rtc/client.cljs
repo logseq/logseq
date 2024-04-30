@@ -1,18 +1,16 @@
 (ns frontend.worker.rtc.client
   "Fns about push local updates"
-  (:require [missionary.core :as m]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.const :as rtc-const]
-            [datascript.core :as d]
+  (:require [clojure.set :as set]
             [cognitect.transit :as transit]
-            [frontend.worker.rtc.ws2 :as ws]
-            [clojure.set :as set]
+            [datascript.core :as d]
+            [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
-            [frontend.worker.rtc.remote-update :as r.remote-update]))
-
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.remote-update :as r.remote-update]
+            [frontend.worker.rtc.ws2 :as ws]
+            [missionary.core :as m]))
 
 (def ^:private transit-w (transit/writer :json))
-
 
 (defn- handle-remote-ex
   [resp]
@@ -24,32 +22,31 @@
 
 (defn send&recv
   "Return a task: throw exception if recv ex-data response"
-  [get-mws-task message]
+  [get-mws-create-task message]
   (m/sp
-   (handle-remote-ex
-    (m/? (ws/send&recv get-mws-task message)))))
+    (handle-remote-ex
+     (m/? (ws/send&recv get-mws-create-task message)))))
 
 (defn- register-graph-updates
-  [get-mws-task graph-uuid]
-  (send&recv get-mws-task {:action "register-graph-updates"
-                           :graph-uuid graph-uuid}))
+  [get-mws-create-task graph-uuid]
+  (send&recv get-mws-create-task {:action "register-graph-updates"
+                                  :graph-uuid graph-uuid}))
 
 (defn ensure-register-graph-updates
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` has been sent"
-  [get-mws-task graph-uuid]
+  [get-mws-create-task graph-uuid]
   (assert (some? graph-uuid))
   (let [*sent (atom {})]
     (m/sp
-      (let [mws (m/? get-mws-task)]
+      (let [mws (m/? get-mws-create-task)]
         (when (contains? @*sent mws)
           (swap! *sent mws false))
         (when (not (@*sent mws))
           (m/? (register-graph-updates (m/sp mws) graph-uuid))
           (swap! *sent mws true))
         mws))))
-
 
 (defn- remove-non-exist-block-uuids-in-add-retract-map
   [conn add-retract-map]
@@ -78,7 +75,6 @@
           pos         (->pos left-uuid parent-uuid)]
       (swap! *remote-ops conj [:move {:block-uuid block-uuid :target-uuid target-uuid :pos pos}])
       (swap! *depend-on-block-uuid-set conj target-uuid))))
-
 
 (defmethod local-block-ops->remote-ops-aux :update-op
   [_ & {:keys [conn user-uuid block update-op left-uuid parent-uuid *remote-ops]}]
@@ -298,15 +294,15 @@
 
 (defn create-push-local-ops-task
   "Return a task: push local updates"
-  [repo conn user-uuid graph-uuid date-formatter get-mws-task add-log-fn]
+  [repo conn user-uuid graph-uuid date-formatter get-mws-create-task add-log-fn]
   (m/sp
     (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
                                (sort-remote-ops
                                 (gen-block-uuid->remote-ops repo conn user-uuid)))]
       (op-mem-layer/new-branch! repo)
       (let [local-tx (op-mem-layer/get-local-tx repo)
-            r (m/? (send&recv get-mws-task {:action "apply-ops" :graph-uuid graph-uuid
-                                            :ops ops-for-remote :t-before (or local-tx 1)}))]
+            r (m/? (send&recv get-mws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+                                                   :ops ops-for-remote :t-before (or local-tx 1)}))]
         (if-let [remote-ex (:ex-data r)]
           (do (add-log-fn remote-ex)
               (case (:type remote-ex)
