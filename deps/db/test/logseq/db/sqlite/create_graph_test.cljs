@@ -46,7 +46,7 @@
 (deftest new-graph-marks-built-ins
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-        idents (->> (d/q '[:find [(pull ?b [:db/ident {:block/properties [* {:property/pair-property [:db/ident]}]}]) ...]
+        idents (->> (d/q '[:find [(pull ?b [:db/ident :logseq.property/built-in?]) ...]
                            :where [?b :db/ident]]
                          @conn)
                     ;; only kv's and empty property value aren't marked because
