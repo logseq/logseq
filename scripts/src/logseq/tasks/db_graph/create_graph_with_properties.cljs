@@ -26,7 +26,7 @@
 
 (defn- build-closed-values-config
   [{:keys [dates]}]
-  {:default-closed
+  {:string-closed
    (mapv #(hash-map :value %
                     :uuid (random-uuid)
                     :icon {:id % :name % :type :emoji})
@@ -91,8 +91,10 @@
        {:page {:block/original-name "Block Properties"}
         :blocks
         ;; TODO: Fix :default
-        [#_{:block/content "default property block" :properties {:default "haha"}}
-         {:block/content "default-closed property block" :properties {:default-closed (random-closed-value :default-closed)}}
+        [#_{:block/content "default property block" :properties {:default "haha block"}}
+         {:block/content "string property block" :properties {:string "haha"}}
+         {:block/content "string-many property block" :properties {:string-many #{"yee" "haw" "sir"}}}
+         {:block/content "string-closed property block" :properties {:string-closed (random-closed-value :string-closed)}}
          {:block/content "url property block" :properties {:url "https://logseq.com"}}
          {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
          {:block/content "url-closed property block" :properties {:url-closed (random-closed-value :url-closed)}}
@@ -109,8 +111,9 @@
          {:block/content "date-closed property block" :properties {:date-closed (random-closed-value :date-closed)}}]}
        {:page {:block/original-name "Block Property Queries"}
         :blocks
-        [{:block/content "{{query (property :default \"haha\")}}"}
-         {:block/content (str "{{query (property :default-closed " (pr-str (get-closed-value :default-closed)) ")}}")}
+        [{:block/content "{{query (property :string \"haha\")}}"}
+         {:block/content "{{query (property :string-many \"haw\")}}"}
+         {:block/content (str "{{query (property :string-closed " (pr-str (get-closed-value :string-closed)) ")}}")}
          {:block/content "{{query (property :url \"https://logseq.com\")}}"}
          {:block/content "{{query (property :url-many \"https://logseq.com\")}}"}
          {:block/content (str "{{query (property :url-closed " (pr-str (get-closed-value :url-closed)) ")}}")}
@@ -126,8 +129,10 @@
          {:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
 
        ;; Page property pages and queries
-       ;; {:page {:block/name "default page" :properties {:default "yolo"}}}
-       {:page {:block/name "default-closed page" :properties {:default-closed (random-closed-value :default-closed)}}}
+       ;; {:page {:block/name "default page" :properties {:default "yolo block"}}}
+       {:page {:block/name "string page" :properties {:string "yolo"}}}
+       {:page {:block/name "string-many page" :properties {:string-many #{"yee" "haw" "sir"}}}}
+       {:page {:block/name "string-closed page" :properties {:string-closed (random-closed-value :string-closed)}}}
        {:page {:block/name "url page" :properties {:url "https://logseq.com"}}}
        {:page {:block/name "url-many page" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}}
        {:page {:block/name "url-closed page" :properties {:url-closed (random-closed-value :url-closed)}}}
@@ -144,8 +149,9 @@
        {:page {:block/name "date-closed page" :properties {:date-closed (random-closed-value :date-closed)}}}
        {:page {:block/original-name "Page Property Queries"}
         :blocks
-        [{:block/content "{{query (page-property :default \"yolo\")}}"}
-         {:block/content (str "{{query (page-property :default-closed " (pr-str (get-closed-value :default-closed)) ")}}")}
+        [{:block/content "{{query (page-property :string \"yolo\")}}"}
+         {:block/content "{{query (page-property :string-many \"haw\")}}"}
+         {:block/content (str "{{query (page-property :string-closed " (pr-str (get-closed-value :string-closed)) ")}}")}
          {:block/content "{{query (page-property :url \"https://logseq.com\")}}"}
          {:block/content "{{query (page-property :url-many \"https://logseq.com\")}}"}
          {:block/content (str "{{query (page-property :url-closed " (pr-str (get-closed-value :url-closed)) ")}}")}
@@ -162,14 +168,14 @@
 
      ;; Properties
      :properties
-     (->> [:default :url :checkbox :number :page :date]
+     (->> [:default :string :url :checkbox :number :page :date]
           (mapcat #(cond-> [[% {:block/schema {:type %}}]]
                      (db-property-type/property-type-allows-schema-attribute? % :cardinality)
                      (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:closed-values (closed-values-config (keyword (str (name %) "-closed")))
                                 :block/schema {:type %}})
-                      [:default :url :number :page :date]))
+                      [:string :url :number :page :date]))
           (into {}))}))
 
 (def spec
