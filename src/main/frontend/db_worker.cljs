@@ -17,6 +17,7 @@
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.rename :as worker-page-rename]
             [frontend.worker.rtc.core :as rtc-core]
+            [frontend.worker.rtc.core2 :as rtc-core2]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
@@ -552,6 +553,18 @@
      (ldb/write-transit-str (worker-export/get-all-page->content repo @conn))))
 
   ;; RTC
+  (rtc-start2
+   [this repo token]
+   (rtc-core2/rtc-start repo token))
+
+  (rtc-stop2
+   [this]
+   (rtc-core2/rtc-stop))
+
+  (rtc-toggle-sync2
+   [this]
+   (rtc-core2/rtc-toggle-sync))
+
   (rtc-start
    [this repo token dev-mode?]
    (async-util/c->p
