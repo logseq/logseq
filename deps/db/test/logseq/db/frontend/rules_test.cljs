@@ -24,7 +24,7 @@
         _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo {})
                              (sqlite-util/build-new-property :user.property/foo2 {})
                              page
-                             {:block/uuid (:block/uuid page) :block/properties {:user.property/foo "bar"}}])]
+                             {:block/uuid (:block/uuid page) :user.property/foo "bar"}])]
     (is (= ["Page"]
            (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (has-page-property ?b :user.property/foo)]
                               @conn)
@@ -51,10 +51,10 @@
                              (sqlite-util/build-new-property :user.property/page-many {:type :page :cardinality :many})
                              page
                              page-a
-                             {:block/uuid (:block/uuid page) :block/properties {:user.property/foo "bar"}}
-                             {:block/uuid (:block/uuid page) :block/properties {:user.property/number-many #{5 10}}}
-                             {:block/uuid (:block/uuid page) :block/properties {:user.property/page-many #{[:block/uuid (:block/uuid page-a)]}}}
-                             {:block/uuid (:block/uuid page-a) :block/properties {:user.property/foo "bar A"}}])]
+                             {:block/uuid (:block/uuid page) :user.property/foo "bar"}
+                             {:block/uuid (:block/uuid page) :user.property/number-many #{5 10}}
+                             {:block/uuid (:block/uuid page) :user.property/page-many #{[:block/uuid (:block/uuid page-a)]}}
+                             {:block/uuid (:block/uuid page-a) :user.property/foo "bar A"}])]
 
     (testing "cardinality :one property"
       (is (= ["Page"]
