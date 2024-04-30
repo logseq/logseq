@@ -283,6 +283,11 @@
   padding: 2px 0;
   display: inherit;
 
+  .block-ref {
+    padding: 6px 5px;
+    border: none;
+  }
+
   &:hover {
     color: var(--ls-link-text-hover-color);
   }
@@ -313,6 +318,18 @@
 
   .block-content {
     cursor: inherit;
+  }
+}
+
+.page-reference {
+  @apply rounded transition-[background];
+
+  .bracket {
+    @apply opacity-30;
+  }
+
+  &:hover {
+    background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color, hsl(var(--primary)/.4)));
   }
 }
 
@@ -798,6 +815,10 @@ html.is-mac {
 
   &-item {
     @apply bg-gray-03 rounded p-4;
+  }
+
+  .page-reference:hover {
+    background: var(--lx-accent-04-alpha, var(--ls-tertiary-background-color, hsl(var(--primary)/.4)));
   }
 }
 
