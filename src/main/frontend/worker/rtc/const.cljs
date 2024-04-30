@@ -207,7 +207,8 @@
     ["get-users-info"
      [:map
       [:req-id :string]
-      [:action :string]]]
+      [:action :string]
+      [:graph-uuid {:optional true} :uuid]]] ;TODO: remove optional
     ["delete-graph"
      [:map
       [:req-id :string]
