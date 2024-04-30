@@ -81,12 +81,11 @@
       (when-let [ent (d/entity db val)]
         (url? (get-in ent [:block/schema :value])))))
 
-(defn- hidden-or-closed-block?
+(defn- hidden-block?
   [db s]
   (when-let [ent (d/entity db s)]
-    (or (and (:block/content ent)
-             (= #{"hidden"} (get-in ent [:block/page :block/type])))
-        (string? (get-in ent [:block/schema :value])))))
+    (and (:block/content ent)
+         (= #{"hidden"} (get-in ent [:block/page :block/type])))))
 
 (defn- page?
   [db val]
@@ -99,22 +98,22 @@
     (and (some? (:block/original-name ent))
          (contains? (:block/type ent) "journal"))))
 
-(defn- string-or-closed-block?
+(defn- string-or-closed-string?
   [db s]
-  (let [entity (when (int? s) (d/entity db s))]
-    (or (string? (get-in entity [:block/schema :value]))
-        (string? s))))
+  (or (string? s)
+      (when-let [entity (d/entity db s)]
+        (string? (get-in entity [:block/schema :value])))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
-              {:error/message "should be a string or an entity"}
-              hidden-or-closed-block?]
+              {:error/message "should be a text block"}
+              hidden-block?]
    :string   [:fn
               {:error/message "should be a string"}
-              string-or-closed-block?]
+              string-or-closed-string?]
    :number   [:fn
-              {:error/message "should be a number or an entity"}
+              {:error/message "should be a number"}
               ;; Also handles entity? so no need to use it
               number?]
    :date     [:fn
