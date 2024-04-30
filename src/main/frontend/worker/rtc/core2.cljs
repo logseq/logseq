@@ -11,7 +11,7 @@
 
 (def ^:private rtc-state-schema
   [:map
-   [:ws-state [:enum :open :connecting :cancelled]]])
+   [:ws-state [:enum :connecting :open :closing :closed]]])
 (def ^:private rtc-state-validator (ma/validator rtc-state-schema))
 
 (defn- get-ws-url
@@ -21,11 +21,11 @@
 (def ^:private sentinel (js-obj))
 (defn get-remote-updates
   "Return a flow: receive messages from mws, and filter messages with :req-id=`push-updates`."
-  [get-mws-task]
+  [get-mws-create-task]
   (m/stream
    (m/ap
      (loop []
-       (let [mws (m/? get-mws-task)
+       (let [mws (m/? get-mws-create-task)
              x (try
                  (m/?> (m/eduction
                         (filter (fn [data] (= "push-updates" (:req-id data))))
@@ -57,53 +57,67 @@
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
   `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote."
-  [get-mws-task *auto-push?]
+  [get-mws-create-task *auto-push?]
   (let [remote-updates-flow (m/eduction
                              (map (fn [data] {:type :remote-update :value data}))
-                             (get-remote-updates get-mws-task))
+                             (get-remote-updates get-mws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
                                   (create-local-updates-check-flow *auto-push? 2000))]
     (c.m/mix remote-updates-flow local-updates-check-flow)))
 
-(defn- wrap-set-rtc-ws-state
-  "Return a task"
-  [get-mws-task set-state-fn]
-  (m/sp
-    (let [mws (m/? (m/race
-                    (m/sp (m/? (m/sleep 100))
-                          (set-state-fn :ws-state :connecting)
-                          (m/? m/never))
-                    get-mws-task))]
-      (set-state-fn :ws-state :open)
-      mws)))
+(defn- create-get-mws-create-task
+  "Return a task and *current-mws atom:
+  get-mws-create-task: get current mws, create one if needed(closed or not created yet)"
+  [url & {:keys [retry-count open-ws-timeout]
+          :or {retry-count 10 open-ws-timeout 10000}}]
+  (let [*current-mws (atom nil)
+        mws-create-task (ws/mws-create url {:retry-count retry-count :open-ws-timeout open-ws-timeout})
+        get-mws-create-task
+        (m/sp
+          (let [mws @*current-mws]
+            (if (and mws
+                     (not (ws/closed? mws)))
+              mws
+              (let [mws (m/? mws-create-task)]
+                (reset! *current-mws mws)
+                mws))))]
+    [*current-mws get-mws-create-task]))
 
-(def send&recv r.client/send&recv)
+(defn- create-mws-state-flow
+  [*current-mws]
+  (m/ap
+    (if-let [mws (m/?< (m/watch *current-mws))]
+      (m/?< (ws/create-mws-state-flow mws))
+      (m/amb))))
+
+(defn- create-rtc-state-flow
+  [mws-state-flow]
+  (m/latest
+   (fn [mws-state]
+     {:post [(rtc-state-validator %)]}
+     {:ws-state mws-state})
+   mws-state-flow))
 
 (defn create-rtc-loop
-  "Return a map with [:rtc-log-flow :*rtc-state :rtc-loop-task :*rtc-auto-push?]
+  "Return a map with [:rtc-log-flow :rtc-state-flow :rtc-loop-task :*rtc-auto-push?]
   TODO: auto refresh token if needed"
-  [user-uuid graph-uuid repo conn date-formatter token & {:keys [auto-push?] :or {auto-push? true}}]
-  (let [ws-url       (get-ws-url token)
+  [user-uuid graph-uuid repo conn date-formatter token
+   & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
+  (let [ws-url       (or debug-ws-url (get-ws-url token))
         *auto-push?  (atom auto-push?)
         *log         (atom nil)
         add-log-fn   #(reset! *log [(js/Date.) %])
-        rtc-log-flow (m/buffer 100 (m/watch *log))
-        *rtc-state   (atom {} :validator rtc-state-validator)
-        set-state-fn (fn [k v] (swap! *rtc-state assoc k v))
-        get-mws-task (wrap-set-rtc-ws-state
-                      (r.client/ensure-register-graph-updates
-                       (ws/get-mws-create ws-url)
-                       graph-uuid)
-                      set-state-fn)
-        mixed-flow   (create-mixed-flow get-mws-task *auto-push?)]
-    {:rtc-log-flow    rtc-log-flow
-     :*rtc-state      *rtc-state
+        [*current-mws get-mws-create-task] (create-get-mws-create-task ws-url)
+        get-mws-create-task (r.client/ensure-register-graph-updates get-mws-create-task graph-uuid)
+        mixed-flow   (create-mixed-flow get-mws-create-task *auto-push?)]
+    {:rtc-log-flow   (m/buffer 100 (m/watch *log))
+     :rtc-state-flow (create-rtc-state-flow (create-mws-state-flow *current-mws))
      :*rtc-auto-push? *auto-push?
      :rtc-loop-task
      (m/sp
-       ;; init run to open a ws
-       (m/? get-mws-task)
+      ;; init run to open a ws
+       (m/? get-mws-create-task)
        (->>
         (let [event (m/?> mixed-flow)]
           (case (:type event)
@@ -113,7 +127,9 @@
             :local-update-check
             (m/? (r.client/create-push-local-ops-task
                   repo conn user-uuid graph-uuid date-formatter
-                  get-mws-task add-log-fn))))
+                  get-mws-create-task add-log-fn))))
         (m/ap)
         (m/reduce {})
         (m/?)))}))
+
+(def send&recv r.client/send&recv)
