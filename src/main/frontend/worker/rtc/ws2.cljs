@@ -171,17 +171,22 @@
    (:recv-flow m-ws)))
 
 (defn send&recv
-  "Return a task: send message wait to recv its response and return it"
+  "Return a task: send message wait to recv its response and return it.
+  Throw if timeout"
   [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
   (assert (pos-int? timeout-ms))
   (let [req-id (str (random-uuid))
         message (assoc message :req-id req-id)]
     (m/sp
-      (let [mws (m/? (send mws message))]
-        (m/? (m/timeout
-              (m/reduce
-               (fn [_ v]
-                 (when (= req-id (:req-id v))
-                   (reduced v)))
-               (recv-flow mws))
-              timeout-ms))))))
+      (let [mws (m/? (send mws message))
+            result (m/?
+                    (m/timeout
+                     (m/reduce
+                      (fn [_ v]
+                        (when (= req-id (:req-id v))
+                          (reduced v)))
+                      (recv-flow mws))
+                     timeout-ms))]
+        (when-not result
+          (throw (ex-info (str "recv timeout (" timeout-ms "ms)") {:missionary/retry true})))
+        result))))

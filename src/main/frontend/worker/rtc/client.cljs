@@ -24,8 +24,10 @@
   "Return a task: throw exception if recv ex-data response"
   [get-mws-create-task message]
   (m/sp
-    (handle-remote-ex
-     (m/? (ws/send&recv get-mws-create-task message)))))
+    (let [mws (m/? get-mws-create-task)]
+      (handle-remote-ex
+       (rtc-const/data-from-ws-coercer
+        (m/? (ws/send&recv mws message)))))))
 
 (defn- register-graph-updates
   [get-mws-create-task graph-uuid]
@@ -38,14 +40,15 @@
   But ensure `register-graph-updates` has been sent"
   [get-mws-create-task graph-uuid]
   (assert (some? graph-uuid))
-  (let [*sent (atom {})]
+  (let [*sent (atom {}) ;; mws->bool
+        ]
     (m/sp
       (let [mws (m/? get-mws-create-task)]
-        (when (contains? @*sent mws)
-          (swap! *sent mws false))
+        (when-not (contains? @*sent mws)
+          (swap! *sent assoc mws false))
         (when (not (@*sent mws))
-          (m/? (register-graph-updates (m/sp mws) graph-uuid))
-          (swap! *sent mws true))
+          (m/? (register-graph-updates get-mws-create-task graph-uuid))
+          (swap! *sent assoc mws true))
         mws))))
 
 (defn- remove-non-exist-block-uuids-in-add-retract-map
@@ -328,5 +331,6 @@
 
           (do (assert (pos? (:t r)) r)
               (op-mem-layer/commit! repo)
-              (r.remote-update/apply-remote-update repo conn date-formatter r add-log-fn)
+              (r.remote-update/apply-remote-update
+               repo conn date-formatter {:type :remote-update :value r} add-log-fn)
               (add-log-fn {:type ::push-client-updates :remote-t (:t r)})))))))
