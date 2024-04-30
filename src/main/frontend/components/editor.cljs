@@ -786,6 +786,10 @@
                       (block-commands id format)
                       {:id :editor.commands/block-commands
                        :align :start
+                       :root-props {:onOpenChange
+                                    #(when-not %
+                                       (when (= :block-commands (state/get-editor-action))
+                                         (state/clear-editor-action!)))}
                        :content-props {:onOpenAutoFocus #(.preventDefault %)
                                        :onCloseAutoFocus #(.preventDefault %)
                                        :data-editor-popup-ref "commands"}
