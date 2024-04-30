@@ -125,7 +125,7 @@
                                                 (update-icon icon))})
       (cond
         property-block?
-        (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id item) (:db/id item))]
+        (let [first-child (ldb/get-first-child (db/get-db) item)]
           (:block/content first-child))
 
         date?
@@ -192,7 +192,7 @@
       [:li (if (uuid? value)
              (let [result (db/entity [:block/uuid value])]
                (if (db-property/property-created-block? result)
-                 (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id result) (:db/id result))]
+                 (let [first-child (ldb/get-first-child (db/get-db) result)]
                    (:block/content first-child))
                  (:block/original-name result)))
              (str value))])]

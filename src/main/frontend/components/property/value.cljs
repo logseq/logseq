@@ -392,7 +392,7 @@
                             (when-let [block (when id (db/entity [:block/uuid id]))]
                               (let [icon (pu/get-block-property-value block :logseq.property/icon)
                                     value (if (db-property/property-created-block? block)
-                                            (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id block) (:db/id block))]
+                                            (let [first-child (ldb/get-first-child (db/get-db) block)]
                                               (:block/content first-child))
                                             (db-property/closed-value-name block))]
                                 {:label (if icon
@@ -416,7 +416,7 @@
             add-property-f #(<add-property! block (:db/ident property) %)
             on-chosen (fn [chosen]
                         (p/do!
-                          (add-property-f (if (map? chosen) (:value chosen) chosen))
+                         (add-property-f (if (map? chosen) (:value chosen) chosen))
                          (when-let [f (:on-chosen select-opts)] (f))))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (coll? selected-choices')
@@ -464,9 +464,7 @@
   [parent block-cp editor-box & {:keys [closed-values?]}]
   (if (and (:block/uuid parent) (state/sub-async-query-loading (:block/uuid parent)))
     [:div.text-sm.opacity-70 "loading"]
-    (let [children (model/sort-by-left
-                    (:block/_parent (db/entity (:db/id parent)))
-                    parent)
+    (let [children (model/sort-by-order (:block/_parent (db/entity (:db/id parent))))
           hide-bullet? (and (= (count children) 1)
                             (not (editor-handler/collapsable? (:block/uuid (first children)))))]
       (if (seq children)
@@ -546,7 +544,7 @@
         (let [property-block? (db-property/property-created-block? block)
               value' (or (get-in block [:block/schema :value])
                          (when property-block?
-                           (let [first-child (ldb/get-by-parent-&-left (db/get-db) (:db/id value) (:db/id value))]
+                           (let [first-child (ldb/get-first-child (db/get-db) value)]
                              (inline-text {} :markdown (:block/content first-child)))))
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond

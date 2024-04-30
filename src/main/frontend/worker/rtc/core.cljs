@@ -484,11 +484,10 @@
 
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
-  (let [blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn from-page-name)) {})
-        from-page-block (some-> (first blocks) :block/page)
+  (let [blocks (:block/_page (ldb/get-page @conn from-page-name))
         target-page-block (ldb/get-page @conn to-page-name)]
     (when (and (seq blocks) target-page-block)
-      (let [blocks* (ldb/sort-by-left blocks from-page-block)]
+      (let [blocks* (ldb/sort-by-order blocks)]
         (outliner-tx/transact!
          {:persist-op? true
           :gen-undo-ops? false

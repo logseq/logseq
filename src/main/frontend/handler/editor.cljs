@@ -34,7 +34,6 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.tree :as tree]
-            [logseq.outliner.tree :as otree]
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
@@ -369,10 +368,10 @@
         input-text-selected? (util/input-text-selected? input)
         new-m {:block/uuid (db/new-block-id)
                :block/content ""}
-        prev-block (-> (merge (select-keys block [:block/parent :block/left :block/format :block/page])
+        prev-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
                               new-m)
                        (wrap-parse-block))
-        left-block (db/pull (:db/id (:block/left block)))]
+        left-block (ldb/get-left-sibling (db/entity (:db/id block)))]
     (when input-text-selected?
       (let [selection-start (util/get-selection-start input)
             selection-end (util/get-selection-end input)
@@ -397,7 +396,7 @@
         current-block (apply dissoc current-block db-schema/retract-attributes)
         new-m {:block/uuid (db/new-block-id)
                :block/content snd-block-text}
-        next-block (-> (merge (select-keys block [:block/parent :block/left :block/format :block/page])
+        next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
                               new-m)
                        (wrap-parse-block))
         sibling? (when block-self? false)]
@@ -422,7 +421,7 @@
          :sidebar? sidebar?
          :format format
          :id id
-         :block (or (db/pull [:block/uuid (:block/uuid block)]) block)
+         :block (or (db/entity [:block/uuid (:block/uuid block)]) block)
          :block-id block-id
          :block-parent-id block-parent-id
          :node node
@@ -447,7 +446,7 @@
              selection-end (util/get-selection-end input)
              [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
              insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
-             block' (or (db/pull [:block/uuid block-id]) block)
+             block' (or (db/entity [:block/uuid block-id]) block)
              original-block (:original-block config)
              block'' (or
                       (when original-block
@@ -490,10 +489,10 @@
       (when block
         (let [last-block (when (not sibling?)
                            (let [children (:block/_parent block)
-                                 blocks (db/sort-by-left children block)
+                                 blocks (db/sort-by-order children)
                                  last-block-id (:db/id (last blocks))]
                              (when last-block-id
-                               (db/pull last-block-id))))
+                               (db/entity last-block-id))))
               format (or
                       (:block/format block)
                       (db/get-page-format (:db/id block))
@@ -514,23 +513,20 @@
               new-block (merge new-block other-attrs)
               [block-m sibling?] (cond
                                    before?
-                                   (let [first-child? (->> [:block/parent :block/left]
-                                                           (map #(:db/id (get block %)))
-                                                           (apply =))
-                                         block (db/pull (:db/id (:block/left block)))
-                                         sibling? (if (or first-child? ;; insert as first child
-                                                          (:block/name block))
+                                   (let [left-or-parent (or (ldb/get-left-sibling block)
+                                                            (:block/parent block))
+                                         sibling? (if (= (:db/id (:block/parent block)) (:db/id left-or-parent))
                                                     false sibling?)]
-                                     [block sibling?])
+                                     [left-or-parent sibling?])
 
                                    sibling?
-                                   [(db/pull (:db/id block)) sibling?]
+                                   [(db/entity (:db/id block)) sibling?]
 
                                    last-block
                                    [last-block true]
 
                                    block
-                                   [(db/pull (:db/id block)) sibling?]
+                                   [(db/entity (:db/id block)) sibling?]
 
                                    ;; FIXME: assert
                                    :else
@@ -701,9 +697,8 @@
      (save-block-if-changed! block new-content))))
 
 (defn delete-block-aux!
-  [{:block/keys [uuid repo] :as _block}]
-  (let [repo (or repo (state/get-current-repo))
-        block (db/pull repo '[*] [:block/uuid uuid])]
+  [{:block/keys [uuid] :as _block}]
+  (let [block (db/entity [:block/uuid uuid])]
     (when block
       (state/set-state! :editor/deleting-block uuid)
       (let [blocks (block-handler/get-top-level-blocks [block])]
@@ -742,8 +737,8 @@
                        0)
                      0)
                 [edit-target container-id] (if edit-block-has-refs?
-                                             [(db/pull (:db/id edit-block)) (:editor/container-id @state/state)]
-                                             [(db/pull (:db/id block)) (some-> (dom/attr sibling-block "containerid")
+                                             [(db/entity (:db/id edit-block)) (:editor/container-id @state/state)]
+                                             [(db/entity (:db/id block)) (some-> (dom/attr sibling-block "containerid")
                                                                                util/safe-parse-int)])]
             (edit-block! edit-target
                          pos
@@ -776,10 +771,10 @@
 
           :else
           (let [has-children? (seq (:block/_parent block-e))
-                block (db/pull (:db/id block-e))
-                left (otree/-get-left (outliner-core/block (db/get-db) block) (db/get-db false))
+                block (db/entity (:db/id block-e))
+                left (ldb/get-left-sibling block)
                 left-has-children? (and left
-                                        (when-let [block-id (:block/uuid (:data left))]
+                                        (when-let [block-id (:block/uuid left)]
                                           (let [block (db/entity [:block/uuid block-id])]
                                             (seq (:block/_parent block)))))]
             (when-not (and has-children? left-has-children?)
@@ -793,8 +788,7 @@
                       {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
                       concat-prev-block? (boolean (and prev-block new-content))
                       transact-opts {:outliner-op :delete-blocks}
-                      db-based? (config/db-based-graph? repo)
-                      db (db/get-db repo)]
+                      db-based? (config/db-based-graph? repo)]
                   (ui-outliner-tx/transact!
                    transact-opts
                    (cond
@@ -814,32 +808,16 @@
                            (delete-block-aux! prev-block)
                            (save-block! repo block new-content {})
                            (outliner-save-block! {:db/id (:db/id block)
-                                                  :block/parent (:db/id (:block/parent prev-block))
-                                                  :block/left (or (:db/id (:block/left prev-block))
-                                                                  (:db/id (:block/parent prev-block)))})
+                                                  :block/parent (:db/id (:block/parent prev-block))})
 
-                             ;; block->right needs to point its `left` to block->left
-                           (let [block-right (outliner-core/get-right-sibling db (:db/id block))]
-                             (when (and block-right (not= (:db/id (:block/parent prev-block))
-                                                          (:db/id (:block/parent block))))
-                               (outliner-save-block! {:db/id (:db/id block-right)
-                                                      :block/left (:db/id (:block/left block))})))
-
-                             ;; update prev-block's children to point to the refed block
+                           ;; update prev-block's children to point to the refed block
                            (when (or (:block/collapsed? prev-block)
                                      (= (:db/id prev-block) (:db/id (:block/parent block))))
                              (let [children (:block/_parent prev-block)]
                                (doseq [child children]
                                  (when-not (= (:db/id child) (:db/id block))
                                    (outliner-save-block! {:db/id (:db/id child)
-                                                          :block/parent (:db/id block)
-                                                          :block/left (:db/id block)})))))
-
-                             ;; parent will be removed
-                           (when (= (:db/id prev-block) (:db/id (:block/parent block)))
-                             (when-let [parent-right (when prev-block (outliner-core/get-right-sibling db (:db/id prev-block)))]
-                               (outliner-save-block! {:db/id (:db/id parent-right)
-                                                      :block/left (:db/id block)})))
+                                                          :block/parent (:db/id block)})))))
 
                            (when db-based?
                              (outliner-save-block! {:db/id (:db/id block)
@@ -911,7 +889,7 @@
   (let [key (string/lower-case (str key))
         block-id (if (string? block-id) (uuid block-id) block-id)
         value (str value)]
-    (when-let [block (db/pull [:block/uuid block-id])]
+    (when-let [block (db/entity [:block/uuid block-id])]
       (let [{:block/keys [content]} block
             content (or content (state/get-edit-content))
             new-content (-> (text-util/remove-timestamp content key)
@@ -1020,7 +998,7 @@
                                          (inc (- level @root-level)))
                                        level)})
                            blocks)
-          block (db/pull [:block/uuid (:id first-block)])
+          block (db/entity [:block/uuid (:id first-block)])
           copy-str (some->> adjusted-blocks
                             (map (fn [{:keys [id level]}]
                                    (condp = (:block/format block)
@@ -1205,7 +1183,7 @@
 
 (defn cut-block!
   [block-id]
-  (when-let [block (db/pull [:block/uuid block-id])]
+  (when-let [block (db/entity [:block/uuid block-id])]
     (let [repo (state/get-current-repo)
           ;; TODO: support org mode
           [_top-level-block-uuids md-content] (compose-copied-blocks-contents repo [block-id])
@@ -1332,7 +1310,7 @@
          (let [input-id (state/get-edit-input-id)
                block (state/get-edit-block)
                db-block (when-let [block-id (:block/uuid block)]
-                          (db/pull [:block/uuid block-id]))
+                          (db/entity [:block/uuid block-id]))
                elem (and input-id (gdom/getElement input-id))
                db-content (:block/content db-block)
                db-content-without-heading (and db-content
@@ -1734,7 +1712,7 @@
                            (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
                          result))]
       (if edit-block-id
-        (when-let [block (db/pull [:block/uuid edit-block-id])]
+        (when-let [block (db/entity [:block/uuid edit-block-id])]
           (let [blocks [(assoc block :block/content (state/get-edit-content))]
                 pos (state/get-edit-pos)]
             (p/do!
@@ -1751,7 +1729,7 @@
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
-                  blocks (db/pull-many (state/get-current-repo) '[*] lookup-refs)]
+                  blocks (map db/entity lookup-refs)]
               (move-nodes blocks))))))))
 
 (defn get-selected-ordered-blocks
@@ -1833,7 +1811,7 @@
   (let [new-meta (merge metadata size)
         image-part (first (string/split full_text #"\{"))
         new-full-text (str image-part (pr-str new-meta))
-        block (db/pull [:block/uuid block-id])
+        block (db/entity [:block/uuid block-id])
         value (:block/content block)
         new-value (string/replace value full_text new-full-text)]
     (save-block-aux! block new-value {})))
@@ -2009,7 +1987,7 @@
    (fn []
      (when-let [last-block (last (:blocks result))]
        (clear-when-saved!)
-       (let [last-block' (db/pull [:block/uuid (:block/uuid last-block)])]
+       (let [last-block' (db/entity [:block/uuid (:block/uuid last-block)])]
          (edit-block! last-block' :max))))))
 
 (defn- nested-blocks
@@ -2030,10 +2008,10 @@
            :or {exclude-properties []}}]
   (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
-                        (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
+                        (some-> (db/entity [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
         has-unsaved-edits (and editing-block
-                               (not= (:block/content (db/pull (:db/id editing-block)))
+                               (not= (:block/content (db/entity (:db/id editing-block)))
                                      (state/get-edit-content)))
         target-block (or target-block editing-block)
         block (db/entity (:db/id target-block))
@@ -2048,7 +2026,7 @@
                                        (and target-block-has-children? (= (count blocks) 1)))
                                    (block-has-no-ref? (:db/id target-block)))
         target-block' (if (and empty-target? target-block-has-children? paste-nested-blocks?)
-                        (db/pull (:db/id (:block/left target-block)))
+                        (ldb/get-left-sibling target-block)
                         target-block)
         sibling? (cond
                    (and paste-nested-blocks? empty-target?)
@@ -2110,7 +2088,7 @@
         page-id (:db/id (:block/page target-block))
         page-name (some-> page-id (db/entity) :block/name)
         blocks (block-tree->blocks repo tree-vec format keep-uuid? page-name)
-        blocks (gp-block/with-parent-and-left page-id blocks)
+        blocks (gp-block/with-parent-and-order page-id blocks)
         block-refs (->> (mapcat :block/refs blocks)
                         (set)
                         (filter (fn [ref] (and (vector? ref) (= :block/uuid (first ref))))))]
@@ -2123,10 +2101,10 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [target-block-id sibling? tree-vec format keep-uuid?]
   (insert-block-tree tree-vec format
-    {:target-block       (db/pull target-block-id)
-     :keep-uuid?         keep-uuid?
-     :skip-empty-target? true
-     :sibling?           sibling?}))
+                     {:target-block       (db/entity target-block-id)
+                      :keep-uuid?         keep-uuid?
+                      :skip-empty-target? true
+                      :sibling?           sibling?}))
 
 (defn insert-template!
   ([element-id db-id]
@@ -2149,7 +2127,7 @@
                  block-uuid (:block/uuid block)
                  template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
                  blocks (db/get-block-and-children repo block-uuid)
-                 root-block (db/pull db-id)
+                 root-block (db/entity db-id)
                  blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
                  sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
                  sorted-blocks (cons
@@ -2249,10 +2227,10 @@
 (defn outdent-on-enter
   [node]
   (let [original-block (block-handler/get-current-editing-original-block)
-        parent-node (otree/-get-parent node (db/get-db false))
-        target (or original-block (:data parent-node))
+        parent-node (:block/parent node)
+        target (or original-block parent-node)
         pos (state/get-edit-pos)
-        block (:data node)]
+        block node]
     (p/do!
      (ui-outliner-tx/transact!
       {:outliner-op :move-blocks
@@ -2265,12 +2243,12 @@
        (util/schedule #(edit-block! block pos))))))
 
 (defn- last-top-level-child?
-  [{:keys [id]} current-node]
+  [{:keys [id]} block]
   (when id
     (when-let [entity (if-let [id' (parse-uuid (str id))]
                         (db/entity [:block/uuid id'])
                         (db/get-page id))]
-      (= (:block/uuid entity) (otree/-get-parent-id current-node (db/get-db false))))))
+      (= (:block/uuid entity) (:block/uuid (:block/parent block))))))
 
 (defn insert
   ([insertion]
@@ -2468,13 +2446,12 @@
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when block
-        (let [input (state/get-input)
+        (let [block (db/entity (:db/id block))
+              input (state/get-input)
               config (assoc config :keydown-new-block true)
               content (gobj/get input "value")
               pos (cursor/pos input)
-              current-node (outliner-core/block (db/get-db) block)
-              has-right? (-> (otree/-get-right current-node (db/get-db false))
-                             (tree/satisfied-inode?))
+              has-right? (ldb/get-right-sibling block)
               db-based? (config/db-based-graph? (state/get-current-repo))
               thing-at-point ;intern is not supported in cljs, need a more elegant solution
               (or (when (thingatpt/get-setting :admonition&src?)
@@ -2522,8 +2499,8 @@
             (and
              (string/blank? content)
              (not has-right?)
-             (not (last-top-level-child? config current-node)))
-            (outdent-on-enter current-node)
+             (not (last-top-level-child? config block)))
+            (outdent-on-enter block)
 
             :else
             (profile
@@ -2614,7 +2591,7 @@
                         (string/trim value))
               (save-block! repo uuid value))
             (let [new-uuid (cljs.core/uuid sibling-block-id)
-                  block (db/pull repo '[*] [:block/uuid new-uuid])]
+                  block (db/entity [:block/uuid new-uuid])]
               (edit-block! block
                            (or (:pos move-opts)
                                [direction line-pos])
@@ -2662,7 +2639,7 @@
           (when (and value (not= (clean-content! repo format content) (string/trim value)))
             (save-block! repo uuid value)))
         (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
-              block (db/pull repo '[*] [:block/uuid (cljs.core/uuid sibling-block-id)])]
+              block (db/entity repo [:block/uuid (cljs.core/uuid sibling-block-id)])]
           (edit-block! block pos {:container-id container-id}))))))
 
 (defn keydown-arrow-handler
@@ -2700,7 +2677,7 @@
                        (let [db (db/get-db repo)]
                          (when-let [e (or
                                        ;; first child or next sibling
-                                       (db-model/get-by-parent-&-left db (:db/id current-block) (:db/id current-block))
+                                       (ldb/get-first-child db (:db/id current-block))
                                        (db-model/get-next db (:db/id current-block)))]
                          (db/entity (:db/id e)))))]
     (cond
@@ -2753,7 +2730,8 @@
         selected-end (util/get-selection-end input)
         block (state/get-edit-block)
         repo (state/get-current-repo)
-        top-block? (= (:block/left block) (:block/page block))
+        top-block? (= (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))
+                      (:db/id (:block/page block)))
         single-block? (inside-of-single-block (.-target e))
         root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
     (block-handler/mark-last-input-time! repo)
@@ -2780,8 +2758,8 @@
             (delete-block! repo))))
 
       (and (> current-pos 0)
-        (contains? #{commands/command-trigger commands/angle-bracket commands/command-ask}
-          (util/nth-safe value (dec current-pos))))
+           (contains? #{commands/command-trigger commands/angle-bracket commands/command-ask}
+                      (util/nth-safe value (dec current-pos))))
       (do
         (util/stop e)
         (commands/restore-state)
@@ -3606,7 +3584,7 @@
       (when-let [block (state/get-edit-block)]
         ;; get-edit-block doesn't track the latest collapsed state, so we need to reload from db.
         (let [block-id (:block/uuid block)
-              block (db/pull [:block/uuid block-id])]
+              block (db/entity [:block/uuid block-id])]
           (if (:block/collapsed? block)
             (expand! e clear-selection?)
             (collapse! e clear-selection?))))
@@ -3618,7 +3596,7 @@
           (when first-block-id
             ;; If multiple blocks are selected, they may not have all the same collapsed state.
             ;; For simplicity, use the first block's state to decide whether to collapse/expand all.
-            (let [first-block (db/pull [:block/uuid first-block-id])]
+            (let [first-block (db/entity [:block/uuid first-block-id])]
               (if (:block/collapsed? first-block)
                 (doseq [block-id block-ids] (expand-block! block-id))
                 (doseq [block-id block-ids] (collapse-block! block-id))))))
@@ -3767,7 +3745,7 @@
   []
   (let [repo (state/get-current-repo)]
     (when-let [{:keys [start end link]} (thingatpt/block-ref-at-point)]
-      (when-let [block (db/pull [:block/uuid link])]
+      (when-let [block (db/entity [:block/uuid link])]
         (let [block-content (:block/content block)
               format (or (:block/format block) :markdown)
               block-content-without-prop (-> (property-file/remove-properties-when-file-based repo format block-content)

@@ -51,13 +51,8 @@
 
 (defn- extract-block-content
   [text]
-  (let [{:keys [blocks]} (extract "a.md" text)
-        lefts (map (juxt :block/parent :block/left) blocks)]
-    (if (not= (count lefts) (count (distinct lefts)))
-      (do
-        (pprint/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) blocks))
-        (throw (js/Error. ":block/parent && :block/left conflicts")))
-      (mapv :block/content blocks))))
+  (let [{:keys [blocks]} (extract "a.md" text)]
+    (mapv :block/content blocks)))
 
 (defn- extract-title [file text]
   (-> (extract file text) :pages first :block/properties :title))

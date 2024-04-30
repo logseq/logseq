@@ -71,7 +71,7 @@
     (assoc block :block/content content')))
 
 (defn wrap-parse-block
-  [{:block/keys [content left level] :as block}]
+  [{:block/keys [content level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (if (nil? content)
                 block
@@ -86,7 +86,6 @@
                                (update block' :block/properties (fn [m] (merge m (:block/properties block))))
                                block')]
                   (update block' :block/refs remove-non-existed-refs!)))
-        block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]

@@ -661,9 +661,7 @@
                                                  (util/format "Custom block UUID already exists (%s)." custom-uuid))))
                 block-uuid'            (if (and (not sibling) before block-uuid)
                                          (let [block       (db/entity [:block/uuid block-uuid])
-                                               first-child (db-model/get-by-parent-&-left (db/get-db)
-                                                                                          (:db/id block)
-                                                                                          (:db/id block))]
+                                               first-child (ldb/get-first-child (db/get-db) (:db/id block))]
                                            (if first-child
                                              (:block/uuid first-child)
                                              block-uuid))
@@ -703,7 +701,7 @@
                                          (throw (js/Error.
                                                  (util/format "Custom block UUID already exists (%s)." uuid)))))))
                 block (if (and before sibling)
-                        (db/pull (:db/id (:block/left block))) block)
+                        (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)
                 _ (editor-handler/insert-block-tree-after-target
                    (:db/id block) sibling bb (:block/format block) keep-uuid?)]
             nil))))))
@@ -758,12 +756,13 @@
 (def ^:export get_previous_sibling_block
   (fn [block-uuid]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<pull-block id)]
+            block (<pull-block id)
+            ;; Load all children blocks
+            _ (db-async/<get-block (state/get-current-repo) (:block/uuid (:block/parent block)) {:children? true})]
       (when block
-       (p/let [{:block/keys [parent left]} block
-               block (when-not (= parent left) (<pull-block (:db/id left)))]
-         (when block
-           (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
+        (when-let [left-sibling (ldb/get-left-sibling (db/entity (:db/id block)))]
+          (let [block (db/pull (:db/id left-sibling))]
+            (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
 
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
@@ -869,7 +868,7 @@
 (defn last-child-of-block
   [block]
   (when-let [children (:block/_parent block)]
-    (last (db-model/sort-by-left children block))))
+    (last (db-model/sort-by-order children))))
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]

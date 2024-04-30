@@ -48,15 +48,16 @@
     content))
 
 (defn transform-content
-  [repo db {:block/keys [collapsed? format pre-block? content left page parent properties] :as b} level {:keys [heading-to-list?]} context]
+  [repo db {:block/keys [collapsed? format pre-block? content page properties] :as b} level {:keys [heading-to-list?]} context]
   (let [block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
                                   (not (string/includes? content (str (:block/uuid b))))
                                   (not (sqlite-util/db-based-graph? repo)))
         heading (:heading properties)
         markdown? (= :markdown format)
         content (or content "")
+        page-first-child? (= (:db/id b) (ldb/get-first-child db (:db/id page)))
         pre-block? (or pre-block?
-                       (and (= page parent left) ; first block
+                       (and page-first-child?
                             markdown?
                             (string/includes? (first (string/split-lines content)) ":: ")))
         content (cond
@@ -67,7 +68,7 @@
                   :else
                   (let [;; first block is a heading, Markdown users prefer to remove the `-` before the content
                         markdown-top-heading? (and markdown?
-                                                   (= parent page left)
+                                                   page-first-child?
                                                    heading)
                         [prefix spaces-tabs]
                         (cond

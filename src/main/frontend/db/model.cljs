@@ -248,7 +248,7 @@ independent of format as format specific heading characters are stripped"
                 blocks)]
     blocks))
 
-(def sort-by-left ldb/sort-by-left)
+(def sort-by-order ldb/sort-by-order)
 
 (defn sub-block
   [id]
@@ -262,7 +262,7 @@ independent of format as format specific heading characters are stripped"
      react
      first)))
 
-(defn sort-by-left-recursive
+(defn sort-by-order-recursive
   [form]
   (walk/postwalk (fn [f]
                    (if (and (map? f)
@@ -270,7 +270,7 @@ independent of format as format specific heading characters are stripped"
                      (let [children (:block/_parent f)]
                        (-> f
                            (dissoc :block/_parent)
-                           (assoc :block/children (sort-by-left children f))))
+                           (assoc :block/children (sort-by-order children))))
                      f))
                  form))
 
@@ -279,19 +279,19 @@ independent of format as format specific heading characters are stripped"
 (defn get-sorted-page-block-ids-and-levels
   "page-name: the page name, original name
    return: a list with elements in:
-       :id    - a list of block ids, sorted by :block/left
+       :id    - a list of block ids, sorted by :block/order
        :level - the level of the block, 1 for root, 2 for children of root, etc."
   [page-name]
   {:pre [(string? page-name)]}
   (let [root (ldb/get-page (conn/get-db) page-name)]
     (loop [result []
-           children (sort-by-left (:block/_parent root) root)
+           children (sort-by-order (:block/_parent root))
            ;; BFS log of walking depth
            levels (repeat (count children) 1)]
       (if (seq children)
         (let [child (first children)
               cur-level (first levels)
-              next-children (sort-by-left (:block/_parent child) child)]
+              next-children (sort-by-order (:block/_parent child))]
           (recur (conj result {:id (:db/id child) :level cur-level})
                  (concat
                   next-children
@@ -306,8 +306,6 @@ independent of format as format specific heading characters are stripped"
    (has-children? (conn/get-db) block-id))
   ([db block-id]
    (ldb/has-children? db block-id)))
-
-(def get-by-parent-&-left ldb/get-by-parent-&-left)
 
 (defn top-block?
   [block]
@@ -346,9 +344,7 @@ independent of format as format specific heading characters are stripped"
           (recur e)))
       nil)))
 
-(def get-prev-sibling ldb/get-prev-sibling)
-
-(def get-right-sibling ldb/get-right-sibling)
+(def page? ldb/page?)
 
 (defn get-next
   "Get next block, either its right sibling, or loop to find its next block."
@@ -358,11 +354,9 @@ independent of format as format specific heading characters are stripped"
                :as opts}]
   (when-let [entity (db-utils/entity db db-id)]
     (or (when-not (and (:block/collapsed? entity) skip-collapsed? init?)
-          (get-right-sibling db db-id))
+          (ldb/get-right-sibling (d/entity db db-id)))
         (let [parent-id (:db/id (:block/parent (db-utils/entity db db-id)))]
           (get-next db parent-id (assoc opts :init? false))))))
-
-(def page? ldb/page?)
 
 (defn get-prev
   "Get prev block, either its left sibling if the sibling is collapsed or no children,
@@ -370,7 +364,7 @@ independent of format as format specific heading characters are stripped"
   [db db-id]
   (when-let [entity (db-utils/entity db db-id)]
     (or
-     (when-let [prev-sibling (get-prev-sibling db db-id)]
+     (when-let [prev-sibling (ldb/get-left-sibling (d/entity db db-id))]
        (if (or (:block/collapsed? prev-sibling)
                (empty? (:block/_parent prev-sibling)))
          prev-sibling
@@ -653,7 +647,7 @@ independent of format as format specific heading characters are stripped"
                                                          (:block/_path-refs (db-utils/entity id))) pages)
                                       blocks (map (fn [e]
                                                     {:block/parent (:block/parent e)
-                                                     :block/left (:block/left e)
+                                                     :block/order (:block/order e)
                                                      :block/page (:block/page e)
                                                      :block/collapsed? (:block/collapsed? e)}) entities)]
                                   {:entities entities
@@ -683,7 +677,7 @@ independent of format as format specific heading characters are stripped"
                                         block-id
                                         block-attrs)
                                react
-                               (sort-by-left-recursive))]
+                               (sort-by-order-recursive))]
          (db-utils/group-by-page query-result))))))
 
 (defn journal-page?

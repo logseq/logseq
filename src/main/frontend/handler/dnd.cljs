@@ -2,8 +2,7 @@
   "Provides fns for drag and drop"
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [logseq.outliner.tree :as otree]
-            [logseq.outliner.core :as outliner-core]
+            [logseq.db :as ldb]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [logseq.common.util.block-ref :as block-ref]
@@ -13,7 +12,8 @@
 
 (defn move-blocks
   [^js event blocks target-block original-block move-to]
-  (let [blocks' (map #(db/pull (:db/id %)) blocks)
+  (let [target-block (db/entity (:db/id target-block))
+        blocks' (map #(db/entity (:db/id %)) blocks)
         first-block (first blocks')
         top? (= move-to :top)
         nested? (= move-to :nested)
@@ -41,21 +41,19 @@
                           :clear? true}])
 
       (every? map? (conj blocks' target-block))
-      (let [target-node (outliner-core/block (db/get-db) target-block)
-            conn (db/get-db false)
-            blocks' (block-handler/get-top-level-blocks blocks')]
+      (let [blocks' (block-handler/get-top-level-blocks blocks')]
         (ui-outliner-tx/transact!
          {:outliner-op :move-blocks}
          (editor-handler/save-current-block!)
          (if top?
            (let [first-child?
-                 (= (otree/-get-parent-id target-node conn)
-                    (otree/-get-left-id target-node conn))]
+                 (= (:block/uuid (:block/parent target-block))
+                    (:block/uuid (ldb/get-left-sibling target-block)))]
              (if first-child?
-               (when-let [parent (otree/-get-parent target-node conn)]
-                 (outliner-op/move-blocks! blocks' (:data parent) false))
-               (when-let [before-node (otree/-get-left target-node conn)]
-                 (outliner-op/move-blocks! blocks' (:data before-node) true))))
+               (when-let [parent (:block/parent target-block)]
+                 (outliner-op/move-blocks! blocks' parent false))
+               (when-let [before-node (ldb/get-left-sibling target-block)]
+                 (outliner-op/move-blocks! blocks' before-node true))))
            (outliner-op/move-blocks! blocks' target-block (not nested?)))))
 
       :else

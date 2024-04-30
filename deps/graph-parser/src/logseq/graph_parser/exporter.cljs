@@ -19,7 +19,8 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.class :as db-class]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
@@ -544,10 +545,8 @@
     block))
 
 (defn- fix-pre-block-references
-  [{:block/keys [left parent page] :as block} pre-blocks]
+  [{:block/keys [parent page] :as block} pre-blocks]
   (cond-> block
-    (and (vector? left) (contains? pre-blocks (second left)))
-    (assoc :block/left page)
     ;; Children blocks of pre-blocks get lifted up to the next level which can cause conflicts
     ;; TODO: Detect sibling blocks to avoid parent-left conflicts
     (and (vector? parent) (contains? pre-blocks (second parent)))
@@ -922,7 +921,7 @@
                             (merge (ldb/build-favorite-tx favorite-id)
                                    {:block/uuid (d/squuid)
                                     :db/id (or (some-> (:db/id (last acc)) dec) -1)
-                                    :block/left {:db/id (or (:db/id (last acc)) page-id)}
+                                    :block/order (db-order/gen-key nil)
                                     :block/parent page-id
                                     :block/page page-id}))))
                    []

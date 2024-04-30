@@ -124,7 +124,7 @@
                                     selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
                                     blocks (if (seq selected) selected [@component-block/*dragging-block])
                                     _ (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
-                              (js/setTimeout #(let [target-block (db/pull (:db/id (db/get-page page-name)))]
+                              (js/setTimeout #(let [target-block (db/entity (:db/id (db/get-page page-name)))]
                                                 (dnd/move-blocks event blocks target-block nil :sibling))
                                 0)))]
       [:div.ls-block.flex-1.flex-col.rounded-sm
@@ -200,7 +200,7 @@
                                :disable-lazy-load? short-page?}
                               config)
               config (common-handler/config-with-document-mode hiccup-config)
-              blocks (if block? [block] (db/sort-by-left children block))]
+              blocks (if block? [block] (db/sort-by-order children block))]
           [:div
            (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
            (when-not config/publishing?

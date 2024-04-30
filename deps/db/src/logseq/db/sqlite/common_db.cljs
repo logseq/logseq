@@ -54,22 +54,17 @@
   [db block]
   (update block :block/refs (fn [refs] (map (fn [ref] (d/pull db '[*] (:db/id ref))) refs))))
 
-(defn with-parent-and-left
+(defn with-parent
   [db block]
   (cond
-    (:block/name block)
-    block
     (:block/page block)
-    (let [left (when-let [e (d/entity db (:db/id (:block/left block)))]
-                 (select-keys e [:db/id :block/uuid]))
-          parent (when-let [e (d/entity db (:db/id (:block/parent block)))]
+    (let [parent (when-let [e (d/entity db (:db/id (:block/parent block)))]
                    (select-keys e [:db/id :block/uuid]))]
       (->>
-       (assoc block
-              :block/left left
-              :block/parent parent)
+       (assoc block :block/parent parent)
        (common-util/remove-nils-non-nested)
        (with-block-refs db)))
+
     :else
     block))
 
@@ -154,7 +149,7 @@
                        (let [long-page? (and (> (count children) 500) (not (contains? (:block/type block) "whiteboard")))]
                          (if long-page?
                            (map (fn [e]
-                                  (select-keys e [:db/id :block/uuid :block/page :block/left :block/parent :block/collapsed?]))
+                                  (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed?]))
                                 children)
                            (->> (d/pull-many db '[*] (map :db/id children))
                                 (map #(with-block-refs db %))
@@ -169,7 +164,7 @@
     (when block
       (if (:block/page block) ; not a page
         (let [block' (->> (d/pull db '[*] (:db/id block))
-                          (with-parent-and-left db)
+                          (with-parent db)
                           (with-block-refs db)
                           mark-block-fully-loaded)]
           (cond->

@@ -1,8 +1,6 @@
 (ns frontend.worker.handler.page.file-based.rename
   "File based page rename"
-  (:require [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.tree :as otree]
-            [frontend.worker.handler.page :as worker-page]
+  (:require [frontend.worker.handler.page :as worker-page]
             [datascript.core :as d]
             [clojure.string :as string]
             [logseq.common.util.page-ref :as page-ref]
@@ -11,7 +9,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.text :as text]))
+            [logseq.graph-parser.text :as text]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn rename-update-namespace!
   "update :block/namespace of the renamed block"
@@ -56,23 +55,16 @@
           to-id (:db/id to-page)
           from-page (d/entity db [:block/name from-page-name])
           from-id (:db/id from-page)
-          from-first-child (some->> (d/pull db '[*] from-id)
-                                    (outliner-core/block @conn)
-                                    (#(otree/-get-down % conn))
-                                    (outliner-core/get-data))
-          to-last-direct-child-id (ldb/get-block-last-direct-child-id db to-id)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
-          blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
+          blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/order :block/parent] block-eids)
           blocks-tx-data (map (fn [block]
                                 (let [id (:db/id block)]
                                   (cond->
                                    {:db/id id
                                     :block/page {:db/id to-id}
-                                    :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)}
-
-                                    (and from-first-child (= id (:db/id from-first-child)))
-                                    (assoc :block/left {:db/id (or to-last-direct-child-id to-id)})
+                                    :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)
+                                    :block/order (db-order/gen-key nil)}
 
                                     (= (:block/parent block) {:db/id from-id})
                                     (assoc :block/parent {:db/id to-id})))) blocks)

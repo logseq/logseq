@@ -21,24 +21,17 @@
        (let [db @conn
              to-id (:db/id to-page)
              from-id (:db/id from-page)
-             from-first-child (some->> (d/pull db '[*] from-id)
-                                       (outliner-core/block @conn)
-                                       (#(otree/-get-down % conn))
-                                       (outliner-core/get-data))
-             to-last-direct-child-id (ldb/get-block-last-direct-child-id db to-id)
              db-based? (sqlite-util/db-based-graph? repo)
              datoms (d/datoms @conn :avet :block/page from-id)
              block-eids (mapv :e datoms)
-             blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
+             blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/parent] block-eids)
              blocks-tx-data (map (fn [block]
                                    (let [id (:db/id block)]
                                      (cond->
                                       {:db/id id
                                        :block/page {:db/id to-id}
-                                       :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)}
-
-                                       (and from-first-child (= id (:db/id from-first-child)))
-                                       (assoc :block/left {:db/id (or to-last-direct-child-id to-id)})
+                                       :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)
+                                       :block/order (db-order/gen-key nil)}
 
                                        (= (:block/parent block) {:db/id from-id})
                                        (assoc :block/parent {:db/id to-id})))) blocks)

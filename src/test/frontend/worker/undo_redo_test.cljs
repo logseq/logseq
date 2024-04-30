@@ -44,7 +44,7 @@
    (fn [[parent left]]
      (and (not= self-uuid left)
           (not= self-uuid parent)))
-   (gen/frequency [[9 (t.gen/gen-available-parent-left-pair db {:page-uuid page-uuid})]
+   (gen/frequency [[9 (t.gen/gen-available-parent db {:page-uuid page-uuid})]
                    [1 (gen/vector gen-non-exist-block-uuid 2)]])))
 
 (defn- gen-move-block-op

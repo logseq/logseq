@@ -14,7 +14,8 @@
             [logseq.graph-parser.text :as text]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.config :as config]
-            [frontend.worker.pipeline :as worker-pipeline]))
+            [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.db.frontend.order :as db-order]))
 
 (def node? (exists? js/process))
 
@@ -225,14 +226,14 @@ This can be called in synchronous contexts as no async fns should be invoked"
       {:block/uuid first-block-uuid
        :block/page page-id
        :block/parent page-id
-       :block/left page-id
+       :block/order (db-order/gen-key nil)
        :block/content "block 1"
        :block/format :markdown}
       ;; second block
       {:block/uuid second-block-uuid
        :block/page page-id
        :block/parent page-id
-       :block/left [:block/uuid first-block-uuid]
+       :block/order (db-order/gen-key nil)
        :block/content "block 2"
        :block/format :markdown}]
      (map sqlite-util/block-with-timestamps))))

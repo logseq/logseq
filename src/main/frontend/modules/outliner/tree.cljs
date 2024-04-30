@@ -3,8 +3,6 @@
             [frontend.state :as state]
             [logseq.outliner.tree :as otree]))
 
-(def satisfied-inode? otree/satisfied-inode?)
-
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."
   ([blocks root-id]

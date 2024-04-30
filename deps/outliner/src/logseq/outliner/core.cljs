@@ -3,11 +3,10 @@
   (:require [clojure.set :as set]
             [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.impl.entity :as de]
+            [datascript.impl.entity :as de :refer [Entity]]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.outliner.datascript :as ds]
             [logseq.outliner.tree :as otree]
-            [logseq.outliner.util :as outliner-u]
             [logseq.common.util :as common-util]
             [malli.core :as m]
             [malli.util :as mu]
@@ -17,12 +16,11 @@
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [cljs.pprint :as pprint]
             [logseq.common.marker :as common-marker]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [frontend.worker.batch-tx :include-macros true :as batch-tx]))
+            [frontend.worker.batch-tx :include-macros true :as batch-tx]
+            [logseq.db.frontend.order :as db-order]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -30,46 +28,12 @@
     [:db/id :int]
     ;; FIXME: tests use ints when they should use uuids
     [:block/uuid [:or :uuid :int]]
-    [:block/left :map]
+    [:block/order :string]
     [:block/parent :map]
     [:block/page :map]]))
 
 (def ^:private block-map-or-entity
   [:or [:fn de/entity?] block-map])
-
-(defrecord ^:api Block [data])
-
-(defn ^:api block
-  [db m]
-  (assert (or (map? m) (de/entity? m)) (common-util/format "block data must be map or entity, got: %s %s" (type m) m))
-  (let [e (if (or (de/entity? m)
-                  (and (:block/uuid m) (:db/id m)))
-            m
-            (let [eid (if (:block/uuid m)
-                        [:block/uuid (:block/uuid m)]
-                        (:db/id m))]
-              (assert eid "eid doesn't exist")
-              (let [entity (d/entity db eid)]
-                (assoc m :db/id (:db/id entity)
-                       :block/uuid (:block/uuid entity)))))]
-    (->Block e)))
-
-(defn ^:api get-data
-  [block]
-  (:data block))
-
-(defn- get-block-by-id
-  [db id]
-  (let [r (ldb/get-by-id db (outliner-u/->block-lookup-ref id))]
-    (when r (->Block r))))
-
-(defn- get-by-parent-&-left
-  [db parent-uuid left-uuid]
-  (let [parent-id (:db/id (d/entity db [:block/uuid parent-uuid]))
-        left-id (:db/id (d/entity db [:block/uuid left-uuid]))
-        entity (ldb/get-by-parent-&-left db parent-id left-id)]
-    (when entity
-      (block db entity))))
 
 (defn ^:api block-with-timestamps
   [block]
@@ -86,10 +50,13 @@
     (assoc block :block/updated-at updated-at)))
 
 (defn- filter-top-level-blocks
-  [blocks]
+  [db blocks]
   (let [parent-ids (set/intersection (set (map (comp :db/id :block/parent) blocks))
                                      (set (map :db/id blocks)))]
-    (remove (fn [e] (contains? parent-ids (:db/id (:block/parent e)))) blocks)))
+    (->> blocks
+         (remove (fn [e] (contains? parent-ids (:db/id (:block/parent e)))))
+         (map (fn [block]
+                (if (de/entity? block) block (d/entity db (:db/id block))))))))
 
 (defn- remove-orphaned-page-refs!
   [db {db-id :db/id} txs-state *old-refs new-refs {:keys [db-graph?]}]
@@ -305,12 +272,9 @@
                                    tags)))
       m)))
 
-;; -get-id, -get-parent-id, -get-left-id return block-id
-;; the :block/parent, :block/left should be datascript lookup ref
-
 ;; TODO: don't parse marker and deprecate typing marker to set status
 (defn- db-marker-handle
-  [conn block-entity txs-state m]
+  [conn m]
   (or
    (let [marker (:block/marker m)
          property (d/entity @conn :logseq.task/status)
@@ -336,55 +300,13 @@
        (dissoc :block/marker :block/priority)))
    m))
 
-(extend-type Block
+(extend-type Entity
   otree/INode
-  (-get-id [this conn]
-    (or
-     (when-let [block-id (get-in this [:data :block/uuid])]
-       block-id)
-     (when-let [data (:data this)]
-       (let [uuid (:block/uuid data)]
-         (if uuid
-           uuid
-           (let [new-id (ldb/new-block-id)]
-             (ldb/transact! conn [{:db/id (:db/id data)
-                                   :block/uuid new-id}])
-             new-id))))))
-
-  (-get-parent-id [this conn]
-    (when-let [id (:db/id (get-in this [:data :block/parent]))]
-      (:block/uuid (d/entity @conn id))))
-
-  (-get-left-id [this conn]
-    (when-let [id (:db/id (get-in this [:data :block/left]))]
-      (:block/uuid (d/entity @conn id))))
-
-  (-set-left-id [this left-id _conn]
-    (outliner-u/check-block-id left-id)
-    (update this :data assoc :block/left [:block/uuid left-id]))
-
-  (-get-parent [this conn]
-    (when-let [parent-id (otree/-get-parent-id this conn)]
-      (get-block-by-id @conn parent-id)))
-
-  (-get-left [this conn]
-    (when-let [left-id (otree/-get-left-id this conn)]
-      (get-block-by-id @conn left-id)))
-
-  (-get-right [this conn]
-    (let [left-id (otree/-get-id this conn)
-          parent-id (otree/-get-parent-id this conn)]
-      (get-by-parent-&-left @conn parent-id left-id)))
-
-  (-get-down [this conn]
-    (let [parent-id (otree/-get-id this conn)]
-      (get-by-parent-&-left @conn parent-id parent-id)))
-
   (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
                                                    :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [data (:data this)
+    (let [data this
           db-based? (sqlite-util/db-based-graph? repo)
           data' (cond->
                  (if (de/entity? data)
@@ -399,13 +321,13 @@
                 block-with-updated-at
                 fix-tag-ids)
           db @conn
-          db-id (:db/id (:data this))
-          block-uuid (:block/uuid (:data this))
+          db-id (:db/id this)
+          block-uuid (:block/uuid this)
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
           m (cond->> m
               db-based?
-              (db-marker-handle conn block-entity txs-state))
+              (db-marker-handle conn))
           m (if db-based?
               (update m :block/tags (fn [tags]
                                       (concat (keep :db/id (:block/tags block-entity))
@@ -456,7 +378,7 @@
   (-del [this txs-state conn]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
-    (let [block-id (otree/-get-id this conn)
+    (let [block-id (:block/uuid this)
           ids (->>
                (let [children (ldb/get-block-children @conn block-id)
                      children-ids (map :block/uuid children)]
@@ -472,17 +394,7 @@
                          [:db/retract id :block/alias]
                          [:db/retract id :block/tags]])))]
       (swap! txs-state concat txs page-tx)
-      block-id))
-
-  (-get-children [this conn]
-    (let [parent-id (otree/-get-id this conn)
-          children (ldb/get-block-immediate-children @conn parent-id)]
-      (map #(block @conn %) children))))
-
-(defn ^:api get-right-sibling
-  [db db-id]
-  (when db-id
-    (ldb/get-right-sibling db db-id)))
+      block-id)))
 
 (defn- assoc-level-aux
   [tree-vec children-key init-level]
@@ -510,23 +422,10 @@
                                       :block/uuid (:block/uuid target-block))]
                               [[:db/retractEntity (:db/id target-block)] ; retract target-block first
                                (assoc block
-                                      :db/id db-id
-                                      :block/left (:db/id (:block/left target-block)))]))
+                                      :db/id db-id)]))
                           [(assoc block :db/id (dec (- idx)))]))) blocks)
        (apply concat)))
 
-(defn- find-outdented-block-prev-hop
-  [outdented-block blocks]
-  (let [blocks (reverse
-                (take-while #(not= (:db/id outdented-block)
-                                   (:db/id %)) blocks))
-        blocks (drop-while #(= (:db/id (:block/parent outdented-block)) (:db/id (:block/parent %))) blocks)]
-    (when (seq blocks)
-      (loop [blocks blocks
-             matched (first blocks)]
-        (if (= (:block/parent (first blocks)) (:block/parent matched))
-          (recur (rest blocks) (first blocks))
-          matched)))))
 
 (defn- get-id
   [x]
@@ -541,7 +440,7 @@
     x))
 
 (defn- compute-block-parent
-  [block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx]
+  [block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx]
   (cond
     ;; replace existing block
     (and (contains? #{:paste :insert-blocks} outliner-op)
@@ -550,9 +449,6 @@
          (zero? idx))
     (get-id (:block/parent target-block))
 
-    prev-hop
-    (:db/id (:block/parent prev-hop))
-
     top-level?
     (if sibling?
       (:db/id (:block/parent target-block))
@@ -560,44 +456,6 @@
 
     :else
     (get-new-id block parent)))
-
-(defn- compute-block-left
-  [blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id]
-  (cond
-    (zero? idx)
-    (if replace-empty-target?
-      (:db/id (:block/left target-block))
-      (:db/id target-block))
-
-    (and prev-hop (not left-exists-in-blocks?))
-    (:db/id (:block/left prev-hop))
-
-    :else
-    (or (get-new-id block left)
-        (get-new-id block (nth blocks (dec idx))))))
-
-(defn- get-left-nodes
-  [conn node limit]
-  (let [parent (otree/-get-parent node conn)]
-    (loop [node node
-           limit limit
-           result []]
-      (if (zero? limit)
-        result
-        (if-let [left (otree/-get-left node conn)]
-          (if-not (= left parent)
-            (recur left (dec limit) (conj result (otree/-get-id left conn)))
-            result)
-          result)))))
-
-(defn- page-first-child?
-  [block]
-  (= (:block/left block)
-     (:block/page block)))
-
-(defn- page-block?
-  [block]
-  (some? (:block/name block)))
 
 ;;; ### public utils
 
@@ -618,27 +476,31 @@
 
 (defn ^:api save-block
   "Save the `block`."
-  [repo conn date-formatter block' opts]
-  {:pre [(map? block')]}
-  (let [txs-state (atom [])]
-    (otree/-save (block @conn block') txs-state conn repo date-formatter opts)
+  [repo conn date-formatter block opts]
+  {:pre [(map? block)]}
+  (let [txs-state (atom [])
+        block' (if (de/entity? block)
+                 block
+                 (do
+                   (assert (or (:db/id block) (:block/uuid block)) "save-block db/id not exists")
+                   (when-let [eid (or (:db/id block) (when-let [id (:block/uuid block)] [:block/uuid id]))]
+                     (merge (d/entity @conn eid) block))))]
+    (otree/-save block' txs-state conn repo date-formatter opts)
     {:tx-data @txs-state}))
 
 (defn- get-right-siblings
   "Get `node`'s right siblings."
-  [conn node]
-  {:pre [(otree/satisfied-inode? node)]}
-  (when-let [parent (otree/-get-parent node conn)]
-    (let [children (otree/-get-children parent conn)]
-      (->> (split-with #(not= (otree/-get-id node conn) (otree/-get-id % conn)) children)
+  [node]
+  (when-let [parent (:block/parent node)]
+    (let [children (ldb/sort-by-order (:block/_parent parent))]
+      (->> (split-with #(not= (:block/uuid node) (:block/uuid %)) children)
            last
            rest))))
 
 (defn- blocks-with-ordered-list-props
   [repo conn blocks target-block sibling?]
   (let [db @conn
-        tb (when target-block (block db target-block))
-        target-block (if sibling? target-block (when tb (:block (otree/-get-down tb conn))))
+        target-block (if sibling? target-block (when target-block (ldb/get-down target-block)))
         list-type-fn (fn [block] (db-property-util/get-block-property-value repo db block :logseq.property/order-list-type))
         db-based? (sqlite-util/db-based-graph? repo)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
@@ -660,36 +522,9 @@
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
-(defn ^:api fix-top-level-blocks
-  "Blocks with :block/level"
-  [blocks]
-  (let [top-level-blocks (filter #(= (:block/level %) 1) blocks)
-        id->block (zipmap (map :db/id top-level-blocks) top-level-blocks)
-        uuid->block (zipmap (map :block/uuid top-level-blocks) top-level-blocks)]
-    (if (every? (fn [block]
-                  (let [left (:block/left block)
-                        id (if (map? left) (:db/id left) (second left))]
-                    (some? (or (get id->block id) (get uuid->block id))))) (rest top-level-blocks))
-      ;; no need to fix
-      blocks
-      (loop [blocks blocks
-             last-top-level-block nil
-             result []]
-        (if-let [block (first blocks)]
-          (if (= 1 (:block/level block))
-            (do
-              (assert (:db/id last-top-level-block) (str "last-top-level-block :block/left not exists: " last-top-level-block))
-              (let [block' (assoc block
-                                  :block/left {:db/id (:db/id last-top-level-block)}
-                                  :block/parent (:block/parent last-top-level-block))]
-                (recur (rest blocks) block (conj result block'))))
-            (recur (rest blocks) last-top-level-block (conj result block)))
-          result)))))
-
 (defn- insert-blocks-aux
-  [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? move? outliner-op]}]
+  [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? outliner-op]}]
   (let [block-uuids (map :block/uuid blocks)
-        ids (set (map :db/id blocks))
         uuids (zipmap block-uuids
                       (if keep-uuid?
                         block-uuids
@@ -716,30 +551,30 @@
 
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
-        indent-outdent? (= outliner-op :indent-outdent-blocks)]
-    (map-indexed (fn [idx {:block/keys [parent left] :as block}]
+        target-order (:block/order target-block)
+        next-sibling-order (:block/order (ldb/get-right-sibling target-block))
+        first-child (ldb/get-down target-block)
+        first-child-order (:block/order first-child)
+        start-order (when sibling? target-order)
+        end-order (if sibling? next-sibling-order first-child-order)
+        orders (db-order/gen-n-keys (count blocks) start-order end-order)]
+    (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid (get uuids (:block/uuid block))]
                      (let [top-level? (= (:block/level block) 1)
-                           outdented-block? (and indent-outdent?
-                                                 top-level?
-                                                 (not= (:block/parent block) (:block/parent target-block)))
-                           prev-hop (if outdented-block? (find-outdented-block-prev-hop block blocks) nil)
-                           left-exists-in-blocks? (contains? ids (:db/id (:block/left block)))
-                           parent (compute-block-parent block parent target-block prev-hop top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
-                           left (compute-block-left blocks block left target-block prev-hop idx replace-empty-target? left-exists-in-blocks? get-new-id)
-                           _ (assert (and parent left) (str "Parent or left is nil: " {:parent parent :left left}))
+                           parent (compute-block-parent block parent target-block top-level? sibling? get-new-id outliner-op replace-empty-target? idx)
+
+                           order (nth orders idx)
+                           _ (assert (and parent order) (str "Parent or order is nil: " {:parent parent :order order}))
                            m {:db/id (:db/id block)
                               :block/uuid uuid
                               :block/page target-page
                               :block/parent parent
-                              :block/left left}]
-                       (cond-> (if (de/entity? block)
-                                 (assoc m :block/level (:block/level block))
-                                 (merge block m))
-                           ;; We'll keep the original `:db/id` if it's a move operation,
-                           ;; e.g. internal cut or drag and drop shouldn't change the ids.
-                         (not move?)
-                         (dissoc :db/id)))))
+                              :block/order order}]
+                       (->
+                        (if (de/entity? block)
+                          (assoc m :block/level (:block/level block))
+                          (merge block m))
+                        (dissoc :db/id)))))
                  blocks)))
 
 (defn- get-target-block
@@ -777,7 +612,8 @@
 
                              :else
                              [block sibling?])
-          sibling? (if (ldb/page? block) false sibling?)]
+          sibling? (if (ldb/page? block) false sibling?)
+          block (if (de/entity? block) block (d/entity db (:db/id block)))]
       [block sibling?])))
 
 
@@ -830,24 +666,19 @@
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (let [[target-block' sibling?] (get-target-block @conn blocks target-block opts)
-        _ (assert (some? target-block') (str "Invalid target: " target-block))
-        sibling? (if (page-block? target-block') false sibling?)
-        move? (contains? #{:move-blocks :move-blocks-up-down :indent-outdent-blocks} outliner-op)
-        keep-uuid? (if move? true keep-uuid?)
+  (let [[target-block sibling?] (get-target-block @conn blocks target-block opts)
+        _ (assert (some? target-block) (str "Invalid target: " target-block))
+        sibling? (if (ldb/page? target-block) false sibling?)
         replace-empty-target? (if (and (some? replace-empty-target?)
-                                       (:block/content target-block')
-                                       (string/blank? (:block/content target-block')))
+                                       (:block/content target-block)
+                                       (string/blank? (:block/content target-block)))
                                 replace-empty-target?
                                 (and sibling?
-                                     (:block/content target-block')
-                                     (string/blank? (:block/content target-block'))
-                                     (> (count blocks) 1)
-                                     (not move?)))
+                                     (:block/content target-block)
+                                     (string/blank? (:block/content target-block))
+                                     (> (count blocks) 1)))
         blocks' (let [blocks' (blocks-with-level blocks)]
                   (cond->> (blocks-with-ordered-list-props repo conn blocks' target-block sibling?)
-                    (= outliner-op :paste)
-                    fix-top-level-blocks
                     update-timestamps?
                     (mapv (fn [b] (block-with-timestamps (dissoc b :block/created-at :block/updated-at))))
                     true
@@ -855,63 +686,21 @@
         insert-opts {:sibling? sibling?
                      :replace-empty-target? replace-empty-target?
                      :keep-uuid? keep-uuid?
-                     :move? move?
                      :outliner-op outliner-op}
-        tx' (insert-blocks-aux blocks' target-block' insert-opts)]
-    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/left b)))) tx')
+        tx' (insert-blocks-aux blocks' target-block insert-opts)]
+    (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) tx')
       (throw (ex-info "Invalid outliner data"
                       {:opts insert-opts
                        :tx (vec tx')
                        :blocks (vec blocks)
-                       :target-block target-block'}))
+                       :target-block target-block}))
       (let [uuids-tx (->> (map :block/uuid tx')
                           (remove nil?)
                           (map (fn [uuid] {:block/uuid uuid})))
-            tx (if move?
-                 tx'
-                 (assign-temp-id tx' replace-empty-target? target-block'))
-            target-node (block @conn target-block')
-            next (if sibling?
-                   (otree/-get-right target-node conn)
-                   (otree/-get-down target-node conn))
-            next-tx (when (and next
-                               (if move? (not (contains? (set (map :db/id blocks)) (:db/id (:data next)))) true))
-                      (if-let [left (last (filter (fn [b] (= 1 (:block/level b))) tx))]
-                        [{:block/uuid (otree/-get-id next conn)
-                          :block/left (:db/id left)}]
-                        (prn :debug :insert-blocks :tx tx)))
-            full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx next-tx)]
+            tx (assign-temp-id tx' replace-empty-target? target-block)
+            full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx)]
         {:tx-data full-tx
          :blocks  tx}))))
-
-(defn- build-move-block-next-tx
-  [db block target-block sibling?]
-  (let [target-id (:db/id target-block)]
-    [(when-let [right-block (get-right-sibling db (:db/id block))]
-       {:db/id (:db/id right-block)
-        :block/left (:db/id (:block/left block))})
-     (when-let [target-next-block (if sibling?
-                                    (get-right-sibling db (:db/id target-block))
-                                    (ldb/get-by-parent-&-left db target-id target-id))]
-       {:db/id (:db/id target-next-block)
-        :block/left (:db/id block)})]))
-
-(defn- find-new-left
-  [db block moved-ids target-block current-block {:keys [sibling? delete-blocks?] :as opts}]
-  (if (= (:db/id target-block) (:db/id (:block/left current-block)))
-    (if delete-blocks?
-      (if sibling?
-        (d/entity db (last moved-ids))
-        target-block)
-      ;; move blocks
-      (let [parent-of-first-block? (= (:db/id target-block) (:db/id (:block/parent current-block)))]
-        (if (or sibling? parent-of-first-block?)
-          (d/entity db (last moved-ids))
-          target-block)))
-    (let [left (d/entity db (:db/id (:block/left block)))]
-      (if (contains? (set moved-ids) (:db/id left))
-        (find-new-left db left moved-ids target-block current-block opts)
-        left))))
 
 (defn- sort-non-consecutive-blocks
   [db blocks]
@@ -920,137 +709,76 @@
               (ldb/sort-page-random-blocks db blocks))
             page-blocks)))
 
-(defn- fix-non-consecutive-blocks
-  [db blocks target-block sibling? delete-blocks?]
-  (when (> (count blocks) 1)
-    (let [page-blocks (group-by :block/page blocks)
-          near-by? (= (:db/id target-block) (:db/id (:block/left (first blocks))))
-          parent-of-first-block? (= (:db/id target-block) (:db/id (:block/parent (first blocks))))]
-      (->>
-       (mapcat (fn [[_page blocks]]
-                 (let [blocks (ldb/sort-page-random-blocks db blocks)
-                       non-consecutive-blocks (->> (conj (ldb/get-non-consecutive-blocks db blocks) (last blocks))
-                                                   (common-util/distinct-by :db/id))]
-                   (when (seq non-consecutive-blocks)
-                     (map-indexed (fn [idx block]
-                                    (when-let [right (get-right-sibling db (:db/id block))]
-                                      (cond
-                                        (and (zero? idx) parent-of-first-block? sibling?)
-                                        {:db/id (:db/id right)
-                                         :block/left (:db/id target-block)}
-                                        (and (zero? idx) near-by? sibling?)
-                                        {:db/id (:db/id right)
-                                         :block/left (:db/id (last blocks))}
-                                        :else
-                                        (let [new-left (find-new-left db right (distinct (map :db/id blocks)) target-block block
-                                                                      {:sibling? sibling?
-                                                                       :delete-blocks? delete-blocks?
-                                                                       :idx idx})]
-                                          (assert new-left (str "Can't find new left, :delete-blocks? " delete-blocks?))
-                                          {:db/id      (:db/id right)
-                                           :block/left (:db/id new-left)}))))
-                                  non-consecutive-blocks)))) page-blocks)
-       (remove nil?)))))
-
 (defn delete-block
-  [repo conn txs-state node {:keys [date-formatter]}]
-  (let [right-node (otree/-get-right node conn)]
-    (otree/-del node txs-state conn)
-    (when (otree/satisfied-inode? right-node)
-      (when-let [left-node (otree/-get-left node conn)]
-        (let [new-right-node (otree/-set-left-id right-node (otree/-get-id left-node conn) conn)]
-          (otree/-save new-right-node txs-state conn repo date-formatter {}))))
-    @txs-state))
+  [_repo conn txs-state node {:keys [_date-formatter]}]
+  (otree/-del node txs-state conn)
+  @txs-state)
+
+(defn- get-top-level-blocks
+  [top-level-blocks non-consecutive?]
+  (let [reversed? (and (not non-consecutive?)
+                       (:block/order (first top-level-blocks))
+                       (:block/order (second top-level-blocks))
+                       (> (compare (:block/order (first top-level-blocks))
+                                   (:block/order (second top-level-blocks))) 0))]
+    (if reversed? (reverse top-level-blocks) top-level-blocks)))
 
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
   [repo conn date-formatter blocks delete-opts]
   [:pre [(seq blocks)]]
-  (let [top-level-blocks (filter-top-level-blocks blocks)
+  (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
-        reversed? (and (not non-consecutive?)
-                       (= (:db/id (:block/left (first top-level-blocks)))
-                          (:db/id (second top-level-blocks))))
-        top-level-blocks (if reversed? (reverse top-level-blocks) top-level-blocks)
+        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
         txs-state (ds/new-outliner-txs-state)
         block-ids (map (fn [b] [:block/uuid (:block/uuid b)]) top-level-blocks)
         start-block (first top-level-blocks)
-        end-block (last top-level-blocks)
-        start-node (block @conn start-block)
-        end-node (block @conn end-block)]
+        end-block (last top-level-blocks)]
     (if (or
          (= 1 (count top-level-blocks))
-         (= start-node end-node))
-      (delete-block repo conn txs-state start-node (assoc delete-opts :date-formatter date-formatter))
-      (do
-        (when-not non-consecutive?
-          (let [sibling? (= (otree/-get-parent-id start-node conn)
-                            (otree/-get-parent-id end-node conn))
-                right-node (otree/-get-right end-node conn)]
-            (when (otree/satisfied-inode? right-node)
-              (let [left-node-id (if sibling?
-                                   (otree/-get-id (otree/-get-left start-node conn) conn)
-                                   (let [end-node-left-nodes (get-left-nodes conn end-node (count block-ids))
-                                         parents (->>
-                                                  (ldb/get-block-parents
-                                                   @conn
-                                                   (otree/-get-id start-node conn)
-                                                   {:depth 1000})
-                                                  (map :block/uuid)
-                                                  (set))
-                                         result (first (set/intersection (set end-node-left-nodes) parents))]
-                                     (when (and (not non-consecutive?) (not result))
-                                       (pprint/pprint {:parents parents
-                                                       :end-node-left-nodes end-node-left-nodes}))
-                                     result))]
-                (when (nil? left-node-id)
-                  (assert left-node-id
-                          (str "Can't find the left-node-id: "
-                               (pr-str {:start (d/entity @conn [:block/uuid (otree/-get-id start-node conn)])
-                                        :end (d/entity @conn [:block/uuid (otree/-get-id end-node conn)])
-                                        :right-node (d/entity @conn [:block/uuid (otree/-get-id right-node conn)])
-                                        :blocks top-level-blocks}))))
-                (let [new-right-node (otree/-set-left-id right-node left-node-id conn)]
-                  (otree/-save new-right-node txs-state conn repo date-formatter {}))))))
-        (doseq [id block-ids]
-          (let [node (block @conn (d/entity @conn id))]
-            (otree/-del node txs-state conn)))
-        (when non-consecutive?
-          (let [fix-non-consecutive-tx (fix-non-consecutive-blocks @conn top-level-blocks nil false true)]
-            (swap! txs-state concat fix-non-consecutive-tx)))))
+         (= start-block end-block))
+      (delete-block repo conn txs-state start-block (assoc delete-opts :date-formatter date-formatter))
+      (doseq [id block-ids]
+        (let [node (d/entity @conn id)]
+          (otree/-del node txs-state conn))))
     {:tx-data @txs-state}))
 
 (defn- move-to-original-position?
   [blocks target-block sibling? non-consecutive-blocks?]
   (and (not non-consecutive-blocks?)
-       (= (:db/id (:block/left (first blocks))) (:db/id target-block))
+       (= (:db/id (ldb/get-left-sibling (first blocks))) (:db/id target-block))
        (not= (= (:db/id (:block/parent (first blocks)))
                 (:db/id target-block))
              sibling?)))
 
 (defn- move-block
-  [db block target-block sibling?]
-  (let [target-block (d/entity db (:db/id target-block))
+  [conn block target-block sibling?]
+  (let [db @conn
+        target-block (d/entity db (:db/id target-block))
         block (d/entity db (:db/id block))
         first-block-page (:db/id (:block/page block))
         target-page (or (:db/id (:block/page target-block))
                         (:db/id target-block))
         not-same-page? (not= first-block-page target-page)
+        block-order (if sibling?
+                      (db-order/gen-key (:block/order target-block)
+                                        (:block/order (ldb/get-right-sibling target-block)))
+                      (db-order/gen-key nil
+                                        (:block/order (ldb/get-down target-block))))
         tx-data [(cond->
                   {:db/id (:db/id block)
-                   :block/left (:db/id target-block)
                    :block/parent (if sibling?
                                    (:db/id (:block/parent target-block))
-                                   (:db/id target-block))}
+                                   (:db/id target-block))
+                   :block/order block-order}
                    not-same-page?
                    (assoc :block/page target-page))]
-        move-blocks-next-tx (build-move-block-next-tx db block target-block sibling?)
         children-page-tx (when not-same-page?
                            (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]
                              (map (fn [id] {:block/uuid id
                                             :block/page target-page}) children-ids)))]
-    (common-util/concat-without-nil tx-data move-blocks-next-tx children-page-tx)))
+    (common-util/concat-without-nil tx-data children-page-tx)))
 
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
@@ -1058,20 +786,18 @@
                                    :as opts}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
-  (assert (every? (fn [block] (and (:db/id (:block/parent block)) (:db/id (:block/left block)))) blocks)
-          (str "Invalid blocks (without either parent or left): "
-               (remove (fn [block] (and (:db/id (:block/parent block)) (:db/id (:block/left block)))) blocks)))
   (let [db @conn
-        top-level-blocks (filter-top-level-blocks blocks)
+        top-level-blocks (filter-top-level-blocks db blocks)
         [target-block sibling?] (get-target-block db top-level-blocks target-block opts)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks db top-level-blocks)))
-        reversed? (and (not non-consecutive?)
-                       (= (:db/id (:block/left (first top-level-blocks)))
-                          (:db/id (second top-level-blocks))))
-        top-level-blocks (if reversed? (reverse top-level-blocks) top-level-blocks)
-        blocks (if non-consecutive?
-                 (sort-non-consecutive-blocks db top-level-blocks)
-                 top-level-blocks)
+        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)
+        blocks (->> (if non-consecutive?
+                      (sort-non-consecutive-blocks db top-level-blocks)
+                      top-level-blocks)
+                    (map (fn [block]
+                           (if (de/entity? block)
+                             block
+                             (d/entity db (:db/id block))))))
         original-position? (move-to-original-position? blocks target-block sibling? non-consecutive?)]
     (when (and (not (contains? (set (map :db/id blocks)) (:db/id target-block)))
                (not original-position?))
@@ -1087,11 +813,11 @@
                     target-block (if first-block? target-block
                                      (d/entity @conn (:db/id (nth blocks (dec idx)))))
                     block (d/entity @conn (:db/id block))]
-                (when-not (and (= (:db/id (:block/left block)) (:db/id target-block))
+                (when-not (and (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
                                (if sibling?
                                  (= (:db/id (:block/parent block)) (:db/id (:block/parent target-block)))
                                  (= (:db/id (:block/parent block)) (:db/id target-block))))
-                  (let [tx-data (move-block @conn block target-block sibling?)]
+                  (let [tx-data (move-block conn block target-block sibling?)]
                     (ldb/transact! conn tx-data {:sibling? sibling?
                                                  :outliner-op (or outliner-op :move-blocks)}))))))
           nil)))))
@@ -1101,13 +827,15 @@
   [repo conn blocks up?]
   {:pre [(seq blocks) (boolean? up?)]}
   (let [db @conn
-        top-level-blocks (filter-top-level-blocks blocks)
+        top-level-blocks (filter-top-level-blocks db blocks)
         opts {:outliner-op :move-blocks-up-down}]
     (if up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             first-block-parent (:block/parent first-block)
-            left (:block/left first-block)
-            left-left (:block/left left)
+            left-or-parent (or (ldb/get-left-sibling first-block)
+                               first-block-parent)
+            left-left (or (ldb/get-left-sibling left-or-parent)
+                          first-block-parent)
             sibling? (= (:db/id (:block/parent left-left))
                         (:db/id first-block-parent))]
         (when (and left-left
@@ -1117,13 +845,13 @@
                                                                          :up? up?}))))
 
       (let [last-top-block (last top-level-blocks)
-            last-top-block-right (get-right-sibling db (:db/id last-top-block))
+            last-top-block-right (ldb/get-right-sibling last-top-block)
             right (or
                    last-top-block-right
                    (let [parent (:block/parent last-top-block)
-                         parent-id (when (:block/page (d/entity db (:db/id parent)))
-                                     (:db/id parent))]
-                     (some->> parent-id (get-right-sibling db))))
+                         parent (when (:block/page (d/entity db (:db/id parent)))
+                                  parent)]
+                     (ldb/get-right-sibling parent)))
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
         (when right
@@ -1135,16 +863,12 @@
   [repo conn blocks indent? & {:keys [parent-original logical-outdenting?]}]
   {:pre [(seq blocks) (boolean? indent?)]}
   (let [db @conn
-        top-level-blocks (->> (map (fn [b] (d/entity db (:db/id b))) blocks)
-                              filter-top-level-blocks)
+        top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
-        reversed? (and (not non-consecutive?)
-                       (= (:db/id (:block/left (first top-level-blocks)))
-                          (:db/id (second top-level-blocks))))
-        top-level-blocks (if reversed? (reverse top-level-blocks) top-level-blocks)]
+        top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)]
     (when-not non-consecutive?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
-            left (d/entity db (:db/id (:block/left first-block)))
+            left (ldb/get-left-sibling first-block)
             parent (:block/parent first-block)
             concat-tx-fn (fn [& results]
                            {:tx-data (->> (map :tx-data results)
@@ -1152,7 +876,7 @@
                             :tx-meta (:tx-meta (first results))})
             opts {:outliner-op :indent-outdent-blocks}]
         (if indent?
-          (when (and left (not (page-first-child? first-block)))
+          (when left
             (let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id left))
                   blocks' (drop-while (fn [b]
                                         (= (:db/id (:block/parent b))
@@ -1179,7 +903,7 @@
                                                                           :sibling? true
                                                                           :indent? false})))
 
-            (when (and parent (not (page-block? (d/entity db (:db/id parent)))))
+            (when (and parent (not (ldb/page? (d/entity db (:db/id parent)))))
               (let [blocks' (take-while (fn [b]
                                           (not= (:db/id (:block/parent b))
                                                 (:db/id (:block/parent parent))))
@@ -1189,8 +913,7 @@
                   result
                   ;; direct outdenting (default behavior)
                   (let [last-top-block (d/entity db (:db/id (last blocks')))
-                        right-siblings (->> (get-right-siblings conn (block db last-top-block))
-                                            (map :data))]
+                        right-siblings (get-right-siblings last-top-block)]
                     (if (seq right-siblings)
                       (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
                         (move-blocks repo conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
@@ -1199,41 +922,10 @@
 
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
-(defn- validate-tx-data
-  "Ensure :block/left and :block/parent not point to itself"
-  [db tx-data tx-meta args]
-  (let [blocks (filter (fn [data] (and (map? data)
-                                       (or (:block/left data) (:block/parent data)))) tx-data)]
-    (every?
-     (fn left-parent-not-self
-       [{:block/keys [left parent] :as block}]
-       (let [eid (or (:db/id block) [:block/uuid (:block/uuid block)])]
-         (when-not (and (number? eid) (neg? eid))
-           (let [block-db-id (:db/id (d/entity db eid))
-                 left-id (some->> (when left (or (and (map? left) (:db/id left)) left))
-                                  (d/entity db)
-                                  :db/id)
-                 parent-id (some->> (when parent (or (and (map? parent) (:db/id parent)) parent))
-                                    (d/entity db)
-                                    :db/id)
-                 point-to-self? (some #(= block-db-id %) (remove nil? [left-id parent-id]))]
-             (when point-to-self?
-               (prn :error ":block/parent or :block/left points to self"
-                    {:block-id block-db-id
-                     :left-id left-id
-                     :parent-id parent-id
-                     :tx-data tx-data
-                     :tx-meta tx-meta
-                     :args (drop 2 args)})
-               (prn :datascript-db (ldb/write-transit-str db)))
-             (assert (not point-to-self?) ":block/parent or :block/left points to self")))))
-     blocks)))
-
 (defn- op-transact!
   [fn-var & args]
   {:pre [(var? fn-var)]}
   (let [result (apply @fn-var args)]
-    (validate-tx-data @(nth args 1) (:tx-data result) (:tx-meta result) args)
     (when result
       (ldb/transact! (second args) (:tx-data result) (:tx-meta result)))
     result))

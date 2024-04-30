@@ -306,7 +306,7 @@
            eid (when (and (vector? id) (= :block/name (first id)))
                  (:db/id (ldb/get-page @conn (second id))))
            result (->> (d/pull @conn selector (or eid id))
-                       (sqlite-common-db/with-parent-and-left @conn))]
+                       (sqlite-common-db/with-parent @conn))]
        (ldb/write-transit-str result))))
 
   (pull-many
@@ -320,7 +320,7 @@
   (get-right-sibling
    [_this repo db-id]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [result (ldb/get-right-sibling @conn db-id)]
+     (let [result (ldb/get-right-sibling (d/entity @conn db-id))]
        (ldb/write-transit-str result))))
 
   (get-block-and-children
@@ -369,9 +369,9 @@
                         (concat tx-data
                                 (db-fix/fix-cardinality-many->one @conn (:property-id tx-meta)))
                         tx-data)
-             tx-data' (if (= :new-property (:outliner-op tx-meta))
+             tx-data' (if (contains? #{:new-property :insert-blocks} (:outliner-op tx-meta))
                         (map (fn [m]
-                               (if (and (map? m))
+                               (if (and (map? m) (nil? (:block/order m)))
                                  (assoc m :block/order (db-order/gen-key nil))
                                  m)) tx-data')
                         tx-data')

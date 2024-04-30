@@ -103,7 +103,7 @@
          (page-handler/<create! page-name {:redirect? false}))
        (let [page-block (db/get-page page-name)
              children (:block/_parent page-block)
-             blocks (db/sort-by-left children page-block)
+             blocks (db/sort-by-order children)
              last-block (last blocks)
              snd-last-block (last (butlast blocks))
              [target-block sibling?] (if (and last-block (seq (:block/content last-block)))

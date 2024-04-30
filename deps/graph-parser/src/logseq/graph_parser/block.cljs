@@ -14,7 +14,8 @@
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.impl.entity :as de]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn heading-block?
   [block]
@@ -675,7 +676,7 @@
         result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
     (map #(dissoc % :block/meta) result)))
 
-(defn with-parent-and-left
+(defn with-parent-and-order
   [page-id blocks]
   (let [[blocks other-blocks] (split-with
                                (fn [b]
@@ -697,7 +698,6 @@
                            (= level-spaces parent-spaces)        ; sibling
                            (let [block (assoc block
                                               :block/parent parent
-                                              :block/left [:block/uuid uuid]
                                               :block/level level)
                                  parents' (conj (vec (butlast parents)) block)
                                  result' (conj result block)]
@@ -706,9 +706,8 @@
                            (> level-spaces parent-spaces)         ; child
                            (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
                                  block (cond->
-                                         (assoc block
-                                                :block/parent parent
-                                                :block/left parent)
+                                        (assoc block
+                                               :block/parent parent)
                                          ;; fix block levels with wrong order
                                          ;; For example:
                                          ;;   - a
@@ -724,10 +723,8 @@
                            (cond
                              (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
                              (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                                   left (last parents')
                                    blocks (cons (assoc (first blocks)
-                                                       :block/level (dec level)
-                                                       :block/left [:block/uuid (:block/uuid left)])
+                                                       :block/level (dec level))
                                                 (rest blocks))]
                                [blocks parents' result])
 
@@ -737,18 +734,17 @@
                                    parent-id (if-let [block-id (:block/uuid (last f))]
                                                [:block/uuid block-id]
                                                page-id)
-                                   block (cond->
-                                           (assoc block
-                                                  :block/parent parent-id
-                                                  :block/left [:block/uuid (:block/uuid left)]
-                                                  :block/level (:block/level left)
-                                                  :block/level-spaces (:block/level-spaces left)))
+                                   block (assoc block
+                                                :block/parent parent-id
+                                                :block/level (:block/level left)
+                                                :block/level-spaces (:block/level-spaces left))
 
                                    parents' (->> (concat f [block]) vec)
                                    result' (conj result block)]
                                [others parents' result'])))]
-                     (recur blocks parents result))))]
-    (concat result other-blocks)))
+                     (recur blocks parents result))))
+        result' (map (fn [block] (assoc block :block/order (db-order/gen-key))) result)]
+    (concat result' other-blocks)))
 
 (defn extract-plain
   "Extract plain elements including page refs"

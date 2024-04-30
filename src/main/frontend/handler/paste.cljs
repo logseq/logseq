@@ -27,7 +27,7 @@
                   (mldoc/->edn text format)
                   text format
                   {:page-name (:block/name (db/entity page-id))})
-          blocks' (gp-block/with-parent-and-left page-id blocks)]
+          blocks' (gp-block/with-parent-and-order page-id blocks)]
       (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
 
 (defn- paste-segmented-text

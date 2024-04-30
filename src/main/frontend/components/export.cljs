@@ -95,14 +95,15 @@
 
 (defn- get-image-blob
   [block-uuids-or-page-name {:keys [transparent-bg? x y width height zoom]} callback]
-  (let [style (js/window.getComputedStyle js/document.body)
+  (let [top-block-id (if (coll? block-uuids-or-page-name) (first block-uuids-or-page-name) block-uuids-or-page-name)
+        style (js/window.getComputedStyle js/document.body)
         background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
-        page? (string? block-uuids-or-page-name)
+        page? (and (uuid? top-block-id) (db/page? (db/entity [:block/uuid top-block-id])))
         selector (if page?
                    "#main-content-container"
-                   (str "[blockid='" (str (first block-uuids-or-page-name)) "']"))
+                   (str "[blockid='" top-block-id "']"))
         container  (js/document.querySelector selector)
-        scale (if page? (/ 1 (or zoom (get-zoom-level block-uuids-or-page-name))) 1)
+        scale (if page? (/ 1 (or zoom (get-zoom-level top-block-id))) 1)
         options #js {:allowTaint true
                      :useCORS true
                      :backgroundColor (or background "transparent")
@@ -113,7 +114,7 @@
                      :scrollX 0
                      :scrollY 0
                      :scale scale
-                     :windowHeight (when (string? block-uuids-or-page-name)
+                     :windowHeight (when page?
                                      (.-scrollHeight container))}]
     (-> (js/html2canvas container options)
         (.then (fn [canvas] (.toBlob canvas (fn [blob]
