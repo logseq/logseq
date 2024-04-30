@@ -234,7 +234,8 @@
   [repo]
   (let [graph-specific-hidden?
         (if (config/db-based-graph? repo)
-          (fn [_p] false)
+          (fn [p]
+            (and (contains? (set (:block/type p)) "property") (ldb/built-in? p)))
           (fn [p]
             (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
     (->> (db/get-all-pages repo)
