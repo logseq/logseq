@@ -88,20 +88,25 @@
   "Prepares properties in entities to be validated by DB schema"
   [db ents]
   (mapv
-   #(if-let [property (some->> (:property/pair-property %) (d/entity db))]
-      (assoc % :property-tuple
-             [(assoc (select-keys property [:db/ident :db/valueType])
-                     :block/schema
-                     (select-keys (:block/schema property) [:type :cardinality :values]))
-              (get % (:db/ident property))])
-      %)
+   (fn [ent]
+     (reduce (fn [m [k v]]
+               (if-let [property (and (db-property/property? k)
+                                      (d/entity db k))]
+                 (update m :block/properties (fnil conj [])
+                         [(assoc (select-keys property [:db/ident :db/valueType])
+                                 :block/schema
+                                 (select-keys (:block/schema property) [:type :cardinality :values]))
+                          v])
+                 (assoc m k v)))
+             {}
+             ent))
    ents))
 
 (defn datoms->entity-maps
   "Returns entity maps for given :eavt datoms indexed by db/id. Optional keys:
    * :entity-fn - Optional fn that given an entity id, returns entity. Defaults
-     to just doing a lookup within entity-maps to be as performant as possible"
-  [datoms & {:keys [_entity-fn]}]
+     to just doing a lookup based on existing entity-maps to be as performant as possible"
+  [datoms & {:keys [entity-fn]}]
   (let [ent-maps
         (reduce (fn [acc {:keys [a e v]}]
                   (if (contains? db-schema/card-many-attributes a)
@@ -114,23 +119,23 @@
                       (update acc e assoc a v))))
                 {}
                 datoms)
-        ;; entity-fn' (or entity-fn #(get ent-maps %))
-        ]
-    ent-maps
-    ;; (-> ent-maps
-    ;;     (update-vals
-    ;;      (fn [v]
-    ;;        (let [pair-ent (when (:property/pair-property v) (entity-fn' (:property/pair-property v)))]
-    ;;          (if-let [prop-value
-    ;;                   (and pair-ent
-    ;;                        (= :db.cardinality/many (:db/cardinality pair-ent))
-    ;;                        (get v (:db/ident pair-ent)))]
-    ;;            (if-not (set? prop-value)
-    ;;              ;; Fix :many property values that only had one value
-    ;;              (assoc v (:db/ident pair-ent) #{prop-value})
-    ;;              v)
-    ;;            v)))))
-    ))
+        entity-fn' (or entity-fn
+                       (let [db-ident-maps (dissoc (into {} (map (juxt :db/ident identity) (vals ent-maps))) nil)]
+                         #(get db-ident-maps %)))]
+    (-> ent-maps
+        (update-vals
+         (fn [m]
+           (->> m
+                (map (fn [[k v]]
+                       (if-let [property (and (db-property/property? k)
+                                              (entity-fn' k))]
+                         (if (and (= :db.cardinality/many (:db/cardinality property))
+                                  (not (set? v)))
+                           ;; Fix :many property values that only had one value
+                           [k #{v}]
+                           [k v])
+                         [k v])))
+                (into {})))))))
 
 (defn datoms->entities
   "Returns a vec of entity maps given :eavt datoms"
@@ -142,12 +147,31 @@
 ;; ==================
 ;; These schemas should be data vars to remain as simple and reusable as possible
 
+(def property-tuple
+  "A tuple of a property map and a property value. This schema
+   has 1 metadata hook which is used to inject a datascript db later"
+  (into
+   [:multi {:dispatch #(-> % first :block/schema :type)}]
+   (map (fn [[prop-type value-schema]]
+          [prop-type
+           (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
+             [:fn (with-meta (fn [db tuple] (validate-property-value db schema-fn tuple)) {:add-db true})])])
+        db-property-type/built-in-validation-schemas)))
+
+(def block-properties
+  "Validates a block's properties as property pairs. Properties are
+  a vector of tuples instead of a map in order to validate each
+  property with its property value that is valid for its type"
+  [:sequential property-tuple])
+
 (def page-or-block-attrs
   "Common attributes for page and normal blocks"
   [[:block/uuid :uuid]
    [:block/created-at :int]
    [:block/updated-at :int]
    [:block/format [:enum :markdown]]
+   ;; Injected by update-properties-in-ents
+   [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
    [:block/collapsed-properties {:optional true} [:set :int]]
@@ -355,28 +379,6 @@
    [:graph/uuid :string]
    [:graph/local-tx :string]])
 
-(def property-tuple
-  "A tuple of a property map and a property value. This schema
-   has 1 metadata hook which is used to inject a datascript db later"
-  (into
-   [:multi {:dispatch #(-> % first :block/schema :type)}]
-   (map (fn [[prop-type value-schema]]
-          [prop-type
-           (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
-             [:fn (with-meta (fn [db tuple] (validate-property-value db schema-fn tuple)) {:add-db true})])])
-        db-property-type/built-in-validation-schemas)))
-
-(def property-pair
-  [:map
-   ;; Not closed because property value key is different with every property
-   {:closed false}
-   [:property/pair-property :int]
-   [:block/created-at :int]
-   [:block/updated-at :int]
-   ;; Injected by update-properties-in-ents
-   [:property-tuple property-tuple]
-   [:block/tx-id {:optional true} :int]])
-
 (def db-ident-key-val
   "A key-val map consists of a :db/ident and a specific key val"
   (into [:or]
@@ -417,8 +419,6 @@
                           :file-block
                           (:block/uuid d)
                           :block
-                          (:property/pair-property d)
-                          :property-pair
                           (:asset/uuid d)
                           :asset-block
                           (= (:db/ident d) :logseq.property/empty-placeholder)
@@ -432,7 +432,6 @@
     :block block
     :file-block file-block
     :db-ident-key-value db-ident-key-val
-    :property-pair property-pair
     :asset-block asset-block
     :property-value-placeholder property-value-placeholder}))
 
@@ -454,7 +453,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-one-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page) (rest property-pair))
+(let [malli-one-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (filter #(= (last %) :int))
                                (map first)
                                set)
