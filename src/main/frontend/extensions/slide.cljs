@@ -12,7 +12,8 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
             [frontend.handler.db-based.property.util :as db-pu]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn loaded? []
   js/window.Reveal)
@@ -20,7 +21,7 @@
 (defn- with-properties
   [m block]
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
-        properties (:block/properties block)]
+        properties (if db-based? (db-property/properties block) (:block/properties block))]
     (if (seq properties)
       (merge m
              (update-keys
@@ -93,11 +94,7 @@
         loading? (rum/react *loading?)
         journal? (ldb/journal-page? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-page-blocks-no-cache repo
-                                                (:db/id page)
-                                                (if (config/db-based-graph? (state/get-current-repo))
-                                                  {:pull-keys '[* {:block/properties [* {:property/pair-property [:db/ident]}]}]}
-                                                  {}))
+        blocks (-> (db/get-page-blocks-no-cache repo (:db/id page))
                    (outliner-tree/blocks->vec-tree (:db/id page)))
         blocks (if journal?
                  (rest blocks)
