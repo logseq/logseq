@@ -69,23 +69,27 @@
                                   (create-local-updates-check-flow repo *auto-push? 2000))]
     (c.m/mix remote-updates-flow local-updates-check-flow)))
 
+
+(def ^:private *url->*current-mws
+  "Atom of url-> atom-*current-mws"
+  (atom {}))
+
 (defn- create-get-mws-create-task
-  "Return a task and *current-mws atom:
-  get-mws-create-task: get current mws, create one if needed(closed or not created yet)"
+  "Return a task that get current mws, create one if needed(closed or not created yet)"
   [url & {:keys [retry-count open-ws-timeout]
           :or {retry-count 10 open-ws-timeout 10000}}]
-  (let [*current-mws (atom nil)
-        mws-create-task (ws/mws-create url {:retry-count retry-count :open-ws-timeout open-ws-timeout})
-        get-mws-create-task
-        (m/sp
-          (let [mws @*current-mws]
-            (if (and mws
-                     (not (ws/closed? mws)))
-              mws
-              (let [mws (m/? mws-create-task)]
-                (reset! *current-mws mws)
-                mws))))]
-    [*current-mws get-mws-create-task]))
+  (let [*current-mws (or (@*url->*current-mws url) (atom nil))
+        mws-create-task (ws/mws-create url {:retry-count retry-count :open-ws-timeout open-ws-timeout})]
+    (when-not (@*url->*current-mws url)
+      (swap! *url->*current-mws assoc url *current-mws))
+    (m/sp
+      (let [mws @*current-mws]
+        (if (and mws
+                 (not (ws/closed? mws)))
+          mws
+          (let [mws (m/? mws-create-task)]
+            (reset! *current-mws mws)
+            mws))))))
 
 (defn- create-mws-state-flow
   [*current-mws]
@@ -127,14 +131,17 @@
   TODO: auto refresh token if needed"
   [user-uuid graph-uuid repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
-  (let [ws-url       (or debug-ws-url (get-ws-url token))
-        *auto-push?  (atom auto-push?)
-        *log         (atom nil)
-        started-dfv  (m/dfv)
-        add-log-fn   #(reset! *log [(js/Date.) %])
-        [*current-mws get-mws-create-task] (create-get-mws-create-task ws-url)
-        get-mws-create-task (r.client/ensure-register-graph-updates get-mws-create-task graph-uuid)
-        mixed-flow   (create-mixed-flow repo get-mws-create-task *auto-push?)]
+  (let [ws-url              (or debug-ws-url (get-ws-url token))
+        *auto-push?         (atom auto-push?)
+        *log                (atom nil)
+        started-dfv         (m/dfv)
+        add-log-fn          #(reset! *log [(js/Date.) %])
+        get-mws-create-task (r.client/ensure-register-graph-updates
+                             (create-get-mws-create-task ws-url)
+                             graph-uuid)
+        *current-mws        (@*url->*current-mws ws-url)
+        mixed-flow          (create-mixed-flow repo get-mws-create-task *auto-push?)]
+    (assert (some? *current-mws))
     {:rtc-log-flow    (m/buffer 100 (m/watch *log))
      :rtc-state-flow  (create-rtc-state-flow (create-mws-state-flow *current-mws))
      :*rtc-auto-push? *auto-push?
@@ -202,6 +209,42 @@
   (when-let [*auto-push? (:*rtc-auto-push? @*rtc-loop-metadata)]
     (swap! *auto-push? not)))
 
+
+(defn create-get-graphs-task
+  [token]
+  (m/sp
+    (let [get-mws-create-task (create-get-mws-create-task (get-ws-url token))]
+      (:graphs (m/? (r.client/send&recv get-mws-create-task {:action "list-graphs"}))))))
+
+(defn create-delete-graph-task
+  "Return a task that return true if succeed"
+  [token graph-uuid]
+  (m/sp
+    (let [get-mws-create-task (create-get-mws-create-task (get-ws-url token))
+          {:keys [ex-data]} (m/?
+                             (r.client/send&recv get-mws-create-task
+                                                 {:action "delete-graph" :graph-uuid graph-uuid}))]
+      (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
+      (boolean (nil? ex-data)))))
+
+(defn create-get-user-info-task
+  "Return a task that return users-info about the graph.
+  FIXME: remote api hasn't support yet."
+  [token graph-uuid]
+  (m/sp
+    (let [get-mws-create-task (create-get-mws-create-task (get-ws-url token))]
+      (:users
+       (m/? (r.client/send&recv get-mws-create-task
+                                {:action "get-users-info" :graph-uuid graph-uuid}))))))
+
+(defn create-grant-access-to-others-task
+  [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
+  (let [get-mws-create-task (create-get-mws-create-task (get-ws-url token))]
+    (r.client/send&recv get-mws-create-task
+                        (cond-> {:action "grant-access"
+                                 :graph-uuid graph-uuid}
+                          target-user-uuids (assoc :target-user-uuids target-user-uuids)
+                          target-user-emails (assoc :target-user-emails target-user-emails)))))
 
 
 (comment
