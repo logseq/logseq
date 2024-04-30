@@ -301,7 +301,7 @@ i.ti {
 }
 
 .admonitionblock {
-  @apply my-2 bg-gray-03 p-2 rounded;
+  @apply my-2 p-2;
 }
 
 .heading-bg {
