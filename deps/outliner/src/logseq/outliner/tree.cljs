@@ -5,21 +5,8 @@
             [datascript.core :as d]))
 
 (defprotocol INode
-  (-get-id [this conn])
-  (-get-parent-id [this conn])
-  (-get-left-id [this conn])
-  (-set-left-id [this left-id conn])
-  (-get-parent [this conn])
-  (-get-left [this conn])
-  (-get-right [this conn])
-  (-get-down [this conn])
   (-save [this txs-state conn repo date-formatter opts])
-  (-del [this db conn])
-  (-get-children [this conn]))
-
-(defn satisfied-inode?
-  [node]
-  (satisfies? INode node))
+  (-del [this db conn]))
 
 (defn- blocks->vec-tree-aux
   [repo db blocks root]
@@ -28,12 +15,12 @@
         parent-blocks (group-by #(get-in % [:block/parent :db/id]) blocks) ;; exclude whiteboard shapes
         sort-fn (fn [parent]
                   (when-let [children (get parent-blocks parent)]
-                    (ldb/sort-by-left children {:db/id parent})))
+                    (ldb/sort-by-order children)))
         block-children (fn block-children [parent level]
                          (map (fn [m]
                                 (let [id (:db/id m)
                                       children (-> (block-children id (inc level))
-                                                   (ldb/sort-by-left m))]
+                                                   (ldb/sort-by-order))]
                                   (assoc m
                                          :block/level level
                                          :block/children children)))
@@ -84,7 +71,7 @@
                             b')))
                       (let [parent {:db/id parent-id}]
                         (-> (get parent->children parent)
-                            (ldb/try-sort-by-left parent)))))
+                            (ldb/sort-by-order)))))
         children (nodes root-id 1)
         root' (assoc root :block/level (or default-level 1))]
     (if (seq children)
@@ -97,8 +84,6 @@
            :block/uuid (:block/uuid e)
            :block/parent {:db/id (:db/id (:block/parent e))}
            :block/page (:block/page e)}
-    (:db/id (:block/left e))
-    (assoc :block/left {:db/id (:db/id (:block/left e))})
     (:block/refs e)
     (assoc :block/refs (:block/refs e))
     (:block/children e)
@@ -118,7 +103,7 @@
   ([blocks default-level]
    (let [blocks (map block-entity->map blocks)
          top-level-blocks (filter-top-level-blocks blocks)
-         top-level-blocks' (ldb/try-sort-by-left top-level-blocks (:block/parent (first top-level-blocks)))
+         top-level-blocks' (ldb/sort-by-order top-level-blocks)
          parent->children (group-by :block/parent blocks)]
      (map #(tree parent->children % (or default-level 1)) top-level-blocks'))))
 
@@ -126,7 +111,7 @@
   [parents parent-groups]
   (mapv (fn [parent]
           (let [parent-id {:db/id (:db/id parent)}
-                children (ldb/sort-by-left (get @parent-groups parent-id) parent)
+                children (ldb/sort-by-order (get @parent-groups parent-id))
                 _ (swap! parent-groups #(dissoc % parent-id))
                 sorted-nested-children (when (not-empty children) (sort-blocks-aux children parent-groups))]
                     (if sorted-nested-children [parent sorted-nested-children] [parent])))

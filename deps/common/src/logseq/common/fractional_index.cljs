@@ -98,13 +98,13 @@
       (throw (js/Error. (str a " >= " b " or trailing zero"))))
     (let [n (when b
               (first (keep-indexed (fn [i _c] (when-not (= (nth a i zero) (nth b i)) i)) b)))]
-      (if (> n 0)
+      (if (and n (> n 0))
         (str (subs b 0 n) (midpoint (subs a n) (subs b n) digits))
-        (let [digit-a (if a (.indexOf digits (first a)) 0)
-              digit-b (if b (.indexOf digits (first b)) (count digits))]
+        (let [digit-a (if (seq a) (.indexOf digits (first a)) 0)
+              digit-b (if (seq b) (.indexOf digits (first b)) (count digits))]
           (if (> (- digit-b digit-a) 1)
             (str (nth digits (Math/round (* 0.5 (+ digit-a digit-b)))))
-            (if (and b (> (count b) 1))
+            (if (and (seq b) (> (count b) 1))
               (subs b 0 1)
               (str (nth digits digit-a) (midpoint (subs a 1) nil digits)))))))))
 

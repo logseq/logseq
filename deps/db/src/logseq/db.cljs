@@ -6,19 +6,19 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
-            [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.frontend.delete-blocks :as delete-blocks]))
+            [logseq.db.frontend.delete-blocks :as delete-blocks]
+            [datascript.impl.entity :as de]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
   '[:db/id
     :block/uuid
     :block/parent
-    :block/left
+    :block/order
     :block/collapsed?
     :block/collapsed-properties
     :block/format
@@ -78,23 +78,9 @@
        (let [f (or @*transact-fn d/transact!)]
          (f repo-or-conn tx-data tx-meta))))))
 
-(defn sort-by-left
-  [blocks parent]
-  (let [left->blocks (->> (reduce (fn [acc b] (assoc! acc (:db/id (:block/left b)) b))
-                                  (transient {}) blocks)
-                          (persistent!))]
-    (loop [block parent
-           result (transient [])]
-      (if-let [next (get left->blocks (:db/id block))]
-        (recur next (conj! result next))
-        (vec (persistent! result))))))
-
-(defn try-sort-by-left
-  [blocks parent]
-  (let [result' (sort-by-left blocks parent)]
-    (if (= (count result') (count blocks))
-      result'
-      blocks)))
+(defn sort-by-order
+  [blocks]
+  (sort-by :block/order blocks))
 
 ;; TODO: use the tree directly
 (defn flatten-tree
@@ -142,24 +128,29 @@
   [db page-id]
   (count (d/datoms db :avet :block/page page-id)))
 
-(defn get-by-parent-&-left
-  [db parent-id left-id]
-  (when (and parent-id left-id)
-    (let [lefts (:block/_left (d/entity db left-id))]
-      (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
-                                  (not= parent-id (:db/id node)))
-                         node)) lefts))))
-
 (defn get-right-sibling
-  [db db-id]
-  (when-let [block (d/entity db db-id)]
-    (get-by-parent-&-left db
-                          (:db/id (:block/parent block))
-                          db-id)))
+  [block]
+  (assert (or (de/entity? block) (nil? block)))
+  (when-let [parent (:block/parent block)]
+    (let [children (sort-by-order (:block/_parent parent))
+          right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
+      (when (not= (:db/id right) (:db/id block))
+        right))))
 
-(defn get-by-id
-  [db id]
-  (d/pull db '[*] id))
+(defn get-left-sibling
+  [block]
+  (assert (or (de/entity? block) (nil? block)))
+  (when-let [parent (:block/parent block)]
+    (let [children (reverse (sort-by-order (:block/_parent parent)))
+          left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
+      (when (not= (:db/id left) (:db/id block))
+        left))))
+
+(defn get-down
+  [block]
+  (assert (or (de/entity? block) (nil? block)))
+  (first (sort-by-order (:block/_parent block))))
+
 
 (defn hidden-page?
   [page]
@@ -269,16 +260,20 @@
      (when (if not-collapsed?
              (not (collapsed-and-has-children? db block))
              true)
-       (let [children (:block/_parent block)
-             all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
-             all-ids (set (map :db/id children))]
-         (first (set/difference all-ids all-left)))))))
+       (let [children (sort-by :block/order (:block/_parent block))]
+         (:db/id (last children)))))))
 
 (defn get-block-immediate-children
   "Doesn't include nested children."
-  [db block-uuid]
-  (when-let [parent (d/entity db [:block/uuid block-uuid])]
-    (sort-by-left (:block/_parent parent) parent)))
+  [db block-entity-or-eid]
+  (when-let [parent (cond
+                      (number? block-entity-or-eid)
+                      (d/entity db block-entity-or-eid)
+                      (uuid? block-entity-or-eid)
+                      (d/entity db [:block/uuid block-entity-or-eid])
+                      :else
+                      block-entity-or-eid)]
+    (sort-by-order (:block/_parent parent))))
 
 (defn get-block-parents
   [db block-id {:keys [depth] :or {depth 100}}]
@@ -294,16 +289,20 @@
 (def get-block-children-ids sqlite-common-db/get-block-children-ids)
 (def get-block-children sqlite-common-db/get-block-children)
 
+(defn get-first-child
+  [db id]
+  (first (sort-by-order (:block/_parent (d/entity db id)))))
+
 (defn- get-sorted-page-block-ids
   [db page-id]
   (let [root (d/entity db page-id)]
     (loop [result []
-           children (sort-by-left (:block/_parent root) root)]
+           children (sort-by-order (:block/_parent root))]
       (if (seq children)
         (let [child (first children)]
           (recur (conj result (:db/id child))
                  (concat
-                  (sort-by-left (:block/_parent child) child)
+                  (sort-by-order (:block/_parent child))
                   (rest children))))
         result))))
 
@@ -317,13 +316,6 @@
         blocks-map (zipmap (map :db/id blocks) blocks)]
     (keep blocks-map sorted-ids)))
 
-(defn get-prev-sibling
-  [db id]
-  (when-let [e (d/entity db id)]
-    (let [left (:block/left e)]
-      (when (not= (:db/id left) (:db/id (:block/parent e)))
-        left))))
-
 (defn last-child-block?
   "The child block could be collapsed."
   [db parent-id child-id]
@@ -332,7 +324,7 @@
       (= parent-id child-id)
       true
 
-      (get-right-sibling db child-id)
+      (get-right-sibling child)
       false
 
       :else
@@ -344,8 +336,8 @@
                  (and (= (:block/page block-1) (:block/page block-2))
                       (or
                        ;; sibling or child
-                       (= (:db/id (:block/left block-2)) (:db/id block-1))
-                       (when-let [prev-sibling (get-prev-sibling db (:db/id block-2))]
+                       (= (:db/id (get-left-sibling block-2)) (:db/id block-1))
+                       (when-let [prev-sibling (get-left-sibling (d/entity db (:db/id block-2)))]
                          (last-child-block? db (:db/id prev-sibling) (:db/id block-1))))))]
     (or (aux-fn block-1 block-2) (aux-fn block-2 block-1))))
 

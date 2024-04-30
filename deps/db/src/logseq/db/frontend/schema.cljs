@@ -20,8 +20,7 @@
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
                   :db/index true}
-   :block/left   {:db/valueType :db.type/ref
-                  :db/index true}
+   :block/order {:db/index true}
    :block/collapsed? {}
    :block/collapsed-properties {:db/valueType :db.type/ref
                                 :db/cardinality :db.cardinality/many}
@@ -123,7 +122,6 @@
            :block/namespace :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
            :block/properties :block/properties-order :block/repeated? :block/deadline :block/scheduled :block/priority :block/marker)
    {:block/name {:db/index true}        ; remove db/unique for :block/name
-    :block/order {:db/index true}
     ;; class properties
     :class/parent {:db/valueType :db.type/ref
                    :db/index true}

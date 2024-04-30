@@ -84,9 +84,7 @@
     (let [repo (state/get-current-repo)]
       (if (config/db-based-graph? repo)
         (when-let [page (ldb/get-page db common-config/favorites-page-name)]
-          (let [blocks (ldb/sort-by-left
-                        (ldb/get-page-blocks db (:db/id page) {})
-                        page)]
+          (let [blocks (ldb/sort-by-order (:block/_parent page))]
             (keep (fn [block]
                     (when-let [block-db-id (:db/id (:block/link block))]
                       (d/entity db block-db-id))) blocks)))
@@ -152,8 +150,7 @@
             (keep (fn [page-uuid]
                     (:db/id (db/get-page page-uuid)))
                   favorites)
-            current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn (:db/id favorites-page) {})
-                                             favorites-page)]
+            current-blocks (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page) {}))]
         (p/do!
          (ui-outliner-tx/transact!
           {}

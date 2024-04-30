@@ -8,7 +8,8 @@
             [frontend.state :as state]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [logseq.db :as ldb]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
@@ -260,8 +261,8 @@
 
 (defn- delete-block
   [db block {:keys [embed?]}]
-  (let [sibling-block (d/entity db (get-in block [:block/left :db/id]))
-        first-block (d/entity db (get-in sibling-block [:block/left :db/id]))
+  (let [sibling-block (ldb/get-left-sibling (d/entity db (:db/id block)))
+        first-block (ldb/get-left-sibling sibling-block)
         block-dom-id "ls-block-block-to-delete"]
     (with-redefs [editor/get-state (constantly {:block-id (:block/uuid block)
                                                 :block-parent-id block-dom-id

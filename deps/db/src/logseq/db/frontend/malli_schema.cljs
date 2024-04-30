@@ -311,7 +311,6 @@
 (def block-attrs
   "Common attributes for normal blocks"
   [[:block/content :string]
-   [:block/left :int]
    [:block/parent :int]
    [:block/order {:optional true} :string]
    ;; refs
@@ -351,7 +350,7 @@
       [:map
        [:value [:or :string :double]]
        [:description {:optional true} :string]]]]
-    (remove #(#{:block/content :block/left} (first %)) block-attrs)
+    (remove #(#{:block/content} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def normal-block

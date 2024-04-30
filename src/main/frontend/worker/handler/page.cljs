@@ -12,7 +12,8 @@
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [medley.core :as medley]
-            [frontend.worker.date :as date]))
+            [frontend.worker.date :as date]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn properties-block
   [repo conn config date-formatter properties format page]
@@ -23,7 +24,7 @@
      :block/properties properties
      :block/properties-order (keys properties)
      :block/refs refs
-     :block/left page
+     :block/order (db-order/gen-key nil nil)
      :block/format format
      :block/content content
      :block/parent page
@@ -130,7 +131,7 @@
                                                         {:block/uuid (ldb/new-block-id)
                                                          :block/page page-id
                                                          :block/parent page-id
-                                                         :block/left page-id
+                                                         :block/order (db-order/gen-key nil nil)
                                                          :block/content ""
                                                          :block/format format})]))
                                    txs      (concat

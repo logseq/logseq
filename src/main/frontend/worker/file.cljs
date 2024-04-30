@@ -35,13 +35,13 @@
 (def whiteboard-blocks-pull-keys-with-persisted-ids
   '[:block/properties
     :block/uuid
+    :block/order
     :block/content
     :block/format
     :block/created-at
     :block/updated-at
     :block/collapsed?
     {:block/page      [:block/uuid]}
-    {:block/left      [:block/uuid]}
     {:block/parent    [:block/uuid]}])
 
 (defn- cleanup-whiteboard-block
@@ -53,7 +53,7 @@
             :block/collapsed?
             :block/content
             :block/format
-            :block/left
+            :block/order
             :block/page
             :block/parent) ;; these are auto-generated for whiteboard shapes
     (dissoc block :db/id :block/page)))

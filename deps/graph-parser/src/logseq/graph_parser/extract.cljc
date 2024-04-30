@@ -229,7 +229,7 @@
                       (attach-block-ids-if-match override-uuids)
                       (mapv #(gp-block/fix-block-id-if-duplicated! db page-name extracted-block-ids %))
                       ;; FIXME: use page uuid
-                      (gp-block/with-parent-and-left {:block/name page-name})
+                      (gp-block/with-parent-and-order {:block/name page-name})
                       (vec))
           ref-pages (atom #{})
           blocks (map (fn [block]
@@ -318,6 +318,7 @@
                 (fn [block]
                   (-> block
                       (common-util/dissoc-in [:block/parent :block/name])
+                      ;; :block/left here for backward compatiblity
                       (common-util/dissoc-in [:block/left :block/name])))
                 blocks)
         serialized-page (first pages)

@@ -28,7 +28,7 @@
  [frontend.db.model
   delete-blocks get-pre-block
   delete-files delete-pages-by-files
-  get-block-and-children get-block-by-uuid get-block-children sort-by-left
+  get-block-and-children get-block-by-uuid get-block-children sort-by-order
   get-block-parent get-block-parents parents-collapsed? get-block-referenced-blocks
   get-block-immediate-children get-block-page
   get-custom-css

@@ -368,7 +368,7 @@
                                                  (outliner-core/delete-block repo
                                                                              (db/get-db false)
                                                                              txs-state
-                                                                             (outliner-core/->Block property-block)
+                                                                             property-block
                                                                              {:children? true})
                                                  @txs-state))]
                        (concat
@@ -488,8 +488,7 @@
                     :block/content ""
                     :block/page page-id
                     :block/parent page-id
-                    :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
-                                    page-id)
+                    :block/order nil
                     :logseq.property/created-from-block (:db/id block)
                     :logseq.property/created-from-property (:db/id property)}
                    sqlite-util/block-with-timestamps)
@@ -498,8 +497,7 @@
                      :block/format :markdown
                      :block/content value
                      :block/page page-id
-                     :block/parent [:block/uuid parent-id]
-                     :block/left [:block/uuid parent-id]}
+                     :block/parent [:block/uuid parent-id]}
                     sqlite-util/block-with-timestamps
                     parse-block)]
     {:page page-tx
@@ -542,8 +540,6 @@
                        :block/tags #{(:db/id template)}
                        :block/page page-id
                        :block/parent page-id
-                       :block/left (or (when page-entity (model/get-block-last-direct-child-id (db/get-db) (:db/id page-entity)))
-                                       page-id)
                        :logseq.property/created-from-block [:block/uuid (:block/uuid block)]
                        :logseq.property/created-from-property (:db/id property)
                        :logseq.property/created-from-template [:block/uuid (:block/uuid template)]}

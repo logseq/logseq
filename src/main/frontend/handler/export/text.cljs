@@ -520,7 +520,8 @@
              ;; page
              (common/get-page-content root-block-uuids-or-page-uuid)
              (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
-           first-block (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)])
+           first-block (and (coll? root-block-uuids-or-page-uuid)
+                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
            format (or (:block/format first-block) (state/get-preferred-format))]
        (export-helper content format options))
      (catch :default e

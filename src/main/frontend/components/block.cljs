@@ -858,7 +858,7 @@
                       page-name))
            (if whiteboard-page?
                ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
-               (let [blocks (db/sort-by-left (:block/_parent block) block)]
+               (let [blocks (db/sort-by-order (:block/_parent block))]
                  (blocks-container blocks (assoc config
                                                  :db/id (:db/id block)
                                                  :id page-name
@@ -3093,7 +3093,7 @@
                              :in-block-container? true})])
 
        (when-not (or (:hide-children? config) in-whiteboard?)
-         (let [children' (db/sort-by-left children block)
+         (let [children' (db/sort-by-order children)
                config' (-> (update config :level inc)
                            (dissoc :original-block))]
            (block-children config' block children' collapsed?)))

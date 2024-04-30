@@ -175,18 +175,6 @@
                    ;; Fallback to original properties for page blocks
                    (get-in row [:block/properties column])))]))
 
-(defn build-column-text [row column]
-  (case column
-    :page  (or (get-in row [:block/page :block/original-name])
-               (get-in row [:block/original-name])
-               (get-in row [:block/content]))
-    :block (or (get-in row [:block/original-name])
-               (get-in row [:block/content]))
-
-           (or (get-in row [:block/properties column])
-               (get-in row [:block/properties-text-values column])
-               (get-in row [(keyword :block column)]))))
-
 (defn- render-column-value
   [{:keys [row-block row-format cell-format value]} page-cp inline-text {:keys [uuid-names db-graph?]}]
   (cond

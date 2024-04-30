@@ -4,6 +4,7 @@
    [clojure.string :as string]
    [clojure.walk :as walk]
    [frontend.db :as db]
+   [logseq.db :as ldb]
    [frontend.db.model :as db-model]
    [frontend.mobile.haptics :as haptics]
    [logseq.outliner.core :as outliner-core]
@@ -53,9 +54,10 @@
   (get-timestamp block "Deadline"))
 
 (defn indentable?
-  [{:block/keys [parent left]}]
+  [{:block/keys [parent] :as block}]
   (when parent
-    (not= parent left)))
+    (not= (:db/id (ldb/get-first-child (db/get-db) (:db/id parent)))
+          (:db/id block))))
 
 (defn outdentable?
   [{:block/keys [level] :as _block}]
@@ -118,17 +120,17 @@
                           (let [properties (:block/properties block)
                                 type (pu/lookup properties :logseq.property/order-list-type)]
                             (= type order-list-type)))
-        prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (db/get-db)))
+        prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
         prev-block      (prev-block-fn block)]
     (letfn [(page-fn? [b] (some-> b :block/name some?))
             (order-sibling-list [b]
               (lazy-seq
-                (when (and (not (page-fn? b)) (order-block-fn? b))
-                  (cons b (order-sibling-list (prev-block-fn b))))))
+               (when (and (not (page-fn? b)) (order-block-fn? b))
+                 (cons b (order-sibling-list (prev-block-fn b))))))
             (order-parent-list [b]
               (lazy-seq
-                (when (and (not (page-fn? b)) (order-block-fn? b))
-                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
+               (when (and (not (page-fn? b)) (order-block-fn? b))
+                 (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
             order-parents-count (dec (count (order-parent-list block)))

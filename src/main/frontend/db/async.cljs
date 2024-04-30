@@ -210,7 +210,7 @@
                              future-day
                              db-model/block-attrs)]
             (->> result
-                 db-model/sort-by-left-recursive
+                 db-model/sort-by-order-recursive
                  db-utils/group-by-page)))))))
 
 (defn <get-tag-pages

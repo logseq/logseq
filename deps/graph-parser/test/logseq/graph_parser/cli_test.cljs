@@ -9,7 +9,8 @@
             [clojure.set :as set]
             ["fs" :as fs]
             ["process" :as process]
-            ["path" :as path]))
+            ["path" :as path]
+            [logseq.db.frontend.order :as db-order]))
 
 (use-fixtures
   :each
@@ -117,7 +118,7 @@
                                :block/uuid (random-uuid)
                                :block/format :markdown
                                :block/page {:db/id page-id}
-                               :block/left {:db/id page-id}
+                               :block/order (db-order/gen-key nil)
                                :block/parent {:db/id page-id}
                                :block/created-at created-at
                                :block/updated-at created-at})

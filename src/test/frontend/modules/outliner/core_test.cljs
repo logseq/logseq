@@ -4,7 +4,6 @@
             [frontend.test.fixtures :as fixtures]
             [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as tree]
-            [logseq.outliner.tree :as otree]
             [logseq.outliner.transaction :as outliner-tx]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -15,7 +14,9 @@
             [frontend.state :as state]
             [clojure.set :as set]
             [frontend.db.conn :as conn]
-            [frontend.worker.db-listener :as worker-db-listener]))
+            [frontend.worker.db-listener :as worker-db-listener]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.order :as db-order]))
 
 (def test-db test-helper/test-db)
 
@@ -44,10 +45,14 @@
 (defn get-block
   ([id]
    (get-block id false))
-  ([id node?]
-   (cond->> (db/pull test-db '[*] [:block/uuid id])
-     node?
-     (outliner-core/block (db/get-db)))))
+  ([id _node?]
+   (db/entity test-db [:block/uuid id])))
+
+(defn get-children
+  [id]
+  (->> (:block/_parent (d/entity (db/get-db) [:block/uuid id]))
+       ldb/sort-by-order
+       (mapv :block/uuid)))
 
 (defn build-node-tree
   [col]
@@ -87,16 +92,17 @@
 
 (defn- build-blocks
   [tree]
-  (gp-block/with-parent-and-left 1 (build-node-tree tree)))
+  (gp-block/with-parent-and-order 1 (build-node-tree tree)))
 
 (defn transact-tree!
   [tree]
   (let [blocks (build-blocks tree)]
-    (assert (every? (fn [block] (and (:block/parent block) (:block/left block))) blocks) (str "Invalid blocks: " blocks))
-    (db/transact! test-db (concat [{:db/id 1
-                                    :block/uuid 1
-                                    :block/name "Test page"}]
-                                  blocks))))
+    (assert (every? (fn [block] (and (:block/parent block) (:block/order block))) blocks) (str "Invalid blocks: " blocks))
+    (d/transact! (db/get-db test-db false)
+                 (concat [{:db/id 1
+                           :block/uuid 1
+                           :block/name "Test page"}]
+                         blocks))))
 
 (def tree
   [[22 [[2 [[3 [[4]
@@ -116,11 +122,6 @@
 (defn get-blocks-ids
   []
   (set (map :v (d/datoms (db/get-db test-db) :avet :block/uuid))))
-
-(defn get-children
-  [id]
-  (->> (otree/-get-children (get-block id true) (db/get-db test-db false))
-       (mapv #(-> % :data :block/uuid))))
 
 (defn- transact-opts
   []
@@ -293,37 +294,6 @@
       (outliner-core/indent-outdent-blocks! test-db (db/get-db test-db false) [(get-block 13) (get-block 14)] false))
     (is (= [2 12 13 14 16] (get-children 22)))))
 
-(deftest test-fix-top-level-blocks
-  (testing "no need to fix"
-    (let [blocks [{:block/uuid #uuid "62aa668b-e258-445d-aef6-5510054ff495",
-                   :block/properties {},
-                   :block/left #:db{:id 144},
-                   :block/format :markdown,
-                   :block/level 1,
-                   :block/content "a",
-                   :db/id 145,
-                   :block/parent #:db{:id 144},
-                   :block/page #:db{:id 144}}
-                  {:block/uuid #uuid "62aa668d-65d1-440c-849b-a0717f691193",
-                   :block/properties {},
-                   :block/left #:db{:id 145},
-                   :block/format :markdown,
-                   :block/level 1,
-                   :block/content "b",
-                   :db/id 146,
-                   :block/parent #:db{:id 144},
-                   :block/page #:db{:id 144}}
-                  {:block/uuid #uuid "62aa668e-f866-48ee-b8fe-737e101c548d",
-                   :block/properties {},
-                   :block/left #:db{:id 146},
-                   :block/format :markdown,
-                   :block/level 1,
-                   :block/content "c",
-                   :db/id 147,
-                   :block/parent #:db{:id 144},
-                   :block/page #:db{:id 144}}]]
-      (is (= blocks (outliner-core/fix-top-level-blocks blocks))))))
-
 (deftest test-outdent-blocks
   (testing "
   [1 [[2 [[3]
@@ -453,8 +423,7 @@
        (outliner-core/insert-blocks!
         test-db
         (db/get-db test-db false)
-        [{:block/left 1
-          :block/content "test"
+        [{:block/content "test"
           :block/parent 1
           :block/page 1}]
         target-block
@@ -490,43 +459,35 @@
   (testing "blocks with level"
     (is (= (outliner-core/blocks-with-level
             [{:db/id 6,
-              :block/left #:db{:id 3},
               :block/level 3,
               :block/parent #:db{:id 2},
               :block/uuid 6}
              {:db/id 9,
-              :block/left #:db{:id 6},
               :block/level 3,
               :block/parent #:db{:id 2},
               :block/uuid 9}])
            [{:db/id 6,
-             :block/left #:db{:id 3},
              :block/level 1,
              :block/parent #:db{:id 2},
              :block/uuid 6}
             {:db/id 9,
-             :block/left #:db{:id 6},
              :block/level 1,
              :block/parent #:db{:id 2},
              :block/uuid 9}]))
     (is (= (outliner-core/blocks-with-level
             [{:db/id 6,
-              :block/left #:db{:id 3},
               :block/level 3,
               :block/parent #:db{:id 2},
               :block/uuid 6}
              {:db/id 9,
-              :block/left #:db{:id 6},
               :block/level 4,
               :block/parent #:db{:id 6},
               :block/uuid 9}])
            [{:db/id 6,
-             :block/left #:db{:id 3},
              :block/level 1,
              :block/parent #:db{:id 2},
              :block/uuid 6}
             {:db/id 9,
-             :block/left #:db{:id 6},
              :block/level 2,
              :block/parent #:db{:id 6},
              :block/uuid 9}]))))
@@ -661,8 +622,8 @@ tags:: tag1, tag2
     (if (seq datoms)
       (let [id (:e (gen/generate (gen/elements datoms)))
             block (db/pull test-db '[*] id)]
-        (assert (and (:block/left block) (:block/parent block))
-                (str "No left or parent for block: " block))
+        (assert (:block/parent block)
+                (str "No parent for block: " block))
         block)
       (do
         (transact-random-tree!)

@@ -1,7 +1,6 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
-            [frontend.worker.db.fix :as db-fix]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
             [frontend.worker.util :as worker-util]
@@ -49,31 +48,24 @@
                empty-property-parents)
        (remove nil?)))))
 
-(defn fix-db!
-  [conn {:keys [db-before db-after tx-data] :as tx-report} context]
-  (let [changed-pages (->> (filter (fn [d] (contains? #{:block/left :block/parent} (:a d))) tx-data)
-                           (map :e)
-                           distinct
-                           (map (fn [id]
-                                  (-> (or (d/entity db-after id)
-                                          (d/entity db-before id))
-                                      :block/page
-                                      :db/id)))
-                           (remove nil?)
-                           (distinct))]
-    (doseq [changed-page-id changed-pages]
-      (db-fix/fix-page-if-broken! conn changed-page-id {:tx-report tx-report
-                                                        :context context}))))
-
-(defn validate-and-fix-db!
+(defn validate-db!
   [repo conn tx-report context]
   (when (and (:dev? context) (not (:importing? context)) (sqlite-util/db-based-graph? repo))
     (let [valid? (db-validate/validate-tx-report! tx-report (:validate-db-options context))]
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
         (worker-util/post-message :notification
                                   [["Invalid DB!"] :error]))))
+
+  ;; Ensure :block/order is unique for any block that has :block/parent
   (when (or (:dev? context) (exists? js/process))
-    (fix-db! conn tx-report context)))
+    (let [order-datoms (filter (fn [d] (= :block/order (:a d))) (:tx-data tx-report))]
+      (doseq [datom order-datoms]
+        (let [entity (d/entity @conn (:db/id datom))
+              parent (:block/parent entity)]
+          (when parent
+            (let [children (:block/_parent parent)]
+              (assert (= (count (distinct (map :block/order children))) (count children))
+                      (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
 
 (defn invoke-hooks
   [repo conn {:keys [tx-meta] :as tx-report} context]
@@ -127,7 +119,7 @@
                           (do
                             (when-not (exists? js/process) (d/store @conn))
                             tx-report))
-              fix-tx-data (validate-and-fix-db! repo conn tx-report context)
+              fix-tx-data (validate-db! repo conn tx-report context)
               full-tx-data (concat (:tx-data tx-report)
                                    fix-tx-data
                                    (:tx-data tx-report'))

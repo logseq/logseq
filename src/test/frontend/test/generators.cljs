@@ -12,7 +12,6 @@
                 true
                 (concat '[:where
                           [?block :block/parent]
-                          [?block :block/left]
                           [?block :block/uuid ?block-uuid]])
                 page-uuid
                 (concat '[[?block :block/page ?page]
@@ -25,17 +24,16 @@
       (gen/elements coll)
       (gen/return nil))))
 
-(defn gen-available-parent-left-pair
-  "generate [<parent-uuid> <left-uuid>]"
+(defn gen-available-parent
+  "generate [<parent-uuid>]"
   [db & {:keys [page-uuid]}]
-  (let [query (cond-> '[:find ?parent-uuid ?left-uuid]
+  (let [query (cond-> '[:find ?parent-uuid]
                 page-uuid
                 (concat '[:in $ ?page-uuid])
                 true
                 (concat '[:where
                           [?b :block/uuid]
                           [?b :block/parent ?parent]
-                          [?b :block/left ?left]
                           [?parent :block/uuid ?parent-uuid]
                           [?left :block/uuid ?left-uuid]])
                 page-uuid

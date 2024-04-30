@@ -15,7 +15,8 @@
             ["fs" :as fs]
             ["path" :as node-path]
             [nbb.classpath :as cp]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn- find-on-classpath [rel-path]
   (some (fn [dir]
@@ -110,13 +111,13 @@
   "Provides the next temp :db/id to use in a create-graph transact!"
   #(swap! current-db-id dec))
 
-(defn- ->block-tx [m uuid-maps all-idents page-id last-block block-id-fn]
+(defn- ->block-tx [m uuid-maps all-idents page-id]
   (merge (dissoc m :properties)
          (sqlite-util/block-with-timestamps
           {:db/id (new-db-id)
            :block/format :markdown
            :block/page {:db/id page-id}
-           :block/left {:db/id (if last-block (block-id-fn last-block) page-id)}
+           :block/order (db-order/gen-key nil)
            :block/parent {:db/id page-id}})
          (when (seq (:properties m))
            (merge (->block-properties (:properties m) uuid-maps all-idents)
@@ -172,7 +173,7 @@
    have the following limitations:
 
  * Only top level blocks can be easily defined. Other level blocks can be
-   defined but they require explicit setting of attributes like :block/left and :block/parent
+   defined but they require explicit setting of attributes like :block/order and :block/parent
  * Block content containing page refs or tags is not supported yet
 
    The EDN map has the following keys:
@@ -190,8 +191,6 @@
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
-  * :block-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
-    Default is :db/id
 
    The :properties in :pages-and-blocks is a map of property names to property
    values.  Multiple property values for a many cardinality property are defined
@@ -199,8 +198,8 @@
    :checkbox, :number, :page and :date. :checkbox and :number values are written
    as booleans and integers/floats. :page references are written as
    vectors e.g. `[:page \"PAGE NAME\"]`"
-  [{:keys [pages-and-blocks properties graph-namespace page-id-fn block-id-fn]
-    :or {page-id-fn :db/id block-id-fn :db/id}
+  [{:keys [pages-and-blocks properties graph-namespace page-id-fn]
+    :or {page-id-fn :db/id}
     :as options}]
   (let [_ (validate-options options)
         ;; add uuids before tx for refs in :properties
@@ -244,7 +243,7 @@
                ;; blocks tx
                (reduce (fn [acc m]
                          (conj acc
-                               (->block-tx m uuid-maps all-idents (page-id-fn new-page) (last acc) block-id-fn)))
+                               (->block-tx m uuid-maps all-idents (page-id-fn new-page))))
                        []
                        blocks))))
           pages-and-blocks'))]

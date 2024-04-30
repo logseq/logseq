@@ -147,5 +147,5 @@
             result' (when result (ldb/read-transit-str result))]
       (when result' (db/transact! repo result'))
       (some->> result'
-               db-model/sort-by-left-recursive
+               db-model/sort-by-order-recursive
                db-utils/group-by-page))))

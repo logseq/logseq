@@ -17,7 +17,8 @@
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.schema :as db-schema]
-            [logseq.common.util.block-ref :as block-ref]))
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.db :as ldb]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -70,7 +71,7 @@
     value))
 
 (defn wrap-parse-block
-  [{:block/keys [content format left page uuid level pre-block?] :as block
+  [{:block/keys [content format page uuid level pre-block?] :as block
     :or {format :markdown}}]
   (let [repo (state/get-current-repo)
         block (or (and (:db/id block) (db/pull (:db/id block))) block)
@@ -87,7 +88,8 @@
                   content)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
-        first-block? (= left page)
+        first-block? (= (:block/uuid (ldb/get-first-child (db/get-db) page))
+                        (:block/uuid block))
         ast (mldoc/->edn (string/trim content) format)
         first-elem-type (first (ffirst ast))
         first-elem-meta (second (ffirst ast))
@@ -117,7 +119,6 @@
                 block
                 (dissoc block :block/pre-block?))
         block (update block :block/refs remove-non-existed-refs!)
-        block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         new-properties (merge
                         (select-keys properties (file-property-handler/hidden-properties))
                         (:block/properties block))]

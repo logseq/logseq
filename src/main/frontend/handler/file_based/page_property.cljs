@@ -71,7 +71,6 @@
                 block]]
         (db/transact! tx))
       (let [block {:block/uuid (db/new-block-id)
-                   :block/left page-id
                    :block/parent page-id
                    :block/page page-id
                    :block/content (if org?
@@ -84,4 +83,4 @@
         (ui-outliner-tx/transact!
          {:outliner-op :insert-blocks
           :additional-tx page-properties-tx}
-         (outliner-op/insert-blocks! block page {:sibling? false}))))))
+         (outliner-op/insert-blocks! [block] page {:sibling? false}))))))

@@ -4,7 +4,6 @@
             [datascript.core :as d]
             [frontend.handler.page :as page-handler]
             [frontend.db :as db]
-            [frontend.worker.db.fix :as db-fix]
             [frontend.worker.handler.page.file-based.rename :as worker-page-rename]
             [frontend.handler.editor :as editor-handler]))
 
@@ -47,9 +46,7 @@
       ;; Old page deleted
       (is (nil? e1))
       ;; Blocks from both pages have been merged
-      (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data)))))
-      ;; Ensure there's no conflicts
-      (is (empty? (db-fix/get-conflicts (db/get-db) (:db/id e2)))))))
+      (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data))))))))
 
 (deftest merge-with-empty-page
   (page-handler/create! "Existing page" {:redirect? false :create-first-block? false})
@@ -60,9 +57,7 @@
       ;; Old page deleted
     (is (nil? e1))
       ;; Blocks from both pages have been merged
-    (is (= (count (:block/_page e2)) (dec (count init-data))))
-      ;; Ensure there's no conflicts
-    (is (empty? (db-fix/get-conflicts (db/get-db) (:db/id e2))))))
+    (is (= (count (:block/_page e2)) (dec (count init-data))))))
 
 (deftest merge-existing-pages-should-update-ref-ids
   (testing "Merge existing page"
@@ -76,7 +71,5 @@
       (is (nil? e1))
       ;; Blocks from both pages have been merged
       (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data)))))
-      ;; Ensure there's no conflicts
-      (is (empty? (db-fix/get-conflicts (db/get-db) (:db/id e2))))
       ;; Content updated
       (is (= "Block 1 [[Existing page]]" (:block/content (db/entity [:block/uuid fbid])))))))
