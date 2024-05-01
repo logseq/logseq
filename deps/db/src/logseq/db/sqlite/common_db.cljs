@@ -231,19 +231,21 @@
                       children)))))
 
 (defn get-initial-data
-  "Returns current database schema and initial data"
+  "Returns current database schema and initial data.
+   NOTE: This fn is called by DB and file graphs"
   [db]
-  (let [max-key (db-order/get-max-order db)]
-    (db-order/reset-max-key! max-key))
-  (let [schema (:schema db)
+  (let [db-graph? (entity-plus/db-based-graph? db)
+        _ (when db-graph?
+            (db-order/reset-max-key! (db-order/get-max-order db)))
+        schema (:schema db)
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]
                            (d/datoms db :eavt (:db/id e))))
                        [:logseq.kv/db-type :logseq.kv/graph-uuid])
-        favorites (get-favorites db)
+        favorites (when db-graph? (get-favorites db))
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
-        structured-datoms (when (entity-plus/db-based-graph? db)
+        structured-datoms (when db-graph?
                             (get-structured-datoms db))
         data (concat idents
                      structured-datoms

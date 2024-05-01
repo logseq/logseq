@@ -139,6 +139,7 @@
              logseq.db ldb
              logseq.db.frontend.content db-content
              logseq.db.frontend.inputs db-inputs
+             logseq.db.frontend.order db-order
              logseq.db.frontend.property db-property
              logseq.db.frontend.property.build db-property-build
              logseq.db.frontend.property.type db-property-type
