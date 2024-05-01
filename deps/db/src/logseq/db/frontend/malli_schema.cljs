@@ -28,9 +28,9 @@
   (db-property/user-property-namespace? (namespace kw)))
 
 (def user-property-ident
-  [:and :keyword [:fn
-                  {:error/message "should be a valid user property namespace"}
-                  user-property?]])
+  [:and :qualified-keyword [:fn
+                            {:error/message "should be a valid user property namespace"}
+                            user-property?]])
 
 (def property-ident
   [:or internal-property-ident user-property-ident])
@@ -48,6 +48,15 @@
                   (fn logseq-namespace? [k]
                     (contains? logseq-ident-namespaces (namespace k)))]])
 
+(defn- class?
+  "Determines if keyword/ident is a logseq or user class"
+  [kw]
+  (string/includes? (namespace kw) ".class"))
+
+(def class-ident
+  [:and :qualified-keyword [:fn
+                            {:error/message "should be a valid class namespace"}
+                            class?]])
 ;; Helper fns
 ;; ==========
 (defn validate-property-value
@@ -208,7 +217,7 @@
     page-or-block-attrs)))
 
 (def class-attrs
-  [[:db/ident {:optional true} logseq-ident]
+  [[:db/ident {:optional true} class-ident]
    [:class/parent {:optional true} :int]
    [:class/schema.properties {:optional true} [:set :int]]])
 
