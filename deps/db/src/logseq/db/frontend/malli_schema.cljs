@@ -304,7 +304,9 @@
 (def hidden-page
   (vec
    (concat
-    [:map]
+    [:map
+     ;; pages from :default property uses this but closed-value pages don't
+     [:block/order {:optional true} :string]]
     page-attrs
     page-or-block-attrs)))
 
@@ -312,7 +314,7 @@
   "Common attributes for normal blocks"
   [[:block/content :string]
    [:block/parent :int]
-   [:block/order {:optional true} :string]
+   [:block/order :string]
    ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
@@ -350,7 +352,7 @@
       [:map
        [:value [:or :string :double]]
        [:description {:optional true} :string]]]]
-    (remove #(#{:block/content} (first %)) block-attrs)
+    (remove #(#{:block/content :block/order} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def normal-block
