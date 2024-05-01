@@ -31,7 +31,10 @@
                                                                              :db/id (:db/id entity)))))
                             (merge (cljs-bean.transit/writer-handlers)))]
     (fn write-transit-str* [o]
-      (transit/write (transit/writer :json {:handlers write-handlers}) o))))
+      (try (transit/write (transit/writer :json {:handlers write-handlers}) o)
+           (catch :default e
+             (prn ::write-transit-str o)
+             (throw e))))))
 
 (def read-transit-str
   (let [read-handlers (assoc dt/read-handlers

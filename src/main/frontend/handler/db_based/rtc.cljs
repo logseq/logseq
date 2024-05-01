@@ -50,29 +50,26 @@
 (defn <rtc-stop!
   []
   (when-let [^js worker @state/*db-worker]
-    (.rtc-stop worker)))
+    (.rtc-stop2 worker)))
 
 (defn <rtc-start!
-  [repo & {:keys [retry] :or {retry 0}}]
+  [repo]
   (when-let [^js worker @state/*db-worker]
     (when (ldb/get-graph-rtc-uuid (db/get-db repo))
       (user-handler/<wrap-ensure-id&access-token
         ;; TODO: `<rtc-stop!` can return a chan so that we can remove timeout
        (<rtc-stop!)
        (let [token (state/get-auth-id-token)]
-         (p/let [result (.rtc-start worker repo token (state/sub [:ui/developer-mode?]))
-                 _ (case result
-                     "rtc-not-closed-yet"
-                     (js/setTimeout #(<rtc-start! repo) 200)
-                     ":graph-not-ready"
-                     (when (< retry 3)
-                       (let [delay (* 2000 (inc retry))]
-                         (prn "graph still creating, retry rtc-start in " delay "ms")
-                         (p/do! (p/delay delay)
-                                (<rtc-start! repo :retry (inc retry)))))
+         (p/let [result (.rtc-start2 worker repo token)
+                 start-ex (ldb/read-transit-str result)
+                 _ (case (:type (:ex-data start-ex))
+                     (:rtc.exception/not-rtc-graph
+                      :rtc.exception/not-found-db-conn)
+                     (notification/show! (:ex-message start-ex) :error)
 
-                     (":break-rtc-loop" ":stop-rtc-loop")
-                     nil
+                     :rtc.exception/lock-failed
+                     (js/setTimeout #(<rtc-start! repo) 1000)
+
                      ;; else
                      nil)]
            nil))))))

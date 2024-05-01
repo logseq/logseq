@@ -8,6 +8,7 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.ws2 :as ws]
+            [logseq.common.missionary-util :as c.m]
             [missionary.core :as m]))
 
 (def ^:private transit-w (transit/writer :json))
@@ -31,8 +32,12 @@
 
 (defn- register-graph-updates
   [get-mws-create-task graph-uuid]
-  (send&recv get-mws-create-task {:action "register-graph-updates"
-                                  :graph-uuid graph-uuid}))
+  (m/sp
+    (let [{:keys [ex-data]}
+          (m/? (send&recv get-mws-create-task {:action "register-graph-updates"
+                                               :graph-uuid graph-uuid}))]
+      (when (= :graph-not-ready (:type ex-data))
+        (throw (ex-info "remote graph is still creating" {:missionary/retry true}))))))
 
 (defn ensure-register-graph-updates
   "Return a task: get or create a mws(missionary wrapped websocket).
@@ -47,7 +52,9 @@
         (when-not (contains? @*sent mws)
           (swap! *sent assoc mws false))
         (when (not (@*sent mws))
-          (m/? (register-graph-updates get-mws-create-task graph-uuid))
+          (m/? (c.m/backoff
+                (take 7 c.m/delays)     ;retry 7 times (128s) if remote-graph is creating
+                (register-graph-updates get-mws-create-task graph-uuid)))
           (swap! *sent assoc mws true))
         mws))))
 
