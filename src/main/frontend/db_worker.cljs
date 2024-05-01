@@ -561,9 +561,9 @@
    [this]
    (rtc-core2/rtc-stop))
 
-  (rtc-toggle-sync2
+  (rtc-toggle-auto-push
    [this]
-   (rtc-core2/rtc-toggle-sync))
+   (rtc-core2/rtc-toggle-auto-push))
 
   (rtc-start
    [this repo token dev-mode?]
