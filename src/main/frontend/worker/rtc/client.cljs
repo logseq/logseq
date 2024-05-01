@@ -302,7 +302,7 @@
                          block-uuid->remote-ops)]
     (concat update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
 
-(defn create-push-local-ops-task
+(defn new-task--push-local-ops
   "Return a task: push local updates"
   [repo conn user-uuid graph-uuid date-formatter get-mws-create-task add-log-fn]
   (m/sp

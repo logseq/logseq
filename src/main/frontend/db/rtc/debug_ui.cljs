@@ -1,7 +1,6 @@
 (ns frontend.db.rtc.debug-ui
   "Debug UI for rtc module"
-  (:require [cljs-bean.core :as bean]
-            [fipp.edn :as fipp]
+  (:require [fipp.edn :as fipp]
             [frontend.db :as db]
             [frontend.handler.user :as user]
             [frontend.persist-db.browser :as db-browser]
@@ -20,11 +19,6 @@
   (let [^object worker @db-browser/*worker]
     (.rtc-stop2 worker))
   (reset! debug-state nil))
-
-(defn- push-pending-ops
-  []
-  (let [^object worker @db-browser/*worker]
-    (.rtc-push-pending-ops worker)))
 
 (rum/defc ^:large-vars/cleanup-todo rtc-debug-ui <
   rum/reactive
@@ -53,8 +47,8 @@
         (fn [_]
           (let [token (state/get-auth-id-token)
                 ^object worker @db-browser/*worker]
-            (p/let [result (.rtc-get-graphs worker token)
-                    graph-list (bean/->clj result)]
+            (p/let [result (.rtc-get-graphs2 worker token)
+                    graph-list (ldb/read-transit-str result)]
               (swap! debug-state assoc
                      :remote-graphs
                      (map
@@ -69,10 +63,12 @@
 
       (shui/button
        {:size :sm
-        :on-click #(let [^object worker @db-browser/*worker]
-                     (p/let [result (.rtc-get-users-info worker)
-                             result* (bean/->clj result)]
-                       (swap! debug-state assoc :online-info result*)))}
+        :on-click #(let [token (state/get-auth-id-token)
+                         ^object worker @db-browser/*worker]
+                     (when-let [graph-uuid (:graph-uuid state)]
+                       (p/let [result (.rtc-get-users-info2 worker token graph-uuid)
+                               result* (ldb/read-transit-str result)]
+                         (swap! debug-state assoc :online-info result*))))}
        (shui/tabler-icon "users") "online-info")]
 
      [:div.pb-4
@@ -104,8 +100,6 @@
         (shui/tabler-icon "player-play") "start")
 
        [:div.my-2.flex
-        [:div.mr-2 (ui/button (str "send pending ops")
-                              {:icon "brand-telegram" :on-click (fn [] (push-pending-ops))})]
         [:div.mr-2 (ui/button (str "Toggle auto push updates("
                                    (if (:auto-push-client-ops? state)
                                      "ON" "OFF")
@@ -113,7 +107,7 @@
                               {:on-click
                                (fn []
                                  (let [^object worker @db-browser/*worker]
-                                   (p/let [result (.rtc-toggle-sync worker (state/get-current-repo))]
+                                   (p/let [result (.rtc-toggle-auto-push worker (state/get-current-repo))]
                                      (swap! debug-state assoc :auto-push-updates? result))))})]
         [:div (shui/button
                {:variant :outline
@@ -128,13 +122,14 @@
         (ui/button "grant graph access to"
                    {:icon "award"
                     :on-click (fn []
-                                (let [user-uuid (some-> (:grant-access-to-user state) parse-uuid)
+                                (let [token (state/get-auth-id-token)
+                                      user-uuid (some-> (:grant-access-to-user state) parse-uuid)
                                       user-email (when-not user-uuid (:grant-access-to-user state))]
                                   (when-let [graph-uuid (:graph-uuid state)]
                                     (let [^object worker @db-browser/*worker]
-                                      (.rtc-grant-graph-access worker graph-uuid
-                                                               (some-> user-uuid vector ldb/write-transit-str)
-                                                               (some-> user-email vector ldb/write-transit-str))))))})
+                                      (.rtc-grant-graph-access2 worker token graph-uuid
+                                                                (some-> user-uuid vector ldb/write-transit-str)
+                                                                (some-> user-email vector ldb/write-transit-str))))))})
 
         [:b "➡️"]
         [:input.form-input.my-2.py-1
@@ -222,7 +217,7 @@
                                               (let [token (state/get-auth-id-token)
                                                     ^object worker @db-browser/*worker]
                                                 (prn ::delete-graph graph-uuid)
-                                                (.rtc-delete-graph worker token graph-uuid)))))))})
+                                                (.rtc-delete-graph2 worker token graph-uuid)))))))})
 
       (shui/select
        {:on-value-change (fn [v]

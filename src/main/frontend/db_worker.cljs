@@ -559,7 +559,7 @@
   (rtc-start2
    [this repo token]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/create-rtc-start-task repo token))))
+     (js/Promise. (rtc-core2/new-task--rtc-start repo token))))
 
   (rtc-stop2
    [this]
@@ -575,29 +575,29 @@
          target-user-emails (ldb/read-transit-str target-user-emails-str)]
      (with-write-transit-str
        (js/Promise.
-        (rtc-core2/create-grant-access-to-others-task token graph-uuid
+        (rtc-core2/new-task--grant-access-to-others token graph-uuid
                                                       :target-user-uuids target-user-uuids
                                                       :target-user-emails target-user-emails)))))
 
   (rtc-get-graphs2
    [this token]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/create-get-graphs-task token))))
+     (js/Promise. (rtc-core2/new-task--get-graphs token))))
 
   (rtc-delete-graph2
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/create-delete-graph-task token graph-uuid))))
+     (js/Promise. (rtc-core2/new-task--delete-graph token graph-uuid))))
 
   (rtc-get-users-info2
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/create-get-user-info-task token graph-uuid))))
+     (js/Promise. (rtc-core2/new-task--get-user-info token graph-uuid))))
 
   (rtc-get-block-content-versions2
    [this token graph-uuid block-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/create-get-block-content-versions-task token graph-uuid block-uuid))))
+     (js/Promise. (rtc-core2/new-task--get-block-content-versions token graph-uuid block-uuid))))
 
   ;; ================================================================
 
