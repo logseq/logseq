@@ -116,11 +116,11 @@
   [started-dfv task]
   (m/sp
     (when-not (compare-and-set! *rtc-lock nil true)
-      (started-dfv false)
-      (throw (ex-info "Must not run multiple rtc-loops, try later"
-                      {:type ::lock-failed
-                       :missionary/retry true})))
-    (started-dfv true)
+      (let [e (ex-info "Must not run multiple rtc-loops, try later"
+                       {:type :rtc.exception/lock-failed
+                        :missionary/retry true})]
+        (started-dfv e)
+        (throw e)))
     (try
       (m/? task)
       (finally
@@ -153,6 +153,7 @@
         (try
           ;; init run to open a ws
           (m/? get-ws-create-task)
+          (started-dfv true)
           (->>
            (let [event (m/?> mixed-flow)]
              (case (:type event)
@@ -167,7 +168,7 @@
            (m/reduce {} nil)
            (m/?))
           (catch Cancelled e
-            (add-log-fn {:type ::cancelled})
+            (add-log-fn {:type :rtc/cancelled})
             (throw e)))))}))
 
 (def ^:private *rtc-loop-metadata
@@ -177,27 +178,28 @@
          :canceler nil}))
 
 ;;; ================ API ================
-(defn rtc-start
+(defn create-rtc-start-task
   [repo token]
-  (if-let [conn (worker-state/get-datascript-conn repo)]
-    (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
-      (let [user-uuid (:sub (worker-util/parse-jwt token))
-            config (worker-state/get-config repo)
-            date-formatter (common-config/get-date-formatter config)
-            {:keys [onstarted-task rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task]}
-            (create-rtc-loop user-uuid graph-uuid repo conn date-formatter token)
-            canceler (rtc-loop-task #(prn :rtc-loop-task-succ %) #(prn :rtc-loop-stopped %))]
-        (onstarted-task
-         (fn [succ?]
-           (prn :start-succ? succ?)
-           (when succ?
-             (reset! *rtc-loop-metadata {:rtc-log-flow rtc-log-flow
-                                         :rtc-state-flow rtc-state-flow
-                                         :*rtc-auto-push? *rtc-auto-push?
-                                         :canceler canceler})))
-         #(prn :started-failed %)))
-      (throw r.ex/ex-local-not-rtc-graph))
-    (throw (ex-info "Not found db-conn" {:repo repo}))))
+  (m/sp
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
+        (let [user-uuid (:sub (worker-util/parse-jwt token))
+              config (worker-state/get-config repo)
+              date-formatter (common-config/get-date-formatter config)
+              {:keys [onstarted-task rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task]}
+              (create-rtc-loop user-uuid graph-uuid repo conn date-formatter token)
+              canceler (rtc-loop-task #(prn :rtc-loop-task-succ %) #(prn :rtc-loop-stopped %))
+              start-ex (m/? onstarted-task)]
+          (if (:ex-data start-ex)
+            (r.ex/->map start-ex)
+            (do (reset! *rtc-loop-metadata {:rtc-log-flow rtc-log-flow
+                                            :rtc-state-flow rtc-state-flow
+                                            :*rtc-auto-push? *rtc-auto-push?
+                                            :canceler canceler})
+                nil)))
+        (r.ex/->map r.ex/ex-local-not-rtc-graph))
+      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                                :repo repo})))))
 
 (defn rtc-stop
   []
@@ -208,7 +210,6 @@
   []
   (when-let [*auto-push? (:*rtc-auto-push? @*rtc-loop-metadata)]
     (swap! *auto-push? not)))
-
 
 (defn create-get-graphs-task
   [token]
@@ -246,7 +247,7 @@
                           target-user-uuids (assoc :target-user-uuids target-user-uuids)
                           target-user-emails (assoc :target-user-emails target-user-emails)))))
 
-(defn create-get-block-content-task
+(defn create-get-block-content-versions-task
   "Return a task that return map [:ex-data :ex-message :versions]"
   [token graph-uuid block-uuid]
   (let [get-ws-create-task (create-get-ws-create-task (get-ws-url token))]
@@ -254,7 +255,6 @@
                         {:action "query-block-content-versions"
                          :block-uuids [block-uuid]
                          :graph-uuid graph-uuid})))
-
 
 
 (comment

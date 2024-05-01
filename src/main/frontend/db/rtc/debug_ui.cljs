@@ -18,7 +18,7 @@
 (defn- stop
   []
   (let [^object worker @db-browser/*worker]
-    (.rtc-stop worker))
+    (.rtc-stop2 worker))
   (reset! debug-state nil))
 
 (defn- push-pending-ops
@@ -100,8 +100,7 @@
          :on-click (fn []
                      (let [token (state/get-auth-id-token)
                            ^object worker @db-browser/*worker]
-                       (.rtc-start worker (state/get-current-repo) token
-                                   (state/sub [:ui/developer-mode?]))))}
+                       (.rtc-start2 worker (state/get-current-repo) token)))}
         (shui/tabler-icon "player-play") "start")
 
        [:div.my-2.flex

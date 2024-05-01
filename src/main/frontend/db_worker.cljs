@@ -248,6 +248,9 @@
   [repo]
   (worker-state/get-sqlite-conn repo {:search? true}))
 
+(defn- with-write-transit-str
+  [p]
+  (p/chain p ldb/write-transit-str))
 
 #_:clj-kondo/ignore
 (defclass DBWorker
@@ -555,7 +558,8 @@
   ;; RTC
   (rtc-start2
    [this repo token]
-   (rtc-core2/rtc-start repo token))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/create-rtc-start-task repo token))))
 
   (rtc-stop2
    [this]
@@ -564,6 +568,38 @@
   (rtc-toggle-auto-push
    [this]
    (rtc-core2/rtc-toggle-auto-push))
+
+  (rtc-grant-graph-access2
+   [this token graph-uuid target-user-uuids-str target-user-emails-str]
+   (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
+         target-user-emails (ldb/read-transit-str target-user-emails-str)]
+     (with-write-transit-str
+       (js/Promise.
+        (rtc-core2/create-grant-access-to-others-task token graph-uuid
+                                                      :target-user-uuids target-user-uuids
+                                                      :target-user-emails target-user-emails)))))
+
+  (rtc-get-graphs2
+   [this token]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/create-get-graphs-task token))))
+
+  (rtc-delete-graph2
+   [this token graph-uuid]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/create-delete-graph-task token graph-uuid))))
+
+  (rtc-get-users-info2
+   [this token graph-uuid]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/create-get-user-info-task token graph-uuid))))
+
+  (rtc-get-block-content-versions2
+   [this token graph-uuid block-uuid]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/create-get-block-content-versions-task token graph-uuid block-uuid))))
+
+  ;; ================================================================
 
   (rtc-start
    [this repo token dev-mode?]
