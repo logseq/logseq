@@ -41,9 +41,8 @@
     {:pages-and-blocks
      (mapv #(hash-map :page % :blocks (build-blocks (:blocks options)))
            pages)
-     ;; Custom id fns because transaction chunks may separate blocks and pages from each other
-     :page-id-fn (fn [b] [:block/uuid (:block/uuid b)])
-     :block-id-fn (fn [b] [:block/uuid (:block/uuid b)])}))
+     ;; Custom id fn because transaction chunks may separate blocks and pages from each other
+     :page-id-fn (fn [b] [:block/uuid (:block/uuid b)])}))
 
 (def spec
   "Options spec"
