@@ -761,13 +761,9 @@
 
 (defn batch-set-property-closed-value!
   [block-ids db-ident closed-value]
-  (let [repo (state/get-current-repo)
-        property (db/entity db-ident)
-        ref-type? (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
-        closed-value-entity (pu/get-closed-value-entity-by-name db-ident closed-value)
-        closed-value-id (if ref-type? (:db/id closed-value-entity) (:block/uuid closed-value-entity))]
-    (when closed-value-id
-      (batch-set-property! repo
-                           block-ids
-                           db-ident
-                           closed-value-id))))
+  (if-let [closed-value-entity (pu/get-closed-value-entity-by-name db-ident closed-value)]
+    (batch-set-property! (state/get-current-repo)
+                         block-ids
+                         db-ident
+                         (:db/id closed-value-entity))
+    (js/console.error (str "No entity found for closed value " (pr-str closed-value)))))
