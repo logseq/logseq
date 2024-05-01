@@ -224,16 +224,17 @@
         (vec
          (mapcat
           (fn [{:keys [page blocks]}]
-            (let [new-page {:db/id (or (:db/id page) (new-db-id))
-                            :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
-                            :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
-                            :block/format :markdown}]
+            (let [new-page (merge
+                            {:db/id (or (:db/id page) (new-db-id))
+                             :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
+                             :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
+                             :block/format :markdown}
+                            (dissoc page :properties :db/id :block/name :block/original-name))]
               (into
                ;; page tx
                [(sqlite-util/block-with-timestamps
                  (merge
                   new-page
-                  (dissoc page :properties)
                   (when (seq (:properties page))
                     (->block-properties (:properties page) uuid-maps all-idents))
                   (when (seq (:properties page))
