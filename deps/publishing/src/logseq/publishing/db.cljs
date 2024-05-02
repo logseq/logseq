@@ -101,7 +101,6 @@
         db)
        (map first)))
 
-;; FIXME: store assets as blocks for db-based graphs
 (defn- get-assets
   [db datoms]
   (let [pull (fn [eid db]
@@ -111,7 +110,15 @@
                    (pull % db)
                    :block/page
                    :db/id
-                   (pull db)))]
+                   (pull db)))
+        hl-type-area? (if (entity-plus/db-based-graph? db)
+                        (fn [datom]
+                          (and (= :logseq.property/hl-type (:a datom))
+                               (= (keyword (:v datom)) :area)))
+                        (fn [datom]
+                          (and
+                           (= :block/properties (:a datom))
+                           (= (keyword (get (:v datom) :hl-type)) :area))))]
     (->>
      (keep
       (fn [datom]
@@ -124,10 +131,7 @@
                                    (not (string/ends-with? path ".js")))
                           path)))))
           ;; area image assets
-          ;; FIXME: Lookup by property uuid
-          (and
-           (= :block/properties (:a datom))
-           (= (keyword (get (:v datom) :hl-type)) :area))
+          (hl-type-area? datom)
           (#(let [path (some-> (pull (:e datom) db)
                                (get-area-block-asset-url
                                 db
