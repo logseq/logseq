@@ -5,7 +5,7 @@
   logseq/db             {:local/root "../db"}
   logseq/graph-parser   {:local/root "../db"}
   com.cognitect/transit-cljs {:mvn/version "0.8.280"}
-  metosin/malli {:mvn/version "0.10.0"}}
+  metosin/malli {:mvn/version "0.16.1"}}
  :aliases
  {:clj-kondo
   {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}

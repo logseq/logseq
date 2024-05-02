@@ -197,14 +197,19 @@
                       (catch :default e
                         (notification/show! (str e) :error false)
                         nil))
-            old-values (get block (:db/ident property))]
+            old-values (get block (:db/ident property))
+            deleted-values (remove values' old-values)]
         (when (not= old-values values')
           (if-let [msg (validate-property-value schema values')]
             (let [msg' (str "\"" (:block/original-name property) "\"" " " (if (coll? msg) (first msg) msg))]
               (notification/show! msg' :warning))
             (do
               (upsert-property! repo property-id (assoc property-schema :type property-type) {})
-              (let [tx-data (build-property-value-tx-data block property-id values' false)]
+              (let [tx-data (concat
+                             (map (fn [v]
+                                    (let [v' (if (map? v) (:db/id v) v)]
+                                      [:db/retract (:db/id block) property-id v'])) deleted-values)
+                             (build-property-value-tx-data block property-id values' false))]
                 (db/transact! repo tx-data {:outliner-op :save-block})))))))))
 
 (defn- resolve-tag

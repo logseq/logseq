@@ -251,6 +251,20 @@
     :vector "[]"
     nil))
 
+;; TODO: mu/to-map-syntax has been deprecated, consider removing usage
+(defn -map-syntax-walker [schema _ children _]
+  (let [properties (m/properties schema)
+        options (m/options schema)
+        r (when properties (properties :registry))
+        properties (if r (assoc properties :registry (m/-property-registry r options m/-form)) properties)]
+    (cond-> {:type (m/type schema)}
+      (seq properties) (assoc :properties properties)
+      (seq children) (assoc :children children))))
+
+(defn- malli-to-map-syntax
+  ([?schema] (malli-to-map-syntax ?schema nil))
+  ([?schema options] (m/walk ?schema -map-syntax-walker options)))
+
 (.registerHelper CodeMirror "hint" "clojure"
                  (fn [cm _options]
                    (let [cur (.getCursor cm)
@@ -324,7 +338,7 @@
                                                 "false" nil)
 
                                          :enum
-                                         (let [{:keys [children]} (mu/to-map-syntax schema)]
+                                         (let [{:keys [children]} (malli-to-map-syntax schema)]
                                            (doseq [child children]
                                              (swap! result assoc (str child) nil)))
 
