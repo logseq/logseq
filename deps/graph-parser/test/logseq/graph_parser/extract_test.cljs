@@ -1,7 +1,6 @@
 (ns logseq.graph-parser.extract-test
   (:require [cljs.test :refer [deftest is are]]
             [logseq.graph-parser.extract :as extract]
-            [clojure.pprint :as pprint]
             [datascript.core :as d]
             [logseq.db.frontend.schema :as db-schema]))
 

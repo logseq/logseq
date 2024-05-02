@@ -26,7 +26,7 @@
 
 (defn- shape->block [shape page-id]
   (let [repo (state/get-current-repo)]
-    (gp-whiteboard/shape->block repo (db/get-db repo) shape page-id)))
+    (gp-whiteboard/shape->block repo shape page-id)))
 
 (defn- build-shapes
   [page-block blocks]

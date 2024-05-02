@@ -1,8 +1,7 @@
 (ns logseq.graph-parser.whiteboard
   "Whiteboard related parser utilities"
   (:require [logseq.db.frontend.property.util :as db-property-util]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.core :as d]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn block->shape [block]
   (get-in block [:block/properties :logseq.tldraw.shape]))
@@ -80,7 +79,7 @@
            (when (nil? (:block/format block)) {:block/format :markdown}) ;; TODO: read from config
            {:block/page page-id})))
 
-(defn shape->block [repo db shape page-id]
+(defn shape->block [repo shape page-id]
   (let [block-uuid (if (uuid? (:id shape)) (:id shape) (uuid (:id shape)))
         properties {(db-property-util/get-pid repo :logseq.property/ls-type) :whiteboard-shape
                     (db-property-util/get-pid repo :logseq.property.tldraw/shape) shape}
