@@ -37,6 +37,16 @@
 (def built-in-pages-names
   #{"Contents"})
 
+(defn- validate-tx-for-duplicate-idents [tx]
+  (when-let [conflicting-idents
+             (->> (keep :db/ident tx)
+                  frequencies
+                  (keep (fn [[k v]] (when (> v 1) k)))
+                  seq)]
+    (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
+                         (vec conflicting-idents))
+                    {:idents conflicting-idents}))))
+
 (defn build-db-initial-data
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
@@ -84,12 +94,5 @@
                          db-class/built-in-classes)
         tx (vec (concat default-properties default-classes
                         initial-data initial-files default-pages))]
-    (when-let [conflicting-idents
-               (->> (keep :db/ident tx)
-                    frequencies
-                    (keep (fn [[k v]] (when (> v 1) k)))
-                    seq)]
-      (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
-                           (vec conflicting-idents))
-                      {:idents conflicting-idents})))
+    (validate-tx-for-duplicate-idents tx)
     tx))
