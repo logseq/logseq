@@ -279,7 +279,7 @@
     (catch :default e
       (let [data (ex-data e)]
         (fs-node/writeFileSync "debug.json" (sqlite-util/write-transit-str data))
-        (throw e)))))
+        (throw (js/Error "check debug.json"))))))
 
 
 
