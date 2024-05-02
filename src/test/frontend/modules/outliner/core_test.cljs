@@ -15,8 +15,7 @@
             [clojure.set :as set]
             [frontend.db.conn :as conn]
             [frontend.worker.db-listener :as worker-db-listener]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db :as ldb]))
 
 (def test-db test-helper/test-db)
 

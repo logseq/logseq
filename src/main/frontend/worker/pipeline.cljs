@@ -8,8 +8,7 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- path-refs-need-recalculated?
   [tx-meta]
