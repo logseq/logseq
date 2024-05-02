@@ -767,6 +767,7 @@
           (let [add-property! (fn []
                                 (<add-property! block (:db/ident property) (boolean (not value))))]
             (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                            :disabled config/publishing?
                             :checked value
                             :auto-focus editing?
                             :on-checked-change add-property!
