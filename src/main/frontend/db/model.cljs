@@ -364,7 +364,7 @@ independent of format as format specific heading characters are stripped"
   [db db-id]
   (when-let [entity (db-utils/entity db db-id)]
     (or
-     (when-let [prev-sibling (ldb/get-left-sibling (d/entity db db-id))]
+     (when-let [prev-sibling (ldb/get-left-sibling entity)]
        (if (or (:block/collapsed? prev-sibling)
                (empty? (:block/_parent prev-sibling)))
          prev-sibling
