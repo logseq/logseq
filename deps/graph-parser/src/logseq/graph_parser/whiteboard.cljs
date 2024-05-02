@@ -85,6 +85,7 @@
         properties {(db-property-util/get-pid repo :logseq.property/ls-type) :whiteboard-shape
                     (db-property-util/get-pid repo :logseq.property.tldraw/shape) shape}
         block {:block/uuid block-uuid
+               :block/content ""
                :block/page page-id
                :block/parent page-id}
         block' (if (sqlite-util/db-based-graph? repo)
