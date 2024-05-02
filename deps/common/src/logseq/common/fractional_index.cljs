@@ -49,15 +49,20 @@
   [x digits]
   (validate-integer x)
   (let [[head & digs] (seq x)
-        [carry digs] (reduce
-                      (fn [[_ digs] dig]
-                        (let [d (inc (.indexOf digits dig))]
-                          (if (= d (count digits))
-                            [true (conj digs (first digits))]
-                            [false (conj digs (nth digits d))])))
-                      [true []]
-                      (reverse digs))]
-    (if carry
+        [carry? diff] (reduce
+                        (fn [[carry? digs] dig]
+                          (if carry?
+                            (let [d (inc (.indexOf digits dig))]
+                              (if (= d (count digits))
+                                [true (conj digs (first digits))]
+                                [false (conj digs (nth digits d))]))
+                            [carry? digs]))
+                        [true []]
+                        (reverse digs))
+        digs (into (subvec (vec digs) 0 (- (count digs)
+                                           (count diff)))
+                   (reverse diff))]
+    (if carry?
       (cond
         (= head \Z) (str "a" (first digits))
         (= head \z) nil
