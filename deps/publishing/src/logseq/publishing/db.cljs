@@ -48,7 +48,7 @@
   (let [pages (->> (d/q
                     '[:find ?p
                       :in $ %
-                      :where (page-property ?p :public true)]
+                      :where (page-property ?p :logseq.property/public true)]
                     db
                     (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
                    (map first)
@@ -60,11 +60,8 @@
                           (when (seq tag-pages*)
                             (some-> (d/entity db :block/tags) :db/id vector)))
         property-pages (mapcat (fn [ent]
-                                 (let [props (:block/properties ent)]
-                                   (->> (keys props)
-                                        (into (mapcat #(filter uuid? (if (coll? %) % [%]))
-                                                      (vals props)))
-                                        (map #(:db/id (d/entity db [:block/uuid %]))))))
+                                 (->> (keys (:block/properties ent))
+                                      (map #(:db/id (d/entity db %)))))
                                page-ents)]
     (concat pages tag-pages property-pages)))
 
@@ -73,7 +70,7 @@
   (->> (d/q
         '[:find ?p
           :in $ %
-          :where (page-property ?p :public false)]
+          :where (page-property ?p :logseq.property/public false)]
         db
         (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
        (map first)
@@ -170,6 +167,7 @@
                                        (not (contains? non-public-datom-ids (:e datom)))))))
         datoms (d/datoms filtered-db :eavt)
         assets (get-assets db datoms)]
+    ;; (prn :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
 
 (defn filter-only-public-pages-and-blocks
@@ -194,4 +192,5 @@
                                           (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
         datoms (d/datoms filtered-db :eavt)
         assets (get-assets db datoms)]
+    ;; (prn :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
