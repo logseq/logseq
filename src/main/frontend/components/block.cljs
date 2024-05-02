@@ -85,7 +85,8 @@
             [logseq.common.path :as path]
             [electron.ipc :as ipc]
             [frontend.db.async :as db-async]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db :as ldb]))
 
 ;; local state
 (defonce *dragging?
@@ -858,7 +859,7 @@
                       page-name))
            (if whiteboard-page?
                ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
-               (let [blocks (db/sort-by-order (:block/_parent block))]
+               (let [blocks (ldb/get-children block)]
                  (blocks-container blocks (assoc config
                                                  :db/id (:db/id block)
                                                  :id page-name
@@ -2340,9 +2341,7 @@
       :block-content-slotted
       (-> block (dissoc :block/children :block/page)))]
 
-    (if (and (:property-block? config) (:hide-bullet? config) (string/blank? (:block/content block)))
-      [:div.opacity-50.text-sm.h-6 "Empty"]
-      (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
+    (let [title-collapse-enabled? (:outliner/block-title-collapse-enabled? (state/get-config))]
         (when (and (not block-ref-with-title?)
                    (seq body)
                    (or (not title-collapse-enabled?)
@@ -2355,7 +2354,7 @@
              (for [[idx child] (medley/indexed body)]
                (when-let [block (markup-element-cp config child)]
                  (rum/with-key (block-child block)
-                   (str uuid "-" idx)))))])))))
+                   (str uuid "-" idx)))))]))))
 
 (rum/defc tags
   [config block]
@@ -2679,30 +2678,23 @@
 
 ;; "block-id - uuid of the target block of breadcrumb. page uuid is also acceptable"
 (rum/defc breadcrumb < rum/reactive
-                       {:init (fn [state]
-                                (let [args (:rum/args state)
-                                      block-id (nth args 2)
-                                      depth (:level-limit (last args))]
-                                  (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
-                                    (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
-                                  state))}
+  {:init (fn [state]
+           (let [args (:rum/args state)
+                 block-id (nth args 2)
+                 depth (:level-limit (last args))]
+             (p/let [id (:db/id (db/entity [:block/uuid block-id]))]
+               (when id (db-async/<get-block-parents (state/get-current-repo) id depth)))
+             state))}
   [config repo block-id {:keys [show-page? indent? end-separator? level-limit _navigating-block]
                          :or {show-page? true
                               level-limit 3}
                          :as opts}]
   (when block-id
     (let [_ (state/sub-async-query-loading (str block-id "-parents"))
-          {:keys [from-block-id from-property-id]}
-          (when (and block-id (config/db-based-graph? repo))
-            (db-property-handler/get-property-block-created-block [:block/uuid block-id]))
-          from-block (when from-block-id (db/entity from-block-id))
-          from-property (when from-property-id (db/entity from-property-id))
-          block-id (or (:block/uuid from-block) block-id)
+          from-property (when (and block-id (config/db-based-graph? repo))
+                          (:logseq.property/created-from-property (db/entity [:block/uuid block-id])))
           parents (db/get-block-parents repo block-id {:depth (inc level-limit)})
-          parents (concat
-                   parents
-                   (when (and from-block from-property)
-                     [from-block from-property]))
+          parents (remove nil? (concat parents [from-property]))
           page (or (db/get-block-page repo block-id) ;; only return for block uuid
                    (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
           page-name (:block/name page)
@@ -3000,7 +2992,7 @@
         order-list? (boolean own-number-list?)
         selected? (when-not (:slide? config)
                     (state/sub-block-selected? uuid))
-        children (:block/_parent block)]
+        children (ldb/get-children block)]
     (when-not (= (:editor/deleting-block @state/state) (:block/uuid block))
       [:div.ls-block
        (cond->
@@ -3097,10 +3089,9 @@
                              :in-block-container? true})])
 
        (when-not (or (:hide-children? config) in-whiteboard?)
-         (let [children' (db/sort-by-order children)
-               config' (-> (update config :level inc)
+         (let [config' (-> (update config :level inc)
                            (dissoc :original-block))]
-           (block-children config' block children' collapsed?)))
+           (block-children config' block children collapsed?)))
 
        (when-not in-whiteboard? (dnd-separator-wrapper block children block-id slide? false false))])))
 

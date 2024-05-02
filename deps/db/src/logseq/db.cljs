@@ -132,7 +132,13 @@
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [children (sort-by-order (:block/_parent parent))
+    (let [from-property (:logseq.property/created-from-property block)
+          children (sort-by-order (if from-property
+                                    (filter (fn [e]
+                                              (= (:db/id (:logseq.property/created-from-property e))
+                                                 (:db/id from-property)))
+                                            (:block/_raw-parent parent))
+                                    (:block/_parent parent)))
           right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
       (when (not= (:db/id right) (:db/id block))
         right))))
@@ -141,7 +147,13 @@
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [children (reverse (sort-by-order (:block/_parent parent)))
+    (let [from-property (:logseq.property/created-from-property block)
+          children (reverse (sort-by-order (if from-property
+                                             (filter (fn [e]
+                                                       (= (:db/id (:logseq.property/created-from-property e))
+                                                          (:db/id from-property)))
+                                                     (:block/_raw-parent parent))
+                                             (:block/_parent parent))))
           left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
       (when (not= (:db/id left) (:db/id block))
         left))))
@@ -263,17 +275,19 @@
        (let [children (sort-by :block/order (:block/_parent block))]
          (:db/id (last children)))))))
 
-(defn get-block-immediate-children
+(defn get-children
   "Doesn't include nested children."
-  [db block-entity-or-eid]
-  (when-let [parent (cond
-                      (number? block-entity-or-eid)
-                      (d/entity db block-entity-or-eid)
-                      (uuid? block-entity-or-eid)
-                      (d/entity db [:block/uuid block-entity-or-eid])
-                      :else
-                      block-entity-or-eid)]
-    (sort-by-order (:block/_parent parent))))
+  ([block-entity]
+   (get-children nil block-entity))
+  ([db block-entity-or-eid]
+   (when-let [parent (cond
+                       (number? block-entity-or-eid)
+                       (d/entity db block-entity-or-eid)
+                       (uuid? block-entity-or-eid)
+                       (d/entity db [:block/uuid block-entity-or-eid])
+                       :else
+                       block-entity-or-eid)]
+     (sort-by-order (:block/_parent parent)))))
 
 (defn get-block-parents
   [db block-id {:keys [depth] :or {depth 100}}]

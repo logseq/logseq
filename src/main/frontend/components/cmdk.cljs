@@ -395,7 +395,10 @@
             _ (db-async/<get-block repo block-id :children? false)
             block (db/entity [:block/uuid block-id])
             parents (db-async/<get-block-parents (state/get-current-repo) (:db/id block) 1000)
-            created-from-block (some #(:logseq.property/created-from-block (db/entity (:db/id %))) parents)
+            created-from-block (some (fn [block']
+                                       (let [block (db/entity (:db/id block'))]
+                                         (when (:logseq.property/created-from-property block)
+                                           (:block/parent block)))) parents)
             [block-id block] (if created-from-block
                                (let [block (db/entity (:db/id created-from-block))]
                                  [(:block/uuid block) block])

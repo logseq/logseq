@@ -202,12 +202,8 @@
                                              v
 
                                              (uuid? v)
-                                             (when-let [entity (d/entity db [:block/uuid v])]
-                                               (let [from-property? (:logseq.property/created-from-property entity)]
-                                                 (if (and from-property? (not (contains? (:block/type entity) "closed value")))
-                                                   ;; don't reference hidden block property values except closed values
-                                                   []
-                                                   [v])))
+                                             (when-let [_entity (d/entity db [:block/uuid v])]
+                                               [v])
 
                                              (and (coll? v) (string? (first v)))
                                              (mapcat #(gp-block/extract-refs-from-text repo db % date-formatter) v)
@@ -698,7 +694,19 @@
                           (remove nil?)
                           (map (fn [uuid] {:block/uuid uuid})))
             tx (assign-temp-id tx' replace-empty-target? target-block)
-            full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx) tx)]
+            from-property (:logseq.property/created-from-property target-block)
+            property-values-tx (when (and sibling? from-property)
+                                 (let [top-level-blocks (filter #(= 1 (:block/level %)) blocks')]
+                                   (mapcat (fn [block]
+                                             [{:block/uuid (:block/uuid block)
+                                               :logseq.property/created-from-property (:db/id from-property)}
+                                              [:db/add
+                                               (:db/id (:block/parent target-block))
+                                               (:db/ident (d/entity @conn (:db/id from-property)))
+                                               [:block/uuid (:block/uuid block)]]]) top-level-blocks)))
+            full-tx (common-util/concat-without-nil (if (and keep-uuid? replace-empty-target?) (rest uuids-tx) uuids-tx)
+                                                    tx
+                                                    property-values-tx)]
         {:tx-data full-tx
          :blocks  tx}))))
 
@@ -777,8 +785,17 @@
         children-page-tx (when not-same-page?
                            (let [children-ids (ldb/get-block-children-ids db (:block/uuid block))]
                              (map (fn [id] {:block/uuid id
-                                            :block/page target-page}) children-ids)))]
-    (common-util/concat-without-nil tx-data children-page-tx)))
+                                            :block/page target-page}) children-ids)))
+        target-from-property (:logseq.property/created-from-property target-block)
+        block-from-property (:logseq.property/created-from-property block)
+        retract-property-tx (when (or (and (not sibling?) target-from-property block-from-property)
+                                      (and sibling? (nil? target-from-property) block-from-property))
+                              [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
+                               [:db/retract (:db/id block) :logseq.property/created-from-property]])
+        add-property-tx (when (and sibling? target-from-property (not block-from-property))
+                          [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id target-from-property)]
+                           [:db/add (:db/id (:block/parent target-block)) (:db/ident target-from-property) (:db/id block)]])]
+    (common-util/concat-without-nil tx-data children-page-tx retract-property-tx add-property-tx)))
 
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."
@@ -832,15 +849,17 @@
     (if up?
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             first-block-parent (:block/parent first-block)
-            left-or-parent (or (ldb/get-left-sibling first-block)
-                               first-block-parent)
+            first-block-left-sibling (ldb/get-left-sibling first-block)
+            left-or-parent (or first-block-left-sibling first-block-parent)
             left-left (or (ldb/get-left-sibling left-or-parent)
                           first-block-parent)
             sibling? (= (:db/id (:block/parent left-left))
                         (:db/id first-block-parent))]
         (when (and left-left
                    (not= (:db/id (:block/page first-block-parent))
-                         (:db/id left-left)))
+                         (:db/id left-left))
+                   (not (and (:logseq.property/created-from-property first-block)
+                             (nil? first-block-left-sibling))))
           (move-blocks repo conn top-level-blocks left-left (merge opts {:sibling? sibling?
                                                                          :up? up?}))))
 
@@ -854,7 +873,9 @@
                      (ldb/get-right-sibling parent)))
             sibling? (= (:db/id (:block/parent last-top-block))
                         (:db/id (:block/parent right)))]
-        (when right
+        (when (and right
+                   (not (and (:logseq.property/created-from-property last-top-block)
+                             (nil? last-top-block-right))))
           (move-blocks repo conn blocks right (merge opts {:sibling? sibling?
                                                            :up? up?})))))))
 
@@ -866,7 +887,10 @@
         top-level-blocks (filter-top-level-blocks db blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
         top-level-blocks (get-top-level-blocks top-level-blocks non-consecutive?)]
-    (when-not non-consecutive?
+    (when-not (or non-consecutive?
+                  (and (not indent?)
+                       ;; property value blocks shouldn't be outdented
+                       (some :logseq.property/created-from-property top-level-blocks)))
       (let [first-block (d/entity db (:db/id (first top-level-blocks)))
             left (ldb/get-left-sibling first-block)
             parent (:block/parent first-block)
