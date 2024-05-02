@@ -4,7 +4,6 @@
   compatible with file graphs"
   (:require [frontend.state :as state]
             [frontend.db :as db]
-            [datascript.core :as d]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]))
@@ -20,12 +19,9 @@
    for file graphs or for db graphs when user properties are involved"
   [coll key]
   (let [repo (state/get-current-repo)
-        db (db/get-db repo)
-        property-name (if (keyword? key)
-                        (name key)
-                        key)]
+        property-name (if (keyword? key) (name key) key)]
     (if (sqlite-util/db-based-graph? repo)
-      (when-let [property (d/entity db (db-property/create-user-property-ident-from-name property-name))]
+      (when-let [property (db/get-case-page property-name)]
         (get coll (:block/uuid property)))
       (get coll key))))
 
