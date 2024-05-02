@@ -2614,11 +2614,15 @@
             (when-let [refs-cp (state/get-component :block/linked-references)]
               (refs-cp uuid)))]))]))
 
-(rum/defc single-block-cp
-  [block-uuid]
+(rum/defcs single-block-cp <
+  {:init (fn [state]
+           (let [container-id (swap! (:ui/container-id @state/state) inc)]
+             (assoc state ::container-id container-id)))}
+  [state block-uuid]
   (let [uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
         block (db/entity [:block/uuid uuid])
         config {:id (str uuid)
+                :container-id (::container-id state)
                 :db/id (:db/id block)
                 :block/uuid uuid
                 :block? true
