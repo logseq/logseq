@@ -371,15 +371,16 @@
         prev-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
                               new-m)
                        (wrap-parse-block))
-        left-block (ldb/get-left-sibling (db/entity (:db/id block)))]
+        block' (db/entity (:db/id block))
+        left-or-parent (or (ldb/get-left-sibling block') (:block/parent block'))]
     (when input-text-selected?
       (let [selection-start (util/get-selection-start input)
             selection-end (util/get-selection-end input)
             [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
         (state/set-edit-content! edit-input-id new-content)))
-    (p/let [_ (let [sibling? (not= (:db/id left-block) (:db/id (:block/parent block)))]
-       (outliner-insert-block! config left-block prev-block {:sibling? sibling?
-                                                             :keep-uuid? true}))])
+    (p/let [_ (let [sibling? (not= (:db/id left-or-parent) (:db/id (:block/parent block)))]
+                (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
+                                                                          :keep-uuid? true}))])
     prev-block))
 
 (defn insert-new-block-aux!
@@ -772,7 +773,7 @@
           :else
           (let [has-children? (seq (:block/_parent block-e))
                 block (db/entity (:db/id block-e))
-                left (ldb/get-left-sibling block)
+                left (or (ldb/get-left-sibling block) (:block/parent block))
                 left-has-children? (and left
                                         (when-let [block-id (:block/uuid left)]
                                           (let [block (db/entity [:block/uuid block-id])]
@@ -2026,7 +2027,8 @@
                                        (and target-block-has-children? (= (count blocks) 1)))
                                    (block-has-no-ref? (:db/id target-block)))
         target-block' (if (and empty-target? target-block-has-children? paste-nested-blocks?)
-                        (ldb/get-left-sibling target-block)
+                        (or (ldb/get-left-sibling target-block)
+                            (:block/parent (db/entity (:db/id target-block))))
                         target-block)
         sibling? (cond
                    (and paste-nested-blocks? empty-target?)
@@ -2729,8 +2731,9 @@
         selected-start (util/get-selection-start input)
         selected-end (util/get-selection-end input)
         block (state/get-edit-block)
+        block (db/entity (:db/id block))
         repo (state/get-current-repo)
-        top-block? (= (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))
+        top-block? (= (:db/id (or (ldb/get-left-sibling block) (:block/parent block)))
                       (:db/id (:block/page block)))
         single-block? (inside-of-single-block (.-target e))
         root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
