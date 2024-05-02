@@ -48,8 +48,6 @@
                                        :public? true}}
    ;; number (1-6) or boolean for auto heading
    :logseq.property/heading {:schema {:type :any :hide? true}}
-   :logseq.property/created-from-block    {:schema {:type :entity
-                                                    :hide? true}}
    :logseq.property/created-from-property {:schema {:type :entity
                                                     :hide? true}}
    :logseq.property/created-from-template {:schema {:type :entity

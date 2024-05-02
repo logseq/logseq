@@ -38,7 +38,7 @@
   (merge-with into
               (zipmap closed-value-property-types (repeat #{:values}))
               (zipmap #{:string :number :url} (repeat #{:position}))
-              {:default #{}
+              {:default #{:cardinality}
                :string #{:cardinality}
                :number #{:cardinality}
                :date #{:cardinality}
@@ -81,11 +81,11 @@
       (when-let [ent (d/entity db val)]
         (url? (get-in ent [:block/schema :value])))))
 
-(defn- hidden-block?
+(defn- property-value-block?
   [db s]
   (when-let [ent (d/entity db s)]
     (and (:block/content ent)
-         (= #{"hidden"} (get-in ent [:block/page :block/type])))))
+         (:logseq.property/created-from-property ent))))
 
 (defn- page?
   [db val]
@@ -108,7 +108,7 @@
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
               {:error/message "should be a text block"}
-              hidden-block?]
+              property-value-block?]
    :string   [:fn
               {:error/message "should be a string"}
               string-or-closed-string?]

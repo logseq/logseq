@@ -418,7 +418,7 @@ independent of format as format specific heading characters are stripped"
   "Doesn't include nested children."
   [repo block-uuid]
   (when-let [db (conn/get-db repo)]
-    (ldb/get-block-immediate-children db block-uuid)))
+    (ldb/get-children db block-uuid)))
 
 (defn get-block-children
   "Including nested children."

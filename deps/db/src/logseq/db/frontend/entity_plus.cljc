@@ -29,9 +29,9 @@
      (let [db (.-db e)]
        (if (db-based-graph? db)
          (lookup-entity e :block/properties
-                    (->> (into {} e)
-                         (filter (fn [[k _]] (db-property/property? k)))
-                         (into {})))
+                        (->> (into {} e)
+                             (filter (fn [[k _]] (db-property/property? k)))
+                             (into {})))
          (lookup-entity e :block/properties nil)))
 
      :block/content
@@ -44,6 +44,14 @@
          (when (string? result)
            (db-content/special-id-ref->page-ref result (distinct (concat refs tags))))
          default-value)))
+
+     :block/_parent
+     (->> (lookup-entity e k default-value)
+          (remove (fn [e] (:logseq.property/created-from-property e)))
+          seq)
+
+     :block/_raw-parent
+     (lookup-entity e :block/_parent default-value)
 
      (or (get (.-kv e) k)
          (lookup-entity e k default-value)))))

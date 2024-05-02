@@ -25,7 +25,7 @@
 }
 
 .property-block-container {
-    margin-left: -24px;
+    @apply -ml-11 flex flex-1;
 }
 
 .ls-page-properties > .ls-properties-area > .property-block {

@@ -367,7 +367,6 @@
                                              (uuid? value))
                            property-block (when block-value? (db/entity [:block/uuid value]))
                            retract-blocks-tx (when (and property-block
-                                                        (some? (get property-block :logseq.property/created-from-block))
                                                         (some? (get property-block :logseq.property/created-from-property)))
                                                (let [txs-state (atom [])]
                                                  (outliner-core/delete-block repo
@@ -477,54 +476,29 @@
 
 (defn property-create-new-block
   [block property value parse-block]
-  (let [parse-block (if (fn? parse-block) parse-block identity)
-        page-name (str "$$$" (:block/uuid property))
-        page-entity (db/get-case-page page-name)
-        page (or page-entity
-                 (-> (block/page-name->map page-name true)
-                     (assoc :block/type #{"hidden"}
-                            :block/format :markdown
-                            :logseq.property/source-page (:db/id property))))
-        page-tx (when-not page-entity page)
-        page-id [:block/uuid (:block/uuid page)]
-        parent-id (db/new-block-id)
-        parent (-> {:block/uuid parent-id
-                    :block/format :markdown
-                    :block/content ""
-                    :block/page page-id
-                    :block/parent page-id
-                    :block/order nil
-                    :logseq.property/created-from-block (:db/id block)
-                    :logseq.property/created-from-property (:db/id property)}
-                   sqlite-util/block-with-timestamps)
-        child-1-id (db/new-block-id)
-        child-1 (-> {:block/uuid child-1-id
-                     :block/format :markdown
-                     :block/content value
-                     :block/page page-id
-                     :block/parent [:block/uuid parent-id]}
-                    sqlite-util/block-with-timestamps
-                    parse-block)]
-    {:page page-tx
-     :blocks [parent child-1]}))
+  (-> {:block/uuid (db/new-block-id)
+       :block/format :markdown
+       :block/content value
+       :block/page (:db/id (:block/page block))
+       :block/parent (:db/id block)
+       :logseq.property/created-from-property (:db/id property)}
+      sqlite-util/block-with-timestamps
+      parse-block))
 
 (defn create-property-text-block!
   [block property value parse-block {:keys [class-schema?]}]
   (assert (e/entity? property))
   (let [repo (state/get-current-repo)
-        {:keys [page blocks]} (property-create-new-block block property value parse-block)
-        first-block (first blocks)
-        last-block-id (:block/uuid (last blocks))
+        new-value-block (property-create-new-block block property value parse-block)
         class? (contains? (:block/type block) "class")
         property-id (:db/ident property)]
-    (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})]
+    (p/let [_ (db/transact! repo [new-value-block] {:outliner-op :insert-blocks})]
       (let [result (when property-id
                      (if (and class? class-schema?)
                        (class-add-property! repo (:db/id block) property-id)
-                       (when-let [parent-id (:db/id (db/entity [:block/uuid (:block/uuid first-block)]))]
-                         (set-block-property! repo (:db/id block) property-id parent-id {}))))]
-        {:parent-block-id (:block/uuid first-block)
-         :last-block-id last-block-id
+                       (when-let [block-id (:db/id (db/entity [:block/uuid (:block/uuid new-value-block)]))]
+                         (set-block-property! repo (:db/id block) property-id block-id {}))))]
+        {:block-id (:block/uuid new-value-block)
          :result result}))))
 
 (defn property-create-new-block-from-template
@@ -545,7 +519,6 @@
                        :block/tags #{(:db/id template)}
                        :block/page page-id
                        :block/parent page-id
-                       :logseq.property/created-from-block [:block/uuid (:block/uuid block)]
                        :logseq.property/created-from-property (:db/id property)
                        :logseq.property/created-from-template [:block/uuid (:block/uuid template)]}
                       sqlite-util/block-with-timestamps)]
@@ -589,7 +562,7 @@
               default-closed-values? (and (= :default property-type) (seq closed-values))
               value (if (and default-closed-values? (string? value) (not (string/blank? value)))
                       (p/let [result (create-property-text-block! nil property value nil {})]
-                        (:db/id (db/entity [:block/uuid (:parent-block-id result)])))
+                        (:db/id (db/entity [:block/uuid (:block-id result)])))
                       value)
               block-values (map (fn [id] (db/entity [:block/uuid id])) closed-values)
               resolved-value (try
@@ -749,16 +722,9 @@
 (defn get-property-block-created-block
   "Get the root block and property that created this property block."
   [eid]
-  (let [b (db/entity eid)
-        parents (model/get-block-parents (state/get-current-repo) (:block/uuid b) {})
-        [created-from-block created-from-property]
-        (some (fn [block]
-                (let [from-block (:logseq.property/created-from-block block)
-                      from-property (:logseq.property/created-from-property block)]
-                  (when (and from-block from-property)
-                    [from-block from-property]))) (reverse parents))]
-    {:from-block-id (:db/id created-from-block)
-     :from-property-id (:db/id created-from-property)}))
+  (let [block (db/entity eid)
+        created-from-property (:logseq.property/created-from-property block)]
+    {:from-property-id (:db/id created-from-property)}))
 
 (defn batch-set-property-closed-value!
   [block-ids db-ident closed-value]

@@ -115,7 +115,7 @@
          (some-> (rum/deref *trigger-ref)
                  (.focus))))
      [])
-    [:div.flex.flex-1.flex-row.gap-1.items-center
+    [:div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
      (when page
        (when-let [page-cp (state/get-component :block/page-cp)]
          (rum/with-key
@@ -154,7 +154,7 @@
 
        (shui/button
         {:class (str "jtrigger h-6" (when-not value " empty-btn")
-                     (when-not multiple-values? " w-full justify-start"))
+                     (when-not multiple-values? " justify-start flex-1"))
          :ref *trigger-ref
          :variant :text
          :size :sm
@@ -352,14 +352,12 @@
 
 (defn <create-new-block!
   [block property value]
-  (p/let [{:keys [last-block-id result]} (db-property-handler/create-property-text-block! block property value
-                                                                                          editor-handler/wrap-parse-block
-
-                                                                                          {})]
+  (p/let [{:keys [block-id result]} (db-property-handler/create-property-text-block!
+                                     block property value editor-handler/wrap-parse-block {})]
     (p/do!
      result
      (exit-edit-property)
-     (let [block (db/entity [:block/uuid last-block-id])]
+     (let [block (db/entity [:block/uuid block-id])]
        (editor-handler/edit-block! block :max {:container-id :unknown-container})))))
 
 (defn <create-new-block-from-template!
@@ -458,23 +456,21 @@
 
 (rum/defc property-normal-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
-           (when-let [block-id (:block/uuid (first (:rum/args state)))]
+           (when-let [block-id (:block/uuid (nth (:rum/args state) 2))]
              (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
-  [parent block-cp editor-box & {:keys [closed-values?]}]
-  (if (and (:block/uuid parent) (state/sub-async-query-loading (:block/uuid parent)))
+  [block _property value-block block-cp editor-box & {:keys [closed-values?]}]
+  (if (and (:block/uuid value-block) (state/sub-async-query-loading (:block/uuid value-block)))
     [:div.text-sm.opacity-70 "loading"]
-    (let [children (model/sort-by-order (:block/_parent (db/entity (:db/id parent))))
-          hide-bullet? (and (= (count children) 1)
-                            (not (editor-handler/collapsable? (:block/uuid (first children)))))]
-      (if (seq children)
-        [:div.property-block-container.content.flex.flex-1
-         (block-cp children {:id (str (:block/uuid parent))
-                             :editor-box editor-box
-                             :property-block? true
-                             :hide-bullet? hide-bullet?
-                             :closed-values? closed-values?})]
-        (property-empty-value)))))
+    (if value-block
+      [:div.property-block-container.content
+       (block-cp [value-block] {:id (str (if (= (:db/id (:block/parent value-block)) (:db/id block))
+                                           (:block/uuid block)
+                                           (:block/uuid value-block)))
+                                :editor-box editor-box
+                                :property-block? true
+                                :closed-values? closed-values?})]
+      (property-empty-value))))
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
@@ -488,7 +484,7 @@
       (when-let [entity (db/sub-block (:db/id (db/entity [:block/uuid value])))]
         (let [properties-cp (:properties-cp opts)]
           (when (and entity properties-cp)
-            [:div.property-block-container.content.w-full.property-template
+            [:div.property-block-container.content.property-template
              (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))]))))))
 
 (defn- create-template-block!
@@ -516,7 +512,7 @@
             (when v-block
               (cond
                 (:block/page v-block)
-                (property-normal-block-value v-block block-cp editor-box)
+                (property-normal-block-value block property v-block block-cp editor-box)
 
                 (and class? (seq (:class/schema.properties v-block)))
                 (if template-instance
@@ -784,65 +780,70 @@
                (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values
-  [block property v {:keys [on-chosen dropdown? editing?]
+  [block property v {:keys [on-chosen dropdown? editing? block-cp editor-box]
                      :or {dropdown? true}
                      :as opts} schema]
   (let [type (get schema :type :default)
         date? (= type :date)
         *el (rum/use-ref nil)
-        items (if (coll? v) v (when v [v]))
-        values-cp (fn [toggle-fn]
-                    (if (seq items)
-                      (concat
-                       (for [item items]
-                         (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-                       (when date?
-                         [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
-                      (when-not editing?
-                        (property-empty-value))))
-        select-cp (fn [select-opts]
-                    (let [select-opts (merge {:multiple-choices? true
-                                              :dropdown? editing?
-                                              :on-chosen (fn []
-                                                           (when on-chosen (on-chosen)))}
-                                        select-opts)]
-                      [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
-                       (if (= :page type)
-                         (property-value-select-page block property
-                                                     (assoc select-opts
-                                                            :classes (:classes schema))
-                                                     opts)
-                         (select block property select-opts opts))]))]
+        items (if (coll? v) v (when v [v]))]
+    ;; TODO: closed values select for default type
+    (if (= type :default)
+      [:div.property-block-container.content
+       (block-cp (sort-by :block/order v) {:editor-box editor-box
+                                          :id (str (:block/uuid block))})]
+      (let [values-cp (fn [toggle-fn]
+                        (if (seq items)
+                          (concat
+                           (for [item items]
+                             (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                           (when date?
+                             [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+                          (when-not editing?
+                            (property-empty-value))))
+            select-cp (fn [select-opts]
+                        (let [select-opts (merge {:multiple-choices? true
+                                                  :dropdown? editing?
+                                                  :on-chosen (fn []
+                                                               (when on-chosen (on-chosen)))}
+                                                 select-opts)]
+                          [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
+                           (if (= :page type)
+                             (property-value-select-page block property
+                                                         (assoc select-opts
+                                                                :classes (:classes schema))
+                                                         opts)
+                             (select block property select-opts opts))]))]
+      ;; why this?
+        (rum/use-effect!
+         (fn []
+           (when editing?
+             (prn "TODO: editing multiple select immediately show...")))
+         [editing?])
 
-    (rum/use-effect!
-      (fn []
-        (when editing?
-          (prn "TODO: editing multiple select immediately show...")))
-      [editing?])
-
-    (if (and dropdown? (not editing?))
-      (let [toggle-fn #(shui/popup-hide!)
-            content-fn (fn [{:keys [_id content-props]}]
-                         (select-cp {:content-props content-props}))]
-        [:div.multi-values.jtrigger
-         {:tab-index "0"
-          :ref *el
-          :on-click (fn [^js e]
-                      (when-not (.closest (.-target e) ".select-item")
-                        (if config/publishing?
-                          nil
-                          (shui/popup-show! (rum/deref *el) content-fn
-                            {:as-dropdown? true :as-content? false
-                             :align "start" :auto-focus? true}))))
-          :on-key-down (fn [^js e]
-                         (case (.-key e)
-                           (" " "Enter")
-                           (do (some-> (rum/deref *el) (.click))
-                               (util/stop e))
-                           :dune))
-          :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
-         (values-cp toggle-fn)])
-      (select-cp {:content-props nil}))))
+        (if (and dropdown? (not editing?))
+          (let [toggle-fn #(shui/popup-hide!)
+                content-fn (fn [{:keys [_id content-props]}]
+                             (select-cp {:content-props content-props}))]
+            [:div.multi-values.jtrigger
+             {:tab-index "0"
+              :ref *el
+              :on-click (fn [^js e]
+                          (when-not (.closest (.-target e) ".select-item")
+                            (if config/publishing?
+                              nil
+                              (shui/popup-show! (rum/deref *el) content-fn
+                                                {:as-dropdown? true :as-content? false
+                                                 :align "start" :auto-focus? true}))))
+              :on-key-down (fn [^js e]
+                             (case (.-key e)
+                               (" " "Enter")
+                               (do (some-> (rum/deref *el) (.click))
+                                   (util/stop e))
+                               :dune))
+              :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
+             (values-cp toggle-fn)])
+          (select-cp {:content-props nil}))))))
 
 (rum/defc property-value < rum/reactive
   [block property v opts]
