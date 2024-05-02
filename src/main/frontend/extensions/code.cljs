@@ -138,7 +138,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.schema.handler.common-config :refer [Config-edn]]
-            [malli.util :as mu]
             [malli.core :as m]
             [rum.core :as rum]
             [promesa.core :as p]))
@@ -459,7 +458,6 @@
                                                 {:editor editor
                                                  :config config
                                                  :state state})))
-
         (.addEventListener element "keydown" (fn [e]
                                                (let [key-code (.-code e)
                                                      meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))

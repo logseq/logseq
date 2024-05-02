@@ -2,7 +2,6 @@
   "Properties handler for db graphs"
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.db.model :as model]
             [frontend.format.block :as block]
             [frontend.handler.notification :as notification]
             [frontend.handler.db-based.property.util :as db-pu]
@@ -502,7 +501,7 @@
          :result result}))))
 
 (defn property-create-new-block-from-template
-  [block property template]
+  [_block property template]
   (let [page-name (str "$$$" (:block/uuid property))
         page-entity (db/get-case-page page-name)
         page (or page-entity
