@@ -74,7 +74,7 @@
         properties (:block/properties current-block)
         query-sort-by (pu/lookup properties :logseq.property/query-sort-by)
         ;; Starting with #6105, we started putting properties under namespaces.
-        nlp-date? (and (not db-graph?) (pu/lookup-by-name properties :logseq.query/nlp-date))
+        nlp-date? (and (not db-graph?) (:logseq.query/nlp-date properties))
         sort-by-column (or (if (uuid? query-sort-by) query-sort-by (keyword query-sort-by))
                            (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                              nil

@@ -2,6 +2,7 @@
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
@@ -16,7 +17,7 @@
             [frontend.extensions.lightbox :as lightbox]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.extensions.pdf.utils :as pdf-utils]
+            [logseq.publishing.db :as publish-db]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [logseq.common.path :as path]
             [logseq.common.config :as common-config]
@@ -286,8 +287,10 @@
 
 (rum/defc area-display
   [block]
-  (when-let [asset-path' (and block (pdf-utils/get-area-block-asset-url
-                                     block (db-utils/pull (:db/id (:block/page block)))))]
+  (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
+                                     (conn/get-db (state/get-current-repo))
+                                     block
+                                     (db-utils/pull (:db/id (:block/page block)))))]
     (let [asset-path (assets-handler/make-asset-url asset-path')]
       [:span.hl-area
        [:span.actions

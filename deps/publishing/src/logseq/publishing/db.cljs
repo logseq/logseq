@@ -3,22 +3,25 @@
   (:require [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
             [clojure.set :as set]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
   because it is used by this dep and needs to be independent from the frontend app"
-  ([block page] (get-area-block-asset-url block page {}))
-  ;; TODO: Add prop-lookup-fn support for db graphs and commandline publishing
-  ([block page {:keys [prop-lookup-fn] :or {prop-lookup-fn get}}]
-   (when-some [props (and block page (:block/properties block))]
-     (when-some [uuid (:block/uuid block)]
-       (when-some [stamp (prop-lookup-fn props :hl-stamp)]
-         (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
-               hl-page        (prop-lookup-fn props :hl-page)
-               encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
-               group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
-           (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png"))))))))
+  [db block page]
+  (when-some [props (and block page (:block/properties block))]
+    ;; Can't use db-property-util/lookup b/c repo isn't available
+    (let [prop-lookup-fn (if (entity-plus/db-based-graph? db)
+                           #(get %1 %2)
+                           #(get %1 (keyword (name %2))))]
+      (when-some [uuid (:block/uuid block)]
+        (when-some [stamp (prop-lookup-fn props :logseq.property/hl-stamp)]
+          (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
+                hl-page        (prop-lookup-fn props :logseq.property/hl-page)
+                encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
+                group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
+            (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png"))))))))
 
 (defn- clean-asset-path-prefix
   [path]
@@ -130,6 +133,7 @@
            (= (keyword (get (:v datom) :hl-type)) :area))
           (#(let [path (some-> (pull (:e datom) db)
                                (get-area-block-asset-url
+                                db
                                 (get-page-by-eid (:e datom))))
                   path (clean-asset-path-prefix path)]
               (conj % path)))))
