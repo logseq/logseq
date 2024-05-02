@@ -41,7 +41,7 @@
           [:span normal-text])))))
 
 (rum/defc root [{:keys [icon icon-theme query text info shortcut value-label value
-                        title highlighted on-highlight on-highlight-dep header on-click
+                        title highlighted on-highlight on-highlight-dep header on-click hls-page?
                         hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
                  :or {hoverable true rounded true}}
                 {:keys [app-config] :as context}]
@@ -93,8 +93,9 @@
         (if (and (= icon "page") (not= text source-page)) ;; alias
           [:div.flex.flex-row.items-center.gap-2
             (highlight-query text)
-            [:div.opacity-50.font-normal "alias of"]
-            source-page]
+           (if-not hls-page?
+             [:<> [:div.opacity-50.font-normal "alias of"] source-page]
+             [:div.opacity-50.font-normal.text-xs " — Highlights page"])]
           (highlight-query text))
         (when info
           [:span.text-xs.text-gray-11 " — " (highlight-query info)])]]
