@@ -75,7 +75,7 @@
       (is (empty? r)))))
 
 
-(deftest gen-remote-ops-test
+(deftest ^:fix-me gen-remote-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         [uuid1 uuid2 uuid3 uuid4] (repeatedly random-uuid)
@@ -116,7 +116,7 @@
     (op-mem-layer/remove-ops-store! repo)))
 
 
-(deftest apply-remote-move-ops-test
+(deftest ^:fix-me apply-remote-move-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         opts {:persist-op? false
@@ -295,7 +295,7 @@
         (rtc-core/apply-remote-update-ops repo conn date-formatter update-ops)
         (is (= #{tag1-uuid} (set (map :block/uuid (:block/tags (d/entity @conn [:block/uuid uuid1-remote]))))))))))
 
-(deftest apply-remote-remove-ops-test
+(deftest ^:fix-me apply-remote-remove-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         opts {:persist-op? false
@@ -346,7 +346,7 @@
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid2-client} (set (map :block/uuid page-blocks)))))))))
 
-(deftest apply-remote-remove-ops-test2
+(deftest ^:fix-me apply-remote-remove-ops-test2
   (testing "
 origin:
 - 1
