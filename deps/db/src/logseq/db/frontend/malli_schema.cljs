@@ -152,6 +152,12 @@
   (mapv (fn [[db-id m]] (with-meta m {:db/id db-id}))
         (datoms->entity-maps datoms)))
 
+(defn internal-ident?
+  "Determines if given ident is created by Logseq"
+  [ident]
+  (or (contains? db-property/db-attribute-properties ident)
+      (contains? logseq-ident-namespaces (namespace ident))))
+
 ;; Main malli schemas
 ;; ==================
 ;; These schemas should be data vars to remain as simple and reusable as possible

@@ -152,12 +152,50 @@
                             properties))]
     new-properties-tx))
 
+(defn- build-classes-tx [classes uuid-maps all-idents]
+  (let [class-db-ids (->> (keys classes)
+                          (map #(vector (name %) (new-db-id)))
+                          (into {}))
+        classes-tx (mapv
+                    (fn [[class-name {:keys [class-parent schema-properties] :as class-m}]]
+                      (merge
+                       (sqlite-util/build-new-class
+                        {:block/name (common-util/page-name-sanity-lc (name class-name))
+                         :block/original-name (name class-name)
+                         :block/uuid (d/squuid)
+                         :db/ident (get-ident all-idents class-name)
+                         :db/id (or (class-db-ids (name class-name))
+                                    (throw (ex-info "No :db/id for class" {:class class-name})))})
+                       (dissoc class-m :properties :class-parent :schema-properties)
+                       (when-let [props (not-empty (:properties class-m))]
+                         (merge
+                          (->block-properties props uuid-maps all-idents)
+                          {:block/refs (build-property-refs props all-idents)}))
+                       (when class-parent
+                         {:class/parent
+                          (or (class-db-ids class-parent)
+                              (throw (ex-info (str "No :db/id for " class-parent) {})))})
+                       (when schema-properties
+                         {:class/schema.properties
+                          (mapv #(hash-map :db/ident (get-ident all-idents (keyword %)))
+                                schema-properties)})))
+                    classes)]
+    classes-tx))
+
+
 (defn- validate-options
-  [{:keys [pages-and-blocks properties]}]
-  (let [undeclared-properties (->> pages-and-blocks
+  [{:keys [pages-and-blocks properties classes]}]
+  (let [page-block-properties (->> pages-and-blocks
                                    (map #(-> (:blocks %) vec (conj (:page %))))
                                    (mapcat #(->> % (map :properties) (mapcat keys)))
-                                   ((fn [x] (set/difference (set x) (set (keys properties))))))
+                                   set)
+        property-class-properties (->> (vals properties)
+                                       (concat (vals classes))
+                                       (mapcat #(keys (:properties %)))
+                                       set)
+        undeclared-properties (-> page-block-properties
+                                  (into property-class-properties)
+                                  (set/difference (set (keys properties))))
         invalid-pages (remove #(or (:block/original-name %) (:block/name %))
                               (map :page pages-and-blocks))]
     (assert (empty? invalid-pages)
@@ -166,6 +204,30 @@
             "All properties must have :block/schema")
     (assert (empty? undeclared-properties)
             (str "The following properties used in EDN were not declared in :properties: " undeclared-properties))))
+
+;; TODO: How to detect these idents don't conflict with existing? :db/add?
+(defn- create-all-idents
+  [properties classes graph-namespace]
+  (let [property-idents (->> (keys properties)
+                             (map #(vector %
+                                           (if graph-namespace
+                                             (db-property/create-db-ident-from-name (str (name graph-namespace) ".property")
+                                                                                    (name %))
+                                             (db-property/create-user-property-ident-from-name (name %)))))
+                             (into {}))
+        _ (assert (= (count (set (vals property-idents))) (count properties)) "All property db-idents must be unique")
+        class-idents (->> (keys classes)
+                          (map #(vector %
+                                        (if graph-namespace
+                                          (db-property/create-db-ident-from-name (str (name graph-namespace) ".class")
+                                                                                 (name %))
+                                          (db-property/create-db-ident-from-name "user.class" (name %)))))
+                          (into {}))
+        _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
+        all-idents (merge property-idents class-idents)]
+    (assert (= (count all-idents) (+ (count property-idents) (count class-idents)))
+            "Class and property db-idents have no overlap")
+    all-idents))
 
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
@@ -186,19 +248,26 @@
        :block/content is required and :properties can be passed to define block properties
    * :properties - This is a map to configure properties where the keys are property names
      and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
-     An additional key `:closed-values` is available to define closed values. The key takes
-     a vec of maps containing keys :uuid, :value and :icon.
+     Additional keys available:
+     * :closed-values - Define closed values with a vec of maps. A map contains keys :uuid, :value and :icon.
+     * :properties - Define properties on a property page.
+   * :classes - This is a map to configure classes where the keys are class names
+     and the values are maps of datascript attributes e.g. `{:block/original-name \"Foo\"}`.
+     Additional keys available:
+     * :properties - Define properties on a class page
+     * :class-parent - Add a class parent by its name
+     * :schema-properties - Vec of property names. Defines properties that a class gives to its objects
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
-   The :properties in :pages-and-blocks is a map of property names to property
-   values.  Multiple property values for a many cardinality property are defined
-   as a set. The following property types are supported: :default, :url,
-   :checkbox, :number, :page and :date. :checkbox and :number values are written
-   as booleans and integers/floats. :page references are written as
-   vectors e.g. `[:page \"PAGE NAME\"]`"
-  [{:keys [pages-and-blocks properties graph-namespace page-id-fn]
+   The :properties in :pages-and-blocks, :properties and :classes is a map of
+   property names to property values.  Multiple property values for a many
+   cardinality property are defined as a set. The following property types are
+   supported: :default, :url, :checkbox, :number, :page and :date. :checkbox and
+   :number values are written as booleans and integers/floats. :page references
+   are written as vectors e.g. `[:page \"PAGE NAME\"]`"
+  [{:keys [pages-and-blocks properties classes graph-namespace page-id-fn]
     :or {page-id-fn :db/id}
     :as options}]
   (let [_ (validate-options options)
@@ -209,17 +278,9 @@
                                     (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
                                 pages-and-blocks)
         uuid-maps (create-uuid-maps pages-and-blocks')
-        ;; TODO: How to detect these idents don't conflict with existing? :db/add?
-        all-idents (->> (keys properties)
-                        (map #(vector %
-                                      (if graph-namespace
-                                        (db-property/create-db-ident-from-name (str (name graph-namespace) ".property")
-                                                                               (name %))
-                                        (db-property/create-user-property-ident-from-name (name %)))))
-                        (into {}))
-        _ (assert (= (count (set (vals all-idents))) (count properties))
-                  "All db-idents must be unique")
-        new-properties-tx (build-properties-tx properties uuid-maps all-idents)
+        all-idents (create-all-idents properties classes graph-namespace)
+        properties-tx (build-properties-tx properties uuid-maps all-idents)
+        classes-tx (build-classes-tx classes uuid-maps all-idents)
         pages-and-blocks-tx
         (vec
          (mapcat
@@ -249,6 +310,7 @@
                        blocks))))
           pages-and-blocks'))]
     ;; Properties first b/c they have schema. Then pages b/c they can be referenced by blocks
-    (vec (concat new-properties-tx
+    (vec (concat properties-tx
+                 classes-tx
                  (filter :block/name pages-and-blocks-tx)
                  (remove :block/name pages-and-blocks-tx)))))
