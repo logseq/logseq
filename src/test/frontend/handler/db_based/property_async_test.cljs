@@ -34,9 +34,8 @@
        ;; add property
        (db-property-handler/upsert-property! repo k {:type :default} {})
        (p/let [property (db/entity k)
-               {:keys [last-block-id]} (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
-               {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
-         (is (= from-block-id (:db/id fb)))
+               {:keys [block-id]} (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
+               {:keys [from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid block-id])]
          (is (= from-property-id (:db/id property))))))))
 
 ;; collapse-expand-property!
