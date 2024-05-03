@@ -240,7 +240,9 @@
             :as block}]
   (let [page? (some? name)
         block? (nil? name)
-        db-based? (sqlite-util/db-based-graph? repo)]
+        db-based? (sqlite-util/db-based-graph? repo)
+        ;; TODO: probably need to handle other properties
+        properties (dissoc properties :logseq.property/created-from-property)]
     (when-not (or
                (and page? name (whiteboard-page? db uuid))
                (and block? (> (count content) 10000))
