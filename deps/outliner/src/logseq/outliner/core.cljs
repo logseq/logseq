@@ -788,14 +788,17 @@
                                             :block/page target-page}) children-ids)))
         target-from-property (:logseq.property/created-from-property target-block)
         block-from-property (:logseq.property/created-from-property block)
-        retract-property-tx (when (or (and (not sibling?) target-from-property block-from-property)
-                                      (and sibling? (nil? target-from-property) block-from-property))
-                              [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
-                               [:db/retract (:db/id block) :logseq.property/created-from-property]])
-        add-property-tx (when (and sibling? target-from-property (not block-from-property))
-                          [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id target-from-property)]
-                           [:db/add (:db/id (:block/parent target-block)) (:db/ident target-from-property) (:db/id block)]])]
-    (common-util/concat-without-nil tx-data children-page-tx retract-property-tx add-property-tx)))
+        move-single-property-value? (and block-from-property (= :db.cardinality/one (:db/cardinality block-from-property)))
+        property-tx (let [retract-property-tx (when (or (and (not sibling?) target-from-property block-from-property)
+                                                        (and sibling? (nil? target-from-property) block-from-property))
+                                                [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
+                                                 [:db/retract (:db/id block) :logseq.property/created-from-property]])
+                          add-property-tx (when (and sibling? target-from-property (not block-from-property))
+                                            [[:db/add (:db/id block) :logseq.property/created-from-property (:db/id target-from-property)]
+                                             [:db/add (:db/id (:block/parent target-block)) (:db/ident target-from-property) (:db/id block)]])]
+                      (concat retract-property-tx add-property-tx))]
+    (when-not move-single-property-value?
+      (common-util/concat-without-nil tx-data children-page-tx property-tx))))
 
 (defn- move-blocks
   "Move `blocks` to `target-block` as siblings or children."

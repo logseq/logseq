@@ -459,18 +459,19 @@
            (when-let [block-id (:block/uuid (nth (:rum/args state) 2))]
              (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
-  [block _property value-block block-cp editor-box & {:keys [closed-values?]}]
+  [block property value-block block-cp editor-box & {:keys [closed-values?]}]
   (if (and (:block/uuid value-block) (state/sub-async-query-loading (:block/uuid value-block)))
     [:div.text-sm.opacity-70 "loading"]
-    (if value-block
-      [:div.property-block-container.content
-       (block-cp [value-block] {:id (str (if (= (:db/id (:block/parent value-block)) (:db/id block))
-                                           (:block/uuid block)
-                                           (:block/uuid value-block)))
-                                :editor-box editor-box
-                                :property-block? true
-                                :closed-values? closed-values?})]
-      (property-empty-value))))
+    (let [multiple-values? (= (:db/cardinality property) :db/cardinality.many)]
+      (if value-block
+       [:div.property-block-container.content
+        (block-cp [value-block] {:id (str (if multiple-values?
+                                            (:block/uuid block)
+                                            (:block/uuid value-block)))
+                                 :editor-box editor-box
+                                 :property-block? true
+                                 :closed-values? closed-values?})]
+       (property-empty-value)))))
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
