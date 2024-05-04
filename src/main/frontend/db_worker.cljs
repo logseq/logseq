@@ -660,15 +660,6 @@
    [this token graph-uuid]
    (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid)))
 
-  (rtc-get-block-content-versions
-   [_this block-id]
-   (async-util/c->p
-    (rtc-core/<get-block-content-versions @rtc-core/*state block-id)))
-
-  (rtc-get-debug-state
-   [_this repo]
-   (ldb/write-transit-str (rtc-core/get-debug-state repo)))
-
   (rtc-get-block-update-log
    [_this block-uuid]
    (transit/write transit-w (rtc-core/get-block-update-log (uuid block-uuid))))
