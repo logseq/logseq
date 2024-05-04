@@ -96,10 +96,11 @@
 
 (defn <rtc-get-users-info
   []
-  (when (ldb/get-graph-rtc-uuid (db/get-db))
+  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
     (when-let [^js worker @state/*db-worker]
-      (p/let [repo (state/get-current-repo)
-              result (.rtc-get-users-info worker)
+      (p/let [token (state/get-auth-id-token)
+              repo (state/get-current-repo)
+              result (.rtc-get-users-info2 worker token graph-uuid)
               result (bean/->clj result)]
         (state/set-state! :rtc/users-info {repo result})))))
 

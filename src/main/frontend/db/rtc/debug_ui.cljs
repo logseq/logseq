@@ -34,9 +34,8 @@
       (shui/button
        {:size :sm
         :on-click (fn [_]
-                    (let [repo (state/get-current-repo)
-                          ^object worker @db-browser/*worker]
-                      (p/let [result (.rtc-get-debug-state worker repo)
+                    (let [^object worker @db-browser/*worker]
+                      (p/let [result (.rtc-get-debug-state2 worker)
                               new-state (ldb/read-transit-str result)]
                         (swap! debug-state (fn [old] (merge old new-state))))))}
        (shui/tabler-icon "refresh") "local-state")
@@ -76,12 +75,11 @@
        (-> {:user-uuid (user/user-uuid)
             :graph (:graph-uuid state)
             :rtc-state rtc-state
-            :ws (:ws-state state)
             :local-tx (:local-tx state)
             :pending-block-update-count (:unpushed-block-update-count state)
             :remote-graphs (:remote-graphs state)
             :online-info (:online-info state)
-            :auto-push-updates? (:auto-push-updates? state)
+            :auto-push? (:auto-push? state)
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
                             (count (:block/_page (db/entity [:block/name (util/page-name-sanity-lc page)]))))}
@@ -101,14 +99,13 @@
 
        [:div.my-2.flex
         [:div.mr-2 (ui/button (str "Toggle auto push updates("
-                                   (if (:auto-push-client-ops? state)
+                                   (if (:auto-push? state)
                                      "ON" "OFF")
                                    ")")
                               {:on-click
                                (fn []
                                  (let [^object worker @db-browser/*worker]
-                                   (p/let [result (.rtc-toggle-auto-push worker (state/get-current-repo))]
-                                     (swap! debug-state assoc :auto-push-updates? result))))})]
+                                   (.rtc-toggle-auto-push worker (state/get-current-repo))))})]
         [:div (shui/button
                {:variant :outline
                 :class "text-red-rx-09 border-red-rx-08 hover:text-red-rx-10"

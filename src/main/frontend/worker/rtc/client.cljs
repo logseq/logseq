@@ -39,7 +39,7 @@
       (when (= :graph-not-ready (:type ex-data))
         (throw (ex-info "remote graph is still creating" {:missionary/retry true}))))))
 
-(defn ensure-register-graph-updates
+(defn- ensure-register-graph-updates*
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` has been sent"
@@ -53,10 +53,13 @@
           (swap! *sent assoc mws false))
         (when (not (@*sent mws))
           (m/? (c.m/backoff
-                (take 7 c.m/delays)     ;retry 7 times (128s) if remote-graph is creating
+                (take 5 c.m/delays)     ;retry 5 times (32s) if remote-graph is creating
                 (register-graph-updates get-mws-create-task graph-uuid)))
           (swap! *sent assoc mws true))
         mws))))
+
+(def ensure-register-graph-updates (memoize ensure-register-graph-updates*))
+
 
 (defn- remove-non-exist-block-uuids-in-add-retract-map
   [conn add-retract-map]
