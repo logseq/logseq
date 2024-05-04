@@ -26,9 +26,7 @@
   [get-mws-create-task message]
   (m/sp
     (let [mws (m/? get-mws-create-task)]
-      (handle-remote-ex
-       (rtc-const/data-from-ws-coercer
-        (m/? (ws/send&recv mws message)))))))
+      (handle-remote-ex (m/? (ws/send&recv mws message))))))
 
 (defn- register-graph-updates
   [get-mws-create-task graph-uuid]

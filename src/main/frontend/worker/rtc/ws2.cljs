@@ -168,6 +168,7 @@
   [m-ws]
   (m/eduction
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
+   (map rtc-const/data-from-ws-coercer)
    (:recv-flow m-ws)))
 
 (defn send&recv

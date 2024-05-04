@@ -21,7 +21,6 @@
             [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.snapshot :as rtc-snapshot]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
             [frontend.worker.undo-redo :as undo-redo]
@@ -682,19 +681,11 @@
 
   (rtc-snapshot-graph
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-snapshot/<snapshot-graph state graph-uuid))))))
+   (js/Promise. (rtc-core2/new-task--snapshot-graph token graph-uuid)))
 
   (rtc-snapshot-list
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-snapshot/<snapshot-list state graph-uuid))))))
+   (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid)))
 
   (rtc-push-pending-ops
    [_this]
