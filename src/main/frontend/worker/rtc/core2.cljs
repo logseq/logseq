@@ -70,34 +70,39 @@
     (c.m/mix remote-updates-flow local-updates-check-flow)))
 
 
-(def ^:private *url->*current-ws
-  "Atom of url-> atom-*current-ws"
-  (atom {}))
-
 (defn- new-task--get-ws-create
-  "Return a task that get current ws, create one if needed(closed or not created yet)"
+  "Return a map with atom *current-ws and a task
+  that get current ws, create one if needed(closed or not created yet)"
   [url & {:keys [retry-count open-ws-timeout]
           :or {retry-count 10 open-ws-timeout 10000}}]
-  (let [*current-ws (or (@*url->*current-ws url) (atom nil))
+  (let [*current-ws (atom nil)
         ws-create-task (ws/mws-create url {:retry-count retry-count :open-ws-timeout open-ws-timeout})]
-    (when-not (@*url->*current-ws url)
-      (swap! *url->*current-ws assoc url *current-ws))
-    (m/sp
-      (let [ws @*current-ws]
-        (if (and ws
-                 (not (ws/closed? ws)))
-          ws
-          (let [ws (m/? ws-create-task)]
-            (reset! *current-ws ws)
-            ws))))))
+    {:*current-ws *current-ws
+     :get-ws-create-task
+     (m/sp
+       (let [ws @*current-ws]
+         (if (and ws
+                  (not (ws/closed? ws)))
+           ws
+           (let [ws (m/? ws-create-task)]
+             (reset! *current-ws ws)
+             ws))))}))
+
+(def new-task--get-ws-create--memoized
+  "Return a memoized task to reuse the same websocket."
+  (memoize new-task--get-ws-create))
 
 (defn- create-ws-state-flow
   [*current-ws]
   (m/relieve
    (m/ap
-     (if-let [ws (m/?< (m/watch *current-ws))]
-       (m/?< (ws/create-mws-state-flow ws))
-       (m/amb)))))
+     (let [ws (m/?< (m/watch *current-ws))]
+       (try
+         (if ws
+           (m/?< (ws/create-mws-state-flow ws))
+           (m/amb))
+         (catch Cancelled _
+           (m/amb)))))))
 
 (defn- create-rtc-state-flow
   [ws-state-flow]
@@ -108,7 +113,7 @@
        ws-state (assoc :ws-state ws-state)))
    (m/reductions {} nil ws-state-flow)))
 
-(def ^:private *rtc-lock (atom nil))
+(defonce ^:private *rtc-lock (atom nil))
 (defn- holding-rtc-lock
   "Use this fn to prevent multiple rtc-loops at same time.
   rtc-loop-task is stateless, but conn is not.
@@ -124,7 +129,7 @@
     (try
       (m/? task)
       (finally
-        (compare-and-set! *rtc-lock true nil)))))
+        (reset! *rtc-lock nil)))))
 
 (defn- create-rtc-loop
   "Return a map with [:rtc-log-flow :rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
@@ -136,10 +141,9 @@
         *log                (atom nil)
         started-dfv         (m/dfv)
         add-log-fn          #(reset! *log [(js/Date.) %])
-        get-ws-create-task (r.client/ensure-register-graph-updates
-                             (new-task--get-ws-create ws-url)
-                             graph-uuid)
-        *current-ws        (@*url->*current-ws ws-url)
+        {:keys [*current-ws get-ws-create-task]}
+        (new-task--get-ws-create--memoized ws-url)
+        get-ws-create-task  (r.client/ensure-register-graph-updates get-ws-create-task graph-uuid)
         mixed-flow          (create-mixed-flow repo get-ws-create-task *auto-push?)]
     (assert (some? *current-ws))
     {:rtc-log-flow    (m/buffer 100 (m/watch *log))
@@ -171,13 +175,15 @@
             (add-log-fn {:type :rtc/cancelled})
             (throw e)))))}))
 
-(def ^:private *rtc-loop-metadata
-  (atom {:graph-uuid nil
-         :user-uuid nil
-         :rtc-log-flow nil
-         :rtc-state-flow nil
-         :*rtc-auto-push? nil
-         :canceler nil}))
+(def ^:private empty-rtc-loop-metadata
+  {:graph-uuid nil
+   :user-uuid nil
+   :rtc-log-flow nil
+   :rtc-state-flow nil
+   :*rtc-auto-push? nil
+   :canceler nil})
+
+(defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata))
 
 ;;; ================ API ================
 (defn new-task--rtc-start
@@ -190,11 +196,12 @@
               date-formatter (common-config/get-date-formatter config)
               {:keys [onstarted-task rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task]}
               (create-rtc-loop user-uuid graph-uuid repo conn date-formatter token)
-              canceler (rtc-loop-task #(prn :rtc-loop-task-succ %) #(prn :rtc-loop-stopped %))
+              canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
               start-ex (m/? onstarted-task)]
           (if (:ex-data start-ex)
             (r.ex/->map start-ex)
-            (do (reset! *rtc-loop-metadata {:graph-uuid graph-uuid
+            (do (reset! *rtc-loop-metadata {:repo repo
+                                            :graph-uuid graph-uuid
                                             :user-uuid user-uuid
                                             :rtc-log-flow rtc-log-flow
                                             :rtc-state-flow rtc-state-flow
@@ -208,7 +215,8 @@
 (defn rtc-stop
   []
   (when-let [canceler (:canceler @*rtc-loop-metadata)]
-    (canceler)))
+    (canceler)
+    (reset! *rtc-loop-metadata empty-rtc-loop-metadata)))
 
 (defn rtc-toggle-auto-push
   []
@@ -218,14 +226,14 @@
 (defn new-task--get-graphs
   [token]
   (m/sp
-    (let [get-ws-create-task (new-task--get-ws-create (get-ws-url token))]
+    (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
       (:graphs (m/? (r.client/send&recv get-ws-create-task {:action "list-graphs"}))))))
 
 (defn new-task--delete-graph
   "Return a task that return true if succeed"
   [token graph-uuid]
   (m/sp
-    (let [get-ws-create-task (new-task--get-ws-create (get-ws-url token))
+    (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))
           {:keys [ex-data]} (m/?
                              (r.client/send&recv get-ws-create-task
                                                  {:action "delete-graph" :graph-uuid graph-uuid}))]
@@ -236,14 +244,14 @@
   "Return a task that return users-info about the graph."
   [token graph-uuid]
   (m/sp
-    (let [get-ws-create-task (new-task--get-ws-create (get-ws-url token))]
+    (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
       (:users
        (m/? (r.client/send&recv get-ws-create-task
                                 {:action "get-users-info" :graph-uuid graph-uuid}))))))
 
 (defn new-task--grant-access-to-others
   [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
-  (let [get-ws-create-task (new-task--get-ws-create (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
     (r.client/send&recv get-ws-create-task
                         (cond-> {:action "grant-access"
                                  :graph-uuid graph-uuid}
@@ -253,16 +261,51 @@
 (defn new-task--get-block-content-versions
   "Return a task that return map [:ex-data :ex-message :versions]"
   [token graph-uuid block-uuid]
-  (let [get-ws-create-task (new-task--get-ws-create (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
     (r.client/send&recv get-ws-create-task
                         {:action "query-block-content-versions"
                          :block-uuids [block-uuid]
                          :graph-uuid graph-uuid})))
 
+(defn- create-get-debug-state-flow
+  []
+  (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
+    (m/ap
+     (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push?]}
+           (m/?< rtc-loop-metadata-flow)]
+       (try
+         (when (and repo rtc-state-flow *rtc-auto-push?)
+           (m/?<
+            (m/latest
+             (fn [rtc-state rtc-auto-push?]
+               {:graph-uuid graph-uuid
+                :user-uuid user-uuid
+                :unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
+                :rtc-state rtc-state
+                :auto-push? rtc-auto-push?})
+             rtc-state-flow (m/watch *rtc-auto-push?))))
+         (catch Cancelled _))))))
+
 (defn new-task--get-debug-state
   []
+  (m/reduce {} nil (m/eduction (take 1) (create-get-debug-state-flow))))
 
-  )
+
+(defonce ^:private *last-subscribe-canceler (atom nil))
+(defn- subscribe-debug-state
+  []
+  (when-let [canceler @*last-subscribe-canceler]
+    (canceler)
+    (reset! *last-subscribe-canceler nil))
+  (let [cancel (c.m/run-task
+                (m/reduce
+                 (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+                 (create-get-debug-state-flow))
+                :subscribe-debug-state)]
+    (reset! *last-subscribe-canceler cancel)
+    nil))
+
+(subscribe-debug-state)
 
 
 (comment
@@ -275,14 +318,14 @@
     (def debug-ws-url "wss://ws-dev.logseq.com/rtc-sync?token=???")
     (let [{:keys [rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task]}
           (create-rtc-loop user-uuid graph-uuid repo conn date-formatter nil {:debug-ws-url debug-ws-url})
-          c (rtc-loop-task #(js/console.log :succ %) #(js/console.log :fail %))]
+          c (c.m/run-task rtc-loop-task :rtc-loop-task)]
       (def cancel c)
       (def rtc-log-flow rtc-log-flow)
       (def rtc-state-flow rtc-state-flow)
       (def *rtc-auto-push? *rtc-auto-push?)))
   (cancel)
 
-  (def cancel2 ((m/reduce (fn [_ v] (prn :v v) v)
-                          (m/latest vector rtc-state-flow (m/reductions {} nil rtc-log-flow)))
-                #(js/console.log :succ %) #(js/console.log :fail %)))
-  (cancel2))
+
+
+
+  )

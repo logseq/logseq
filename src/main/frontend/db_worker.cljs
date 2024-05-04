@@ -576,8 +576,8 @@
      (with-write-transit-str
        (js/Promise.
         (rtc-core2/new-task--grant-access-to-others token graph-uuid
-                                                      :target-user-uuids target-user-uuids
-                                                      :target-user-emails target-user-emails)))))
+                                                    :target-user-uuids target-user-uuids
+                                                    :target-user-emails target-user-emails)))))
 
   (rtc-get-graphs2
    [this token]
@@ -598,6 +598,11 @@
    [this token graph-uuid block-uuid]
    (with-write-transit-str
      (js/Promise. (rtc-core2/new-task--get-block-content-versions token graph-uuid block-uuid))))
+
+  (rtc-get-debug-state2
+   [this]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--get-debug-state))))
 
   ;; ================================================================
 

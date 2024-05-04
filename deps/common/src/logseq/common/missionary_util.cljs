@@ -50,3 +50,8 @@
       (try (m/? (m/sleep duration-ms x))
            (catch Cancelled _
              (m/amb))))))
+
+(defn run-task
+  "Return the canceler"
+  [task key & {:keys [succ fail]}]
+  (task (or succ #(prn key :succ %)) (or fail #(js/console.log key (or (some-> % .-stack) %)))))
