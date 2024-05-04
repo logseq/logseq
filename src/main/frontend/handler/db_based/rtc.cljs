@@ -1,14 +1,13 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
-  (:require [frontend.state :as state]
-            [cljs-bean.core :as bean]
-            [promesa.core :as p]
-            [frontend.config :as config]
-            [frontend.handler.user :as user-handler]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.user :as user-handler]
+            [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [frontend.handler.notification :as notification]))
+            [promesa.core :as p]))
 
 
 (defn <rtc-create-graph!
@@ -24,7 +23,7 @@
   (when-let [^js worker @state/*db-worker]
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
-       (.rtc-delete-graph worker token graph-uuid)))))
+       (.rtc-delete-graph2 worker token graph-uuid)))))
 
 (defn <rtc-download-graph!
   [graph-name graph-uuid timeout-ms]
@@ -80,8 +79,8 @@
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
        (when worker
-         (p/let [result (.rtc-get-graphs worker token)
-                 graphs (bean/->clj result)
+         (p/let [result (.rtc-get-graphs2 worker token)
+                 graphs (ldb/read-transit-str result)
                  result (->> graphs
                              (remove (fn [graph] (= (:graph-status graph) "deleting")))
                              (mapv (fn [graph]
@@ -101,18 +100,19 @@
       (p/let [token (state/get-auth-id-token)
               repo (state/get-current-repo)
               result (.rtc-get-users-info2 worker token graph-uuid)
-              result (bean/->clj result)]
+              result (ldb/read-transit-str result)]
         (state/set-state! :rtc/users-info {repo result})))))
 
 (defn <rtc-invite-email
   [graph-uuid email]
   (when-let [^js worker @state/*db-worker]
-    (->
-     (p/do!
-      (.rtc-grant-graph-access worker graph-uuid
-                               (ldb/write-transit-str [])
-                               (ldb/write-transit-str [email]))
-      (notification/show! (str "Invitation sent!") :success))
-     (p/catch (fn [e]
-                (notification/show! (str "Something wrong, please try again.") :error)
-                (js/console.error e))))))
+    (let [token (state/get-auth-id-token)]
+      (->
+       (p/do!
+        (.rtc-grant-graph-access2 worker token graph-uuid
+                                  (ldb/write-transit-str [])
+                                  (ldb/write-transit-str [email]))
+        (notification/show! (str "Invitation sent!") :success))
+       (p/catch (fn [e]
+                  (notification/show! (str "Something wrong, please try again.") :error)
+                  (js/console.error e)))))))

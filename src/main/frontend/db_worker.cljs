@@ -604,33 +604,6 @@
      (js/Promise. (rtc-core2/new-task--get-debug-state))))
 
   ;; ================================================================
-
-  (rtc-start
-   [this repo token dev-mode?]
-   (async-util/c->p
-    (when-let [conn (worker-state/get-datascript-conn repo)]
-      (rtc-core/<start-rtc repo conn token dev-mode?))))
-
-  (rtc-stop
-   [this]
-   (when-let [state @rtc-core/*state]
-     (rtc-core/stop-rtc state)))
-
-  (rtc-toggle-sync
-   [this repo]
-   (async-util/c->p (rtc-core/<toggle-sync)))
-
-  (rtc-grant-graph-access
-   [this graph-uuid target-user-uuids-str target-user-emails-str]
-   (async-util/c->p
-    (when-let [state @rtc-core/*state]
-      (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
-            target-user-emails (ldb/read-transit-str target-user-emails-str)]
-        (rtc-core/<grant-graph-access-to-others
-         state graph-uuid
-         :target-user-uuids target-user-uuids
-         :target-user-emails target-user-emails)))))
-
   (rtc-async-upload-graph
    [this repo token remote-graph-name]
    (let [d (p/deferred)]
@@ -686,25 +659,6 @@
   (rtc-snapshot-list
    [this token graph-uuid]
    (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid)))
-
-  (rtc-push-pending-ops
-   [_this]
-   (async/put! (:force-push-client-ops-chan @rtc-core/*state) true))
-
-  (rtc-get-graphs
-   [_this token]
-   (async-util/c->p
-    (rtc-core/<get-graphs token)))
-
-  (rtc-delete-graph
-   [_this token graph-uuid]
-   (async-util/c->p
-    (rtc-core/<delete-graph token graph-uuid)))
-
-  (rtc-get-users-info
-   [_this]
-   (async-util/c->p
-    (rtc-core/<get-users-info @rtc-core/*state)))
 
   (rtc-get-block-content-versions
    [_this block-id]

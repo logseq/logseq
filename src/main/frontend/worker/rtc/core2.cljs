@@ -259,10 +259,10 @@
   "Return a task that return map [:ex-data :ex-message :versions]"
   [token graph-uuid block-uuid]
   (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
-    (r.client/send&recv get-ws-create-task
-                        {:action "query-block-content-versions"
-                         :block-uuids [block-uuid]
-                         :graph-uuid graph-uuid})))
+    (m/join :versions (r.client/send&recv get-ws-create-task
+                                          {:action "query-block-content-versions"
+                                           :block-uuids [block-uuid]
+                                           :graph-uuid graph-uuid}))))
 
 (defn- create-get-debug-state-flow
   []
