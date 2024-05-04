@@ -35,9 +35,7 @@
        (let [ws (m/? get-ws-create-task)
              x (try
                  (m/?> (m/eduction
-                        (keep (fn [data]
-                                (when (= "push-updates" (:req-id data))
-                                  (rtc-const/data-from-ws-coercer data))))
+                        (filter (fn [data] (= "push-updates" (:req-id data))))
                         (ws/recv-flow ws)))
                  (catch js/CloseEvent _
                    sentinel))]
@@ -225,29 +223,28 @@
 
 (defn new-task--get-graphs
   [token]
-  (m/sp
-    (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
-      (:graphs (m/? (r.client/send&recv get-ws-create-task {:action "list-graphs"}))))))
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (m/join :graphs
+            (r.client/send&recv get-ws-create-task {:action "list-graphs"}))))
 
 (defn new-task--delete-graph
   "Return a task that return true if succeed"
   [token graph-uuid]
-  (m/sp
-    (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))
-          {:keys [ex-data]} (m/?
-                             (r.client/send&recv get-ws-create-task
-                                                 {:action "delete-graph" :graph-uuid graph-uuid}))]
-      (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
-      (boolean (nil? ex-data)))))
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (m/sp
+     (let [{:keys [ex-data]}
+           (m/? (r.client/send&recv get-ws-create-task
+                                    {:action "delete-graph" :graph-uuid graph-uuid}))]
+       (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
+       (boolean (nil? ex-data))))))
 
 (defn new-task--get-user-info
   "Return a task that return users-info about the graph."
   [token graph-uuid]
-  (m/sp
-    (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
-      (:users
-       (m/? (r.client/send&recv get-ws-create-task
-                                {:action "get-users-info" :graph-uuid graph-uuid}))))))
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (m/join :users
+            (r.client/send&recv get-ws-create-task
+                                {:action "get-users-info" :graph-uuid graph-uuid}))))
 
 (defn new-task--grant-access-to-others
   [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
@@ -290,6 +287,21 @@
   []
   (m/reduce {} nil (m/eduction (take 1) (create-get-debug-state-flow))))
 
+(defn new-task--snapshot-graph
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (m/join #(select-keys % [:snapshot-uuid :graph-uuid])
+            (r.client/send&recv get-ws-create-task {:action "snapshot-graph"
+                                                    :graph-uuid graph-uuid}))))
+(defn new-task--snapshot-list
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (m/join :snapshot-list
+            (r.client/send&recv get-ws-create-task {:action "snapshot-list"
+                                                    :graph-uuid graph-uuid}))))
+
+
+;;; subscribe debug state ;;;
 
 (defonce ^:private *last-subscribe-canceler (atom nil))
 (defn- subscribe-debug-state
