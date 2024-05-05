@@ -70,7 +70,6 @@
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
-
 (def ^:private block-type-kw->str
   {:block-type/property     "property"
    :block-type/class        "class"
@@ -183,6 +182,12 @@
           (r.client/send&recv get-ws-create-task {:action "download-graph"
                                                   :graph-uuid graph-uuid})))
 
+(defn new-task--download-info-list
+  [get-ws-create-task graph-uuid]
+  (m/join :download-info-list
+          (r.client/send&recv get-ws-create-task {:action "download-info-list"
+                                                  :graph-uuid graph-uuid})))
+
 (defn <wait-download-info-ready
   [state download-info-uuid graph-uuid timeout-ms]
   (let [init-interval 1000
@@ -227,10 +232,3 @@
            (<! (op-mem-layer/<sync-to-idb-layer! repo))
            (<! (p->c (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
            (worker-state/set-rtc-downloading-graph! false)))))))
-
-(defn <download-info-list
-  [state graph-uuid]
-  (go-try
-   (:download-info-list
-    (<? (ws/<send&receive state {:action "download-info-list"
-                                 :graph-uuid graph-uuid})))))
