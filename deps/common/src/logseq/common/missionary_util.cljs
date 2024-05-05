@@ -1,7 +1,8 @@
 (ns logseq.common.missionary-util
   "Utils based on missionary."
-  (:import [missionary Cancelled])
-  (:require [missionary.core :as m]))
+  (:require [clojure.core.async :as a]
+            [missionary.core :as m])
+  (:import [missionary Cancelled]))
 
 (def delays (reductions * 1000 (repeat 2)))
 
@@ -55,3 +56,14 @@
   "Return the canceler"
   [task key & {:keys [succ fail]}]
   (task (or succ #(prn key :succ %)) (or fail #(js/console.log key (or (some-> % .-stack) %)))))
+
+(defn >!
+  "Return a task that
+  puts given value on given channel,
+  completing with true when put is accepted, or false if port was closed."
+  [c x] (doto (m/dfv) (->> (a/put! c x))))
+
+(defn <!
+  "Return a task that takes from given channel,
+  completing with value when take is accepted, or nil if port was closed."
+  [c] (doto (m/dfv) (->> (a/take! c))))
