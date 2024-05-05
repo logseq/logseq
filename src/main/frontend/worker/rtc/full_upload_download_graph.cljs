@@ -71,7 +71,7 @@
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
 
-(def block-type-kw->str
+(def ^:private block-type-kw->str
   {:block-type/property     "property"
    :block-type/class        "class"
    :block-type/whiteboard   "whiteboard"
@@ -177,13 +177,11 @@
 ;; async download-graph ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn <request-download-graph
-  [state graph-uuid]
-  (go-try
-   (let [{:keys [download-info-uuid]}
-         (<? (ws/<send&receive state {:action "download-graph"
-                                      :graph-uuid graph-uuid}))]
-     download-info-uuid)))
+(defn new-task--request-download-graph
+  [get-ws-create-task graph-uuid]
+  (m/join :download-info-uuid
+          (r.client/send&recv get-ws-create-task {:action "download-graph"
+                                                  :graph-uuid graph-uuid})))
 
 (defn <wait-download-info-ready
   [state download-info-uuid graph-uuid timeout-ms]

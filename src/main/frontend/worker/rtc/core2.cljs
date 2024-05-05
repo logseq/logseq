@@ -308,6 +308,13 @@
       (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
                                                 :repo repo})))))
 
+(defn new-task--request-download-graph
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid)))
+
+;;; ================ API (ends) ================
+
 ;;; subscribe debug state ;;;
 
 (defonce ^:private *last-subscribe-canceler (atom nil))
