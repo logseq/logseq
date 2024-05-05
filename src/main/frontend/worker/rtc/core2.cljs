@@ -318,6 +318,12 @@
   (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
     (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid)))
 
+(defn new-task--wait-download-info-ready
+  [token download-info-uuid graph-uuid timeout-ms]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (r.upload-download/new-task--wait-download-info-ready
+     get-ws-create-task download-info-uuid graph-uuid timeout-ms)))
+
 ;;; ================ API (ends) ================
 
 ;;; subscribe debug state ;;;

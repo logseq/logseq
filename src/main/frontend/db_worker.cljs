@@ -610,16 +610,14 @@
   ;; ================================================================
   (rtc-request-download-graph
    [this token graph-uuid]
-   (js/Promise. (rtc-core2/new-task--request-download-graph token graph-uuid)))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--request-download-graph token graph-uuid))))
 
   (rtc-wait-download-graph-info-ready
-   [this repo token download-info-uuid graph-uuid timeout-ms]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (ldb/write-transit-str
-         (<? (rtc-updown/<wait-download-info-ready state download-info-uuid graph-uuid timeout-ms)))))))
+   [this token download-info-uuid graph-uuid timeout-ms]
+   (with-write-transit-str
+     (js/Promise.
+      (rtc-core2/new-task--wait-download-info-ready token download-info-uuid graph-uuid timeout-ms))))
 
   (rtc-download-graph-from-s3
    [this graph-uuid graph-name s3-url]
@@ -629,15 +627,18 @@
 
   (rtc-download-info-list
    [this token graph-uuid]
-   (js/Promise. (rtc-core2/new-task--download-info-list token graph-uuid)))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--download-info-list token graph-uuid))))
 
   (rtc-snapshot-graph
    [this token graph-uuid]
-   (js/Promise. (rtc-core2/new-task--snapshot-graph token graph-uuid)))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--snapshot-graph token graph-uuid))))
 
   (rtc-snapshot-list
    [this token graph-uuid]
-   (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid)))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid))))
 
   (rtc-get-block-update-log
    [_this block-uuid]
