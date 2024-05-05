@@ -611,11 +611,7 @@
   ;; ================================================================
   (rtc-request-download-graph
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-updown/<request-download-graph state graph-uuid))))))
+   (js/Promise. (rtc-core2/new-task--request-download-graph token graph-uuid)))
 
   (rtc-wait-download-graph-info-ready
    [this repo token download-info-uuid graph-uuid timeout-ms]
