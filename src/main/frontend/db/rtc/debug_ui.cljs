@@ -150,7 +150,7 @@
                                           ^object worker @db-browser/*worker
                                           download-info-uuid (.rtc-request-download-graph worker token graph-uuid)
                                           result (.rtc-wait-download-graph-info-ready
-                                                  worker nil token download-info-uuid graph-uuid 60000)
+                                                  worker token download-info-uuid graph-uuid 60000)
                                           {:keys [_download-info-uuid
                                                   download-info-s3-url
                                                   _download-info-tx-instant

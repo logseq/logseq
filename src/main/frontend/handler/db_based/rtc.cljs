@@ -32,7 +32,7 @@
     (user-handler/<wrap-ensure-id&access-token
      (p/let [token (state/get-auth-id-token)
              download-info-uuid (.rtc-request-download-graph worker token graph-uuid)
-             result (.rtc-wait-download-graph-info-ready worker nil token download-info-uuid graph-uuid timeout-ms)
+             result (.rtc-wait-download-graph-info-ready worker token download-info-uuid graph-uuid timeout-ms)
              {:keys [_download-info-uuid
                      download-info-s3-url
                      _download-info-tx-instant

@@ -2,7 +2,7 @@
   "- upload local graph to remote
   - download remote graph"
   (:require [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [<! go-loop]]
+            [cljs.core.async :as async :refer [<!]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [cognitect.transit :as transit]
@@ -10,7 +10,6 @@
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.missionary-util :as c.m]
@@ -188,33 +187,25 @@
           (r.client/send&recv get-ws-create-task {:action "download-info-list"
                                                   :graph-uuid graph-uuid})))
 
-(defn <wait-download-info-ready
-  [state download-info-uuid graph-uuid timeout-ms]
-  (let [init-interval 1000
-        interval      3000
-        timeout-ch    (async/timeout timeout-ms)]
-    (go-loop [interval-ch (async/timeout init-interval)]
-      (let [{:keys [timeout retry]}
-            (async/alt!
-              timeout-ch {:timeout true}
-              interval-ch {:retry true}
-              :priority true)]
-        (cond
-          timeout :timeout
-          retry
-          (let [{:keys [download-info-list]}
-                (<? (ws/<send&receive state {:action     "download-info-list"
-                                             :graph-uuid graph-uuid}))
-                finished-download-info
-                (some
-                 (fn [download-info]
-                   (when (and (= download-info-uuid (:download-info-uuid download-info))
-                              (:download-info-s3-url download-info))
-                     download-info))
-                 download-info-list)]
-            (if finished-download-info
-              finished-download-info
-              (recur (async/timeout interval)))))))))
+(defn new-task--wait-download-info-ready
+  [get-ws-create-task download-info-uuid graph-uuid timeout-ms]
+  (->
+   (m/sp
+     (loop []
+       (m/? (m/sleep 3000))
+       (let [{:keys [download-info-list]}
+             (m/? (r.client/send&recv get-ws-create-task {:action "download-info-list"
+                                                          :graph-uuid graph-uuid}))]
+         (if-let [found-download-info
+                  (some
+                   (fn [download-info]
+                     (when (and (= download-info-uuid (:download-info-uuid download-info))
+                                (:download-info-s3-url download-info))
+                       download-info))
+                   download-info-list)]
+           found-download-info
+           (recur)))))
+   (m/timeout timeout-ms :timeout)))
 
 (defn <download-graph-from-s3
   [graph-uuid graph-name s3-url]
