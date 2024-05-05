@@ -23,41 +23,42 @@
 
 (defn send&recv
   "Return a task: throw exception if recv ex-data response"
-  [get-mws-create-task message]
+  [get-ws-create-task message]
   (m/sp
-    (let [mws (m/? get-mws-create-task)]
-      (handle-remote-ex (m/? (ws/send&recv mws message))))))
+    (let [ws (m/? get-ws-create-task)]
+      (handle-remote-ex (m/? (ws/send&recv ws message))))))
 
 (defn- register-graph-updates
-  [get-mws-create-task graph-uuid]
+  [get-ws-create-task graph-uuid]
   (m/sp
-    (let [{:keys [ex-data]}
-          (m/? (send&recv get-mws-create-task {:action "register-graph-updates"
-                                               :graph-uuid graph-uuid}))]
-      (when (= :graph-not-ready (:type ex-data))
-        (throw (ex-info "remote graph is still creating" {:missionary/retry true}))))))
+   (try
+     (m/? (send&recv get-ws-create-task {:action "register-graph-updates"
+                                         :graph-uuid graph-uuid}))
+     (catch :default e
+       (if (= :rtc.exception/remote-graph-not-ready (:type (ex-data e)))
+         (throw (ex-info "remote graph is still creating" {:missionary/retry true} e))
+         (throw e))))))
 
 (defn- ensure-register-graph-updates*
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` has been sent"
-  [get-mws-create-task graph-uuid]
+  [get-ws-create-task graph-uuid]
   (assert (some? graph-uuid))
-  (let [*sent (atom {}) ;; mws->bool
+  (let [*sent (atom {}) ;; ws->bool
         ]
     (m/sp
-      (let [mws (m/? get-mws-create-task)]
-        (when-not (contains? @*sent mws)
-          (swap! *sent assoc mws false))
-        (when (not (@*sent mws))
+      (let [ws (m/? get-ws-create-task)]
+        (when-not (contains? @*sent ws)
+          (swap! *sent assoc ws false))
+        (when (not (@*sent ws))
           (m/? (c.m/backoff
                 (take 5 c.m/delays)     ;retry 5 times (32s) if remote-graph is creating
-                (register-graph-updates get-mws-create-task graph-uuid)))
-          (swap! *sent assoc mws true))
-        mws))))
+                (register-graph-updates get-ws-create-task graph-uuid)))
+          (swap! *sent assoc ws true))
+        ws))))
 
 (def ensure-register-graph-updates (memoize ensure-register-graph-updates*))
-
 
 (defn- remove-non-exist-block-uuids-in-add-retract-map
   [conn add-retract-map]
@@ -305,15 +306,15 @@
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
-  [repo conn user-uuid graph-uuid date-formatter get-mws-create-task add-log-fn]
+  [repo conn user-uuid graph-uuid date-formatter get-ws-create-task add-log-fn]
   (m/sp
     (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
                                (sort-remote-ops
                                 (gen-block-uuid->remote-ops repo conn user-uuid)))]
       (op-mem-layer/new-branch! repo)
       (let [local-tx (op-mem-layer/get-local-tx repo)
-            r (m/? (send&recv get-mws-create-task {:action "apply-ops" :graph-uuid graph-uuid
-                                                   :ops ops-for-remote :t-before (or local-tx 1)}))]
+            r (m/? (send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+                                                  :ops ops-for-remote :t-before (or local-tx 1)}))]
         (if-let [remote-ex (:ex-data r)]
           (do (add-log-fn remote-ex)
               (case (:type remote-ex)
@@ -329,8 +330,8 @@
                 :graph-lock-missing
                 (do (op-mem-layer/rollback! repo)
                     (throw r.ex/ex-remote-graph-lock-missing))
-              ;; TODO: support read s3-obj when websocket return specific data
-                :get-s3-object-failed
+
+                :rtc.exception/get-s3-object-failed
                 (do (op-mem-layer/rollback! repo)
                     nil)
               ;; else

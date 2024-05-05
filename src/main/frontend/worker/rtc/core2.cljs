@@ -1,8 +1,8 @@
 (ns frontend.worker.rtc.core2
   "Main(use missionary) ns for rtc related fns"
   (:require [frontend.worker.rtc.client :as r.client]
-            [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
+            [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.ws2 :as ws]
@@ -66,7 +66,6 @@
                                   (map (fn [data] {:type :local-update-check :value data}))
                                   (create-local-updates-check-flow repo *auto-push? 2000))]
     (c.m/mix remote-updates-flow local-updates-check-flow)))
-
 
 (defn- new-task--get-ws-create
   "Return a map with atom *current-ws and a task
@@ -232,11 +231,11 @@
   [token graph-uuid]
   (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
     (m/sp
-     (let [{:keys [ex-data]}
-           (m/? (r.client/send&recv get-ws-create-task
-                                    {:action "delete-graph" :graph-uuid graph-uuid}))]
-       (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
-       (boolean (nil? ex-data))))))
+      (let [{:keys [ex-data]}
+            (m/? (r.client/send&recv get-ws-create-task
+                                     {:action "delete-graph" :graph-uuid graph-uuid}))]
+        (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
+        (boolean (nil? ex-data))))))
 
 (defn new-task--get-user-info
   "Return a task that return users-info about the graph."
@@ -268,20 +267,20 @@
   []
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-     (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push?]}
-           (m/?< rtc-loop-metadata-flow)]
-       (try
-         (when (and repo rtc-state-flow *rtc-auto-push?)
-           (m/?<
-            (m/latest
-             (fn [rtc-state rtc-auto-push?]
-               {:graph-uuid graph-uuid
-                :user-uuid user-uuid
-                :unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
-                :rtc-state rtc-state
-                :auto-push? rtc-auto-push?})
-             rtc-state-flow (m/watch *rtc-auto-push?))))
-         (catch Cancelled _))))))
+      (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push?]}
+            (m/?< rtc-loop-metadata-flow)]
+        (try
+          (when (and repo rtc-state-flow *rtc-auto-push?)
+            (m/?<
+             (m/latest
+              (fn [rtc-state rtc-auto-push?]
+                {:graph-uuid graph-uuid
+                 :user-uuid user-uuid
+                 :unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
+                 :rtc-state rtc-state
+                 :auto-push? rtc-auto-push?})
+              rtc-state-flow (m/watch *rtc-auto-push?))))
+          (catch Cancelled _))))))
 
 (defn new-task--get-debug-state
   []
@@ -300,6 +299,14 @@
             (r.client/send&recv get-ws-create-task {:action "snapshot-list"
                                                     :graph-uuid graph-uuid}))))
 
+(defn new-task--upload-graph
+  [token repo remote-graph-name]
+  (m/sp
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+        (m/? (r.upload-download/new-task--upload-graph get-ws-create-task repo conn remote-graph-name)))
+      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                                :repo repo})))))
 
 ;;; subscribe debug state ;;;
 
@@ -319,7 +326,6 @@
 
 (subscribe-debug-state)
 
-
 (comment
   (do
     (def user-uuid "7f41990d-2c8f-4f79-b231-88e9f652e072")
@@ -335,6 +341,4 @@
       (def rtc-log-flow rtc-log-flow)
       (def rtc-state-flow rtc-state-flow)
       (def *rtc-auto-push? *rtc-auto-push?)))
-  (cancel)
-
-  )
+  (cancel))

@@ -96,36 +96,6 @@
          (throw (ex-info "failed to open websocket conn"
                          {:missionary/retry true}
                          e)))))))
-(comment
-  (defn get-mws-create
-    "Returns a task to get a mws(missionary-websocket), creating one if needed.
-  Always try to produce NOT-closed websocket.
-  When failed to open websocket, retry with backoff.
-  TODO: retry ASAP once network condition changed"
-    [url & {:keys [retry-count open-ws-timeout]
-            :or {retry-count 10 open-ws-timeout 10000}}]
-    (assert (and (pos-int? retry-count)
-                 (pos-int? open-ws-timeout))
-            [retry-count open-ws-timeout])
-    (let [*last-m-ws (atom nil)
-          backoff-create-ws-task
-          (c.m/backoff
-           (take retry-count c.m/delays)
-           (m/sp
-             (let [m-ws
-                   (try
-                     (m/? (m/timeout (create-mws* url) open-ws-timeout))
-                     (catch js/CloseEvent e
-                       (throw (ex-info "failed to open websocket conn"
-                                       {:missionary/retry true}
-                                       e))))]
-               (reset! *last-m-ws m-ws)
-               m-ws)))]
-      (m/sp
-        (let [m-ws @*last-m-ws]
-          (if (and m-ws (not (closed? m-ws)))
-            m-ws
-            (m/? backoff-create-ws-task)))))))
 
 (defn create-mws-state-flow
   [mws]
@@ -209,5 +179,5 @@
             (js->clj (js/JSON.parse body) :keywordize-keys true)
             {:req-id req-id
              :ex-message "get s3 object failed"
-             :ex-data {:type :get-s3-object-failed :status status :body body}}))
+             :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
         resp))))
