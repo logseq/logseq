@@ -337,7 +337,4 @@
       (def *rtc-auto-push? *rtc-auto-push?)))
   (cancel)
 
-
-
-
   )
