@@ -9,17 +9,20 @@
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws :as ws :refer [<send!]]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
+            [logseq.common.missionary-util :as c.m]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.outliner.core :as outliner-core]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
-(def transit-r (transit/reader :json))
+(def ^:private transit-r (transit/reader :json))
 
 (defn- export-as-blocks
   [db]
@@ -38,6 +41,35 @@
                         (assoc r (:a datom) (:v datom))))
                     {:db/id (:e (first datoms))}
                     datoms)))))))
+
+(defn new-task--upload-graph
+  [get-ws-create-task repo conn remote-graph-name]
+  (m/sp
+    (let [[{:keys [url key]} all-blocks-str]
+          (m/?
+           (m/join
+            vector
+            (r.client/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
+            (m/sp
+              (let [all-blocks (export-as-blocks @conn)]
+                (transit/write (transit/writer :json) all-blocks)))))]
+      (m/? (c.m/<! (http/put url {:body all-blocks-str})))
+      (let [upload-resp
+            (m/? (r.client/send&recv get-ws-create-task {:action "upload-graph"
+                                                         :s3-key key
+                                                         :graph-name remote-graph-name}))]
+        (if-let [graph-uuid (:graph-uuid upload-resp)]
+          (let [^js worker-obj (:worker/object @worker-state/*state)]
+            (d/transact! conn
+                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}
+                          {:db/ident :logseq.kv/graph-local-tx :graph/local-tx "0"}])
+            (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
+            (op-mem-layer/init-empty-ops-store! repo)
+            (op-mem-layer/update-graph-uuid! repo graph-uuid)
+            (op-mem-layer/update-local-tx! repo 8)
+            (m/? (c.m/<! (op-mem-layer/<sync-to-idb-layer! repo)))
+            nil)
+          (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
 (defn <async-upload-graph
   [state repo conn remote-graph-name]
@@ -169,7 +201,6 @@
 
      (worker-util/post-message :add-repo {:repo repo}))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; async download-graph ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -181,7 +212,6 @@
          (<? (ws/<send&receive state {:action "download-graph"
                                       :graph-uuid graph-uuid}))]
      download-info-uuid)))
-
 
 (defn <wait-download-info-ready
   [state download-info-uuid graph-uuid timeout-ms]

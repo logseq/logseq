@@ -22,6 +22,12 @@ Trying to start rtc loop but there's already one running, need to cancel that on
 (sr/defkeyword :rtc.exception/not-found-db-conn
   "Local exception. Cannot find db-conn by repo")
 
+(sr/defkeyword :rtc.exception/get-s3-object-failed
+  "Failed to fetch response from s3.
+When response from remote is too huge(> 32KB),
+the server will put it to s3 and return its presigned-url to clients.")
+
+
 (def ex-remote-graph-not-exist
   (ex-info "remote graph not exist" {:type :rtc.exception/remote-graph-not-exist}))
 

@@ -55,7 +55,7 @@
 (defn run-task
   "Return the canceler"
   [task key & {:keys [succ fail]}]
-  (task (or succ #(prn key :succ %)) (or fail #(js/console.log key (or (some-> % .-stack) %)))))
+  (task (or succ #(prn key :succ %)) (or fail #(js/console.log key %))))
 
 (defn >!
   "Return a task that
@@ -67,3 +67,11 @@
   "Return a task that takes from given channel,
   completing with value when take is accepted, or nil if port was closed."
   [c] (doto (m/dfv) (->> (a/take! c))))
+
+
+(defn await-promise
+  "Returns a task completing with the result of given promise"
+  [p]
+  (let [v (m/dfv)]
+    (.then p #(v (fn [] %)) #(v (fn [] (throw %))))
+    (m/absolve v)))

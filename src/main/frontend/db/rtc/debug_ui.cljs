@@ -193,7 +193,7 @@
                                     token (state/get-auth-id-token)
                                     remote-graph-name (:upload-as-graph-name state)
                                     ^js worker @db-browser/*worker]
-                                (.rtc-async-upload-graph worker repo token remote-graph-name)))})
+                                (.rtc-async-upload-graph2 worker repo token remote-graph-name)))})
       [:b "➡️"]
       [:input.form-input.my-2.py-1.w-32
        {:on-change (fn [e] (swap! debug-state assoc :upload-as-graph-name (util/evalue e)))
@@ -206,15 +206,11 @@
       (ui/button (str "delete graph")
                  {:icon "trash"
                   :on-click (fn []
-                              (-> (shui/dialog-confirm!
-                                   {:title [:p.flex.flex-col.gap-1
-                                            [:b "Are you sure delete current graph?"]
-                                            [:small.line-through.opacity-80 (state/get-current-repo)]]})
-                                  (p/then #((when-let [graph-uuid (:graph-uuid-to-delete state)]
-                                              (let [token (state/get-auth-id-token)
-                                                    ^object worker @db-browser/*worker]
-                                                (prn ::delete-graph graph-uuid)
-                                                (.rtc-delete-graph2 worker token graph-uuid)))))))})
+                              (when-let [graph-uuid (:graph-uuid-to-delete state)]
+                                (let [token (state/get-auth-id-token)
+                                      ^object worker @db-browser/*worker]
+                                  (prn ::delete-graph graph-uuid)
+                                  (.rtc-delete-graph2 worker token graph-uuid))))})
 
       (shui/select
        {:on-value-change (fn [v]

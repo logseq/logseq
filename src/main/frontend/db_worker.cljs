@@ -603,24 +603,12 @@
    (with-write-transit-str
      (js/Promise. (rtc-core2/new-task--get-debug-state))))
 
-  ;; ================================================================
-  (rtc-async-upload-graph
+  (rtc-async-upload-graph2
    [this repo token remote-graph-name]
-   (let [d (p/deferred)]
-     (when-let [conn (worker-state/get-datascript-conn repo)]
-       (async/go
-         (try
-           (let [state (<? (rtc-core/<init-state token false))
-                 r (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))]
-             (p/resolve! d r))
-           (catch :default e
-             (worker-util/post-message :notification
-                                       [[:div
-                                         [:p "upload graph failed"]]
-                                        :error])
-             (p/reject! d e)))))
-     d))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--upload-graph token repo remote-graph-name))))
 
+  ;; ================================================================
   (rtc-request-download-graph
    [this token graph-uuid]
    (async-util/c->p
