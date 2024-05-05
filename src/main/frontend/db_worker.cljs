@@ -67,7 +67,6 @@
       (reset! *sqlite sqlite)
       nil)))
 
-
 (def repo-path "/db.sqlite")
 
 (defn- <export-db-file
@@ -104,9 +103,9 @@
                            ffirst)]
       (try
         (let [data (sqlite-util/transit-read content)]
-         (if-let [addresses (:addresses data)]
-           (assoc data :addresses (bean/->js addresses))
-           data))
+          (if-let [addresses (:addresses data)]
+            (assoc data :addresses (bean/->js addresses))
+            data))
         (catch :default _e              ; TODO: remove this once db goes to test
           (edn/read-string content))))))
 
@@ -630,11 +629,7 @@
 
   (rtc-download-info-list
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-updown/<download-info-list state graph-uuid))))))
+   (js/Promise. (rtc-core2/new-task--download-info-list token graph-uuid)))
 
   (rtc-snapshot-graph
    [this token graph-uuid]
@@ -679,10 +674,10 @@
 
 (comment
   (defn <remove-all-files!
-   "!! Dangerous: use it only for development."
-   []
-   (p/let [all-files (<list-all-files)
-           files (filter #(= (.-kind %) "file") all-files)
-           dirs (filter #(= (.-kind %) "directory") all-files)
-           _ (p/all (map (fn [file] (.remove file)) files))]
-     (p/all (map (fn [dir] (.remove dir)) dirs)))))
+    "!! Dangerous: use it only for development."
+    []
+    (p/let [all-files (<list-all-files)
+            files (filter #(= (.-kind %) "file") all-files)
+            dirs (filter #(= (.-kind %) "directory") all-files)
+            _ (p/all (map (fn [file] (.remove file)) files))]
+      (p/all (map (fn [dir] (.remove dir)) dirs)))))

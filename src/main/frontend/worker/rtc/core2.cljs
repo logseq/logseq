@@ -313,6 +313,11 @@
   (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
     (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid)))
 
+(defn new-task--download-info-list
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+    (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid)))
+
 ;;; ================ API (ends) ================
 
 ;;; subscribe debug state ;;;
