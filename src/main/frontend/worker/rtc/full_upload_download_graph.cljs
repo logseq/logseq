@@ -1,9 +1,8 @@
 (ns frontend.worker.rtc.full-upload-download-graph
   "- upload local graph to remote
   - download remote graph"
-  (:require-macros [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [<! go go-loop]]
+            [cljs.core.async :as async :refer [<! go-loop]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [cognitect.transit :as transit]
@@ -11,7 +10,7 @@
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.ws :as ws :refer [<send!]]
+            [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.missionary-util :as c.m]
@@ -71,33 +70,6 @@
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
-(defn <async-upload-graph
-  [state repo conn remote-graph-name]
-  (go
-    (let [{:keys [url key all-blocks-str]}
-          (with-sub-data-from-ws state
-            (<? (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
-            (let [all-blocks (export-as-blocks @conn)
-                  all-blocks-str (transit/write (transit/writer :json) all-blocks)]
-              (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
-      (<! (http/put url {:body all-blocks-str}))
-      (let [r (<? (ws/<send&receive state {:action "upload-graph"
-                                           :s3-key key
-                                           :graph-name remote-graph-name}))]
-        (if-not (:graph-uuid r)
-          (ex-info "upload graph failed" r)
-          (let [^js worker-obj (:worker/object @worker-state/*state)]
-            (d/transact! conn
-                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid (:graph-uuid r)}
-                          {:db/ident :logseq.kv/graph-local-tx :graph/local-tx "0"}])
-            (<! (p->c
-                 (p/do!
-                  (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
-            (op-mem-layer/init-empty-ops-store! repo)
-            (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
-            (op-mem-layer/update-local-tx! repo 8)
-            (<! (op-mem-layer/<sync-to-idb-layer! repo))
-            r))))))
 
 (def block-type-kw->str
   {:block-type/property     "property"
