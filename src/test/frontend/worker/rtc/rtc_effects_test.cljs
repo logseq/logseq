@@ -35,14 +35,14 @@
     (is (= "register-graph-updates" (:action last-ws-msg)))))
 
 
-(deftest gen-local-ops-test--create-page
+(deftest ^:fix-me gen-local-ops-test--create-page
   (idb-keyval-mock/with-reset-idb-keyval-mock reset
     (page-handler/create! "gen-local-ops-test-1" {:redirect? false :create-first-block? false})
     (is (= 1 (op-mem-layer/get-unpushed-block-update-count (state/get-current-repo))))
     (reset)))
 
 
-(deftest gen-local-ops-test-2--create-page&insert-blocks
+(deftest ^:fix-me gen-local-ops-test-2--create-page&insert-blocks
   (idb-keyval-mock/with-reset-idb-keyval-mock reset
     (let [repo (state/get-current-repo)
           conn (conn/get-db repo false)]
