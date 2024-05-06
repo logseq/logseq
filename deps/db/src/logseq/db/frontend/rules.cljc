@@ -217,44 +217,19 @@
 
     :has-property
     '[(has-property ?b ?prop)
-      [?b :block/properties ?bp]
+      [?b ?prop ?v]
       [(missing? $ ?b :block/name)]
-      [(name ?prop) ?prop-name-str]
-      [?prop-b :block/name ?prop-name-str]
-      [?prop-b :block/type "property"]
-      [?prop-b :block/uuid ?prop-uuid]
-      [(get ?bp ?prop-uuid) ?v]
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]
       ;; Some deleted properties leave #{} which this rule shouldn't match on
       [(not= #{} ?v)]]
 
     :property
-    '[;; Clause 1: Match non-ref values
-      [(property ?b ?key ?val)
-       [?b :block/properties ?prop]
-       [(missing? $ ?b :block/name)]
-       [(name ?key) ?key-str]
-       [?prop-b :block/name ?key-str]
-       [?prop-b :block/type "property"]
-       [?prop-b :block/uuid ?prop-uuid]
-       [(get ?prop ?prop-uuid) ?v]
-       (or [(= ?v ?val)]
-           [(contains? ?v ?val)])]
-
-      ;; Clause 2: Match values joined by refs
-      [(property ?b ?key ?val)
-       [?b :block/properties ?prop]
-       [(missing? $ ?b :block/name)]
-       [(name ?key) ?key-str]
-       [?prop-b :block/name ?key-str]
-       [?prop-b :block/type "property"]
-       [?prop-b :block/uuid ?prop-uuid]
-       [(get ?prop ?prop-uuid) ?v]
-       [(str ?val) ?str-val]
-      ;; str-val is for integer pages that aren't strings
-       [?prop-val-b :block/original-name ?str-val]
-       [?prop-val-b :block/uuid ?val-uuid]
-       (or ([= ?v ?val-uuid])
-           [(contains? ?v ?val-uuid)])]]}))
+    '[(property ?b ?prop ?val)
+      [?b ?prop ?val]
+      [(missing? $ ?b :block/name)]
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]]}))
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
