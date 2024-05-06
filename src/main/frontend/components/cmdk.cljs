@@ -116,14 +116,13 @@
                  [["Pages"          :pages          (visible-items :pages)]]
 
                  include-slash?
-                 [(if page-exists?
-                    ["Pages"          :pages          (visible-items :pages)]
-                    ["Filters"        :filters        (visible-items :filters)])
-                  (if page-exists?
-                    ["Filters"        :filters        (visible-items :filters)]
-                    ["Pages"          :pages          (visible-items :pages)])
+                 [["Filters" :filters (visible-items :filters)]
+                  (when page-exists?
+                    ["Pages" :pages (visible-items :pages)])
+
                   (when-not page-exists?
                     ["Create"         :create         (create-items input)])
+
                   ["Current page"   :current-page   (visible-items :current-page)]
                   ["Blocks"         :blocks         (visible-items :blocks)]
                   ["Files"          :files          (visible-items :files)]]
@@ -142,7 +141,8 @@
                  (->>
                   [["Pages"          :pages          (visible-items :pages)]
                    (when-not page-exists?
-                     ["Create"         :create         (create-items input)])
+                     ["Create"         :create       (create-items input)])
+                   ["Filters"        :filters        (visible-items :filters)]
                    ["Commands"       :commands       (visible-items :commands)]
                    ["Current page"   :current-page   (visible-items :current-page)]
                    ["Blocks"         :blocks         (visible-items :blocks)]
@@ -179,7 +179,7 @@
 
 (defmethod load-results :initial [_ state]
   (let [!results (::results state)
-        command-items (->> (cp-handler/top-commands 1000)
+        command-items (->> (cp-handler/top-commands 100)
                            (remove (fn [c] (= :window/close (:id c))))
                            (map #(hash-map :icon "command"
                                            :icon-theme :gray
@@ -379,7 +379,8 @@
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
   (if-not (some-> state ::input deref seq)
-    (load-results :initial state)
+    (do (load-results :initial state)
+        (load-results :filters state))
     (let [filter-group (:group @(::filter state))]
       (if filter-group
         (load-results filter-group state)
