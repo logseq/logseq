@@ -3,13 +3,11 @@
     @apply flex flex-col md:flex-row min-h-[55dvh] max-h-[75dvh];
 
     > header {
-      padding: 10px;
-      padding-top: 0;
-      border-bottom: 1px solid or(--ls-settings-header-border-color, --lx-gray-06, --ls-quaternary-background-color);
+      padding: 0 10px 10px;
+      border-bottom: 1px solid var(--lx-gray-06, var(--ls-quaternary-background-color));
 
       h1 {
-        font-size: 22px;
-        margin: 0;
+        @apply text-xl m-0;
       }
     }
 
@@ -21,10 +19,7 @@
           @apply mb-2;
 
           > strong {
-            font-size: 14px;
-            font-weight: normal;
-            padding-left: 5px;
-            opacity: .9;
+            @apply text-sm font-normal pl-1 opacity-90;
           }
         }
 
@@ -35,7 +30,7 @@
     }
 
     > article {
-      @apply p-4 flex-1 min-h-[12rem] w-auto overflow-y-auto;
+      @apply p-4 flex-1 min-h-[12rem] w-screen overflow-y-auto;
       @apply md:max-h-[70vh] md:w-[44rem];
     }
 
