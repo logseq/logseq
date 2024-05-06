@@ -101,6 +101,17 @@
         db)
        (map first)))
 
+(defn- hl-type-area-fn
+  [db]
+  (if (entity-plus/db-based-graph? db)
+    (fn [datom]
+      (and (= :logseq.property/hl-type (:a datom))
+           (= (keyword (:v datom)) :area)))
+    (fn [datom]
+      (and
+       (= :block/properties (:a datom))
+       (= (keyword (get (:v datom) :hl-type)) :area)))))
+
 (defn- get-assets
   [db datoms]
   (let [pull (fn [eid db]
@@ -111,14 +122,7 @@
                    :block/page
                    :db/id
                    (pull db)))
-        hl-type-area? (if (entity-plus/db-based-graph? db)
-                        (fn [datom]
-                          (and (= :logseq.property/hl-type (:a datom))
-                               (= (keyword (:v datom)) :area)))
-                        (fn [datom]
-                          (and
-                           (= :block/properties (:a datom))
-                           (= (keyword (get (:v datom) :hl-type)) :area))))]
+        hl-type-area? (hl-type-area-fn db)]
     (->>
      (keep
       (fn [datom]

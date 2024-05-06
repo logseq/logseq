@@ -2963,10 +2963,9 @@
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
-        {:block/keys [uuid pre-block? raw-content content properties]} block
+        {:block/keys [uuid pre-block? raw-content content]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
-        heading? (pu/lookup properties :logseq.property/heading)
         *control-show? (get container-state ::control-show?)
         db-collapsed? (util/collapsed? block)
         collapsed? (cond

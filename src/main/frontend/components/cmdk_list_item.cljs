@@ -44,7 +44,7 @@
                         title highlighted on-highlight on-highlight-dep header on-click hls-page?
                         hoverable compact rounded on-mouse-enter component-opts source-page] :as _props
                  :or {hoverable true rounded true}}
-                {:keys [app-config] :as context}]
+                {:keys [app-config]}]
   (let [ref (rum/create-ref)
         highlight-query (partial highlight-query* app-config query)
         [hover? set-hover?] (rum/use-state false)]

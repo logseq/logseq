@@ -8,7 +8,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            [frontend.worker.async-util :include-macros true :refer [<?] :as async-util]
+            [frontend.worker.async-util :include-macros true :as async-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.export :as worker-export]

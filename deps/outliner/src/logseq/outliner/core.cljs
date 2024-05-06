@@ -685,7 +685,7 @@
               (ldb/sort-page-random-blocks db blocks))
             page-blocks)))
 
-(defn delete-block
+(defn ^:api delete-block
   [_repo conn txs-state node {:keys [_date-formatter]}]
   (otree/-del node txs-state conn)
   @txs-state)
