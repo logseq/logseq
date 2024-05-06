@@ -11,6 +11,7 @@
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
+            [frontend.components.file-based.block :as file-block]
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
@@ -61,7 +62,6 @@
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
-            [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
             [frontend.handler.property.file :as property-file]
             [frontend.handler.file-based.property.util :as property-util]
@@ -1874,27 +1874,6 @@
              :width "100%"
              :z-index 3}}]])
 
-(defn block-checkbox
-  [block class]
-  (let [marker (:block/marker block)
-        [class checked?] (cond
-                           (nil? marker)
-                           nil
-                           (contains? #{"NOW" "LATER" "DOING" "IN-PROGRESS" "TODO" "WAIT" "WAITING"} marker)
-                           [class false]
-                           (= "DONE" marker)
-                           [(str class " checked") true])]
-    (when class
-      (ui/checkbox {:class class
-                    :style {:margin-right 5}
-                    :value checked?
-                    :on-pointer-down (fn [e]
-                                     (util/stop-propagation e))
-                    :on-change (fn [_e]
-                                 (if checked?
-                                   (editor-handler/uncheck block)
-                                   (editor-handler/check block)))}))))
-
 (defn list-checkbox
   [config checked?]
   (ui/checkbox
@@ -1905,57 +1884,6 @@
                        block (:block config)
                        item-content (.. target -nextSibling -data)]
                    (editor-handler/toggle-list-checkbox block item-content)))}))
-
-(defn marker-switch
-  [{:block/keys [marker] :as block}]
-  (when (contains? #{"NOW" "LATER" "TODO" "DOING"} marker)
-    (let [set-marker-fn (fn [new-marker]
-                          (fn [e]
-                            (util/stop e)
-                            (editor-handler/set-marker block new-marker)))
-          next-marker (case marker
-                        "NOW" "LATER"
-                        "LATER" "NOW"
-                        "TODO" "DOING"
-                        "DOING" "TODO")]
-      [:a
-       {:class (str "marker-switch block-marker " marker)
-        :title (util/format "Change from %s to %s" marker next-marker)
-        :on-pointer-down (set-marker-fn next-marker)}
-       marker])))
-
-(defn marker-cp
-  [{:block/keys [pre-block? marker] :as _block}]
-  (when-not pre-block?
-    (when (contains? #{"IN-PROGRESS" "WAIT" "WAITING"} marker)
-      [:span {:class (str "task-status block-marker " (string/lower-case marker))
-              :style {:margin-right 3.5}}
-       (string/upper-case marker)])))
-
-(rum/defc set-priority
-  [block priority]
-  [:div
-   (let [priorities (sort (remove #(= priority %) ["A" "B" "C"]))]
-     (for [p priorities]
-       [:a.mr-2.text-base.tooltip-priority {:key (str (random-uuid))
-                                            :priority p
-                                            :on-click (fn [] (editor-handler/set-priority block p))}]))])
-
-(rum/defc priority-text
-  [priority]
-  [:a.opacity-50.hover:opacity-100
-   {:class "priority"
-    :href (rfe/href :page {:name priority})
-    :style {:margin-right 3.5}}
-   (util/format "[#%s]" (str priority))])
-
-(defn priority-cp
-  [{:block/keys [pre-block? priority] :as block}]
-  (when (and (not pre-block?) priority)
-    (ui/tippy
-     {:interactive true
-      :html (set-priority block priority)}
-     (priority-text priority))))
 
 (declare block-content)
 
@@ -1970,14 +1898,6 @@
                         (pu/lookup properties :logseq.property/ls-type))
                        :default)
         html-export? (:html-export? config)
-        checkbox (when (and (not pre-block?)
-                            (not html-export?))
-                   (block-checkbox t (str "mr-1 cursor")))
-        marker-switch (when (and (not pre-block?)
-                                 (not html-export?))
-                        (marker-switch t))
-        marker-cp (marker-cp t)
-        priority (priority-cp t)
         bg-color (pu/lookup properties :logseq.property/background-color)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
         heading-level (:block/heading-level t)
@@ -2037,10 +1957,17 @@
                         (pdf-assets/area-display t))])]
        (remove-nils
         (concat
-         [(when-not slide? checkbox)
-          (when-not slide? marker-switch)
-          marker-cp
-          priority]
+         (when (config/local-file-based-graph? (state/get-current-repo))
+          [(when (and (not pre-block?)
+                      (not html-export?)
+                      (not slide?))
+             (file-block/block-checkbox t (str "mr-1 cursor")))
+           (when (and (not pre-block?)
+                      (not html-export?)
+                      (not slide?))
+             (file-block/marker-switch t))
+           (file-block/marker-cp t)
+           (file-block/priority-cp t)])
 
          ;; highlight ref block (inline)
          (when-not area? [(hl-ref)])
@@ -2306,33 +2233,6 @@
                   (= move-to :nested)))
           (dnd-separator move-to block-content?))))))
 
-(defn clock-summary-cp
-  [block body]
-  (when (and (state/enable-timetracking?)
-             (or (= (:block/marker block) "DONE")
-                 (contains? #{"TODO" "LATER"} (:block/marker block))))
-    (let [summary (clock/clock-summary body true)]
-      (when (and summary
-                 (not= summary "0m")
-                 (not (string/blank? summary)))
-        [:div {:style {:max-width 100}}
-         (ui/tippy {:html        (fn []
-                                   (when-let [logbook (drawer/get-logbook body)]
-                                     (let [clocks (->> (last logbook)
-                                                       (filter #(string/starts-with? % "CLOCK:"))
-                                                       (remove string/blank?))]
-                                       [:div.p-4
-                                        [:div.font-bold.mb-2 "LOGBOOK:"]
-                                        [:ul
-                                         (for [clock (take 10 (reverse clocks))]
-                                           [:li clock])]])))
-                    :interactive true
-                    :in-editor?  true
-                    :delay       [1000, 100]}
-                   [:div.text-sm.time-spent.ml-1 {:style {:padding-top 3}}
-                    [:a.fade-link
-                     summary]])]))))
-
 (defn- block-content-inner
   [config block body plugin-slotted? collapsed? block-ref-with-title?]
   (if plugin-slotted?
@@ -2454,7 +2354,7 @@
                 (ui/icon "link")])]]
            ))
 
-       (clock-summary-cp block body)]
+       (file-block/clock-summary-cp block body)]
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
