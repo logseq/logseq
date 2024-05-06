@@ -210,7 +210,7 @@ independent of format as format specific heading characters are stripped"
     :markdown
     (keyword
      (or
-      (let [page (ldb/get-page (conn/get-db) page-name)]
+      (let [page (some->> page-name (ldb/get-page (conn/get-db)))]
         (or
          (:block/format page)
          (when-let [file (:block/file page)]
