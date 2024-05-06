@@ -5,5 +5,7 @@
                   frontend.db
                   ;; Used for debugging
                   frontend.db.debug
-                  frontend.worker.debug]
+                  frontend.worker.debug
+                  ;; FIXME: Should remove its unused fns
+                  frontend.worker.rtc.core]
  :report {:format :ignore}}
