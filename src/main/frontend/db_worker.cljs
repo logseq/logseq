@@ -17,10 +17,10 @@
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.handler.page.db-based.rename :as db-worker-page-rename]
             [frontend.worker.rtc.core :as rtc-core]
+            [frontend.worker.rtc.core2 :as rtc-core2]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.snapshot :as rtc-snapshot]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
             [frontend.worker.undo-redo :as undo-redo]
@@ -68,7 +68,6 @@
       (reset! *sqlite sqlite)
       nil)))
 
-
 (def repo-path "/db.sqlite")
 
 (defn- <export-db-file
@@ -105,9 +104,9 @@
                            ffirst)]
       (try
         (let [data (sqlite-util/transit-read content)]
-         (if-let [addresses (:addresses data)]
-           (assoc data :addresses (bean/->js addresses))
-           data))
+          (if-let [addresses (:addresses data)]
+            (assoc data :addresses (bean/->js addresses))
+            data))
         (catch :default _e              ; TODO: remove this once db goes to test
           (edn/read-string content))))))
 
@@ -248,6 +247,9 @@
   [repo]
   (worker-state/get-sqlite-conn repo {:search? true}))
 
+(defn- with-write-transit-str
+  [p]
+  (p/chain p ldb/write-transit-str))
 
 #_:clj-kondo/ignore
 (defclass DBWorker
@@ -572,65 +574,70 @@
      (ldb/write-transit-str (worker-export/get-all-page->content repo @conn))))
 
   ;; RTC
-  (rtc-start
-   [this repo token dev-mode?]
-   (async-util/c->p
-    (when-let [conn (worker-state/get-datascript-conn repo)]
-      (rtc-core/<start-rtc repo conn token dev-mode?))))
+  (rtc-start2
+   [this repo token]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--rtc-start repo token))))
 
-  (rtc-stop
+  (rtc-stop2
    [this]
-   (when-let [state @rtc-core/*state]
-     (rtc-core/stop-rtc state)))
+   (rtc-core2/rtc-stop))
 
-  (rtc-toggle-sync
-   [this repo]
-   (async-util/c->p (rtc-core/<toggle-sync)))
+  (rtc-toggle-auto-push
+   [this]
+   (rtc-core2/rtc-toggle-auto-push))
 
-  (rtc-grant-graph-access
-   [this graph-uuid target-user-uuids-str target-user-emails-str]
-   (async-util/c->p
-    (when-let [state @rtc-core/*state]
-      (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
-            target-user-emails (ldb/read-transit-str target-user-emails-str)]
-        (rtc-core/<grant-graph-access-to-others
-         state graph-uuid
-         :target-user-uuids target-user-uuids
-         :target-user-emails target-user-emails)))))
+  (rtc-grant-graph-access2
+   [this token graph-uuid target-user-uuids-str target-user-emails-str]
+   (let [target-user-uuids (ldb/read-transit-str target-user-uuids-str)
+         target-user-emails (ldb/read-transit-str target-user-emails-str)]
+     (with-write-transit-str
+       (js/Promise.
+        (rtc-core2/new-task--grant-access-to-others token graph-uuid
+                                                    :target-user-uuids target-user-uuids
+                                                    :target-user-emails target-user-emails)))))
 
-  (rtc-async-upload-graph
+  (rtc-get-graphs2
+   [this token]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--get-graphs token))))
+
+  (rtc-delete-graph2
+   [this token graph-uuid]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--delete-graph token graph-uuid))))
+
+  (rtc-get-users-info2
+   [this token graph-uuid]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--get-user-info token graph-uuid))))
+
+  (rtc-get-block-content-versions2
+   [this token graph-uuid block-uuid]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--get-block-content-versions token graph-uuid block-uuid))))
+
+  (rtc-get-debug-state2
+   [this]
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--get-debug-state))))
+
+  (rtc-async-upload-graph2
    [this repo token remote-graph-name]
-   (let [d (p/deferred)]
-     (when-let [conn (worker-state/get-datascript-conn repo)]
-       (async/go
-         (try
-           (let [state (<? (rtc-core/<init-state token false))
-                 r (<? (rtc-updown/<async-upload-graph state repo conn remote-graph-name))]
-             (p/resolve! d r))
-           (catch :default e
-             (worker-util/post-message :notification
-                                       [[:div
-                                         [:p "upload graph failed"]]
-                                        :error])
-             (p/reject! d e)))))
-     d))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--upload-graph token repo remote-graph-name))))
 
+  ;; ================================================================
   (rtc-request-download-graph
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-updown/<request-download-graph state graph-uuid))))))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--request-download-graph token graph-uuid))))
 
   (rtc-wait-download-graph-info-ready
-   [this repo token download-info-uuid graph-uuid timeout-ms]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (ldb/write-transit-str
-         (<? (rtc-updown/<wait-download-info-ready state download-info-uuid graph-uuid timeout-ms)))))))
+   [this token download-info-uuid graph-uuid timeout-ms]
+   (with-write-transit-str
+     (js/Promise.
+      (rtc-core2/new-task--wait-download-info-ready token download-info-uuid graph-uuid timeout-ms))))
 
   (rtc-download-graph-from-s3
    [this graph-uuid graph-name s3-url]
@@ -640,55 +647,18 @@
 
   (rtc-download-info-list
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-updown/<download-info-list state graph-uuid))))))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--download-info-list token graph-uuid))))
 
   (rtc-snapshot-graph
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-snapshot/<snapshot-graph state graph-uuid))))))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--snapshot-graph token graph-uuid))))
 
   (rtc-snapshot-list
    [this token graph-uuid]
-   (async-util/c->p
-    (async/go
-      (let [state (or @rtc-core/*state
-                      (<! (rtc-core/<init-state token false)))]
-        (<? (rtc-snapshot/<snapshot-list state graph-uuid))))))
-
-  (rtc-push-pending-ops
-   [_this]
-   (async/put! (:force-push-client-ops-chan @rtc-core/*state) true))
-
-  (rtc-get-graphs
-   [_this token]
-   (async-util/c->p
-    (rtc-core/<get-graphs token)))
-
-  (rtc-delete-graph
-   [_this token graph-uuid]
-   (async-util/c->p
-    (rtc-core/<delete-graph token graph-uuid)))
-
-  (rtc-get-users-info
-   [_this]
-   (async-util/c->p
-    (rtc-core/<get-users-info @rtc-core/*state)))
-
-  (rtc-get-block-content-versions
-   [_this block-id]
-   (async-util/c->p
-    (rtc-core/<get-block-content-versions @rtc-core/*state block-id)))
-
-  (rtc-get-debug-state
-   [_this repo]
-   (ldb/write-transit-str (rtc-core/get-debug-state repo)))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid))))
 
   (rtc-get-block-update-log
    [_this block-uuid]
@@ -729,10 +699,10 @@
 
 (comment
   (defn <remove-all-files!
-   "!! Dangerous: use it only for development."
-   []
-   (p/let [all-files (<list-all-files)
-           files (filter #(= (.-kind %) "file") all-files)
-           dirs (filter #(= (.-kind %) "directory") all-files)
-           _ (p/all (map (fn [file] (.remove file)) files))]
-     (p/all (map (fn [dir] (.remove dir)) dirs)))))
+    "!! Dangerous: use it only for development."
+    []
+    (p/let [all-files (<list-all-files)
+            files (filter #(= (.-kind %) "file") all-files)
+            dirs (filter #(= (.-kind %) "directory") all-files)
+            _ (p/all (map (fn [file] (.remove file)) files))]
+      (p/all (map (fn [dir] (.remove dir)) dirs)))))

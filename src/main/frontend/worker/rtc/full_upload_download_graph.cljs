@@ -1,25 +1,26 @@
 (ns frontend.worker.rtc.full-upload-download-graph
   "- upload local graph to remote
   - download remote graph"
-  (:require-macros [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
   (:require [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [<! go go-loop]]
+            [cljs.core.async :as async :refer [<!]]
             [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.worker.async-util :include-macros true :refer [<? go-try]]
+            [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [frontend.worker.rtc.ws :as ws :refer [<send!]]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
+            [logseq.common.missionary-util :as c.m]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.outliner.core :as outliner-core]
+            [missionary.core :as m]
             [promesa.core :as p]))
 
-(def transit-r (transit/reader :json))
+(def ^:private transit-r (transit/reader :json))
 
 (defn- export-as-blocks
   [db]
@@ -39,35 +40,36 @@
                     {:db/id (:e (first datoms))}
                     datoms)))))))
 
-(defn <async-upload-graph
-  [state repo conn remote-graph-name]
-  (go
-    (let [{:keys [url key all-blocks-str]}
-          (with-sub-data-from-ws state
-            (<? (<send! state {:req-id (get-req-id) :action "presign-put-temp-s3-obj"}))
-            (let [all-blocks (export-as-blocks @conn)
-                  all-blocks-str (transit/write (transit/writer :json) all-blocks)]
-              (merge (<! (get-result-ch)) {:all-blocks-str all-blocks-str})))]
-      (<! (http/put url {:body all-blocks-str}))
-      (let [r (<? (ws/<send&receive state {:action "upload-graph"
-                                           :s3-key key
-                                           :graph-name remote-graph-name}))]
-        (if-not (:graph-uuid r)
-          (ex-info "upload graph failed" r)
+(defn new-task--upload-graph
+  [get-ws-create-task repo conn remote-graph-name]
+  (m/sp
+    (let [[{:keys [url key]} all-blocks-str]
+          (m/?
+           (m/join
+            vector
+            (r.client/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
+            (m/sp
+              (let [all-blocks (export-as-blocks @conn)]
+                (transit/write (transit/writer :json) all-blocks)))))]
+      (m/? (c.m/<! (http/put url {:body all-blocks-str})))
+      (let [upload-resp
+            (m/? (r.client/send&recv get-ws-create-task {:action "upload-graph"
+                                                         :s3-key key
+                                                         :graph-name remote-graph-name}))]
+        (if-let [graph-uuid (:graph-uuid upload-resp)]
           (let [^js worker-obj (:worker/object @worker-state/*state)]
             (d/transact! conn
-                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid (:graph-uuid r)}
+                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}
                           {:db/ident :logseq.kv/graph-local-tx :graph/local-tx "0"}])
-            (<! (p->c
-                 (p/do!
-                  (.storeMetadata worker-obj repo (pr-str {:graph/uuid (:graph-uuid r)})))))
+            (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
             (op-mem-layer/init-empty-ops-store! repo)
-            (op-mem-layer/update-graph-uuid! repo (:graph-uuid r))
+            (op-mem-layer/update-graph-uuid! repo graph-uuid)
             (op-mem-layer/update-local-tx! repo 8)
-            (<! (op-mem-layer/<sync-to-idb-layer! repo))
-            r))))))
+            (m/? (c.m/<! (op-mem-layer/<sync-to-idb-layer! repo)))
+            nil)
+          (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
-(def block-type-kw->str
+(def ^:private block-type-kw->str
   {:block-type/property     "property"
    :block-type/class        "class"
    :block-type/whiteboard   "whiteboard"
@@ -169,47 +171,41 @@
 
      (worker-util/post-message :add-repo {:repo repo}))))
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; async download-graph ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defn <request-download-graph
-  [state graph-uuid]
-  (go-try
-   (let [{:keys [download-info-uuid]}
-         (<? (ws/<send&receive state {:action "download-graph"
-                                      :graph-uuid graph-uuid}))]
-     download-info-uuid)))
+(defn new-task--request-download-graph
+  [get-ws-create-task graph-uuid]
+  (m/join :download-info-uuid
+          (r.client/send&recv get-ws-create-task {:action "download-graph"
+                                                  :graph-uuid graph-uuid})))
 
+(defn new-task--download-info-list
+  [get-ws-create-task graph-uuid]
+  (m/join :download-info-list
+          (r.client/send&recv get-ws-create-task {:action "download-info-list"
+                                                  :graph-uuid graph-uuid})))
 
-(defn <wait-download-info-ready
-  [state download-info-uuid graph-uuid timeout-ms]
-  (let [init-interval 1000
-        interval      3000
-        timeout-ch    (async/timeout timeout-ms)]
-    (go-loop [interval-ch (async/timeout init-interval)]
-      (let [{:keys [timeout retry]}
-            (async/alt!
-              timeout-ch {:timeout true}
-              interval-ch {:retry true}
-              :priority true)]
-        (cond
-          timeout :timeout
-          retry
-          (let [{:keys [download-info-list]}
-                (<? (ws/<send&receive state {:action     "download-info-list"
-                                             :graph-uuid graph-uuid}))
-                finished-download-info
-                (some
-                 (fn [download-info]
-                   (when (and (= download-info-uuid (:download-info-uuid download-info))
-                              (:download-info-s3-url download-info))
-                     download-info))
-                 download-info-list)]
-            (if finished-download-info
-              finished-download-info
-              (recur (async/timeout interval)))))))))
+(defn new-task--wait-download-info-ready
+  [get-ws-create-task download-info-uuid graph-uuid timeout-ms]
+  (->
+   (m/sp
+     (loop []
+       (m/? (m/sleep 3000))
+       (let [{:keys [download-info-list]}
+             (m/? (r.client/send&recv get-ws-create-task {:action "download-info-list"
+                                                          :graph-uuid graph-uuid}))]
+         (if-let [found-download-info
+                  (some
+                   (fn [download-info]
+                     (when (and (= download-info-uuid (:download-info-uuid download-info))
+                                (:download-info-s3-url download-info))
+                       download-info))
+                   download-info-list)]
+           found-download-info
+           (recur)))))
+   (m/timeout timeout-ms :timeout)))
 
 (defn <download-graph-from-s3
   [graph-uuid graph-name s3-url]
@@ -227,10 +223,3 @@
            (<! (op-mem-layer/<sync-to-idb-layer! repo))
            (<! (p->c (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
            (worker-state/set-rtc-downloading-graph! false)))))))
-
-(defn <download-info-list
-  [state graph-uuid]
-  (go-try
-   (:download-info-list
-    (<? (ws/<send&receive state {:action "download-info-list"
-                                 :graph-uuid graph-uuid})))))

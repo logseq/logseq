@@ -66,7 +66,7 @@
                    (reset! *interval
                            (js/setInterval
                             (fn []
-                              (if (= :open (:rtc-state @(:rtc/state @state/state)))
+                              (if (= :open (:ws-state (:rtc-state @(:rtc/state @state/state))))
                                 (rtc-handler/<rtc-get-users-info)
                                 (when @*interval (js/clearInterval @*interval))))
                             5000))

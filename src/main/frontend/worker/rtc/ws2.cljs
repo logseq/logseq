@@ -2,8 +2,8 @@
   "Websocket wrapped by missionary.
   based on
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
-  {:clj-kondo/ignore true}
-  (:require [frontend.worker.rtc.const :as rtc-const]
+  (:require [cljs-http.client :as http]
+            [frontend.worker.rtc.const :as rtc-const]
             [logseq.common.missionary-util :as c.m]
             [missionary.core :as m]))
 
@@ -51,111 +51,133 @@
     (throw x)
     x))
 
-(defn- create-ws-task
+(defn- create-mws*
   [url]
   (m/sp
-   (if-let [[mbx ws close-dfv] (m/? (m/timeout (open-ws-task url) 10000))]
-     {:raw-ws ws
-      :send (fn [data]
-              (m/sp
-               (handle-close
-                (m/?
-                 (m/race close-dfv
-                         (m/sp (while (< 4096 (.-bufferedAmount ws))
-                                 (m/? (m/sleep 50)))
-                               (.send ws data)))))))
-      :recv-flow
-      (m/stream
-       (m/ap
-        (loop []
-          (m/amb
-           (handle-close
-            (m/? (m/race close-dfv mbx)))
-           (recur)))))}
-     (throw (ex-info "open ws timeout(10s)" {:missionary/retry true})))))
+    (if-let [[mbx ws close-dfv] (m/? (open-ws-task url))]
+      {:raw-ws ws
+       :send (fn [data]
+               (m/sp
+                 (handle-close
+                  (m/?
+                   (m/race close-dfv
+                           (m/sp (while (< 4096 (.-bufferedAmount ws))
+                                   (m/? (m/sleep 50)))
+                                 (.send ws data)))))))
+       :recv-flow
+       (m/stream
+        (m/ap
+          (loop []
+            (m/amb
+             (handle-close
+              (m/? (m/race close-dfv mbx)))
+             (recur)))))}
+      (throw (ex-info "open ws timeout(10s)" {:missionary/retry true})))))
 
+(defn closed?
+  [mws]
+  (contains? #{:closing :closed} (get-state (:raw-ws mws))))
 
-
-(defn- closed?
-  [m-ws]
-  (contains? #{:closing :closed} (get-state (:raw-ws m-ws))))
-
-(defn create-ws-flow
-  "Return a missionary-webocket flow.
-  Always produce NOT-closed websockets if possible.
-  If open&connect websocket failed, will retry with backoff(`c.m/delays`)
+(defn mws-create
+  "Return a task that create a mws (missionary wrapped websocket).
+  When failed to open websocket, retry with backoff.
   TODO: retry ASAP once network condition changed"
-  [url]
-  (let [*last-m-ws (atom nil)
-        new-m-ws-task
-        (c.m/backoff
-         (take 10 c.m/delays)
-         (m/sp (let [r (try
-                         (m/? (create-ws-task url))
-                         (catch js/CloseEvent e
-                           (throw (ex-info "failed to open ws conn" {:missionary/retry true} e))))]
-                 (reset! *last-m-ws r)
-                 r)))]
-    (m/stream
-     (m/ap
-       (loop []
-         (m/amb
-          (if-let [m-ws @*last-m-ws]
-            (if (closed? m-ws)
-              (m/? new-m-ws-task)
-              m-ws)
-            (m/? new-m-ws-task))
-          (recur)))))))
+  [url & {:keys [retry-count open-ws-timeout]
+          :or {retry-count 10 open-ws-timeout 10000}}]
+  (assert (and (pos-int? retry-count)
+               (pos-int? open-ws-timeout))
+          [retry-count open-ws-timeout])
+  (c.m/backoff
+   (take retry-count c.m/delays)
+   (m/sp
+     (try
+       (m/? (m/timeout (create-mws* url) open-ws-timeout))
+       (catch js/CloseEvent e
+         (throw (ex-info "failed to open websocket conn"
+                         {:missionary/retry true}
+                         e)))))))
 
-(defn close
-  [m-ws]
-  (.close (:raw-ws m-ws)))
+(defn create-mws-state-flow
+  [mws]
+  (m/relieve
+   (m/observe
+    (fn ctor [emit!]
+      (let [ws (:raw-ws mws)
+            old-onclose (.-onclose ws)
+            old-onerror (.-onerror ws)
+            old-onopen (.-onopen ws)]
+        (set! (.-onclose ws) (fn [e]
+                               (when old-onclose (old-onclose e))
+                               (emit! (get-state ws))))
+        (set! (.-onerror ws) (fn [e]
+                               (when old-onerror (old-onerror e))
+                               (emit! (get-state ws))))
+        (set! (.-onopen ws) (fn [e]
+                              (when old-onopen (old-onopen e))
+                              (emit! (get-state ws))))
+        (emit! (get-state ws))
+        (fn dtor []
+          (set! (.-onclose ws) old-onclose)
+          (set! (.-onerror ws) old-onerror)
+          (set! (.-onopen ws) old-onopen)))))))
 
-(defn send-task
-  "return m-ws"
-  [ws-flow message]
+(comment
+  (defn close
+    [m-ws]
+    (.close (:raw-ws m-ws))))
+
+(defn send
+  "Returns a task: send message and return mws"
+  [mws message]
   (m/sp
-    (let [m-ws (m/? (m/reduce (fn [_ m-ws] (when m-ws (reduced m-ws))) ws-flow))
-          decoded-message (rtc-const/data-to-ws-coercer message)
+    (let [decoded-message (rtc-const/data-to-ws-coercer message)
           message-str (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message)))]
-      (m/? ((:send m-ws) message-str))
-      m-ws)))
+      (m/? ((:send mws) message-str))
+      mws)))
 
 (defn recv-flow
   [m-ws]
   (m/eduction
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
+   (map rtc-const/data-from-ws-coercer)
    (:recv-flow m-ws)))
 
-(defn send&recv-task
-  [ws-flow message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
-  (assert (pos-int? timeout-ms))
-  (let [req-id (str (random-uuid))
-        message (assoc message :req-id req-id)]
-    (m/sp
-      (let [m-ws (m/? (send-task ws-flow message))]
-        (m/? (m/timeout
-              (m/reduce
-               (fn [_ v]
-                 (when (= req-id (:req-id v))
-                   (reduced v)))
-               (recv-flow m-ws))
-              timeout-ms))))))
+(defn- send&recv*
+  "Return a task: send message wait to recv its response and return it.
+  Throw if timeout"
+  [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
+  {:pre [(pos-int? timeout-ms)
+         (some? (:req-id message))]}
+  (m/sp
+    (let [mws (m/? (send mws message))
+          req-id (:req-id message)
+          result (m/?
+                  (m/timeout
+                   (m/reduce
+                    (fn [_ v]
+                      (when (= req-id (:req-id v))
+                        (reduced v)))
+                    (recv-flow mws))
+                   timeout-ms))]
+      (when-not result
+        (throw (ex-info (str "recv timeout (" timeout-ms "ms)") {:missionary/retry true})))
+      result)))
 
-(comment
-  (do
-    (def url "wss://ws-dev.logseq.com/rtc-sync?token=????")
-    (def ws-flow (create-ws-flow url)))
-  (def cancel1
-    ((m/reduce conj (m/eduction (take 1) ws-flow)) #(prn :s %) #(js/console.log %)))
-  (cancel1)
-
-  (do
-    (def cancel ((m/sp
-                   (m/? (send&recv-task ws-flow {:action "list-graphs"} :timeout-ms 1000))
-                   (m/? (send&recv-task ws-flow {:action "list-graphs"})))
-                 #(prn :s %) #(js/console.log :f %)))
-    (cancel))
-
-
-  )
+(defn send&recv
+  "Return a task that send the message then wait to recv its response,
+  if the response has kv `:s3-presign-url`, fetch the response from s3,
+  else just return the response.
+  Throw if timeout"
+  [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
+  (m/sp
+    (let [req-id (str (random-uuid))
+          message (assoc message :req-id req-id)
+          resp (m/? (send&recv* mws message :timeout-ms timeout-ms))]
+      (if-let [s3-presign-url (:s3-presign-url resp)]
+        (let [{:keys [status body]} (m/? (c.m/<! (http/get s3-presign-url {:with-credentials? false})))]
+          (if (http/unexceptional-status? status)
+            (js->clj (js/JSON.parse body) :keywordize-keys true)
+            {:req-id req-id
+             :ex-message "get s3 object failed"
+             :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
+        resp))))

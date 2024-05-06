@@ -2545,7 +2545,7 @@
         named? (some? (:block/name block))
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
-    [:div.flex.flex-1.flex-row.flex-wrap.gap-1.items-start
+    [:div.block-content-or-editor-wrap
      (when db-based? (block-closed-values-properties block))
      (if (and edit? editor-box)
        [:div.editor-wrapper.flex.flex-1
@@ -3037,8 +3037,7 @@
          (dnd-separator-wrapper block children block-id slide? true false))
 
        [:div.block-main-container.flex.flex-row.pr-2
-        {:class (if (and heading? (seq (:block/title block))) "items-baseline" "")
-         :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+        {:on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
          :on-touch-move (fn [event]
                           (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
          :on-touch-end (fn [event]

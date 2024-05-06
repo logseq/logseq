@@ -766,14 +766,27 @@
             pos [(+ left (:left rect) -20) (+ top (:top rect) 20)]]
         (let [pid (case action
                     :commands
-                    (shui/popup-show!
-                      pos
+                    (shui/popup-show! pos
                       (commands id format)
                       {:id :editor.commands/commands
                        :align :start
                        :root-props {:onOpenChange
                                     #(when-not %
                                        (when (= :commands (state/get-editor-action))
+                                         (state/clear-editor-action!)))}
+                       :content-props {:onOpenAutoFocus #(.preventDefault %)
+                                       :onCloseAutoFocus #(.preventDefault %)
+                                       :data-editor-popup-ref "commands"}
+                       :force-popover? true})
+
+                    :block-commands
+                    (shui/popup-show! pos
+                      (block-commands id format)
+                      {:id :editor.commands/block-commands
+                       :align :start
+                       :root-props {:onOpenChange
+                                    #(when-not %
+                                       (when (= :block-commands (state/get-editor-action))
                                          (state/clear-editor-action!)))}
                        :content-props {:onOpenAutoFocus #(.preventDefault %)
                                        :onCloseAutoFocus #(.preventDefault %)
@@ -845,7 +858,7 @@
        (= action :commands-classic)
        (animated-modal "commands" (commands id format) true)
 
-       (= action :block-commands)
+       (= action :block-commands-classic)
        (animated-modal "block-commands" (block-commands id format) true)
 
        (contains? #{:page-search :page-search-hashtag} action)
@@ -862,21 +875,6 @@
 
        (= :property-value-search action)
        (animated-modal "property-value-search" (property-value-search id) true)
-
-       ;; date-picker in editing-mode
-       (= :datepicker-classic action)
-       (animated-modal "date-picker" (datetime-comp/date-picker id format nil) false)
-
-       (= :select-code-block-mode-classic action)
-       (animated-modal "select-code-block-mode" (code-block-mode-picker id format) true)
-
-       (= :input-classic action)
-       (animated-modal "input" (input id
-                                 (fn [command m]
-                                   (editor-handler/handle-command-input command id format m))
-                                 (fn []
-                                   (editor-handler/handle-command-input-close id)))
-         true)
 
        (= :zotero action)
        (animated-modal "zotero-search" (zotero/zotero-search id) false)

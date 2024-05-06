@@ -1,6 +1,9 @@
 (ns frontend.components.cmdk
-  (:require [clojure.string :as string]
+  (:require
+   [clojure.string :as string]
    [frontend.components.block :as block]
+   [frontend.components.cmdk-list-item :as cmdk-list-item]
+   [frontend.extensions.pdf.utils :as pdf-utils]
    [frontend.context.i18n :refer [t]]
    [frontend.db :as db]
    [frontend.db.model :as model]
@@ -113,14 +116,13 @@
                  [["Pages"          :pages          (visible-items :pages)]]
 
                  include-slash?
-                 [(if page-exists?
-                    ["Pages"          :pages          (visible-items :pages)]
-                    ["Filters"        :filters        (visible-items :filters)])
-                  (if page-exists?
-                    ["Filters"        :filters        (visible-items :filters)]
-                    ["Pages"          :pages          (visible-items :pages)])
+                 [["Filters" :filters (visible-items :filters)]
+                  (when page-exists?
+                    ["Pages" :pages (visible-items :pages)])
+
                   (when-not page-exists?
                     ["Create"         :create         (create-items input)])
+
                   ["Current page"   :current-page   (visible-items :current-page)]
                   ["Blocks"         :blocks         (visible-items :blocks)]
                   ["Files"          :files          (visible-items :files)]]
@@ -139,7 +141,8 @@
                  (->>
                   [["Pages"          :pages          (visible-items :pages)]
                    (when-not page-exists?
-                     ["Create"         :create         (create-items input)])
+                     ["Create"         :create       (create-items input)])
+                   ["Filters"        :filters        (visible-items :filters)]
                    ["Commands"       :commands       (visible-items :commands)]
                    ["Current page"   :current-page   (visible-items :current-page)]
                    ["Blocks"         :blocks         (visible-items :blocks)]
@@ -176,7 +179,7 @@
 
 (defmethod load-results :initial [_ state]
   (let [!results (::results state)
-        command-items (->> (cp-handler/top-commands 1000)
+        command-items (->> (cp-handler/top-commands 100)
                            (remove (fn [c] (= :window/close (:id c))))
                            (map #(hash-map :icon "command"
                                            :icon-theme :gray
@@ -355,7 +358,8 @@
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
   (if-not (some-> state ::input deref seq)
-    (load-results :initial state)
+    (do (load-results :initial state)
+        (load-results :filters state))
     (let [filter-group (:group @(::filter state))]
       (if filter-group
         (load-results filter-group state)
@@ -587,29 +591,37 @@
 
       [:div.search-results
        (for [item visible-items
-             :let [highlighted? (= item highlighted-item)]]
-         (let [item (shui/list-item (assoc item
-                                      :query (when-not (= group :create) @(::input state))
-                                      :compact true
-                                      :rounded false
-                                      :hoverable @*mouse-active?
-                                      :highlighted highlighted?
-                                      ;; for some reason, the highlight effect does not always trigger on a
-                                      ;; boolean value change so manually pass in the dep
-                                      :on-highlight-dep highlighted-item
-                                      :on-click (fn [e]
-                                                  (reset! (::highlighted-item state) item)
-                                                  (handle-action :default state item)
-                                                  (when-let [on-click (:on-click item)]
-                                                    (on-click e)))
-                                      ;; :on-mouse-enter (fn [e]
-                                      ;;                   (when (not highlighted?)
-                                      ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                                      :on-highlight (fn [ref]
-                                                      (reset! (::highlighted-group state) group)
-                                                      (when (and ref (.-current ref)
-                                                              (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                                        (scroll-into-view-when-invisible state (.-current ref)))))
+             :let [highlighted? (= item highlighted-item)
+                   page? (= "page" (some-> item :icon))
+                   text (some-> item :text)
+                   source-page (some-> item :source-page)
+                   hls-page? (and page? (pdf-utils/hls-file? source-page))]]
+         (let [item (cmdk-list-item/root
+                      (assoc item
+                        :group group
+                        :query (when-not (= group :create) @(::input state))
+                        :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
+                        :hls-page? hls-page?
+                        :compact true
+                        :rounded false
+                        :hoverable @*mouse-active?
+                        :highlighted highlighted?
+                        ;; for some reason, the highlight effect does not always trigger on a
+                        ;; boolean value change so manually pass in the dep
+                        :on-highlight-dep highlighted-item
+                        :on-click (fn [e]
+                                    (reset! (::highlighted-item state) item)
+                                    (handle-action :default state item)
+                                    (when-let [on-click (:on-click item)]
+                                      (on-click e)))
+                        ;; :on-mouse-enter (fn [e]
+                        ;;                   (when (not highlighted?)
+                        ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
+                        :on-highlight (fn [ref]
+                                        (reset! (::highlighted-group state) group)
+                                        (when (and ref (.-current ref)
+                                                (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                          (scroll-into-view-when-invisible state (.-current ref)))))
                       nil)]
            (if (= group :blocks)
              (ui/lazy-visible (fn [] item) {:trigger-once? true})
@@ -899,7 +911,6 @@
   (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
-        _input (rum/react *input)
         search-mode (:search/mode @state/state)
         group-filter (:group (rum/react (::filter state)))
         results-ordered (state->results-ordered state search-mode)
@@ -935,7 +946,7 @@
             (let [title (string/capitalize group-name)]
               (result-group state title group-key group-items first-item sidebar?)))
           [:div.flex.flex-col.p-4.opacity-50
-           (when-not (string/blank? (rum/react *input))
+           (when-not (string/blank? @*input)
              "No matched results")]))]
      (when-not sidebar? (hints state))]))
 
