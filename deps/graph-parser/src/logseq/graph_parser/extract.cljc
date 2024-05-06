@@ -318,7 +318,7 @@
                 (fn [block]
                   (-> block
                       (common-util/dissoc-in [:block/parent :block/name])
-                      ;; :block/left here for backward compatiblity
+                      ;; :block/left here for backward compatibility
                       (common-util/dissoc-in [:block/left :block/name])))
                 blocks)
         serialized-page (first pages)

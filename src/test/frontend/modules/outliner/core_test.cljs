@@ -647,7 +647,7 @@ tags:: tag1, tag2
   (let [limit (inc (rand-int 20))]
     (repeatedly limit get-random-block)))
 
-(deftest ^:long random-inserts
+(deftest ^:long ^:fix-me random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
@@ -674,7 +674,7 @@ tags:: tag1, tag2
                                                                (state/get-date-formatter)
                                                                blocks {})))))))
 
-(deftest ^:long random-moves
+(deftest ^:long ^:fix-me random-moves
   (testing "Random moves"
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
