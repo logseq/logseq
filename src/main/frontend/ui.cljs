@@ -560,15 +560,16 @@
                    :on-mouse-move  #(reset! *current-idx idx)}
                   (let [chosen? (= @*current-idx idx)]
                     (menu-link
-                     {:id            (str "ac-" idx)
-                      :tab-index     "0"
-                      :class         (when chosen? "chosen")
-                      :on-pointer-down (fn [e]
-                                       (util/stop e)
-                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                         (on-shift-chosen item)
-                                         (on-chosen item e)))}
-                     (if item-render (item-render item chosen?) item)))]]
+                      {:id (str "ac-" idx)
+                       :tab-index "0"
+                       :class (when chosen? "chosen")
+                       :on-pointer-down #(util/stop %)
+                       :on-click (fn [e]
+                                   (util/stop e)
+                                   (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                     (on-shift-chosen item)
+                                     (on-chosen item e)))}
+                      (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
