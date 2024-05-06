@@ -350,12 +350,12 @@
 
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} with-id? db date-formatter]
-  (let [refs (->> (concat tags refs [marker priority])
+  (let [db-based? (ldb/db-based-graph? db)
+        refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
         *refs (atom refs)
-        *structured-tags (atom #{})
-        db-based? (ldb/db-based-graph? db)]
+        *structured-tags (atom #{})]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
