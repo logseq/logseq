@@ -229,7 +229,14 @@
       [?b ?prop ?val]
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]]}))
+      [?prop-e :block/type "property"]]
+
+    :task
+    '[(task ?b ?statuses)
+      (property ?b :logseq.task/status ?v)
+      [?v :block/schema ?schema]
+      [(get ?schema :value) ?status]
+      [(contains? ?statuses ?status)]]}))
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
