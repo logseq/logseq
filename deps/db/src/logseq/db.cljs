@@ -6,18 +6,19 @@
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
-            [clojure.set :as set]
             [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.entity-plus]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.delete-blocks :as delete-blocks]))
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.frontend.delete-blocks :as delete-blocks]
+            [datascript.impl.entity :as de]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
   '[:db/id
     :block/uuid
     :block/parent
-    :block/left
+    :block/order
     :block/collapsed?
     :block/collapsed-properties
     :block/format
@@ -77,23 +78,9 @@
        (let [f (or @*transact-fn d/transact!)]
          (f repo-or-conn tx-data tx-meta))))))
 
-(defn sort-by-left
-  [blocks parent]
-  (let [left->blocks (->> (reduce (fn [acc b] (assoc! acc (:db/id (:block/left b)) b))
-                                  (transient {}) blocks)
-                          (persistent!))]
-    (loop [block parent
-           result (transient [])]
-      (if-let [next (get left->blocks (:db/id block))]
-        (recur next (conj! result next))
-        (vec (persistent! result))))))
-
-(defn try-sort-by-left
-  [blocks parent]
-  (let [result' (sort-by-left blocks parent)]
-    (if (= (count result') (count blocks))
-      result'
-      blocks)))
+(defn sort-by-order
+  [blocks]
+  (sort-by :block/order blocks))
 
 ;; TODO: use the tree directly
 (defn flatten-tree
@@ -118,73 +105,70 @@
           (->> (map #(db-content/update-block-content repo db % (:db/id %))))))
 
 (defn whiteboard-page?
-  "Given a page name or a page object, check if it is a whiteboard page"
-  [db page]
-  (cond
-    (string? page)
-    (let [page (d/entity db [:block/name (common-util/page-name-sanity-lc page)])]
-      (or
-       (contains? (set (:block/type page)) "whiteboard")
-       (when-let [file (:block/file page)]
-         (when-let [path (:file/path (d/entity db (:db/id file)))]
-           (common-config/whiteboard? path)))))
+  "Given a page entity or map, check if it is a whiteboard page"
+  [page]
+  (contains? (set (:block/type page)) "whiteboard"))
 
-    (seq page)
-    (contains? (set (:block/type page)) "whiteboard")
-
-    :else false))
+(defn journal-page?
+  "Given a page entity or map, check if it is a journal page"
+  [page]
+  (contains? (set (:block/type page)) "journal"))
 
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
-   page - name / title of the page"
-  [db page {:keys [pull-keys]
-            :or {pull-keys '[*]}}]
-  (when page
-    (let [page (common-util/page-name-sanity-lc page)
-          page-id (:db/id (d/entity db [:block/name page]))]
-      (when page-id
-        (let [datoms (d/datoms db :avet :block/page page-id)
-              block-eids (mapv :e datoms)]
-          (d/pull-many db pull-keys block-eids))))))
-
-(defn get-page-blocks-by-uuid
-  [db page-uuid & {:keys [pull-keys]
-                   :or {pull-keys '[*]}}]
-  (when-let [page-id (and page-uuid (:db/id (d/entity db [:block/uuid page-uuid])))]
+   page-id - eid"
+  [db page-id {:keys [pull-keys]
+               :or {pull-keys '[*]}}]
+  (when page-id
     (let [datoms (d/datoms db :avet :block/page page-id)
           block-eids (mapv :e datoms)]
       (d/pull-many db pull-keys block-eids))))
-
 
 (defn get-page-blocks-count
   [db page-id]
   (count (d/datoms db :avet :block/page page-id)))
 
-(defn get-by-parent-&-left
-  [db parent-id left-id]
-  (when (and parent-id left-id)
-    (let [lefts (:block/_left (d/entity db left-id))]
-      (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
-                                  (not= parent-id (:db/id node)))
-                         node)) lefts))))
-
 (defn get-right-sibling
-  [db db-id]
-  (when-let [block (d/entity db db-id)]
-    (get-by-parent-&-left db
-                          (:db/id (:block/parent block))
-                          db-id)))
+  [block]
+  (assert (or (de/entity? block) (nil? block)))
+  (when-let [parent (:block/parent block)]
+    (let [from-property (:logseq.property/created-from-property block)
+          children (sort-by-order (if from-property
+                                    (filter (fn [e]
+                                              (= (:db/id (:logseq.property/created-from-property e))
+                                                 (:db/id from-property)))
+                                            (:block/_raw-parent parent))
+                                    (:block/_parent parent)))
+          right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
+      (when (not= (:db/id right) (:db/id block))
+        right))))
 
-(defn get-by-id
-  [db id]
-  (d/pull db '[*] id))
+(defn get-left-sibling
+  [block]
+  (assert (or (de/entity? block) (nil? block)))
+  (when-let [parent (:block/parent block)]
+    (let [from-property (:logseq.property/created-from-property block)
+          children (reverse (sort-by-order (if from-property
+                                             (filter (fn [e]
+                                                       (= (:db/id (:logseq.property/created-from-property e))
+                                                          (:db/id from-property)))
+                                                     (:block/_raw-parent parent))
+                                             (:block/_parent parent))))
+          left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
+      (when (not= (:db/id left) (:db/id block))
+        left))))
+
+(defn get-down
+  [block]
+  (assert (or (de/entity? block) (nil? block)))
+  (first (sort-by-order (:block/_parent block))))
+
 
 (defn hidden-page?
   [page]
   (when page
     (if (string? page)
-      (or (and (string/starts-with? page "$$$")
-               (common-util/uuid-string? (common-util/safe-subs page 3)))
+      (or (string/starts-with? page "$$$")
           (= common-config/favorites-page-name page))
       (contains? (set (:block/type page)) "hidden"))))
 
@@ -195,22 +179,42 @@
           :where
           [?page :block/name ?page-name]
           [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
-         db)
+        db)
        (map first)
        (remove hidden-page?)))
+
+(def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
 
 (defn page-exists?
   "Whether a page exists."
   [db page-name]
   (when page-name
-    (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)])))
+    (some? (get-first-page-by-name db page-name))))
+
+(defn get-page
+  "Get a page given its unsanitized name"
+  [db page-name-or-uuid]
+  (when db
+    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
+                    (parse-uuid page-name-or-uuid))]
+      (d/entity db [:block/uuid id])
+      (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
+
+(defn get-case-page
+  "Case sensitive version of get-page. For use with DB graphs"
+  [db page-name-or-uuid]
+  (when db
+    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
+                    (parse-uuid page-name-or-uuid))]
+      (d/entity db [:block/uuid id])
+      (d/entity db (sqlite-common-db/get-first-page-by-original-name db page-name-or-uuid)))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
   `page-id` could be either a string or a db/id."
   [db page-id]
   (let [page-id (if (string? page-id)
-                  [:block/name (common-util/page-name-sanity-lc page-id)]
+                  (get-first-page-by-name db page-id)
                   page-id)
         page (d/entity db page-id)]
     (nil? (:block/_left page))))
@@ -225,8 +229,8 @@
         orphaned-pages (->>
                         (map
                          (fn [page]
-                           (let [name (common-util/page-name-sanity-lc page)]
-                             (when-let [page (d/entity db [:block/name name])]
+                           (when-let [page (get-page db page)]
+                             (let [name (:block/name page)]
                                (and
                                 (empty-ref-f page)
                                 (or
@@ -238,12 +242,12 @@
                                     (= 1 (count children))
                                     (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
                                 (not (contains? built-in-pages name))
-                                (not (whiteboard-page? db page))
+                                (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
                                 (not (contains? (:block/type page) "property"))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
-                                          (not (:block/journal? page))))
+                                          (not (journal-page? page))))
                                 page))))
                          pages)
                         (remove false?)
@@ -268,16 +272,22 @@
      (when (if not-collapsed?
              (not (collapsed-and-has-children? db block))
              true)
-       (let [children (:block/_parent block)
-             all-left (set (concat (map (comp :db/id :block/left) children) [db-id]))
-             all-ids (set (map :db/id children))]
-         (first (set/difference all-ids all-left)))))))
+       (let [children (sort-by :block/order (:block/_parent block))]
+         (:db/id (last children)))))))
 
-(defn get-block-immediate-children
+(defn get-children
   "Doesn't include nested children."
-  [db block-uuid]
-  (when-let [parent (d/entity db [:block/uuid block-uuid])]
-    (sort-by-left (:block/_parent parent) parent)))
+  ([block-entity]
+   (get-children nil block-entity))
+  ([db block-entity-or-eid]
+   (when-let [parent (cond
+                       (number? block-entity-or-eid)
+                       (d/entity db block-entity-or-eid)
+                       (uuid? block-entity-or-eid)
+                       (d/entity db [:block/uuid block-entity-or-eid])
+                       :else
+                       block-entity-or-eid)]
+     (sort-by-order (:block/_parent parent)))))
 
 (defn get-block-parents
   [db block-id {:keys [depth] :or {depth 100}}]
@@ -290,43 +300,23 @@
         (recur (:block/uuid parent) (conj parents parent) (inc d))
         parents))))
 
-(defn get-block-children-ids
-  "Returns children UUIDs"
-  [db block-uuid]
-  (when-let [eid (:db/id (d/entity db [:block/uuid block-uuid]))]
-    (let [seen   (volatile! [])]
-      (loop [steps          100      ;check result every 100 steps
-             eids-to-expand [eid]]
-        (when (seq eids-to-expand)
-          (let [eids-to-expand*
-                (mapcat (fn [eid] (map first (d/datoms db :avet :block/parent eid))) eids-to-expand)
-                uuids-to-add (remove nil? (map #(:block/uuid (d/entity db %)) eids-to-expand*))]
-            (when (and (zero? steps)
-                       (seq (set/intersection (set @seen) (set uuids-to-add))))
-              (throw (ex-info "bad outliner data, need to re-index to fix"
-                              {:seen @seen :eids-to-expand eids-to-expand})))
-            (vswap! seen (partial apply conj) uuids-to-add)
-            (recur (if (zero? steps) 100 (dec steps)) eids-to-expand*))))
-      @seen)))
+(def get-block-children-ids sqlite-common-db/get-block-children-ids)
+(def get-block-children sqlite-common-db/get-block-children)
 
-(defn get-block-children
-  "Including nested children."
-  [db block-uuid]
-  (let [ids (get-block-children-ids db block-uuid)]
-    (when (seq ids)
-      (let [ids' (map (fn [id] [:block/uuid id]) ids)]
-        (d/pull-many db '[*] ids')))))
+(defn get-first-child
+  [db id]
+  (first (sort-by-order (:block/_parent (d/entity db id)))))
 
 (defn- get-sorted-page-block-ids
   [db page-id]
   (let [root (d/entity db page-id)]
     (loop [result []
-           children (sort-by-left (:block/_parent root) root)]
+           children (sort-by-order (:block/_parent root))]
       (if (seq children)
         (let [child (first children)]
           (recur (conj result (:db/id child))
                  (concat
-                  (sort-by-left (:block/_parent child) child)
+                  (sort-by-order (:block/_parent child))
                   (rest children))))
         result))))
 
@@ -340,13 +330,6 @@
         blocks-map (zipmap (map :db/id blocks) blocks)]
     (keep blocks-map sorted-ids)))
 
-(defn get-prev-sibling
-  [db id]
-  (when-let [e (d/entity db id)]
-    (let [left (:block/left e)]
-      (when (not= (:db/id left) (:db/id (:block/parent e)))
-        left))))
-
 (defn last-child-block?
   "The child block could be collapsed."
   [db parent-id child-id]
@@ -355,7 +338,7 @@
       (= parent-id child-id)
       true
 
-      (get-right-sibling db child-id)
+      (get-right-sibling child)
       false
 
       :else
@@ -367,8 +350,8 @@
                  (and (= (:block/page block-1) (:block/page block-2))
                       (or
                        ;; sibling or child
-                       (= (:db/id (:block/left block-2)) (:db/id block-1))
-                       (when-let [prev-sibling (get-prev-sibling db (:db/id block-2))]
+                       (= (:db/id (get-left-sibling block-2)) (:db/id block-1))
+                       (when-let [prev-sibling (get-left-sibling (d/entity db (:db/id block-2)))]
                          (last-child-block? db (:db/id prev-sibling) (:db/id block-1))))))]
     (or (aux-fn block-1 block-2) (aux-fn block-2 block-1))))
 
@@ -398,17 +381,8 @@
 
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
-  [db property-uuid]
-  (d/q
-   '[:find [?b ...]
-     :in $ ?property-uuid
-     :where
-     [?b :block/schema ?schema]
-     [(get ?schema :properties) ?schema-properties*]
-     [(set ?schema-properties*) ?schema-properties]
-     [(contains? ?schema-properties ?property-uuid)]]
-   db
-   property-uuid))
+  [db property-id]
+  (:class/_schema.properties (d/entity db property-id)))
 
 (defn get-block-property-values
   "Get blocks which have this property."
@@ -425,51 +399,11 @@
 
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
-  [db alias]
-  (let [alias (common-util/page-name-sanity-lc alias)
-        pages (d/q '[:find [(pull ?p [*]) ...]
-                     :in $ ?alias
-                     :where
-                     [?a :block/name ?alias]
-                     [?p :block/alias ?a]]
-                   db
-                   alias)]
-    ;; may be a case that a user added same alias into multiple pages.
+  [db alias-id]
+  (when alias-id
+      ;; may be a case that a user added same alias into multiple pages.
       ;; only return the first result for idiot-proof
-    (when (seq pages)
-      (first pages))))
-
-(defn get-namespace-pages
-  "Accepts both sanitized and unsanitized namespaces"
-  [db namespace {:keys [db-graph?]}]
-  (assert (string? namespace))
-  (let [namespace (common-util/page-name-sanity-lc namespace)
-        pull-attrs  (cond-> [:db/id :block/name :block/original-name :block/namespace]
-                      (not db-graph?)
-                      (conj {:block/file [:db/id :file/path]}))]
-    (d/q
-     [:find [(list 'pull '?c pull-attrs) '...]
-      :in '$ '% '?namespace
-      :where
-      ['?p :block/name '?namespace]
-      (list 'namespace '?p '?c)]
-     db
-     (:namespace rules/rules)
-     namespace)))
-
-(defn get-pages-by-name-partition
-  [db partition]
-  (when-not (string/blank? partition)
-    (let [partition (common-util/page-name-sanity-lc (string/trim partition))
-          ids (->> (d/datoms db :aevt :block/name)
-                   (filter (fn [datom]
-                             (let [page (:v datom)]
-                               (string/includes? page partition))))
-                   (map :e))]
-      (when (seq ids)
-        (d/pull-many db
-                     '[:db/id :block/name :block/original-name]
-                     ids)))))
+    (first (:block/_alias (d/entity db alias-id)))))
 
 (defn get-page-alias
   [db page-id]
@@ -527,16 +461,17 @@
 
 (defn built-in?
   "Built-in page or block"
-  [db entity]
-  (get (:block/properties entity) (:block/uuid (d/entity db :logseq.property/built-in?))))
+  [entity]
+  (:logseq.property/built-in? entity))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
-  [db class-entity property-entity]
-  (and (built-in? db class-entity)
+  [class-entity property-entity]
+  (and (built-in? class-entity)
        (contains? (:block/type class-entity) "class")
-       (built-in? db property-entity)
-       (contains? (set (get-in class-entity [:block/schema :properties])) (:block/uuid property-entity))))
+       (built-in? property-entity)
+       (contains? (set (map :db/ident (:class/schema.properties class-entity)))
+                  (:db/ident property-entity))))
 
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
@@ -550,7 +485,6 @@
      {:block/uuid (d/squuid)
       :block/name common-config/favorites-page-name
       :block/original-name common-config/favorites-page-name
-      :block/journal? false
       :block/type #{"hidden"}
       :block/format :markdown})]))
 
@@ -565,14 +499,38 @@
   [db]
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
 
-(defn page?
-  "Whether `block` is a page"
-  [block]
-  (and (:block/name block)
-       (not (:block/page block))))
+(def page? sqlite-util/page?)
+(def db-based-graph? entity-plus/db-based-graph?)
 
-(comment
-  (defn db-based-graph?
-    "Whether the current graph is db-only"
-    [db]
-    (= "db" (:db/type (d/entity db :logseq.kv.db/type)))))
+;; File based fns
+(defn get-namespace-pages
+  "Accepts both sanitized and unsanitized namespaces"
+  [db namespace {:keys [db-graph?]}]
+  (assert (string? namespace))
+  (let [namespace (common-util/page-name-sanity-lc namespace)
+        pull-attrs  (cond-> [:db/id :block/name :block/original-name :block/namespace]
+                      (not db-graph?)
+                      (conj {:block/file [:db/id :file/path]}))]
+    (d/q
+     [:find [(list 'pull '?c pull-attrs) '...]
+      :in '$ '% '?namespace
+      :where
+      ['?p :block/name '?namespace]
+      (list 'namespace '?p '?c)]
+     db
+     (:namespace rules/rules)
+     namespace)))
+
+(defn get-pages-by-name-partition
+  [db partition]
+  (when-not (string/blank? partition)
+    (let [partition (common-util/page-name-sanity-lc (string/trim partition))
+          ids (->> (d/datoms db :aevt :block/name)
+                   (filter (fn [datom]
+                             (let [page (:v datom)]
+                               (string/includes? page partition))))
+                   (map :e))]
+      (when (seq ids)
+        (d/pull-many db
+                     '[:db/id :block/name :block/original-name]
+                     ids)))))

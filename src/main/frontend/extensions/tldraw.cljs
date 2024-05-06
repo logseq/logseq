@@ -10,6 +10,7 @@
             [frontend.db :as db]
             [frontend.extensions.pdf.assets :as pdf-assets]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.page :as page-handler]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -25,15 +26,17 @@
             [frontend.ui :as ui]
             [frontend.components.whiteboard :as whiteboard]
             [cljs-bean.core :as bean]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [logseq.common.util :as common-util]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
 (def generate-preview (gobj/get TldrawLogseq "generateJSXFromModel"))
 
+;; FIXME: use page uuid instead or creating a ref
 (rum/defc page-cp
   [props]
-  (page/page {:page-name (model/get-redirect-page-name (gobj/get props "pageName")) :whiteboard? true}))
+  (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
 
 (rum/defc block-cp
   [props]
@@ -104,7 +107,7 @@
 
 (def undo (fn [] (history/undo! nil)))
 (def redo (fn [] (history/redo! nil)))
-(defn get-tldraw-handlers [current-whiteboard-name]
+(defn get-tldraw-handlers [current-whiteboard-uuid]
   {:t (fn [key] (t (keyword key)))
    :search search-handler
    :queryBlockByUUID (fn [block-uuid]
@@ -113,9 +116,13 @@
    :getBlockPageName #(let [block-id-str %]
                         (if (util/uuid-string? block-id-str)
                           (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
-                          (:block/name (db/entity [:block/name (util/page-name-sanity-lc block-id-str)]))))
-   :exportToImage (fn [page-name options] (state/set-modal! #(export/export-blocks page-name (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
-   :isWhiteboardPage model/whiteboard-page?
+                          (:block/name (db/get-page block-id-str))))
+   :exportToImage (fn [page-uuid-str options]
+                    (assert (common-util/uuid-string? page-uuid-str))
+                    (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
+   :isWhiteboardPage (fn [page-name]
+                       (when-let [entity (db/get-page page-name)]
+                         (model/whiteboard-page? entity)))
    :isMobile util/mobile?
    :saveAsset save-asset-handler
    :makeAssetUrl assets-handler/make-asset-url
@@ -127,23 +134,27 @@
    :addNewWhiteboard (fn [page-name]
                        (whiteboard-handler/<create-new-whiteboard-page! page-name))
    :addNewBlock (fn [content]
-                  (p/let [new-block-id (whiteboard-handler/<add-new-block! current-whiteboard-name content)]
+                  (p/let [new-block-id (whiteboard-handler/<add-new-block! current-whiteboard-uuid content)]
                     (str new-block-id)))
    :sidebarAddBlock (fn [uuid type]
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
-   :redirectToPage (fn [page-name-or-uuid]
-                     (let [page-name (or (when (util/uuid-string? page-name-or-uuid)
-                                           (:block/name (model/get-block-page (state/get-current-repo)
-                                                                              (parse-uuid page-name-or-uuid))))
-                                         page-name-or-uuid)
-                           page-exists? (model/page-exists? page-name)
-                           whiteboard? (model/whiteboard-page? page-name)]
-                       (when page-exists?
-                         (if whiteboard?
-                           (route-handler/redirect-to-whiteboard! page-name {:block-id page-name-or-uuid})
-                           (route-handler/redirect-to-page! (model/get-redirect-page-name page-name-or-uuid))))))})
+   :redirectToPage (fn [page-name-or-uuid] ; FIXME whiteboard link refs should store UUIDs instead of page names
+                     (when page-name-or-uuid
+                       (let [block-id (parse-uuid page-name-or-uuid)
+                             page (if block-id
+                                    (model/get-block-page (state/get-current-repo) block-id)
+                                    (db/get-page page-name-or-uuid))
+                             whiteboard? (model/whiteboard-page? page)]
+                         (p/let [new-page (when (nil? page)
+                                            (page-handler/<create! page-name-or-uuid {:redirect? false}))
+                                 page' (or new-page page)]
+                           (route-handler/redirect-to-page! (if whiteboard?
+                                                              (:block/uuid page')
+                                                              (model/get-redirect-page-name (:block/uuid page')))
+                                                            (when (and block-id (not= block-id (:block/uuid page')))
+                                                              {:block-id block-id}))))))})
 
 (defonce *transact-result (atom nil))
 
@@ -162,7 +173,7 @@
 
 (rum/defc tldraw-inner < rum/static
   {:will-remount (fn [old-state new-state]
-                   (let [page-name (first (:rum/args old-state))
+                   (let [page-uuid (first (:rum/args old-state))
                          old-data (nth (:rum/args old-state) 1)
                          new-data (nth (:rum/args new-state) 1)
                          old-shapes (let [shapes (some-> (gobj/get old-data "pages")
@@ -181,9 +192,9 @@
                      (when (seq updated-shapes)
                        (whiteboard-handler/update-shapes! updated-shapes))
 
-                     (whiteboard-handler/update-shapes-index! page-name))
+                     (whiteboard-handler/update-shapes-index! page-uuid))
                    new-state)}
-  [page-name data populate-onboarding? loaded-app on-mount]
+  [page-uuid data populate-onboarding? loaded-app on-mount]
   [:div.draw.tldraw.whiteboard.relative.w-full.h-full
    {:style {:overscroll-behavior "none"}
     :on-blur (fn [e]
@@ -199,21 +210,21 @@
       (ui/loading "Loading onboarding whiteboard ...")])
 
    (tldraw {:renderers tldraw-renderers
-            :handlers (get-tldraw-handlers page-name)
+            :handlers (get-tldraw-handlers page-uuid)
             :onMount on-mount
             :readOnly config/publishing?
-            ;; :onPersist (debounce #(on-persist page-name %1 %2) 200)
-            :onPersist #(on-persist page-name %1 %2)
+            ;; :onPersist (debounce #(on-persist page-uuid %1 %2) 200)
+            :onPersist #(on-persist page-uuid %1 %2)
             :model data})])
 
 (rum/defc tldraw-app-inner < rum/reactive
   {:init (fn [state]
-           (let [page-name (first (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) page-name)
+           (let [page-uuid (first (:rum/args state))]
+             (db-async/<get-block (state/get-current-repo) page-uuid)
              state))}
-  [page-name block-id loaded-app set-loaded-app]
-  (when-not (state/sub-async-query-loading page-name)
-    (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-name)
+  [page-uuid block-id loaded-app set-loaded-app]
+  (when-not (state/sub-async-query-loading (str page-uuid))
+    (let [populate-onboarding? (whiteboard-handler/should-populate-onboarding-whiteboard? page-uuid)
           on-mount (fn [^js tln]
                      (when tln
                        (set! (.-appUndo tln) undo)
@@ -224,16 +235,17 @@
                                  #(do (whiteboard-handler/cleanup! (.-currentPage tln))
                                       (state/focus-whiteboard-shape tln block-id)
                                       (set-loaded-app tln))))))
-          data (whiteboard-handler/page-name->tldr! page-name)]
+          data (whiteboard-handler/get-page-tldr page-uuid)]
       (when data
-        (tldraw-inner page-name data populate-onboarding? loaded-app on-mount)))))
+        (tldraw-inner page-uuid data populate-onboarding? loaded-app on-mount)))))
 
 (rum/defc tldraw-app
-  [page-name block-id]
-  (let [[loaded-app set-loaded-app] (rum/use-state nil)]
+  [page-uuid block-id]
+  (let [page-uuid (str page-uuid)
+        [loaded-app set-loaded-app] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when (and loaded-app block-id)
                          (state/focus-whiteboard-shape loaded-app block-id))
                        #())
                      [block-id loaded-app])
-    (tldraw-app-inner page-name block-id loaded-app set-loaded-app)))
+    (tldraw-app-inner page-uuid block-id loaded-app set-loaded-app)))

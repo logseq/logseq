@@ -9,7 +9,7 @@
             [frontend.schema-register :as sr]
             [frontend.worker.batch-tx :as batch-tx]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page.db-based.rename :as worker-page-rename]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
@@ -17,7 +17,7 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.util :as db-property-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
@@ -330,12 +330,12 @@
     (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
       (let [page-name (:block/name local-parent)
             properties* (transit/read transit-r properties)
-            shape-property-id (db-property/get-pid repo db :logseq.property.tldraw/shape)
+            shape-property-id (db-property-util/get-pid repo :logseq.property.tldraw/shape)
             shape (and (map? properties*)
                        (get properties* shape-property-id))]
         (assert (some? page-name) local-parent)
         (assert (some? shape) properties*)
-        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
+        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-name)])))))
 
 (defn- need-update-block?
   [conn block-uuid op-value]
@@ -450,10 +450,9 @@
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
   (let [blocks (ldb/get-page-blocks @conn from-page-name {})
-        from-page-block (some-> (first blocks) :block/page)
         target-page-block (d/entity @conn [:block/name to-page-name])]
     (when (and (seq blocks) target-page-block)
-      (let [blocks* (ldb/sort-by-left blocks from-page-block)]
+      (let [blocks* (ldb/sort-by-order blocks)]
         (outliner-tx/transact!
          {:persist-op? true
           :gen-undo-ops? false

@@ -88,7 +88,7 @@
                     default-content)
           file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
                                                                           (config/get-file-extension format)))
-          page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
+          page-exists? (db/page-exists? title)
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)

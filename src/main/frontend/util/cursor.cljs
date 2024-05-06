@@ -177,7 +177,7 @@
     (move-cursor-to input idx)))
 
 (defn textarea-cursor-rect-first-row? [cursor]
-  (let [elms   (-> (gdom/getElement "mock-text")
+  (let [elms   (some-> (gdom/getElement "mock-text")
                    gdom/getChildren
                    array-seq)
         tops   (->> elms
@@ -191,7 +191,7 @@
 
 
 (defn textarea-cursor-rect-last-row? [cursor]
-  (let [elms   (-> (gdom/getElement "mock-text")
+  (let [elms   (some-> (gdom/getElement "mock-text")
                    gdom/getChildren
                    array-seq)
         tops   (->> elms

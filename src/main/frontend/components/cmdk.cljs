@@ -108,7 +108,7 @@
                             :else
                             (take 5 items))))
         page-exists? (when-not (string/blank? input)
-                       (db/entity [:block/name (string/trim input)]))
+                       (db/get-page (string/trim input)))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
         order* (cond
@@ -218,15 +218,15 @@
                        (remove nil?)
                        (map
                         (fn [page]
-                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                          (let [entity (db/get-page page)
                                 whiteboard? (= (:block/type entity) "whiteboard")
-                                source-page (model/get-alias-source-page repo page)]
+                                source-page (model/get-alias-source-page repo (:db/id entity))]
                             (hash-map :icon (if whiteboard? "whiteboard" "page")
                                       :icon-theme :gray
                                       :text page
                                       :source-page (if source-page
-                                              (:block/original-name source-page)
-                                              page))))))]
+                                                     (:block/original-name source-page)
+                                                     page))))))]
       (swap! !results update group        merge {:status :success :items items}))))
 
 (defmethod load-results :whiteboards [group state]
@@ -240,7 +240,7 @@
                        (remove nil?)
                        (keep
                         (fn [page]
-                          (let [entity (db/entity [:block/name (util/page-name-sanity-lc page)])
+                          (let [entity (db/get-page page)
                                 whiteboard? (= (:block/type entity) "whiteboard")]
                             (when whiteboard?
                               (hash-map :icon "whiteboard"
@@ -316,27 +316,6 @@
                    files)]
       (swap! !results update group        merge {:status :success :items items}))))
 
-;; FIXME: recent search
-;; (defmethod load-results :recents [group state]
-;;   (let [!input (::input state)
-;;         !results (::results state)
-;;         recent-searches (mapv (fn [q] {:type :search :data q}) (db/get-key-value :recent/search))
-;;         recent-pages (->> (filter string? (db/get-key-value :recent/pages))
-;;                           (keep (fn [page]
-;;                                   (when-let [page-entity (db/entity [:block/name (util/page-name-sanity-lc page)])]
-;;                                     {:type :page :data (:block/original-name page-entity)})))
-;;                           vec)]
-;;     (swap! !results assoc-in [group :status] :loading)
-;;     (let [items (->> (concat recent-searches recent-pages)
-;;                      (filter #(string/includes? (lower-case-str (:data %)) (lower-case-str @!input)))
-;;                      (map #(hash-map :icon (if (= :page (:type %)) "page" "history")
-;;                                      :icon-theme :gray
-;;                                      :text (:data %)
-;;                                      :source-recent %
-;;                                      :source-page (when (= :page (:type %)) (:data %))
-;;                                      :source-search (when (= :search (:type %)) (:data %)))))]
-;;       (swap! !results update group merge {:status :success :items items}))))
-
 (defn- get-filter-q
   [input]
   (or (when (string/starts-with? input "/")
@@ -400,45 +379,49 @@
 
 (defmulti handle-action (fn [action _state _event] action))
 
-(defn- get-highlighted-page-name
+(defn- get-highlighted-page-uuid-or-name
   [state]
   (let [highlighted-item (some-> state state->highlighted-item)]
-    (or (when-let [id (:block/uuid (:source-block highlighted-item))]
-          (:block/name (db/entity [:block/uuid id])))
-        (:source-page highlighted-item))))
+    (or (:block/uuid (:source-block highlighted-item))
+        (or (:block/uuid (db/get-case-page (:source-page highlighted-item)))
+            ;; fallback for file graphs
+            (:source-page highlighted-item)))))
 
 (defmethod handle-action :open-page [_ state _event]
-  (when-let [page-name (get-highlighted-page-name state)]
-    (let [redirect-page-name (model/get-redirect-page-name page-name)
-          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])
-          original-name (:block/original-name page)]
-      (if (= (:block/type page) "whiteboard")
-        (route-handler/redirect-to-whiteboard! original-name)
-        (route-handler/redirect-to-page! original-name)))
+  (when-let [page-name (get-highlighted-page-uuid-or-name state)]
+    (let [page (db/get-page page-name)]
+      (route-handler/redirect-to-page! (:block/uuid page)))
     (state/close-modal!)))
 
 (defmethod handle-action :open-block [_ state _event]
   (when-let [block-id (some-> state state->highlighted-item :source-block :block/uuid)]
     (p/let [repo (state/get-current-repo)
-            _ (db-async/<get-block repo block-id :children? false)]
-      (let [get-block-page (partial model/get-block-page repo)
-           block (db/entity [:block/uuid block-id])]
-       (when block
-         (when-let [page (some-> block-id get-block-page)]
-           (let [page-name (:block/name page)]
-             (cond
-               (= (:block/type page) "whiteboard")
-               (route-handler/redirect-to-whiteboard! page-name {:block-id block-id})
-               (model/parents-collapsed? (state/get-current-repo) block-id)
-               (route-handler/redirect-to-page! block-id)
-               :else
-               (route-handler/redirect-to-page! page-name {:anchor (str "ls-block-" block-id)})))
-           (state/close-modal!)))))))
+            _ (db-async/<get-block repo block-id :children? false)
+            block (db/entity [:block/uuid block-id])
+            parents (db-async/<get-block-parents (state/get-current-repo) (:db/id block) 1000)
+            created-from-block (some (fn [block']
+                                       (let [block (db/entity (:db/id block'))]
+                                         (when (:logseq.property/created-from-property block)
+                                           (:block/parent block)))) parents)
+            [block-id block] (if created-from-block
+                               (let [block (db/entity (:db/id created-from-block))]
+                                 [(:block/uuid block) block])
+                               [block-id block])]
+      (let [get-block-page (partial model/get-block-page repo)]
+        (when block
+          (when-let [page (some-> block-id get-block-page)]
+            (cond
+              (db/whiteboard-page? page)
+              (route-handler/redirect-to-page! (:block/uuid page) {:block-id block-id})
+              (model/parents-collapsed? (state/get-current-repo) block-id)
+              (route-handler/redirect-to-page! block-id)
+              :else
+              (route-handler/redirect-to-page! (:block/uuid page) {:anchor (str "ls-block-" block-id)}))
+            (state/close-modal!)))))))
 
 (defmethod handle-action :open-page-right [_ state _event]
-  (when-let [page-name (get-highlighted-page-name state)]
-    (let [redirect-page-name (model/get-redirect-page-name page-name)
-          page (db/entity [:block/name (util/page-name-sanity-lc redirect-page-name)])]
+  (when-let [page-name (get-highlighted-page-uuid-or-name state)]
+    (let [page (db/get-page page-name)]
       (when page
         (editor-handler/open-block-in-sidebar! (:block/uuid page))))
     (state/close-modal!)))
@@ -512,7 +495,7 @@
        create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
        create-page? (page-handler/<create! @!input {:redirect? true}))
      (if create-class?
-       (state/pub-event! [:class/configure (db/entity [:block/name (util/page-name-sanity-lc class)])])
+       (state/pub-event! [:class/configure (db/get-page class)])
        (state/close-modal!)))))
 
 (defn- get-filter-user-input

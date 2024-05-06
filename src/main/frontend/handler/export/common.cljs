@@ -90,31 +90,23 @@
                (mapv remove-block-ast-pos
                      (mldoc/->edn content format))))))
 
-;; TODO: Enable when unused
-#_(defn <get-page-content
-    ([page-name]
-     (<get-page-content (state/get-current-repo) page-name))
-    ([repo page-name]
-     (when-let [^object worker @db-browser/*worker]
-       (.block->content worker repo page-name nil
-                        (pr-str {:export-bullet-indentation (state/get-export-bullet-indentation)})))))
-
 (defn get-page-content
-  [page-name]
+  [page-uuid]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (worker-export/block->content repo db page-name
+    (worker-export/block->content repo db page-uuid
                                   nil
                                   {:export-bullet-indentation (state/get-export-bullet-indentation)})))
 
 (defn- page-name->ast
   [page-name]
-  (when-let [content (get-page-content page-name)]
-    (when content
-      (let [format :markdown]
-        (removev Properties-block-ast?
-                 (mapv remove-block-ast-pos
-                       (mldoc/->edn content format)))))))
+  (let [page (db/get-page page-name)]
+    (when-let [content (get-page-content (:block/uuid page))]
+      (when content
+        (let [format :markdown]
+          (removev Properties-block-ast?
+                   (mapv remove-block-ast-pos
+                         (mldoc/->edn content format))))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]

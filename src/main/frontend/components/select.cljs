@@ -43,6 +43,7 @@
    * :show-new-when-not-exact-match? - Boolean to allow new values be entered. Default is false
    * :exact-match-exclude-items - A set of strings that can't be added as a new item. Default is #{}
    * :transform-fn - Optional fn to transform search results given results and current input
+   * :new-case-sensitive? - Boolean to allow new values to be case sensitive
    TODO: Describe more options"
   < rum/reactive
   shortcut/disable-all-shortcuts
@@ -58,7 +59,7 @@
                  prompt-key input-default-placeholder close-modal?
                  extract-fn extract-chosen-fn host-opts on-input input-opts
                  item-cp transform-fn tap-*input-val
-                 multiple-choices? on-apply
+                 multiple-choices? on-apply new-case-sensitive?
                  dropdown? show-new-when-not-exact-match? exact-match-exclude-items
                  input-container initial-open?]
           :or {limit 100
@@ -81,8 +82,9 @@
                           (fn? transform-fn)
                           (transform-fn @input))
                         (remove nil?))
-        exact-match? (contains? (set (map (comp string/lower-case str extract-fn) search-result'))
-                                (string/lower-case @input))
+        exact-transform-fn (if new-case-sensitive? identity string/lower-case)
+        exact-match? (contains? (set (map (comp exact-transform-fn str extract-fn) search-result'))
+                                (exact-transform-fn @input))
         search-result' (if multiple-choices?
                          (sort-by (fn [item]
                                     (not (contains? selected-choices (:value item))))

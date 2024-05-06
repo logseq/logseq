@@ -9,6 +9,7 @@
 
 (def operators [:and :or :not])
 (def operators-set (set operators))
+
 (def page-filters ["all page tags"
                    "namespace"
                    "tags"
@@ -155,7 +156,7 @@
               (last f))]
       (into [(symbol (first f))] [(second f) l]))
 
-    (and (vector? f) (contains? #{:page :namespace :tags} (keyword (first f))))
+    (and (vector? f) (contains? #{:page :tags :namespace} (keyword (first f))))
     (into [(symbol (first f))] (map ->page-ref (rest f)))
 
     :else f))

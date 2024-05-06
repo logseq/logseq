@@ -13,7 +13,7 @@
             [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page.db-based.rename :as worker-page-rename]
             [frontend.worker.rtc.asset-sync :as asset-sync]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
@@ -24,7 +24,6 @@
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
@@ -355,12 +354,12 @@
     (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
       (let [page-name (:block/name local-parent)
             properties* (transit/read transit-r properties)
-            shape-property-id (db-property/get-pid repo db :logseq.property.tldraw/shape)
+            shape-property-id :logseq.property.tldraw/shape
             shape (and (map? properties*)
                        (get properties* shape-property-id))]
         (assert (some? page-name) local-parent)
         (assert (some? shape) properties*)
-        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
+        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-name)])))))
 
 (defn- need-update-block?
   [conn block-uuid op-value]
@@ -435,7 +434,7 @@
                   (and (contains? key-set :journal-day)
                        (some? (:journal-day op-value)))
                   (assoc :block/journal-day (:journal-day op-value)
-                         :block/journal? true))
+                         :block/type "journal"))
                 *other-tx-data (atom [])]
             ;; 'save-block' dont handle card-many attrs well?
             (when (contains? key-set :alias)
@@ -452,8 +451,7 @@
               (swap! *other-tx-data conj [:db/retract db-id :block/properties]))
             (when (and (contains? key-set :journal-day) (nil? (:journal-day op-value)))
               (swap! *other-tx-data conj
-                     [:db/retract db-id :block/journal-day]
-                     [:db/retract db-id :block/journal?]))
+                     [:db/retract db-id :block/journal-day]))
             (when (seq @*other-tx-data)
               (ldb/transact! conn @*other-tx-data {:persist-op? false
                                                    :gen-undo-ops? false}))
@@ -487,11 +485,10 @@
 
 (defn- move-all-blocks-to-another-page
   [repo conn from-page-name to-page-name]
-  (let [blocks (ldb/get-page-blocks @conn from-page-name {})
-        from-page-block (some-> (first blocks) :block/page)
-        target-page-block (d/entity @conn [:block/name to-page-name])]
+  (let [blocks (:block/_page (ldb/get-page @conn from-page-name))
+        target-page-block (ldb/get-page @conn to-page-name)]
     (when (and (seq blocks) target-page-block)
-      (let [blocks* (ldb/sort-by-left blocks from-page-block)]
+      (let [blocks* (ldb/sort-by-order blocks)]
         (outliner-tx/transact!
          {:persist-op? true
           :gen-undo-ops? false
@@ -527,7 +524,7 @@
   (let [config (worker-state/get-config repo)]
     (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
       (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
-            exist-page (d/entity @conn [:block/name page-name])
+            exist-page (ldb/get-page @conn page-name)
             create-opts {:create-first-block? false
                          :uuid self :persist-op? false}]
         (cond
@@ -536,7 +533,7 @@
           (and exist-page
                (not= (:block/uuid exist-page) self)
                (empty-page? exist-page))
-          (do (worker-page/delete! repo conn page-name {:persist-op? false})
+          (do (worker-page/delete! repo conn self {:persist-op? false})
               (worker-page/create! repo conn config original-name create-opts))
 
           ;; same name but different uuid
@@ -546,14 +543,14 @@
           (and exist-page
                (not= (:block/uuid exist-page) self))
           (let [conflict-page-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now)))]
-            (worker-page-rename/rename! repo conn config original-name conflict-page-name {:persist-op? false})
+            (worker-page-rename/rename! repo conn config self conflict-page-name {:persist-op? false})
             (worker-page/create! repo conn config original-name create-opts)
             (move-all-blocks-to-another-page repo conn conflict-page-name original-name))
 
           ;; a client-page has same uuid as remote but different page-names,
           ;; then we need to rename the client-page to remote-page-name
           (and old-page-original-name (not= old-page-original-name original-name))
-          (worker-page-rename/rename! repo conn config old-page-original-name original-name {:persist-op? false})
+          (worker-page-rename/rename! repo conn config self original-name {:persist-op? false})
 
           ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
           ;; just create-page
@@ -565,8 +562,7 @@
 (defn apply-remote-remove-page-ops
   [repo conn remove-page-ops]
   (doseq [op remove-page-ops]
-    (when-let [page-name (:block/name (d/entity @conn [:block/uuid (:block-uuid op)]))]
-      (worker-page/delete! repo conn page-name {:persist-op? false}))))
+    (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
 
 (defn filter-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,

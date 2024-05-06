@@ -41,9 +41,13 @@
   []
   (let [repo (state/get-current-repo)]
     [:<>
-     (ui/menu-background-color #(property-handler/batch-set-block-property! repo (state/get-selection-block-ids) :background-color %)
-                               #(property-handler/batch-remove-block-property! repo (state/get-selection-block-ids) :background-color))
-
+     (ui/menu-background-color #(property-handler/batch-set-block-property! repo
+                                                                            (state/get-selection-block-ids)
+                                                                            (pu/get-pid :logseq.property/background-color)
+                                                                            %)
+                               #(property-handler/batch-remove-block-property! repo
+                                                                               (state/get-selection-block-ids)
+                                                                               (pu/get-pid :logseq.property/background-color)))
      (ui/menu-heading #(editor-handler/batch-set-heading! (state/get-selection-block-ids) %)
                       #(editor-handler/batch-set-heading! (state/get-selection-block-ids) true)
                       #(editor-handler/batch-remove-heading! (state/get-selection-block-ids)))
@@ -170,9 +174,11 @@
                                           [:p (t :context-menu/template-exists-warning)]
                                           :error)
                                          (p/do!
-                                          (property-handler/set-block-property! repo block-id :template title)
+                                          (property-handler/set-block-property! repo block-id (pu/get-pid :logseq.property/template) title)
                                           (when (false? template-including-parent?)
-                                            (property-handler/set-block-property! repo block-id :template-including-parent false))
+                                            (property-handler/set-block-property! repo block-id
+                                                                                  (pu/get-pid :logseq.property/template-including-parent)
+                                                                                  false))
                                           (state/hide-custom-context-menu!))))))))]
          (shui/dropdown-menu-separator)])
       (shui/dropdown-menu-item
@@ -191,10 +197,12 @@
       (let [properties (:block/properties block)
             heading (or (pu/lookup properties :logseq.property/heading)
                         false)]
-
         [:<>
-         (ui/menu-background-color #(property-handler/set-block-property! repo block-id :background-color %)
-                                   #(property-handler/remove-block-property! repo block-id :background-color))
+         (ui/menu-background-color #(property-handler/set-block-property! repo block-id
+                                                                          (pu/get-pid :logseq.property/background-color)
+                                                                          %)
+                                   #(property-handler/remove-block-property! repo block-id
+                                                                             (pu/get-pid :logseq.property/background-color)))
 
          (ui/menu-heading heading
                           #(editor-handler/set-heading! block-id %)
@@ -384,7 +392,7 @@
 
 (rum/defc page-title-custom-context-menu-content
   [page]
-  (when-not (string/blank? page)
+  (when page
     (let [page-menu-options (page-menu/page-menu page)]
       [:<>
        (for [{:keys [title options]} page-menu-options]

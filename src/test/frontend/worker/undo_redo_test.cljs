@@ -44,7 +44,7 @@
    (fn [[parent left]]
      (and (not= self-uuid left)
           (not= self-uuid parent)))
-   (gen/frequency [[9 (t.gen/gen-available-parent-left-pair db {:page-uuid page-uuid})]
+   (gen/frequency [[9 (t.gen/gen-available-parent db {:page-uuid page-uuid})]
                    [1 (gen/vector gen-non-exist-block-uuid 2)]])))
 
 (defn- gen-move-block-op
@@ -167,7 +167,7 @@
   (undo-all conn page-uuid)
   (redo-all conn page-uuid))
 
-(deftest undo-redo-gen-test
+(deftest ^:long undo-redo-gen-test
   (let [conn (db/get-db false)
         all-remove-ops (gen/generate (gen/vector (gen-op @conn {:remove-block-op 1000}) 1000))]
     (#'undo-redo/push-undo-ops test-helper/test-db-name-db-version page-uuid all-remove-ops)
@@ -203,8 +203,9 @@
         (is (= origin-graph-block-set (get-db-block-set @conn)))))))
 
 (defn- print-page-stat
-  [db page-uuid page-name]
-  (let [blocks (ldb/get-page-blocks db page-name {})]
+  [db page-uuid]
+  (let [page (d/entity db [:block/uuid page-uuid])
+        blocks (ldb/get-page-blocks db (:db/id page) {})]
     (pp/pprint
      {:block-count (count blocks)
       :undo-op-count (count (get-in @(:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
@@ -213,8 +214,9 @@
                                     [test-helper/test-db-name-db-version page-uuid]))})))
 
 (defn- print-page-blocks-tree
-  [db page-uuid page-name]
-  (let [blocks (ldb/get-page-blocks db page-name {})]
+  [db page-uuid]
+  (let [page (d/entity db [:block/uuid page-uuid])
+        blocks (ldb/get-page-blocks db (:db/id page) {})]
     (prn ::page-block-tree)
     (pp/pprint
      (walk/postwalk
@@ -227,7 +229,7 @@
       (otree/blocks->vec-tree test-helper/test-db-name-db-version db
                               blocks page-uuid)))))
 
-(deftest undo-redo-outliner-op-gen-test
+(deftest ^:long ^:wip undo-redo-outliner-op-gen-test
   (try
     (let [conn (db/get-db false)]
       (loop [num 100]
@@ -238,11 +240,11 @@
                 (recur (dec num)))
             (recur (dec num)))))
       (println "================ random inserts ================")
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
       (undo-all conn page-uuid)
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
       (redo-all conn page-uuid)
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
 
       (loop [num 1000]
         (when (> num 0)
@@ -252,11 +254,11 @@
                 (recur (dec num)))
             (recur (dec num)))))
       (println "================ random moves ================")
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
       (undo-all conn page-uuid)
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
       (redo-all conn page-uuid)
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
 
       (loop [num 100]
         (when (> num 0)
@@ -266,18 +268,18 @@
                 (recur (dec num)))
             (recur (dec num)))))
       (println "================ random deletes ================")
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
       (undo-all conn page-uuid)
-      (print-page-stat @conn page-uuid "test")
+      (print-page-stat @conn page-uuid)
       (try (redo-all conn page-uuid)
            (catch :default e
-             (print-page-blocks-tree @conn page-uuid "test")
+             (print-page-blocks-tree @conn page-uuid)
              (throw e)))
-      (print-page-stat @conn page-uuid "test"))
+      (print-page-stat @conn page-uuid))
     (catch :default e
       (let [data (ex-data e)]
         (fs-node/writeFileSync "debug.json" (sqlite-util/write-transit-str data))
-        (throw (ex-info "stop now" {}))))))
+        (throw (js/Error "check debug.json"))))))
 
 
 

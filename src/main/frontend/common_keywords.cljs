@@ -22,7 +22,7 @@
 (sr/defkeyword :block/parent
   "page blocks don't have this attr")
 
-(sr/defkeyword :block/left
+(sr/defkeyword :block/order
   "
 - page blocks don't have this attr
 - some no-order blocks don't have this attr too,

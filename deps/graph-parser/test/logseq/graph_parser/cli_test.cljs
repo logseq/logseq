@@ -9,7 +9,8 @@
             [clojure.set :as set]
             ["fs" :as fs]
             ["process" :as process]
-            ["path" :as path]))
+            ["path" :as path]
+            [logseq.db.frontend.order :as db-order]))
 
 (use-fixtures
   :each
@@ -29,6 +30,9 @@
         {:keys [conn files asts]} (gp-cli/parse-graph graph-dir {:verbose false})]
 
     (docs-graph-helper/docs-graph-assertions @conn graph-dir files)
+
+    (testing "Additional counts"
+      (is (= 48225 (count (d/datoms @conn :eavt))) "Correct datoms count"))
 
     (testing "Asts"
       (is (seq asts) "Asts returned are non-zero")
@@ -84,8 +88,8 @@
   (fs/mkdirSync (path/join graph-dir "pages") #js {:recursive true})
   (fs/mkdirSync (path/join graph-dir "journals"))
   (doseq [[page blocks] pages-to-blocks]
-    (fs/writeFileSync (if (:block/journal? page)
-                                ;; Hardcode journal name until more are added
+    (fs/writeFileSync (if (contains? (:block/type page) "journal")
+                        ;; Hardcode journal name until more are added
                         (path/join graph-dir "journals" "2023_07_20.md")
                         (path/join graph-dir "pages" (str (:block/name page) ".md")))
                       (string/join "\n" (map #(str "- " (:block/content %)) blocks))))
@@ -113,9 +117,8 @@
                               {:db/id (new-db-id)
                                :block/uuid (random-uuid)
                                :block/format :markdown
-                               :block/path-refs [{:db/id page-id}]
                                :block/page {:db/id page-id}
-                               :block/left {:db/id page-id}
+                               :block/order (db-order/gen-key nil)
                                :block/parent {:db/id page-id}
                                :block/created-at created-at
                                :block/updated-at created-at})
@@ -147,9 +150,9 @@
   (let [graph-dir "tmp/file-and-db-graph"
         ;; pages and their blocks which are being tested
         pages-to-blocks
-        {{:block/name "page1" :block/journal? false}
+        {{:block/name "page1"}
          [{:block/content "block 1"} {:block/content "block 2"}]
-         {:block/name "jul 20th, 2023" :block/journal? true :block/journal-day 20230720}
+         {:block/name "jul 20th, 2023" :block/type #{"journal"} :block/journal-day 20230720}
          [{:block/content "b1"} {:block/content "b2"}]}
         file-db (create-file-db graph-dir pages-to-blocks)
         graph-db (create-graph-db "tmp" "file-and-db-graph" pages-to-blocks)

@@ -1,7 +1,8 @@
 (ns logseq.graph-parser.extract-test
   (:require [cljs.test :refer [deftest is are]]
             [logseq.graph-parser.extract :as extract]
-            [clojure.pprint :as pprint]))
+            [datascript.core :as d]
+            [logseq.db.frontend.schema :as db-schema]))
 
 ;; This is a copy of frontend.util.fs/multiplatform-reserved-chars for reserved chars testing
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
@@ -41,28 +42,29 @@
   (is (= "asldk lakls" (#'extract/path->file-body "file://data/app/asldk lakls.as")))
   (is (= "中文asldk lakls" (#'extract/path->file-body "file://中文data/app/中文asldk lakls.as"))))
 
-(defn- extract
+(defn- extract [file content & [options]]
+  (extract/extract file
+                   content
+                   (merge {:block-pattern "-" :db (d/empty-db db-schema/schema)}
+                          options)))
+
+(defn- extract-block-content
   [text]
-  (let [{:keys [blocks]} (extract/extract "a.md" text {:block-pattern "-"})
-        lefts (map (juxt :block/parent :block/left) blocks)]
-    (if (not= (count lefts) (count (distinct lefts)))
-      (do
-        (pprint/pprint (map (fn [x] (select-keys x [:block/uuid :block/level :block/content :block/left])) blocks))
-        (throw (js/Error. ":block/parent && :block/left conflicts")))
-      (mapv :block/content blocks))))
+  (let [{:keys [blocks]} (extract "a.md" text)]
+    (mapv :block/content blocks)))
 
 (defn- extract-title [file text]
-  (-> (extract/extract file text {}) :pages first :block/properties :title))
+  (-> (extract file text) :pages first :block/properties :title))
 
 (deftest extract-blocks-for-headings
   (is (= ["a" "b" "c"]
-         (extract
+         (extract-block-content
           "- a
   - b
     - c")))
 
   (is (= ["## hello" "world" "nice" "nice" "bingo" "world"]
-         (extract "## hello
+         (extract-block-content "## hello
     - world
       - nice
         - nice
@@ -70,7 +72,7 @@
       - world")))
 
   (is (= ["# a" "## b" "### c" "#### d" "### e" "f" "g" "h" "i" "j"]
-       (extract "# a
+         (extract-block-content "# a
 ## b
 ### c
 #### d
@@ -99,26 +101,25 @@
          (extract-title "foo.org" ":PROPERTIES:
 :ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
 :END:
-#+title: diagram/abcdef")))
-)
+#+title: diagram/abcdef"))))
 
 (deftest extract-blocks-with-property-pages-config
   (are [extract-args expected-refs]
        (= expected-refs
-          (->> (apply extract/extract extract-args)
+          (->> (apply extract extract-args)
                :blocks
                (mapcat #(->> % :block/refs (map :block/name)))
                set))
 
-       ["a.md" "foo:: #bar\nbaz:: #bing" {:block-pattern "-" :user-config {:property-pages/enabled? true}}]
-       #{"bar" "bing" "foo" "baz"}
+    ["a.md" "foo:: #bar\nbaz:: #bing" {:user-config {:property-pages/enabled? true}}]
+    #{"bar" "bing" "foo" "baz"}
 
-       ["a.md" "foo:: #bar\nbaz:: #bing" {:block-pattern "-" :user-config {:property-pages/enabled? false}}]
-       #{"bar" "bing"}))
+    ["a.md" "foo:: #bar\nbaz:: #bing" {:user-config {:property-pages/enabled? false}}]
+    #{"bar" "bing"}))
 
 (deftest test-regression-1902
   (is (= ["line1" "line2" "line3" "line4"]
-         (extract
+         (extract-block-content
           "- line1
     - line2
       - line3
@@ -134,6 +135,7 @@
     :pages
     ({:block/format :markdown,
       :block/original-name "Foo"
+      :block/uuid #uuid "a846e3b4-c41d-4251-80e1-be6978c36d8c"
       :block/properties {:title "my whiteboard foo"}})})
 
 (deftest test-extract-whiteboard-edn
@@ -143,4 +145,4 @@
     (is (= (:block/name page) "foo"))
     (is (= (:block/type page) "whiteboard"))
     (is (= (:block/original-name page) "Foo"))
-    (is (every? #(= (:block/parent %) {:block/name "foo"}) blocks))))
+    (is (every? #(= (:block/parent %) [:block/uuid #uuid "a846e3b4-c41d-4251-80e1-be6978c36d8c"]) blocks))))

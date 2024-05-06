@@ -13,7 +13,9 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [logseq.graph-parser.text :as text]
             [reitit.frontend.easy :as rfe]
-            [frontend.context.i18n :refer [t]]))
+            [frontend.context.i18n :refer [t]]
+            [clojure.string :as string]
+            [logseq.common.util :as common-util]))
 
 (defn redirect!
   "If `push` is truthy, previous page will be left in history."
@@ -68,37 +70,39 @@
      :path-params {:name (str page-name)}}))
 
 (defn redirect-to-page!
-  "Must ensure `page-name` is dereferenced (not an alias), or it will create a
-  wrong new page with that name (#3511). page-name can be a block name or uuid"
+  "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
    (redirect-to-page! page-name {}))
-  ([page-name {:keys [anchor push click-from-recent?]
-               :or {click-from-recent? false}}]
-   (when (or (uuid? page-name) (seq page-name))
-     (recent-handler/add-page-to-recent! (state/get-current-repo) page-name
-                                         click-from-recent?)
-     (let [m (cond->
-               (default-page-route page-name)
+  ([page-name {:keys [anchor push click-from-recent? block-id new-whiteboard?]
+               :or {click-from-recent? false}
+               :as opts}]
+   (when (or (uuid? page-name)
+             (and (string? page-name) (not (string/blank? page-name))))
+     (let [page (db/get-page page-name)
+           whiteboard? (db/whiteboard-page? page)]
+       (if-let [source (db/get-alias-source-page (state/get-current-repo) (:db/id page))]
+         (redirect-to-page! (:block/uuid source) opts)
+         (do
+           ;; Always skip onboarding when loading an existing whiteboard
+           (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
+           (when-let [db-id (:db/id page)]
+             (recent-handler/add-page-to-recent! db-id click-from-recent?))
+           (if (and whiteboard?  (= (str page-name) (state/get-current-page)) block-id)
+             (state/focus-whiteboard-shape block-id)
+             (let [m (cond->
+                      (default-page-route (str page-name))
 
-               anchor
-               (assoc :query-params {:anchor anchor})
+                       block-id
+                       (assoc :query-params (if whiteboard?
+                                              {:block-id block-id}
+                                              {:anchor (str "ls-block-" block-id)}))
 
-              (boolean? push)
-              (assoc :push push))]
-       (redirect! m)))))
+                       anchor
+                       (assoc :query-params {:anchor anchor})
 
-(defn redirect-to-whiteboard!
-  ([name]
-   (redirect-to-whiteboard! name nil))
-  ([name {:keys [block-id new-whiteboard? click-from-recent?]}]
-   ;; Always skip onboarding when loading an existing whiteboard
-   (when-not new-whiteboard? (state/set-onboarding-whiteboard! true))
-   (recent-handler/add-page-to-recent! (state/get-current-repo) name click-from-recent?)
-   (if (= name (state/get-current-whiteboard))
-     (state/focus-whiteboard-shape block-id)
-     (redirect! {:to :whiteboard
-                 :path-params {:name (str name)}
-                 :query-params (merge {:block-id block-id})}))))
+                       (boolean? push)
+                       (assoc :push push))]
+               (redirect! m)))))))))
 
 (defn get-title
   [name path-params]
@@ -125,27 +129,24 @@
     "Create a new page"
     :page
     (let [name (:name path-params)
-          block? (util/uuid-string? name)]
-      (if block?
-        (if-let [block (db/entity [:block/uuid (uuid name)])]
-          (let [content (text/remove-level-spaces (:block/content block)
-                                                  (:block/format block) (config/get-block-pattern (:block/format block)))]
-            (if (> (count content) 48)
-              (str (subs content 0 48) "...")
-              content))
-          "Page no longer exists!!")
-        (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
-          (or (util/get-page-original-name page)
-              "Logseq"))))
-    :whiteboard
-    (let [name (:name path-params)
-          block? (util/uuid-string? name)]
-      (str
-       (if block?
-         (t :untitled)
-         (let [page (db/pull [:block/name (util/page-name-sanity-lc name)])]
-           (or (util/get-page-original-name page)
-               "Logseq"))) " - " (t :whiteboard)))
+          page (db/get-page name)
+          page (and (db/page? page) page)
+          block? (util/uuid-string? name)
+          block-title (when (and block? (not page))
+                        (when-let [block (db/entity [:block/uuid (uuid name)])]
+                          (let [content (text/remove-level-spaces (:block/content block)
+                                                                  (:block/format block) (config/get-block-pattern (:block/format block)))]
+                            (if (> (count content) 48)
+                              (str (subs content 0 48) "...")
+                              content))))
+          block-name (:block/original-name page)
+          block-name' (when block-name
+                        (if (common-util/uuid-string? block-name)
+                          "Untitled"
+                          block-name))]
+      (or block-name'
+          block-title
+          "Logseq"))
     :tag
     (str "#"  (:name path-params))
     :diff
@@ -169,7 +170,12 @@
   [route]
   (let [{:keys [data]} route]
     (when-let [data-name (:name data)]
-      (set! (. js/document.body.dataset -page) (name data-name)))))
+      (set! (. js/document.body.dataset -page) (get-title data-name (:path-params route))))))
+
+(defn update-page-title-and-label!
+  [route]
+  (update-page-title! route)
+  (update-page-label! route))
 
 (defn jump-to-anchor!
   [anchor-text]

@@ -1,6 +1,6 @@
 (ns transact
   "This script generically runs transactions against the queried blocks"
-  (:require [logseq.outliner.cli.pipeline :as cli-pipeline]
+  (:require [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.frontend.rules :as rules]
             [datascript.core :as d]
@@ -33,7 +33,7 @@
           (println "With the following blocks updated:")
           (prn (map #(select-keys (d/entity @conn %) [:block/name :block/content]) blocks-to-update)))
       (do
-        (cli-pipeline/add-listener conn)
+        (db-pipeline/add-listener conn)
         (d/transact! conn update-tx)
         (println "Updated" (count update-tx) "block(s) for graph" (str db-name "!"))))))
 

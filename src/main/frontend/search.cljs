@@ -133,12 +133,12 @@
 
 (defn get-page-unlinked-refs
   "Get matched result from search first, and then filter by worker db"
-  [page]
+  [page-id]
   (when-let [repo (state/get-current-repo)]
-    (p/let [page-name (util/safe-page-name-sanity-lc page)
-            page (db/entity [:block/name page-name])
+    (p/let [page (db/entity page-id)
             alias-names (conj (set (map util/safe-page-name-sanity-lc
-                                        (db/get-page-alias-names repo page-name))) page-name)
+                                     (db/get-page-alias-names repo page-id)))
+                              (:block/original-name page))
             q (string/join " " alias-names)
             result (block-search repo q {:limit 100})
             eids (map (fn [b] [:block/uuid (:block/uuid b)]) result)
@@ -147,5 +147,5 @@
             result' (when result (ldb/read-transit-str result))]
       (when result' (db/transact! repo result'))
       (some->> result'
-               db-model/sort-by-left-recursive
+               db-model/sort-by-order-recursive
                db-utils/group-by-page))))

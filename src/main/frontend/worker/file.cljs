@@ -35,13 +35,13 @@
 (def whiteboard-blocks-pull-keys-with-persisted-ids
   '[:block/properties
     :block/uuid
+    :block/order
     :block/content
     :block/format
     :block/created-at
     :block/updated-at
     :block/collapsed?
     {:block/page      [:block/uuid]}
-    {:block/left      [:block/uuid]}
     {:block/parent    [:block/uuid]}])
 
 (defn- cleanup-whiteboard-block
@@ -53,7 +53,7 @@
             :block/collapsed?
             :block/content
             :block/format
-            :block/left
+            :block/order
             :block/page
             :block/parent) ;; these are auto-generated for whiteboard shapes
     (dissoc block :db/id :block/page)))
@@ -71,7 +71,7 @@
                (not (worker-state/tx-idle? repo {:diff 3000})))
         (async/put! file-writes-chan [repo page-db-id outliner-op (tc/to-long (t/now)) request-id])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
-              blocks (ldb/get-page-blocks @conn (:block/name page-block) {:pull-keys pull-keys})
+              blocks (ldb/get-page-blocks @conn (:db/id page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
           (if (and (= 1 (count blocks))
                    (string/blank? (:block/content (first blocks)))
@@ -79,7 +79,7 @@
                    (not whiteboard?))
             (dissoc-request! request-id)
             (let [tree-or-blocks (if whiteboard? blocks
-                                     (otree/blocks->vec-tree repo @conn blocks (:block/name page-block)))]
+                                     (otree/blocks->vec-tree repo @conn blocks (:db/id page-block)))]
               (if page-block
                 (file/save-tree! repo conn page-block tree-or-blocks blocks-just-deleted? context request-id)
                 (do

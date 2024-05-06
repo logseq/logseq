@@ -13,7 +13,9 @@
             [datascript.core :as d]
             [logseq.graph-parser.text :as text]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [frontend.worker.pipeline :as worker-pipeline]
+            [logseq.db.frontend.order :as db-order]))
 
 (def node? (exists? js/process))
 
@@ -24,11 +26,16 @@
 
 (defn start-test-db!
   [& {:as opts}]
-  (let [test-db (if (or (:db-graph? opts) (some? js/process.env.DB_GRAPH))
-                  test-db-name-db-version
-                  test-db-name)]
+  (let [db-graph? (or (:db-graph? opts) (and node? (some? js/process.env.DB_GRAPH)))
+        test-db (if db-graph? test-db-name-db-version test-db-name)]
     (state/set-current-repo! test-db)
-    (conn/start! test-db opts)))
+    (conn/start! test-db opts)
+    (let [conn (conn/get-db test-db false)]
+      (when db-graph?
+        (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
+      (d/listen! conn ::listen-db-changes!
+                 (fn [tx-report]
+                   (worker-pipeline/invoke-hooks test-db conn tx-report {}))))))
 
 (defn destroy-test-db!
   []
@@ -196,7 +203,7 @@
   "Given a collection of file maps, loads them into the current test-db.
 This can be called in synchronous contexts as no async fns should be invoked"
   [files]
-  (if js/process.env.DB_GRAPH
+  (if (and node? js/process.env.DB_GRAPH)
     (load-test-files-for-db-graph files)
     (file-repo-handler/parse-files-and-load-to-db!
      test-db
@@ -214,19 +221,19 @@ This can be called in synchronous contexts as no async fns should be invoked"
      [;; page
       {:block/uuid page-uuid
        :block/name "test"
-       :block/original-name "test"}
+       :block/original-name "Test"}
       ;; first block
       {:block/uuid first-block-uuid
        :block/page page-id
        :block/parent page-id
-       :block/left page-id
+       :block/order (db-order/gen-key nil)
        :block/content "block 1"
        :block/format :markdown}
       ;; second block
       {:block/uuid second-block-uuid
        :block/page page-id
        :block/parent page-id
-       :block/left [:block/uuid first-block-uuid]
+       :block/order (db-order/gen-key nil)
        :block/content "block 2"
        :block/format :markdown}]
      (map sqlite-util/block-with-timestamps))))
@@ -237,13 +244,12 @@ This can be called in synchronous contexts as no async fns should be invoked"
   connection when done with it."
   [f & {:as start-opts}]
   ;; Set current-repo explicitly since it's not the default
-  (let [db-graph? (or (:db-graph? start-opts) (some? js/process.env.DB_GRAPH))
+  (let [db-graph? (or (:db-graph? start-opts) (and node? (some? js/process.env.DB_GRAPH)))
         repo (if db-graph? test-db-name-db-version test-db-name)]
     (state/set-current-repo! repo)
     (start-test-db! start-opts)
     (when db-graph?
       (let [built-in-data (sqlite-create-graph/build-db-initial-data
-                           (db/get-db repo)
                            config/config-default-content)]
         (db/transact! repo built-in-data)))
     (when-let [init-f (:init-data start-opts)]

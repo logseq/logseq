@@ -16,14 +16,15 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.state :as state]
-            [frontend.handler.property.util :as pu]
             [promesa.core :as p]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db :as ldb]))
 
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
-  (let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property item)]
+  (p/let [{:keys [block-id tx-data]} (db-property-handler/<upsert-closed-value property item)]
     (p/do!
      (when (seq tx-data) (db/transact! tx-data))
      (when (seq tx-data) (db-property-handler/re-init-commands! property))
@@ -43,7 +44,7 @@
       (let [value (if (string/blank? @*value) nil @*value)]
         (property-value/date-picker value
           {:on-change (fn [page]
-                        (reset! *value (:block/uuid page)))}))
+                        (reset! *value (:db/id page)))}))
 
       (shui/input
         {:default-value @*value
@@ -57,7 +58,7 @@
   {:init (fn [state]
            (let [block (second (:rum/args state))
                  value (or (str (get-in block [:block/schema :value])) "")
-                 icon (when block (pu/get-block-property-value block :logseq.property/icon))
+                 icon (:logseq.property/icon block)
                  description (or (get-in block [:block/schema :description]) "")]
              (assoc state
                     ::value (atom value)
@@ -113,23 +114,27 @@
   (let [*hover? (::hover? state)
         value (db-property/closed-value-name item)
         page? (:block/original-name item)
-        date? (= :date (:type (:block/schema property)))]
+        date? (= :date (:type (:block/schema property)))
+        property-block? (db-property/property-created-block? item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
       :on-mouse-out #(reset! *hover? false)}
      [:div.flex.flex-row.items-center.gap-2
-      (icon-component/icon-picker (pu/get-block-property-value item :logseq.property/icon)
+      (icon-component/icon-picker (:logseq.property/icon item)
                                   {:on-chosen (fn [_e icon]
                                                 (update-icon icon))})
       (cond
+        property-block?
+        (let [first-child (ldb/get-first-child (db/get-db) item)]
+          (:block/content first-child))
+
         date?
         [:div.flex.flex-row.items-center.gap-1
-         (property-value/date-picker (:block/original-name item)
-                                    {:on-change (fn [page]
-                                                  (db-property-handler/replace-closed-value property
-                                                                                            (:block/uuid page)
-                                                                                            (:block/uuid item)))})
-         ((:page-cp parent-opts) {:preview? false} item)]
+         (property-value/date-picker item
+                                     {:on-change (fn [page]
+                                                   (db-property-handler/replace-closed-value property
+                                                                                             (:db/id page)
+                                                                                             (:db/id item)))})]
 
         (and page? (:page-cp parent-opts))
         ((:page-cp parent-opts) {:preview? false} item)
@@ -169,12 +174,12 @@
        (assoc opts
               :delete-choice
               (fn []
-                (p/let [success? (db-property-handler/delete-closed-value! (db/get-db) property block)]
+                (p/let [success? (db-property-handler/delete-closed-value! property block)]
                   (when success?
                     (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))))
               :update-icon
               (fn [icon]
-                (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :icon icon)))
+                (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon icon)))
        parent-opts))))
 
 (rum/defc add-existing-values
@@ -186,7 +191,10 @@
     (for [value values]
       [:li (if (uuid? value)
              (let [result (db/entity [:block/uuid value])]
-               (:block/original-name result))
+               (if (db-property/property-created-block? result)
+                 (let [first-child (ldb/get-first-child (db/get-db) result)]
+                   (:block/content first-child))
+                 (:block/original-name result)))
              (str value))])]
    (ui/button
     "Add choices"
@@ -222,15 +230,19 @@
          :size :sm
          :on-click
          (fn [e]
-           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:block/uuid property))]
+           (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
+                   existing-values (seq (get-in property [:block/schema :values]))
+                   values (if (seq existing-values)
+                            (let [existing-ids (set (map #(:db/id (db/entity [:block/uuid %])) existing-values))]
+                              (remove (fn [[_ id]] (existing-ids id)) values))
+                            values)]
              (shui/popup-show! (.-target e)
                                (fn [{:keys [id]}]
                                  (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
-                                       values' (->> (if (= :many (get-in property [:block/schema :cardinality]))
-                                                      (mapcat second values)
+                                       values' (->> (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                                                      (map #(:block/uuid (db/entity (second %))) values)
                                                       (map second values))
                                                     (remove string/blank?)
-                                                    (remove (set (get-in property [:block/schema :values])))
                                                     distinct)]
                                    (if (seq values')
                                      (add-existing-values property *property-schema values' opts)

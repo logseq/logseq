@@ -13,7 +13,9 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.page-ref :as page-ref]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn heading-block?
   [block]
@@ -301,45 +303,50 @@
     Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page"
   [original-page-name with-id? db with-timestamp? date-formatter
-   & {:keys [from-page]}]
-  (cond
-    (and original-page-name (string? original-page-name))
-    (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
-          [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
-          namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
-                          (text/namespace-page? original-page-name))
-          page-entity (some-> db (d/entity [:block/name page-name]))
-          original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
-      (merge
-       {:block/name page-name
-        :block/original-name original-page-name}
-       (when with-id?
-         (let [new-uuid (or
-                         (cond page-entity      (:block/uuid page-entity)
-                               (uuid? with-id?) with-id?)
-                         (d/squuid))]
-           {:block/uuid new-uuid}))
-       (when namespace?
-         (let [namespace (first (common-util/split-last "/" original-page-name))]
-           (when-not (string/blank? namespace)
-             {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
-       (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
-         (let [current-ms (common-util/time-ms)]
-           {:block/created-at current-ms
-            :block/updated-at current-ms}))
-       (if journal-day
-         {:block/journal? true
-          :block/journal-day journal-day}
-         {:block/journal? false})))
+   & {:keys [from-page class?]}]
+  (let [db-based? (ldb/db-based-graph? db)]
+    (cond
+     (and original-page-name (string? original-page-name))
+     (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
+           [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+           namespace? (and (not db-based?)
+                           (not (boolean (text/get-nested-page-name original-page-name)))
+                           (text/namespace-page? original-page-name))
+           page-entity (when db
+                         (if class?
+                           (ldb/get-case-page db original-page-name)
+                           (ldb/get-page db original-page-name)))
+           original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
+       (merge
+        {:block/name page-name
+         :block/original-name original-page-name}
+        (when with-id?
+          (let [new-uuid (or
+                          (cond page-entity      (:block/uuid page-entity)
+                                (uuid? with-id?) with-id?)
+                          (d/squuid))]
+            {:block/uuid new-uuid}))
+        (when namespace?
+          (let [namespace (first (common-util/split-last "/" original-page-name))]
+            (when-not (string/blank? namespace)
+              {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
+        (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
+          (let [current-ms (common-util/time-ms)]
+            {:block/created-at current-ms
+             :block/updated-at current-ms}))
+        (if journal-day
+          {:block/type "journal"
+           :block/journal-day journal-day}
+          {})))
 
-    (and (map? original-page-name) (:block/uuid original-page-name))
-    original-page-name
+     (and (map? original-page-name) (:block/uuid original-page-name))
+     original-page-name
 
-    (and (map? original-page-name) with-id?)
-    (assoc original-page-name :block/uuid (d/squuid))
+     (and (map? original-page-name) with-id?)
+     (assoc original-page-name :block/uuid (d/squuid))
 
-    :else
-    nil))
+     :else
+     nil)))
 
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} with-id? db date-formatter]
@@ -347,7 +354,8 @@
                   (remove string/blank?)
                   (distinct))
         *refs (atom refs)
-        *structured-tags (atom #{})]
+        *structured-tags (atom #{})
+        db-based? (ldb/db-based-graph? db)]
     (walk/prewalk
      (fn [form]
        ;; skip custom queries
@@ -367,17 +375,18 @@
     (let [*name->id (atom {})
           ref->map-fn (fn [*col _tag?]
                         (let [col (remove string/blank? @*col)
-                              children-pages (->> (mapcat (fn [p]
-                                                            (let [p (if (map? p)
-                                                                      (:block/original-name p)
-                                                                      p)]
-                                                              (when (string? p)
-                                                                (let [p (or (text/get-nested-page-name p) p)]
-                                                                  (when (text/namespace-page? p)
-                                                                    (common-util/split-namespace-pages p))))))
-                                                          col)
-                                                  (remove string/blank?)
-                                                  (distinct))
+                              children-pages (when-not db-based?
+                                               (->> (mapcat (fn [p]
+                                                              (let [p (if (map? p)
+                                                                        (:block/original-name p)
+                                                                        p)]
+                                                                (when (string? p)
+                                                                  (let [p (or (text/get-nested-page-name p) p)]
+                                                                    (when (text/namespace-page? p)
+                                                                      (common-util/split-namespace-pages p))))))
+                                                            col)
+                                                    (remove string/blank?)
+                                                    (distinct)))
                               col (->> (distinct (concat col children-pages))
                                        (remove nil?))]
                           (map
@@ -461,57 +470,10 @@
           with-block-refs
           (update :refs (fn [col] (remove nil? col)))))
 
-(defn- with-path-refs
-  [blocks]
-  (loop [blocks blocks
-         acc []
-         parents []]
-    (if (empty? blocks)
-      acc
-      (let [block (first blocks)
-            cur-level (:block/level block)
-            level-diff (- cur-level
-                          (get (last parents) :block/level 0))
-            [path-refs parents]
-            (cond
-              (zero? level-diff)            ; sibling
-              (let [path-refs (mapcat :block/refs (drop-last parents))
-                    parents (conj (vec (butlast parents)) block)]
-                [path-refs parents])
-
-              (> level-diff 0)              ; child
-              (let [path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)])
-
-              (< level-diff 0)              ; new parent
-              (let [parents (vec (take-while (fn [p] (< (:block/level p) cur-level)) parents))
-                    path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)]))
-            path-ref-pages (->> path-refs
-                                (concat (:block/refs block))
-                                (map (fn [ref]
-                                       (cond
-                                         (map? ref)
-                                         (:block/name ref)
-
-                                         :else
-                                         ref)))
-                                (remove string/blank?)
-                                (map (fn [ref]
-                                       (if (string? ref)
-                                         {:block/name (common-util/page-name-sanity-lc ref)}
-                                         ref)))
-                                (remove vector?)
-                                (remove nil?)
-                                (distinct))]
-        (recur (rest blocks)
-               (conj acc (assoc block :block/path-refs path-ref-pages))
-               parents)))))
-
 (defn- macro->block
   "macro: {:name \"\" arguments [\"\"]}"
   [macro]
-  {:db/ident (str (:name macro) " " (string/join " " (:arguments macro)))
+  {:block/uuid (random-uuid)
    :block/type "macro"
    :block/properties {:logseq.macro-name (:name macro)
                       :logseq.macro-arguments (:arguments macro)}})
@@ -567,7 +529,7 @@
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)]
-    (with-path-refs blocks)))
+    blocks))
 
 (defn- with-heading-property
   [properties markdown-heading? size]
@@ -714,7 +676,7 @@
         result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
     (map #(dissoc % :block/meta) result)))
 
-(defn with-parent-and-left
+(defn with-parent-and-order
   [page-id blocks]
   (let [[blocks other-blocks] (split-with
                                (fn [b]
@@ -736,7 +698,6 @@
                            (= level-spaces parent-spaces)        ; sibling
                            (let [block (assoc block
                                               :block/parent parent
-                                              :block/left [:block/uuid uuid]
                                               :block/level level)
                                  parents' (conj (vec (butlast parents)) block)
                                  result' (conj result block)]
@@ -745,9 +706,8 @@
                            (> level-spaces parent-spaces)         ; child
                            (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
                                  block (cond->
-                                         (assoc block
-                                                :block/parent parent
-                                                :block/left parent)
+                                        (assoc block
+                                               :block/parent parent)
                                          ;; fix block levels with wrong order
                                          ;; For example:
                                          ;;   - a
@@ -763,10 +723,8 @@
                            (cond
                              (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
                              (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                                   left (last parents')
                                    blocks (cons (assoc (first blocks)
-                                                       :block/level (dec level)
-                                                       :block/left [:block/uuid (:block/uuid left)])
+                                                       :block/level (dec level))
                                                 (rest blocks))]
                                [blocks parents' result])
 
@@ -776,18 +734,17 @@
                                    parent-id (if-let [block-id (:block/uuid (last f))]
                                                [:block/uuid block-id]
                                                page-id)
-                                   block (cond->
-                                           (assoc block
-                                                  :block/parent parent-id
-                                                  :block/left [:block/uuid (:block/uuid left)]
-                                                  :block/level (:block/level left)
-                                                  :block/level-spaces (:block/level-spaces left)))
+                                   block (assoc block
+                                                :block/parent parent-id
+                                                :block/level (:block/level left)
+                                                :block/level-spaces (:block/level-spaces left))
 
                                    parents' (->> (concat f [block]) vec)
                                    result' (conj result block)]
                                [others parents' result'])))]
-                     (recur blocks parents result))))]
-    (concat result other-blocks)))
+                     (recur blocks parents result))))
+        result' (map (fn [block] (assoc block :block/order (db-order/gen-key))) result)]
+    (concat result' other-blocks)))
 
 (defn extract-plain
   "Extract plain elements including page refs"

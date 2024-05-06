@@ -95,14 +95,15 @@
 
 (defn- get-image-blob
   [block-uuids-or-page-name {:keys [transparent-bg? x y width height zoom]} callback]
-  (let [style (js/window.getComputedStyle js/document.body)
+  (let [top-block-id (if (coll? block-uuids-or-page-name) (first block-uuids-or-page-name) block-uuids-or-page-name)
+        style (js/window.getComputedStyle js/document.body)
         background (when-not transparent-bg? (.getPropertyValue style "--ls-primary-background-color"))
-        page? (string? block-uuids-or-page-name)
+        page? (and (uuid? top-block-id) (db/page? (db/entity [:block/uuid top-block-id])))
         selector (if page?
                    "#main-content-container"
-                   (str "[blockid='" (str (first block-uuids-or-page-name)) "']"))
+                   (str "[blockid='" top-block-id "']"))
         container  (js/document.querySelector selector)
-        scale (if page? (/ 1 (or zoom (get-zoom-level block-uuids-or-page-name))) 1)
+        scale (if page? (/ 1 (or zoom (get-zoom-level top-block-id))) 1)
         options #js {:allowTaint true
                      :useCORS true
                      :backgroundColor (or background "transparent")
@@ -113,7 +114,7 @@
                      :scrollX 0
                      :scrollY 0
                      :scale scale
-                     :windowHeight (when (string? block-uuids-or-page-name)
+                     :windowHeight (when page?
                                      (.-scrollHeight container))}]
     (-> (js/html2canvas container options)
         (.then (fn [canvas] (.toBlob canvas (fn [blob]
@@ -142,7 +143,7 @@
                  (reset! (::text-indent-style state) (state/get-export-block-text-indent-style))
                  (reset! (::text-other-options state) (state/get-export-block-text-other-options))
                  state)}
-  [state root-block-uuids-or-page-name {:keys [whiteboard?] :as options}]
+  [state root-block-uuids-or-page-uuid {:keys [whiteboard?] :as options}]
   (let [tp @*export-block-type
         *text-other-options (::text-other-options state)
         *text-remove-options (::text-remove-options state)
@@ -157,21 +158,21 @@
          (ui/button "Text"
            :class "mr-4 w-20"
            :on-click #(do (reset! *export-block-type :text)
-                          (reset! *content (export-helper root-block-uuids-or-page-name))))
+                          (reset! *content (export-helper root-block-uuids-or-page-uuid))))
          (ui/button "OPML"
            :class "mr-4 w-20"
            :on-click #(do (reset! *export-block-type :opml)
-                          (reset! *content (export-helper root-block-uuids-or-page-name))))
+                          (reset! *content (export-helper root-block-uuids-or-page-uuid))))
          (ui/button "HTML"
            :class "mr-4 w-20"
            :on-click #(do (reset! *export-block-type :html)
-                          (reset! *content (export-helper root-block-uuids-or-page-name))))
-         (when-not (seq? root-block-uuids-or-page-name)
+                          (reset! *content (export-helper root-block-uuids-or-page-uuid))))
+         (when-not (seq? root-block-uuids-or-page-uuid)
            (ui/button "PNG"
              :class "w-20"
              :on-click #(do (reset! *export-block-type :png)
                             (reset! *content nil)
-                            (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
+                            (get-image-blob root-block-uuids-or-page-uuid (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
 
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
@@ -186,7 +187,7 @@
          (ui/checkbox {:class "mr-2 ml-4"
                        :on-change (fn [e]
                                     (reset! *content nil)
-                                    (get-image-blob root-block-uuids-or-page-name (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
+                                    (get-image-blob root-block-uuids-or-page-uuid (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
         (let [options (->> text-indent-style-options
                         (mapv (fn [opt]
                                 (if (= @*text-indent-style (:label opt))
@@ -202,7 +203,7 @@
                                 (let [value (util/evalue e)]
                                   (state/set-export-block-text-indent-style! value)
                                   (reset! *text-indent-style value)
-                                  (reset! *content (export-helper root-block-uuids-or-page-name))))}
+                                  (reset! *content (export-helper root-block-uuids-or-page-uuid))))}
                   (for [{:keys [label value selected]} options]
                     [:option (cond->
                                {:key label
@@ -217,7 +218,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :page-ref)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              "[[text]] -> text"]
 
@@ -227,7 +228,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :emphasis)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              "remove emphasis"]
@@ -238,7 +239,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :tag)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
 
             [:div {:style {:visibility (if (#{:text :html :opml} tp) "visible" "hidden")}}
              "remove #tags"]]
@@ -251,7 +252,7 @@
                                        (state/update-export-block-text-other-options!
                                          :newline-after-block (boolean (util/echecked? e)))
                                        (reset! *text-other-options (state/get-export-block-text-other-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
              "newline after block"]
 
@@ -261,7 +262,7 @@
                           :on-change (fn [e]
                                        (state/update-export-block-text-remove-options! e :property)
                                        (reset! *text-remove-options (state/get-export-block-text-remove-options))
-                                       (reset! *content (export-helper root-block-uuids-or-page-name)))})
+                                       (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
              "remove properties"]]
 
@@ -276,7 +277,7 @@
                                  level (if (= "all" value) :all (util/safe-parse-int value))]
                              (state/update-export-block-text-other-options! :keep-only-level<=N level)
                              (reset! *text-other-options (state/get-export-block-text-other-options))
-                             (reset! *content (export-helper root-block-uuids-or-page-name))))}
+                             (reset! *content (export-helper root-block-uuids-or-page-uuid))))}
              (for [n (cons "all" (range 1 10))]
                [:option {:key n :value n} n])]]]))
 
@@ -290,8 +291,8 @@
                          (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
                        (reset! *copied? true)))
          (ui/button (t :export-save-to-file)
-           :on-click #(let [file-name (if (string? root-block-uuids-or-page-name)
-                                        (-> (db/get-page root-block-uuids-or-page-name)
+           :on-click #(let [file-name (if (uuid? root-block-uuids-or-page-uuid)
+                                        (-> (db/get-page root-block-uuids-or-page-uuid)
                                           (util/get-page-original-name))
                                         (t/now))]
                         (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))

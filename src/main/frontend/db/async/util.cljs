@@ -7,13 +7,14 @@
             [logseq.db :as ldb]))
 
 (defn <q
-  [graph & inputs]
+  [graph {:keys [transact-db?]
+          :or {transact-db? true}} & inputs]
   (assert (not-any? fn? inputs) "Async query inputs can't include fns because fn can't be serialized")
   (when-let [^Object sqlite @state/*db-worker]
     (p/let [result (.q sqlite graph (ldb/write-transit-str inputs))]
       (when result
         (let [result' (ldb/read-transit-str result)]
-          (when (and (seq result') (coll? result'))
+          (when (and transact-db? (seq result') (coll? result'))
             (when-let [conn (db-conn/get-db graph false)]
               (let [tx-data (->>
                              (if (and (coll? (first result'))

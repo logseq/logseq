@@ -25,7 +25,7 @@
     (let [conn (db/get-db test-helper/test-db false)
           blocks (get-blocks @conn)
           ;; Update parent block to replace #foo with #bar
-          new-tag-id (:db/id (d/entity @conn [:block/name "bar"]))
+          new-tag-id (:db/id (db/get-page "bar"))
           modified-blocks (map #(if (= "parent #foo" (:block/content %))
                                   (assoc %
                                          :block/refs [{:db/id new-tag-id}]

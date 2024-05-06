@@ -290,9 +290,9 @@
 
 (defonce *query-properties (atom {}))
 (rum/defc query-properties-settings-inner < rum/reactive
-                                            {:will-unmount (fn [state]
-                                                             (reset! *query-properties {})
-                                                             state)}
+  {:will-unmount (fn [state]
+                   (reset! *query-properties {})
+                   state)}
   [block shown-properties all-properties]
   (let [query-properties (rum/react *query-properties)]
     [:div
@@ -302,7 +302,8 @@
        :on-click
        (fn []
          (reset! *query-properties {})
-         (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) :query-properties))}
+         (let [k (pu/get-pid :logseq.property/query-properties)]
+           (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) k)))}
       (ui/icon "refresh")]
      (for [property all-properties]
        (let [property-value (get query-properties property)
@@ -312,15 +313,15 @@
          [:div.flex.flex-row.my-2.justify-between.align-items
           [:div (if (uuid? property) (db-pu/get-property-name property) (name property))]
           [:div.mt-1 (ui/toggle shown?
-                       (fn []
-                         (let [value (not shown?)]
-                           (swap! *query-properties assoc property value)
-                           (editor-handler/set-block-query-properties!
-                             (:block/uuid block)
-                             all-properties
-                             property
-                             value)))
-                       true)]]))]))
+                                (fn []
+                                  (let [value (not shown?)]
+                                    (swap! *query-properties assoc property value)
+                                    (editor-handler/set-block-query-properties!
+                                     (:block/uuid block)
+                                     all-properties
+                                     property
+                                     value)))
+                                true)]]))]))
 
 (defn query-properties-settings
   [block shown-properties all-properties]
@@ -693,13 +694,13 @@
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
-    (when-let [page (db/pull [:block/name page-name])]
+    (when-let [page (db/get-page page-name)]
       (when (db/page-empty? (state/get-current-repo) page-name)
         (when-let [template (state/get-default-journal-template)]
           (editor-handler/insert-template!
-            nil
-            template
-            {:target page}))))))
+           nil
+           template
+           {:target page}))))))
 
 (defmethod handle :editor/set-org-mode-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
@@ -758,7 +759,7 @@
   (state/set-state! :whiteboard/linked-shapes shapes))
 
 (defmethod handle :whiteboard-go-to-link [[_ link]]
-  (route-handler/redirect! {:to :whiteboard
+  (route-handler/redirect! {:to :page
                             :path-params {:name link}}))
 
 (defmethod handle :graph/dir-gone [[_ dir]]

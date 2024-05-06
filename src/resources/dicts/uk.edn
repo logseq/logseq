@@ -52,7 +52,6 @@
  :right-side-bar/switch-theme "Режим теми"
  :right-side-bar/contents "Зміст"
  :right-side-bar/page-graph "Графік сторінки"
- :right-side-bar/history "(Dev) Скасувати/Повторити історію"
  :right-side-bar/block-ref "Посилання на блоки"
  :right-side-bar/graph-view "Вигляд графіка"
  :right-side-bar/all-pages "Всі сторінки"

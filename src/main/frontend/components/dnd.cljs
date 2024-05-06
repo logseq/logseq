@@ -43,6 +43,7 @@
                   :onDragEnd (fn [event]
                                (let [active-id (.-id (.-active event))
                                      over-id (.-id (.-over event))]
+                                 (js/console.dir event)
                                  (when-not (= active-id over-id)
                                    (let [old-index (.indexOf ids active-id)
                                          new-index (.indexOf ids over-id)
@@ -61,7 +62,11 @@
                                               :new-items new-items})
                                            (do
                                              (set-items new-items)
-                                             (on-drag-end new-values)))))))
+                                             (on-drag-end new-values {:active-id active-id
+                                                                      :over-id over-id
+                                                                      :direction (if (> new-index old-index)
+                                                                                   :down
+                                                                                   :up)})))))))
                                  (set-active-id nil)))}
         sortable-opts {:items items
                        :strategy verticalListSortingStrategy}

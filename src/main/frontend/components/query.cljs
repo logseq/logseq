@@ -9,12 +9,12 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.property.util :as pu]))
 
 (defn built-in-custom-query?
   [title]
@@ -51,7 +51,7 @@
            view-f
            result
            group-by-page?]}]
-  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline inline]} config
+  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline]} config
         *query-error query-error-atom
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and group-by-page?
@@ -78,10 +78,10 @@
            (util/hiccup-keywordize result))
 
          page-list?
-         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text inline)
+         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
          table?
-         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text inline)
+         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result
@@ -157,10 +157,9 @@
                        collapsed?
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
-        properties (:block/properties current-block)
-        query-table-property (pu/lookup properties :logseq.property/query-table)
+        query-table? (get current-block (pu/get-pid :logseq.property/query-table))
         table? (or table-view?
-                   query-table-property
+                   query-table?
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
@@ -211,13 +210,13 @@
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                  "query-table"
-                                                                                                  false))}
+                                                                                                   (pu/get-pid :logseq.property/query-table)
+                                                                                                   false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                  "query-table"
-                                                                                                  true))}
+                                                                                                   (pu/get-pid :logseq.property/query-table)
+                                                                                                   true))}
                     (ui/icon "table" {:style {:font-size 20}})]))
 
                [:a.flex.ml-1.fade-link
@@ -232,8 +231,8 @@
                           (and query-time (> query-time 50)))
                   (query-refresh-button query-time {:full-text-search? full-text-search?
                                                     :on-pointer-down (fn [e]
-                                                                     (util/stop e)
-                                                                     (query-result/trigger-custom-query! config q *query-error))}))]])])
+                                                                       (util/stop e)
+                                                                       (query-result/trigger-custom-query! config q *query-error))}))]])])
 
          (when dsl-query? builder)
 

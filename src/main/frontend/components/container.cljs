@@ -73,85 +73,80 @@
       (when child [:div.bd child])]]))
 
 (rum/defc page-name
-  [name icon recent?]
-  (let [original-name (db-model/get-page-original-name name)
-        whiteboard-page? (db-model/whiteboard-page? name)
-        untitled? (db-model/untitled-page? name)
-        name (util/safe-page-name-sanity-lc name)
+  [page icon recent?]
+  (let [repo (state/get-current-repo)
+        page (or (db/get-alias-source-page repo (:db/id page)) page)
+        original-name (:block/original-name page)
+        whiteboard-page? (db-model/whiteboard-page? page)
+        untitled? (db-model/untitled-page? original-name)
+        name (:block/name page)
         file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
-        source-page (db-model/get-alias-source-page (state/get-current-repo) name)
         ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
-        open-in-sidebar #(when-let [page-entity (and (not whiteboard-page?)
-                                                  (if (empty? source-page)
-                                                    (db/entity [:block/name name]) source-page))]
-                           (state/sidebar-add-block!
-                             (state/get-current-repo)
-                             (:db/id page-entity)
-                             :page))
+        open-in-sidebar #(state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id page)
+                          :page)
         x-menu-content (fn []
                          (let [x-menu-item shui/dropdown-menu-item
                                x-menu-shortcut shui/dropdown-menu-shortcut]
                            [:<>
                             (when-not recent?
                               (x-menu-item
-                                {:on-click #(page-handler/<unfavorite-page! original-name)}
-                                (ctx-icon "star-off")
-                                (t :page/unfavorite)
-                                (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
-                                                   (some-> binding
-                                                     (first)
-                                                     (shortcut-utils/decorate-binding))))))
+                               {:on-click #(page-handler/<unfavorite-page! original-name)}
+                               (ctx-icon "star-off")
+                               (t :page/unfavorite)
+                               (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
+                                                  (some-> binding
+                                                          (first)
+                                                          (shortcut-utils/decorate-binding))))))
                             (when-let [page-fpath (and (util/electron?) file-rpath
-                                                    (config/get-repo-fpath (state/get-current-repo) file-rpath))]
+                                                       (config/get-repo-fpath (state/get-current-repo) file-rpath))]
                               [:<>
                                (x-menu-item
-                                 {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
-                                 (ctx-icon "folder")
-                                 (t :page/open-in-finder))
+                                {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
+                                (ctx-icon "folder")
+                                (t :page/open-in-finder))
 
                                (x-menu-item
-                                 {:on-click #(js/window.apis.openPath page-fpath)}
-                                 (ctx-icon "file")
-                                 (t :page/open-with-default-app))])
+                                {:on-click #(js/window.apis.openPath page-fpath)}
+                                (ctx-icon "file")
+                                (t :page/open-with-default-app))])
                             (x-menu-item
-                              {:on-click open-in-sidebar}
-                              (ctx-icon "layout-sidebar-right")
-                              (t :content/open-in-sidebar)
-                              (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
+                             {:on-click open-in-sidebar}
+                             (ctx-icon "layout-sidebar-right")
+                             (t :content/open-in-sidebar)
+                             (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
 
     ;; TODO: move to standalone component
     [:a.flex.items-center.justify-between.relative.group
      {:on-click
       (fn [e]
-        (let [name (if (empty? source-page) name (:block/name source-page))]
-          (if (gobj/get e "shiftKey")
-            (open-in-sidebar)
-            (if whiteboard-page?
-              (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
-              (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))
+        (if (gobj/get e "shiftKey")
+          (open-in-sidebar)
+          (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
       :on-context-menu (fn [^js e]
                          (shui/popup-show! e (x-menu-content)
-                           {:as-dropdown? true
-                            :content-props {:on-click (fn [] (shui/popup-hide!))
-                                            :class "w-60"}})
+                                           {:as-dropdown? true
+                                            :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                            :class "w-60"}})
                          (util/stop e))}
      [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitled? "opacity-50")}
       (if untitled? (t :untitled)
-                    (pdf-utils/fix-local-asset-pagename original-name))]
+          (pdf-utils/fix-local-asset-pagename original-name))]
 
      ;; dots trigger
      (shui/button
-       {:size :sm
-        :variant :ghost
-        :class "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
-        :on-click #(do
-                     (shui/popup-show! (.-target %) (x-menu-content)
-                       {:as-dropdown? true
-                        :content-props {:on-click (fn [] (shui/popup-hide!))
-                                        :class "w-60"}})
-                     (util/stop %))}
-       [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")])]))
+      {:size :sm
+       :variant :ghost
+       :class "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
+       :on-click #(do
+                    (shui/popup-show! (.-target %) (x-menu-content)
+                                      {:as-dropdown? true
+                                       :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                       :class "w-60"}})
+                    (util/stop %))}
+      [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")])]))
 
 ;; Fall back to default if icon is undefined or empty
 
@@ -173,11 +168,10 @@
      (when (seq favorite-entities)
        (let [favorites (map
                         (fn [e]
-                          (let [name (:block/name e)
-                                icon (icon/get-page-icon e {})]
+                          (let [icon (icon/get-page-icon e {})]
                             {:id (str (:db/id e))
-                             :value name
-                             :content [:li.favorite-item (page-name name icon false)]}))
+                             :value (:block/uuid e)
+                             :content [:li.favorite-item (page-name e icon false)]}))
                         favorite-entities)]
          (dnd-component/items favorites
                               {:on-drag-end (fn [favorites]
@@ -197,15 +191,14 @@
       :count (count pages)}
 
      [:ul.text-sm
-      (for [name pages]
-        (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-          [:li.recent-item.select-none
-           {:key name
-            :title name
-            :draggable true
-            :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event))
-            :data-ref name}
-           (page-name name (icon/get-page-icon entity {}) true)]))])))
+      (for [page pages]
+        [:li.recent-item.select-none
+         {:key (str "recent-" (:db/id page))
+          :title (:block/original-name page)
+          :draggable true
+          :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
+          :data-ref name}
+         (page-name page (icon/get-page-icon page {}) true)])])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -232,7 +225,7 @@
     (let [page (:page default-home)
           page (when (and (string? page)
                           (not (string/blank? page)))
-                 (db/entity [:block/name (util/safe-page-name-sanity-lc page)]))]
+                 (db/get-page page))]
       (if page
         default-home
         (dissoc default-home :page)))))
@@ -538,7 +531,7 @@
                  (state/set-editor-last-pos! pos)))
     :onStop (fn [_event]
               (when-let [block (get @(get @state/state :editor/block) :block/uuid)]
-                (editor-handler/edit-block! block :max nil)
+                (editor-handler/edit-block! block :max)
                 (when-let [input (state/get-input)]
                   (when-let [saved-cursor (state/get-editor-last-pos)]
                     (cursor/move-cursor-to input saved-cursor)))))}
@@ -659,7 +652,7 @@
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
-                                              [(:db/id (db/pull [:block/name page])) :page])]
+                                              [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            (when (state/mobile?)
@@ -838,7 +831,7 @@
                   block-el (.closest target ".bullet-container[blockid]")
                   block-id (some-> block-el (.getAttribute "blockid"))
                   {:keys [block block-ref]} (state/sub :block-ref/context)
-                  {:keys [page]} (state/sub :page-title/context)]
+                  {:keys [page page-entity]} (state/sub :page-title/context)]
 
               (let [show!
                     (fn [content]
@@ -852,7 +845,7 @@
                     (cond
                       page
                       (do
-                        (show! (cp-content/page-title-custom-context-menu-content page))
+                        (show! (cp-content/page-title-custom-context-menu-content page-entity))
                         (state/set-state! :page-title/context nil))
 
                       block-ref
@@ -893,12 +886,13 @@
                                   (and
                                    ;; FIXME: this does not work on CI tests
                                    util/node-test?
-                                   state/*editor-editing-ref)))
+                                   (state/editing?))))
                           (state/close-modal!)
                           (hide-context-menu-and-clear-selection e)))))))
   [state route-match main-content]
   (let [{:keys [open-fn]} state
         current-repo (state/sub :git/current-repo)
+        selection-mode? (state/sub :selection/mode)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
@@ -912,14 +906,15 @@
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
+        margin-less-pages? (or (boolean (#{:graph} route-name))
+                               (db-model/whiteboard-page? (state/get-current-page)))
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
         native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
-        edit? (some? @state/*editor-editing-ref)
+        edit? (state/editing?)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/enable-fold-button-right?)
@@ -959,7 +954,8 @@
                      (when (= "Enter" (.-key e))
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
-      [:div.#app-container
+      [:div.#app-container (cond-> {} selection-mode?
+                             (assoc :class "blocks-selection-mode"))
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
         (header/header {:open-fn        open-fn
@@ -1002,10 +998,10 @@
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer
-        {:t t
-         :current-repo current-repo
-         :nfs-granted? granted?
-         :db-restoring? db-restoring?})
+       {:t t
+        :current-repo current-repo
+        :nfs-granted? granted?
+        :db-restoring? db-restoring?})
       (app-context-menu-observer)
 
       [:a#download.hidden]

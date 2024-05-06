@@ -14,7 +14,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.handler.editor :as editor-handler]
@@ -130,7 +129,7 @@
 
 (defn card-block?
   [block]
-  (let [card-entity (db/entity [:block/name card-hash-tag])
+  (let [card-entity (db/get-page card-hash-tag)
         refs (into #{} (:block/refs block))]
     (contains? refs card-entity)))
 
@@ -265,7 +264,7 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [result (if (string/blank? query-string)
-                    (:block/_refs (db/entity [:block/name card-hash-tag]))
+                    (:block/_refs (db/get-page card-hash-tag))
                     (let [query-string (template/resolve-dynamic-template! query-string)
                           query-string (if-not (or (string/blank? query-string)
                                                    (string/starts-with? query-string "(")
@@ -588,12 +587,10 @@
 
 (declare cards)
 
+;; TODO: FIXME: macros have been deleted
 (rum/defc cards-select
   [{:keys [on-chosen]}]
-  (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
-        items (->> (map (comp :logseq.macro-arguments :block/properties) cards)
-                   (map (fn [col] (string/join " " col))))
-        items (concat items [(t :flashcards/modal-select-all)])]
+  (let [items [(t :flashcards/modal-select-all)]]
     (component-select/select {:items items
                               :on-chosen on-chosen
                               :close-modal? false

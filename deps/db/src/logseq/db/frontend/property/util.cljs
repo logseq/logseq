@@ -1,72 +1,31 @@
 (ns logseq.db.frontend.property.util
-  "Util fns for building core property concepts"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.default :as default-db]
-            [datascript.core :as d]))
+  "Property related util fns. Fns used in both DB and file graphs should go here"
+  (:require [logseq.db.frontend.property :as db-property]
+            [datascript.core :as d]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
-(defonce hidden-page-name-prefix "$$$")
+(defn get-pid
+  "Get a built-in property's id (keyword name for file graph and db-ident for db
+  graph) given its db-ident. No need to use this fn in a db graph only context"
+  [repo db-ident]
+  (if (sqlite-util/db-based-graph? repo)
+    db-ident
+    (get-in db-property/built-in-properties [db-ident :name])))
 
-(defn- closed-value-new-block
-  [db page-id block-id value property]
-  {:block/type #{"closed value"}
-   :block/format :markdown
-   :block/uuid block-id
-   :block/page page-id
-   :block/properties {(:block/uuid (d/entity db :logseq.property/created-from-property)) (:block/uuid property)}
-   :block/schema {:value value}
-   :block/parent page-id})
+(defn lookup
+  "Get the value of coll by db-ident. For file and db graphs"
+  [repo coll db-ident]
+  (get coll (get-pid repo db-ident)))
 
-(defn build-closed-value-block
-  "Builds a closed value block to be transacted"
-  [db block-uuid block-value page-id property {:keys [db-ident icon-id icon description]}]
-  (cond->
-   (closed-value-new-block db page-id (or block-uuid (d/squuid)) block-value property)
-    (and db-ident (keyword? db-ident))
-    (assoc :db/ident db-ident)
+(defn get-block-property-value
+  "Get the value of built-in block's property by its db-ident"
+  [repo db block db-ident]
+  (when db
+    (let [block (or (d/entity db (:db/id block)) block)]
+      (if (sqlite-util/db-based-graph? repo)
+        (get block db-ident)
+        (lookup repo (:block/properties block) db-ident)))))
 
-    icon
-    (update :block/properties assoc icon-id icon)
-
-    ;; For now, only closed values with :db/ident are built-in?
-    (and db-ident (keyword? db-ident))
-    ((fn [b] (default-db/mark-block-as-built-in db b)))
-
-    description
-    (update :block/schema assoc :description description)
-
-    true
-    sqlite-util/block-with-timestamps))
-
-(defn build-property-hidden-page
-  "Builds a hidden property page for closed values to be transacted"
-  [property]
-  (let [page-name (str hidden-page-name-prefix (:block/uuid property))]
-    (-> (sqlite-util/build-new-page page-name)
-        (assoc :block/type #{"hidden"}
-               :block/format :markdown))))
-
-(defn build-closed-values
-  "Builds all the tx needed for property with closed values including
-   the hidden page and closed value blocks as needed"
-  [db prop-name property {:keys [icon-id db-ident translate-closed-page-value-fn property-attributes]
-                          :or {translate-closed-page-value-fn identity}}]
-  (let [page-tx (build-property-hidden-page property)
-        page-id [:block/uuid (:block/uuid page-tx)]
-        closed-value-page-uuids? (contains? #{:page :date} (get-in property [:block/schema :type]))
-        closed-value-blocks-tx
-        (if closed-value-page-uuids?
-          (map translate-closed-page-value-fn (:closed-values property))
-          (map (fn [{:keys [db-ident value icon description uuid]}]
-                 (build-closed-value-block db
-                  uuid value page-id property {:db-ident db-ident
-                                               :icon-id icon-id
-                                               :icon icon
-                                               :description description}))
-               (:closed-values property)))
-        property-schema (assoc (:block/schema property)
-                               :values (mapv :block/uuid closed-value-blocks-tx))
-        property-tx (merge (sqlite-util/build-new-property prop-name property-schema (:block/uuid property)
-                                                           {:db-ident db-ident})
-                           property-attributes)]
-    (into [property-tx page-tx]
-          (when-not closed-value-page-uuids? closed-value-blocks-tx))))
+(defn shape-block?
+  [repo db block]
+  (= :whiteboard-shape (get-block-property-value repo db block :logseq.property/ls-type)))

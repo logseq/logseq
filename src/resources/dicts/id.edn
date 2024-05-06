@@ -123,7 +123,6 @@
  :right-side-bar/switch-theme "Mode tema"
  :right-side-bar/contents "Konten"
  :right-side-bar/page-graph "Grafik halaman"
- :right-side-bar/history "(Dev) Urungkan/Ubah riwayat"
  :right-side-bar/block-ref "Referensi blok"
  :right-side-bar/graph-view "Tampilan grafik"
  :right-side-bar/all-pages "Semua halaman"
@@ -438,7 +437,6 @@
 
  :home "Beranda"
  :new-page "Halaman baru:"
- :whiteboard "Papan tulis"
  :whiteboards "Papan tulis"
  :new-graph "Tambahkan grafik baru"
  :graph "Grafik"

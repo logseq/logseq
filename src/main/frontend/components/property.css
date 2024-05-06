@@ -19,9 +19,13 @@
     max-height: var(--radix-dropdown-menu-content-available-height);
 }
 
-.ls-block .ls-properties-area, .property-block-container {
+.ls-block .ls-properties-area {
     border-left: 1px solid;
     border-left-color: or(--lx-gray-04-alpha, --ls-guideline-color, #ddd) !important;
+}
+
+.property-block-container {
+    @apply -ml-11 flex flex-1;
 }
 
 .ls-page-properties > .ls-properties-area > .property-block {
@@ -47,7 +51,7 @@
 }
 
 .ls-properties-area {
-    @apply grid gap-0.5 pt-1.5 pb-1.5;
+    @apply grid gap-1 py-2;
 
     .property-pair {
         @apply grid grid-cols-5 gap-1;
@@ -63,6 +67,8 @@
         }
 
         .property-value {
+            @apply pl-1;
+
             .jtrigger-id {
                 @apply left-[-34px] top-[2px];
             }
@@ -147,7 +153,7 @@
 }
 
 .ui__button.empty-btn {
-    @apply !h-7 !px-0 font-normal opacity-50;
+    @apply !h-6 !px-0 font-normal opacity-50;
 }
 
 .closed-values-properties {
@@ -171,8 +177,14 @@ input.simple-input:focus {
     box-shadow: none;
 }
 
-.property-key .bullet-container .bullet, .ls-property-input .bullet-container .bullet {
-    background-color: darkgrey;
+.page-configure {
+    @screen md {
+        max-width: 720px;
+    }
+}
+
+.property-key .bullet-container, .property-key .bullet-container .bullet {
+    border-radius: 0px;
 }
 
 /* TODO:  */

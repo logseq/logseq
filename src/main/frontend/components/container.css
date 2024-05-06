@@ -743,10 +743,6 @@
       }
     }
   }
-
-  .page-hierarchy {
-    @apply pl-[28px];
-  }
 }
 
 .cp__sidebar-main-content[data-is-full-width='true'] {
@@ -816,4 +812,8 @@ html[data-theme='dark'] {
       background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
     }
   }
+}
+
+.blocks-selection-mode .page-title, .blocks-selection-mode .block-content-inner, .blocks-selection-mode .block-body, .blocks-selection-mode .ls-properties-area {
+    user-select: none;
 }

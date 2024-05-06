@@ -10,67 +10,29 @@
             [frontend.state :as state]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
-            [frontend.handler.db-based.property.util :as db-pu]
             [lambdaisland.glogi :as log]
-            [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]
             [frontend.format.mldoc :as mldoc]))
-
-(def built-in-property-names-to-idents
-  "This maps built-in properties names to idents. Only use
-   with legacy internals where names are hardcoded"
-  (into {}
-        (map (fn [[k v]]
-               [(:name v) k])
-             db-property/built-in-properties)))
-
-(defn- update-extracted-block-properties
-  "Updates DB graph blocks to ensure that built-in properties are using uuids
-  for property ids"
-  [blocks]
-  (let [repo (state/get-current-repo)
-        update-properties (fn [props]
-                            (update-keys props
-                                         #(if-let [ident (built-in-property-names-to-idents %)]
-                                            (db-pu/get-built-in-property-uuid repo ident)
-                                            %)))]
-    (if (config/db-based-graph? repo)
-     (->> blocks
-          (map (fn [b]
-                 (if (:block/properties b)
-                   (-> b
-                       (dissoc :block/properties-order)
-                       (update :block/properties update-properties))
-                   b)))
-          (map (fn [b]
-                 (if (:block/macros b)
-                   (update b :block/macros
-                           (fn [macros]
-                             (map #(-> %
-                                       (assoc :block/uuid (d/squuid))
-                                       (update :block/properties update-properties)) macros)))
-                   b))))
-     blocks)))
 
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
   [blocks content format {:keys [with-id? page-name]
                           :or {with-id? true}}]
-  (try
-    (update-extracted-block-properties
+  (let [repo (state/get-current-repo)]
+    (try
      (gp-block/extract-blocks blocks content with-id? format
                               {:user-config (state/get-config)
                                :block-pattern (config/get-block-pattern format)
-                               :db (db/get-db (state/get-current-repo))
+                               :db (db/get-db repo)
                                :date-formatter (state/get-date-formatter)
-                               :page-name page-name}))
-    (catch :default e
-      (log/error :exception e)
-      (state/pub-event! [:capture-error {:error e
-                                         :payload {:type "Extract-blocks"}}])
-      (notification/show! "An unexpected error occurred during block extraction." :error)
-      [])))
+                               :page-name page-name
+                               :db-graph-mode? (config/db-based-graph? repo)})
+     (catch :default e
+       (log/error :exception e)
+       (state/pub-event! [:capture-error {:error e
+                                          :payload {:type "Extract-blocks"}}])
+       (notification/show! "An unexpected error occurred during block extraction." :error)
+       []))))
 
 (defn page-name->map
   "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"

@@ -11,22 +11,23 @@
             [frontend.db :as db]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.state :as state]
-            [frontend.handler.db-based.property.util :as db-pu]))
+            [frontend.handler.db-based.property.util :as db-pu]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn loaded? []
   js/window.Reveal)
 
 (defn- with-properties
   [m block]
-  (let [properties (:block/properties block)]
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        properties (if db-based? (db-property/properties block) (:block/properties block))]
     (if (seq properties)
       (merge m
              (update-keys
               properties
               (fn [k]
-                (-> (str "data-" (if (config/db-based-graph? (state/get-current-repo))
-                                   (db-pu/get-property-name k)
-                                   (name k)))
+                (-> (str "data-" (if db-based? (db-pu/get-property-name k) (name k)))
                     (string/replace "data-data-" "data-")))))
       m)))
 
@@ -88,13 +89,13 @@
                        (reset! *loading? false)
                        (render!)))))
                 state)}
-  [page-name]
-  (let [loading? (rum/react *loading?)
-        page (db/entity [:block/name page-name])
-        journal? (:journal? page)
+  [page]
+  (let [page-name (:block/original-name page)
+        loading? (rum/react *loading?)
+        journal? (ldb/journal-page? page)
         repo (state/get-current-repo)
-        blocks (-> (db/get-page-blocks-no-cache repo page-name)
-                   (outliner-tree/blocks->vec-tree page-name))
+        blocks (-> (db/get-page-blocks-no-cache repo (:db/id page))
+                   (outliner-tree/blocks->vec-tree (:db/id page)))
         blocks (if journal?
                  (rest blocks)
                  blocks)

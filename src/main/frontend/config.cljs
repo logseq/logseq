@@ -25,10 +25,6 @@
 
 (reset! state/publishing? publishing?)
 
-(comment
-  (goog-define TEST false)
-  (def test? TEST))
-
 (def ENABLE-FILE-SYNC-PRODUCTION false)
 
 ;; this is a feature flag to enable the account tab

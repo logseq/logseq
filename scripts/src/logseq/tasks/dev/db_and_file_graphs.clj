@@ -77,12 +77,14 @@
   []
   (let [file-concepts (->>
                        ;; from logseq.db.frontend.schema
-                       [:block/properties-text-values :block/pre-block :recent/pages :file/handle :block/file :block/properties-order]
+                       [:block/properties-text-values :block/pre-block :recent/pages :file/handle :block/file :block/properties-order
+                        :block/marker :block/priority :block/scheduled :block/deadline]
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
                               ;; anything org mode
-                              "org"]))
+                              "org"
+                              "db/get-page"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]

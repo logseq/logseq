@@ -1,6 +1,5 @@
 (ns frontend.extensions.graph
   (:require [cljs-bean.core :as bean]
-            [frontend.db.model :as model]
             [frontend.extensions.graph.pixi :as pixi]
             [frontend.handler.route :as route-handler]
             [frontend.colors :as colors]
@@ -42,9 +41,8 @@
       (highlight-neighbours! graph node (set @*focus-nodes) dark?)
       (highlight-edges! graph node dark?))
     (when-not drag?
-      (let [page-name (model/get-redirect-page-name node)]
-        (.unhoverNode ^js graph node)
-        (route-handler/redirect-to-page! page-name)))))
+      (.unhoverNode ^js graph node)
+      (route-handler/redirect-to-page! node))))
 
 (rum/defcs graph-2d <
   (rum/local nil :ref)

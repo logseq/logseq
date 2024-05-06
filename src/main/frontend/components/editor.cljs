@@ -114,16 +114,16 @@
                         (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
-        (p/let [page-name (util/page-name-sanity-lc chosen-item)
-                page (db/entity [:block/name page-name])
+        (p/let [page (db/get-page chosen-item)
                 _ (when-not page (page-handler/<create! chosen-item {:redirect? false
                                                                      :create-first-block? false}))
+                page' (db/get-page chosen-item)
                 current-block (state/get-edit-block)]
           (editor-handler/api-insert-new-block! chosen-item
                                                 {:block-uuid (:block/uuid current-block)
                                                  :sibling? true
                                                  :replace-empty-target? true
-                                                 :other-attrs {:block/link (:db/id (db/entity [:block/name page-name]))}}))))
+                                                 :other-attrs {:block/link (:db/id page')}}))))
     (page-handler/on-chosen-handler input id q pos format)))
 
 (rum/defc page-search-aux
@@ -151,7 +151,7 @@
                                       matched-pages)
                               (cons q matched-pages)))
 
-                                ;; reorder, shortest and starts-with first.
+                          ;; reorder, shortest and starts-with first.
                           :else
                           (let [matched-pages (remove nil? matched-pages)
                                 matched-pages (sort-by
@@ -253,10 +253,9 @@
       :on-enter    non-exist-block-handler
       :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
       :item-render (fn [{:block/keys [page uuid]}]  ;; content returned from search engine is normalized
-                     (let [page (or (:block/original-name page)
-                                    (:block/name page))
+                     (let [page-entity (db/entity [:block/uuid page])
                            repo (state/sub :git/current-repo)
-                           format (db/get-page-format page)
+                           format (get page-entity :block/format :markdown)
                            block (db-model/query-block-by-uuid uuid)
                            content (:block/content block)]
                        (when-not (string/blank? content)
@@ -607,8 +606,7 @@
   "Get textarea css class according to it's content"
   [block content format]
   (let [content (if content (str content) "")
-        properties (:block/properties block)
-        heading (pu/lookup properties :logseq.property/heading)
+        heading (pu/get-block-property-value block :logseq.property/heading)
         heading (if (true? heading)
                   (min (inc (:block/level block)) 6)
                   heading)]

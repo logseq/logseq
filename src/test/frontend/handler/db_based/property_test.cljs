@@ -5,8 +5,7 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.state :as state]
-            [frontend.handler.page :as page-handler]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.handler.page :as page-handler]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -34,30 +33,30 @@
 ;; update-property!
 (deftest ^:large-vars/cleanup-todo block-property-test
   (testing "Add a property to a block"
-    (db-property-handler/set-block-property! repo fbid "property-1" "value" {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value" {:property-type :string})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
-          property (db/entity [:block/name "property-1"])]
+          property (db/entity :user.property/property-1)]
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
-        {:type :default}
+        {:type :string}
         (:block/type property)
         #{"property"})
       ;; check block's properties
       (are [x y] (= x y)
         (count properties)
         1
-        (uuid? (ffirst properties))
+        (keyword? (ffirst properties))
         true
         (second (first properties))
         "value")))
 
   (testing "Add another property"
-    (db-property-handler/set-block-property! repo fbid "property-2" "1" {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-2 "1" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
-          property (db/entity [:block/name "property-2"])]
+          property (db/entity :user.property/property-2)]
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
@@ -68,13 +67,13 @@
       (are [x y] (= x y)
         (count properties)
         2
-        (every? uuid? (map first properties))
+        (every? keyword? (map first properties))
         true
         (second (second properties))
         1)))
 
   (testing "Update property value"
-    (db-property-handler/set-block-property! repo fbid "property-2" 2 {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-2 2 {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -85,7 +84,7 @@
         2)))
 
   (testing "Wrong type property value shouldn't transacted"
-    (db-property-handler/set-block-property! repo fbid "property-2" "Not a number" {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-2 "Not a number" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -96,13 +95,13 @@
         2)))
 
   (testing "Add a multi-values property"
-    (db-property-handler/upsert-property! repo "property-3" {:type :number :cardinality :many} {})
-    (db-property-handler/set-block-property! repo fbid "property-3" 1 {})
-    (db-property-handler/set-block-property! repo fbid "property-3" 2 {})
-    (db-property-handler/set-block-property! repo fbid "property-3" 3 {})
+    (db-property-handler/upsert-property! repo :user.property/property-3 {:type :number :cardinality :many} {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-3 1 {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-3 2 {})
+    (db-property-handler/set-block-property! repo fbid :user.property/property-3 3 {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
-          property (db/entity [:block/name "property-3"])]
+          property (db/entity :user.property/property-3)]
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
@@ -111,54 +110,37 @@
         #{"property"})
       ;; check block's properties
       (are [x y] (= x y)
-        (count properties)
         3
-        (get properties (:block/uuid property))
-        #{1 2 3}))
-
-    ;; update property value from 1 to 4
-    (db-property-handler/set-block-property! repo fbid "property-3" 4 {:old-value 1})
-    (let [block (db/entity [:block/uuid fbid])
-          properties (:block/properties block)
-          property (db/entity [:block/name "property-3"])]
-      ;; check block's properties
-      (are [x y] (= x y)
         (count properties)
-        3
-        (get properties (:block/uuid property))
-        #{4 2 3})
-
-      (db-property-handler/delete-property-value! repo block (:block/uuid property) "value 4")
-      (let [properties (:block/properties block)]
-        (is (get properties (:block/uuid property))
-            #{"value 2" "value 3"}))))
+        #{1 2 3}
+        (get properties :user.property/property-3))))
 
   (testing "Remove a property"
-    (db-property-handler/remove-block-property! repo fbid "property-3")
+    (db-property-handler/remove-block-property! repo fbid :user.property/property-3)
     (let [block (db/entity [:block/uuid fbid])
-          properties (:block/properties block)
-          property (db/entity [:block/name "property-3"])]
+          properties (:block/properties block)]
       ;; check block's properties
       (are [x y] (= x y)
         (count properties)
         2
-        (contains? (set (keys properties)) (:block/uuid property))
+        (contains? (set (keys properties)) :user.property/property-3)
         false)))
 
   (testing "Batch set properties"
-    (let [k "property-4"
+    (let [k :user.property/property-4
           v "batch value"]
+      (db-property-handler/upsert-property! repo :user.property/property-4 {:type :string} {})
       (db-property-handler/batch-set-property! repo [fbid sbid] k v)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
-          (get (:block/properties fb) (:block/uuid (db/entity [:block/name k])))
+          (get (:block/properties fb) k)
           v
-          (get (:block/properties sb) (:block/uuid (db/entity [:block/name k])))
+          (get (:block/properties sb) k)
           v))))
 
   (testing "Batch remove properties"
-    (let [k "property-4"]
+    (let [k :user.property/property-4]
       (db-property-handler/batch-remove-property! repo [fbid sbid] k)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
@@ -171,38 +153,39 @@
 ;; class related
 ;; class-add-property!
 ;; class-remove-property!
-;; class-set-schema!
 ;; get-block-classes-properties
 (deftest property-class-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)
         _ (page-handler/create! "class3" opts)
-        c1 (db/entity [:block/name "class1"])
-        c2 (db/entity [:block/name "class2"])
+        c1 (db/get-page "class1")
+        c2 (db/get-page "class2")
         c1id (:block/uuid c1)
         c2id (:block/uuid c2)]
 
     (testing "Create classes"
       (are [x y] (= x y)
-        (:block/type (db/entity [:block/name "class1"]))
+        (:block/type (db/get-page "class1"))
         #{"class"}
-        (:block/type (db/entity [:block/name "class2"]))
+        (:block/type (db/get-page "class2"))
         #{"class"}))
 
     (testing "Class add property"
-      (db-property-handler/class-add-property! repo c1id "property-1")
-      (db-property-handler/class-add-property! repo c1id "property-2")
+      (db-property-handler/class-add-property! repo c1id :user.property/property-1)
+      (db-property-handler/class-add-property! repo c1id :user.property/property-2)
       ;; repeated adding property-2
-      (db-property-handler/class-add-property! repo c1id "property-2")
-      (is (= 2 (count (:properties (:block/schema (db/entity (:db/id c1))))))))
+      (db-property-handler/class-add-property! repo c1id :user.property/property-2)
+      ;; add new property with same base db-ident as property-1
+      (db-property-handler/class-add-property! repo c1id ":property-1")
+      (is (= 3 (count (:class/schema.properties (db/entity (:db/id c1)))))))
 
     (testing "Class remove property"
-      (db-property-handler/class-remove-property! repo c1id (:block/uuid (db/entity [:block/name "property-1"])))
-      (is (= 1 (count (:properties (:block/schema (db/entity (:db/id c1))))))))
+      (db-property-handler/class-remove-property! repo c1id :user.property/property-1)
+      (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
     (testing "Add classes to a block"
-        (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
-        (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
+      (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
+      (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
     ;; FIXME: @tiensonqin https://github.com/logseq/logseq/commit/575624c650b2b7e919033a79aa5d14b97507d86f
     #_(testing "Remove a class from a block"
       ;; make sure class2 will not be deleted when removing it from the first block
@@ -211,29 +194,14 @@
         (is (= 2 (count (:block/tags (db/entity [:block/uuid fbid]))))))
     (testing "Get block's classes properties"
       ;; set c2 as parent of c3
-      (let [c3 (db/entity [:block/name "class3"])]
+      (let [c3 (db/get-page "class3")]
         (db/transact! [{:db/id (:db/id c3)
                         :class/parent (:db/id c2)}]))
-      (db-property-handler/class-add-property! repo c2id "property-3")
-      (db-property-handler/class-add-property! repo c2id "property-4")
-      (is (= 3 (count (:classes-properties
+      (db-property-handler/class-add-property! repo c2id :user.property/property-3)
+      (db-property-handler/class-add-property! repo c2id :user.property/property-4)
+      (is (= 4 (count (:classes-properties
                        (db-property-handler/get-block-classes-properties (:db/id (db/entity [:block/uuid fbid]))))))))))
 
-
-;; property-create-new-block
-;; get-property-block-created-block
-(deftest text-block-test
-  (testing "Add property and create a block value"
-    (let [repo (state/get-current-repo)
-          fb (db/entity [:block/uuid fbid])
-          k "property-1"]
-      ;; add property
-      (db-property-handler/upsert-property! repo k {:type :default} {})
-      (let [property (db/entity [:block/name k])
-            {:keys [last-block-id]} (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
-            {:keys [from-block-id from-property-id]} (db-property-handler/get-property-block-created-block [:block/uuid last-block-id])]
-        (is (= from-block-id (:db/id fb)))
-        (is (= from-property-id (:db/id property)))))))
 
 ;; convert-property-input-string
 (deftest convert-property-input-string
@@ -244,42 +212,32 @@
                 (db-property-handler/convert-property-input-string schema-type value)) y)
         [:number "1"] 1
         [:number "1.2"] 1.2
-        [:page (str test-uuid)] test-uuid
         [:url test-uuid] test-uuid
         [:date test-uuid] test-uuid
         [:any test-uuid] test-uuid
         [nil test-uuid] test-uuid))))
 
-;; replace-key-with-id
-(deftest replace-key-with-id-test
-  (db-property-handler/upsert-property! repo "property 1" {:type :default} {})
-  (db-property-handler/upsert-property! repo "property 2" {:type :default} {})
-  (testing "Replace property key with its uuid"
-    (let [result (db-property-handler/replace-key-with-id {"property 1" "value 1"
-                                                           "property 2" "value 2"})]
-      (is (every? uuid? (keys result)))))
-  (testing "Throw an error if a property doesn't exists"
-    (is (thrown? js/Error (db-property-handler/replace-key-with-id {"property not exists yet" "value 1"})))))
+(deftest upsert-property!
+  (testing "Update an existing property"
+    (let [repo (state/get-current-repo)]
+      (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p0"})
+      (db-property-handler/upsert-property! repo :user.property/p0 {:type :default :cardinality :many} {})
+      (is (= :many (get-in (db/entity repo :user.property/p0) [:block/schema :cardinality])))))
+  (testing "Multiple properties that generate the same initial :db/ident"
+    (let [repo (state/get-current-repo)]
+      (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p1"})
+      (db-property-handler/upsert-property! repo nil {} {:property-name ":p1"})
+      (db-property-handler/upsert-property! repo nil {} {:property-name "1p1"})
 
-;; collapse-expand-property!
-(deftest collapse-expand-property-test
-  (testing "Collapse and expand property"
-    (let [repo (state/get-current-repo)
-          fb (db/entity [:block/uuid fbid])
-          k "property-1"]
-      ;; add property
-      (db-property-handler/upsert-property! repo k {:type :default} {})
-      (let [property (db/entity [:block/name k])]
-        (db-property-handler/create-property-text-block! fb property "Block content" editor-handler/wrap-parse-block {})
-        ;; collapse property-1
-        (db-property-handler/collapse-expand-property! repo fb property true)
-        (is (=
-             [(:db/id property)]
-             (map :db/id (:block/collapsed-properties (db/entity [:block/uuid fbid])))))
-
-        ;; expand property-1
-        (db-property-handler/collapse-expand-property! repo fb property false)
-        (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid]))))))))
+      (is (= {:block/name "p1" :block/original-name "p1" :block/schema {:type :default}}
+             (select-keys (db/entity repo :user.property/p1) [:block/name :block/original-name :block/schema]))
+          "Existing db/ident does not get modified")
+      (is (= ":p1"
+             (:block/original-name (db/entity repo :user.property/p1-1)))
+          "2nd property gets unique ident")
+      (is (= "1p1"
+             (:block/original-name (db/entity repo :user.property/p1-2)))
+          "3rd property gets unique ident"))))
 
 ;; template (TBD, template implementation not settle down yet)
 ;; property-create-new-block-from-template

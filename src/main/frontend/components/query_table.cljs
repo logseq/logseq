@@ -18,7 +18,6 @@
             [logseq.graph-parser.text :as text]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property.util :as db-pu]
             [logseq.db.frontend.content :as db-content]))
 
 ;; Util fns
@@ -75,7 +74,7 @@
         properties (:block/properties current-block)
         query-sort-by (pu/lookup properties :logseq.property/query-sort-by)
         ;; Starting with #6105, we started putting properties under namespaces.
-        nlp-date? (and (not db-graph?) (pu/lookup-by-name properties :logseq.query/nlp-date))
+        nlp-date? (and (not db-graph?) (:logseq.query/nlp-date properties))
         sort-by-column (or (if (uuid? query-sort-by) query-sort-by (keyword query-sort-by))
                            (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                              nil
@@ -92,8 +91,12 @@
     [:th.whitespace-nowrap
      [:a {:on-click (fn []
                       (p/do!
-                       (property-handler/set-block-property! repo block-id :query-sort-by (if (uuid? column) column (name column)))
-                       (property-handler/set-block-property! repo block-id :query-sort-desc (not sort-desc?))))}
+                       (property-handler/set-block-property! repo block-id
+                                                             (pu/get-pid :logseq.property/query-sort-by)
+                                                             (if (uuid? column) column (name column)))
+                       (property-handler/set-block-property! repo block-id
+                                                             (pu/get-pid :logseq.property/query-sort-desc)
+                                                             (not sort-desc?))))}
       [:div.flex.items-center
        [:span.mr-1 title]
        (when (= sort-by-column column)
@@ -110,8 +113,7 @@
         hidden-properties (if db-graph?
                             ;; TODO: Support additional hidden properties e.g. from user config
                             ;; or gp-property/built-in-extended properties
-                            (set (map #(db-pu/get-built-in-property-uuid repo %)
-                                      (keys db-property/built-in-properties)))
+                            (set (keys db-property/built-in-properties))
                             (conj (file-property-handler/built-in-properties) :template))
         prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
                         (remove hidden-properties))
@@ -173,18 +175,6 @@
                    ;; Fallback to original properties for page blocks
                    (get-in row [:block/properties column])))]))
 
-(defn build-column-text [row column]
-  (case column
-    :page  (or (get-in row [:block/page :block/original-name])
-               (get-in row [:block/original-name])
-               (get-in row [:block/content]))
-    :block (or (get-in row [:block/original-name])
-               (get-in row [:block/content]))
-
-           (or (get-in row [:block/properties column])
-               (get-in row [:block/properties-text-values column])
-               (get-in row [(keyword :block column)]))))
-
 (defn- render-column-value
   [{:keys [row-block row-format cell-format value]} page-cp inline-text {:keys [uuid-names db-graph?]}]
   (cond
@@ -204,7 +194,7 @@
     (boolean? value) (str value)
     ;; string values will attempt to be rendered as pages, falling back to
     ;; inline-text when no page entity is found
-    (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
+    (string? value) (if-let [page (db/get-page value)]
                       (page-cp {} page)
                       (inline-text row-block row-format value))
     ;; render uuids as page refs

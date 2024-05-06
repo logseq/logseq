@@ -26,8 +26,8 @@
    :after test-helper/destroy-test-db!})
 
 (defn- get-value-ids
-  [property-name]
-  (:values (:block/schema (db/entity [:block/name property-name]))))
+  [k]
+  (:values (:block/schema (db/entity k))))
 
 (defn- get-closed-values
   "Get value from block ids"
@@ -40,10 +40,10 @@
 ;; delete-closed-value
 (deftest-async closed-values-test
   (testing "Create properties and closed values"
-    (db-property-handler/set-block-property! repo fbid "property-1" "1" {})
-    (db-property-handler/set-block-property! repo sbid "property-1" "2" {})
-    (let [k "property-1"
-          property (db/entity [:block/name k])]
+    (db-property-handler/set-block-property! repo fbid :user.property/property-1 "1" {})
+    (db-property-handler/set-block-property! repo sbid :user.property/property-1 "2" {})
+    (let [k :user.property/property-1
+          property (db/entity k)]
       (p/do!
        (db-property-handler/<add-existing-values-to-closed-values! property [1 2])
        (testing "Add existing values to closed values"
@@ -53,36 +53,35 @@
            (is (every? #(contains? (:block/type (db/entity [:block/uuid %])) "closed value")
                        values))))
        (testing "Add non-numbers shouldn't work"
-         (let [result (db-property-handler/upsert-closed-value property {:value "not a number"})]
+         (p/let [result (db-property-handler/<upsert-closed-value property {:value "not a number"})]
            (is (= result :value-invalid))
            (let [values (get-value-ids k)]
              (is (= #{1 2} (get-closed-values values))))))
 
        (testing "Add existing value"
-         (let [result (db-property-handler/upsert-closed-value property {:value 2})]
+         (p/let [result (db-property-handler/<upsert-closed-value property {:value 2})]
            (is (= result :value-exists))))
 
        (testing "Add new value"
-         (let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value property {:value 3})]
+         (p/let [{:keys [block-id tx-data]} (db-property-handler/<upsert-closed-value property {:value 3})]
            (db/transact! tx-data)
            (let [b (db/entity [:block/uuid block-id])]
              (is (= 3 (:value (:block/schema b))))
-             (is (contains? (:block/type b) "closed value")))
-           (let [values (get-value-ids k)]
-             (is (= #{1 2 3} (get-closed-values values))))
+             (is (contains? (:block/type b) "closed value"))
+             (let [values (get-value-ids k)]
+               (is (= #{1 2 3} (get-closed-values values))))
 
-           (testing "Update closed value"
-             (let [{:keys [tx-data]} (db-property-handler/upsert-closed-value property {:id block-id
-                                                                                        :value 4
-                                                                                        :description "choice 4"})]
-               (db/transact! tx-data)
-               (let [b (db/entity [:block/uuid block-id])]
-                 (is (= 4 (:value (:block/schema b))))
-                 (is (= "choice 4" (:description (:block/schema b))))
-                 (is (contains? (:block/type b) "closed value")))))
+             (testing "Update closed value"
+               (p/let [{:keys [tx-data]} (db-property-handler/<upsert-closed-value property {:id block-id
+                                                                                            :value 4
+                                                                                            :description "choice 4"})]
+                 (db/transact! tx-data)
+                 (let [b (db/entity [:block/uuid block-id])]
+                   (is (= 4 (:value (:block/schema b))))
+                   (is (= "choice 4" (:description (:block/schema b))))
+                   (is (contains? (:block/type b) "closed value"))
+                   (p/let [_ (db-property-handler/delete-closed-value! property (db/entity [:block/uuid block-id]))]
 
-           (p/do!
-            (db-property-handler/delete-closed-value! (db/get-db) property (db/entity [:block/uuid block-id]))
-            (testing "Delete closed value"
-              (is (nil? (db/entity [:block/uuid block-id])))
-              (is (= 2 (count (:values (:block/schema (db/entity [:block/name k]))))))))))))))
+                     (testing "Delete closed value"
+                       (is (nil? (db/entity [:block/uuid block-id])))
+                       (is (= 2 (count (:values (:block/schema (db/entity k))))))))))))))))))

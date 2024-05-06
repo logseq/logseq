@@ -128,7 +128,6 @@
  :right-side-bar/switch-theme                      "Motívy"
  :right-side-bar/contents                          "Obsah"
  :right-side-bar/page-graph                        "Graf stránok"
- :right-side-bar/history                           "(Dev) Historia Späť/Znova"
  :right-side-bar/block-ref                         "Referencie bloku"
  :right-side-bar/graph-view                        "Zobrazenie grafu"
  :right-side-bar/all-pages                         "Všetky stránky"
@@ -441,7 +440,6 @@
 
  :home                                             "Domov"
  :new-page                                         "Nová stránka:"
- :whiteboard                                       "Tabuľa"
  :whiteboards                                      "Tabule"
  :new-graph                                        "Pridať nový graf"
  :graph                                            "Graf"

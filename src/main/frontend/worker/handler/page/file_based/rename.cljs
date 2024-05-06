@@ -1,10 +1,7 @@
-(ns frontend.worker.handler.page.rename
-  "Page rename"
-  (:require [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.tree :as otree]
-            [frontend.worker.handler.page :as worker-page]
+(ns frontend.worker.handler.page.file-based.rename
+  "File based page rename"
+  (:require [frontend.worker.handler.page :as worker-page]
             [datascript.core :as d]
-            [medley.core :as medley]
             [clojure.string :as string]
             [logseq.common.util.page-ref :as page-ref]
             [frontend.worker.file.util :as wfu]
@@ -12,7 +9,8 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]
-            [logseq.graph-parser.text :as text]))
+            [logseq.graph-parser.text :as text]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn rename-update-namespace!
   "update :block/namespace of the renamed block"
@@ -37,50 +35,6 @@
       :else
       nil)))
 
-(defn- replace-page-ref
-  "Replace from-page refs with to-page"
-  [from-page to-page]
-  (let [refs (:block/_refs from-page)
-        from-uuid (:block/uuid from-page)
-        to-uuid (:block/uuid to-page)
-        replace-ref (fn [content] (string/replace content (str from-uuid) (str to-uuid)))]
-    (when (seq refs)
-      (let [tx-data (mapcat
-                     (fn [{:block/keys [raw-content properties] :as ref}]
-                         ;; block content or properties
-                       (let [content' (replace-ref raw-content)
-                             content-tx (when (not= raw-content content')
-                                          {:db/id (:db/id ref)
-                                           :block/content content'})
-                             properties' (-> (medley/map-vals (fn [v]
-                                                                (cond
-                                                                  (and (coll? v) (uuid? (first v)))
-                                                                  (mapv (fn [id] (if (= id from-uuid) to-uuid id)) v)
-
-                                                                  (and (uuid? v) (= v from-uuid))
-                                                                  to-uuid
-
-                                                                  (and (coll? v) (string? (first v)))
-                                                                  (mapv replace-ref v)
-
-                                                                  (string? v)
-                                                                  (replace-ref v)
-
-                                                                  :else
-                                                                  v)) properties)
-                                             (common-util/remove-nils-non-nested))
-                             tx (merge
-                                 content-tx
-                                 (when (not= (seq properties) (seq properties'))
-                                   {:db/id (:db/id ref)
-                                    :block/properties properties'}))]
-                         (concat
-                          [[:db/add (:db/id ref) :block/refs (:db/id to-page)]
-                           [:db/retract (:db/id ref) :block/refs (:db/id from-page)]]
-                          (when tx [tx]))))
-                     refs)]
-        tx-data))))
-
 (defn- rename-update-block-refs!
   [refs from-id to-id]
   (->> refs
@@ -101,37 +55,27 @@
           to-id (:db/id to-page)
           from-page (d/entity db [:block/name from-page-name])
           from-id (:db/id from-page)
-          from-first-child (some->> (d/pull db '[*] from-id)
-                                    (outliner-core/block @conn)
-                                    (#(otree/-get-down % conn))
-                                    (outliner-core/get-data))
-          to-last-direct-child-id (ldb/get-block-last-direct-child-id db to-id)
-          db-based? (sqlite-util/db-based-graph? repo)
           datoms (d/datoms @conn :avet :block/page from-id)
           block-eids (mapv :e datoms)
-          blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/left :block/parent] block-eids)
+          blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/order :block/parent] block-eids)
           blocks-tx-data (map (fn [block]
                                 (let [id (:db/id block)]
                                   (cond->
                                    {:db/id id
                                     :block/page {:db/id to-id}
-                                    :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)}
-
-                                    (and from-first-child (= id (:db/id from-first-child)))
-                                    (assoc :block/left {:db/id (or to-last-direct-child-id to-id)})
+                                    :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)
+                                    :block/order (db-order/gen-key nil)}
 
                                     (= (:block/parent block) {:db/id from-id})
                                     (assoc :block/parent {:db/id to-id})))) blocks)
-          replace-ref-tx-data (if db-based?
-                                (replace-page-ref from-page to-page)
-                                (page-rename/replace-page-ref db config from-page-name to-page-name))
+          replace-ref-tx-data (page-rename/replace-page-ref db config from-page to-page-name)
           tx-data (concat blocks-tx-data replace-ref-tx-data)]
 
       (rename-page-aux repo conn config old-name new-name
                        :merge? true
-                       :other-tx tx-data))
+                       :other-tx tx-data)
 
-    (worker-page/delete! repo conn from-page-name {:rename? true})))
+      (worker-page/delete! repo conn (:block/uuid from-page) {:rename? true}))))
 
 (defn- compute-new-file-path
   "Construct the full path given old full path and the file sanitized body.
@@ -147,7 +91,7 @@
   [db old-page-name new-page-name]
   (let [page (d/entity db [:block/name old-page-name])
         file (:block/file page)]
-    (when (and file (not (:block/journal? page)))
+    (when (and file (not (ldb/journal-page? page)))
       (let [old-path (:file/path file)
             new-file-name (wfu/file-name-sanity new-page-name) ;; w/o file extension
             new-path (compute-new-file-path old-path new-file-name)]
@@ -162,7 +106,6 @@
   (let [db                  @conn
         old-page-name       (common-util/page-name-sanity-lc old-name)
         new-page-name       (common-util/page-name-sanity-lc new-name)
-        db-based?           (sqlite-util/db-based-graph? repo)
         page                (d/pull @conn '[*] [:block/name old-page-name])]
     (when (and repo page)
       (let [old-original-name   (:block/original-name page)
@@ -174,15 +117,14 @@
             {:keys [old-path new-path tx-data]} (update-file-tx db old-page-name new-name)
             txs (concat page-txs
                         other-tx
-                        (when-not db-based?
-                          (->>
-                           (concat
+                        (->>
+                         (concat
                             ;;  update page refes in block content when ref name changes
-                            (page-rename/replace-page-ref db config old-name new-name)
+                          (page-rename/replace-page-ref db config page new-name)
                             ;; update file path
-                            tx-data)
+                          tx-data)
 
-                           (remove nil?))))]
+                         (remove nil?)))]
 
         (ldb/transact! conn txs {:outliner-op :rename-page
                                  :data (cond->
@@ -243,18 +185,18 @@
             (println "Renamed " old-page-title " to " new-page-title)))))))
 
 (defn rename!
-  [repo conn config old-name new-name & {:keys [persist-op?]
+  [repo conn config page-uuid new-name & {:keys [persist-op?]
                                          :or {persist-op? true}}]
   (let [db @conn
-        old-name      (string/trim old-name)
+        page-e        (d/entity db [:block/uuid page-uuid])
+        old-name      (:block/original-name page-e)
         new-name      (string/trim new-name)
         old-page-name (common-util/page-name-sanity-lc old-name)
-        page-e (d/entity db [:block/name old-page-name])
         new-page-name (common-util/page-name-sanity-lc new-name)
         new-page-e (d/entity db [:block/name new-page-name])
         name-changed? (not= old-name new-name)]
     (cond
-      (ldb/built-in? @conn page-e)
+      (ldb/built-in? page-e)
       :built-in-page
 
       (string/blank? new-name)

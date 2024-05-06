@@ -509,19 +509,23 @@
   :indent-style \"dashes\" | \"spaces\" | \"no-indent\"
   :remove-options [:emphasis :page-ref :tag :property]
   :other-options {:keep-only-level<=N int :newline-after-block bool}"
-  [repo root-block-uuids-or-page-name options]
-  {:pre [(or (coll? root-block-uuids-or-page-name)
-             (string? root-block-uuids-or-page-name))]}
+  [repo root-block-uuids-or-page-uuid options]
+  {:pre [(or (coll? root-block-uuids-or-page-uuid)
+             (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
-      :export-blocks-as-markdown
-      (let [content
-            (if (string? root-block-uuids-or-page-name)
-              ;; page
-              (common/get-page-content root-block-uuids-or-page-name)
-              (common/root-block-uuids->content repo root-block-uuids-or-page-name))
-            first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
-            format (or (:block/format first-block) (state/get-preferred-format))]
-        (export-helper content format options))))
+   :export-blocks-as-markdown
+   (try
+     (let [content
+           (if (uuid? root-block-uuids-or-page-uuid)
+             ;; page
+             (common/get-page-content root-block-uuids-or-page-uuid)
+             (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+           first-block (and (coll? root-block-uuids-or-page-uuid)
+                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
+           format (or (:block/format first-block) (state/get-preferred-format))]
+       (export-helper content format options))
+     (catch :default e
+       (js/console.error e)))))
 
 (defn export-files-as-markdown
   "options see also `export-blocks-as-markdown`"
