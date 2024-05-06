@@ -90,6 +90,10 @@
   }
 }
 
+.block-content-or-editor-wrap {
+  @apply flex flex-1 flex-row flex-wrap gap-1 items-center;
+}
+
 .block-head-wrap {
   @apply flex flex-1 w-full flex-row flex-wrap;
   @apply justify-between items-center;
@@ -202,7 +206,7 @@
 }
 
 .block-control-wrap {
-  @apply h-[24px] mt-0 pr-[6px];
+  @apply h-[24px] mt-[1px] pr-[6px];
 
   &.is-order-list {
     @apply mr-0 pr-0;
@@ -283,6 +287,11 @@
   padding: 2px 0;
   display: inherit;
 
+  .block-ref {
+    padding: 6px 5px;
+    border: none;
+  }
+
   &:hover {
     color: var(--ls-link-text-hover-color);
   }
@@ -313,6 +322,18 @@
 
   .block-content {
     cursor: inherit;
+  }
+}
+
+.page-reference {
+  @apply rounded transition-[background];
+
+  .bracket {
+    @apply opacity-30;
+  }
+
+  &:hover {
+    background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color, hsl(var(--primary)/.4)));
   }
 }
 
@@ -386,7 +407,37 @@
 }
 
 .block-main-container {
-  min-height: 24px;
+  @apply min-h-[24px];
+
+  &:has(h1.as-heading) {
+    .block-control-wrap {
+      @apply relative top-4;
+    }
+  }
+
+  &:has(h2.as-heading) {
+    .block-control-wrap {
+      @apply relative top-3;
+    }
+  }
+
+  &:has(h3.as-heading) {
+    .block-control-wrap {
+      @apply relative top-[3px];
+    }
+  }
+
+  &:has(h5.as-heading) {
+    .block-control-wrap {
+      @apply relative -top-[1px];
+    }
+  }
+
+  &:has(h6.as-heading) {
+    .block-control-wrap {
+      @apply relative -top-0.5;
+    }
+  }
 }
 
 .ls-block {
@@ -395,10 +446,6 @@
   &.selected {
     @apply rounded;
   }
-}
-
-.block-children {
-  > .ls-block:first-child {}
 }
 
 .ls-block h1,
@@ -768,6 +815,10 @@ html.is-mac {
 
   &-item {
     @apply bg-gray-03 rounded p-4;
+  }
+
+  .page-reference:hover {
+    background: var(--lx-accent-04-alpha, var(--ls-tertiary-background-color, hsl(var(--primary)/.4)));
   }
 }
 

@@ -1,14 +1,13 @@
 (ns frontend.handler.db-based.rtc
   "RTC handler"
-  (:require [frontend.state :as state]
-            [cljs-bean.core :as bean]
-            [promesa.core :as p]
-            [frontend.config :as config]
-            [frontend.handler.user :as user-handler]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
+            [frontend.handler.notification :as notification]
+            [frontend.handler.user :as user-handler]
+            [frontend.state :as state]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [frontend.handler.notification :as notification]))
+            [promesa.core :as p]))
 
 
 (defn <rtc-create-graph!
@@ -17,14 +16,14 @@
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)
            repo-name (sqlite-common-db/sanitize-db-name repo)]
-       (.rtc-async-upload-graph worker repo token repo-name)))))
+       (.rtc-async-upload-graph2 worker repo token repo-name)))))
 
 (defn <rtc-delete-graph!
   [graph-uuid]
   (when-let [^js worker @state/*db-worker]
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
-       (.rtc-delete-graph worker token graph-uuid)))))
+       (.rtc-delete-graph2 worker token graph-uuid)))))
 
 (defn <rtc-download-graph!
   [graph-name graph-uuid timeout-ms]
@@ -33,7 +32,7 @@
     (user-handler/<wrap-ensure-id&access-token
      (p/let [token (state/get-auth-id-token)
              download-info-uuid (.rtc-request-download-graph worker token graph-uuid)
-             result (.rtc-wait-download-graph-info-ready worker nil token download-info-uuid graph-uuid timeout-ms)
+             result (.rtc-wait-download-graph-info-ready worker token download-info-uuid graph-uuid timeout-ms)
              {:keys [_download-info-uuid
                      download-info-s3-url
                      _download-info-tx-instant
@@ -50,29 +49,26 @@
 (defn <rtc-stop!
   []
   (when-let [^js worker @state/*db-worker]
-    (.rtc-stop worker)))
+    (.rtc-stop2 worker)))
 
 (defn <rtc-start!
-  [repo & {:keys [retry] :or {retry 0}}]
+  [repo]
   (when-let [^js worker @state/*db-worker]
     (when (ldb/get-graph-rtc-uuid (db/get-db repo))
       (user-handler/<wrap-ensure-id&access-token
         ;; TODO: `<rtc-stop!` can return a chan so that we can remove timeout
        (<rtc-stop!)
        (let [token (state/get-auth-id-token)]
-         (p/let [result (.rtc-start worker repo token (state/sub [:ui/developer-mode?]))
-                 _ (case result
-                     "rtc-not-closed-yet"
-                     (js/setTimeout #(<rtc-start! repo) 200)
-                     ":graph-not-ready"
-                     (when (< retry 3)
-                       (let [delay (* 2000 (inc retry))]
-                         (prn "graph still creating, retry rtc-start in " delay "ms")
-                         (p/do! (p/delay delay)
-                                (<rtc-start! repo :retry (inc retry)))))
+         (p/let [result (.rtc-start2 worker repo token)
+                 start-ex (ldb/read-transit-str result)
+                 _ (case (:type (:ex-data start-ex))
+                     (:rtc.exception/not-rtc-graph
+                      :rtc.exception/not-found-db-conn)
+                     (notification/show! (:ex-message start-ex) :error)
 
-                     (":break-rtc-loop" ":stop-rtc-loop")
-                     nil
+                     :rtc.exception/lock-failed
+                     (js/setTimeout #(<rtc-start! repo) 1000)
+
                      ;; else
                      nil)]
            nil))))))
@@ -83,8 +79,8 @@
     (user-handler/<wrap-ensure-id&access-token
      (let [token (state/get-auth-id-token)]
        (when worker
-         (p/let [result (.rtc-get-graphs worker token)
-                 graphs (bean/->clj result)
+         (p/let [result (.rtc-get-graphs2 worker token)
+                 graphs (ldb/read-transit-str result)
                  result (->> graphs
                              (remove (fn [graph] (= (:graph-status graph) "deleting")))
                              (mapv (fn [graph]
@@ -99,22 +95,24 @@
 
 (defn <rtc-get-users-info
   []
-  (when (ldb/get-graph-rtc-uuid (db/get-db))
+  (when-let [graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))]
     (when-let [^js worker @state/*db-worker]
-      (p/let [repo (state/get-current-repo)
-              result (.rtc-get-users-info worker)
-              result (bean/->clj result)]
+      (p/let [token (state/get-auth-id-token)
+              repo (state/get-current-repo)
+              result (.rtc-get-users-info2 worker token graph-uuid)
+              result (ldb/read-transit-str result)]
         (state/set-state! :rtc/users-info {repo result})))))
 
 (defn <rtc-invite-email
   [graph-uuid email]
   (when-let [^js worker @state/*db-worker]
-    (->
-     (p/do!
-      (.rtc-grant-graph-access worker graph-uuid
-                               (ldb/write-transit-str [])
-                               (ldb/write-transit-str [email]))
-      (notification/show! (str "Invitation sent!") :success))
-     (p/catch (fn [e]
-                (notification/show! (str "Something wrong, please try again.") :error)
-                (js/console.error e))))))
+    (let [token (state/get-auth-id-token)]
+      (->
+       (p/do!
+        (.rtc-grant-graph-access2 worker token graph-uuid
+                                  (ldb/write-transit-str [])
+                                  (ldb/write-transit-str [email]))
+        (notification/show! (str "Invitation sent!") :success))
+       (p/catch (fn [e]
+                  (notification/show! (str "Something wrong, please try again.") :error)
+                  (js/console.error e)))))))
