@@ -12,6 +12,7 @@
      * schema.org assumes no cardinality. For now, only :page properties are given a :cardinality :many"
   (:require [logseq.tasks.db-graph.create-graph :as create-graph]
             [logseq.common.util :as common-util]
+            [logseq.db.frontend.property :as db-property]
             [clojure.string :as string]
             [datascript.core :as d]
             ["path" :as node-path]
@@ -20,13 +21,8 @@
             [nbb.core :as nbb]
             [clojure.set :as set]
             [clojure.walk :as w]
-            [babashka.cli :as cli]))
-
-(defn- get-class-db-id [class-db-ids class-id]
-  (or (class-db-ids class-id)
-      ;; Map of owl:equivalentClass exceptions
-      (class-db-ids ({"rdfs:Class" "schema:Class"} class-id))
-      (throw (ex-info (str "No :db/id for " class-id) {}))))
+            [babashka.cli :as cli]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
 (defn- get-class-uuid [class-uuids class-id]
   (or (class-uuids class-id)
@@ -46,7 +42,7 @@
 (defn- strip-schema-prefix [s]
   (string/replace-first s "schema:" ""))
 
-(defn- ->class-page [class-m class-db-ids class-uuids class-properties property-uuids {:keys [verbose renamed-classes renamed-pages]}]
+(defn- ->class-page [class-m class-uuids class-properties {:keys [verbose renamed-classes renamed-pages]}]
   (let [parent-class* (class-m "rdfs:subClassOf")
         parent-class (cond
                        (map? parent-class*)
@@ -63,28 +59,29 @@
                                          (if (string? type') [type'] type')))
                                   "schema:DataType")
                        "schema:DataType")
-        properties (sort (class-properties (class-m "@id")))
+        ;; Map of owl:equivalentClass exceptions
+        parent-class' (get {"rdfs:Class" "Class"} parent-class parent-class)
+        properties (class-properties (class-m "@id"))
         inverted-renamed-classes (set/map-invert renamed-classes)
         class-name (strip-schema-prefix (class-m "@id"))
         url (str "https://schema.org/" (get inverted-renamed-classes class-name class-name))]
     (cond-> {:block/original-name class-name
              :block/type "class"
              :block/uuid (get-class-uuid class-uuids (class-m "@id"))
-             :db/id (get-class-db-id class-db-ids (class-m "@id"))
              :properties (cond-> {:url url}
                            (class-m "rdfs:comment")
                            (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
-      parent-class
-      (assoc :class/parent {:db/id (get-class-db-id class-db-ids parent-class)})
+      parent-class'
+      (assoc :class-parent (strip-schema-prefix parent-class'))
       (seq properties)
-      (assoc :block/schema {:properties (mapv property-uuids properties)}))))
+      (assoc :schema-properties (map strip-schema-prefix properties)))))
 
 (def schema->logseq-data-types
   "Schema datatypes, https://schema.org/DataType, mapped to their Logseq equivalents"
   {"schema:Integer" :number
    "schema:Float" :number
    "schema:Number" :number
-   "schema:Text_Class" :default
+   "schema:Text_Class" :string
    "schema:URL_Class" :url
    "schema:Boolean" :checkbox
    "schema:Date" :date})
@@ -105,7 +102,7 @@
              (when (class-map %) :page))
         range-includes))
 
-(defn- ->property-page [property-m prop-uuid class-map class-uuids {:keys [verbose renamed-pages renamed-properties]}]
+(defn- ->property-page [property-m class-map class-uuids {:keys [verbose renamed-pages renamed-properties]}]
   (let [range-includes (get-range-includes property-m)
         schema-type (get-schema-type range-includes class-map)
         ;; Pick first range to determine type as only one range is supported currently
@@ -132,8 +129,7 @@
                                                                 " has DataType class values which aren't supported: " datatype-classes) {})))]
                                    (set (map class-uuids range-includes)))))]
     {(keyword (strip-schema-prefix (property-m "@id")))
-     {:block/uuid prop-uuid
-      :block/schema schema
+     {:block/schema schema
       :properties {:url url}}}))
 
 (defn- get-class-to-properties
@@ -243,23 +239,20 @@
             (println "Skipping" (count unsupported-properties) "properties with unsupported data types"))]
     all-properties))
 
-(defn- generate-pages
-  [select-classes class-uuids class-to-properties property-uuids options]
-  (let [;; Build db-ids for all classes as they are needed for refs later, across class maps
-        class-db-ids (->> select-classes
-                          (map #(vector (% "@id") (create-graph/new-db-id)))
-                          (into {}))
-        pages (mapv #(hash-map :page
-                               (->class-page % class-db-ids class-uuids class-to-properties property-uuids options))
-                    select-classes)]
-    (assert (= ["Thing"] (keep #(when-not (:class/parent (:page %))
-                                  (:block/original-name (:page %)))
-                               pages))
+(defn- generate-classes
+  [select-classes class-uuids class-to-properties options]
+  (let [classes (->> select-classes
+                     (map #(vector (strip-schema-prefix (get % "@id"))
+                                   (->class-page % class-uuids class-to-properties options)))
+                     (into {}))]
+    (assert (= ["Thing"] (keep #(when-not (:class-parent %)
+                                  (:block/original-name %))
+                               (vals classes)))
             "Thing is the only class that doesn't have a parent class")
-    pages))
+    classes))
 
 (defn- generate-properties
-  [select-properties property-uuids class-map class-uuids options]
+  [select-properties class-map class-uuids options]
   (when (:verbose options)
     (println "Properties by type:"
              (->> select-properties
@@ -268,7 +261,7 @@
                   frequencies)
              "\n"))
   (apply merge
-         (mapv #(->property-page % (property-uuids (% "@id")) class-map class-uuids options)
+         (mapv #(->property-page % class-map class-uuids options)
                select-properties)))
 
 (defn- get-all-classes-and-properties
@@ -318,20 +311,17 @@
         class-map (->> all-classes
                        (map #(vector (% "@id") %))
                        (into {}))
-        select-class-ids (keys class-map)
-        ;; Debug: Uncomment to generate a narrower graph of classes
-        ;; select-class-ids ["schema:Person" "schema:CreativeWorkSeries"
-        ;;                   "schema:Movie" "schema:CreativeWork" "schema:Thing"]
+        select-class-ids
+        (if (:subset options)
+          ["schema:Person" "schema:CreativeWorkSeries" "schema:Organization"
+           "schema:Movie" "schema:CreativeWork" "schema:Thing"]
+          (keys class-map))
         ;; Generate class uuids as they are needed for properties (:page) and pages
         class-uuids (->> all-classes
                          (map #(vector (% "@id") (random-uuid)))
                          (into {}))
         class-to-properties (get-class-to-properties select-class-ids all-properties)
         select-properties (set (mapcat val class-to-properties))
-        ;; Generate property uuids as they are needed for properties and pages (:schema properties)
-        property-uuids (->> select-properties
-                            (map #(vector % (random-uuid)))
-                            (into {}))
         options' (assoc options
                         :renamed-classes renamed-classes
                         :renamed-properties renamed-properties
@@ -339,12 +329,23 @@
         ;; Generate pages and properties
         properties (generate-properties
                     (filter #(contains? select-properties (% "@id")) all-properties)
-                    property-uuids class-map class-uuids options')
-        pages (generate-pages
-               (map #(class-map %) select-class-ids)
-               class-uuids class-to-properties property-uuids options')]
-    {:pages-and-blocks pages
-     :properties properties}))
+                    class-map class-uuids options')
+        properties'
+        (if (:subset options)
+          ;; only keep classes that are in subset to keep graph valid
+          (let [select-class-uuids (->> select-class-ids (map class-uuids) set)]
+            (-> properties
+                (update-vals (fn [m]
+                               (if (get-in m [:block/schema :classes])
+                                 (update-in m [:block/schema :classes] (fn [cs] (set (filterv #(contains? select-class-uuids %) cs))))
+                                 m)))))
+          properties)
+        classes (generate-classes
+                 (map #(class-map %) select-class-ids)
+                 class-uuids class-to-properties options')]
+    {:graph-namespace :schema
+     :classes classes
+     :properties properties'}))
 
 (def spec
   "Options spec"
@@ -352,30 +353,39 @@
           :desc "Print help"}
    :debug {:alias :d
            :desc "Prints additional debug info and a schema.edn for debugging"}
+   :subset {:alias :s
+            :desc "Only generate a subset of data for testing purposes"}
    :verbose {:alias :v
              :desc "Verbose mode"}})
 
-(defn- write-debug-file [blocks-tx db]
-  (let [block-uuid->name* (->> (d/q '[:find (pull ?b [:block/name :block/uuid]) :where [?b :block/name]] db)
+(defn- write-debug-file [db]
+  (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
+                     (d/q '[:find [(pull ?b [*
+                                             {:class/schema.properties [:block/original-name]}
+                                             {:class/parent [:block/original-name]}]) ...]
+                            :in $
+                            :where [?b :db/ident ?ident]]
+                          db))
+        block-uuid->name* (->> (d/q '[:find (pull ?b [:block/original-name :block/uuid]) :where [?b :block/original-name]] db)
                                (map first)
-                               (map (juxt :block/uuid :block/name))
+                               (map (juxt :block/uuid :block/original-name))
                                (into {}))
-        block-uuid->name #(or (block-uuid->name* %) (throw (ex-info (str "No entity found for " %) {})))
-        ;; TODO: Figure out why some Thing's properties don't exist
-        block-uuid->name-please-fixme
-        #(or (block-uuid->name* %2) (println "WARNING: Page" (pr-str (:block/original-name %1)) "skipped uuid" %2))]
+        block-uuid->name #(or (block-uuid->name* %) (throw (ex-info (str "No entity found for " %) {})))]
     (fs/writeFileSync "schema-org.edn"
                       (pr-str
-                       (->> blocks-tx
+                       (->> ents
                             (map (fn [m]
-                                   (cond-> (select-keys m [:block/name :block/type :block/original-name
-                                                           :block/properties :block/schema])
-                                     (seq (:block/properties m))
-                                     (update :block/properties #(update-keys % block-uuid->name))
-                                     (seq (get-in m [:block/schema :properties]))
-                                     (update-in [:block/schema :properties] #(mapv (partial block-uuid->name-please-fixme m) %))
-                                     (seq (get-in m [:block/schema :classes]))
-                                     (update-in [:block/schema :classes] #(mapv block-uuid->name %)))))
+                                   (let [props (db-property/properties m)]
+                                     (cond-> (select-keys m [:block/name :block/type :block/original-name :block/schema :db/ident
+                                                             :class/schema.properties :class/parent])
+                                       (seq props)
+                                       (assoc :block/properties (update-keys props name))
+                                       (seq (:class/schema.properties m))
+                                       (update :class/schema.properties #(set (map :block/original-name %)))
+                                       (some? (:class/parent m))
+                                       (update :class/parent :block/original-name)
+                                       (seq (get-in m [:block/schema :classes]))
+                                       (update-in [:block/schema :classes] #(set (map block-uuid->name %)))))))
                             set)))))
 
 (defn -main [args]
@@ -391,13 +401,13 @@
         conn (create-graph/init-conn dir db-name)
         init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
                                     options)
-        blocks-tx (create-graph/create-blocks-tx @conn init-data)]
+        blocks-tx (create-graph/create-blocks-tx init-data)]
     (println "Generating" (str (count (filter :block/name blocks-tx)) " pages with "
-                               (count (:pages-and-blocks init-data)) " classes and "
+                               (count (:classes init-data)) " classes and "
                                (count (:properties init-data)) " properties ..."))
     (d/transact! conn blocks-tx)
     (when (:verbose options) (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
-    (when (:debug options) (write-debug-file blocks-tx @conn))
+    (when (:debug options) (write-debug-file @conn))
     (println "Created graph" (str db-name "!"))))
 
 (when (= nbb/*file* (:file (meta #'-main)))

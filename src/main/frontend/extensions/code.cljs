@@ -138,7 +138,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.schema.handler.common-config :refer [Config-edn]]
-            [malli.util :as mu]
             [malli.core :as m]
             [rum.core :as rum]
             [promesa.core :as p]))
@@ -251,6 +250,20 @@
     :vector "[]"
     nil))
 
+;; TODO: mu/to-map-syntax has been deprecated, consider removing usage
+(defn -map-syntax-walker [schema _ children _]
+  (let [properties (m/properties schema)
+        options (m/options schema)
+        r (when properties (properties :registry))
+        properties (if r (assoc properties :registry (m/-property-registry r options m/-form)) properties)]
+    (cond-> {:type (m/type schema)}
+      (seq properties) (assoc :properties properties)
+      (seq children) (assoc :children children))))
+
+(defn- malli-to-map-syntax
+  ([?schema] (malli-to-map-syntax ?schema nil))
+  ([?schema options] (m/walk ?schema -map-syntax-walker options)))
+
 (.registerHelper CodeMirror "hint" "clojure"
                  (fn [cm _options]
                    (let [cur (.getCursor cm)
@@ -324,7 +337,7 @@
                                                 "false" nil)
 
                                          :enum
-                                         (let [{:keys [children]} (mu/to-map-syntax schema)]
+                                         (let [{:keys [children]} (malli-to-map-syntax schema)]
                                            (doseq [child children]
                                              (swap! result assoc (str child) nil)))
 
@@ -380,7 +393,7 @@
    (code-handler/save-code-editor!)
    (when-let [block-id (:block/uuid config)]
      (let [block (db/pull [:block/uuid block-id])]
-       (editor-handler/edit-block! block :max block-id)))))
+       (editor-handler/edit-block! block :max)))))
 
 (defn render!
   [state]
@@ -445,7 +458,6 @@
                                                 {:editor editor
                                                  :config config
                                                  :state state})))
-
         (.addEventListener element "keydown" (fn [e]
                                                (let [key-code (.-code e)
                                                      meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))

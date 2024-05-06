@@ -43,7 +43,7 @@
             {[_e _a block-uuid _t add1?] :block/uuid
              [_e _a _v _t add2?]         :block/name
              [_e _a _v _t add3?]         :block/parent
-             [_e _a _v _t add4?]         :block/left
+             [_e _a _v _t add4?]         :block/order
              [_e _a _v _t add5?]         :block/original-name} attr->datom
             ops (cond
                   (and (not add1?) block-uuid

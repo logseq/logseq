@@ -215,6 +215,10 @@
       @apply relative left-[-3px];
     }
   }
+
+  &.bullet-hidden {
+    padding-right: 2px;
+  }
 }
 
 .block-title-wrap {
@@ -403,7 +407,7 @@
 }
 
 .block-main-container {
-  @apply min-h-[26px];
+  @apply min-h-[24px];
 
   &:has(h1.as-heading) {
     .block-control-wrap {

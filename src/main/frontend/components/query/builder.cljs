@@ -19,7 +19,8 @@
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 (rum/defc page-block-selector
   [*find]
@@ -158,6 +159,21 @@
                   (reset! *property nil)
                   (append-tree! *tree opts loc x)))))))
 
+(rum/defc tags
+  [repo *tree opts loc]
+  (let [[values set-values!] (rum/use-state nil)]
+    (rum/use-effect!
+     (fn []
+       (p/let [result (db-async/<get-tags repo)]
+         (set-values! result)))
+     [])
+    (let [items (->> values
+                     (map :block/original-name)
+                     sort)]
+      (select items
+              (fn [{:keys [value]}]
+                (append-tree! *tree opts loc [:page-tags value]))))))
+
 (defn- query-filter-picker
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
@@ -172,12 +188,7 @@
                    (append-tree! *tree opts loc [:namespace value]))))
 
        "tags"
-       (let [items (->> (db-model/get-all-tagged-pages repo)
-                        (map second)
-                        sort)]
-         (select items
-                 (fn [{:keys [value]}]
-                   (append-tree! *tree opts loc [:page-tags value]))))
+       (tags repo *tree opts loc)
 
        "property"
        (property-select *mode *property)
@@ -248,8 +259,11 @@
   (rum/local nil ::property)
   [state *find *tree loc clause opts]
   (let [*mode (::mode state)
+        db-based? (config/db-based-graph? (state/get-current-repo))
         filters (if (= :page @*find)
-                  query-builder/page-filters
+                  (if db-based?
+                    (remove #{"namespace"} query-builder/page-filters)
+                    query-builder/page-filters)
                   query-builder/block-filters)
         filters-and-ops (concat filters query-builder/operators)
         operator? #(contains? query-builder/operators-set (keyword %))]

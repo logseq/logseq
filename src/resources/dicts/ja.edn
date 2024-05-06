@@ -132,7 +132,6 @@
  :right-side-bar/switch-theme "テーマ"
  :right-side-bar/contents "目次"
  :right-side-bar/page-graph "ページグラフ"
- :right-side-bar/history "(開発) 「元に戻す/やり直し」の履歴"
  :right-side-bar/block-ref "ブロック参照"
  :right-side-bar/graph-view "グラフビュー"
  :right-side-bar/all-pages "全ページ"
@@ -449,7 +448,6 @@
 
  :home "ホーム"
  :new-page "新しいページ："
- :whiteboard "ホワイトボード"
  :whiteboards "ホワイトボード"
  :new-graph "新規グラフを追加"
  :graph "グラフ"

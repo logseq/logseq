@@ -19,7 +19,11 @@
           data (persist-db/<fetch-init-data repo)
           _ (assert (some? data) "No data found when reloading db")
           {:keys [schema initial-data]} (dt/read-transit-str data)
-          conn (sqlite-common-db/restore-initial-data initial-data schema)
+          conn (try
+                 (sqlite-common-db/restore-initial-data initial-data schema)
+                 (catch :default e
+                   (js/console.error e)
+                   (throw e)))
           db-name (db-conn/datascript-db repo)
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]

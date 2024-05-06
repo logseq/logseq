@@ -2,11 +2,9 @@
   (:require [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
             [frontend.db :as db]
-            [frontend.handler.block :as block-handler]
-            [clojure.string :as string]))
+            [logseq.db :as ldb]))
 
 (defn did-mount!
   [state]
@@ -14,34 +12,35 @@
         content (state/get-edit-content)]
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
-    ;; FIXME: remove ugly :editor/property-triggered-by-click?
-    (if (get-in @state/state [:editor/property-triggered-by-click? id])
-      (do
-        (when-let [input (gdom/getElement (str id))]
-          (cursor/move-cursor-to-end input))
-        (state/set-state! :editor/property-triggered-by-click? {}))
-      (when content
-        (editor-handler/restore-cursor-pos! id content)))
+
+    (when content
+      (editor-handler/restore-cursor-pos! id content))
 
     (when-let [element (gdom/getElement id)]
       ;; TODO: check whether editor is visible, do less work
-      (js/setTimeout #(util/scroll-editor-cursor element) 50)))
+      (js/setTimeout #(util/scroll-editor-cursor element) 50))
+
+    (let [^js worker @state/*db-worker
+          page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
+          repo (state/get-current-repo)]
+      (when page-id
+        (.record-editor-info worker repo (str page-id) (ldb/write-transit-str (state/get-editor-info))))))
   state)
 
-(defn will-remount!
-  [_old-state state]
-  (let [new-block (:block (first (:rum/args state)))
-        edit-block (state/get-edit-content)
-        repo (state/get-current-repo)]
-    (when (and edit-block
-           (= (:block/uuid new-block)
-              (:block/uuid edit-block))
-           (not= (some-> edit-block string/trim)
-                 (some-> (:block/content new-block) string/trim)))
-      (when-let [input (state/get-input)]
-        (util/set-change-value input
-                               (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block))))))
-  state)
+;; (defn will-remount!
+;;   [_old-state state]
+;;   (let [new-block (:block (first (:rum/args state)))
+;;         edit-block (state/get-edit-content)
+;;         repo (state/get-current-repo)]
+;;     (when (and edit-block
+;;            (= (:block/uuid new-block)
+;;               (:block/uuid edit-block))
+;;            (not= (some-> edit-block string/trim)
+;;                  (some-> (:block/content new-block) string/trim)))
+;;       (when-let [input (state/get-input)]
+;;         (util/set-change-value input
+;;                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block))))))
+;;   state)
 
 (defn will-unmount
   [state]
@@ -50,12 +49,12 @@
     (editor-handler/clear-when-saved!)
     (state/set-editor-op! nil)
     (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
-      (when-not (or (contains? #{:undo :redo :escape} editor-op)
+      (when-not (or (contains? #{:undo :redo :escape :insert-block :paste-blocks} editor-op)
                     (state/editor-in-composition?))
         (editor-handler/save-block! state value))))
   state)
 
 (def lifecycle
   {:did-mount did-mount!
-   :will-remount will-remount!
+   ;; :will-remount will-remount!
    :will-unmount will-unmount})

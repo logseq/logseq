@@ -4,7 +4,6 @@
   is still some file-specific tech debt to remove from create!"
   (:require [clojure.string :as string]
             [frontend.db :as db]
-            [frontend.db.model :as model]
             [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
@@ -17,14 +16,12 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [frontend.handler.block :as block-handler]
-            [frontend.handler.file-based.recent :as file-recent-handler]
             [logseq.db :as ldb]
             [frontend.db.conn :as conn]
             [datascript.core :as d]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]))
 
-;; TODO: return page entity instead
 (defn create!
   "Create page. Has the following options:
 
@@ -44,11 +41,11 @@
    (let [repo (state/get-current-repo)
          conn (db/get-db repo false)
          config (state/get-config repo)
-         [_ page-name] (worker-page/create! repo conn config title options)]
+         [_ page-name page-uuid] (worker-page/create! repo conn config title options)]
      (when redirect?
-       (route-handler/redirect-to-page! page-name))
-     (when-let [first-block (first (:block/_left (db/entity [:block/name page-name])))]
-       (block-handler/edit-block! first-block :max nil))
+       (route-handler/redirect-to-page! page-uuid))
+     (when-let [first-block (first (:block/_left (db/get-page page-uuid)))]
+       (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
      page-name)))
 
 (defn <create!
@@ -60,18 +57,18 @@
    (p/let [repo (state/get-current-repo)
            conn (db/get-db repo false)
            config (state/get-config repo)
-           [p page-name] (worker-page/create! repo conn config title options)
+           [p _page-name page-uuid] (worker-page/create! repo conn config title options)
            _result p]
      (when redirect?
-       (route-handler/redirect-to-page! page-name))
-     (let [page (db/entity [:block/name page-name])]
+       (route-handler/redirect-to-page! page-uuid))
+     (let [page (db/get-page page-uuid)]
        (when-let [first-block (first (:block/_left page))]
-         (block-handler/edit-block! first-block :max nil))
+         (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
        page))))
 
 ;; favorite fns
 ;; ============
-(defn favorited?
+(defn file-favorited?
   [page-name]
   (let [favorites (->> (:favorites (state/get-config))
                        (filter string?)
@@ -79,7 +76,7 @@
                        (set))]
     (contains? favorites page-name)))
 
-(defn favorite-page!
+(defn file-favorite-page!
   [page-name]
   (when-not (string/blank? page-name)
     (let [favorites (->
@@ -90,7 +87,7 @@
                      (vec))]
       (config-handler/set-config! :favorites favorites))))
 
-(defn unfavorite-page!
+(defn file-unfavorite-page!
   [page-name]
   (when-not (string/blank? page-name)
     (let [old-favorites (:favorites (state/get-config))
@@ -102,33 +99,34 @@
 
 (defn- find-block-in-favorites-page
   [page-block-uuid]
-  (let [db (conn/get-db)
-        blocks (ldb/get-page-blocks db common-config/favorites-page-name {})]
-    (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
-      (some (fn [block]
-              (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
-                block))
-            blocks))))
+  (let [db (conn/get-db)]
+    (when-let [page (db/get-page common-config/favorites-page-name)]
+      (let [blocks (ldb/get-page-blocks db (:db/id page) {})]
+        (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
+          (some (fn [block]
+                  (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
+                    block))
+                blocks))))))
 
-(defn favorited?-v2
+(defn db-favorited?
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
   (some? (find-block-in-favorites-page page-block-uuid)))
 
-(defn <favorite-page!-v2
+(defn <db-favorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
-  (let [favorites-page (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])]
+  (let [favorites-page (db/get-page common-config/favorites-page-name)]
     (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
       (p/do!
        (when-not favorites-page (ldb/create-favorites-page (state/get-current-repo)))
        (ui-outliner-tx/transact!
         {:outliner-op :insert-blocks}
         (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]
-                                    (d/entity (conn/get-db) [:block/name common-config/favorites-page-name])
+                                    (db/get-page common-config/favorites-page-name)
                                     {}))))))
 
-(defn <unfavorite-page!-v2
+(defn <db-unfavorite-page!
   [page-block-uuid]
   {:pre [(uuid? page-block-uuid)]}
   (when-let [block (find-block-in-favorites-page page-block-uuid)]
@@ -144,17 +142,20 @@
   "Deletes a page. If delete is successful calls ok-handler. Otherwise calls error-handler
    if given. Note that error-handler is being called in addition to error messages that worker
    already provides"
-  [page-name ok-handler & {:keys [error-handler]}]
-  (when page-name
-    (when-let [^Object worker @state/*db-worker]
-      (-> (p/let [repo (state/get-current-repo)
-                  res (.page-delete worker repo page-name)
-                  res' (gobj/get res "result")]
-            (if res'
-              (when ok-handler (ok-handler))
-              (when error-handler (error-handler))))
-          (p/catch (fn [error]
-                     (js/console.error error)))))))
+  [page-uuid-or-name ok-handler & {:keys [error-handler]}]
+  (when page-uuid-or-name
+    (assert (or (uuid? page-uuid-or-name) (string? page-uuid-or-name)))
+    (when-let [page-uuid (or (and (uuid? page-uuid-or-name) page-uuid-or-name)
+                             (:block/uuid (db/get-page page-uuid-or-name)))]
+      (when-let [^Object worker @state/*db-worker]
+        (-> (p/let [repo (state/get-current-repo)
+                    res (.page-delete worker repo (str page-uuid))
+                    res' (gobj/get res "result")]
+              (if res'
+                (when ok-handler (ok-handler))
+                (when error-handler (error-handler))))
+            (p/catch (fn [error]
+                       (js/console.error error))))))))
 
 ;; other fns
 ;; =========
@@ -165,11 +166,9 @@
   (let [repo-dir (config/get-repo-dir repo)]
       ;; TODO: move favorite && unfavorite to worker too
     (if (config/db-based-graph? repo)
-      (when-let [page-block-uuid (:block/uuid
-                                  (d/entity (conn/get-db repo)
-                                            [:block/name (common-util/page-name-sanity-lc page-name)]))]
-        (<unfavorite-page!-v2 page-block-uuid))
-      (unfavorite-page! page-name))
+      (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+        (<db-unfavorite-page! page-block-uuid))
+      (file-unfavorite-page! page-name))
 
     (when (and (not= :rename-page (:real-outliner-op tx-meta))
                (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
@@ -198,30 +197,29 @@
                 (println "file rename failed: " error))))))
 
 (defn after-page-renamed!
-  [repo {:keys [old-name new-name old-path new-path]}]
+  [repo {:keys [page-id old-name new-name old-path new-path]}]
   (let [db-based?           (config/db-based-graph? repo)
         old-page-name       (common-util/page-name-sanity-lc old-name)
         new-page-name       (common-util/page-name-sanity-lc new-name)
-        page (db/entity [:block/name new-page-name])
         redirect? (= (some-> (state/get-current-page) common-util/page-name-sanity-lc)
-                     (common-util/page-name-sanity-lc old-page-name))]
+                     (common-util/page-name-sanity-lc old-page-name))
+        page (db/entity repo page-id)]
 
     ;; Redirect to the newly renamed page
-    (when redirect?
-      (route-handler/redirect! {:to          (if (model/whiteboard-page? page) :whiteboard :page)
+    (when (and redirect? (not (db/whiteboard-page? page)))
+      (route-handler/redirect! {:to          :page
                                 :push        false
-                                :path-params {:name new-page-name}}))
+                                :path-params {:name (str (:block/uuid page))}}))
 
-    (when (and (config/db-based-graph? repo) (favorited? old-page-name))
-      (unfavorite-page! old-page-name)
-      (favorite-page! new-page-name))
+    ;; FIXME: favorites should store db id/uuid instead of page names
+    (when (and (config/db-based-graph? repo) (file-favorited? old-page-name))
+      (file-unfavorite-page! old-page-name)
+      (file-favorite-page! new-page-name))
     (let [home (get (state/get-config) :default-home {})]
       (when (= old-page-name (common-util/page-name-sanity-lc (get home :page "")))
         (config-handler/set-config! :default-home (assoc home :page new-name))))
 
     (when-not db-based?
-      (file-recent-handler/update-or-add-renamed-page repo old-page-name new-page-name)
-
       (when (and old-path new-path)
         (rename-file! old-path new-path)))
 

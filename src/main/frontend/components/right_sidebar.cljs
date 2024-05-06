@@ -10,7 +10,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as db-model]
             [frontend.extensions.slide :as slide]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.ui :as ui-handler]
@@ -21,7 +20,8 @@
             [medley.core :as medley]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]))
+            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
+            [frontend.handler.property.util :as pu]))
 
 (rum/defc toggle
   []
@@ -49,7 +49,7 @@
 (rum/defc contents < rum/reactive db-mixins/query
   []
   [:div.contents.flex-col.flex.ml-3
-   (when-let [contents (db/entity [:block/name "contents"])]
+   (when-let [contents (db/get-page "contents")]
      (page/contents-page contents))])
 
 (rum/defc shortcut-settings
@@ -67,42 +67,6 @@
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]
      (block-cp repo idx block)]))
 
-(comment
-  (rum/defc history-action-info
-   [[k v]]
-   (when v [:.ml-4 (ui/foldable
-                    [:div (str k)]
-                    [:.ml-4 (case k
-                              :tx-id
-                              [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str v)]]
-
-                              :blocks
-                              (map (fn [block]
-                                     [:.my-1 [:pre.code.pre-wrap-white-space.bg-base-4 (str block)]]) v)
-
-                              :txs
-                              (map (fn [[_ key val]]
-                                     (when val
-                                       [:pre.code.pre-wrap-white-space.bg-base-4
-                                        [:span.font-bold (str key) " "] (str val)])) v)
-
-                              (map (fn [[key val]]
-                                     (when val
-                                       [:pre.code.pre-wrap-white-space.bg-base-4
-                                        [:span.font-bold (str key) " "] (str val)])) v))]
-                    {:default-collapsed? true})])))
-
-(comment
-  (rum/defc history-stack
-   [label stack]
-   [:.ml-4 (ui/foldable
-            [:div label " (" (count stack) ")"]
-            (map-indexed (fn [index item]
-                           [:.ml-4 (ui/foldable [:div (str index " " (-> item :tx-meta :outliner-op))]
-                                                (map history-action-info item)
-                                                {:default-collapsed? true})]) stack)
-            {:default-collapsed? true})]))
-
 (defn build-sidebar-item
   [repo idx db-id block-type *db-id init-key]
   (case (keyword block-type)
@@ -116,10 +80,6 @@
     :page-graph
     [[:.flex.items-center (ui/icon "hierarchy" {:class "text-md mr-2"}) (t :right-side-bar/page-graph)]
      (page/page-graph)]
-
-    ;; :history
-    ;; [[:.flex.items-center (ui/icon "history" {:class "text-md mr-2"}) (t :right-side-bar/history)]
-    ;;  (history)]
 
     :block-ref
     #_:clj-kondo/ignore
@@ -139,10 +99,10 @@
           page (db/entity repo lookup)
           page-name (:block/name page)]
       [[:.flex.items-center.page-title
-        (if-let [icon (get-in page [:block/properties :icon])]
+        (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
           [:.text-md.mr-2 icon]
           (ui/icon (if (= "whiteboard" (:block/type page)) "whiteboard" "page") {:class "text-md mr-2"}))
-        [:span.overflow-hidden.text-ellipsis (db-model/get-page-original-name page-name)]]
+        [:span.overflow-hidden.text-ellipsis (:block/original-name page)]]
        (page-cp repo page-name)])
 
     :search
@@ -157,16 +117,16 @@
                          :on-input-change (fn [new-value]
                                             (reset! *db-id new-value))
                          :on-input-blur (fn [new-value]
-                                            (state/sidebar-replace-block! [repo db-id block-type]
-                                                                          [repo new-value block-type]))})
+                                          (state/sidebar-replace-block! [repo db-id block-type]
+                                                                        [repo new-value block-type]))})
        (str init-key))]
 
     :page-slide-view
-    (let [page-name (:block/name (db/entity db-id))]
-      [[:a.page-title {:href (rfe/href :page {:name page-name})}
-        (db-model/get-page-original-name page-name)]
+    (let [page (db/entity db-id)]
+      [[:a.page-title {:href (rfe/href :page {:name (str (:block/uuid page))})}
+        (:block/original-name page)]
        [:div.ml-2.slide.mt-2
-        (slide/slide page-name)]])
+        (slide/slide page)]])
 
     :shortcut-settings
     [[:.flex.items-center (ui/icon "command" {:class "text-md mr-2"}) (t :help/shortcuts)]
@@ -202,10 +162,8 @@
      (when multi-items? (menu-item {:on-click #(state/sidebar-block-set-collapsed-all! false)} (t :right-side-bar/pane-expand-all)))
      (when (= type :page) [:hr.menu-separator])
      (when (= type :page)
-       (let [name (:block/name (db/entity db-id))]
-         (menu-item {:href (if (db-model/whiteboard-page? name)
-                             (rfe/href :whiteboard {:name name})
-                             (rfe/href :page {:name name}))} (t :right-side-bar/pane-open-as-page))))]))
+       (let [page  (db/entity db-id)]
+         (menu-item {:href (rfe/href :page {:name (str (:block/uuid page))})} (t :right-side-bar/pane-open-as-page))))]))
 
 (rum/defc drop-indicator
   [idx drag-to]
@@ -254,7 +212,7 @@
                                    {:as-dropdown? true
                                     :content-props {:on-click (fn [] (shui/popup-hide!))}})
                :on-drag-start (fn [event]
-                                (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event)
+                                (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
                                 (reset! *drag-from idx))
                :on-drag-end   (fn [_event]
                                 (when drag-to (state/sidebar-move-block! idx drag-to))
@@ -449,14 +407,7 @@
           [:div.text-sm
            [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
                                                                        (state/sidebar-add-block! repo "rtc" :rtc))}
-            "(Dev) RTC"]])
-
-        ;; (when (and config/dev? (state/sub [:ui/developer-mode?]))
-        ;;   [:div.text-sm
-        ;;    [:button.button.cp__right-sidebar-settings-btn {:on-click (fn [_e]
-        ;;                                                                (state/sidebar-add-block! repo "history" :history))}
-        ;;     (t :right-side-bar/history)]])
-        ]]
+            "(Dev) RTC"]])]]
 
       [:.sidebar-item-list.flex-1.scrollbar-spacing.px-2
        (if @*anim-finished?

@@ -4,29 +4,24 @@
   compatible with file graphs"
   (:require [frontend.state :as state]
             [frontend.db :as db]
-            [datascript.core :as d]
-            [logseq.common.util :as common-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.util :as db-property-util]))
 
 (defn lookup
   "Get the value of coll's (a map) by db-ident. For file and db graphs"
   [coll key]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (db-property/lookup repo db coll key)))
+  (let [repo (state/get-current-repo)]
+    (db-property-util/lookup repo coll key)))
 
 (defn lookup-by-name
   "Get the value of coll's (a map) by name. Only use this
    for file graphs or for db graphs when user properties are involved"
   [coll key]
   (let [repo (state/get-current-repo)
-        db (db/get-db repo)
-        property-name (if (keyword? key)
-                        (name key)
-                        key)]
+        property-name (if (keyword? key) (name key) key)]
     (if (sqlite-util/db-based-graph? repo)
-      (when-let [property (d/entity db [:block/name (common-util/page-name-sanity-lc property-name)])]
+      (when-let [property (db/get-case-page property-name)]
         (get coll (:block/uuid property)))
       (get coll key))))
 
@@ -35,28 +30,13 @@
   [block db-ident]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-block-property-value repo db block db-ident)))
-
-(defn get-property
-  "Get a property given its unsanitized name"
-  [property-name]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))])))
-
-;; TODO: move this to another ns
-(defn get-page-uuid
-  "Get a user property's uuid given its unsanitized name"
-  ;; Get a page's uuid given its unsanitized name
-  [property-name]
-  (:block/uuid (get-property property-name)))
+    (db-property-util/get-block-property-value repo db block db-ident)))
 
 (defn get-pid
-  "Get a built-in property's id (name or uuid) given its db-ident. For file and db graphs"
+  "Get a built-in property's id (db-ident or name) given its db-ident. For file and db graphs"
   [db-ident]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (db-property/get-pid repo db db-ident)))
+  (let [repo (state/get-current-repo)]
+    (db-property-util/get-pid repo db-ident)))
 
 (defn block->shape [block]
   (get-block-property-value block :logseq.property.tldraw/shape))
@@ -68,16 +48,16 @@
   [block]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/shape-block? repo db block)))
+    (db-property-util/shape-block? repo db block)))
 
 (defn get-closed-property-values
-  [property-name]
+  [property-id]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-closed-property-values db property-name)))
+    (db-property/get-closed-property-values db property-id)))
 
 (defn get-closed-value-entity-by-name
-  [property-name value-name]
+  [property-id value-name]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (db-property/get-closed-value-entity-by-name db property-name value-name)))
+    (db-property/get-closed-value-entity-by-name db property-id value-name)))

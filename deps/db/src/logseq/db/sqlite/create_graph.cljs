@@ -4,41 +4,32 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.frontend.property.build :as db-property-build]
             [logseq.common.util :as common-util]
-            [datascript.core :as d]
-            [logseq.db.frontend.default :as default-db]))
+            [datascript.core :as d]))
 
 (defn- build-initial-properties
-  [db]
-  (let [;; Some uuids need to be pre-defined since they are referenced by other properties
-        default-property-uuids {:logseq.property/icon (d/squuid)}]
-    (mapcat
-     (fn [[db-ident {:keys [schema original-name closed-values] :as m}]]
-       (let [id (if (contains? db-property/first-stage-properties db-ident)
-                  (let [id (:block/uuid (d/entity db db-ident))]
-                    (assert (uuid? id) "First stage properties are not created yet")
-                    id)
-                  (d/squuid))
-             prop-name (or original-name (name (:name m)))
-             blocks (if closed-values
-                      (db-property-util/build-closed-values
-                       db
-                       prop-name
-                       {:block/schema schema :block/uuid id :closed-values closed-values}
-                       {:icon-id (get default-property-uuids :logseq.property/icon)
-                        :db-ident db-ident})
-                      [(sqlite-util/build-new-property
-                        prop-name
-                        schema
-                        (get default-property-uuids db-ident id)
-                        {:db-ident db-ident})])]
-         (update blocks 0 #(default-db/mark-block-as-built-in db %))))
-     db-property/built-in-properties)))
+  []
+  (mapcat
+   (fn [[db-ident {:keys [schema original-name closed-values] :as m}]]
+     (let [prop-name (or original-name (name (:name m)))
+           blocks (if closed-values
+                    (db-property-build/build-closed-values
+                     db-ident
+                     prop-name
+                     {:db/ident db-ident :block/schema schema :closed-values closed-values}
+                     {})
+                    [(sqlite-util/build-new-property
+                      db-ident
+                      schema
+                      {:original-name prop-name})])]
+       (update blocks 0 sqlite-util/mark-block-as-built-in)))
+   db-property/built-in-properties))
+
 
 (defn kv
   "Creates a key-value pair tx with the key under the :db/ident namespace :logseq.kv.
-   For example, the :db/type key is stored under an entity with ident :logseq.kv.db/type"
+   For example, the :db/type key is stored under an entity with ident :logseq.kv/db-type"
   [key value]
   {:db/ident (keyword "logseq.kv" (str (namespace key) "-" (name key)))
    key value})
@@ -46,15 +37,24 @@
 (def built-in-pages-names
   #{"Contents"})
 
+(defn- validate-tx-for-duplicate-idents [tx]
+  (when-let [conflicting-idents
+             (->> (keep :db/ident tx)
+                  frequencies
+                  (keep (fn [[k v]] (when (> v 1) k)))
+                  seq)]
+    (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
+                         (vec conflicting-idents))
+                    {:idents conflicting-idents}))))
+
 (defn build-db-initial-data
-  [db* config-content]
-  (let [db (d/db-with db*
-                      (map (fn [ident]
-                             {:db/ident ident
-                              :block/name (name ident)
-                              :block/uuid (random-uuid)}) db-property/first-stage-properties))
-        initial-data [(kv :db/type "db")
-                      (kv :schema/version db-schema/version)]
+  "Builds tx of initial data for a new graph including key values, initial files,
+   built-in properties and built-in classes"
+  [config-content]
+  (let [initial-data [(kv :db/type "db")
+                      (kv :schema/version db-schema/version)
+                      ;; Empty property value used by db.type/ref properties
+                      {:db/ident :logseq.property/empty-placeholder}]
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
@@ -68,29 +68,31 @@
                         :file/content ""
                         :file/last-modified-at (js/Date.)}]
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
-                           (map #(assoc % :block/format :markdown))
-                           (map #(default-db/mark-block-as-built-in db %)))
-        default-properties (build-initial-properties db)
+                           (map sqlite-util/mark-block-as-built-in))
+        default-properties (build-initial-properties)
         db-ident->properties (zipmap
                               (map :db/ident default-properties)
                               default-properties)
         default-classes (map
                          (fn [[db-ident {:keys [schema original-name]}]]
-                           (default-db/mark-block-as-built-in
-                            db
-                            (sqlite-util/build-new-class
-                             (let [properties (mapv
-                                               (fn [db-ident]
-                                                 (let [id (:block/uuid (get db-ident->properties db-ident))]
-                                                   (assert id (str "Built-in property " db-ident " is not defined yet"))
-                                                   id))
-                                               (:properties schema))]
-                               (cond->
-                                {:block/original-name (or original-name (name db-ident))
-                                 :block/name (common-util/page-name-sanity-lc (name db-ident))
-                                 :db/ident db-ident
-                                 :block/uuid (d/squuid)}
-                                 (seq properties)
-                                 (assoc-in [:block/schema :properties] properties))))))
-                         db-class/built-in-classes)]
-    (vec (concat initial-data initial-files default-pages default-classes default-properties))))
+                           (let [original-name' (or original-name (name db-ident))]
+                             (sqlite-util/mark-block-as-built-in
+                              (sqlite-util/build-new-class
+                               (let [properties (mapv
+                                                 (fn [db-ident]
+                                                   (let [property (get db-ident->properties db-ident)]
+                                                     (assert property (str "Built-in property " db-ident " is not defined yet"))
+                                                     db-ident))
+                                                 (:properties schema))]
+                                 (cond->
+                                  {:block/original-name original-name'
+                                   :block/name (common-util/page-name-sanity-lc original-name')
+                                   :db/ident db-ident
+                                   :block/uuid (d/squuid)}
+                                   (seq properties)
+                                   (assoc :class/schema.properties properties)))))))
+                         db-class/built-in-classes)
+        tx (vec (concat default-properties default-classes
+                        initial-data initial-files default-pages))]
+    (validate-tx-for-duplicate-idents tx)
+    tx))

@@ -19,12 +19,13 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.class :as db-class]
             [logseq.common.util.page-ref :as page-ref]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
   [db property-name]
-  (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc (name property-name))])))
+  (:block/uuid (ldb/get-page db property-name)))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -49,8 +50,7 @@
       (-> tag-block
           add-missing-timestamps
           ;; don't use build-new-class b/c of timestamps
-          (merge {:block/journal? false
-                  :block/format :markdown
+          (merge {:block/format :markdown
                   :block/type "class"})))))
 
 (defn- update-page-tags
@@ -182,9 +182,8 @@
                             ;; don't create different uuids and thus an invalid page
                             (assoc (sqlite-util/build-new-page
                                     (date-time-util/int->journal-title deadline (common-config/get-date-formatter user-config)))
-                                   :block/journal? true
-                                   :block/journal-day deadline
-                                   :block/format :markdown))]
+                                   :block/type "journal"
+                                   :block/journal-day deadline))]
       (-> block
           (update :block/properties assoc deadline-prop (:block/uuid deadline-page))
           (update :block/refs (fnil into []) [:logseq.task/deadline deadline-page])
@@ -203,9 +202,8 @@
                                          db scheduled))
                             (assoc (sqlite-util/build-new-page
                                     (date-time-util/int->journal-title scheduled (common-config/get-date-formatter user-config)))
-                                   :block/journal? true
-                                   :block/journal-day scheduled
-                                   :block/format :markdown))]
+                                   :block/type "journal"
+                                   :block/journal-day scheduled))]
       (-> block
           (update :block/properties assoc scheduled-prop (:block/uuid scheduled-page))
           (update :block/refs (fnil into []) [:logseq.task/scheduled scheduled-page])
@@ -246,7 +244,8 @@
   (let [prop-type (cond (and (coll? prop-val)
                              (seq prop-val)
                              (set/subset? prop-val
-                                          (set (keep #(when (:block/journal? %) (:block/original-name %)) refs))))
+                                          (set (keep #(when (contains? (:block/type %) "journal")
+                                                        (:block/original-name %)) refs))))
                         :date
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
                         :default
@@ -546,10 +545,8 @@
     block))
 
 (defn- fix-pre-block-references
-  [{:block/keys [left parent page] :as block} pre-blocks]
+  [{:block/keys [parent page] :as block} pre-blocks]
   (cond-> block
-    (and (vector? left) (contains? pre-blocks (second left)))
-    (assoc :block/left page)
     ;; Children blocks of pre-blocks get lifted up to the next level which can cause conflicts
     ;; TODO: Detect sibling blocks to avoid parent-left conflicts
     (and (vector? parent) (contains? pre-blocks (second parent)))
@@ -577,7 +574,7 @@
 
 (defn- build-new-page
   [m new-property-schemas tag-classes page-names-to-uuids page-tags-uuid]
-  (-> (merge {:block/journal? false} m)
+  (-> m
       ;; Fix pages missing :block/original-name. Shouldn't happen
       ((fn [m']
          (if-not (:block/original-name m')
@@ -602,7 +599,7 @@
                                      (not (:block/file %))))
                        ;; remove file path relative
                        (map #(dissoc % :block/file)))
-        existing-pages (keep #(d/entity @conn [:block/name (:block/name %)]) all-pages)
+        existing-pages (keep #(ldb/get-page @conn (:block/name %)) all-pages)
         existing-page-names (set (map :block/name existing-pages))
         new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
         page-names-to-uuids (into {}
@@ -616,9 +613,9 @@
                           (let [schema (get new-property-schemas (keyword (:block/name %)))
                                 ;; These attributes are not allowed to be transacted because they must not change across files
                                 ;; block/uuid was particularly bad as it actually changed the page's identity across files
-                                disallowed-attributes [:block/name :block/uuid :block/format :block/journal? :block/original-name :block/journal-day
+                                disallowed-attributes [:block/name :block/uuid :block/format :block/original-name :block/journal-day
                                                        :block/created-at :block/updated-at]
-                                allowed-attributes [:block/properties :block/tags :block/alias :block/namespace :class/parent :block/type]
+                                allowed-attributes [:block/properties :block/tags :block/alias :class/parent :block/type :block/namespace]
                                 block-changes (select-keys % allowed-attributes)]
                             (when-let [ignored-attrs (not-empty (apply dissoc % (into disallowed-attributes allowed-attributes)))]
                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/original-name %)) ": "
@@ -748,8 +745,7 @@
                               (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
                               (map (fn [page-block]
                                      (-> page-block
-                                         (assoc :block/journal? false
-                                                :block/format :markdown
+                                         (assoc :block/format :markdown
                                                  ;; fixme: missing properties
                                                 :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
@@ -880,7 +876,7 @@
                     [(get ?bp ?prop-uuid) ?_v]]
                   @conn
                   (set (map :block/name user-classes)))
-             (remove #(ldb/built-in? @conn (d/entity @conn [:block/name (second %)])))
+             (remove #(ldb/built-in? (ldb/get-page @conn (second %))))
              (reduce (fn [acc [class-id _prop-name prop-uuid]]
                        (update acc class-id (fnil conj #{}) prop-uuid))
                      {}))
@@ -925,7 +921,7 @@
                             (merge (ldb/build-favorite-tx favorite-id)
                                    {:block/uuid (d/squuid)
                                     :db/id (or (some-> (:db/id (last acc)) dec) -1)
-                                    :block/left {:db/id (or (:db/id (last acc)) page-id)}
+                                    :block/order (db-order/gen-key nil)
                                     :block/parent page-id
                                     :block/page page-id}))))
                    []
@@ -939,10 +935,10 @@
      (ldb/create-favorites-page repo)
      (if-let [favorited-ids
               (keep (fn [page-name]
-                      (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
+                      (some-> (ldb/get-page @conn page-name)
                               :block/uuid))
                     favorites)]
-       (let [page-entity (d/entity @conn [:block/name common-config/favorites-page-name])]
+       (let [page-entity (ldb/get-page @conn common-config/favorites-page-name)]
          (insert-favorites repo favorited-ids (:db/id page-entity)))
        (log-fn :no-favorites-found {:favorites favorites})))))
 
@@ -975,7 +971,7 @@
    * :<save-config-file - fn which saves a config file
    * :<save-logseq-file - fn which saves a logseq file
    * :<copy-asset - fn which copies asset file
-   
+
    Note: See export-doc-files for additional options that are only for it"
   [repo-or-conn conn config-file *files {:keys [<read-file <copy-asset rpath-key log-fn]
                                          :or {rpath-key :path log-fn println}

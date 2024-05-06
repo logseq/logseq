@@ -71,7 +71,7 @@
     (assoc block :block/content content')))
 
 (defn wrap-parse-block
-  [{:block/keys [content left level] :as block}]
+  [{:block/keys [content level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
         block (if (nil? content)
                 block
@@ -79,12 +79,13 @@
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
-                      block' (merge block (block/parse-block (assoc block :block/content content')))
+                      block' (merge block
+                                    (block/parse-block (assoc block :block/content content'))
+                                    {:block/content content})
                       block' (if (seq (:block/properties block))
                                (update block' :block/properties (fn [m] (merge m (:block/properties block))))
                                block')]
                   (update block' :block/refs remove-non-existed-refs!)))
-        block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]
@@ -163,4 +164,4 @@
    {:outliner-op :save-block}
    (doseq [block (keep #(set-heading-aux! % heading) block-ids)]
      (outliner-op/save-block! block))
-   (property-handler/batch-set-block-property! repo block-ids :heading heading)))
+   (property-handler/batch-set-block-property! repo block-ids :logseq.property/heading heading)))

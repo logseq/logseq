@@ -49,7 +49,9 @@
             [frontend.modules.layout.core]
             [frontend.handler.code :as code-handler]
             [frontend.handler.search :as search-handler]
-            [logseq.api.block :as api-block]))
+            [logseq.api.block :as api-block]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.property.util :as db-property-util]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -61,6 +63,7 @@
                 (and (vector? id-or-name) (= (count id-or-name) 2)) id-or-name
                 (number? id-or-name) id-or-name
                 (and (string? id-or-name) (util/uuid-string? id-or-name)) [:block/uuid (uuid id-or-name)]
+                ;; Can still use block/name lookup ref here because the db_worker convert it to the actual eid
                 :else [:block/name (util/page-name-sanity-lc id-or-name)])]
       (db-async/<pull (state/get-current-repo) eid))))
 
@@ -620,7 +623,7 @@
     (when-let [block-uuid (and block-uuid (sdk-utils/uuid-or-throw-error block-uuid))]
       (when-let [block (db-model/query-block-by-uuid block-uuid)]
         (let [{:keys [pos] :or {pos :max}} (bean/->clj opts)]
-          (editor-handler/edit-block! block pos block-uuid))))))
+          (editor-handler/edit-block! block pos {:container-id :unknown-container}))))))
 
 ;; TODO: perf improvement, some operations such as delete-block doesn't need to load the full page
 ;; instead, the db worker should provide those calls
@@ -647,7 +650,8 @@
                                          [nil (uuid block-uuid-or-page-name)]
                                          [block-uuid-or-page-name nil])
                 page-name              (when page-name (util/page-name-sanity-lc page-name))
-                _                      (when (and page-name (not (db/entity [:block/name page-name])))
+                _                      (when (and page-name
+                                                  (nil? (ldb/get-page (db/get-db) page-name)))
                                          (page-handler/<create! block-uuid-or-page-name {:create-first-block? false}))
                 custom-uuid            (or customUUID (:id properties))
                 custom-uuid            (when custom-uuid (sdk-utils/uuid-or-throw-error custom-uuid))
@@ -657,9 +661,7 @@
                                                  (util/format "Custom block UUID already exists (%s)." custom-uuid))))
                 block-uuid'            (if (and (not sibling) before block-uuid)
                                          (let [block       (db/entity [:block/uuid block-uuid])
-                                               first-child (db-model/get-by-parent-&-left (db/get-db)
-                                                                                          (:db/id block)
-                                                                                          (:db/id block))]
+                                               first-child (ldb/get-first-child (db/get-db) (:db/id block))]
                                            (if first-child
                                              (:block/uuid first-child)
                                              block-uuid))
@@ -699,7 +701,7 @@
                                          (throw (js/Error.
                                                  (util/format "Custom block UUID already exists (%s)." uuid)))))))
                 block (if (and before sibling)
-                        (db/pull (:db/id (:block/left block))) block)
+                        (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)
                 _ (editor-handler/insert-block-tree-after-target
                    (:db/id block) sibling bb (:block/format block) keep-uuid?)]
             nil))))))
@@ -754,12 +756,13 @@
 (def ^:export get_previous_sibling_block
   (fn [block-uuid]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<pull-block id)]
+            block (<pull-block id)
+            ;; Load all children blocks
+            _ (db-async/<get-block (state/get-current-repo) (:block/uuid (:block/parent block)) {:children? true})]
       (when block
-       (p/let [{:block/keys [parent left]} block
-               block (when-not (= parent left) (<pull-block (:db/id left)))]
-         (when block
-           (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
+        (when-let [left-sibling (ldb/get-left-sibling (db/entity (:db/id block)))]
+          (let [block (db/pull (:db/id left-sibling))]
+            (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
 
 (def ^:export get_next_sibling_block
   (fn [block-uuid]
@@ -821,8 +824,9 @@
 (def ^:export get_current_page_blocks_tree
   (fn []
     (when-let [page (state/get-current-page)]
-      (let [blocks (db-model/get-page-blocks-no-cache page)
-            blocks (outliner-tree/blocks->vec-tree blocks page)
+      (let [page-id (:db/id (ldb/get-page (db/get-db) page))
+            blocks (db-model/get-page-blocks-no-cache page-id)
+            blocks (outliner-tree/blocks->vec-tree blocks page-id)
             ;; clean key
             blocks (sdk-utils/normalize-keyword-for-json blocks)]
         (bean/->js blocks)))))
@@ -830,9 +834,9 @@
 (def ^:export get_page_blocks_tree
   (fn [id-or-page-name]
     (p/let [_ (<ensure-page-loaded id-or-page-name)]
-      (when-let [page-name (:block/name (db-model/get-page id-or-page-name))]
-        (let [blocks (db-model/get-page-blocks-no-cache page-name)
-              blocks (outliner-tree/blocks->vec-tree blocks page-name)
+      (when-let [page-id (:db/id (db-model/get-page id-or-page-name))]
+        (let [blocks (db-model/get-page-blocks-no-cache page-id)
+              blocks (outliner-tree/blocks->vec-tree blocks page-id)
               blocks (sdk-utils/normalize-keyword-for-json blocks)]
           (bean/->js blocks))))))
 
@@ -842,10 +846,10 @@
           block (db-async/<get-block repo page-name-or-uuid :children? false)
           ;; load refs to db
           _ (when-let [id (:db/id block)] (db-async/<get-block-refs repo id))
-          page-name (:block/name block)
-          ref-blocks (if page-name
-                       (db-model/get-page-referenced-blocks-full page-name)
-                       (db-model/get-block-referenced-blocks (:block/uuid block)))
+          page? (nil? (:block/page block))
+          ref-blocks (if page?
+                       (db-model/get-page-referenced-blocks-full (:db/id block))
+                       (db-model/get-block-referenced-blocks (:db/id block)))
           ref-blocks (and (seq ref-blocks) (into [] ref-blocks))]
     (bean/->js (sdk-utils/normalize-keyword-for-json ref-blocks))))
 
@@ -864,7 +868,7 @@
 (defn last-child-of-block
   [block]
   (when-let [children (:block/_parent block)]
-    (last (db-model/sort-by-left children block))))
+    (last (db-model/sort-by-order children))))
 
 (defn ^:export prepend_block_in_page
   [uuid-or-page-name content ^js opts]
@@ -930,7 +934,8 @@
 
                                       :else %)
                                    inputs)
-              result          (apply db-async/<q repo (cons query resolved-inputs))]
+              result          (apply db-async/<q repo {:transact-db? false}
+                                (cons query resolved-inputs))]
         (bean/->js (sdk-utils/normalize-keyword-for-json result false))))))
 
 (defn ^:export custom_query
@@ -1024,17 +1029,18 @@
             repo (state/get-current-repo)]
       (if (or (not block) (true? overwrite))
         (do (when-let [old-target block]
-              (property-handler/remove-block-property! repo (:block/uuid old-target) :template))
-            (property-handler/set-block-property! repo target-uuid :template template-name))
+              (let [k (db-property-util/get-pid repo :logseq.property/template)]
+                (property-handler/remove-block-property! repo (:block/uuid old-target) k)))
+            (property-handler/set-block-property! repo target-uuid :logseq.property/template template-name))
         (throw (js/Error. "Template already exists!"))))))
 
 (defn ^:export remove_template
   [name]
   (p/let [block (when name (db-async/<get-template-by-name name))]
     (when block
-      (property-handler/remove-block-property!
-       (state/get-current-repo)
-       (:block/uuid block) :template))))
+      (let [repo (state/get-current-repo)
+            k (db-property-util/get-pid repo :logseq.property/template)]
+        (property-handler/remove-block-property! repo (:block/uuid block) k)))))
 
 ;; search
 (defn ^:export search

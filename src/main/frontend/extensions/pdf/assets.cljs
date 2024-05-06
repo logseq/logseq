@@ -2,6 +2,7 @@
   (:require [cljs.reader :as reader]
             [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.fs :as fs]
@@ -16,7 +17,7 @@
             [frontend.extensions.lightbox :as lightbox]
             [frontend.state :as state]
             [frontend.util :as util]
-            [frontend.extensions.pdf.utils :as pdf-utils]
+            [logseq.publishing.db :as publish-db]
             [frontend.extensions.pdf.windows :as pdf-windows]
             [logseq.common.path :as path]
             [logseq.common.config :as common-config]
@@ -129,10 +130,12 @@
 (defn update-hl-block!
   [highlight]
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
-    (doseq [[k v] {:hl-stamp (if (area-highlight? highlight)
-                               (get-in highlight [:content :image])
-                               (js/Date.now))
-                   :hl-color (get-in highlight [:properties :color])}]
+    (doseq [[k v] {(pu/get-pid :logseq.property/hl-stamp)
+                   (if (area-highlight? highlight)
+                     (get-in highlight [:content :image])
+                     (js/Date.now))
+                   (pu/get-pid :logseq.property/hl-color)
+                   (get-in highlight [:properties :color])}]
       (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) k v))))
 
 (defn unlink-hl-area-image$
@@ -179,7 +182,7 @@
 
         ;; try to update file path
         (do
-          (property-handler/add-page-property! page-name :file-path url)
+          (property-handler/add-page-property! page-name (pu/get-pid :logseq.property/file-path) url)
           page)))))
 
 (defn ensure-ref-block!
@@ -203,11 +206,9 @@
                          (pu/get-pid :logseq.property/hl-page)  page
                          (pu/get-pid :logseq.property/hl-color) (:color properties)}
                          (not (config/db-based-graph? (state/get-current-repo)))
-                       ;; force custom uuid
+                          ;; force custom uuid
                          (assoc :id (str id)))
-                 properties (->>
-                             (wrap-props props)
-                             (property-handler/replace-key-with-id (state/get-current-repo)))]
+                 properties (wrap-props props)]
              (when (string? text)
                (editor-handler/api-insert-new-block!
                 text (merge {:page        (:block/name ref-page)
@@ -286,8 +287,10 @@
 
 (rum/defc area-display
   [block]
-  (when-let [asset-path' (and block (pdf-utils/get-area-block-asset-url
-                                     block (db-utils/pull (:db/id (:block/page block)))))]
+  (when-let [asset-path' (and block (publish-db/get-area-block-asset-url
+                                     (conn/get-db (state/get-current-repo))
+                                     block
+                                     (db-utils/pull (:db/id (:block/page block)))))]
     (let [asset-path (assets-handler/make-asset-url asset-path')]
       [:span.hl-area
        [:span.actions

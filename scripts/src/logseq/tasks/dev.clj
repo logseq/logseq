@@ -60,7 +60,7 @@
   [file1 file2 & args]
   (let [spec {:ignored-attributes
               ;; Ignores some attributes by default that are expected to change often
-              {:alias :i :coerce #{:keyword} :default #{:block/tx-id :block/left :block/updated-at}}}
+              {:alias :i :coerce #{:keyword} :default #{:block/tx-id :block/order :block/updated-at}}}
         {{:keys [ignored-attributes]} :opts} (cli/parse-args args {:spec spec})
         datom-filter (fn [[e a _ _ _]] (contains? ignored-attributes a))
         data-diff* (apply data/diff (map (fn [x] (->> x slurp edn/read-string (remove datom-filter))) [file1 file2]))

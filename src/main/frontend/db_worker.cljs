@@ -6,7 +6,6 @@
             [cljs.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [cognitect.transit :as transit]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [frontend.worker.async-util :include-macros true :refer [<?] :as async-util]
@@ -15,7 +14,8 @@
             [frontend.worker.export :as worker-export]
             [frontend.worker.file :as file]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
+            [frontend.worker.handler.page.db-based.rename :as db-worker-page-rename]
             [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.core2 :as rtc-core2]
             [frontend.worker.rtc.db-listener]
@@ -30,15 +30,16 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
             [promesa.core :as p]
-            [shadow.cljs.modern :refer [defclass]]))
+            [shadow.cljs.modern :refer [defclass]]
+            [logseq.common.util :as common-util]
+            [frontend.worker.db.fix :as db-fix]
+            [logseq.db.frontend.order :as db-order]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
 (defonce *datascript-conns worker-state/*datascript-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
-
-(defonce transit-w (transit/writer :json))
 
 (defn- <get-opfs-pool
   [graph]
@@ -304,8 +305,10 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [selector (ldb/read-transit-str selector-str)
            id (ldb/read-transit-str id-str)
-           result (->> (d/pull @conn selector id)
-                       (sqlite-common-db/with-parent-and-left @conn))]
+           eid (when (and (vector? id) (= :block/name (first id)))
+                 (:db/id (ldb/get-page @conn (second id))))
+           result (->> (d/pull @conn selector (or eid id))
+                       (sqlite-common-db/with-parent @conn))]
        (ldb/write-transit-str result))))
 
   (pull-many
@@ -319,14 +322,14 @@
   (get-right-sibling
    [_this repo db-id]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [result (ldb/get-right-sibling @conn db-id)]
+     (let [result (ldb/get-right-sibling (d/entity @conn db-id))]
        (ldb/write-transit-str result))))
 
   (get-block-and-children
-   [_this repo name children?]
-   (assert (string? name))
+   [_this repo id opts]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn name children?))))
+     (let [id (if (and (string? id) (common-util/uuid-string? id)) (uuid id) id)]
+       (ldb/write-transit-str (sqlite-common-db/get-block-and-children @conn id (ldb/read-transit-str opts))))))
 
   (get-block-refs
    [_this repo id]
@@ -363,27 +366,37 @@
              tx-meta (if (string? tx-meta)
                        (ldb/read-transit-str tx-meta)
                        tx-meta)
+             tx-data' (if (and (= :update-property (:outliner-op tx-meta))
+                               (:many->one? tx-meta) (:property-id tx-meta))
+                        (concat tx-data
+                                (db-fix/fix-cardinality-many->one @conn (:property-id tx-meta)))
+                        tx-data)
+             tx-data' (if (contains? #{:new-property :insert-blocks} (:outliner-op tx-meta))
+                        (map (fn [m]
+                               (if (and (map? m) (nil? (:block/order m)))
+                                 (assoc m :block/order (db-order/gen-key nil))
+                                 m)) tx-data')
+                        tx-data')
              context (if (string? context)
                        (ldb/read-transit-str context)
                        context)
              _ (when context (worker-state/set-context! context))
-             tx-meta' (if (:new-graph? tx-meta)
-                        tx-meta
-                        (cond-> tx-meta
-                          (and (not (:whiteboard/transact? tx-meta))
-                               (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
-                          (assoc :skip-store? true)
+             tx-meta' (cond-> tx-meta
+                        (and (not (:whiteboard/transact? tx-meta))
+                             (not (:rtc-download-graph? tx-meta))) ; delay writes to the disk
+                        (assoc :skip-store? true)
 
-                          true
-                          (dissoc :insert-blocks?)))]
+                        true
+                        (dissoc :insert-blocks?))]
          (when-not (and (:create-today-journal? tx-meta)
                         (:today-journal-name tx-meta)
-                        (seq tx-data)
-                        (d/entity @conn [:block/name (:today-journal-name tx-meta)])) ; today journal created already
+                        (seq tx-data')
+                        (ldb/get-page @conn (:today-journal-name tx-meta))) ; today journal created already
 
-           ;; (prn :debug :transact :tx-data tx-data :tx-meta tx-meta')
+           ;; (prn :debug :transact :tx-data tx-data' :tx-meta tx-meta')
+
            (worker-util/profile "Worker db transact"
-                                (ldb/transact! conn tx-data tx-meta')))
+                                (ldb/transact! conn tx-data' tx-meta')))
          nil)
        (catch :default e
          (prn :debug :error)
@@ -399,10 +412,10 @@
      (ldb/write-transit-str (sqlite-common-db/get-initial-data @conn))))
 
   (fetch-all-pages
-   [_this repo]
+   [_this repo exclude-page-ids-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (async/go
-       (let [all-pages (sqlite-common-db/get-all-pages @conn)
+       (let [all-pages (sqlite-common-db/get-all-pages @conn (ldb/read-transit-str exclude-page-ids-str))
              partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
          (doseq [[idx tx-data] partitioned-data]
            (worker-util/post-message :sync-db-changes {:repo repo
@@ -484,19 +497,24 @@
      (search/page-search repo @conn q limit)))
 
   (page-rename
-   [this repo old-name new-name]
+   [this repo page-uuid-str new-name]
+   (assert (common-util/uuid-string? page-uuid-str))
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [config (worker-state/get-config repo)
-           result (worker-page-rename/rename! repo conn config old-name new-name)]
+           f (if (sqlite-util/db-based-graph? repo)
+               db-worker-page-rename/rename!
+               file-worker-page-rename/rename!)
+           result (f repo conn config (uuid page-uuid-str) new-name)]
        (bean/->js {:result result}))))
 
   (page-delete
-   [this repo page-name]
+   [this repo page-uuid-str]
+   (assert (common-util/uuid-string? page-uuid-str))
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [error-handler (fn [{:keys [msg]}]
                            (worker-util/post-message :notification
                                                      [[:div [:p msg]] :error]))
-           result (worker-page/delete! repo conn page-name {:error-handler error-handler})]
+           result (worker-page/delete! repo conn (uuid page-uuid-str) {:error-handler error-handler})]
        (bean/->js {:result result}))))
 
   (apply-outliner-ops
@@ -537,11 +555,13 @@
 
   ;; Export
   (block->content
-   [this repo block-uuid-or-page-name tree->file-opts context]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (worker-export/block->content repo @conn block-uuid-or-page-name
-                                   (ldb/read-transit-str tree->file-opts)
-                                   (ldb/read-transit-str context))))
+   [this repo block-uuid-str tree->file-opts context]
+   (assert (common-util/uuid-string? block-uuid-str))
+   (let [block-uuid (uuid block-uuid-str)]
+     (when-let [conn (worker-state/get-datascript-conn repo)]
+       (worker-export/block->content repo @conn block-uuid
+                                     (ldb/read-transit-str tree->file-opts)
+                                     (ldb/read-transit-str context)))))
 
   (get-all-pages
    [this repo]
@@ -642,18 +662,22 @@
 
   (rtc-get-block-update-log
    [_this block-uuid]
-   (transit/write transit-w (rtc-core/get-block-update-log (uuid block-uuid))))
+   (ldb/write-transit-str (rtc-core/get-block-update-log (uuid block-uuid))))
 
   (undo
    [_this repo page-block-uuid-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (undo-redo/undo repo (uuid page-block-uuid-str) conn))
-   nil)
+     (ldb/write-transit-str (undo-redo/undo repo (uuid page-block-uuid-str) conn))))
 
   (redo
    [_this repo page-block-uuid-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (undo-redo/redo repo (uuid page-block-uuid-str) conn)))
+     (ldb/write-transit-str (undo-redo/redo repo (uuid page-block-uuid-str) conn))))
+
+  (record-editor-info
+   [_this repo page-block-uuid-str editor-info-str]
+   (undo-redo/record-editor-info! repo (uuid page-block-uuid-str) (ldb/read-transit-str editor-info-str))
+   nil)
 
   (keep-alive
    [_this]

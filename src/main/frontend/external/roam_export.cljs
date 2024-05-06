@@ -22,16 +22,16 @@
 
 (defn <uuid->uid-map []
   (let [repo (state/get-current-repo)]
-    (p/let [result (db-async/<q repo
+    (p/let [result (db-async/<q repo {:transact-db? false}
                                 '[:find (pull ?r [:block/uuid])
                                   :in $
                                   :where
                                   [?b :block/refs ?r]])]
       (->> result
-       (map (comp :block/uuid first))
-       (distinct)
-       (map (fn [uuid] [uuid (nano-id)]))
-       (into {})))))
+           (map (comp :block/uuid first))
+           (distinct)
+           (map (fn [uuid] [uuid (nano-id)]))
+           (into {})))))
 
 (defn update-content [content uuid->uid-map]
   (when content                         ; page block doesn't have content

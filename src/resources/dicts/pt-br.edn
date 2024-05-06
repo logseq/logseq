@@ -129,7 +129,6 @@
  :right-side-bar/switch-theme "Temas"
  :right-side-bar/contents "Conteúdo"
  :right-side-bar/page-graph "Grafo da página"
- :right-side-bar/history "(Dev) Histórico de desfazer/refazer"
  :right-side-bar/block-ref "Referências de bloco"
  :right-side-bar/graph-view "Visualização de grafo"
  :right-side-bar/all-pages "Todas as páginas"
@@ -773,7 +772,6 @@
 
  ;; Allowed duplicates - start
  :settings-of-plugins "Plugins"
- :whiteboard "Whiteboard"
  :whiteboards "Whiteboards"
  :on-boarding/quick-tour-journal-page-desc-2 "[[link]]"
  :plugin/downloads "Downloads"

@@ -132,7 +132,6 @@
  :right-side-bar/switch-theme "Tema modları"
  :right-side-bar/contents "İçindekiler"
  :right-side-bar/page-graph "Sayfa grafı"
- :right-side-bar/history "(Dev) Geri Al / Yinele geçmişi"
  :right-side-bar/block-ref "Blok referansı"
  :right-side-bar/graph-view "Graf görünümü"
  :right-side-bar/all-pages "Bütün sayfalar"
@@ -469,7 +468,6 @@
 
  :home "Başlangıç"
  :new-page "Yeni sayfa:"
- :whiteboard "Beyaz tahta"
  :whiteboards "Beyaz tahtalar"
  :new-graph "Yeni graf ekle"
  :graph "Graf"

@@ -6,7 +6,8 @@
             [clojure.walk :as walk]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.db :as ldb]))
 
 (defn- replace-page-ref-aux
   "Unsanitized names"
@@ -105,27 +106,27 @@
 
 (defn replace-page-ref
   "Unsanitized only"
-  [db config old-original-name new-name]
+  [db config page new-name]
   ;; update all pages which have references to this page
-  (let [page (d/entity db [:block/name (common-util/page-name-sanity-lc old-original-name)])
-        to-page (d/entity db [:block/name (common-util/page-name-sanity-lc new-name)])
+  (let [to-page (ldb/get-page db new-name)
+        old-original-name (:block/original-name page)
         blocks (:block/_refs (d/entity db (:db/id page)))
-        tx       (->> (map (fn [{:block/keys [uuid content properties format] :as block}]
-                             (let [content    (let [content' (replace-old-page! config content old-original-name new-name format)]
-                                                (when-not (= content' content)
-                                                  content'))
-                                   properties (let [properties' (walk-replace-old-page! config properties old-original-name new-name format)]
-                                                (when-not (= properties' properties)
-                                                  properties'))]
-                               (when (or content properties)
-                                 (common-util/remove-nils-non-nested
-                                  {:block/uuid       uuid
-                                   :block/content    content
-                                   :block/properties properties
-                                   :block/properties-order (when (seq properties)
-                                                             (map first properties))
-                                   :block/refs (->> (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
-                                                    (map :db/id)
-                                                    (set))})))) blocks)
-                      (remove nil?))]
+        tx     (->> (map (fn [{:block/keys [uuid content properties format] :as block}]
+                           (let [content    (let [content' (replace-old-page! config content old-original-name new-name format)]
+                                              (when-not (= content' content)
+                                                content'))
+                                 properties (let [properties' (walk-replace-old-page! config properties old-original-name new-name format)]
+                                              (when-not (= properties' properties)
+                                                properties'))]
+                             (when (or content properties)
+                               (common-util/remove-nils-non-nested
+                                {:block/uuid       uuid
+                                 :block/content    content
+                                 :block/properties properties
+                                 :block/properties-order (when (seq properties)
+                                                           (map first properties))
+                                 :block/refs (->> (rename-update-block-refs! (:block/refs block) (:db/id page) (:db/id to-page))
+                                                  (map :db/id)
+                                                  (set))})))) blocks)
+                    (remove nil?))]
     tx))

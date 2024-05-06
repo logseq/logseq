@@ -40,7 +40,7 @@
 
 #?(:cljs
    (extend-protocol IPrintWithWriter
-     js/Symbol
+     symbol
      (-pr-writer [sym writer _]
        (-write writer (str "\"" (.toString sym) "\"")))))
 #?(:cljs

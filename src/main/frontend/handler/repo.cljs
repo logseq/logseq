@@ -193,7 +193,6 @@
            _ (state/add-repo! {:url full-graph-name})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
            initial-data (sqlite-create-graph/build-db-initial-data
-                         (db/get-db)
                          (migrate-db-config config/config-default-content))
            _ (db/transact! full-graph-name initial-data)
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)

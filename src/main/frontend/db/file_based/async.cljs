@@ -9,7 +9,7 @@
 
 (defn <file-based-get-all-properties
   [graph]
-  (p/let [properties (<q graph
+  (p/let [properties (<q graph {:transact-db? false}
                          '[:find [?p ...]
                            :where
                            [_ :block/properties ?p]])
@@ -37,7 +37,7 @@
 
 (defn <get-file-based-property-values
   [graph property]
-  (p/let [result (<q graph
+  (p/let [result (<q graph {:transact-db? false}
                      '[:find ?property-val ?text-property-val
                        :in $ ?property
                        :where

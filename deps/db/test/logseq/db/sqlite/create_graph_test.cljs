@@ -6,12 +6,13 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.validate :as db-validate]
+            [logseq.db.frontend.property :as db-property]
             [logseq.db :as ldb]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
     (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data @conn "{}"))
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           ident-ents (->> (d/q '[:find (pull ?b [:db/ident :block/type])
                                  :where [?b :db/ident]]
                                @conn)
@@ -24,7 +25,8 @@
         (is (= '() (remove namespace default-idents))
             "All default :db/ident's have namespaces")
         (is (= []
-               (->> (keep namespace default-idents)
+               (->> (remove db-property/db-attribute-properties default-idents)
+                    (keep namespace)
                     (remove #(string/starts-with? % "logseq."))))
             "All default :db/ident namespaces start with logseq."))
 
@@ -43,31 +45,36 @@
 
 (deftest new-graph-marks-built-ins
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data @conn "{}"))
-        idents (->> (d/q '[:find [(pull ?b [:db/ident :block/properties]) ...]
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+        idents (->> (d/q '[:find [(pull ?b [:db/ident :logseq.property/built-in?]) ...]
                            :where [?b :db/ident]]
                          @conn)
-                    ;; only kv's don't have built-in property
-                    (remove #(= "logseq.kv" (namespace (:db/ident %)))))]
+                    ;; only kv's and empty property value aren't marked because
+                    ;; they aren't user facing
+                    (remove #(or (= "logseq.kv" (namespace (:db/ident %)))
+                                 (= :logseq.property/empty-placeholder (:db/ident %)))))]
     (is (= []
-           (remove #(ldb/built-in? @conn %) idents))
+           (remove ldb/built-in? idents))
         "All entities with :db/ident have built-in property (except for kv idents)")))
 
 (deftest new-graph-creates-class
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data @conn "{}"))
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         task (d/entity @conn :logseq.class/task)]
     (is (contains? (:block/type task) "class")
         "Task class has correct type")
-    (is (= 4 (count (get-in task [:block/schema :properties])))
+    (is (= 4 (count (:class/schema.properties task)))
         "Has correct number of task properties")
-    (is (every? #(contains? (:block/type (d/entity @conn [:block/uuid %])) "property")
-                (get-in task [:schema :properties]))
+    (is (every? #(contains? (:block/type %) "property")
+                (:class/schema.properties task))
         "Each task property has correct type")))
 
 (deftest new-graph-is-valid
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data @conn "{}"))
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         validation (db-validate/validate-db! @conn)]
+    ;; For debugging
+    ;; (cljs.pprint/pprint (map :entity (:errors validation)))
+    ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))
     (is (nil? (:errors validation))
         "New graph has no validation errors")))

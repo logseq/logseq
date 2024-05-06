@@ -5,9 +5,7 @@
 (defonce version 2)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
-  {:schema/version  {}
-   :db/type         {}
-   :db/ident        {:db/unique :db.unique/identity}
+  {:db/ident        {:db/unique :db.unique/identity}
 
    :recent/pages {}
 
@@ -22,9 +20,8 @@
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
                   :db/index true}
-   :block/left   {:db/valueType :db.type/ref
-                  :db/index true}
-   :block/collapsed? {:db/index true}
+   :block/order {:db/index true}
+   :block/collapsed? {}
    :block/collapsed-properties {:db/valueType :db.type/ref
                                 :db/cardinality :db.cardinality/many}
 
@@ -48,6 +45,9 @@
    ;; which block this block links to, used for tag, embeds
    :block/link {:db/valueType :db.type/ref
                 :db/index true}
+
+   ;; page's namespace
+   :block/namespace {:db/valueType :db.type/ref}
 
    ;; for pages
    :block/alias {:db/valueType :db.type/ref
@@ -81,23 +81,23 @@
    ;; whether blocks is a repeated block (usually a task)
    :block/repeated? {}
 
-   :block/created-at {}
-   :block/updated-at {}
+   :block/created-at {:db/index true}
+   :block/updated-at {:db/index true}
 
    ;; page additional attributes
    ;; page's name, lowercase
    :block/name {:db/unique :db.unique/identity}
 
    ;; page's original name
-   :block/original-name {:db/unique :db.unique/identity}
-   ;; whether page's is a journal
-   :block/journal? {}
+   :block/original-name {:db/index true}
+
+   ;; page's journal day
    :block/journal-day {}
-   ;; page's namespace
-   :block/namespace {:db/valueType :db.type/ref}
+
    ;; macros in block
    :block/macros {:db/valueType :db.type/ref
                   :db/cardinality :db.cardinality/many}
+
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
 
@@ -119,17 +119,22 @@
 (def schema-for-db-based-graph
   (merge
    (dissoc schema
-           :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
-           :block/properties-order)
-   {:class/parent {:db/valueType :db.type/ref
+           :block/namespace :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
+           :block/properties :block/properties-order :block/repeated? :block/deadline :block/scheduled :block/priority :block/marker)
+   {:block/name {:db/index true}        ; remove db/unique for :block/name
+    ;; class properties
+    :class/parent {:db/valueType :db.type/ref
                    :db/index true}
+    :class/schema.properties {:db/valueType :db.type/ref
+                              :db/cardinality :db.cardinality/many
+                              :db/index true}
+
     :file/last-modified-at {}
     :asset/uuid {:db/unique :db.unique/identity}
     :asset/meta {}}))
 
 (def retract-attributes
-  #{
-    :block/refs
+  #{:block/refs
     :block/tags
     :block/alias
     :block/marker
@@ -143,9 +148,7 @@
     :block/properties-text-values
     :block/macros
     :block/invalid-properties
-    :block/warning
-    }
-  )
+    :block/warning})
 
 ;; If only block/content changes
 (def db-version-retract-attributes
@@ -170,19 +173,21 @@
     :block/tags})
 
 
+;; DB graph helpers
+;; ================
 (def ref-type-attributes
   (into #{}
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.type/ref (:db/valueType attr-body-map))
                   attr-name)))
-        schema))
+        schema-for-db-based-graph))
 
 (def card-many-attributes
   (into #{}
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.cardinality/many (:db/cardinality attr-body-map))
                   attr-name)))
-        schema))
+        schema-for-db-based-graph))
 
 (def card-many-ref-type-attributes
   (set/intersection card-many-attributes ref-type-attributes))

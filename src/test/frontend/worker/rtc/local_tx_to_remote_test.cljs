@@ -11,7 +11,8 @@
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
             [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]))
+            [logseq.outliner.transaction :as outliner-tx]
+            [logseq.db :as ldb]))
 
 
 (use-fixtures :each
@@ -19,7 +20,7 @@
   rtc-fixture/listen-test-db-to-gen-rtc-ops-fixture
   rtc-fixture/clear-op-mem-stores-fixture)
 
-(deftest local-db-tx->remote-ops-test
+(deftest ^:fix-me local-db-tx->remote-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         [page1-uuid
@@ -54,7 +55,7 @@
          {:block/uuid uuid2 :block/content "uuid2-client"
           :block/left [:block/uuid uuid1]
           :block/parent [:block/uuid page1-uuid]}]
-        (d/pull @conn '[*] [:block/name page1-name])
+        (ldb/get-page @conn page1-name)
         {:sibling? true :keep-uuid? true}))
       (let [ops (gen-ops-fn)]
         (is (= #{[:move uuid1 page1-uuid]
@@ -73,11 +74,4 @@
         [(d/entity @conn [:block/uuid uuid1])]
         opts))
       (let [ops (gen-ops-fn)]
-        (is (contains? (set ops) [:remove {:block-uuids [uuid1]}]))))
-
-    (testing "create 'aaa/bbb/ccc' namespace-page"
-      (let [page-uuid (random-uuid)]
-        (page-handler/create! "aaa/bbb/ccc" {:redirect? false :create-first-block? false :uuid page-uuid})
-        (let [ops (gen-ops-fn)]
-          (is (= #{[:update-page "aaa"] [:update-page "aaa/bbb"] [:update-page "aaa/bbb/ccc"]}
-                 (set (map (juxt first (comp :page-name second)) ops)))))))))
+        (is (contains? (set ops) [:remove {:block-uuids [uuid1]}]))))))

@@ -7,13 +7,13 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [datascript.core :as d]
             [clojure.string :as string]
-            [frontend.worker.date :as date]
             [logseq.graph-parser.text :as text]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [logseq.db.frontend.content :as db-content]
             [medley.core :as medley]
-            [logseq.db.frontend.schema :as db-schema]))
+            [frontend.worker.date :as date]
+            [logseq.db.frontend.order :as db-order]))
 
 (defn properties-block
   [repo conn config date-formatter properties format page]
@@ -24,7 +24,7 @@
      :block/properties properties
      :block/properties-order (keys properties)
      :block/refs refs
-     :block/left page
+     :block/order (db-order/gen-key nil nil)
      :block/format format
      :block/content content
      :block/parent page
@@ -77,63 +77,74 @@
              uuid                nil
              persist-op?         true}
       :as options}]
-  (let [date-formatter (common-config/get-date-formatter config)
-        split-namespace? (not (or (string/starts-with? title "hls__")
-                                  (date/valid-journal-title? date-formatter title)))
-
+  (let [db-based? (ldb/db-based-graph? @conn)
+        date-formatter (common-config/get-date-formatter config)
+        split-namespace? (and
+                          (not db-based?)
+                          (not (or (string/starts-with? title "hls__")
+                                   (date/valid-journal-title? date-formatter title))))
         [title page-name] (get-title-and-pagename title)
         with-uuid? (if (uuid? uuid) uuid true)
-        result (when (ldb/page-empty? @conn page-name)
-                 (let [pages    (if split-namespace?
-                                  (common-util/split-namespace-pages title)
-                                  [title])
-                       format   (or format (common-config/get-preferred-format config))
-                       pages    (map (fn [page]
-                             ;; only apply uuid to the deepest hierarchy of page to create if provided.
-                                       (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter)
-                                           (assoc :block/format format)))
-                                     pages)
-                       txs      (->> pages
-                           ;; for namespace pages, only last page need properties
-                                     drop-last
-                                     (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
-                                     (remove nil?))
-                       txs      (map-indexed (fn [i page]
-                                               (if (zero? i)
-                                                 page
-                                                 (assoc page :block/namespace
-                                                        [:block/uuid (:block/uuid (nth txs (dec i)))])))
-                                             txs)
-                       page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
-                       page-txs (if (seq txs)
-                                  (update page-txs 0
-                                          (fn [p]
-                                            (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
-                                  page-txs)
-                       first-block-tx (when (and
-                                             create-first-block?
-                                             (not (or whiteboard? class?))
-                                             (ldb/page-empty? @conn (:db/id (d/entity @conn [:block/name page-name])))
-                                             page-txs)
-                                        (let [page-id [:block/uuid (:block/uuid (first page-txs))]]
-                                          [(sqlite-util/block-with-timestamps
-                                            {:block/uuid (ldb/new-block-id)
-                                             :block/page page-id
-                                             :block/parent page-id
-                                             :block/left page-id
-                                             :block/content ""
-                                             :block/format format})]))
-                       txs      (concat
-                                 txs
-                                 page-txs
-                                 first-block-tx)]
-                   (when (seq txs)
-                     (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
-                                                      :outliner-op :create-page}
-                                               today-journal?
-                                               (assoc :create-today-journal? true
-                                                      :today-journal-name page-name))))))] ;; FIXME: prettier validation
-    [result page-name]))
+        [page-uuid result] (when (ldb/page-empty? @conn page-name)
+                             (let [pages    (if split-namespace?
+                                              (common-util/split-namespace-pages title)
+                                              [title])
+                                   format   (or format (common-config/get-preferred-format config))
+                                   pages    (map (fn [page]
+                                                   ;; only apply uuid to the deepest hierarchy of page to create if provided.
+                                                   (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter :class? class?)
+                                                       (assoc :block/format format)))
+                                                 pages)
+                                   txs      (when-not db-based?
+                                              (->> pages
+                                                   ;; for namespace pages, only last page need properties
+                                                   drop-last
+                                                   (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
+                                                   (remove nil?)))
+                                   txs      (when-not db-based?
+                                              (map-indexed (fn [i page]
+                                                             (if (zero? i)
+                                                               page
+                                                               (assoc page :block/namespace
+                                                                      [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                                           txs))
+                                   txs      (when-not db-based?
+                                              (map-indexed (fn [i page]
+                                                             (if (zero? i)
+                                                               page
+                                                               (assoc page :block/namespace
+                                                                      [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                                           txs))
+                                   page-uuid (:block/uuid (last pages))
+                                   page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
+                                   page-txs (if (and (seq txs) (not db-based?))
+                                              (update page-txs 0
+                                                      (fn [p]
+                                                        (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
+                                              page-txs)
+                                   first-block-tx (when (and
+                                                         create-first-block?
+                                                         (not (or whiteboard? class?))
+                                                         page-txs)
+                                                    (let [page-id [:block/uuid (:block/uuid (first page-txs))]]
+                                                      [(sqlite-util/block-with-timestamps
+                                                        {:block/uuid (ldb/new-block-id)
+                                                         :block/page page-id
+                                                         :block/parent page-id
+                                                         :block/order (db-order/gen-key nil nil)
+                                                         :block/content ""
+                                                         :block/format format})]))
+                                   txs      (concat
+                                             txs
+                                             page-txs
+                                             first-block-tx)]
+                               (when (seq txs)
+                                 [page-uuid (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
+                                                                             :outliner-op :create-page}
+                                                                      today-journal?
+                                                                      (assoc :create-today-journal? true
+                                                                             :today-journal-name page-name)))])))] ;; FIXME: prettier validation
+    [result page-name page-uuid]))
 
 (defn db-refs->page
   "Replace [[page name]] with page name"
@@ -170,6 +181,7 @@
                                           content-tx
                                           (when (not= (seq properties) (seq properties'))
                                             {:db/id (:db/id ref)
+                                             ;; FIXME: properties
                                              :block/properties properties'}))]
                                   (concat
                                    [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]
@@ -181,10 +193,7 @@
   [conn page]
   (try
     (cond
-      (and (contains? (:block/type page) "class")
-           (seq (ldb/get-tag-blocks @conn (:block/name page))))
-      {:msg "Page content deleted but unable to delete this page because blocks are tagged with this page"}
-
+      ;; TODO: allow users to delete not built-in properties
       (contains? (:block/type page) "property")
       (cond (seq (ldb/get-classes-with-property @conn (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because classes use this property"}
@@ -201,19 +210,20 @@
 (defn delete!
   "Deletes a page. Returns true if able to delete page. If unable to delete,
   calls error-handler fn and returns false"
-  [repo conn page-name & {:keys [persist-op? rename? error-handler]
+  [repo conn page-uuid & {:keys [persist-op? rename? error-handler]
                           :or {persist-op? true
                                error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
-  (when (and repo page-name)
-    (let [page-name (common-util/page-name-sanity-lc page-name)
-          page (d/entity @conn [:block/name page-name])
+  (when (and repo page-uuid)
+    (let [page (d/entity @conn [:block/uuid page-uuid])
+          property? (contains? (:block/type page) "property")
+          page-name (:block/name page)
           blocks (:block/_page page)
           truncate-blocks-tx-data (mapv
                                    (fn [block]
                                      [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
                                    blocks)
           db-based? (sqlite-util/db-based-graph? repo)]
-      (if (ldb/built-in? @conn page)
+      (if (ldb/built-in? page)
         (do
           (error-handler {:msg "Built-in page cannot be deleted"})
           false)
@@ -223,26 +233,21 @@
                            {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
             (error-handler msg)
             false)
-          (let [file (gp-db/get-page-file @conn page-name)
+          (let [db @conn
+                file (gp-db/get-page-file db page-name)
                 file-path (:file/path file)
                 delete-file-tx (when file
                                  [[:db.fn/retractEntity [:file/path file-path]]])
-              ;; if other page alias this pagename,
-              ;; then just remove some attrs of this entity instead of retractEntity
-                delete-page-tx (cond
-                                 (or (and db-based? (not (:block/_namespace page)))
-                                     (not db-based?))
-                                 (if (and db-based? (ldb/get-alias-source-page @conn page-name))
-                                   (when-let [id (:db/id (d/entity @conn [:block/name page-name]))]
-                                     (mapv (fn [attribute]
-                                             [:db/retract id attribute])
-                                           db-schema/retract-page-attributes))
-                                   (concat (db-refs->page repo page)
-                                           [[:db.fn/retractEntity [:block/name page-name]]]))
+                delete-page-tx (concat (db-refs->page repo page)
+                                       [[:db.fn/retractEntity (:db/id page)]])
 
-                                 :else
-                                 nil)
-                tx-data (concat truncate-blocks-tx-data delete-page-tx delete-file-tx)]
+                ;; TODO: is this still needed?
+                delete-property-pairs-tx (when property?
+                                           (map (fn [d] [:db.fn/retractEntity (:e d)]) (d/datoms db :avet (:db/ident page))))
+                tx-data (concat truncate-blocks-tx-data
+                                delete-page-tx
+                                delete-file-tx
+                                delete-property-pairs-tx)]
 
             (ldb/transact! conn tx-data
                            (cond-> {:outliner-op :delete-page

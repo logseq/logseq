@@ -1,12 +1,11 @@
 (ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
-            [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [clojure.string :as string]))
+  (:require [datascript.core :as d]
+            [clojure.string :as string]
+            [flatland.ordered.map :refer [ordered-map]]))
 
-(def first-stage-properties
-  #{:logseq.property/built-in? :logseq.property/created-from-property})
+;; Main property vars
+;; ==================
 
 (def ^:large-vars/data-var built-in-properties*
   "Map of built in properties for db graphs with their :db/ident as keys.
@@ -23,15 +22,15 @@
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :closed-values - Vec of closed-value maps for properties with choices. Map
-     has keys :value, :db-ident, :uuid and :icon
-   * :db-ident - Keyword to set :db/ident and give property unique id in db"
-  {:logseq.property/alias {:original-name "Alias"
+     has keys :value, :db-ident, :uuid and :icon"
+  (ordered-map
+   :block/alias           {:original-name "Alias"
                            :attribute :block/alias
                            :schema {:type :page
                                     :cardinality :many
                                     :view-context :page
                                     :public? true}}
-   :logseq.property/tags {:original-name "Tags"
+   :block/tags           {:original-name "Tags"
                           :attribute :block/tags
                           :schema {:type :page
                                    :cardinality :many
@@ -42,47 +41,58 @@
                                         :public? true
                                         :view-context :page
                                         :cardinality :many}}
-   :logseq.property/background-color {:schema {:type :default :hide? true}}
+   :logseq.property/background-color {:schema {:type :string :hide? true}}
    :logseq.property/background-image {:schema
-                                      {:type :default
-                                       :hide? true
+                                      {:type :string
                                        :view-context :block
                                        :public? true}}
    ;; number (1-6) or boolean for auto heading
    :logseq.property/heading {:schema {:type :any :hide? true}}
-   :logseq.property/created-from-block    {:schema {:type :uuid}}
-   :logseq.property/created-from-property {:schema {:type :uuid}}
-   :logseq.property/created-from-template {:schema {:type :uuid}}
-   :logseq.property/source-page-id        {:schema {:type :uuid}}
-   :logseq.property/built-in?             {:schema {:type :checkbox}}
-   :logseq.property/hide-properties?      {:schema {:type :checkbox}}
-   :logseq.property/query-table {:schema {:type :checkbox}}
+   :logseq.property/created-from-property {:schema {:type :entity
+                                                    :hide? true}}
+   :logseq.property/created-from-template {:schema {:type :entity
+                                                    :hide? true}}
+   :logseq.property/source-page           {:schema {:type :entity
+                                                    :hide? true}}
+   :logseq.property/built-in?             {:schema {:type :checkbox
+                                                    :hide? true}}
+   :logseq.property/hide-properties?      {:schema {:type :checkbox
+                                                    :hide? true}}
+   :logseq.property/query-table {:schema {:type :checkbox
+                                          :hide? true}}
    ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords
-   :logseq.property/query-properties {:schema {:type :coll}}
+   :logseq.property/query-properties {:schema {:type :coll
+                                               :hide? true}}
    ;; query-sort-by is either a property uuid or a keyword where keyword is a special frontend keyword
-   :logseq.property/query-sort-by {:schema {:type :any}}
-   :logseq.property/query-sort-desc {:schema {:type :checkbox}}
-   :logseq.property/ls-type {:schema {:type :keyword}}
-   :logseq.property/hl-type {:schema {:type :keyword}}
-   :logseq.property/hl-page {:schema {:type :number}}
-   :logseq.property/hl-stamp {:schema {:type :number}}
-   :logseq.property/hl-color {:schema {:type :default}}
-   :logseq.property/macro-name {:name :logseq.macro-name
-                                :schema {:type :default}}
-   :logseq.property/macro-arguments {:name :logseq.macro-arguments
-                                     :schema {:type :coll}}
+   :logseq.property/query-sort-by {:schema {:type :any
+                                            :hide? true}}
+   :logseq.property/query-sort-desc {:schema {:type :checkbox
+                                              :hide? true}}
+   :logseq.property/ls-type {:schema {:type :keyword
+                                      :hide? true}}
+   :logseq.property/hl-type {:schema {:type :keyword
+                                      :hide? true}}
+   :logseq.property/hl-page {:schema {:type :number
+                                      :hide? true}}
+   :logseq.property/hl-stamp {:schema {:type :number
+                                       :hide? true}}
+   :logseq.property/hl-color {:schema {:type :string
+                                       :hide? true}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
-                                     :schema {:type :default}}
+                                     :schema {:type :string
+                                              :hide? true}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page
-                                 :schema {:type :map}}
+                                 :schema {:type :map
+                                          :hide? true}}
    :logseq.property.tldraw/shape {:name :logseq.tldraw.shape
-                                  :schema {:type :map}}
+                                  :schema {:type :map
+                                           :hide? true}}
 
    ;; Task props
    :logseq.task/status
    {:original-name "Status"
     :schema
-    {:type :default
+    {:type :string
      :public? true}
     :closed-values
     (mapv (fn [[db-ident value icon]]
@@ -99,7 +109,7 @@
    :logseq.task/priority
    {:original-name "Priority"
     :schema
-    {:type :default
+    {:type :string
      :public? true}
     :closed-values
     (mapv (fn [[db-ident value]]
@@ -125,7 +135,7 @@
    :logseq.property/color
    {:name :logseq.color
     :schema
-    {:type :default :hide? true :public? true}
+    {:type :string :hide? true :public? true}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property" (str "color." %))
                      :value %
@@ -140,7 +150,7 @@
    :logseq.property.table/headers
    {:name :logseq.table.headers
     :schema
-    {:type :default :hide? true :public? true :view-context :block}
+    {:type :string :hide? true :public? true :view-context :block}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "headers." %))
                      :value %
@@ -149,7 +159,7 @@
    :logseq.property.table/hover
    {:name :logseq.table.hover
     :schema
-    {:type :default :hide? true :public? true :view-context :block}
+    {:type :string :hide? true :public? true :view-context :block}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "hover." %))
                      :value %
@@ -169,12 +179,13 @@
                              :hide? true
                              :view-context :page
                              :public? true}}
-   :logseq.property/filters {:schema {:type :map}}
+   :logseq.property/filters {:schema {:type :map
+                                      :hide? true}}
    :logseq.property/exclude-from-graph-view {:schema
                                              {:type :checkbox
                                               :hide? true
                                               :view-context :page
-                                              :public? true}}})
+                                              :public? true}}))
 
 (def built-in-properties
   (->> built-in-properties*
@@ -185,6 +196,49 @@
                (if (:name v)
                  v
                  (assoc v :name (keyword (string/lower-case (name k)))))]))
+       (into (ordered-map))))
+
+(def db-attribute-properties
+  "Internal properties that are also db schema attributes"
+  #{:block/alias :block/tags})
+
+(assert (= db-attribute-properties
+           (set (keep (fn [[k {:keys [attribute]}]] (when attribute k))
+                      built-in-properties)))
+        "All db attribute properties are configured in built-in-properties")
+
+(def logseq-property-namespaces
+  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
+    "logseq.task"})
+
+(defn logseq-property?
+  "Determines if keyword is a logseq property"
+  [kw]
+  (contains? logseq-property-namespaces (namespace kw)))
+
+(defn user-property-namespace?
+  "Determines if namespace string is a user property"
+  [s]
+  (string/includes? s ".property"))
+
+(defn property?
+  "Determines if ident kw is a property"
+  [k]
+  (let [k-name (namespace k)]
+    (and k-name
+         (or (contains? logseq-property-namespaces k-name)
+             (user-property-namespace? k-name)
+             (and (keyword? k) (contains? db-attribute-properties k))))))
+
+;; Helper fns
+;; ==========
+
+(defn properties
+  "Returns a block's properties as a map indexed by property's db-ident.
+   Use this in deps because nbb can't use :block/properties from entity-plus"
+  [e]
+  (->> (into {} e)
+       (filter (fn [[k _]] (property? k)))
        (into {})))
 
 (defn valid-property-name?
@@ -193,46 +247,9 @@
   ;; Disallow tags or page refs as they would create unreferenceable page names
   (not (re-find #"^(#|\[\[)" s)))
 
-(defn get-pid
-  "Get a built-in property's id (keyword name for file graph and uuid for db graph)
-  given its db-ident. Use this fn on a file or db graph. Use
-  db-pu/get-built-in-property-uuid if only in a db graph context"
-  [repo db db-ident]
-  (if (sqlite-util/db-based-graph? repo)
-    (when db (:block/uuid (d/entity db db-ident)))
-    (get-in built-in-properties [db-ident :name])))
-
-(defn lookup
-  "Get the value of coll by db-ident. For file and db graphs"
-  [repo db coll db-ident]
-  (get coll (get-pid repo db db-ident)))
-
-(defn get-block-property-value
-  "Get the value of built-in block's property by its db-ident"
-  [repo db block db-ident]
-  (when db
-    (let [block' (or (d/entity db (:db/id block)) block)]
-      (get (:block/properties block') (get-pid repo db db-ident)))))
-
-(defn shape-block?
-  [repo db block]
-  (= :whiteboard-shape (get-block-property-value repo db block :logseq.property/ls-type)))
-
-(defn get-built-in
-  "Gets a built-in page/class/property/X by its :db/ident"
-  [db db-ident]
-  (d/entity db db-ident))
-
-(defn get-by-ident-or-name
-  "Gets a property by db-ident or name if it's a user property"
-  [db ident-or-name]
-  (if (and (keyword? ident-or-name) (namespace ident-or-name))
-    (get-built-in db ident-or-name)
-    (d/entity db [:block/name (common-util/page-name-sanity-lc (name ident-or-name))])))
-
 (defn get-closed-property-values
-  [db ident-or-name]
-  (when-let [property (get-by-ident-or-name db ident-or-name)]
+  [db property-id]
+  (when-let [property (d/entity db property-id)]
     (get-in property [:block/schema :values])))
 
 (defn closed-value-name
@@ -249,3 +266,39 @@
             (let [e (d/entity db [:block/uuid id])]
               (when (= (closed-value-name e) value-name)
                 e))) values)))
+
+;; TODO: db ident should obey clojure's rules for keywords
+(defn create-db-ident-from-name
+  "Creates a :db/ident by sanitizing the given name.
+
+   NOTE: Only use this when creating a db-ident for a string name. Using this
+   in read-only contexts like querying can result in db-ident conflicts"
+  [user-namespace name-string]
+  (let [n (-> name-string
+              (string/replace #"(^:\s*|\s*:$)" "")
+              (string/replace #"\s*:\s*$" "")
+              (string/replace-first #"^\d+" "")
+              (string/replace " " "-")
+              (string/replace "#" "")
+              (string/trim))]
+    (assert (seq n) "name is not empty")
+    (keyword user-namespace n)))
+
+(defn create-user-property-ident-from-name
+  "Creates a property :db/ident for a default user namespace"
+  [property-name]
+  (create-db-ident-from-name "user.property" property-name))
+
+(defn get-class-ordered-properties
+  [class-entity]
+  (->> (:class/schema.properties class-entity)
+       (sort-by :block/order)))
+
+(defn property-created-block?
+  "`block` has been created in a property and it's not a closed value."
+  [block]
+  (and (map? block)
+       (:logseq.property/created-from-property block)
+       (:block/page block)
+       ;; not closed value
+       (not (some? (get-in block [:block/schema :value])))))

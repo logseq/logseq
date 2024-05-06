@@ -7,7 +7,7 @@
   ;; false positive with match/match and _
   frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
   frontend.db {:linters {:aliased-namespace-symbol
-                         {:exclude [frontend.db.conn frontend.db.react logseq.db.frontend.default]}}}}
+                         {:exclude [frontend.db.conn frontend.db.react]}}}}
 
  :linters
  {:path-invalid-construct/string-join {:level :info}
@@ -139,9 +139,12 @@
              logseq.db ldb
              logseq.db.frontend.content db-content
              logseq.db.frontend.inputs db-inputs
+             logseq.db.frontend.order db-order
              logseq.db.frontend.property db-property
+             logseq.db.frontend.property.build db-property-build
              logseq.db.frontend.property.type db-property-type
              logseq.db.frontend.property.util db-property-util
+             logseq.db.frontend.entity-plus entity-plus
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate

@@ -22,31 +22,42 @@
   boolean indicating if db is valid"
   [{:keys [db-after tx-data tx-meta]} validate-options]
   (let [changed-ids (->> tx-data (map :e) distinct)
-        ent-maps* (->> changed-ids (mapcat #(d/datoms db-after :eavt %)) db-malli-schema/datoms->entity-maps vals)
-        ent-maps (vec (db-malli-schema/update-properties-in-ents ent-maps*))
+        ent-maps* (-> (mapcat #(d/datoms db-after :eavt %) changed-ids)
+                      (db-malli-schema/datoms->entity-maps {:entity-fn #(d/entity db-after %)})
+                      vals)
+        ent-maps (db-malli-schema/update-properties-in-ents db-after ent-maps*)
         db-schema (update-schema db-malli-schema/DB db-after validate-options)
-        explain-result (m/explain db-schema ent-maps)]
+        invalid-ent-maps (remove #(m/validate db-schema [%]) ent-maps)]
     (js/console.log "changed eids:" changed-ids tx-meta)
-    (if (:errors explain-result)
-      (do (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
-          (pprint/pprint {:errors (me/humanize explain-result)})
-          (pprint/pprint {:entity-maps ent-maps})
-          false)
+    (if (seq invalid-ent-maps)
+      (do
+        (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
+        (doseq [m invalid-ent-maps]
+          (pprint/pprint {:entity-map m
+                          :errors (me/humanize (m/explain db-schema [m]))}))
+        false)
       true)))
 
 (defn group-errors-by-entity
   "Groups malli errors by entities. db is used for providing more debugging info"
   [db ent-maps errors]
+  (assert (vector? ent-maps) "Must be a vec for grouping to work")
   (->> errors
        (group-by #(-> % :in first))
        (map (fn [[idx errors']]
-              {:entity (cond-> (get ent-maps idx)
-                         ;; Provide additional page info for debugging
-                         (:block/page (get ent-maps idx))
-                         (update :block/page
-                                 (fn [id] (select-keys (d/entity db id)
-                                                       [:block/name :block/type :db/id :block/created-at]))))
+              {:entity (let [ent (get ent-maps idx)
+                             db-id (:db/id (meta ent))]
+                         (cond-> ent
+                           db-id
+                           (assoc :db/id db-id)
+                           ;; Provide additional page info for debugging
+                           (:block/page ent)
+                           (update :block/page
+                                   (fn [id] (select-keys (d/entity db id)
+                                                         [:block/name :block/type :db/id :block/created-at])))))
+               :errors errors'
                ;; Group by type to reduce verbosity
+               ;; TODO: Move/remove this to another fn if unused
                :errors-by-type
                (->> (group-by :type errors')
                     (map (fn [[type' type-errors]]
@@ -67,9 +78,9 @@
   :errors and grouped by entity"
   [db]
   (let [datoms (d/datoms db :eavt)
-        ent-maps* (db-malli-schema/datoms->entity-maps datoms)
-        ent-maps (vec (db-malli-schema/update-properties-in-ents (vals ent-maps*)))
+        ent-maps* (db-malli-schema/datoms->entities datoms)
         schema (update-schema db-malli-schema/DB db {:closed-schema? true})
+        ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
         errors (->> ent-maps (m/explain schema) :errors)]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}

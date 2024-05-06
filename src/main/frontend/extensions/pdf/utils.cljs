@@ -4,9 +4,7 @@
             [frontend.util :as util]
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [datascript.core :as d]
-            [logseq.publishing.db :as publish-db]
-            [clojure.string :as string]
-            [frontend.handler.property.util :as pu]))
+            [clojure.string :as string]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
@@ -15,9 +13,6 @@
 (defn hls-file?
   [filename]
   (and filename (string? filename) (string/starts-with? filename "hls__")))
-
-(def get-area-block-asset-url
-  #(publish-db/get-area-block-asset-url %1 %2 {:prop-lookup-fn pu/lookup-by-name}))
 
 (defn get-bounding-rect
   [rects]

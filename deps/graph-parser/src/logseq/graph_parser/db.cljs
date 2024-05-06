@@ -23,7 +23,6 @@
   [title]
   {:block/name (string/lower-case title)
    :block/original-name title
-   :block/journal? false
    :block/uuid (random-uuid)})
 
 (def built-in-pages
@@ -43,7 +42,7 @@
   "Creates default pages if one of the default pages does not exist. This
    fn is idempotent"
   [db-conn]
-  (when-not (d/entity @db-conn [:block/name "card"])
+  (when-not (ldb/get-page @db-conn "card")
     (let [built-in-pages (build-pages-tx built-in-pages)]
       (ldb/transact! db-conn built-in-pages))))
 
@@ -56,6 +55,5 @@
 
 (defn get-page-file
   [db page-name]
-  (some-> (or (d/entity db [:block/name page-name])
-              (d/entity db [:block/original-name page-name]))
+  (some-> (ldb/get-page db page-name)
           :block/file))

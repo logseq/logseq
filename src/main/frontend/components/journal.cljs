@@ -1,6 +1,5 @@
 (ns frontend.components.journal
-  (:require [clojure.string :as string]
-            [frontend.components.page :as page]
+  (:require [frontend.components.page :as page]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.page :as page-handler]
@@ -9,21 +8,20 @@
             [rum.core :as rum]))
 
 (rum/defc journal-cp < rum/reactive
-  [title]
+  [page]
   (let [;; Don't edit the journal title
-        page (string/lower-case title)
         repo (state/sub :git/current-repo)]
     (page/page {:repo repo
-                :page-name page})))
+                :page-name (:block/name page)})))
 
 (rum/defc journals < rum/reactive
   [latest-journals]
   [:div#journals
    (ui/infinite-list
     "main-content-container"
-    (for [{:block/keys [name]} latest-journals]
+    (for [{:block/keys [name] :as page} latest-journals]
       [:div.journal-item.content {:key name}
-       (journal-cp name)])
+       (journal-cp page)])
     {:has-more (page-handler/has-more-journals?)
      :more-class "text-4xl"
      :on-top-reached page-handler/create-today-journal!

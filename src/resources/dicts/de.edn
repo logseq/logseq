@@ -354,7 +354,6 @@
  :right-side-bar/flashcards "Karteikarten"
  :right-side-bar/graph-view "Graph-Ansicht"
  :right-side-bar/help "Hilfe"
- :right-side-bar/history "(Dev) Verlauf rückgängig machen / wiederherstellen"
  :right-side-bar/new-page "Neue Seite"
  :right-side-bar/page-graph "Seiten-Graph"
  :right-side-bar/separator "Griff zur Größenänderung der rechten Seitenleiste"
