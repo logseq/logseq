@@ -77,6 +77,7 @@ jobs:
         run: yarn install
         env:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+          
 
       # NOTE: require the app to be build with DEV-RELEASE flag
       - name: Prepare E2E test build
