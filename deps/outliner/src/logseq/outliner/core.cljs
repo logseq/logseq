@@ -281,7 +281,7 @@
                    data)
                   db-based?
                   (dissoc :block/properties))
-          m (-> data'
+          m* (-> data'
                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
                         :block/title :block/body :block/level :block.temp/fully-loaded?)
                 common-util/remove-nils
@@ -292,11 +292,13 @@
           block-uuid (:block/uuid this)
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
-          m (if db-based?
-              (update m :block/tags (fn [tags]
+          m (cond-> m*
+              db-based?
+              (dissoc :block/priority :block/marker)
+              db-based?
+              (update :block/tags (fn [tags]
                                       (concat (keep :db/id (:block/tags block-entity))
-                                              (keep ref->eid tags))))
-              m)]
+                                              (keep ref->eid tags)))))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
