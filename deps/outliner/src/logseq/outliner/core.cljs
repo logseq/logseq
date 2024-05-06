@@ -16,7 +16,6 @@
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.marker :as common-marker]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.worker.batch-tx :include-macros true :as batch-tx]
@@ -268,34 +267,6 @@
                                    tags)))
       m)))
 
-;; TODO: don't parse marker and deprecate typing marker to set status
-(defn- db-marker-handle
-  [conn m]
-  (or
-   (let [marker (:block/marker m)
-         property (d/entity @conn :logseq.task/status)
-         matched-status-id (when marker
-                             (->> (get-in property [:block/schema :values])
-                                  (some (fn [id]
-                                          (let [value-e (d/entity @conn [:block/uuid id])
-                                                value (get-in value-e [:block/schema :value])]
-                                            (when (= (string/lower-case marker) (string/lower-case value))
-                                              (:db/id value-e)))))))]
-     (cond-> m
-       matched-status-id
-       (assoc (:db/ident property) matched-status-id)
-
-       matched-status-id
-       (update :block/content (fn [content]
-                                (common-marker/clean-marker content (get m :block/format :markdown))))
-       matched-status-id
-       (update :db/other-tx (fn [tx]
-                              (conj tx [:db/add (:db/id m) :block/tags :logseq.class/task])))
-
-       true
-       (dissoc :block/marker :block/priority)))
-   m))
-
 (extend-type Entity
   otree/INode
   (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
@@ -321,9 +292,6 @@
           block-uuid (:block/uuid this)
           eid (or db-id (when block-uuid [:block/uuid block-uuid]))
           block-entity (d/entity db eid)
-          m (cond->> m
-              db-based?
-              (db-marker-handle conn))
           m (if db-based?
               (update m :block/tags (fn [tags]
                                       (concat (keep :db/id (:block/tags block-entity))
