@@ -327,11 +327,6 @@
    [:block/macros {:optional true} [:set :int]]
    [:block/link {:optional true} :int]
     ;; other
-   [:block/marker {:optional true} :string]
-   [:block/deadline {:optional true} :int]
-   [:block/scheduled {:optional true} :int]
-   [:block/repeated? {:optional true} :boolean]
-   [:block/priority {:optional true} :string]
    [:block/collapsed? {:optional true} :boolean]])
 
 (def whiteboard-block
