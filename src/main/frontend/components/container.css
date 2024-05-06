@@ -55,9 +55,7 @@
 }
 
 #main-content-container {
-  @apply p-4 sm:px-8;
-
-  font-size: 1em;
+  @apply py-4 sm:py-0 sm:pl-8 sm:pr-4;
 }
 
 #main-content-container[data-is-margin-less-pages=true] {
