@@ -114,6 +114,7 @@
              frontend.ui ui
              frontend.util util
              frontend.util.clock clock
+             frontend.util.drawer drawer
              frontend.util.page page-util
              frontend.util.property property
              frontend.util.persist-var persist-var
