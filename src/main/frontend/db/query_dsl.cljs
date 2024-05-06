@@ -291,14 +291,17 @@
     (build-property-one-arg e)))
 
 (defn- build-task
-  [e]
+  [e {:keys [db-graph?]}]
   (let [markers (if (coll? (first (rest e)))
                   (first (rest e))
                   (rest e))]
     (when (seq markers)
-      (let [markers (set (map (comp string/upper-case name) markers))]
-        {:query (list 'task '?b markers)
-         :rules [:task]}))))
+      (if db-graph?
+        {:query (list 'task '?b (set markers))
+         :rules [:task :property]}
+        (let [markers (set (map (comp string/upper-case name) markers))]
+          {:query (list 'task '?b markers)
+           :rules [:task]})))))
 
 (defn- build-priority
   [e]
@@ -434,7 +437,7 @@ Some bindings in this fn:
 
        ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
-       (build-task e)
+       (build-task e env)
 
        (= 'priority fe)
        (build-priority e)
