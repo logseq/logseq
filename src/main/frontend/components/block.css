@@ -419,13 +419,13 @@
 
   &:has(h3.as-heading) {
     .block-control-wrap {
-      @apply relative top-1;
+      @apply relative top-[3px];
     }
   }
 
-  &:has(h4.as-heading) {
+  &:has(h5.as-heading) {
     .block-control-wrap {
-      @apply relative top-0.5;
+      @apply relative -top-[1px];
     }
   }
 
@@ -442,10 +442,6 @@
   &.selected {
     @apply rounded;
   }
-}
-
-.block-children {
-  > .ls-block:first-child {}
 }
 
 .ls-block h1,
