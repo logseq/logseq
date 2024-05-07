@@ -12,7 +12,7 @@
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.class :as class-component]
-            [frontend.components.cmdk :as cmdk]
+            [frontend.components.cmdk.core :as cmdk]
             [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
