@@ -294,7 +294,7 @@
           block-entity (d/entity db eid)
           m (cond-> m*
               db-based?
-              (dissoc :block/priority :block/marker)
+              (dissoc :block/priority :block/marker :block/properties-order)
               db-based?
               (update :block/tags (fn [tags]
                                       (concat (keep :db/id (:block/tags block-entity))
