@@ -6,7 +6,7 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.worker.rtc.const :as rtc-const]
-            [frontend.worker.rtc.core :as rtc-core]
+            [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.fixture :as rtc-fixture]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
@@ -32,8 +32,8 @@
                               :conn conn}}
         gen-ops-fn (fn []
                      (let [r (rtc-const/to-ws-ops-decoder
-                              (rtc-core/sort-remote-ops
-                               (rtc-core/gen-block-uuid->remote-ops repo conn "user-uuid")))]
+                              (#'r.client/sort-remote-ops
+                               (#'r.client/gen-block-uuid->remote-ops repo conn "user-uuid")))]
                        (is (rtc-const/to-ws-ops-validator r) r)
                        r))]
     (testing "create a new page"
