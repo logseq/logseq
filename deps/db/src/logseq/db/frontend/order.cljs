@@ -36,5 +36,5 @@
 (defn gen-n-keys
   [n start end]
   (let [ks (index/generate-n-keys-between start end n)]
-    (reset! *max-key (last ks))
+    (reset-max-key! (last ks))
     ks))
