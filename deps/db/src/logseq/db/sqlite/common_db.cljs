@@ -231,7 +231,7 @@
   [db]
   (let [db-graph? (entity-plus/db-based-graph? db)
         _ (when db-graph?
-            (db-order/reset-max-key! (db-order/get-max-order db)))
+            (reset! db-order/*max-key (db-order/get-max-order db)))
         schema (:schema db)
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]
