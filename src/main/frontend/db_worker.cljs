@@ -8,7 +8,6 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
-            [frontend.worker.async-util :include-macros true :as async-util]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.export :as worker-export]
@@ -19,7 +18,6 @@
             [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.core2 :as rtc-core2]
             [frontend.worker.rtc.db-listener]
-            [frontend.worker.rtc.full-upload-download-graph :as rtc-updown]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
@@ -641,9 +639,8 @@
 
   (rtc-download-graph-from-s3
    [this graph-uuid graph-name s3-url]
-   (async-util/c->p
-    (async/go
-      (rtc-updown/<download-graph-from-s3 graph-uuid graph-name s3-url))))
+   (with-write-transit-str
+     (js/Promise. (rtc-core2/new-task--download-graph-from-s3 graph-uuid graph-name s3-url))))
 
   (rtc-download-info-list
    [this token graph-uuid]
