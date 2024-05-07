@@ -724,11 +724,11 @@
 
 (defn- move-to-original-position?
   [blocks target-block sibling? non-consecutive-blocks?]
-  (and (not non-consecutive-blocks?)
-       (= (:db/id (ldb/get-left-sibling (first blocks))) (:db/id target-block))
-       (not= (= (:db/id (:block/parent (first blocks)))
-                (:db/id target-block))
-             sibling?)))
+  (let [block (first blocks)]
+    (and (not non-consecutive-blocks?)
+         (if sibling?
+           (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
+           (= (:db/id (:block/parent block)) (:db/id target-block))))))
 
 (defn- move-block
   [conn block target-block sibling?]
@@ -739,11 +739,13 @@
         target-page (or (:db/id (:block/page target-block))
                         (:db/id target-block))
         not-same-page? (not= first-block-page target-page)
+
         block-order (if sibling?
                       (db-order/gen-key (:block/order target-block)
                                         (:block/order (ldb/get-right-sibling target-block)))
                       (db-order/gen-key nil
                                         (:block/order (ldb/get-down target-block))))
+
         tx-data [(cond->
                   {:db/id (:db/id block)
                    :block/parent (if sibling?
@@ -803,10 +805,7 @@
                     target-block (if first-block? target-block
                                      (d/entity @conn (:db/id (nth blocks (dec idx)))))
                     block (d/entity @conn (:db/id block))]
-                (when-not (and (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
-                               (if sibling?
-                                 (= (:db/id (:block/parent block)) (:db/id (:block/parent target-block)))
-                                 (= (:db/id (:block/parent block)) (:db/id target-block))))
+                (when-not (move-to-original-position? [block] target-block sibling? false)
                   (let [tx-data (move-block conn block target-block sibling?)]
                     (ldb/transact! conn tx-data {:sibling? sibling?
                                                  :outliner-op (or outliner-op :move-blocks)}))))))
