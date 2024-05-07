@@ -604,12 +604,6 @@
  :header/more                                      "Viac"
  :header/go-back                                   "Späť"
  :header/go-forward                                "Vpred"
-
- :command.date-picker/complete                     "Výber dátumu: Potvrdiť vybraný deň"
- :command.date-picker/prev-day                     "Výber dátumu: Vybrať predchádzajúci deň"
- :command.date-picker/next-day                     "Výber dátumu: Vybrať nasledujúci deň"
- :command.date-picker/prev-week                    "Výber dátumu: Vybrať predchádzajúci týždeň"
- :command.date-picker/next-week                    "Výber dátumu: Vybrať nasledujúci týždeň"
  :command.pdf/previous-page                        "PDF: Predchádzajúca strana aktuálneho PDF dokumentu"
  :command.pdf/next-page                            "PDF: Nasledujúca strana aktuálneho PDF dokumentu"
  :command.pdf/close                                "PDF: Zatvoriť aktuálny PDF dokument"

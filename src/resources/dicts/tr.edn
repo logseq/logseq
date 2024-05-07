@@ -635,12 +635,6 @@
  :header/more                        "Diğer"
  :header/go-back                     "Geri git"
  :header/go-forward                  "İleri git"
-
- :command.date-picker/complete         "Tarih seçici: Seçilen günü seç"
- :command.date-picker/prev-day         "Tarih seçici: Önceki günü seç"
- :command.date-picker/next-day         "Tarih seçici: Sonraki günü seç"
- :command.date-picker/prev-week        "Tarih seçici: Önceki haftayı seç"
- :command.date-picker/next-week        "Tarih seçici: Sonraki haftayı seç"
  :command.pdf/previous-page            "Pdf: Geçerli pdf belgesinin önceki sayfası"
  :command.pdf/next-page                "Pdf: Geçerli pdf belgesinin sonraki sayfası"
  :command.pdf/close                    "Pdf: Geçerli pdf görüntüleyiciyi kapat"

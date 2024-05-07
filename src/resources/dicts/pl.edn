@@ -229,12 +229,7 @@
  :shortcut.category/toggle                        "Przełącz"
  :shortcut.category/others                        "Pozostałe"
 
- :command.date-picker/complete                    "Date picker: Wybierz zaznaczony dzień"
- :command.date-picker/next-day                    "Date picker: Wybierz następny dzień"
- :command.date-picker/prev-day                    "Date picker: Wybierz poprzedni dzień"
- :command.date-picker/prev-week                   "Date picker: Wybierz poprzedni tydzień"
- :command.date-picker/next-week                   "Date picker: Wybierz następny tydzień"
- :command.pdf/previous-page                       "Poprzednia strona otwartego dokumentu PDF"
+  :command.pdf/previous-page                       "Poprzednia strona otwartego dokumentu PDF"
  :command.pdf/next-page                           "Następna strona otwartego dokumentu PDF"
  :command.pdf/close                               "Zamknij aktualnie otwarty dokument PDF"
  :command.auto-complete/complete                  "Auto uzupełnianie: Wybierz zaznaczoną opcję"

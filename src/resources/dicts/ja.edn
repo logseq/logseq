@@ -616,15 +616,6 @@
  :header/more "もっと見る"
  :header/go-back "戻る"
  :header/go-forward "進む"
-
-
-
-
- :command.date-picker/complete "日付選択：選択した日で決定"
- :command.date-picker/prev-day "日付選択：前の日を選ぶ"
- :command.date-picker/next-day "日付選択：次の日を選ぶ"
- :command.date-picker/prev-week "日付選択：前の週を選ぶ"
- :command.date-picker/next-week "日付選択：次の週を選ぶ"
  :command.pdf/next-page "PDF：現在のPDF文書で次のページへ"
  :command.pdf/previous-page "PDF：現在のPDF文書で前のページへ"
  :command.pdf/close "PDF：現在のPDF文書を閉じる"
