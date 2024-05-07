@@ -5,7 +5,5 @@
                   frontend.db
                   ;; Used for debugging
                   frontend.db.debug
-                  frontend.worker.debug
-                  ;; FIXME: Are these unused fns?
-                  frontend.worker.rtc.op-mem-layer]
+                  frontend.worker.debug]
  :report {:format :ignore}}
