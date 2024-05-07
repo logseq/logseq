@@ -71,10 +71,10 @@
         validate-fn'' (if (and (db-property-type/closed-value-property-types (:type schema))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
-                               (seq (:values schema)))
+                               (seq (:property/closed-values property)))
                         (fn closed-value-valid? [val]
                           (and (validate-fn' val)
-                               (contains? (set (:values schema))
+                               (contains? (set (map :block/uuid (:property/closed-values property)))
                                           (:block/uuid (d/entity db val)))))
                         validate-fn')]
     (if (= (:cardinality schema) :many)
@@ -321,7 +321,7 @@
   [[:block/content :string]
    [:block/parent :int]
    [:block/order :string]
-   [:property/schema.value {:optional true} :any]
+   [:block/closed-value-property {:optional true} [:set :int]]
    ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]

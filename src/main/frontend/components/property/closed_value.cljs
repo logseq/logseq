@@ -8,7 +8,6 @@
             [logseq.shui.ui :as shui]
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
-            [frontend.components.property.util :as pu-component]
             [frontend.handler.property :as property-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.config :as config]
@@ -18,14 +17,16 @@
             [frontend.state :as state]
             [promesa.core :as p]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.outliner.core :as outliner-core]))
 
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
   (p/let [{:keys [block-id tx-data]} (db-property-handler/<upsert-closed-value property item)]
     (p/do!
-     (when (seq tx-data) (db/transact! tx-data))
+     (when (seq tx-data) (db/transact! (state/get-current-repo) tx-data {:outliner-op :upsert-closed-value}))
      (when (seq tx-data) (db-property-handler/re-init-commands! property))
      block-id)))
 
@@ -147,7 +148,7 @@
         (ui/icon "X")])]))
 
 (rum/defc choice-item-content
-  [property *property-schema block parent-opts]
+  [property block parent-opts]
   (let [{:block/keys [uuid]} block]
     (let [content-fn
           (if config/publishing?
@@ -173,16 +174,14 @@
        (assoc opts
               :delete-choice
               (fn []
-                (p/let [success? (db-property-handler/delete-closed-value! property block)]
-                  (when success?
-                    (swap! *property-schema update :values (fn [vs] (vec (remove #(= uuid %) vs)))))))
+                (db-property-handler/delete-closed-value! property block))
               :update-icon
               (fn [icon]
                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon icon)))
        parent-opts))))
 
 (rum/defc add-existing-values
-  [property *property-schema values {:keys [toggle-fn]}]
+  [property values {:keys [toggle-fn]}]
   [:div.flex.flex-col.gap-1.w-64.p-4.overflow-y-auto
    {:class "max-h-[50dvh]"}
    [:div "Existing values:"]
@@ -196,30 +195,43 @@
    (ui/button
     "Add choices"
     {:on-click (fn []
-                 (p/let [closed-values (db-property-handler/<add-existing-values-to-closed-values! property values)]
-                   (swap! *property-schema assoc :values closed-values)
+                 (p/let [_ (db-property-handler/<add-existing-values-to-closed-values! property values)]
                    (toggle-fn)))})])
 
 (rum/defc choices < rum/reactive
-  [property *property-name *property-schema opts]
+  [property *property-schema opts]
   (let [schema (:block/schema property)
+        values (:property/closed-values property)
         property-type (:type schema)
-        values (:values schema)
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
     [:div.closed-values.flex.flex-col
      (let [choices (doall
-                    (keep (fn [id]
-                            (when-let [block (db/sub-block (:db/id (db/entity [:block/uuid id])))]
-                              {:id (str id)
-                               :value id
-                               :content (choice-item-content property *property-schema block (merge opts dropdown-opts))}))
+                    (keep (fn [value]
+                            (when-let [block (db/sub-block (:db/id value))]
+                              (let [id (:block/uuid block)]
+                                {:id (str id)
+                                 :value id
+                                 :content (choice-item-content property block (merge opts dropdown-opts))})))
                           values))]
        (dnd/items choices
-                  {:on-drag-end (fn [new-values]
-                                  (when (seq new-values)
-                                    (swap! *property-schema assoc :values new-values)
-                                    (pu-component/update-property! property @*property-name @*property-schema)))}))
+                  {:on-drag-end (fn [_ {:keys [active-id over-id direction]}]
+                                  (let [move-down? (= direction :down)
+                                        over (db/entity [:block/uuid (uuid over-id)])
+                                        active (db/entity [:block/uuid (uuid active-id)])
+                                        over-order (:block/order over)
+                                        new-order (if move-down?
+                                                    (let [next-order (db-order/get-next-order (db/get-db) property (:db/id over))]
+                                                      (db-order/gen-key over-order next-order))
+                                                    (let [prev-order (db-order/get-prev-order (db/get-db) property (:db/id over))]
+                                                      (db-order/gen-key prev-order over-order)))]
+
+                                    (db/transact! (state/get-current-repo)
+                                                  [{:db/id (:db/id active)
+                                                    :block/order new-order}
+                                                   (outliner-core/block-with-updated-at
+                                                    {:db/id (:db/id property)})]
+                                                  {:outliner-op :save-block})))}))
      (if config/publishing?
        (constantly [])
        (shui/button
@@ -228,9 +240,9 @@
          :on-click
          (fn [e]
            (p/let [values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
-                   existing-values (seq (get-in property [:block/schema :values]))
+                   existing-values (seq (:property/closed-values property))
                    values (if (seq existing-values)
-                            (let [existing-ids (set (map #(:db/id (db/entity [:block/uuid %])) existing-values))]
+                            (let [existing-ids (set (map :db/id existing-values))]
                               (remove (fn [[_ id]] (existing-ids id)) values))
                             values)]
              (shui/popup-show! (.-target e)
@@ -242,7 +254,7 @@
                                                     (remove string/blank?)
                                                     distinct)]
                                    (if (seq values')
-                                     (add-existing-values property *property-schema values' opts)
+                                     (add-existing-values property values' opts)
                                      (if (= :page property-type)
                                        (property-value/select-page property
                                                                    {:multiple-choices? false

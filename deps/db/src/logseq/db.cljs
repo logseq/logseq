@@ -128,17 +128,28 @@
   [db page-id]
   (count (d/datoms db :avet :block/page page-id)))
 
+(defn- get-block-children-or-property-children
+  [block parent]
+  (let [from-property (:logseq.property/created-from-property block)
+        closed-property (:block/closed-value-property block)]
+    (sort-by-order (cond
+                     closed-property
+                     (:property/closed-values closed-property)
+
+                     from-property
+                     (filter (fn [e]
+                               (= (:db/id (:logseq.property/created-from-property e))
+                                  (:db/id from-property)))
+                             (:block/_raw-parent parent))
+
+                     :else
+                     (:block/_parent parent)))))
+
 (defn get-right-sibling
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [from-property (:logseq.property/created-from-property block)
-          children (sort-by-order (if from-property
-                                    (filter (fn [e]
-                                              (= (:db/id (:logseq.property/created-from-property e))
-                                                 (:db/id from-property)))
-                                            (:block/_raw-parent parent))
-                                    (:block/_parent parent)))
+    (let [children (get-block-children-or-property-children block parent)
           right (some (fn [child] (when (> (compare (:block/order child) (:block/order block)) 0) child)) children)]
       (when (not= (:db/id right) (:db/id block))
         right))))
@@ -147,13 +158,7 @@
   [block]
   (assert (or (de/entity? block) (nil? block)))
   (when-let [parent (:block/parent block)]
-    (let [from-property (:logseq.property/created-from-property block)
-          children (reverse (sort-by-order (if from-property
-                                             (filter (fn [e]
-                                                       (= (:db/id (:logseq.property/created-from-property e))
-                                                          (:db/id from-property)))
-                                                     (:block/_raw-parent parent))
-                                             (:block/_parent parent))))
+    (let [children (reverse (get-block-children-or-property-children block parent))
           left (some (fn [child] (when (< (compare (:block/order child) (:block/order block)) 0) child)) children)]
       (when (not= (:db/id left) (:db/id block))
         left))))

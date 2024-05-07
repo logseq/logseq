@@ -37,12 +37,13 @@
      :block/content
      (or
       (get (.-kv e) k)
-      (let [result (lookup-entity e k default-value)
-            refs (:block/refs e)
-            tags (:block/tags e)]
+      (let [result (lookup-entity e k default-value)]
         (or
-         (when (string? result)
-           (db-content/special-id-ref->page-ref result (distinct (concat refs tags))))
+         (if (string? result)
+           (let [refs (:block/refs e)
+                 tags (:block/tags e)]
+             (db-content/special-id-ref->page-ref result (distinct (concat refs tags))))
+           result)
          default-value)))
 
      :block/_parent
@@ -52,6 +53,10 @@
 
      :block/_raw-parent
      (lookup-entity e :block/_parent default-value)
+
+     :property/closed-values
+     (->> (lookup-entity e :block/_closed-value-property default-value)
+          (sort-by :block/order))
 
      (or (get (.-kv e) k)
          (lookup-entity e k default-value)))))

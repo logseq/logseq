@@ -25,7 +25,7 @@
        (map (fn [[k v]]
               (let [prop-ent (db-utils/entity k)
                     readable-property-val
-                    #(if (seq (get-in prop-ent [:block/schema :values])) ; closed values
+                    #(if (seq (:property/closed-values prop-ent)) ; closed values
                        (when-let [block (db-utils/entity [:block/uuid %])]
                          (db-property/closed-value-name block))
                        %)]
@@ -39,4 +39,4 @@
   "Returns property value if the given entity is type 'closed value' or nil"
   [ent]
   (when (contains? (:block/type ent) "closed value")
-    (:property/schema.value ent)))
+    (:block/content ent)))

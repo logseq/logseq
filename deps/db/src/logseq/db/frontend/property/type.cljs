@@ -20,7 +20,7 @@
 
 (def closed-value-property-types
   "Valid schema :type for closed values"
-  #{:string :number :url :page :date})
+  #{:string :number :url})
 
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
@@ -79,7 +79,7 @@
   (or (url? val)
       (macro-url? val)
       (when-let [ent (d/entity db val)]
-        (url? (:property/schema.value ent)))))
+        (url? (:block/content ent)))))
 
 (defn- property-value-block?
   [db s]
@@ -102,7 +102,7 @@
   [db s]
   (or (string? s)
       (when-let [entity (d/entity db s)]
-        (string? (:property/schema.value entity)))))
+        (string? (:block/content entity)))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
