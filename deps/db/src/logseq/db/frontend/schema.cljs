@@ -129,7 +129,8 @@
                               :db/cardinality :db.cardinality/many
                               :db/index true}
     ;; closed value
-    :property/schema.value {:db/index true}
+    :block/closed-value-property {:db/valueType :db.type/ref
+                                  :db/cardinality :db.cardinality/many}
 
     :file/last-modified-at {}
     :asset/uuid {:db/unique :db.unique/identity}

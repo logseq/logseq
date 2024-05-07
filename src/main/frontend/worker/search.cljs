@@ -186,7 +186,7 @@
   "Returns property value if the given entity is type 'closed value' or nil"
   [ent]
   (when (contains? (:block/type ent) "closed value")
-    (:property/schema.value ent)))
+    (:block/content ent)))
 
 (defn get-by-parent-&-left
   [db parent-id left-id]
@@ -245,12 +245,12 @@
         properties (dissoc properties :logseq.property/created-from-property)]
     (when-not (or
                (and page? name (whiteboard-page? db uuid))
-               (and block? (> (count content) 10000))
+               (and block? (string? content) (> (count content) 10000))
                (and (empty? properties)
                     (or (and block? (string/blank? content))
                         (and db-based? page?))))        ; empty page or block
       (let [content (if block?
-                      content
+                      (when (string? content) content)
                       ;; File based page content
                       (if db-based?
                         ""            ; empty page content

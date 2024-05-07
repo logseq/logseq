@@ -57,7 +57,7 @@
   [property type]
   (or (contains? #{:page :number :url :date} type)
       ;; closed values
-      (seq (get-in property [:block/schema :values]))))
+      (seq (:property/closed-values property))))
 
 (defn exit-edit-property
   []
@@ -256,7 +256,7 @@
                                   (map :block/original-name v)
                                   [(:block/original-name v)])))
                             (remove nil?)))
-        closed-values (seq (get-in property [:block/schema :values]))
+        closed-values (seq (:property/closed-values property))
         pages (->>
                (cond
                  (seq classes)
@@ -270,7 +270,7 @@
                   classes)
 
                  (and block closed-values)
-                 (map (fn [id] (:block/original-name (db/entity [:block/uuid id]))) closed-values)
+                 (map (fn [e] (:block/original-name e)) closed-values)
 
                  :else
                  (model/get-all-page-original-names repo))
@@ -384,18 +384,17 @@
       (let [schema (:block/schema property)
             property (db/sub-block (:db/id property))
             type (:type schema)
-            closed-values? (seq (:values schema))
+            closed-values? (seq (:property/closed-values property))
             items (if closed-values?
-                    (keep (fn [id]
-                            (when-let [block (when id (db/entity [:block/uuid id]))]
-                              (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                    value (db-property/closed-value-name block)]
-                                {:label (if icon
-                                          [:div.flex.flex-row.gap-2
-                                           (icon-component/icon icon)
-                                           value]
-                                          value)
-                                 :value (:db/id block)}))) (:values schema))
+                    (keep (fn [block]
+                            (let [icon (pu/get-block-property-value block :logseq.property/icon)
+                                  value (db-property/closed-value-name block)]
+                              {:label (if icon
+                                        [:div.flex.flex-row.gap-2
+                                         (icon-component/icon icon)
+                                         value]
+                                        value)
+                               :value (:db/id block)})) (:property/closed-values property))
                     (->> values
                          (mapcat (fn [[_id value]]
                                    (if (coll? value)
@@ -564,7 +563,7 @@
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text _icon?] :as opts}]
-  (let [closed-values? (seq (get-in property [:block/schema :values]))]
+  (let [closed-values? (seq (:property/closed-values property))]
     [:div.select-item
      (cond
        (= value :logseq.property/empty-placeholder)
@@ -741,7 +740,7 @@
                      (state/sub-property-value-editing? editor-id)
                      (state/sub-editing? [container-id (:block/uuid block) (:block/uuid property)]))
         select-type? (select-type? property type)
-        closed-values? (seq (:values schema))
+        closed-values? (seq (:property/closed-values property))
         select-opts {:on-chosen on-chosen}
         value (if (and (de/entity? value) (= (:db/ident value) :logseq.property/empty-placeholder))
                 nil
@@ -772,8 +771,8 @@
         ;; :others
           [:div.flex.flex-1
            (if editing?
-               (property-editing block property value schema editor-box editor-args editor-id)
-               (property-value-inner block property value opts))])))))
+             (property-editing block property value schema editor-box editor-args editor-id)
+             (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values
   [block property v {:keys [on-chosen dropdown? editing? block-cp editor-box]

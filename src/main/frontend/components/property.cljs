@@ -152,9 +152,6 @@
           (let [type (keyword (string/lower-case v))
                 update-schema-fn (apply comp
                                         #(assoc % :type type)
-                                             ;; always delete previous closed values as they
-                                             ;; are not valid for the new type
-                                        #(dissoc % :values)
                                         (keep
                                          (fn [attr]
                                            (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
@@ -302,7 +299,7 @@
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
             (case (:type @*property-schema)
               :page
-              (when (empty? (:values @*property-schema))
+              (when (empty? (:property/closed-values property))
                 [:div.grid.grid-cols-4.gap-1.items-center.leading-8
                  [:label "Specify classes:"]
                  (class-select *property-schema
@@ -326,11 +323,11 @@
             [:div.grid.grid-cols-4.gap-1.items-start.leading-8
              [:label.col-span-1 "Available choices:"]
              [:div.col-span-3
-              (closed-value/choices property *property-name *property-schema opts)]])
+              (closed-value/choices property *property-schema opts)]])
 
           (when (and enable-closed-values?
                      (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position)
-                     (seq (:values @*property-schema)))
+                     (seq (:property/closed-values property)))
             (let [position (:position @*property-schema)
                   choices (map
                            (fn [item]
@@ -411,7 +408,7 @@
 
         (and (not add-class-property?)
              (= :default (get-in property [:block/schema :type]))
-             (not (seq (get-in property [:block/schema :values]))))
+             (not (seq (:property/closed-values property))))
         (do
           (pv/<create-new-block! entity property "")
           nil)
@@ -681,7 +678,7 @@
   (when (keyword? k)
     (when-let [property (db/sub-block (:db/id (db/entity k)))]
       (let [type (get-in property [:block/schema :type] :default)
-            closed-values? (seq (get-in property [:block/schema :values]))
+            closed-values? (seq (:property/closed-values property))
             v-block (when (integer? v) (db/entity v))
             block? (and v-block
                         (not closed-values?)
@@ -732,9 +729,9 @@
                                        active (db/entity (keyword active-id))
                                        over-order (:block/order over)
                                        new-order (if move-down?
-                                                   (let [next-order (db-order/get-next-order (db/get-db) over-order)]
+                                                   (let [next-order (db-order/get-next-order (db/get-db) nil (:db/id over))]
                                                      (db-order/gen-key over-order next-order))
-                                                   (let [prev-order (db-order/get-prev-order (db/get-db) over-order)]
+                                                   (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
                                                      (db-order/gen-key prev-order over-order)))]
                                    (db/transact! (state/get-current-repo)
                                                  [{:db/id (:db/id active)

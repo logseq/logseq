@@ -250,13 +250,12 @@
 (defn get-closed-property-values
   [db property-id]
   (when-let [property (d/entity db property-id)]
-    (get-in property [:block/schema :values])))
+    (:property/closed-values property)))
 
 (defn closed-value-name
   "Gets name of closed value given closed value ent/map. Works for all closed value types including pages, blocks"
   [ent]
   (or (:block/original-name ent)
-      (:property/schema.value ent)
       (:block/content ent)))
 
 (defn get-closed-value-entity-by-name
@@ -264,10 +263,9 @@
   found. Works for all closed value types"
   [db db-ident value-name]
   (let [values (get-closed-property-values db db-ident)]
-    (some (fn [id]
-            (let [e (d/entity db [:block/uuid id])]
-              (when (= (closed-value-name e) value-name)
-                e))) values)))
+    (some (fn [e]
+            (when (= (closed-value-name e) (str value-name))
+              e)) values)))
 
 ;; TODO: db ident should obey clojure's rules for keywords
 (defn create-db-ident-from-name
@@ -303,4 +301,4 @@
        (:logseq.property/created-from-property block)
        (:block/page block)
        ;; not closed value
-       (not (some? (:property/schema.value block)))))
+       (not (some? (:block/content block)))))
