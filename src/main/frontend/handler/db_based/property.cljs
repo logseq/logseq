@@ -572,9 +572,10 @@
                                 (get-property-value-schema property-type property {:new-closed-value? true})
                                 resolved-value)]
         (cond
-          (some (fn [b] (and (= resolved-value (or (db-pu/property-value-when-closed b)
-                                                   (:block/uuid b)))
-                             (not= id (:block/uuid b)))) closed-values)
+          (some (fn [b]
+                  (and (= (str resolved-value) (str (or (db-pu/property-value-when-closed b)
+                                                        (:block/uuid b))))
+                       (not= id (:block/uuid b)))) closed-values)
           (do
             (notification/show! "Choice already exists" :warning)
             :value-exists)
