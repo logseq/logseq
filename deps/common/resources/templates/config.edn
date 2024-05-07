@@ -203,40 +203,10 @@
  {:sort-by-priority
   (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
 
- ;; The following queries will be displayed at the bottom of today's journal page.
- ;; The "NOW" query returns tasks with "NOW" or "DOING" status.
- ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status.
- :default-queries
- {:journals
-  [{:title "🔨 NOW"
-    :query [:find (pull ?h [*])
-            :in $ ?start ?today
-            :where
-            [?h :block/marker ?marker]
-            [(contains? #{"NOW" "DOING"} ?marker)]
-            [?h :block/page ?p]
-            [?p :block/journal-day ?d]
-            [(>= ?d ?start)]
-            [(<= ?d ?today)]]
-    :inputs [:14d :today]
-    :result-transform (fn [result]
-                        (sort-by (fn [h]
-                                   (get h :block/priority "Z")) result))
-    :group-by-page? false
-    :collapsed? false}
-   {:title "📅 NEXT"
-    :query [:find (pull ?h [*])
-            :in $ ?start ?next
-            :where
-            [?h :block/marker ?marker]
-            [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?h :block/page ?p]
-            [?p :block/journal-day ?d]
-            [(> ?d ?start)]
-            [(< ?d ?next)]]
-    :inputs [:today :7d-after]
-    :group-by-page? false
-    :collapsed? false}]}
+;; Queries will be displayed at the bottom of today's journal page.
+;; Example usage:
+;; :default-queries
+;; {:journals []}
 
  ;; Add custom commands to the command palette
  ;; Example usage:
