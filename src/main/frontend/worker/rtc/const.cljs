@@ -26,7 +26,7 @@
 (def block-pos-schema
   ":sibling:  sibling of target-block(:target-uuid)
   :child: child of target-block(:target-uuid)
-  :no-order: this block doesn't have :block/left attr"
+  :no-order: this block doesn't have :block/order attr"
   [:enum :sibling :child :no-order])
 
 

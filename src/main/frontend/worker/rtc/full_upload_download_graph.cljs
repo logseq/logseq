@@ -29,7 +29,7 @@
                  (when (seq datoms)
                    (reduce
                     (fn [r datom]
-                      (when (and (contains? #{:block/parent :block/left} (:a datom))
+                      (when (and (contains? #{:block/parent} (:a datom))
                                  (not (pos-int? (:v datom))))
                         (throw (ex-info "invalid block data" {:datom datom})))
                       (if (contains? db-schema/card-many-attributes (:a datom))
@@ -81,7 +81,6 @@
    (fn [block]
      (let [db-id            (:db/id block)
            block-parent     (:db/id (:block/parent block))
-           block-left       (:db/id (:block/left block))
            block-alias      (map :db/id (:block/alias block))
            block-tags       (map :db/id (:block/tags block))
            block-type       (keep block-type-kw->str (:block/type block))
@@ -92,7 +91,6 @@
            block-link       (:db/id (:block/link block))]
        (cond-> (assoc block :db/id (str db-id))
          block-parent      (assoc :block/parent (str block-parent))
-         block-left        (assoc :block/left (str block-left))
          (seq block-alias) (assoc :block/alias (map str block-alias))
          (seq block-tags)  (assoc :block/tags (map str block-tags))
          (seq block-type)  (assoc :block/type block-type)

@@ -71,7 +71,7 @@
                  (mapv (fn [block-uuid]
                          ;; add block/content block/format to satisfy the normal-block schema
                          {:block/uuid block-uuid
-                          ;; NOTE: block without :block/left
+                          ;; NOTE: block without :block/order
                           ;; must be `logseq.db.frontend.malli-schema.closed-value-block`
                           :block/type #{"closed value"}})
                        block-uuids)
@@ -298,7 +298,6 @@
               (-> (apply dissoc block [:block/tx-id
                                        :block/uuid
                                        :block/updated-at
-                                       :block/left
                                        :block/created-at
                                        :block/format
                                        :db/id
@@ -309,7 +308,7 @@
       children-blocks))))
 
 (defn- check-block-pos
-  "NOTE: some blocks don't have :block/left (e.g. whiteboard blocks)"
+  "NOTE: some blocks don't have :block/order (e.g. whiteboard blocks)"
   [db block-uuid remote-parents remote-left-uuid]
   (let [local-b (d/entity db [:block/uuid block-uuid])
         remote-parent-uuid (first remote-parents)]
@@ -318,7 +317,7 @@
       :not-exist
 
       (not= [remote-left-uuid remote-parent-uuid]
-            [(:block/uuid (:block/left local-b)) (:block/uuid (:block/parent local-b))])
+            [(:block/uuid (ldb/get-left-sibling local-b)) (:block/uuid (:block/parent local-b))])
       :wrong-pos
 
       :else nil)))
