@@ -315,12 +315,6 @@
  :shortcut.category/toggle                                 "Перемкнути"
  :shortcut.category/whiteboard                             "Дошка"
  :shortcut.category/others                                 "Інші"
-
- :command.date-picker/complete                             "Вибір дати: підтвердити обраний день"
- :command.date-picker/next-day                             "Вибір дати: виберіть наступний день"
- :command.date-picker/next-week                            "Вибір дати: виберіть наступний тиждень"
- :command.date-picker/prev-day                             "Вибір дати: виберіть попередній день"
- :command.date-picker/prev-week                            "Вибір дати: виберіть попередній тиждень"
  :command.pdf/previous-page                                "PDF: Попередня сторінка поточного документа PDF"
  :command.pdf/next-page                                    "PDF: Наступна сторінка поточного документа PDF"
  :command.pdf/close                                        "PDF: Закрити поточний документ PDF"
