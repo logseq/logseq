@@ -389,10 +389,7 @@
                     (keep (fn [id]
                             (when-let [block (when id (db/entity [:block/uuid id]))]
                               (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                    value (if (db-property/property-created-block? block)
-                                            (let [first-child (ldb/get-first-child (db/get-db) block)]
-                                              (:block/content first-child))
-                                            (db-property/closed-value-name block))]
+                                    value (db-property/closed-value-name block)]
                                 {:label (if icon
                                           [:div.flex.flex-row.gap-2
                                            (icon-component/icon icon)
@@ -539,10 +536,7 @@
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
         (let [property-block? (db-property/property-created-block? block)
-              value' (or (get-in block [:block/schema :value])
-                         (when property-block?
-                           (let [first-child (ldb/get-first-child (db/get-db) value)]
-                             (inline-text {} :markdown (:block/content first-child)))))
+              value' (db-property/closed-value-name block)
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
             (:block/name block)

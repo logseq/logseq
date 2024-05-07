@@ -39,4 +39,4 @@
   "Returns property value if the given entity is type 'closed value' or nil"
   [ent]
   (when (contains? (:block/type ent) "closed value")
-    (get-in ent [:block/schema :value])))
+    (:property/schema.value ent)))

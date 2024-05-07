@@ -125,8 +125,8 @@
 
 (defn db-based-statuses
   []
-  (map (fn [id] (get-in (db/entity [:block/uuid id]) [:block/schema :value]))
-    (pu/get-closed-property-values :logseq.task/status)))
+  (map (fn [id] (:property/schema.value (db/entity [:block/uuid id])))
+       (pu/get-closed-property-values :logseq.task/status)))
 
 (defn db-based-embed-page
   []
@@ -161,7 +161,7 @@
 
 (defn db-based-priorities
   []
-  (map (fn [id] (get-in (db/entity [:block/uuid id]) [:block/schema :value]))
+  (map (fn [id] (:property/schema.value (db/entity [:block/uuid id])))
     (pu/get-closed-property-values :logseq.task/priority)))
 
 (defn get-priorities

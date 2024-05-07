@@ -603,10 +603,10 @@
                 description (string/trim description)
                 description (when-not (string/blank? description) description)
                 tx-data (if block
-                          [(let [schema (assoc (:block/schema block)
-                                               :value resolved-value)]
+                          [(let [schema (:block/schema block)]
                              (cond->
                               {:block/uuid id
+                               :property/schema.value resolved-value
                                :block/schema (if description
                                                (assoc schema :description description)
                                                (dissoc schema :description))}
@@ -664,7 +664,7 @@
                                             {}))
                                          values')
                 value->block-id (zipmap
-                                 (map #(get-in % [:block/schema :value]) closed-value-blocks)
+                                 (map :property/schema.value closed-value-blocks)
                                  (map :block/uuid closed-value-blocks))
                 new-value-ids (mapv :block/uuid closed-value-blocks)
                 property-tx {:db/ident (:db/ident property)

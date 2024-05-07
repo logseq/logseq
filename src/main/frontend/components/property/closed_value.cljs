@@ -57,7 +57,7 @@
   shortcut/disable-all-shortcuts
   {:init (fn [state]
            (let [block (second (:rum/args state))
-                 value (or (str (get-in block [:block/schema :value])) "")
+                 value (or (str (db-property/closed-value-name block)) "")
                  icon (:logseq.property/icon block)
                  description (or (get-in block [:block/schema :description]) "")]
              (assoc state
@@ -125,8 +125,8 @@
                                                 (update-icon icon))})
       (cond
         property-block?
-        (let [first-child (ldb/get-first-child (db/get-db) item)]
-          (:block/content first-child))
+        [:a {:on-click toggle-fn}
+         value]
 
         date?
         [:div.flex.flex-row.items-center.gap-1
@@ -191,10 +191,8 @@
     (for [value values]
       [:li (if (uuid? value)
              (let [result (db/entity [:block/uuid value])]
-               (if (db-property/property-created-block? result)
-                 (let [first-child (ldb/get-first-child (db/get-db) result)]
-                   (:block/content first-child))
-                 (:block/original-name result)))
+               (or (:block/original-name result)
+                   (:block/content result)))
              (str value))])]
    (ui/button
     "Add choices"

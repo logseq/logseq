@@ -12,7 +12,7 @@
    :block/uuid block-id
    :block/page page-id
    :logseq.property/created-from-property (:db/ident property)
-   :block/schema {:value value}
+   :property/schema.value value
    :block/parent page-id})
 
 (defn build-closed-value-block
