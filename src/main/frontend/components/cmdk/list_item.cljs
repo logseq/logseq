@@ -1,4 +1,4 @@
-(ns frontend.components.cmdk-list-item
+(ns frontend.components.cmdk.list-item
   (:require
    ["remove-accents" :as remove-accents]
    [rum.core :as rum]
