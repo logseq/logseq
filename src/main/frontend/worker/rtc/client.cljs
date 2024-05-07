@@ -9,6 +9,7 @@
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.ws2 :as ws]
             [logseq.common.missionary-util :as c.m]
+            [logseq.db :as ldb]
             [missionary.core :as m]))
 
 (def ^:private transit-w (transit/writer :json))
@@ -167,9 +168,9 @@
     (when-let [block-uuid
                (some (comp :block-uuid second) [move-op update-op update-page-op])]
       (when-let [block (d/entity @conn [:block/uuid block-uuid])]
-        (let [left-uuid (some-> block :block/left :block/uuid)
+        (let [left-uuid (:block/uuid (ldb/get-left-sibling block))
               parent-uuid (some-> block :block/parent :block/uuid)]
-          (when parent-uuid ; whiteboard blocks don't have :block/left
+          (when parent-uuid
             ;; remote-move-op
             (when move-op
               (local-block-ops->remote-ops-aux :move-op
