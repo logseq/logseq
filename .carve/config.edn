@@ -6,6 +6,6 @@
                   ;; Used for debugging
                   frontend.db.debug
                   frontend.worker.debug
-                  ;; FIXME: Should remove its unused fns
-                  frontend.worker.rtc.core]
+                  ;; FIXME: Are these unused fns?
+                  frontend.worker.rtc.op-mem-layer]
  :report {:format :ignore}}

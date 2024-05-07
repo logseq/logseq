@@ -18,8 +18,7 @@
             [frontend.state :as state]
             [promesa.core :as p]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db :as ldb]))
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
