@@ -28,7 +28,10 @@
   [{:keys [query] :as query-m} {:keys [db-graph?]}]
   (let [{:keys [where in]} (datalog-util/query-vec->map query)
         query-dsl-rules (if db-graph? rules/db-query-dsl-rules rules/query-dsl-rules)
-        rules-found (datalog-util/find-rules-in-where where (-> query-dsl-rules keys set))]
+        rules-found* (datalog-util/find-rules-in-where where (-> query-dsl-rules keys set))
+        rules-found (cond-> rules-found*
+                      db-graph?
+                      (concat (mapcat rules/rules-dependencies rules-found*)))]
     (if (seq rules-found)
       (if (and (= '% (last in)) (vector? (last (:inputs query-m))))
         ;; Add to existing :inputs rules

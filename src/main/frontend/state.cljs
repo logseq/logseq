@@ -19,7 +19,8 @@
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [frontend.rum :as r]))
+            [frontend.rum :as r]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defonce *profile-state
   (atom {}))
@@ -341,8 +342,8 @@
 ;;  (re-)fetches get-current-repo needlessly
 ;; TODO: Add consistent validation. Only a few config options validate at get time
 
-(def default-config
-  "Default config for a repo-specific, user config"
+(def common-default-config
+  "Common default config for a user's repo config"
   {:feature/enable-search-remove-accents? true
    :default-arweave-gateway "https://arweave.net"
    :ui/auto-expand-block-refs? true
@@ -352,6 +353,72 @@
    ;; For not upgraded graphs, the config will have no key `:file/name-format`
    ;; Then the default value is applied
    :file/name-format :legacy})
+
+(def file-default-config
+  "Default repo config for file graphs"
+  (merge common-default-config
+         ;; The "NOW" query returns tasks with "NOW" or "DOING" status.
+         ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status.
+         {:default-queries
+          {:journals
+           [{:title "🔨 NOW"
+             :query '[:find (pull ?h [*])
+                      :in $ ?start ?today
+                      :where
+                      (task ?h #{"NOW" "DOING"})
+                      [?h :block/page ?p]
+                      [?p :block/journal-day ?d]
+                      [(>= ?d ?start)]
+                      [(<= ?d ?today)]]
+             :inputs [:14d :today]
+             :result-transform '(fn [result]
+                                 (sort-by (fn [h]
+                                            (get h :block/priority "Z")) result))
+             :group-by-page? false
+             :collapsed? false}
+            {:title "📅 NEXT"
+             :query '[:find (pull ?h [*])
+                      :in $ ?start ?next
+                      :where
+                      (task ?h #{"NOW" "LATER" "TODO"})
+                      [?h :block/page ?p]
+                      [?p :block/journal-day ?d]
+                      [(> ?d ?start)]
+                      [(< ?d ?next)]]
+             :inputs [:today :7d-after]
+             :group-by-page? false
+             :collapsed? false}]}}))
+
+(def db-default-config
+  "Default repo config for DB graphs"
+  (merge common-default-config
+         ;; The "NOW" query returns tasks with "Doing" status for recent past days
+         ;; The "NEXT" query returns tasks with "Todo" status for upcoming future days
+         {:default-queries
+          {:journals
+           [{:title "🔨 NOW"
+             :query '[:find (pull ?b [*])
+                      :in $ ?start ?today
+                      :where
+                      (task ?b #{"Doing"})
+                      [?b :block/page ?p]
+                      [?p :block/journal-day ?d]
+                      [(>= ?d ?start)]
+                      [(<= ?d ?today)]]
+             :inputs [:14d :today]
+             :collapsed? false}
+            {:title "📅 NEXT"
+             :query '[:find (pull ?b [*])
+                      :in $ ?start ?next
+                      :where
+                      (task ?b #{"Todo"})
+                      [?b :block/page ?p]
+                      [?p :block/journal-day ?d]
+                      [(> ?d ?start)]
+                      [(< ?d ?next)]]
+             :inputs [:today :7d-after]
+             :group-by-page? false
+             :collapsed? false}]}}))
 
 ;; State that most user config is dependent on
 (declare get-current-repo sub set-state!)
@@ -387,7 +454,7 @@ should be done through this fn in order to get global config and config defaults
    (get-config (get-current-repo)))
   ([repo-url]
    (merge-configs
-    default-config
+    (if (sqlite-util/db-based-graph? repo-url) db-default-config file-default-config)
     (get-global-config)
     (get-graph-config repo-url))))
 
@@ -627,7 +694,7 @@ Similar to re-frame subscriptions"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
-     (merge-configs default-config
+     (merge-configs (if (sqlite-util/db-based-graph? repo) db-default-config file-default-config)
                     (get config ::global-config)
                     (get config repo)))))
 

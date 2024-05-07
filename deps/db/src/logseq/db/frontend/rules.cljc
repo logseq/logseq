@@ -237,6 +237,12 @@
       [?v :block/content ?status]
       [(contains? ?statuses ?status)]]}))
 
+(def rules-dependencies
+  "For db graphs, a map of rule names and the rules they depend on. If this map
+  becomes long or brittle, we could do scan rules for their deps with something
+  like find-rules-in-where"
+  {:task #{:property}})
+
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
   be passed to datascript.core/q. Can handle rules with multiple or single clauses"
