@@ -324,6 +324,8 @@
     (r.upload-download/new-task--wait-download-info-ready
      get-ws-create-task download-info-uuid graph-uuid timeout-ms)))
 
+(def new-task--download-graph-from-s3 r.upload-download/new-task--download-graph-from-s3)
+
 ;;; ================ API (ends) ================
 
 ;;; subscribe debug state ;;;

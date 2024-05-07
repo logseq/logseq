@@ -2,12 +2,9 @@
   "- upload local graph to remote
   - download remote graph"
   (:require [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [<!]]
-            [cljs.core.async.interop :refer [p->c]]
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [datascript.core :as d]
-            [frontend.worker.async-util :include-macros true :refer [<? go-try]]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
@@ -16,6 +13,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [missionary.core :as m]
             [promesa.core :as p]))
@@ -51,7 +49,7 @@
             (m/sp
               (let [all-blocks (export-as-blocks @conn)]
                 (transit/write (transit/writer :json) all-blocks)))))]
-      (m/? (c.m/<! (http/put url {:body all-blocks-str})))
+      (m/? (c.m/<! (http/put url {:body all-blocks-str :with-credentials? false})))
       (let [upload-resp
             (m/? (r.client/send&recv get-ws-create-task {:action "upload-graph"
                                                          :s3-key key
@@ -152,24 +150,24 @@
                    datoms)]
       (d/transact! conn refs-tx {:outliner-op :rtc-download-rebuild-block-refs}))))
 
-(defn- <transact-remote-all-blocks-to-sqlite
+(defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
-  (go-try
-   (let [{:keys [t blocks]} all-blocks
-         blocks* (replace-db-id-with-temp-id blocks)
-         blocks-with-page-id (fill-block-fields blocks*)
-         tx-data (concat blocks-with-page-id
-                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
-         ^js worker-obj (:worker/object @worker-state/*state)
-         _ (op-mem-layer/update-local-tx! repo t)
-         work (p/do!
-               (.createOrOpenDB worker-obj repo {:close-other-db? false})
-               (.exportDB worker-obj repo)
-               (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
-               (transact-block-refs! repo))]
-     (<? (p->c work))
-
-     (worker-util/post-message :add-repo {:repo repo}))))
+  (let [{:keys [t blocks]} all-blocks
+        blocks* (replace-db-id-with-temp-id blocks)
+        blocks-with-page-id (fill-block-fields blocks*)
+        tx-data (concat blocks-with-page-id
+                        [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
+        ^js worker-obj (:worker/object @worker-state/*state)]
+    (m/sp
+      (op-mem-layer/update-local-tx! repo t)
+      (m/?
+       (c.m/await-promise
+        (p/do!
+         (.createOrOpenDB worker-obj repo {:close-other-db? false})
+         (.exportDB worker-obj repo)
+         (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
+         (transact-block-refs! repo))))
+      (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; async download-graph ;;
@@ -207,19 +205,19 @@
            (recur)))))
    (m/timeout timeout-ms :timeout)))
 
-(defn <download-graph-from-s3
+(defn new-task--download-graph-from-s3
   [graph-uuid graph-name s3-url]
-  (let [^js worker-obj              (:worker/object @worker-state/*state)]
-    (go-try
-     (let [{:keys [status body] :as r} (<! (http/get s3-url))
-           repo                        (str "logseq_db_" graph-name)]
-       (if (not= 200 status)
-         (ex-info "<download-graph failed" r)
-         (let [all-blocks (transit/read transit-r body)]
-           (worker-state/set-rtc-downloading-graph! true)
-           (op-mem-layer/init-empty-ops-store! repo)
-           (<? (<transact-remote-all-blocks-to-sqlite all-blocks repo graph-uuid))
-           (op-mem-layer/update-graph-uuid! repo graph-uuid)
-           (<! (op-mem-layer/<sync-to-idb-layer! repo))
-           (<! (p->c (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
-           (worker-state/set-rtc-downloading-graph! false)))))))
+  (m/sp
+    (let [^js worker-obj              (:worker/object @worker-state/*state)
+          {:keys [status body] :as r} (m/? (c.m/<! (http/get s3-url {:with-credentials? false})))
+          repo                        (str sqlite-util/db-version-prefix graph-name)]
+      (if (not= 200 status)
+        (throw (ex-info "download-graph from s3 failed" {:resp r}))
+        (let [all-blocks (transit/read transit-r body)]
+          (worker-state/set-rtc-downloading-graph! true)
+          (op-mem-layer/init-empty-ops-store! repo)
+          (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
+          (op-mem-layer/update-graph-uuid! repo graph-uuid)
+          (m/? (c.m/<! (op-mem-layer/<sync-to-idb-layer! repo)))
+          (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
+          (worker-state/set-rtc-downloading-graph! false))))))
