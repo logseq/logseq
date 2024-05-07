@@ -153,11 +153,28 @@
 (defn generate-n-keys-between
   [a b n & {:keys [digits]
             :or {digits base-62-digits}}]
-  (cond
-    (= n 0) []
-    (= n 1) [(generate-key-between a b digits)]
-    :else (let [c (generate-key-between a b digits)]
-            (concat
-             (generate-n-keys-between a c (Math/floor (/ n 2)) digits)
-             [c]
-             (generate-n-keys-between c b (- n (Math/floor (/ n 2)) 1) digits)))))
+  (let [result (cond
+                 (= n 0) []
+                 (= n 1) [(generate-key-between a b digits)]
+                 (nil? b) (reduce
+                           (fn [col _]
+                             (let [k (generate-key-between (or (last col) a) b {:digits digits})]
+                               (conj col k)))
+                           []
+                           (range n))
+                 (nil? a) (->>
+                           (reduce
+                            (fn [col _]
+                              (let [k (generate-key-between a (or (last col) b) {:digits digits})]
+                                (conj col k)))
+                            []
+                            (range n))
+                           (reverse)
+                           (vec))
+                 :else (let [mid (Math/floor (/ n 2))
+                             c (generate-key-between a b digits)]
+                         (concat
+                          (generate-n-keys-between a c mid digits)
+                          [c]
+                          (generate-n-keys-between c b mid digits))))]
+    (vec (take n result))))
