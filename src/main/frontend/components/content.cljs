@@ -348,17 +348,7 @@
                                                 :content (:value version)})
                                              versions))))))}
 
-               "(Dev) Show block content history")
-              (shui/dropdown-menu-item
-               {:key "(Dev) Show block RTC log"
-                :on-click
-                (fn []
-                  (let [^object worker @db-browser/*worker]
-                    (p/let [result (.rtc-get-block-update-log worker (str block-id))
-                            logs (transit/read transit-r result)]
-                      (prn :Dev-show-block-RTC-log block-id)
-                      (apply js/console.log logs))))}
-               "(Dev) Show block RTC log")))])]))))
+               "(Dev) Show block content history")))])]))))
 
 (rum/defc block-ref-custom-context-menu-content
   [block block-ref-id]

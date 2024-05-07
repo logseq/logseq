@@ -15,7 +15,6 @@
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.handler.page.db-based.rename :as db-worker-page-rename]
-            [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.core2 :as rtc-core2]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
@@ -656,10 +655,6 @@
    [this token graph-uuid]
    (with-write-transit-str
      (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid))))
-
-  (rtc-get-block-update-log
-   [_this block-uuid]
-   (ldb/write-transit-str (rtc-core/get-block-update-log (uuid block-uuid))))
 
   (undo
    [_this repo page-block-uuid-str]
