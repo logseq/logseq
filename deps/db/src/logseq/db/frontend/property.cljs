@@ -253,9 +253,11 @@
     (get-in property [:block/schema :values])))
 
 (defn closed-value-name
-  "Gets name of closed value given closed value ent/map. Works for all closed value types including pages"
+  "Gets name of closed value given closed value ent/map. Works for all closed value types including pages, blocks"
   [ent]
-  (or (:block/original-name ent) (get-in ent [:block/schema :value])))
+  (or (:block/original-name ent)
+      (:property/schema.value ent)
+      (:block/content ent)))
 
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
@@ -301,4 +303,4 @@
        (:logseq.property/created-from-property block)
        (:block/page block)
        ;; not closed value
-       (not (some? (get-in block [:block/schema :value])))))
+       (not (some? (:property/schema.value block)))))

@@ -234,8 +234,7 @@
     :task
     '[(task ?b ?statuses)
       (property ?b :logseq.task/status ?v)
-      [?v :block/schema ?schema]
-      [(get ?schema :value) ?status]
+      [?v :property/schema.value ?status]
       [(contains? ?statuses ?status)]]}))
 
 (defn extract-rules

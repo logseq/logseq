@@ -321,6 +321,7 @@
   [[:block/content :string]
    [:block/parent :int]
    [:block/order :string]
+   [:property/schema.value {:optional true} :any]
    ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
@@ -351,7 +352,6 @@
      [:db/ident {:optional true} logseq-property-ident]
      [:block/schema {:optional true}
       [:map
-       [:value [:or :string :double]]
        [:description {:optional true} :string]]]]
     (remove #(#{:block/content :block/order} (first %)) block-attrs)
     page-or-block-attrs)))

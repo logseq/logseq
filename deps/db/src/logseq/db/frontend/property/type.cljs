@@ -79,7 +79,7 @@
   (or (url? val)
       (macro-url? val)
       (when-let [ent (d/entity db val)]
-        (url? (get-in ent [:block/schema :value])))))
+        (url? (:property/schema.value ent)))))
 
 (defn- property-value-block?
   [db s]
@@ -102,7 +102,7 @@
   [db s]
   (or (string? s)
       (when-let [entity (d/entity db s)]
-        (string? (get-in entity [:block/schema :value])))))
+        (string? (:property/schema.value entity)))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"

@@ -32,7 +32,7 @@
 (defn- get-closed-values
   "Get value from block ids"
   [values]
-  (set (map #(get-in (db/entity [:block/uuid %]) [:block/schema :value]) values)))
+  (set (map #(:property/schema.value (db/entity [:block/uuid %])) values)))
 
 ;; closed values related
 ;; upsert-closed-value
@@ -66,18 +66,18 @@
          (p/let [{:keys [block-id tx-data]} (db-property-handler/<upsert-closed-value property {:value 3})]
            (db/transact! tx-data)
            (let [b (db/entity [:block/uuid block-id])]
-             (is (= 3 (:value (:block/schema b))))
+             (is (= 3 (:property/schema.value b)))
              (is (contains? (:block/type b) "closed value"))
              (let [values (get-value-ids k)]
                (is (= #{1 2 3} (get-closed-values values))))
 
              (testing "Update closed value"
                (p/let [{:keys [tx-data]} (db-property-handler/<upsert-closed-value property {:id block-id
-                                                                                            :value 4
-                                                                                            :description "choice 4"})]
+                                                                                             :value 4
+                                                                                             :description "choice 4"})]
                  (db/transact! tx-data)
                  (let [b (db/entity [:block/uuid block-id])]
-                   (is (= 4 (:value (:block/schema b))))
+                   (is (= 4 (:property/schema.value b)))
                    (is (= "choice 4" (:description (:block/schema b))))
                    (is (contains? (:block/type b) "closed value"))
                    (p/let [_ (db-property-handler/delete-closed-value! property (db/entity [:block/uuid block-id]))]

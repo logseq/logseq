@@ -21,7 +21,7 @@
         ;; handles page uuids and closed values w/o knowing type
         get-uuid-prop-value (fn [v]
                               (or (db-pu/get-property-name v)
-                                  (get-in (db/entity [:block/uuid v]) [:block/schema :value])))
+                                  (:property/schema.value (db/entity [:block/uuid v]))))
         result (cond-> result*
                  (and (seq (:block/properties entity)) (config/db-based-graph? (state/get-current-repo)))
                  (assoc :block.debug/properties
