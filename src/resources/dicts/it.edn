@@ -754,7 +754,6 @@
  :linked-references/filter-heading "Filtro"
  :linked-references/filter-includes "Include: "
  :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " di ")) total (if (= total 1) " Riferimento Collegato" " Riferimenti Collegati")))
- :linked-references/unexpected-error "Riferimenti Collegati: Errore inatteso. Per favore, re-indicizza prima il grafo."
  :settings-page/git-commit-on-close "Esegui commit Git alla chiusura della finestra"
  :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Riferimento Scollegato" " Riferimenti Scollegati")))
  :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Riferimento" "Riferimenti"))}

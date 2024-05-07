@@ -2,7 +2,6 @@
   (:require [cljs-time.coerce :as tc]
             [cljs.pprint :as pp]
             [clojure.string :as string]
-            [cognitect.transit :as transit]
             [dommy.core :as d]
             [frontend.commands :as commands]
             [frontend.components.editor :as editor]
@@ -32,8 +31,6 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.db :as ldb]))
-
-(defonce transit-r (transit/reader :json))
 
 ;; TODO i18n support
 

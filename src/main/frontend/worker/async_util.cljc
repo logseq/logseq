@@ -4,15 +4,6 @@
   #?(:cljs (:require [promesa.core :as p]
                      [clojure.core.async :as async])))
 
-(defmacro go-try
-  [& body]
-  `(cljs.core.async/go
-     (try
-       ~@body
-       (catch :default e#
-         e#))))
-
-
 #?(:cljs
    (defn throw-err
      [v]
