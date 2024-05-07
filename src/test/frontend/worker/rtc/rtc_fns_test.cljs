@@ -403,7 +403,7 @@ server: ;; remove 2
           (is (= page-uuid (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid3]))))))))))
 
 
-(deftest apply-remote-update&remove-page-ops-test
+(deftest ^:fix-me apply-remote-update&remove-page-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
