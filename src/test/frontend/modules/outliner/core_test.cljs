@@ -223,7 +223,7 @@
     (is (= [2 3 6 5 7] (get-children 22)))))
 
 (deftest ^:fix-me test-move-non-consecutive-blocks-2
-  (testing "Move 3 as sibling of 2."
+  (testing "Move 3 and 5 as children of 2."
     (transact-tree! [[22 [[2 [[3]
                               [4]
                               [5]]]
