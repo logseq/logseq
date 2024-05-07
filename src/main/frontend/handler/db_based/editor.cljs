@@ -79,12 +79,14 @@
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
-                      block' (merge block
-                                    (block/parse-block (assoc block :block/content content'))
-                                    {:block/content content})
-                      block' (if (seq (:block/properties block))
-                               (update block' :block/properties (fn [m] (merge m (:block/properties block))))
-                               block')]
+                      parsed-block (block/parse-block (assoc block :block/content content'))
+                      parsed-block' (cond-> (dissoc parsed-block :block/properties)
+                                      (:block/properties parsed-block)
+                                      (merge (update-keys (:block/properties parsed-block)
+                                                          (fn [k]
+                                                            (or ({:heading :logseq.property/heading} k)
+                                                                (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))
+                      block' (merge block parsed-block' {:block/content content})]
                   (update block' :block/refs remove-non-existed-refs!)))
         result (-> block
                    (merge (if level {:block/level level} {}))
