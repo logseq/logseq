@@ -323,7 +323,7 @@
             [:div.grid.grid-cols-4.gap-1.items-start.leading-8
              [:label.col-span-1 "Available choices:"]
              [:div.col-span-3
-              (closed-value/choices property *property-schema opts)]])
+              (closed-value/choices property opts)]])
 
           (when (and enable-closed-values?
                      (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position)

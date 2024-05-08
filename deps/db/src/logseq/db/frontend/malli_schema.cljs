@@ -106,7 +106,7 @@
                                  :block/schema
                                  (select-keys (:block/schema property) [:type :cardinality])
                                  :property/closed-values
-                                 ;; use explict call to be nbb compatible
+                                 ;; use explicit call to be nbb compatible
                                  (entity-plus/lookup-kv-then-entity property :property/closed-values))
                           v])
                  (assoc m k v)))
@@ -246,6 +246,8 @@
   "Property :schema attributes that vary by :type"
   [;; For any types except for :checkbox :default :template
    [:cardinality {:optional true} [:enum :one :many]]
+   ;; For closed values
+   [:position {:optional true} :string]
    ;; For :page and :template
    [:classes {:optional true} [:set [:or :uuid :keyword]]]])
 
