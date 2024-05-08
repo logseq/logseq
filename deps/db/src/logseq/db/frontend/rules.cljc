@@ -245,11 +245,17 @@
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
-  be passed to datascript.core/q. Can handle rules with multiple or single clauses"
+  be passed to datascript.core/q. Can handle rules with multiple or single clauses.
+  Takes following options:
+   * :deps - A map of rule names to their dependencies. Only one-level of dependencies are resolved.
+   No dependencies are detected by default though we could add it later e.g. find-rules-in-where"
   ([rules-m] (extract-rules rules-m (keys rules-m)))
-  ([rules-m rules]
-   (vec
-    (mapcat #(let [val (rules-m %)]
-              ;; if vector?, rule has multiple clauses
-               (if (vector? (first val)) val [val]))
-            rules))))
+  ([rules-m rules & {:keys [deps]}]
+   (let [rules-with-deps (concat rules
+                                 (when (map? deps)
+                                   (mapcat deps rules)))]
+     (vec
+      (mapcat #(let [val (rules-m %)]
+                 ;; if vector?, rule has multiple clauses
+                 (if (vector? (first val)) val [val]))
+              rules-with-deps)))))

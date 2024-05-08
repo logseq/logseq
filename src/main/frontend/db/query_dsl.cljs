@@ -298,7 +298,7 @@
     (when (seq markers)
       (if db-graph?
         {:query (list 'task '?b (set markers))
-         :rules [:task :property]}
+         :rules [:task]}
         (let [markers (set (map (comp string/upper-case name) markers))]
           {:query (list 'task '?b markers)
            :rules [:task]})))))
@@ -564,7 +564,7 @@ Some bindings in this fn:
                       (add-bindings! (if (= key :and) (rest result) result))))]
       {:query result'
        :rules (if db-graph?
-                (rules/extract-rules rules/db-query-dsl-rules rules)
+                (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies})
                 (mapv rules/query-dsl-rules rules))
        :sort-by @sort-by
        :blocks? (boolean @blocks?)

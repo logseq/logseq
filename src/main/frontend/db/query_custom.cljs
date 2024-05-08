@@ -28,10 +28,7 @@
   [{:keys [query] :as query-m} {:keys [db-graph?]}]
   (let [{:keys [where in]} (datalog-util/query-vec->map query)
         query-dsl-rules (if db-graph? rules/db-query-dsl-rules rules/query-dsl-rules)
-        rules-found* (datalog-util/find-rules-in-where where (-> query-dsl-rules keys set))
-        rules-found (cond-> rules-found*
-                      db-graph?
-                      (concat (mapcat rules/rules-dependencies rules-found*)))]
+        rules-found (datalog-util/find-rules-in-where where (-> query-dsl-rules keys set))]
     (if (seq rules-found)
       (if (and (= '% (last in)) (vector? (last (:inputs query-m))))
         ;; Add to existing :inputs rules
@@ -41,7 +38,10 @@
                   (assoc (vec inputs)
                          ;; last position is rules
                          (dec (count inputs))
-                         (->> (rules/extract-rules query-dsl-rules rules-found)
+                         (->> (rules/extract-rules query-dsl-rules
+                                                   rules-found
+                                                   (when db-graph?
+                                                     {:deps rules/rules-dependencies}))
                               (into (last inputs))
                               ;; user could give rules that we already have
                               distinct
@@ -59,7 +59,10 @@
             (update :rules
                     (fn [rules]
                       (into (or rules [])
-                            (rules/extract-rules query-dsl-rules rules-found))))))
+                            (rules/extract-rules query-dsl-rules
+                                                   rules-found
+                                                   (when db-graph?
+                                                     {:deps rules/rules-dependencies})))))))
       query-m)))
 
 (defn custom-query
