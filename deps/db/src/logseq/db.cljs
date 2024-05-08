@@ -222,7 +222,11 @@
                   (get-first-page-by-name db page-id)
                   page-id)
         page (d/entity db page-id)]
-    (nil? (:block/_left page))))
+    (empty? (:block/_parent page))))
+
+(defn get-first-child
+  [db id]
+  (first (sort-by-order (:block/_parent (d/entity db id)))))
 
 (defn get-orphaned-pages
   [db {:keys [pages empty-ref-f built-in-pages-names]
@@ -240,7 +244,7 @@
                                 (empty-ref-f page)
                                 (or
                                  (page-empty? db (:db/id page))
-                                 (let [first-child (first (:block/_left page))
+                                 (let [first-child (get-first-child db (:db/id page))
                                        children (:block/_page page)]
                                    (and
                                     first-child
@@ -307,10 +311,6 @@
 
 (def get-block-children-ids sqlite-common-db/get-block-children-ids)
 (def get-block-children sqlite-common-db/get-block-children)
-
-(defn get-first-child
-  [db id]
-  (first (sort-by-order (:block/_parent (d/entity db id)))))
 
 (defn- get-sorted-page-block-ids
   [db page-id]

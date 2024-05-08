@@ -188,14 +188,6 @@
   (when (contains? (:block/type ent) "closed value")
     (:block/content ent)))
 
-(defn get-by-parent-&-left
-  [db parent-id left-id]
-  (when (and parent-id left-id)
-    (let [lefts (:block/_left (d/entity db left-id))]
-      (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
-                                  (not= parent-id (:db/id node)))
-                         node)) lefts))))
-
 (defn- get-db-properties-str
   "Similar to db-pu/readable-properties but with a focus on making property values searchable"
   [db properties]
@@ -219,7 +211,7 @@
                                             (:block/content e))
                                            ;; first child
                                            (let [parent-id (:db/id e)]
-                                             (:block/content (get-by-parent-&-left db parent-id parent-id))))]
+                                             (:block/content (ldb/get-first-child db parent-id))))]
                                 value)
                               val)))
                      (remove string/blank?))]

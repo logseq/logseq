@@ -44,7 +44,7 @@
          [_ page-name page-uuid] (worker-page/create! repo conn config title options)]
      (when redirect?
        (route-handler/redirect-to-page! page-uuid))
-     (when-let [first-block (first (:block/_left (db/get-page page-uuid)))]
+     (when-let [first-block (ldb/get-first-child (db/get-db) (:db/id (db/get-page page-uuid)))]
        (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
      page-name)))
 
@@ -62,7 +62,7 @@
      (when redirect?
        (route-handler/redirect-to-page! page-uuid))
      (let [page (db/get-page page-uuid)]
-       (when-let [first-block (first (:block/_left page))]
+       (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
          (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
        page))))
 
