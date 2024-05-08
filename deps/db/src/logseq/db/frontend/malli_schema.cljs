@@ -350,7 +350,7 @@
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
-     [:block/content [:or :string :int]]
+     [:block/content [:or :string :double]]
      [:block/closed-value-property {:optional true} [:set :int]]
      [:block/schema {:optional true}
       [:map
