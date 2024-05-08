@@ -362,9 +362,8 @@
                  (fn [eid]
                    (when-let [block (db/entity eid)]
                      (let [value (get block property-id)
-                           block-value? (and (= :default (get-in property [:block/schema :type] :default))
-                                             (uuid? value))
-                           property-block (when block-value? (db/entity [:block/uuid value]))
+                           block-value? (= :default (get-in property [:block/schema :type] :default))
+                           property-block (when block-value? (db/entity (:db/id value)))
                            retract-blocks-tx (when (and property-block
                                                         (some? (get property-block :logseq.property/created-from-property)))
                                                (let [txs-state (atom [])]
