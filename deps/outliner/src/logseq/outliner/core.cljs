@@ -724,11 +724,12 @@
 
 (defn- move-to-original-position?
   [blocks target-block sibling? non-consecutive-blocks?]
-  (let [block (first blocks)]
+  (let [block (first blocks)
+        db (.-db target-block)]
     (and (not non-consecutive-blocks?)
          (if sibling?
            (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
-           (= (:db/id (:block/parent block)) (:db/id target-block))))))
+           (= (ldb/get-first-child db (:db/id target-block)) (:db/id block))))))
 
 (defn- move-block
   [conn block target-block sibling?]
