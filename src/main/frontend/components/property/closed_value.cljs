@@ -199,7 +199,7 @@
                    (toggle-fn)))})])
 
 (rum/defc choices < rum/reactive
-  [property *property-schema opts]
+  [property opts]
   (let [schema (:block/schema property)
         values (:property/closed-values property)
         property-type (:type schema)
