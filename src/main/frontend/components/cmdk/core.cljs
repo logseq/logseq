@@ -1,5 +1,6 @@
 (ns frontend.components.cmdk.core
   (:require
+   [cljs-bean.core :as bean]
    [clojure.string :as string]
    [frontend.components.block :as block]
    [frontend.components.cmdk.list-item :as list-item]
@@ -44,18 +45,13 @@
 (def GROUP-LIMIT 5)
 
 (def search-actions
-  [{:text "Search only pages"        :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
-                                                                                                          :group :pages}}
-   {:text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page" :filter {:mode "search"
-                                                                                                          :group :current-page}}
-   {:text "Search only blocks"       :info "Add filter to search" :icon-theme :gray :icon "block" :filter {:mode "search"
-                                                                                                           :group :blocks}}
-   {:text "Search only commands"     :info "Add filter to search" :icon-theme :gray :icon "command" :filter {:mode "search"
-                                                                                                             :group :commands}}
-   {:text "Search only whiteboards"  :info "Add filter to search" :icon-theme :gray :icon "whiteboard" :filter {:mode "search"
-                                                                                                                :group :whiteboards}}
-   {:text "Search only files"        :info "Add filter to search" :icon-theme :gray :icon "file" :filter {:mode "search"
-                                                                                                          :group :files}}])
+  [{:filter {:group :pages :mode "search"} :text "Search only pages" :info "Add filter to search" :icon-theme :gray :icon "page"}
+   {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
+   {:filter {:group :blocks} :text "Search only blocks" :info "Add filter to search" :icon-theme :gray :icon "block"}
+   {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
+   {:filter {:group :whiteboards} :text "Search only whiteboards" :info "Add filter to search" :icon-theme :gray :icon "whiteboard"}
+   {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
+   {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}])
 
 (def filters search-actions)
 
@@ -67,6 +63,7 @@
    :pages          {:status :success :show :less :items nil}
    :blocks         {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
+   :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
 
 (defn get-class-from-input
@@ -172,6 +169,7 @@
           (:source-command highlighted-item) :trigger
           (:source-create highlighted-item) :create
           (:filter highlighted-item) :filter
+          (:source-theme highlighted-item) :theme
           :else nil)))
 
 ;; Each result group has it's own load-results function
@@ -314,7 +312,23 @@
                         :text file
                         :file-path file))
                     files)]
-      (swap! !results update group        merge {:status :success :items items}))))
+      (swap! !results update group merge {:status :success :items items}))))
+
+(defmethod load-results :themes [group _state]
+  (let [!input (::input _state)
+        !results (::results _state)
+        themes (state/sub :plugin/installed-themes)
+        themes (if (string/blank? @!input)
+                 themes
+                 (search/fuzzy-search themes @!input :limit 100 :extract-fn :name))
+        themes (cons {:name "Logseq Default theme"
+                      :pid :logseq-classic-theme
+                      :url nil} themes)]
+    (swap! !results assoc-in [group :status] :loading)
+    (let [items (for [t themes]
+                  {:icon-theme :gray :text (:name t) :info (str (:mode t) " #" (:pid t))
+                   :icon "palette" :source-theme t})]
+      (swap! !results update group merge {:status :success :items items}))))
 
 (defn- get-filter-q
   [input]
@@ -357,10 +371,11 @@
 
 ;; The default load-results function triggers all the other load-results function
 (defmethod load-results :default [_ state]
-  (if-not (some-> state ::input deref seq)
-    (do (load-results :initial state)
-        (load-results :filters state))
-    (let [filter-group (:group @(::filter state))]
+  (let [filter-group (:group @(::filter state))]
+    (if (and (not (some-> state ::input deref seq))
+          (not filter-group))
+      (do (load-results :initial state)
+          (load-results :filters state))
       (if filter-group
         (load-results filter-group state)
         (do
@@ -516,6 +531,11 @@
           group (get-in item [:filter :group])]
       (swap! !filter assoc :group group)
       (load-results group state))))
+
+(defmethod handle-action :theme [_ state]
+  (when-let [item (some-> state state->highlighted-item)]
+    (js/LSPluginCore.selectTheme (bean/->js (:source-theme item)))
+    (state/close-modal!)))
 
 (defmethod handle-action :default [_ state event]
   (when-let [action (state->action state)]
@@ -865,50 +885,51 @@
                   (reset! (::filter state) nil))}
      (shui/tabler-icon "x"))])
 
-(rum/defcs cmdk < rum/static
-                  rum/reactive
-                  {:will-mount
-                   (fn [state]
-                     (when-not (:sidebar? (last (:rum/args state)))
-                       (shortcut/unlisten-all!))
-                     state)
+(rum/defcs cmdk
+  < rum/static
+    rum/reactive
+    {:will-mount
+     (fn [state]
+       (when-not (:sidebar? (last (:rum/args state)))
+         (shortcut/unlisten-all!))
+       state)
 
-                   :will-unmount
-                   (fn [state]
-                     (when-not (:sidebar? (last (:rum/args state)))
-                       (shortcut/listen-all!))
+     :will-unmount
+     (fn [state]
+       (when-not (:sidebar? (last (:rum/args state)))
+         (shortcut/listen-all!))
+       state)}
+    {:init (fn [state]
+             (let [search-mode (:search/mode @state/state)
+                   opts (last (:rum/args state))]
+               (assoc state
+                 ::ref (atom nil)
+                 ::filter (if (and search-mode
+                                (not (contains? #{:global :graph} search-mode))
+                                (not (:sidebar? opts)))
+                            (atom {:group search-mode})
+                            (atom nil))
+                 ::input (atom (or (:initial-input opts) "")))))
+     :will-unmount (fn [state]
+                     (state/set-state! :search/mode nil)
                      state)}
-                  {:init (fn [state]
-                           (let [search-mode (:search/mode @state/state)
-                                 opts (last (:rum/args state))]
-                             (assoc state
-                                    ::ref (atom nil)
-                                    ::filter (if (and search-mode
-                                                   (not (contains? #{:global :graph} search-mode))
-                                                   (not (:sidebar? opts)))
-                                               (atom {:group search-mode})
-                                               (atom nil))
-                                    ::input (atom (or (:initial-input opts) "")))))
-                   :will-unmount (fn [state]
-                                   (state/set-state! :search/mode nil)
-                                   state)}
-                  (mixins/event-mixin
-                    (fn [state]
-                      (let [ref @(::ref state)]
-                        (mixins/on-key-down state {}
-                          {:target ref
-                           :all-handler (fn [e _key] (keydown-handler state e))})
-                        (mixins/on-key-up state {} (fn [e _key]
-                                                     (keyup-handler state e))))))
-                  (rum/local false ::shift?)
-                  (rum/local false ::meta?)
-                  (rum/local nil ::highlighted-group)
-                  (rum/local nil ::highlighted-item)
-                  (rum/local default-results ::results)
-                  (rum/local nil ::load-results-throttled)
-                  (rum/local nil ::scroll-container-ref)
-                  (rum/local nil ::input-ref)
-                  (rum/local false ::input-changed?)
+    (mixins/event-mixin
+      (fn [state]
+        (let [ref @(::ref state)]
+          (mixins/on-key-down state {}
+            {:target ref
+             :all-handler (fn [e _key] (keydown-handler state e))})
+          (mixins/on-key-up state {} (fn [e _key]
+                                       (keyup-handler state e))))))
+    (rum/local false ::shift?)
+    (rum/local false ::meta?)
+    (rum/local nil ::highlighted-group)
+    (rum/local nil ::highlighted-item)
+    (rum/local default-results ::results)
+    (rum/local nil ::load-results-throttled)
+    (rum/local nil ::scroll-container-ref)
+    (rum/local nil ::input-ref)
+    (rum/local false ::input-changed?)
   [state {:keys [sidebar?] :as opts}]
   (let [*input (::input state)
         search-mode (:search/mode @state/state)
