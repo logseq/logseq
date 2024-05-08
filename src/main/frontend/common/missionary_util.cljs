@@ -1,8 +1,9 @@
-(ns logseq.common.missionary-util
+(ns frontend.common.missionary-util
   "Utils based on missionary."
   (:require [clojure.core.async :as a]
             [missionary.core :as m])
-  (:import [missionary Cancelled]))
+  ;; (:import [missionary Cancelled])
+  )
 
 (def delays (reductions * 1000 (repeat 2)))
 
@@ -44,24 +45,26 @@
     (m/reductions {} value)
     (m/latest identity))))
 
-(defn debounce
-  [duration-ms flow]
-  (m/ap
-    (let [x (m/?< flow)]
-      (try (m/? (m/sleep duration-ms x))
-           (catch Cancelled _
-             (m/amb))))))
+(comment
+  (defn debounce
+    [duration-ms flow]
+    (m/ap
+      (let [x (m/?< flow)]
+        (try (m/? (m/sleep duration-ms x))
+             (catch Cancelled _
+               (m/amb)))))))
 
 (defn run-task
   "Return the canceler"
   [task key & {:keys [succ fail]}]
   (task (or succ #(prn key :succ %)) (or fail #(js/console.log key %))))
 
-(defn >!
-  "Return a task that
+(comment
+  (defn >!
+    "Return a task that
   puts given value on given channel,
   completing with true when put is accepted, or false if port was closed."
-  [c x] (doto (m/dfv) (->> (a/put! c x))))
+    [c x] (doto (m/dfv) (->> (a/put! c x)))))
 
 (defn <!
   "Return a task that takes from given channel,
