@@ -261,18 +261,16 @@
                                                                     :dropdown? false
                                                                     :close-modal? false
                                                                     :on-chosen (fn [chosen]
-                                                                                 (p/let [closed-value (<upsert-closed-value! property {:value chosen})]
-                                                                                   (swap! *property-schema update :values (fnil conj []) closed-value)
+                                                                                 (p/let [_closed-value (<upsert-closed-value! property {:value chosen})]
                                                                                    (shui/popup-hide! id)))})
                                        (item-config
                                         property
                                         nil
                                         (assoc opts :on-save
                                                (fn [value icon description]
-                                                 (p/let [closed-value (<upsert-closed-value! property {:value value
-                                                                                                       :description description
-                                                                                                       :icon icon})]
-                                                   (swap! *property-schema update :values (fnil conj []) closed-value)))))))))
+                                                 (<upsert-closed-value! property {:value value
+                                                                                  :description description
+                                                                                  :icon icon}))))))))
                                {:content-props {:class "w-auto"}})))}
         (ui/icon "plus" {:size 16})
         "Add choice"))]))
