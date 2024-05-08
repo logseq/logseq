@@ -12,7 +12,7 @@
    :block/format :markdown
    :block/uuid block-id
    :block/page page-id
-   :block/content (str value)
+   :block/content value
    :block/closed-value-property (:db/ident property)
    :block/parent page-id})
 
