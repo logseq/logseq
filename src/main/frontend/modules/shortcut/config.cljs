@@ -354,8 +354,13 @@
 
    :go/search                               {:binding "mod+k"
                                              :fn      #(search :global)}
+
+   :go/search-themes                        {:binding "mod+shift+i"
+                                             :fn      #(search :themes)}
+
    :command-palette/toggle                  {:binding "mod+shift+p"
                                              :fn      #(search :commands)}
+
    :go/search-in-page                       {:binding "mod+shift+k"
                                              :fn      #(search :current-page)}
 
@@ -706,6 +711,7 @@
             :ui/toggle-brackets
             :go/search-in-page
             :go/search
+            :go/search-themes
             :go/electron-find-in-page
             :go/electron-jump-to-the-next
             :go/electron-jump-to-the-previous
@@ -773,6 +779,7 @@
   (atom
     {:shortcut.category/basics
      [:go/search
+      :go/search-themes
       :editor/new-block
       :editor/new-line
       :editor/indent
