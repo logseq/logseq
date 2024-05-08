@@ -350,11 +350,12 @@
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
+     [:block/content [:or :string :int]]
      [:block/closed-value-property {:optional true} [:set :int]]
      [:block/schema {:optional true}
       [:map
        [:description {:optional true} :string]]]]
-    block-attrs
+    (remove #(#{:block/content} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def normal-block

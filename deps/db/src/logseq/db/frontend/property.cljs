@@ -264,7 +264,7 @@
   [db db-ident value-name]
   (let [values (get-closed-property-values db db-ident)]
     (some (fn [e]
-            (when (= (closed-value-name e) (str value-name))
+            (when (= (closed-value-name e) value-name)
               e)) values)))
 
 ;; TODO: db ident should obey clojure's rules for keywords
