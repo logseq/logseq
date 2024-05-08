@@ -322,12 +322,14 @@
                  themes
                  (search/fuzzy-search themes @!input :limit 100 :extract-fn :name))
         themes (cons {:name "Logseq Default theme"
-                      :pid :logseq-classic-theme
-                      :url nil} themes)]
+                      :pid  "logseq-classic-theme"
+                      :url nil} themes)
+        selected (state/sub :plugin/selected-theme)]
     (swap! !results assoc-in [group :status] :loading)
-    (let [items (for [t themes]
+    (let [items (for [t themes
+                      :let [selected? (= (:url t) selected)]]
                   {:icon-theme :gray :text (:name t) :info (str (:mode t) " #" (:pid t))
-                   :icon "palette" :source-theme t})]
+                   :icon (if selected? "checkbox" "palette") :source-theme t :selected selected?})]
       (swap! !results update group merge {:status :success :items items}))))
 
 (defn- get-filter-q
@@ -782,7 +784,8 @@
                                 (or (and slash? (not namespace-page-matched?))
                                   (and backspace? (= last-char "/"))
                                   (and backspace? (= input ""))))
-                          (reset! (::filter state) nil))))
+                          (reset! (::filter state) nil)
+                          (load-results :default state))))
        :value input}]]))
 
 (defn rand-tip
