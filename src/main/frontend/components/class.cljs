@@ -70,19 +70,20 @@
       [:div.property-configure.grid.gap-2
        (when show-title? [:h1.title.mb-4 "Configure class"])
 
-       [:div.grid.grid-cols-5.gap-1.items-center.class-parent
-        [:div.col-span-2 "Parent class:"]
-        (if config/publishing?
-          [:div.col-span-3
-           (if-let [parent-class (some-> (:db/id (:class/parent page))
-                                         db/entity)]
-             [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid parent-class))}
-              (:block/original-name parent-class)]
-             "None")]
-          [:div.col-span-3
-           (let [parent (some-> (:db/id (:class/parent page))
-                                db/entity)]
-             (page-parent page parent))])]
+       (when-not (= (:db/ident page) :logseq.class/base)
+         [:div.grid.grid-cols-5.gap-1.items-center.class-parent
+          [:div.col-span-2 "Parent class:"]
+          (if config/publishing?
+            [:div.col-span-3
+             (if-let [parent-class (some-> (:db/id (:class/parent page))
+                                           db/entity)]
+               [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid parent-class))}
+                (:block/original-name parent-class)]
+               "None")]
+            [:div.col-span-3
+             (let [parent (some-> (:db/id (:class/parent page))
+                                  db/entity)]
+               (page-parent page parent))])])
 
        (when (:class/parent page)
          (let [ancestor-pages (loop [parents [page]]

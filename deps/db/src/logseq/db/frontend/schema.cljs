@@ -131,6 +131,8 @@
     ;; closed value
     :block/closed-value-property {:db/valueType :db.type/ref
                                   :db/cardinality :db.cardinality/many}
+    :property/schema.classes {:db/valueType :db.type/ref
+                              :db/cardinality :db.cardinality/many}
 
     :file/last-modified-at {}
     :asset/uuid {:db/unique :db.unique/identity}

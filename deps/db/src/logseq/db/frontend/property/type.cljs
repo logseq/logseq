@@ -43,8 +43,8 @@
                :number #{:cardinality}
                :date #{:cardinality}
                :url #{:cardinality}
-               :page #{:cardinality :classes}
-               :template #{:classes}
+               :page #{:cardinality}
+               :template #{}
                :checkbox #{}}))
 
 (assert (= (set user-built-in-property-types) (set (keys user-built-in-allowed-schema-attributes)))

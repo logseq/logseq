@@ -212,7 +212,8 @@
   [[:db/index {:optional true} :boolean]
    [:db/valueType {:optional true} [:enum :db.type/ref]]
    [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
-   [:block/order {:optional true} :string]])
+   [:block/order {:optional true} :string]
+   [:property/schema.classes {:optional true} [:set :int]]])
 
 (def normal-page
   (vec
@@ -247,9 +248,7 @@
   [;; For any types except for :checkbox :default :template
    [:cardinality {:optional true} [:enum :one :many]]
    ;; For closed values
-   [:position {:optional true} :string]
-   ;; For :page and :template
-   [:classes {:optional true} [:set [:or :uuid :keyword]]]])
+   [:position {:optional true} :string]])
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
@@ -458,7 +457,7 @@
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
-(let [malli-many-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block))
+(let [malli-many-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block))
                                 (filter #(= (last %) [:set :int]))
                                 (map first)
                                 set)]
@@ -467,7 +466,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-one-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
+(let [malli-one-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (filter #(= (last %) :int))
                                (map first)
                                set)
@@ -477,7 +476,7 @@
                          (string/join ", " undeclared-ref-attrs))
                     {}))))
 
-(let [malli-non-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
+(let [malli-non-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (concat (rest file-block) (rest asset-block)
                                        db-ident-keys (rest class-page))
                                (remove #(= (last %) [:set :int]))

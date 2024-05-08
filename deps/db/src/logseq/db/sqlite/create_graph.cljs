@@ -42,6 +42,7 @@
              (->> (keep :db/ident tx)
                   frequencies
                   (keep (fn [[k v]] (when (> v 1) k)))
+                  (remove #{:logseq.class/base})
                   seq)]
     (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
                          (vec conflicting-idents))
@@ -54,7 +55,8 @@
   (let [initial-data [(kv :db/type "db")
                       (kv :schema/version db-schema/version)
                       ;; Empty property value used by db.type/ref properties
-                      {:db/ident :logseq.property/empty-placeholder}]
+                      {:db/ident :logseq.property/empty-placeholder}
+                      {:db/ident :logseq.class/base}]
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
@@ -92,7 +94,7 @@
                                    (seq properties)
                                    (assoc :class/schema.properties properties)))))))
                          db-class/built-in-classes)
-        tx (vec (concat default-properties default-classes
-                        initial-data initial-files default-pages))]
+        tx (vec (concat initial-data default-properties default-classes
+                        initial-files default-pages))]
     (validate-tx-for-duplicate-idents tx)
     tx))

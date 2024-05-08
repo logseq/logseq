@@ -336,9 +336,12 @@
           (let [select-class-uuids (->> select-class-ids (map class-uuids) set)]
             (-> properties
                 (update-vals (fn [m]
-                               (if (get-in m [:block/schema :classes])
-                                 (update-in m [:block/schema :classes] (fn [cs] (set (filterv #(contains? select-class-uuids %) cs))))
-                                 m)))))
+                               (let [classes (get-in m [:block/schema :classes])]
+                                 (if (seq classes)
+                                   (assoc m :property/schema.classes
+                                          (set (map (fn [id] [:block/uuid id])
+                                                    (filter #(contains? select-class-uuids %) classes))))
+                                   m))))))
           properties)
         classes (generate-classes
                  (map #(class-map %) select-class-ids)
