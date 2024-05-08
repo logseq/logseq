@@ -12,6 +12,7 @@
             [logseq.common.missionary-util :as c.m]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
@@ -74,6 +75,20 @@
    :block-type/macro        "macro"
    :block-type/hidden       "hidden"
    :block-type/closed-value "closed value"})
+
+(defn- remote-block-index->block-order*
+  [same-parent-blocks]
+  (let [orders (db-order/gen-n-keys (count same-parent-blocks) nil nil)]
+    (map (fn [order block]
+           (-> block
+               (assoc :block/order order)
+               (dissoc :block/index)))
+         orders (sort-by :block/index same-parent-blocks))))
+
+(defn- remote-block-index->block-order
+  [blocks]
+  (let [blocks-coll (vals (group-by :block/parent blocks))]
+    (mapcat remote-block-index->block-order* blocks-coll)))
 
 (defn- replace-db-id-with-temp-id
   [blocks]
@@ -151,7 +166,7 @@
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
-        blocks* (replace-db-id-with-temp-id blocks)
+        blocks* (remote-block-index->block-order (replace-db-id-with-temp-id blocks))
         blocks-with-page-id (fill-block-fields blocks*)
         tx-data (concat blocks-with-page-id
                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
