@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.core2
   "Main(use missionary) ns for rtc related fns"
-  (:require [frontend.worker.rtc.client :as r.client]
+  (:require [frontend.common.missionary-util :as c.m]
+            [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
@@ -10,7 +11,6 @@
             [frontend.worker.util :as worker-util]
             [goog.string :as gstring]
             [logseq.common.config :as common-config]
-            [logseq.common.missionary-util :as c.m]
             [logseq.db :as ldb]
             [malli.core :as ma]
             [missionary.core :as m])

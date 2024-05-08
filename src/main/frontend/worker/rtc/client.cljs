@@ -3,12 +3,12 @@
   (:require [clojure.set :as set]
             [cognitect.transit :as transit]
             [datascript.core :as d]
+            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.ws2 :as ws]
-            [logseq.common.missionary-util :as c.m]
             [logseq.db :as ldb]
             [missionary.core :as m]))
 

@@ -3,8 +3,8 @@
   based on
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
   (:require [cljs-http.client :as http]
+            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
-            [logseq.common.missionary-util :as c.m]
             [missionary.core :as m]))
 
 (defn- get-state
