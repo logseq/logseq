@@ -104,11 +104,12 @@
          {:block/content "number-closed property block" :properties {:number-closed (random-closed-value :number-closed)}}
          {:block/content "page property block" :properties {:page [:page "page 1"]}}
          {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
-         {:block/content "page-closed property block" :properties {:page-closed (random-closed-value :page-closed)}}
+         ;; :page-closed and :date-closed disabled for now since they're not supported
+         #_{:block/content "page-closed property block" :properties {:page-closed (random-closed-value :page-closed)}}
          {:block/content "date property block" :properties {:date [:page (date-journal-title today)]}}
          {:block/content "date-many property block" :properties {:date-many #{[:page (date-journal-title today)]
                                                                               [:page (date-journal-title yesterday)]}}}
-         {:block/content "date-closed property block" :properties {:date-closed (random-closed-value :date-closed)}}]}
+         #_{:block/content "date-closed property block" :properties {:date-closed (random-closed-value :date-closed)}}]}
        {:page {:block/original-name "Block Property Queries"}
         :blocks
         [{:block/content "{{query (property :string \"haha\")}}"}
@@ -123,10 +124,10 @@
          {:block/content (str "{{query (property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
          {:block/content "{{query (property :page [[Page 1]])}}"}
          {:block/content "{{query (property :page-many [[Page 2]])}}"}
-         {:block/content (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
+         #_{:block/content (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
          {:block/content (str "{{query (property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
          {:block/content (str "{{query (property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
-         {:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
+         #_{:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
 
        ;; Page property pages and queries
        ;; {:page {:block/name "default page" :properties {:default "yolo block"}}}
@@ -142,11 +143,11 @@
        {:page {:block/name "number-closed page" :properties {:number-closed (random-closed-value :number-closed)}}}
        {:page {:block/name "page page" :properties {:page [:page "page 1"]}}}
        {:page {:block/name "page-many page" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}}
-       {:page {:block/name "page-closed page" :properties {:page-closed (random-closed-value :page-closed)}}}
+       #_{:page {:block/name "page-closed page" :properties {:page-closed (random-closed-value :page-closed)}}}
        {:page {:block/name "date page" :properties {:date [:page (date-journal-title today)]}}}
        {:page {:block/name "date-many page" :properties {:date-many #{[:page (date-journal-title today)]
                                                                       [:page (date-journal-title yesterday)]}}}}
-       {:page {:block/name "date-closed page" :properties {:date-closed (random-closed-value :date-closed)}}}
+       #_{:page {:block/name "date-closed page" :properties {:date-closed (random-closed-value :date-closed)}}}
        {:page {:block/original-name "Page Property Queries"}
         :blocks
         [{:block/content "{{query (page-property :string \"yolo\")}}"}
@@ -161,10 +162,10 @@
          {:block/content (str "{{query (page-property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
          {:block/content "{{query (page-property :page [[Page 1]])}}"}
          {:block/content "{{query (page-property :page-many [[Page 2]])}}"}
-         {:block/content (str "{{query (page-property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
+         #_{:block/content (str "{{query (page-property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
          {:block/content (str "{{query (page-property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
          {:block/content (str "{{query (page-property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
-         {:block/content (str "{{query (page-property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}])
+         #_{:block/content (str "{{query (page-property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}])
 
      ;; Properties
      :properties
@@ -175,7 +176,7 @@
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:closed-values (closed-values-config (keyword (str (name %) "-closed")))
                                 :block/schema {:type %}})
-                      [:string :url :number :page :date]))
+                      [:string :url :number #_:page #_:date]))
           (into {}))}))
 
 (def spec
