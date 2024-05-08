@@ -752,6 +752,7 @@
   :go/electron-jump-to-the-next   "Jump to the next match to your Find bar search"
   :go/electron-jump-to-the-previous "Jump to the previous match to your Find bar search"
   :go/search                      "Search pages and blocks"
+  :go/search-themes               "Search themes"
   :go/search-in-page              "Search blocks in page"
   :command-palette/toggle         "Search commands"
   :go/journals                    "Go to journals"
