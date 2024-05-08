@@ -6,6 +6,7 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; :db/ident malli schemas
@@ -66,7 +67,7 @@
   property type"
   [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
-  ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val property property-val))
+  ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema)) (partial validate-fn db) validate-fn)
         validate-fn'' (if (and (db-property-type/closed-value-property-types (:type schema))
                                ;; new closed values aren't associated with the property yet
@@ -74,8 +75,7 @@
                                (seq (:property/closed-values property)))
                         (fn closed-value-valid? [val]
                           (and (validate-fn' val)
-                               (contains? (set (map :block/uuid (:property/closed-values property)))
-                                          (:block/uuid (d/entity db val)))))
+                               (contains? (set (map :db/id (:property/closed-values property))) val)))
                         validate-fn')]
     (if (= (:cardinality schema) :many)
       (every? validate-fn'' property-val)
@@ -104,7 +104,10 @@
                  (update m :block/properties (fnil conj [])
                          [(assoc (select-keys property [:db/ident :db/valueType])
                                  :block/schema
-                                 (select-keys (:block/schema property) [:type :cardinality :values]))
+                                 (select-keys (:block/schema property) [:type :cardinality])
+                                 :property/closed-values
+                                 ;; use explict call to be nbb compatible
+                                 (entity-plus/lookup-kv-then-entity property :property/closed-values))
                           v])
                  (assoc m k v)))
              {}
@@ -243,10 +246,6 @@
   "Property :schema attributes that vary by :type"
   [;; For any types except for :checkbox :default :template
    [:cardinality {:optional true} [:enum :one :many]]
-   ;; For closed values
-   [:values {:optional true}  [:vector :uuid]]
-   ;; For closed values
-   [:position {:optional true} :string]
    ;; For :page and :template
    [:classes {:optional true} [:set [:or :uuid :keyword]]]])
 
@@ -288,7 +287,7 @@
          property-common-schema-attrs
          (remove #(not (db-property-type/property-type-allows-schema-attribute? prop-type (first %)))
                  property-type-schema-attrs)))])
-     db-property-type/user-built-in-property-types)))
+    db-property-type/user-built-in-property-types)))
 
 (def user-property
   (vec
@@ -321,7 +320,6 @@
   [[:block/content :string]
    [:block/parent :int]
    [:block/order :string]
-   [:block/closed-value-property {:optional true} [:set :int]]
    ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
@@ -350,10 +348,11 @@
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
+     [:block/closed-value-property {:optional true} [:set :int]]
      [:block/schema {:optional true}
       [:map
        [:description {:optional true} :string]]]]
-    (remove #(#{:block/content :block/order} (first %)) block-attrs)
+    block-attrs
     page-or-block-attrs)))
 
 (def normal-block
@@ -456,7 +455,7 @@
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
-(let [malli-many-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs)
+(let [malli-many-ref-attrs (->> (concat class-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block))
                                 (filter #(= (last %) [:set :int]))
                                 (map first)
                                 set)]
