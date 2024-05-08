@@ -801,8 +801,7 @@ independent of format as format specific heading characters are stripped"
   (d/q
    '[:find ?name ?id
      :where
-     [?page :block/type ?t]
-     [(= ?t "class")]
+     [?page :block/type "class"]
      [?page :block/original-name ?name]
      [?page :block/uuid ?id]]
     (conn/get-db repo)))

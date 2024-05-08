@@ -83,13 +83,14 @@
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or original-name (name db-ident'))
-         block-order (when-not from-ui-thread? (db-order/gen-key nil))]
+         block-order (when-not from-ui-thread? (db-order/gen-key nil))
+         classes (:classes prop-schema)]
      (block-with-timestamps
       (cond->
        {:db/ident db-ident'
         :block/type "property"
         :block/format :markdown
-        :block/schema (merge {:type :default} prop-schema)
+        :block/schema (merge {:type :default} (dissoc prop-schema :classes))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
         :block/uuid (or block-uuid (d/squuid))
         :block/original-name (name prop-name)
@@ -99,6 +100,8 @@
                           :db.cardinality/one)}
         block-order
         (assoc :block/order block-order)
+        (seq classes)
+        (assoc :property/schema.classes classes)
         (or ref-type? (contains? (conj db-property-type/ref-property-types :entity) (:type prop-schema)))
         (assoc :db/valueType :db.type/ref))))))
 
@@ -107,8 +110,11 @@
   "Build a standard new class so that it is is consistent across contexts"
   [block]
   (block-with-timestamps
-   (merge {:block/type "class"
-           :block/format :markdown}
+   (merge (cond->
+           {:block/type "class"
+            :block/format :markdown}
+            (not= (:db/ident block) :logseq.class/base)
+            (assoc :class/parent :logseq.class/base))
           block)))
 
 (defn build-new-page

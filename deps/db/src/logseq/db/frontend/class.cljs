@@ -3,9 +3,12 @@
 
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
-  {:logseq.class/task
+  {:logseq.class/base {:original-name "Root class"}
+
+   :logseq.class/task
    {:original-name "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/scheduled :logseq.task/deadline]}}
+
    :logseq.class/card {:original-name "card"
                        ;; :schema {:property []}
                        }

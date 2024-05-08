@@ -94,6 +94,20 @@
         (shui/popup-hide!)
         (exit-edit-property))))))
 
+(defn- add-or-remove-property-value
+  [block property value selected?]
+  (let [many? (= :db/cardinality.many (:db/cardinality property))]
+    (if selected?
+      (<add-property! block (:db/ident property) value
+                      {:exit-edit? (not many?)})
+      (p/do!
+        (db/transact! (state/get-current-repo)
+                     [[:db/retract (:db/id block) (:db/ident property) value]]
+                     {:outliner-op :save-block})
+        (when-not many?
+          (shui/popup-hide!)
+          (exit-edit-property))))))
+
 (defn- navigate-to-date-page
   [value]
   (when value
@@ -200,9 +214,9 @@
                                                   :create-first-block? false
                                                   :tags (if inline-class-uuid
                                                           [inline-class-uuid]
-                                                       ;; Only 1st class b/c page normally has
-                                                       ;; one of and not all these classes
-                                                          (take 1 classes))
+                                                          ;; Only 1st class b/c page normally has
+                                                          ;; one of and not all these classes
+                                                          (mapv :block/uuid (take 1 classes)))
                                                   :class? class?})]
           (:db/id page)))
       id)))
@@ -220,14 +234,14 @@
                         items)
                   items)
                 (remove #(= :logseq.property/empty-placeholder (:value %))))
-        k (if multiple-choices? :on-apply :on-chosen)
+        k :on-chosen
         f (get opts k)
-        f' (fn [chosen]
+        f' (fn [chosen selected?]
              (if (or (and (not multiple-choices?) (= chosen clear-value))
                      (and multiple-choices? (= chosen [clear-value])))
                (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block)
                                                         (:db/ident property))
-               (f chosen)))]
+               (f chosen selected?)))]
     (select/select (assoc opts
                           :selected-choices selected-choices
                           :items items'
@@ -239,8 +253,9 @@
 
 (defn select-page
   [property
-   {:keys [block classes multiple-choices? dropdown? input-opts on-chosen] :as opts}]
+   {:keys [block multiple-choices? dropdown? input-opts] :as opts}]
   (let [repo (state/get-current-repo)
+        classes (:property/schema.classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
@@ -262,10 +277,10 @@
                  (seq classes)
                  (mapcat
                   (fn [class]
-                    (if (= :logseq.class class)
-                      (map first (model/get-all-classes repo))
-                      (some->> (:db/id (db/entity [:block/uuid class]))
-                               (model/get-class-objects repo)
+                    (if (= :logseq.class/base (:db/ident class))
+                      (->> (map first (model/get-all-classes repo))
+                           (remove #{"Root class"}))
+                      (some->> (model/get-class-objects repo (:db/id class))
                                (map #(:block/original-name (db/entity %))))))
                   classes)
 
@@ -277,7 +292,7 @@
                distinct
                (remove (fn [p] (or (ldb/hidden-page? p) (util/uuid-string? (str p))))))
         options (map (fn [p] {:value p}) pages)
-        string-classes (remove #(= :logseq.class %) classes)
+        classes' (remove (fn [class] (= :logseq.class/base (:db/ident class))) classes)
         opts' (cond->
                (merge
                 opts
@@ -300,32 +315,25 @@
                  :transform-fn (fn [results input]
                                  (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
                                    (let [repo (state/get-current-repo)
-                                         class-ents (map #(db/entity repo [:block/uuid %]) string-classes)
-                                         class-names (map :block/original-name class-ents)
-                                         descendent-classes (->> class-ents
+                                         class-names (map :block/original-name classes')
+                                         descendent-classes (->> classes'
                                                                  (mapcat #(model/get-class-children repo (:db/id %)))
                                                                  (map #(:block/original-name (db/entity repo %))))]
                                      (->> (concat class-names descendent-classes)
                                           (filter #(string/includes? % class-input))
                                           (mapv #(hash-map :value (str new-page "#" %)))))
                                    results))
-                 :input-opts input-opts})
-                multiple-choices?
-                (assoc :on-apply (fn [choices]
-                                   (p/let [page-ids (p/all (map #(<create-page-if-not-exists! property string-classes %) choices))
-                                           values (set page-ids)]
-                                     (when on-chosen (on-chosen values)))))
-                (not multiple-choices?)
-                (assoc :on-chosen (fn [chosen]
-                                    (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
-                                      (when-not (string/blank? page*)
-                                        (p/let [id (<create-page-if-not-exists! property string-classes page*)]
-                                          (when on-chosen (on-chosen id))))))))]
+                 :input-opts input-opts
+                 :on-chosen (fn [chosen selected?]
+                              (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
+                                (when-not (string/blank? page*)
+                                  (p/let [id (<create-page-if-not-exists! property classes' page*)]
+                                    (when id
+                                      (add-or-remove-property-value block property id selected?))))))}))]
     (select-aux block property opts')))
 
 (defn property-value-select-page
-  [block property
-   {:keys [on-chosen] :as opts}
+  [block property opts
    {:keys [*show-new-property-config?]}]
   (let [input-opts (fn [_]
                      {:on-blur (fn []
@@ -343,11 +351,7 @@
                           nil))})
         opts' (assoc opts
                      :block block
-                     :input-opts input-opts
-                     :on-chosen (fn [values]
-                                  (p/do!
-                                   (<add-property! block (:db/ident property) values)
-                                   (when on-chosen (on-chosen)))))]
+                     :input-opts input-opts)]
     (select-page property opts')))
 
 (defn <create-new-block!
@@ -407,11 +411,9 @@
                                           (assoc m :label label)))) items)
                          items)
                        (remove nil?))
-            add-property-f #(<add-property! block (:db/ident property) %)
-            on-chosen (fn [chosen]
-                        (p/do!
-                         (add-property-f (if (map? chosen) (:value chosen) chosen))
-                         (when-let [f (:on-chosen select-opts)] (f))))
+            on-chosen (fn [chosen selected?]
+                        (let [value (if (map? chosen) (:value chosen) chosen)]
+                          (add-or-remove-property-value block property value selected?)))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (coll? selected-choices')
                                (->> selected-choices'
@@ -428,6 +430,7 @@
                       :input-default-placeholder "Select"
                       :extract-chosen-fn :value
                       :content-props content-props
+                      :on-chosen on-chosen
                       :input-opts (fn [_]
                                     {:on-blur (fn []
                                                 (exit-edit-property)
@@ -444,11 +447,7 @@
                                            (when-let [f (:on-chosen select-opts)] (f)))
                                          nil))})}
                       closed-values?
-                      (assoc :extract-fn :label)
-                      multiple-choices?
-                      (assoc :on-apply on-chosen)
-                      (not multiple-choices?)
-                      (assoc :on-chosen on-chosen)))))))
+                      (assoc :extract-fn :label)))))))
 
 (rum/defc property-normal-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -590,11 +589,9 @@
   (let [[open? set-open!] (rum/use-state editing?)
         schema (:block/schema property)
         type (get schema :type :default)
-        select-opts' (cond-> (assoc select-opts
-                                    :multiple-choices? false
-                                    :on-chosen #(set-open! false))
-                       (= type :page)
-                       (assoc :classes (:classes schema)))]
+        select-opts' (assoc select-opts
+                            :multiple-choices? false
+                            :on-chosen #(set-open! false))]
     (shui/dropdown-menu
      {:open open?}
      (shui/dropdown-menu-trigger
@@ -658,10 +655,8 @@
   [:div.flex.flex-1
    (case (:type schema)
      :template
-     (let [id (first (:classes schema))
-           template (when id (db/entity [:block/uuid id]))]
-       (when template
-         (<create-new-block-from-template! block property template)))
+     (when-let [template (first (:property/schema.classes property))]
+       (<create-new-block-from-template! block property template))
      :string
      (let [repo (state/get-current-repo)
            config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
@@ -706,14 +701,12 @@
                   (when (= type :string)
                     (set-editing! block property editor-id dom-id value opts)))}
      (if (and (string/blank? value) template?)
-       (let [id (first (:classes schema))
-             template (when id (db/entity [:block/uuid id]))]
-         (when template
-           [:a.fade-link.pointer.text-sm.jtrigger
-            {:on-click (fn [e]
-                         (util/stop e)
-                         (<create-new-block-from-template! block property template))}
-            (str "Use template #" (:block/original-name template))]))
+       (when-let [template (first (:property/schema.classes schema))]
+         [:a.fade-link.pointer.text-sm.jtrigger
+          {:on-click (fn [e]
+                       (util/stop e)
+                       (<create-new-block-from-template! block property template))}
+          (str "Use template #" (:block/original-name template))])
        (cond
          (= type :template)
          (property-template-value {:editor-id editor-id}
@@ -786,7 +779,7 @@
     (if (= type :default)
       [:div.property-block-container.content
        (block-cp (sort-by :block/order v) {:editor-box editor-box
-                                          :id (str (:block/uuid block))})]
+                                           :id (str (:block/uuid block))})]
       (let [values-cp (fn [toggle-fn]
                         (if (seq items)
                           (concat
@@ -805,8 +798,7 @@
                           [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
                            (if (= :page type)
                              (property-value-select-page block property
-                                                         (assoc select-opts
-                                                                :classes (:classes schema))
+                                                         select-opts
                                                          opts)
                              (select block property select-opts opts))]))]
       ;; why this?

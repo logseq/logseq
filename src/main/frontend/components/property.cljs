@@ -43,25 +43,25 @@
           (:block/uuid page))))))
 
 (rum/defc class-select
-  [*property-schema schema-classes {:keys [multiple-choices? save-property-fn disabled?]
-                                    :or {multiple-choices? true}}]
-  [:div.flex.flex-1.col-span-3
-   (let [content-fn
-         (fn [{:keys [id]}]
-           (let [toggle-fn #(shui/popup-hide! id)
-                 classes (model/get-all-classes (state/get-current-repo))
-                 options (cond->> (map (fn [[name id]]
-                                         {:label name :value id})
-                                    classes)
-                           (not= :template (:type @*property-schema))
-                           (concat [{:label "Logseq Class" :value :logseq.class}]))
-                 opts (cond->
-                        {:items options
+  [property {:keys [multiple-choices? disabled?]
+             :or {multiple-choices? true}}]
+  (let [schema-classes (:property/schema.classes property)]
+    [:div.flex.flex-1.col-span-3
+     (let [content-fn
+           (fn [{:keys [id]}]
+             (let [toggle-fn #(shui/popup-hide! id)
+                   classes (model/get-all-classes (state/get-current-repo))
+                   options (cond->> (map (fn [[name id]]
+                                           {:label name :value id})
+                                         classes)
+                             (= :template (get-in property [:block/schema :type]))
+                             (remove (fn [[name _id]] (= name "Root class"))))
+                   opts {:items options
                          :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
                          :dropdown? false
                          :close-modal? false
                          :multiple-choices? multiple-choices?
-                         :selected-choices schema-classes
+                         :selected-choices (map :block/uuid schema-classes)
                          :extract-fn :label
                          :extract-chosen-fn :value
                          :show-new-when-not-exact-match? true
@@ -73,39 +73,25 @@
                                           (do
                                             (util/stop e)
                                             (toggle-fn))
-                                          nil))}}
-                        multiple-choices?
-                        (assoc :on-apply (fn [choices]
-                                           (p/let [choices' (p/all (map (fn [value]
-                                                                          (p/let [result (<create-class-if-not-exists! value)]
-                                                                            (or result value))) choices))
-                                                   _ (swap! *property-schema assoc :classes (set choices'))
-                                                   _ (save-property-fn)]
-                                             (toggle-fn))))
+                                          nil))}
+                         :on-chosen (fn [value select?]
+                                      (p/let [result (<create-class-if-not-exists! value)
+                                              value' (or result value)
+                                              tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]]
+                                        (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})
+                                        (when-not multiple-choices? (toggle-fn))))}]
 
-                        (not multiple-choices?)
-                        (assoc :on-chosen (fn [value]
-                                            (p/let [result (<create-class-if-not-exists! value)
-                                                    value' (or result value)
-                                                    _ (swap! *property-schema assoc :classes #{value'})
-                                                    _ (save-property-fn)]
-                                              (toggle-fn)))))]
+               (select/select opts)))]
 
-             (select/select opts)))]
-
-    [:div.flex.flex-1.cursor-pointer
-     {:on-click (if disabled?
-                  (constantly nil)
-                  #(shui/popup-show! (.-target %) content-fn))}
-     (if (seq schema-classes)
-       [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
-        (for [class schema-classes]
-          (if (= class :logseq.class)
-            [:a.text-sm "#Logseq Class"]
-            (when-let [page (db/entity [:block/uuid class])]
-              (let [page-name (:block/original-name page)]
-                [:a.text-sm (str "#" page-name)]))))]
-       (pv/property-empty-value))])])
+       [:div.flex.flex-1.cursor-pointer
+        {:on-click (if disabled?
+                     (constantly nil)
+                     #(shui/popup-show! (.-target %) content-fn))}
+        (if (seq schema-classes)
+          [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
+           (for [class schema-classes]
+             [:a.text-sm (str "#" (:block/original-name class))])]
+          (pv/property-empty-value))])]))
 
 (defn- property-type-label
   [property-type]
@@ -156,7 +142,7 @@
                                          (fn [attr]
                                            (when-not (db-property-type/property-type-allows-schema-attribute? type attr)
                                              #(dissoc % attr)))
-                                         [:cardinality :classes :position]))]
+                                         [:cardinality :position]))]
             (when *property-schema
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
@@ -302,24 +288,18 @@
               (when (empty? (:property/closed-values property))
                 [:div.grid.grid-cols-4.gap-1.items-center.leading-8
                  [:label "Specify classes:"]
-                 (class-select *property-schema
-                               (:classes @*property-schema)
-                               (assoc opts
-                                      :disabled? disabled?
-                                      :save-property-fn save-property-fn))])
+                 (class-select property (assoc opts :disabled? disabled?))])
 
               :template
               [:div.grid.grid-cols-4.gap-1.items-center.leading-8
                [:label "Specify template:"]
-               (class-select *property-schema (:classes @*property-schema)
-                             (assoc opts
-                                    :multiple-choices? false
-                                    :disabled? disabled?
-                                    :save-property-fn save-property-fn))]
+               (class-select property (assoc opts
+                                             :multiple-choices? false
+                                             :disabled? disabled?))]
 
               nil))
 
-          (when (and enable-closed-values? (empty? (:classes @*property-schema)))
+          (when (and enable-closed-values? (empty? (:property/schema.classes property)))
             [:div.grid.grid-cols-4.gap-1.items-start.leading-8
              [:label.col-span-1 "Available choices:"]
              [:div.col-span-3

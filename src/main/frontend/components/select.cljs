@@ -129,24 +129,27 @@
                                                    (let [chosen (extract-chosen-fn raw-chosen)]
                                                      (if multiple-choices?
                                                        (if (selected-choices chosen)
-                                                         (swap! *selected-choices disj chosen)
-                                                         (swap! *selected-choices conj chosen))
+                                                         (do
+                                                           (swap! *selected-choices disj chosen)
+                                                           (when on-chosen (on-chosen chosen false)))
+                                                         (do
+                                                           (swap! *selected-choices conj chosen)
+                                                           (when on-chosen (on-chosen chosen true))))
                                                        (do
                                                          (when (and close-modal? (not multiple-choices?))
                                                            (state/close-modal!))
                                                          (when on-chosen
-                                                           (on-chosen (if multiple-choices? selected-choices chosen)))))))
+                                                           (on-chosen chosen true))))))
                               :empty-placeholder (empty-placeholder t)})]
 
-                           (when multiple-choices?
+                           (when (and multiple-choices? (fn? on-apply))
                              [:div.p-4 (ui/button "Apply"
                                                   {:small? true
                                                    :on-pointer-down (fn [e]
-                                                                    (util/stop e)
-                                                                    (when @*toggle (@*toggle))
-                                                                    (when (fn? on-apply)
+                                                                      (util/stop e)
+                                                                      (when @*toggle (@*toggle))
                                                                       (on-apply selected-choices)
-                                                                      (when close-modal? (state/close-modal!))))})])]]
+                                                                      (when close-modal? (state/close-modal!)))})])]]
     (when (fn? tap-*input-val)
       (tap-*input-val input))
     [:div.cp__select
