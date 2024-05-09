@@ -249,7 +249,8 @@
     (test-helper/load-test-files [{:file/path "foo.md"
                                    :file/content "# foo"}])
     (let [repo test-helper/test-db
-          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo "foo" "foo"))]
+          page-uuid (:block/uuid (db/get-page "foo"))
+          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]
       (editor/save-block! repo block-uuid "# bar")
       (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid))))
 

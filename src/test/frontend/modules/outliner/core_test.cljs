@@ -222,7 +222,7 @@
     (is (= [4] (get-children 2)))
     (is (= [2 3 6 5 7] (get-children 22)))))
 
-(deftest ^:fix-me test-move-non-consecutive-blocks-2
+(deftest test-move-non-consecutive-blocks-2
   (testing "Move 3 and 5 as children of 2."
     (transact-tree! [[22 [[2 [[3]
                               [4]
@@ -647,7 +647,7 @@ tags:: tag1, tag2
   (let [limit (inc (rand-int 20))]
     (repeatedly limit get-random-block)))
 
-(deftest ^:long ^:fix-me random-inserts
+(deftest ^:long random-inserts
   (testing "Random inserts"
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
@@ -674,7 +674,7 @@ tags:: tag1, tag2
                                                                (state/get-date-formatter)
                                                                blocks {})))))))
 
-(deftest ^:long ^:fix-me random-moves
+(deftest ^:long random-moves
   (testing "Random moves"
     (transact-random-tree!)
     (let [c1 (get-blocks-ids)
