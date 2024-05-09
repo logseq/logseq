@@ -51,14 +51,14 @@ module.exports = {
           enabled: false,
           chooseDirectory: true,
           images: {
-            banner: path.join(__dirname, '../resources/windows/banner.jpg'),
-            background: path.join(__dirname, '../resources/windows/background.jpg')
+            banner: path.join(__dirname, './windows/banner.jpg'),
+            background: path.join(__dirname, './windows/background.jpg')
           },
         },
         // Standard WiX template appends the unsightly "(Machine - WSI)" to the name, so use our own template
         beforeCreate: (msiCreator) => {
           return new Promise((resolve, reject) => {
-            fs.readFile(path.join(__dirname,"../resources/windows/wix.xml"), "utf8" , (err, content) => {
+            fs.readFile(path.join(__dirname,"./windows/wix.xml"), "utf8" , (err, content) => {
                 if (err) {
                     reject (err);
                 }
