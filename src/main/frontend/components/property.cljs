@@ -274,7 +274,7 @@
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
             [:div.grid.grid-cols-4.gap-1.items-center.leading-8
              [:label "Multiple values:"]
-             (let [many? (boolean (= :many (:cardinality @*property-schema)))]
+             (let [many? (db-property/many? property)]
                (shui/checkbox
                 {:checked           many?
                  :disabled          disabled?

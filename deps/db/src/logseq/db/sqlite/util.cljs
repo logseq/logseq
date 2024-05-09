@@ -90,7 +90,7 @@
        {:db/ident db-ident'
         :block/type "property"
         :block/format :markdown
-        :block/schema (merge {:type :default} (dissoc prop-schema :classes))
+        :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
         :block/uuid (or block-uuid (d/squuid))
         :block/original-name (name prop-name)

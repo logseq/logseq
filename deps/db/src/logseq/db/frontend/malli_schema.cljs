@@ -77,8 +77,10 @@
                           (and (validate-fn' val)
                                (contains? (set (map :db/id (:property/closed-values property))) val)))
                         validate-fn')]
-    (if (= (:cardinality schema) :many)
-      (every? validate-fn'' property-val)
+    (if (db-property/many? property)
+      (if (coll? property-val)
+        (every? validate-fn'' property-val)
+        (validate-fn'' property-val))
       (or (validate-fn'' property-val)
           (if (= :db.type/ref (:db/valueType property))
             (and (integer? property-val)
@@ -104,7 +106,7 @@
                  (update m :block/properties (fnil conj [])
                          [(assoc (select-keys property [:db/ident :db/valueType])
                                  :block/schema
-                                 (select-keys (:block/schema property) [:type :cardinality])
+                                 (select-keys (:block/schema property) [:type])
                                  :property/closed-values
                                  ;; use explicit call to be nbb compatible
                                  (entity-plus/lookup-kv-then-entity property :property/closed-values))
@@ -141,7 +143,7 @@
                 (map (fn [[k v]]
                        (if-let [property (and (db-property/property? k)
                                               (entity-fn' k))]
-                         (if (and (= :db.cardinality/many (:db/cardinality property))
+                         (if (and (db-property/many? property)
                                   (not (set? v)))
                            ;; Fix :many property values that only had one value
                            [k #{v}]
@@ -245,9 +247,7 @@
 
 (def property-type-schema-attrs
   "Property :schema attributes that vary by :type"
-  [;; For any types except for :checkbox :default :template
-   [:cardinality {:optional true} [:enum :one :many]]
-   ;; For closed values
+  [;; For closed values
    [:position {:optional true} :string]])
 
 (def property-common-schema-attrs
