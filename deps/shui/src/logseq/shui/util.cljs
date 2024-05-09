@@ -11,23 +11,6 @@
 
 (goog-define NODETEST false)
 
-;;      /--------------- app ------------\
-;;    /-------- left --------\             \
-;;  /l-side\                  \  /- r-side --\
-;;
-;; |--------|-------------------|-------------| \ head
-;; |--------|-------------------|             | /
-;; |        |                   |             |
-;; |--------|-------------------|-------------|
-
-(def $app (partial gdom/getElement "app-container"))
-(def $left (partial gdom/getElement "left-container"))
-(def $head (partial gdom/getElement "head-container"))
-(def $main (partial gdom/getElement "main-container"))
-(def $main-content (partial gdom/getElement "main-content-container"))
-(def $left-sidebar (partial gdom/getElement "left-sidebar"))
-(def $right-sidebar (partial gdom/getElement "right-sidebar"))
-
 (defn el->clj-rect [el]
   (let [rect (.getBoundingClientRect el)]
     {:top    (.-top rect)

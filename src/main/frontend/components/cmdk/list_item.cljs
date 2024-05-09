@@ -4,10 +4,17 @@
    [rum.core :as rum]
    [clojure.string :as string]
    [goog.string :as gstring]
-   [logseq.shui.icon.v2 :as icon]
-   [logseq.shui.shortcut.v1 :as shortcut]))
+   [logseq.shui.ui :as shui]))
 
-(def to-string shortcut/to-string)
+(defn- to-string [input]
+  (cond
+    (string? input) input
+    (keyword? input) (name input)
+    (symbol? input) (name input)
+    (number? input) (str input)
+    (uuid? input) (str input)
+    (nil? input) ""
+    :else (pr-str input)))
 
 (defn- normalize-text [app-config text]
   (cond-> (to-string text)
@@ -17,7 +24,7 @@
 
 (defn highlight-query* [app-config query text]
   (cond
-    (or (vector? text) (object? text))                                     ; hiccup
+    (or (vector? text) (object? text))                      ; hiccup
     text
 
     (string/blank? query)
@@ -84,13 +91,12 @@
                                          (if highlighted "bg-accent-07-alpha" "bg-gray-05")
                                          " dark:text-white")
                  (= icon-theme :gray) (str " bg-gray-05 dark:text-white"))}
-       (icon/root icon {:size "14"
-                        :class ""})]
+       (shui/tabler-icon icon {:size "14" :class ""})]
       [:div.flex.flex-1.flex-col
        (when title
          [:div.text-sm.pb-2.font-bold.text-gray-11 (highlight-query title)])
        [:div {:class "text-sm font-medium text-gray-12"}
-        (if (and (= group :pages) (not= text source-page)) ;; alias
+        (if (and (= group :pages) (not= text source-page))  ;; alias
           [:div.flex.flex-row.items-center.gap-2
            (highlight-query text)
            (if-not hls-page?
@@ -110,4 +116,4 @@
       (when shortcut
         [:div {:class "flex gap-1"
                :style {:opacity (if (or highlighted hover?) 1 0.9)}}
-         (shortcut/root shortcut)])]]))
+         (shui/shortcut shortcut)])]]))

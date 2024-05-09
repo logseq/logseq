@@ -11,9 +11,6 @@
    [logseq.shui.util :as shui-utils]
    [rum.core :as rum]))
 
-(def get-adapt-icon-class
-  (memoize (fn [klass] (shui-utils/react->rum klass true))))
-
 (rum/defc root
   ([name] (root name nil))
   ([name {:keys [extension? font? class] :as opts}]
@@ -29,7 +26,7 @@
                            (dissoc opts :class :extension? :font?))]
 
          ;; tabler svg react
-         (when-let [klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
+         (when-let [_klass (gobj/get js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
            (let [f (shui-utils/component-wrap js/tablerIcons (str "Icon" (csk/->PascalCase name)))]
              [:span.ui__icon.ti
               {:class (str "ls-icon-" name " " class)}
