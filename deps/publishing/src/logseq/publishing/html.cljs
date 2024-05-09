@@ -39,7 +39,7 @@ necessary db filtering"
         (string/join " " (map html v))
         :else (str v)))
 
-(def spa-github-script
+(defn- spa-github-script
   "// Single Page Apps for GitHub Pages
       // https://github.com/rafgraph/spa-github-pages
       // Copyright (c) 2016 Rafael Pedicini, licensed under the MIT License
@@ -69,7 +69,7 @@ necessary db filtering"
       }(window.location))")
 
 
-(defn construct-body [transit-db app-state scripts-before]
+(defn- construct-body [transit-db app-state scripts-before]
   (into
    [:body
     [:div {:id "root"}]]
