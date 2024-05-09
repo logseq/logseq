@@ -30,7 +30,8 @@
             [promesa.core :as p]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.core :as outliner-core]
+            [dommy.core :as d]))
 
 (defn- <create-class-if-not-exists!
   [value]
@@ -826,8 +827,11 @@
          true (assoc :tab-index 0
                      :on-key-up #(when-let [block (and (= "Escape" (.-key %))
                                                        (.closest (.-target %) "[blockid]"))]
-                                   (state/set-selection-blocks! [block])
-                                   (some-> js/document.activeElement (.blur)))))
+                                   (let [target (.-target %)]
+                                     (when-not (d/has-class? target "ls-popup-closed")
+                                       (state/set-selection-blocks! [block])
+                                       (some-> js/document.activeElement (.blur)))
+                                     (d/remove-class! target "ls-popup-closed")))))
        (let [own-properties' (cond
                                (and page? page-configure?)
                                (concat [[:block/tags (:block/tags block)]
