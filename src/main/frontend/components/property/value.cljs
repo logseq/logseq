@@ -96,11 +96,10 @@
         (exit-edit-property))))))
 
 (defn- add-or-remove-property-value
-  [block property value selected? page?]
+  [block property value selected?]
   (let [many? (db-property/many? property)]
     (if selected?
-      (let [value' (if page? (:block/uuid (db/entity value)) value)]
-        (<add-property! block (:db/ident property) value' {:exit-edit? (not many?)}))
+      (<add-property! block (:db/ident property) value {:exit-edit? (not many?)})
       (p/do!
        (db/transact! (state/get-current-repo)
                      [[:db/retract (:db/id block) (:db/ident property) value]]
@@ -330,7 +329,7 @@
                                 (when-not (string/blank? page*)
                                   (p/let [id (<create-page-if-not-exists! property classes' page*)]
                                     (when id
-                                      (add-or-remove-property-value block property id selected? true))))))}))]
+                                      (add-or-remove-property-value block property id selected?))))))}))]
     (select-aux block property opts')))
 
 (defn property-value-select-page
@@ -414,7 +413,7 @@
                        (remove nil?))
             on-chosen (fn [chosen selected?]
                         (let [value (if (map? chosen) (:value chosen) chosen)]
-                          (add-or-remove-property-value block property value selected? false)))
+                          (add-or-remove-property-value block property value selected?)))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (coll? selected-choices')
                                (->> selected-choices'
@@ -817,13 +816,12 @@
             [:div.multi-values.jtrigger
              {:tab-index "0"
               :ref *el
-              :on-click (fn [^js e]
-                          (when-not (.closest (.-target e) ".select-item")
-                            (if config/publishing?
-                              nil
-                              (shui/popup-show! (rum/deref *el) content-fn
-                                                {:as-dropdown? true :as-content? false
-                                                 :align "start" :auto-focus? true}))))
+              :on-click (fn [^js _e]
+                          (if config/publishing?
+                            nil
+                            (shui/popup-show! (rum/deref *el) content-fn
+                                              {:as-dropdown? true :as-content? false
+                                               :align "start" :auto-focus? true})))
               :on-key-down (fn [^js e]
                              (case (.-key e)
                                (" " "Enter")
