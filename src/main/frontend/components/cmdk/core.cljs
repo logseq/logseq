@@ -719,7 +719,8 @@
                (handle-input-change state nil ""))
              (when (and filter (string/blank? input))
                (util/stop e)
-               (reset! (::filter state) nil)))
+               (reset! (::filter state) nil)
+               (load-results :default state)))
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
