@@ -61,15 +61,14 @@
 ;; Helper fns
 ;; ==========
 (defn validate-property-value
-  "Validates the property value in a property tuple. The property value can be
-  one or many of a value to validated. validate-fn is a fn that is called
-  directly on each value to return a truthy value. validate-fn varies by
-  property type"
+  "Validates the property value in a property tuple. The property value is
+  expected to be a coll if the property has a :many cardinality. validate-fn is
+  a fn that is called directly on each value to return a truthy value.
+  validate-fn varies by property type"
   [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
   ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
-  (let [property (d/entity db (:db/ident property))
-        validate-fn' (if (db-property-type/property-types-with-db (:type schema)) (partial validate-fn db) validate-fn)
+  (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema)) (partial validate-fn db) validate-fn)
         validate-fn'' (if (and (db-property-type/closed-value-property-types (:type schema))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
@@ -79,10 +78,9 @@
                                (contains? (set (map :db/id (:property/closed-values property))) val)))
                         validate-fn')]
     (if (db-property/many? property)
-      (if (coll? property-val)
-        (every? validate-fn'' property-val)
-        (validate-fn'' property-val))
+      (every? validate-fn'' property-val)
       (or (validate-fn'' property-val)
+          ;; also valid if value is empty-placeholder
           (if (= :db.type/ref (:db/valueType property))
             (and (integer? property-val)
                  (= :logseq.property/empty-placeholder (:db/ident (d/entity db property-val))))
@@ -105,7 +103,7 @@
                (if-let [property (and (db-property/property? k)
                                       (d/entity db k))]
                  (update m :block/properties (fnil conj [])
-                         [(assoc (select-keys property [:db/ident :db/valueType])
+                         [(assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
                                  :block/schema
                                  (select-keys (:block/schema property) [:type])
                                  :property/closed-values

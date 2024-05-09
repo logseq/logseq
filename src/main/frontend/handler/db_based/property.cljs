@@ -230,7 +230,11 @@
                                  (notification/show! (str e) :error false)
                                  nil)))]
             (when-not (= existing-value new-value*)
-              (if-let [msg (when-not (= new-value* :logseq.property/empty-placeholder) (validate-property-value schema new-value*))]
+              (if-let [msg (validate-property-value schema
+                                                    ;; normalize :many values for components that only provide single value
+                                                    (if (and (db-property/many? property) (not (coll? new-value*)))
+                                                      #{new-value*}
+                                                      new-value*))]
                 (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                   (notification/show! msg' :warning))
                 (let [_ (upsert-property! repo property-id (assoc property-schema :type property-type') {:property-name property-name})
