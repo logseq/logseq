@@ -42,16 +42,6 @@
       result
       (string/capitalize result))))
 
-(defn to-string [input]
-  (cond
-    (string? input) input
-    (keyword? input) (name input)
-    (symbol? input) (name input)
-    (number? input) (str input)
-    (uuid? input) (str input)
-    (nil? input) ""
-    :else (pr-str input)))
-
 (defn- parse-shortcuts
   [s]
   (->> (string/split s #" \| ")
