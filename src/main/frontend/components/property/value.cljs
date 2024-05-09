@@ -614,6 +614,10 @@
        :div.jtrigger.flex.flex-1.w-full
        {:ref *el
         :tabIndex 0
+        :on-key-down (fn [^js e]
+                       (when (contains? #{"Enter" " "} (.-key e))
+                         (.click (.-target e))
+                         (util/stop e)))
         :on-click #(show! (.-target %))}
        (if (string/blank? value)
          (property-empty-value)
