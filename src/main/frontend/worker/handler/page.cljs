@@ -33,21 +33,23 @@
 (defn- build-page-tx [repo conn config date-formatter format properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
     (let [page-entity   [:block/uuid (:block/uuid page)]
-          page          (merge page
-                               (when (seq properties) {:block/properties properties})
-                               (when whiteboard? {:block/type "whiteboard"})
-                               (when class? {:block/type "class"})
-                               (when tags {:block/tags (mapv #(hash-map :db/id
-                                                                        (:db/id (d/entity @conn [:block/uuid %])))
-                                                             tags)}))
-          page-empty?   (ldb/page-empty? @conn (:block/name page))
-          db-based? (sqlite-util/db-based-graph? repo)]
-      (if (and (seq properties)
-               (not whiteboard?)
-               (not db-based?)
-               page-empty?)
-        [page (properties-block repo conn config date-formatter properties format page-entity)]
-        [page]))))
+          page'          (merge page
+                                (when whiteboard? {:block/type "whiteboard"})
+                                (when tags {:block/tags (mapv #(hash-map :db/id
+                                                                         (:db/id (d/entity @conn [:block/uuid %])))
+                                                              tags)}))]
+      (if (sqlite-util/db-based-graph? repo)
+        [(merge page'
+                ;; FIXME: Add refs for properties?
+                properties
+                (when class? {:block/type "class"}))]
+        (let [file-page (merge page'
+                               (when (seq properties) {:block/properties properties}))]
+          (if (and (seq properties)
+                   (not whiteboard?)
+                   (ldb/page-empty? @conn (:block/name page)))
+            [file-page (properties-block repo conn config date-formatter properties format page-entity)]
+            [file-page]))))))
 
 (defn get-title-and-pagename
   [title]
@@ -68,6 +70,7 @@
    * :whiteboard?         - when true, adds a :block/type 'whiteboard'
    * :tags                - tag uuids that are added to :block/tags
    * :persist-op?         - when true, add an update-page op
+   * :properties          - properties to add to the page
    TODO: Add other options"
   [repo conn config title
    & {:keys [create-first-block? format properties uuid persist-op? whiteboard? class? today-journal?]

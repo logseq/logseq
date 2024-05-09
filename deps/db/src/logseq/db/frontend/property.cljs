@@ -185,7 +185,11 @@
                                              {:type :checkbox
                                               :hide? true
                                               :view-context :page
-                                              :public? true}}))
+                                              :public? true}}
+   :logseq.property.pdf/file
+   {:schema {:type :string :hide? true :public? true :view-context :page}}
+   :logseq.property.pdf/file-path
+   {:schema {:type :string :hide? true :public? true :view-context :page}}))
 
 (def built-in-properties
   (->> built-in-properties*
@@ -209,7 +213,7 @@
 
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
-    "logseq.task"})
+    "logseq.property.pdf" "logseq.task"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
