@@ -586,39 +586,40 @@
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
 (rum/defc single-value-select
-  [block property value value-f select-opts {:keys [editing?] :as opts}]
-  (let [[open? set-open!] (rum/use-state editing?)
-        schema (:block/schema property)
-        type (get schema :type :default)
-        select-opts' (assoc select-opts
-                            :multiple-choices? false
-                            :on-chosen #(set-open! false))]
-    (shui/dropdown-menu
-     {:open open?}
-     (shui/dropdown-menu-trigger
-      {:class "jtrigger flex flex-1 w-full"
-       :on-click (if config/publishing?
-                   (constantly nil)
-                   #(set-open! (not open?)))
-       :on-key-down (fn [^js e]
-                      (case (util/ekey e)
-                        (" " "Enter")
-                        (do (set-open! true) (util/stop e))
-                        :dune))}
-      (if (string/blank? value)
-        (property-empty-value)
-        (value-f)))
-     (shui/dropdown-menu-content
-      {:align "start"
-       :on-interact-outside #(set-open! false)
-       :onEscapeKeyDown #(set-open! false)}
-      [:div.property-select
-       (case type
-         (:string :number :url)
-         (select block property select-opts' opts)
+  [block property value value-f select-opts opts]
+  (let [*el (rum/use-ref nil)]
+    ;; Open popover initially when editing a property
+    (rum/use-effect!
+     (fn []
+       (when (:editing? opts)
+         (.click (.-current *el))))
+     [(:editing? opts)])
+    (let [schema (:block/schema property)
+          type (get schema :type :default)
+          select-opts' (assoc select-opts :multiple-choices? false)
+          popup-content (fn content-fn [_]
+                          [:div.property-select
+                           (case type
+                             (:string :number :url)
+                             (select block property select-opts' opts)
 
-         (:page :date)
-         (property-value-select-page block property select-opts' opts))]))))
+                             (:page :date)
+                             (property-value-select-page block property select-opts' opts))])
+          show! (fn [target]
+                  (if config/publishing?
+                    ((constantly nil) target)
+                    (shui/popup-show! target popup-content
+                                      {:align "start"
+                                       :as-dropdown? true
+                                       :auto-focus? true})))]
+      (shui/trigger-as
+       :div.jtrigger.flex.flex-1.w-full
+       {:ref *el
+        :tabIndex 0
+        :on-click #(show! (.-target %))}
+       (if (string/blank? value)
+         (property-empty-value)
+         (value-f))))))
 
 (defn- save-text!
   [repo block property value _editor-id e]
