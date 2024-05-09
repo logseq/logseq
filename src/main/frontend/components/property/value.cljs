@@ -605,8 +605,7 @@
                              (:page :date)
                              (property-value-select-page block property select-opts' opts))])
           show! (fn [target]
-                  (if config/publishing?
-                    ((constantly nil) target)
+                  (when-not (or (util/link? target) (.closest target "a") config/publishing?)
                     (shui/popup-show! target popup-content
                                       {:align "start"
                                        :as-dropdown? true
@@ -816,12 +815,12 @@
             [:div.multi-values.jtrigger
              {:tab-index "0"
               :ref *el
-              :on-click (fn [^js _e]
-                          (if config/publishing?
-                            nil
-                            (shui/popup-show! (rum/deref *el) content-fn
-                                              {:as-dropdown? true :as-content? false
-                                               :align "start" :auto-focus? true})))
+              :on-click (fn [^js e]
+                          (let [target (.-target e)]
+                            (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                              (shui/popup-show! (rum/deref *el) content-fn
+                                                {:as-dropdown? true :as-content? false
+                                                 :align "start" :auto-focus? true}))))
               :on-key-down (fn [^js e]
                              (case (.-key e)
                                (" " "Enter")
