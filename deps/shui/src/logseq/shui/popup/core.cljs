@@ -2,7 +2,8 @@
   (:require [rum.core :as rum]
             [logseq.shui.util :as util]
             [medley.core :as medley]
-            [logseq.shui.util :refer [use-atom]]))
+            [logseq.shui.util :refer [use-atom]]
+            [dommy.core :as d]))
 
 ;; ui
 (def button (util/lsui-wrap "Button"))
@@ -60,8 +61,13 @@
 
 (defn detach-popup!
   [id]
-  (when-let [[index] (get-popup id)]
-    (swap! *popups #(->> % (medley/remove-nth index) (vec)))))
+  (let [[index config] (get-popup id)]
+    (when index
+      (swap! *popups #(->> % (medley/remove-nth index) (vec)))
+      (let [{:keys [auto-focus? target]} config]
+        (when (and auto-focus? target)
+          (d/add-class! target "ls-popup-closed")
+          (.focus target))))))
 
 (defn show!
   [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props] :as opts}]
@@ -103,8 +109,9 @@
   ([id] (hide! id 0 {}))
   ([id delay] (hide! id delay {}))
   ([id delay {:keys [all?]}]
-   (let [f #(do (update-popup! id :open? false)
-                (when (true? all?) (update-popup! id :all? true)))]
+   (let [f #(if all?
+              (reset! *popups [])
+              (detach-popup! id))]
      (if (and (number? delay) (> delay 0))
        (js/setTimeout f delay)
        (f)))))
@@ -116,16 +123,8 @@
 
 (rum/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
-           auto-side? auto-focus? target root-props content-props]
+           auto-side? _auto-focus? _target root-props content-props]
     :as _props}]
-  (rum/use-effect!
-    (fn []
-      (when (false? open?)
-        (js/setTimeout #(detach-popup! id) 128)
-        (when (and auto-focus? target)
-          (js/setTimeout #(.focus target) 256))))
-    [open?])
-
   ;; disableOutsidePointerEvents
   ;(rum/use-effect!
   ;  (fn []
@@ -154,32 +153,32 @@
           content-props (cond-> content-props
                           auto-side? (assoc :side (auto-side-fn)))]
       (popup-root
-        (merge root-props {:open open?})
-        (popup-trigger
-          {:as-child true}
-          (button {:class "overflow-hidden fixed p-0 opacity-0"
-                   :style {:height (if (and (number? height)
-                                         (> height 0))
-                                     height 1)
-                           :width 1
-                           :top y
-                           :left x}} ""))
-        (let [content-props (cond-> (merge {:onEscapeKeyDown #(hide! id)
-                                            :onPointerDownOutside #(hide! id)}
-                                      content-props)
-                              (and (not force-popover?)
-                                (not as-dropdown?))
-                              (assoc :on-key-down (fn [^js e]
-                                                    (some-> content-props :on-key-down (apply [e]))
-                                                    (set! (. e -defaultPrevented) true))
-                                     :on-pointer-move #(set! (. % -defaultPrevented) true)))
-              content (if (fn? content)
-                        (content (cond-> {:id id}
-                                   as-content?
-                                   (assoc :content-props content-props))) content)]
-          (if as-content?
-            content
-            (popup-content content-props content)))))))
+       (merge root-props {:open open?})
+       (popup-trigger
+        {:as-child true}
+        (button {:class "overflow-hidden fixed p-0 opacity-0"
+                 :style {:height (if (and (number? height)
+                                          (> height 0))
+                                   height 1)
+                         :width 1
+                         :top y
+                         :left x}} ""))
+       (let [content-props (cond-> (merge {:onEscapeKeyDown #(hide! id)
+                                           :onPointerDownOutside #(hide! id)}
+                                          content-props)
+                             (and (not force-popover?)
+                                  (not as-dropdown?))
+                             (assoc :on-key-down (fn [^js e]
+                                                   (some-> content-props :on-key-down (apply [e]))
+                                                   (set! (. e -defaultPrevented) true))
+                                    :on-pointer-move #(set! (. % -defaultPrevented) true)))
+             content (if (fn? content)
+                       (content (cond-> {:id id}
+                                  as-content?
+                                  (assoc :content-props content-props))) content)]
+         (if as-content?
+           content
+           (popup-content content-props content)))))))
 
 (rum/defc install-popups
   < rum/static
