@@ -106,7 +106,7 @@
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
-        {:type :number :cardinality :many}
+        {:type :number}
         (:block/type property)
         #{"property"})
       ;; check block's properties
