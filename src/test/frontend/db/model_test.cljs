@@ -143,11 +143,13 @@
 foo:: bar"}])
   (is (uuid?
        (:block/uuid
-        (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "header 2")))
+        (let [page (db/get-page "foo")]
+          (model/get-block-by-page-name-and-block-route-name test-helper/test-db (str (:block/uuid page)) "header 2"))))
       "Header block's content returns map with :block/uuid")
 
   (is (nil?
-       (model/get-block-by-page-name-and-block-route-name test-helper/test-db "foo" "b2"))
+       (let [page (db/get-page "foo")]
+         (model/get-block-by-page-name-and-block-route-name test-helper/test-db (str (:block/uuid page)) "b2")))
       "Non header block's content returns nil"))
 
 

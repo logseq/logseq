@@ -729,7 +729,7 @@
     (and (not non-consecutive-blocks?)
          (if sibling?
            (= (:db/id (ldb/get-left-sibling block)) (:db/id target-block))
-           (= (ldb/get-first-child db (:db/id target-block)) (:db/id block))))))
+           (= (:db/id (ldb/get-first-child db (:db/id target-block))) (:db/id block))))))
 
 (defn- move-block
   [conn block target-block sibling?]
