@@ -68,7 +68,8 @@
   [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
   ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
-  (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema)) (partial validate-fn db) validate-fn)
+  (let [property (d/entity db (:db/ident property))
+        validate-fn' (if (db-property-type/property-types-with-db (:type schema)) (partial validate-fn db) validate-fn)
         validate-fn'' (if (and (db-property-type/closed-value-property-types (:type schema))
                                ;; new closed values aren't associated with the property yet
                                (not new-closed-value?)
@@ -175,7 +176,8 @@
    (map (fn [[prop-type value-schema]]
           [prop-type
            (let [schema-fn (if (vector? value-schema) (last value-schema) value-schema)]
-             [:fn (with-meta (fn [db tuple] (validate-property-value db schema-fn tuple)) {:add-db true})])])
+             [:fn (with-meta (fn [db tuple]
+                               (validate-property-value db schema-fn tuple)) {:add-db true})])])
         db-property-type/built-in-validation-schemas)))
 
 (def block-properties
