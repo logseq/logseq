@@ -1,4 +1,5 @@
 const path = require('path')
+const fs = require('fs')
 
 module.exports = {
   packagerConfig: {
@@ -41,8 +42,31 @@ module.exports = {
     {
       'name': '@electron-forge/maker-wix',
       'config': {
-        'language': 1033,
-        'manufacturer': 'Logseq, Inc.',
+        name: 'Logseq',
+        icon: path.join(__dirname, './icons/logseq.ico'),
+        language: 1033,
+        manufacturer: 'Logseq',
+        appUserModelId: 'com.logseq.logseq',
+        ui: {
+          enabled: false,
+          chooseDirectory: true,
+          images: {
+            banner: path.join(__dirname, '../resources/windows/banner.jpg'),
+            background: path.join(__dirname, '../resources/windows/background.jpg')
+          },
+        },
+        // Standard WiX template appends the unsightly "(Machine - WSI)" to the name, so use our own template
+        beforeCreate: (msiCreator) => {
+          return new Promise((resolve, reject) => {
+            fs.readFile(path.join(__dirname,"../resources/windows/wix.xml"), "utf8" , (err, content) => {
+                if (err) {
+                    reject (err);
+                }
+                msiCreator.wixTemplate = content;
+                resolve();
+            });
+          });
+        }
       }
     },
     {
