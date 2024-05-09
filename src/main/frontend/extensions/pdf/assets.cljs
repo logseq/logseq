@@ -168,21 +168,22 @@
            (page-handler/<create! page-name {:redirect?        false :create-first-block? false
                                              :split-namespace? false
                                              :format           format
-                                             ;; FIXME: file and file-path properties for db version
-                                             :properties       {:file      (case format
-                                                                             :markdown
-                                                                             (util/format "[%s](%s)" label url)
+                                             :properties       {(pu/get-pid :logseq.property.pdf/file)
+                                                                (case format
+                                                                  :markdown
+                                                                  (util/format "[%s](%s)" label url)
 
-                                                                             :org
-                                                                             (util/format "[[%s][%s]]" url label)
+                                                                  :org
+                                                                  (util/format "[[%s][%s]]" url label)
 
-                                                                             url)
-                                                                :file-path url}})
+                                                                  url)
+                                                                (pu/get-pid :logseq.property.pdf/file-path)
+                                                                url}})
            (db-model/get-page page-name)))
 
         ;; try to update file path
         (do
-          (property-handler/add-page-property! page-name (pu/get-pid :logseq.property/file-path) url)
+          (property-handler/add-page-property! page-name (pu/get-pid :logseq.property.pdf/file-path) url)
           page)))))
 
 (defn ensure-ref-block!
@@ -236,8 +237,7 @@
   (let [id        (:block/uuid block)
         page      (db-utils/pull (:db/id (:block/page block)))
         page-name (:block/original-name page)
-        ;; FIXME: file-path property for db version
-        file-path (:file-path (:block/properties page))
+        file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
         hl-page   (pu/get-block-property-value block :logseq.property/hl-page)]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
