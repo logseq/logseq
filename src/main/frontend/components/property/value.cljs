@@ -73,6 +73,7 @@
   ([block property-key property-value] (<add-property! block property-key property-value {}))
   ([block property-key property-value {:keys [exit-edit? class-schema?]
                                        :or {exit-edit? true}}]
+
    (let [repo (state/get-current-repo)
          class? (contains? (:block/type block) "class")]
      (p/do!
@@ -95,18 +96,18 @@
         (exit-edit-property))))))
 
 (defn- add-or-remove-property-value
-  [block property value selected?]
-  (let [many? (= :db/cardinality.many (:db/cardinality property))]
+  [block property value selected? page?]
+  (let [many? (db-property/many? property)]
     (if selected?
-      (<add-property! block (:db/ident property) value
-                      {:exit-edit? (not many?)})
+      (let [value' (if page? (:block/uuid (db/entity value)) value)]
+        (<add-property! block (:db/ident property) value' {:exit-edit? (not many?)}))
       (p/do!
-        (db/transact! (state/get-current-repo)
+       (db/transact! (state/get-current-repo)
                      [[:db/retract (:db/id block) (:db/ident property) value]]
                      {:outliner-op :save-block})
-        (when-not many?
-          (shui/popup-hide!)
-          (exit-edit-property))))))
+       (when-not many?
+         (shui/popup-hide!)
+         (exit-edit-property))))))
 
 (defn- navigate-to-date-page
   [value]
@@ -186,7 +187,7 @@
 
 (rum/defc property-value-date-picker
   [block property value opts]
-  (let [multiple-values? (= :many (:cardinality (:block/schema property)))]
+  (let [multiple-values? (db-property/many? property)]
     (date-picker value
                  (merge opts
                         {:multiple-values? multiple-values?
@@ -329,7 +330,7 @@
                                 (when-not (string/blank? page*)
                                   (p/let [id (<create-page-if-not-exists! property classes' page*)]
                                     (when id
-                                      (add-or-remove-property-value block property id selected?))))))}))]
+                                      (add-or-remove-property-value block property id selected? true))))))}))]
     (select-aux block property opts')))
 
 (defn property-value-select-page
@@ -413,7 +414,7 @@
                        (remove nil?))
             on-chosen (fn [chosen selected?]
                         (let [value (if (map? chosen) (:value chosen) chosen)]
-                          (add-or-remove-property-value block property value selected?)))
+                          (add-or-remove-property-value block property value selected? false)))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (coll? selected-choices')
                                (->> selected-choices'
@@ -457,7 +458,7 @@
   [block property value-block block-cp editor-box & {:keys [closed-values?]}]
   (if (and (:block/uuid value-block) (state/sub-async-query-loading (:block/uuid value-block)))
     [:div.text-sm.opacity-70 "loading"]
-    (let [multiple-values? (= (:db/cardinality property) :db/cardinality.many)]
+    (let [multiple-values? (db-property/many? property)]
       (if value-block
        [:div.property-block-container.content
         (block-cp [value-block] {:id (str (if multiple-values?
@@ -678,7 +679,7 @@
                                 editor-box]
                          :as opts}]
   (let [schema (:block/schema property)
-        multiple-values? (= :many (:cardinality schema))
+        multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
         type (:type schema)
@@ -840,7 +841,7 @@
          editor-id (str dom-id "-editor")
          schema (:block/schema property)
          type (some-> schema (get :type :default))
-         multiple-values? (= :many (:cardinality schema))
+         multiple-values? (db-property/many? property)
          empty-value? (= :logseq.property/empty-placeholder v)
          editor-args {:block property
                       :parent-block block

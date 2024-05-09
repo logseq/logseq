@@ -302,3 +302,7 @@
        (:block/page block)
        ;; not closed value
        (not (some? (:block/content block)))))
+
+(defn many?
+  [property]
+  (= (:db/cardinality property) :db.cardinality/many))

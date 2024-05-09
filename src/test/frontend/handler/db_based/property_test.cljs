@@ -5,7 +5,8 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.state :as state]
-            [frontend.handler.page :as page-handler]))
+            [frontend.handler.page :as page-handler]
+            [logseq.db.frontend.property :as db-property]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -222,7 +223,7 @@
     (let [repo (state/get-current-repo)]
       (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p0"})
       (db-property-handler/upsert-property! repo :user.property/p0 {:type :default :cardinality :many} {})
-      (is (= :many (get-in (db/entity repo :user.property/p0) [:block/schema :cardinality])))))
+      (is (db-property/many? (db/entity repo :user.property/p0)))))
   (testing "Multiple properties that generate the same initial :db/ident"
     (let [repo (state/get-current-repo)]
       (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p1"})

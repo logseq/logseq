@@ -138,9 +138,10 @@
             (cond-> []
               (seq changed-property-attrs)
               (conj (outliner-core/block-with-updated-at
-                     (merge {:db/ident db-ident} changed-property-attrs)))
+                     (merge {:db/ident db-ident}
+                            (common-util/dissoc-in changed-property-attrs [:block/schema :cardinality]))))
               (or (not= (:type schema) (get-in property [:block/schema :type]))
-                  (not= (:cardinality schema) (get-in property [:block/schema :cardinality]))
+                  (and (:cardinality schema) (not= (:cardinality schema) (keyword (name (:db/cardinality property)))))
                   (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property)))
                   (seq (:property/closed-values property)))
               (conj (update-datascript-schema property schema)))
@@ -149,8 +150,7 @@
                               (mapcat
                                (fn [[property-id v]]
                                  (build-property-value-tx-data property property-id v)) properties)))
-            many->one? (and (= (:db/cardinality property) :db.cardinality/many)
-                            (= :one (:cardinality schema)))]
+            many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
         (when (seq tx-data)
           (db/transact! repo tx-data {:outliner-op :update-property
                                       :property-id (:db/id property)
@@ -168,48 +168,6 @@
 (defn validate-property-value
   [schema value]
   (me/humanize (mu/explain-data schema value)))
-
-(defn- set-block-property-multiple-values!
-  "Sets values for a :many property. Most calls to this fn come from components
-  that provide all existing values when updating. If this fn is called with a
-  single value it's because it came from a component that doesn't have existing
-  values. In this case the existing values are fetched and added to the new
-  single value e.g. adding a new date"
-  [repo block property one-or-many-values]
-  (let [property-id (:db/ident property)
-        values (if (coll? one-or-many-values)
-                 one-or-many-values
-                 (cond->> (some->> (:db/ident property) (get block))
-                   (= :db.type/ref (:db/valueType property))
-                   (mapv :db/id)
-                   ;; single value means add to existing values
-                   true
-                   (into [one-or-many-values])
-                   true
-                   (remove nil?)))]
-    (when (seq values)
-      (let [property-schema (:block/schema property)
-            property-type (:type property-schema)
-            schema (get-property-value-schema property-type property)
-            values' (try
-                      (set (map #(convert-property-input-string property-type %) values))
-                      (catch :default e
-                        (notification/show! (str e) :error false)
-                        nil))
-            old-values (get block (:db/ident property))
-            deleted-values (remove values' old-values)]
-        (when (not= old-values values')
-          (if-let [msg (validate-property-value schema values')]
-            (let [msg' (str "\"" (:block/original-name property) "\"" " " (if (coll? msg) (first msg) msg))]
-              (notification/show! msg' :warning))
-            (do
-              (upsert-property! repo property-id (assoc property-schema :type property-type) {})
-              (let [tx-data (concat
-                             (map (fn [v]
-                                    (let [v' (if (map? v) (:db/id v) v)]
-                                      [:db/retract (:db/id block) property-id v'])) deleted-values)
-                             (build-property-value-tx-data block property-id values' false))]
-                (db/transact! repo tx-data {:outliner-op :save-block})))))))))
 
 (defn- resolve-tag
   "Change `v` to a tag's db id if v is a string tag, e.g. `#book`"
@@ -246,16 +204,13 @@
         property (db/entity property-id)
         k-name (:block/original-name property)
         property-schema (:block/schema property)
-        {:keys [type cardinality]} property-schema
+        {:keys [type]} property-schema
         v' (or (resolve-tag v) v)
         db-attribute? (contains? db-property/db-attribute-properties property-id)]
     (cond
       db-attribute?
       (db/transact! repo [{:db/id (:db/id block) property-id v'}]
                     {:outliner-op :save-block})
-
-      (= cardinality :many)
-      (set-block-property-multiple-values! repo block property v')
 
       :else
       (let [v'' (if property v' (or v' ""))]
@@ -336,13 +291,13 @@
       (let [type (:type (:block/schema property))
             infer-schema (when-not type (infer-schema-from-input-string v))
             property-type (or type infer-schema :default)
-            {:keys [cardinality]} (:block/schema property)
+            many? (db-property/many? property)
             status? (= :logseq.task/status (:db/ident property))
             txs (->>
                  (mapcat
                   (fn [eid]
                     (when-let [block (db/entity eid)]
-                      (when (and (some? v) (not= cardinality :many))
+                      (when (and (some? v) (not many?))
                         (when-let [v* (try
                                         (convert-property-input-string property-type v)
                                         (catch :default e
@@ -396,17 +351,16 @@
   (when block
     (when (not= property-id (:db/ident block))
       (when-let [property (db/entity property-id)]
-        (let [schema (:block/schema property)]
-          (if (= :many (:cardinality schema))
-            (db/transact! repo
-                          [[:db/retract (:db/id block) property-id property-value]]
-                          {:outliner-op :save-block})
-            (if (= :default (get-in property [:block/schema :type]))
-              (set-block-property! repo (:db/id block)
-                                   (:db/ident property)
-                                   ""
-                                   {})
-              (remove-block-property! repo (:db/id block) property-id))))))))
+        (if (db-property/many? property)
+          (db/transact! repo
+                        [[:db/retract (:db/id block) property-id property-value]]
+                        {:outliner-op :save-block})
+          (if (= :default (get-in property [:block/schema :type]))
+            (set-block-property! repo (:db/id block)
+                                 (:db/ident property)
+                                 ""
+                                 {})
+            (remove-block-property! repo (:db/id block) property-id)))))))
 
 (defn collapse-expand-property!
   "Notice this works only if the value itself if a block (property type should be either :default or :template)"
