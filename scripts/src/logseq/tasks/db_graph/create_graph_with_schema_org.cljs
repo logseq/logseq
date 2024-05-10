@@ -24,10 +24,6 @@
             [babashka.cli :as cli]
             [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
-(defn- get-class-uuid [class-uuids class-id]
-  (or (class-uuids class-id)
-      (throw (ex-info (str "No :block/uuid for " class-id) {}))))
-
 (defn- get-comment-string
   [rdfs-comment renamed-pages]
   (let [desc* (if (map? rdfs-comment)
@@ -42,7 +38,7 @@
 (defn- strip-schema-prefix [s]
   (string/replace-first s "schema:" ""))
 
-(defn- ->class-page [class-m class-uuids class-properties {:keys [verbose renamed-classes renamed-pages]}]
+(defn- ->class-page [class-m class-properties {:keys [verbose renamed-classes renamed-pages]}]
   (let [parent-class* (class-m "rdfs:subClassOf")
         parent-class (cond
                        (map? parent-class*)
@@ -67,7 +63,6 @@
         url (str "https://schema.org/" (get inverted-renamed-classes class-name class-name))]
     (cond-> {:block/original-name class-name
              :block/type "class"
-             :block/uuid (get-class-uuid class-uuids (class-m "@id"))
              :properties (cond-> {:url url}
                            (class-m "rdfs:comment")
                            (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
@@ -102,7 +97,7 @@
              (when (class-map %) :page))
         range-includes))
 
-(defn- ->property-page [property-m class-map class-uuids {:keys [verbose renamed-pages renamed-properties]}]
+(defn- ->property-page [property-m class-map {:keys [verbose renamed-pages renamed-properties]}]
   (let [range-includes (get-range-includes property-m)
         schema-type (get-schema-type range-includes class-map)
         ;; Pick first range to determine type as only one range is supported currently
@@ -110,6 +105,12 @@
             (println "Picked property type:"
                      {:property (property-m "@id") :type schema-type :range-includes (vec range-includes)}))
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
+        _ (when (= schema-type :page)
+            (when-let [datatype-classes (not-empty (set/intersection (set range-includes)
+                                                                     (set (keys schema->logseq-data-types))))]
+              (throw (ex-info (str "property " (pr-str (property-m "@id"))
+                                   " with type :page has DataType class values which aren't supported: " datatype-classes) {}))))
+
         inverted-renamed-properties (set/map-invert renamed-properties)
         class-name (strip-schema-prefix (property-m "@id"))
         url (str "https://schema.org/" (get inverted-renamed-properties class-name class-name))
@@ -118,19 +119,12 @@
                  (= schema-type :page)
                  (assoc :cardinality :many)
                  (property-m "rdfs:comment")
-                 (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-pages))
-                 (= schema-type :page)
-                 (assoc :classes (let [invalid-classes (remove class-uuids range-includes)
-                                       _ (when (seq invalid-classes)
-                                           (throw (ex-info (str "No uuids found for range(s): " invalid-classes) {})))
-                                       datatype-classes (set/intersection (set range-includes) (set (keys schema->logseq-data-types)))
-                                       _ (when (seq datatype-classes)
-                                           (throw (ex-info (str "property " (pr-str (property-m "@id"))
-                                                                " has DataType class values which aren't supported: " datatype-classes) {})))]
-                                   (set (map class-uuids range-includes)))))]
+                 (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-pages)))]
     {(keyword (strip-schema-prefix (property-m "@id")))
-     {:block/schema schema
-      :properties {:url url}}}))
+     (cond-> {:block/schema schema
+              :properties {:url url}}
+       (= schema-type :page)
+       (assoc :schema-classes (map strip-schema-prefix range-includes)))}))
 
 (defn- get-class-to-properties
   "Given a vec of class ids and a vec of properties map to process, return a map of
@@ -240,10 +234,10 @@
     all-properties))
 
 (defn- generate-classes
-  [select-classes class-uuids class-to-properties options]
+  [select-classes class-to-properties options]
   (let [classes (->> select-classes
                      (map #(vector (strip-schema-prefix (get % "@id"))
-                                   (->class-page % class-uuids class-to-properties options)))
+                                   (->class-page % class-to-properties options)))
                      (into {}))]
     (assert (= ["Thing"] (keep #(when-not (:class-parent %)
                                   (:block/original-name %))
@@ -252,7 +246,7 @@
     classes))
 
 (defn- generate-properties
-  [select-properties class-map class-uuids options]
+  [select-properties class-map options]
   (when (:verbose options)
     (println "Properties by type:"
              (->> select-properties
@@ -261,8 +255,7 @@
                   frequencies)
              "\n"))
   (apply merge
-         (mapv #(->property-page % class-map class-uuids options)
-               select-properties)))
+         (mapv #(->property-page % class-map options) select-properties)))
 
 (defn- get-all-classes-and-properties
   "Get all classes and properties from raw json file"
@@ -316,10 +309,6 @@
           ["schema:Person" "schema:CreativeWorkSeries" "schema:Organization"
            "schema:Movie" "schema:CreativeWork" "schema:Thing"]
           (keys class-map))
-        ;; Generate class uuids as they are needed for properties (:page) and pages
-        class-uuids (->> all-classes
-                         (map #(vector (% "@id") (random-uuid)))
-                         (into {}))
         class-to-properties (get-class-to-properties select-class-ids all-properties)
         select-properties (set (mapcat val class-to-properties))
         options' (assoc options
@@ -329,23 +318,20 @@
         ;; Generate pages and properties
         properties (generate-properties
                     (filter #(contains? select-properties (% "@id")) all-properties)
-                    class-map class-uuids options')
+                    class-map options')
         properties'
         (if (:subset options)
           ;; only keep classes that are in subset to keep graph valid
-          (let [select-class-uuids (->> select-class-ids (map class-uuids) set)]
+          (let [select-class-ids' (->> select-class-ids (map strip-schema-prefix) set)]
             (-> properties
                 (update-vals (fn [m]
-                               (let [classes (get-in m [:block/schema :classes])]
-                                 (if (seq classes)
-                                   (assoc m :property/schema.classes
-                                          (set (map (fn [id] [:block/uuid id])
-                                                    (filter #(contains? select-class-uuids %) classes))))
-                                   m))))))
+                               (if (:schema-classes m)
+                                 (update m :schema-classes (fn [cs] (set (filterv #(contains? select-class-ids' %) cs))))
+                                 m)))))
           properties)
         classes (generate-classes
                  (map #(class-map %) select-class-ids)
-                 class-uuids class-to-properties options')]
+                 class-to-properties options')]
     {:graph-namespace :schema
      :classes classes
      :properties properties'}))
@@ -365,30 +351,27 @@
   (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
                      (d/q '[:find [(pull ?b [*
                                              {:class/schema.properties [:block/original-name]}
+                                             {:property/schema.classes [:block/original-name]}
                                              {:class/parent [:block/original-name]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
-                          db))
-        block-uuid->name* (->> (d/q '[:find (pull ?b [:block/original-name :block/uuid]) :where [?b :block/original-name]] db)
-                               (map first)
-                               (map (juxt :block/uuid :block/original-name))
-                               (into {}))
-        block-uuid->name #(or (block-uuid->name* %) (throw (ex-info (str "No entity found for " %) {})))]
+                          db))]
     (fs/writeFileSync "schema-org.edn"
                       (pr-str
                        (->> ents
                             (map (fn [m]
                                    (let [props (db-property/properties m)]
                                      (cond-> (select-keys m [:block/name :block/type :block/original-name :block/schema :db/ident
-                                                             :class/schema.properties :class/parent])
+                                                             :class/schema.properties :class/parent
+                                                             :db/cardinality :property/schema.classes])
                                        (seq props)
                                        (assoc :block/properties (update-keys props name))
                                        (seq (:class/schema.properties m))
                                        (update :class/schema.properties #(set (map :block/original-name %)))
                                        (some? (:class/parent m))
                                        (update :class/parent :block/original-name)
-                                       (seq (get-in m [:block/schema :classes]))
-                                       (update-in [:block/schema :classes] #(set (map block-uuid->name %)))))))
+                                       (seq (:property/schema.classes m))
+                                       (update :property/schema.classes #(set (map :block/original-name %)))))))
                             set)))))
 
 (defn -main [args]
