@@ -20,7 +20,6 @@
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
             [promesa.core :as p]
-            [frontend.db.async :as db-async]
             [logseq.db :as ldb]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.order :as db-order]))
@@ -429,22 +428,11 @@
      (and (seq properties)
           (not= properties [:logseq.property/icon])))))
 
-(defn property-create-new-block
-  [block property value parse-block]
-  (-> {:block/uuid (db/new-block-id)
-       :block/format :markdown
-       :block/content value
-       :block/page (:db/id (:block/page block))
-       :block/parent (:db/id block)
-       :logseq.property/created-from-property (:db/id property)}
-      sqlite-util/block-with-timestamps
-      parse-block))
-
 (defn create-property-text-block!
   [block property value parse-block {:keys [class-schema?]}]
   (assert (e/entity? property))
   (let [repo (state/get-current-repo)
-        new-value-block (property-create-new-block block property value parse-block)
+        new-value-block (db-property-build/property-create-new-block block property value parse-block)
         class? (contains? (:block/type block) "class")
         property-id (:db/ident property)]
     (p/let [_ (db/transact! repo [new-value-block] {:outliner-op :insert-blocks})]

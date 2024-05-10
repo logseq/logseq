@@ -16,7 +16,8 @@
             ["path" :as node-path]
             [nbb.classpath :as cp]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn- find-on-classpath [rel-path]
   (some (fn [dir]
@@ -111,17 +112,52 @@
   "Provides the next temp :db/id to use in a create-graph transact!"
   #(swap! current-db-id dec))
 
-(defn- ->block-tx [m uuid-maps all-idents page-id]
-  (merge (dissoc m :properties)
-         (sqlite-util/block-with-timestamps
-          {:db/id (new-db-id)
-           :block/format :markdown
-           :block/page {:db/id page-id}
-           :block/order (db-order/gen-key nil)
-           :block/parent {:db/id page-id}})
-         (when (seq (:properties m))
-           (merge (->block-properties (:properties m) uuid-maps all-idents)
-                  {:block/refs (build-property-refs (:properties m) all-idents)}))))
+(defn- create-property-value
+  [block property value]
+  (db-property-build/property-create-new-block
+   block
+   property
+   ;; FIXME: Remove when fixed in UI
+   (str value)
+   ;; TODO: One day would be nice to parse block for refs
+   #(assoc % :block/order (db-order/gen-key nil))))
+
+(defn- create-pvalue-entities
+  "Given a new block and its properties, creates a map of properties which have property values as entities"
+  [new-block properties properties-config all-idents]
+  (->> properties
+       (map (fn [[k v]]
+              (when (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
+                [k (if (set? v)
+                     (set (map #(create-property-value new-block {:db/ident (get-ident all-idents k)} %) v))
+                     (create-property-value new-block {:db/ident (get-ident all-idents k)} v))])))
+       (into {})))
+
+(defn- ->block-tx [{:keys [properties] :as m} properties-config uuid-maps all-idents page-id]
+  (let [new-block {:db/id (new-db-id)
+                   :block/format :markdown
+                   :block/page {:db/id page-id}
+                   :block/order (db-order/gen-key nil)
+                   :block/parent {:db/id page-id}}
+        pvalue-ents (create-pvalue-entities new-block properties properties-config all-idents)
+        block-props (when (seq properties)
+                      (->block-properties (merge properties
+                                                 (update-vals pvalue-ents
+                                                              (fn [v]
+                                                                (if (set? v)
+                                                                  (set (map #(vector :block/uuid (:block/uuid %)) v))
+                                                                  (vector :block/uuid (:block/uuid v))))))
+                                          uuid-maps all-idents))]
+    (cond-> []
+      ;; Place property values first since they are referenced by block
+      (seq pvalue-ents)
+      (into (mapcat #(if (set? %) % [%]) (vals pvalue-ents)))
+      true
+      (conj (merge (dissoc m :properties)
+                   (sqlite-util/block-with-timestamps new-block)
+                   (when (seq properties)
+                     (merge block-props
+                            {:block/refs (build-property-refs properties all-idents)})))))))
 
 (defn- build-properties-tx [properties uuid-maps all-idents]
   (let [property-db-ids (->> (keys properties)
@@ -207,8 +243,8 @@
                               (map :page pages-and-blocks))]
     (assert (empty? invalid-pages)
             (str "The following pages did not have a name attribute: " invalid-pages))
-    (assert (every? :block/schema (vals properties))
-            "All properties must have :block/schema")
+    (assert (every? #(get-in % [:block/schema :type]) (vals properties))
+            "All properties must have :block/schema and :type")
     (assert (empty? undeclared-properties)
             (str "The following properties used in EDN were not declared in :properties: " undeclared-properties))))
 
@@ -323,8 +359,8 @@
                      :block/path-refs (build-property-refs (:properties page) all-idents)})))]
                ;; blocks tx
                (reduce (fn [acc m]
-                         (conj acc
-                               (->block-tx m uuid-maps all-idents (page-id-fn new-page))))
+                         (into acc
+                               (->block-tx m properties uuid-maps all-idents (page-id-fn new-page))))
                        []
                        blocks))))
           pages-and-blocks'))]
