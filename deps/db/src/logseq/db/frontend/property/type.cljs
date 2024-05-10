@@ -12,17 +12,17 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity})
+  #{:string :keyword :map :coll :any :entity})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :string :number :date :checkbox :url :page :template])
+  [:default :number :date :checkbox :url :page :template])
 
 (def closed-value-property-types
   "Valid schema :type for closed values"
-  #{:string :number :url})
+  #{:default :string :number :url})
 
-(assert (set/subset? closed-value-property-types (set user-built-in-property-types))
+(assert (set/subset? closed-value-property-types (set (conj user-built-in-property-types :string)))
         "All closed value types are valid property types")
 
 (def ref-property-types
@@ -47,7 +47,7 @@
                :template #{:classes}
                :checkbox #{}}))
 
-(assert (= (set user-built-in-property-types) (set (keys user-built-in-allowed-schema-attributes)))
+(assert (= (set user-built-in-property-types) (set (remove #{:string} (keys user-built-in-allowed-schema-attributes))))
         "Each user built in type should have an allowed schema attribute")
 
 ;; Property value validation

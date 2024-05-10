@@ -98,7 +98,7 @@
   [property-type]
   (case property-type
     :default
-    "Text block"
+    "Text"
     :string
     "Text"
     ((comp string/capitalize name) property-type)))
