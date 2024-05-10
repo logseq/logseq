@@ -432,7 +432,7 @@
   [block property value parse-block {:keys [class-schema?]}]
   (assert (e/entity? property))
   (let [repo (state/get-current-repo)
-        new-value-block (db-property-build/property-create-new-block block property value parse-block)
+        new-value-block (db-property-build/build-property-value-block block property value parse-block)
         class? (contains? (:block/type block) "class")
         property-id (:db/ident property)]
     (p/let [_ (db/transact! repo [new-value-block] {:outliner-op :insert-blocks})]

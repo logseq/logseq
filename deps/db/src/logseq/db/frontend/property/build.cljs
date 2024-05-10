@@ -68,12 +68,15 @@
             closed-value-blocks-tx))]
     (into [property-tx] hidden-tx)))
 
-(defn property-create-new-block
+(defn build-property-value-block
   [block property value parse-block]
   (-> {:block/uuid (d/squuid)
        :block/format :markdown
        :block/content value
-       :block/page (:db/id (:block/page block))
+       :block/page (if (:block/page block)
+                     (:db/id (:block/page block))
+                     ;; page block
+                     (:db/id block))
        :block/parent (:db/id block)
        :logseq.property/created-from-property (or (:db/id property)
                                                   {:db/ident (:db/ident property)})}
