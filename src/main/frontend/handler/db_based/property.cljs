@@ -594,16 +594,19 @@
     (let [values' (remove string/blank? values)
           property-schema (:block/schema property)]
       (if (every? uuid? values')
-        (p/let [value-ids (vec (remove #(nil? (db/entity [:block/uuid %])) values'))]
-          (when (seq value-ids)
+        (p/let [values (keep #(db/entity [:block/uuid %]) values')]
+          (when (seq values)
             (let [property-tx {:db/ident (:db/ident property)
                                :db/valueType :db.type/ref
                                :db/cardinality (:db/cardinality property)
                                :block/schema property-schema}
-                  value-property-tx (map (fn [id] [:db/add [:block/uuid id] :property/value-property (:db/id property)]) value-ids)]
+                  value-property-tx (map (fn [id]
+                                           {:db/id id
+                                            :block/type "closed value"
+                                            :block/closed-value-property (:db/id property)})
+                                         (map :db/id values))]
               (db/transact! (state/get-current-repo) (cons property-tx value-property-tx)
-                            {:outliner-op :insert-blocks})
-              value-ids)))
+                            {:outliner-op :insert-blocks}))))
         (p/let [property-id (:db/ident property)
                 page (get-property-hidden-page property)
                 page-tx (when-not (e/entity? page) page)

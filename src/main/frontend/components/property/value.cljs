@@ -599,7 +599,7 @@
           popup-content (fn content-fn [_]
                           [:div.property-select
                            (case type
-                             (:string :number :url)
+                             (:string :number :url :default)
                              (select block property select-opts' opts)
 
                              (:page :date)
