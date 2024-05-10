@@ -74,10 +74,8 @@
 
 (defn- url-entity?
   [db val]
-  (or
-   (= val :logseq.property/empty-placeholder)
-   (when-let [ent (d/entity db val)]
-     (url? (:block/content ent)))))
+  (when-let [ent (d/entity db val)]
+    (url? (:block/content ent))))
 
 (defn- property-value-block?
   [db s]
@@ -104,11 +102,9 @@
 
 (defn- number-entity?
   [db id]
-  (or
-   (= id :logseq.property/empty-placeholder)
-   (when-let [entity (d/entity db id)]
-     (number? (some-> (:block/content entity)
-                      parse-double)))))
+  (when-let [entity (d/entity db id)]
+    (number? (some-> (:block/content entity)
+                     parse-double))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
@@ -120,7 +116,6 @@
               string-or-closed-string?]
    :number   [:fn
               {:error/message "should be a number"}
-              ;; Also handles entity? so no need to use it
               number-entity?]
    :date     [:fn
               {:error/message "should be a journal date"}

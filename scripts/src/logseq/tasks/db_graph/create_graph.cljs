@@ -114,7 +114,7 @@
 
 (defn- create-property-value
   [block property value]
-  (db-property-build/property-create-new-block
+  (db-property-build/build-property-value-block
    block
    property
    ;; FIXME: Remove when fixed in UI
@@ -122,8 +122,9 @@
    ;; TODO: One day would be nice to parse block for refs
    #(assoc % :block/order (db-order/gen-key nil))))
 
-(defn- create-pvalue-entities
-  "Given a new block and its properties, creates a map of properties which have property values as entities"
+(defn- ->property-value-tx-m
+  "Given a new block and its properties, creates a map of properties which have values of property value tx.
+   This map is used for both creating the new property values and then adding them to a block"
   [new-block properties properties-config all-idents]
   (->> properties
        (map (fn [[k v]]
@@ -133,25 +134,30 @@
                      (create-property-value new-block {:db/ident (get-ident all-idents k)} v))])))
        (into {})))
 
+(defn- property-value-properties
+  "Converts a property-value-tx map for addition to a block by replacing values with references
+   to the property value entities"
+  [pvalue-tx]
+  (update-vals pvalue-tx
+               (fn [v]
+                 (if (set? v)
+                   (set (map #(vector :block/uuid (:block/uuid %)) v))
+                   (vector :block/uuid (:block/uuid v))))))
+
 (defn- ->block-tx [{:keys [properties] :as m} properties-config uuid-maps all-idents page-id]
   (let [new-block {:db/id (new-db-id)
                    :block/format :markdown
                    :block/page {:db/id page-id}
                    :block/order (db-order/gen-key nil)
                    :block/parent {:db/id page-id}}
-        pvalue-ents (create-pvalue-entities new-block properties properties-config all-idents)
+        pvalue-tx-m (->property-value-tx-m new-block properties properties-config all-idents)
         block-props (when (seq properties)
-                      (->block-properties (merge properties
-                                                 (update-vals pvalue-ents
-                                                              (fn [v]
-                                                                (if (set? v)
-                                                                  (set (map #(vector :block/uuid (:block/uuid %)) v))
-                                                                  (vector :block/uuid (:block/uuid v))))))
+                      (->block-properties (merge properties (property-value-properties pvalue-tx-m))
                                           uuid-maps all-idents))]
     (cond-> []
       ;; Place property values first since they are referenced by block
-      (seq pvalue-ents)
-      (into (mapcat #(if (set? %) % [%]) (vals pvalue-ents)))
+      (seq pvalue-tx-m)
+      (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
       (conj (merge (dissoc m :properties)
                    (sqlite-util/block-with-timestamps new-block)
@@ -272,6 +278,45 @@
             "Class and property db-idents have no overlap")
     all-idents))
 
+(defn- build-pages-and-blocks-tx
+  [pages-and-blocks all-idents uuid-maps {:keys [page-id-fn properties]
+                                          :or {page-id-fn :db/id}}]
+  (vec
+   (mapcat
+    (fn [{:keys [page blocks]}]
+      (let [new-page (merge
+                      {:db/id (or (:db/id page) (new-db-id))
+                       :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
+                       :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
+                       :block/format :markdown}
+                      (dissoc page :properties :db/id :block/name :block/original-name))
+            pvalue-tx-m (->property-value-tx-m new-page (:properties page) properties all-idents)]
+        (into
+         ;; page tx
+         (cond-> []
+           (seq pvalue-tx-m)
+           (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+           true
+           (conj
+            (sqlite-util/block-with-timestamps
+             (merge
+              new-page
+              (when (seq (:properties page))
+                (->block-properties (merge (:properties page) (property-value-properties pvalue-tx-m))
+                                    uuid-maps
+                                    all-idents))
+              (when (seq (:properties page))
+                {:block/refs (build-property-refs (:properties page) all-idents)
+                 ;; app doesn't do this yet but it should to link property to page
+                 :block/path-refs (build-property-refs (:properties page) all-idents)})))))
+         ;; blocks tx
+         (reduce (fn [acc m]
+                   (into acc
+                         (->block-tx m properties uuid-maps all-idents (page-id-fn new-page))))
+                 []
+                 blocks))))
+    pages-and-blocks)))
+
 (defn create-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a
   vector of transactable data for use with d/transact!. The blocks that can be created
@@ -311,8 +356,7 @@
    supported: :default, :url, :checkbox, :number, :page and :date. :checkbox and
    :number values are written as booleans and integers/floats. :page references
    are written as vectors e.g. `[:page \"PAGE NAME\"]`"
-  [{:keys [pages-and-blocks properties classes graph-namespace page-id-fn]
-    :or {page-id-fn :db/id}
+  [{:keys [pages-and-blocks properties classes graph-namespace]
     :as options}]
   (let [_ (validate-options options)
         ;; add uuids before tx for refs in :properties
@@ -336,36 +380,8 @@
                                                  cs)))
                                  m))
                              properties-tx)
-        pages-and-blocks-tx
-        (vec
-         (mapcat
-          (fn [{:keys [page blocks]}]
-            (let [new-page (merge
-                            {:db/id (or (:db/id page) (new-db-id))
-                             :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
-                             :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
-                             :block/format :markdown}
-                            (dissoc page :properties :db/id :block/name :block/original-name))]
-              (into
-               ;; page tx
-               [(sqlite-util/block-with-timestamps
-                 (merge
-                  new-page
-                  (when (seq (:properties page))
-                    (->block-properties (:properties page) uuid-maps all-idents))
-                  (when (seq (:properties page))
-                    {:block/refs (build-property-refs (:properties page) all-idents)
-                     ;; app doesn't do this yet but it should to link property to page
-                     :block/path-refs (build-property-refs (:properties page) all-idents)})))]
-               ;; blocks tx
-               (reduce (fn [acc m]
-                         (into acc
-                               (->block-tx m properties uuid-maps all-idents (page-id-fn new-page))))
-                       []
-                       blocks))))
-          pages-and-blocks'))]
-    ;; Properties first b/c they have schema. Then pages b/c they can be referenced by blocks
+        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents uuid-maps options)]
+    ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
     (vec (concat properties-tx'
                  classes-tx
-                 (filter :block/name pages-and-blocks-tx)
-                 (remove :block/name pages-and-blocks-tx)))))
+                 pages-and-blocks-tx))))
