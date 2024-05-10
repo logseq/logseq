@@ -129,7 +129,7 @@
                              (into {}))
         new-properties-tx (vec
                            (mapcat
-                            (fn [[prop-name prop-m]]
+                            (fn [[prop-name {:keys [schema-classes] :as prop-m}]]
                               (if (:closed-values prop-m)
                                 (let [db-ident (get-ident all-idents prop-name)]
                                   (db-property-build/build-closed-values
@@ -148,7 +148,11 @@
                                   (when-let [props (not-empty (:properties prop-m))]
                                     (merge
                                      (->block-properties props uuid-maps all-idents)
-                                     {:block/refs (build-property-refs props all-idents)})))]))
+                                     {:block/refs (build-property-refs props all-idents)}))
+                                  (when (seq schema-classes)
+                                    {:property/schema.classes
+                                     (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                           schema-classes)}))]))
                             properties))]
     new-properties-tx))
 
@@ -159,13 +163,16 @@
         classes-tx (mapv
                     (fn [[class-name {:keys [class-parent schema-properties] :as class-m}]]
                       (merge
-                       (sqlite-util/build-new-class
-                        {:block/name (common-util/page-name-sanity-lc (name class-name))
-                         :block/original-name (name class-name)
-                         :block/uuid (d/squuid)
-                         :db/ident (get-ident all-idents class-name)
-                         :db/id (or (class-db-ids (name class-name))
-                                    (throw (ex-info "No :db/id for class" {:class class-name})))})
+                       (->
+                        (sqlite-util/build-new-class
+                         {:block/name (common-util/page-name-sanity-lc (name class-name))
+                          :block/original-name (name class-name)
+                          :block/uuid (d/squuid)
+                          :db/ident (get-ident all-idents class-name)
+                          :db/id (or (class-db-ids (name class-name))
+                                     (throw (ex-info "No :db/id for class" {:class class-name})))})
+                        ;; TODO: Move this concern to schema script
+                        (dissoc :class/parent))
                        (dissoc class-m :properties :class-parent :schema-properties)
                        (when-let [props (not-empty (:properties class-m))]
                          (merge
@@ -251,6 +258,7 @@
      Additional keys available:
      * :closed-values - Define closed values with a vec of maps. A map contains keys :uuid, :value and :icon.
      * :properties - Define properties on a property page.
+     * :schema-classes - Vec of class names. Defines a property's range classes
    * :classes - This is a map to configure classes where the keys are class names
      and the values are maps of datascript attributes e.g. `{:block/original-name \"Foo\"}`.
      Additional keys available:
@@ -281,6 +289,17 @@
         all-idents (create-all-idents properties classes graph-namespace)
         properties-tx (build-properties-tx properties uuid-maps all-idents)
         classes-tx (build-classes-tx classes uuid-maps all-idents)
+        class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
+        ;; Replace idents with db-ids to avoid any upsert issues
+        properties-tx' (mapv (fn [m]
+                               (if (:property/schema.classes m)
+                                 (update m :property/schema.classes
+                                         (fn [cs]
+                                           (mapv #(or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
+                                                      (throw (ex-info (str "No :db/id found for :db/ident " (pr-str (:db/ident %))) {})))
+                                                 cs)))
+                                 m))
+                             properties-tx)
         pages-and-blocks-tx
         (vec
          (mapcat
@@ -310,7 +329,7 @@
                        blocks))))
           pages-and-blocks'))]
     ;; Properties first b/c they have schema. Then pages b/c they can be referenced by blocks
-    (vec (concat properties-tx
+    (vec (concat properties-tx'
                  classes-tx
                  (filter :block/name pages-and-blocks-tx)
                  (remove :block/name pages-and-blocks-tx)))))
