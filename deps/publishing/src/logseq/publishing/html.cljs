@@ -39,7 +39,7 @@ necessary db filtering"
         (string/join " " (map html v))
         :else (str v)))
 
-(defn- spa-github-script
+(def ^{:private boolean} spa-github-script
   "// Single Page Apps for GitHub Pages
       // https://github.com/rafgraph/spa-github-pages
       // Copyright (c) 2016 Rafael Pedicini, licensed under the MIT License
