@@ -7,21 +7,22 @@
 (defonce hidden-page-name-prefix "$$$")
 
 (defn- closed-value-new-block
-  [page-id block-id value property]
-  {:block/type #{"closed value"}
-   :block/format :markdown
-   :block/uuid block-id
-   :block/page page-id
-   :block/content value
-   :block/closed-value-property (:db/ident property)
-   :block/parent page-id})
+  [block-id value property]
+  (let [property-id (:db/ident property)]
+    {:block/type #{"closed value"}
+     :block/format :markdown
+     :block/uuid block-id
+     :block/page property-id
+     :block/content value
+     :block/closed-value-property property-id
+     :block/parent property-id}))
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
-  [block-uuid block-value page-id property {:keys [db-ident icon description]}]
+  [block-uuid block-value property {:keys [db-ident icon description]}]
   (assert block-uuid (uuid? block-uuid))
   (cond->
-   (closed-value-new-block page-id block-uuid block-value property)
+   (closed-value-new-block block-uuid block-value property)
     (and db-ident (keyword? db-ident))
     (assoc :db/ident db-ident)
 
@@ -38,13 +39,6 @@
     true
     sqlite-util/block-with-timestamps))
 
-(defn build-property-hidden-page
-  "Builds a hidden property page for closed values to be transacted"
-  [property]
-  (let [page-name (str hidden-page-name-prefix (:block/uuid property))]
-    (-> (sqlite-util/build-new-page page-name)
-        (assoc :block/type #{"hidden"}))))
-
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
@@ -59,18 +53,16 @@
         ;; closed ref types don't have hidden tx
         (if ref-type?
           []
-          (let [page-tx (build-property-hidden-page property-tx)
-                closed-value-blocks-tx
+          (let [closed-value-blocks-tx
                 (map (fn [{:keys [db-ident value icon description uuid]}]
                        (cond->
                         (build-closed-value-block
                          uuid
                          value
-                         [:block/uuid (:block/uuid page-tx)]
                          property
                          {:db-ident db-ident :icon icon :description description})
                          (not from-ui-thread?)
                          (assoc :block/order (db-order/gen-key))))
                      (:closed-values property))]
-            (into [page-tx] closed-value-blocks-tx)))]
+            closed-value-blocks-tx))]
     (into [property-tx] hidden-tx)))
