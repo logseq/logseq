@@ -2,8 +2,7 @@
   "Provides property types and related helper fns e.g. property value validation
   fns and their allowed schema attributes"
   (:require [datascript.core :as d]
-            [clojure.set :as set]
-            [logseq.common.util.macro :as macro-util]))
+            [clojure.set :as set]))
 
 ;; Config vars
 ;; ===========
@@ -27,7 +26,7 @@
 
 (def ref-property-types
   "User facing ref types"
-  #{:default :page :date})
+  #{:default :page :date :number :url})
 
 (assert (set/subset? ref-property-types
                      (set user-built-in-property-types))
@@ -65,21 +64,16 @@
          (catch :default _e
            false))))
 
-(defn macro-url?
-  [s]
-  ;; TODO: Confirm that macro expanded value is url when it's easier to pass data into validations
-  (macro-util/macro? s))
-
 (defn- entity?
   [db id]
   (some? (d/entity db id)))
 
-(defn- url-or-closed-url?
+(defn- url-entity?
   [db val]
-  (or (url? val)
-      (macro-url? val)
-      (when-let [ent (d/entity db val)]
-        (url? (:block/content ent)))))
+  (or
+   (= val :logseq.property/empty-placeholder)
+   (when-let [ent (d/entity db val)]
+     (url? (:block/content ent)))))
 
 (defn- property-value-block?
   [db s]
@@ -104,6 +98,14 @@
       (when-let [entity (d/entity db s)]
         (string? (:block/content entity)))))
 
+(defn- number-entity?
+  [db id]
+  (or
+   (= id :logseq.property/empty-placeholder)
+   (when-let [entity (d/entity db id)]
+     (number? (some-> (:block/content entity)
+                      parse-double)))))
+
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
@@ -115,14 +117,14 @@
    :number   [:fn
               {:error/message "should be a number"}
               ;; Also handles entity? so no need to use it
-              number?]
+              number-entity?]
    :date     [:fn
               {:error/message "should be a journal date"}
               date?]
    :checkbox boolean?
    :url      [:fn
               {:error/message "should be a URL"}
-              url-or-closed-url?]
+              url-entity?]
    :page     [:fn
               {:error/message "should be a page"}
               page?]
@@ -148,7 +150,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :string :url :date :page :template :entity})
+  #{:default :string :url :number :date :page :template :entity})
 
 ;; Helper fns
 ;; ==========

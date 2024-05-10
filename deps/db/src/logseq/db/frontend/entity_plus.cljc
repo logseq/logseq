@@ -48,7 +48,8 @@
 
      :block/_parent
      (->> (lookup-entity e k default-value)
-          (remove (fn [e] (:logseq.property/created-from-property e)))
+          (remove (fn [e] (or (:logseq.property/created-from-property e)
+                              (:block/closed-value-property e))))
           seq)
 
      :block/_raw-parent

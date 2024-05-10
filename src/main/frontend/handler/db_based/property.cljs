@@ -29,9 +29,9 @@
 ;;           min, max -> string length, number range, cardinality size limit
 
 (defn- build-property-value-tx-data
-  ([block property-id value]
-   (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
-  ([block property-id value status?]
+  ([db block property-id value]
+   (build-property-value-tx-data db block property-id value (= property-id :logseq.task/status)))
+  ([db block property-id value status?]
    (when (some? value)
      (let [block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                         property-id value)
@@ -86,16 +86,12 @@
     v-str))
 
 (defn- update-datascript-schema
-  [property {:keys [type cardinality values]}]
+  [property {:keys [cardinality]}]
   (let [ident (:db/ident property)
-        cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
-        type-data (when (and type (or (db-property-type/ref-property-types type) (seq values))) ; type changes or closed values
-                    {:db/ident ident
-                     :db/valueType :db.type/ref
-                     :db/cardinality cardinality})]
-    (or type-data
-        {:db/ident ident
-         :db/cardinality cardinality})))
+        cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)]
+    {:db/ident ident
+     :db/valueType :db.type/ref
+     :db/cardinality cardinality}))
 
 (defn ensure-unique-db-ident
   "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
@@ -124,7 +120,8 @@
    with the given property-id or :property-name option. When a property is created
    it is ensured to have a unique :db/ident"
   [repo property-id schema {:keys [property-name properties]}]
-  (let [db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))]
+  (let [db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))
+        db (db/get-db repo)]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (db/entity db-ident))]
       (let [changed-property-attrs
@@ -149,7 +146,7 @@
                             (when (seq properties)
                               (mapcat
                                (fn [[property-id v]]
-                                 (build-property-value-tx-data property property-id v)) properties)))
+                                 (build-property-value-tx-data db property property-id v)) properties)))
             many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
         (when (seq tx-data)
           (db/transact! repo tx-data {:outliner-op :update-property
@@ -206,7 +203,8 @@
         property-schema (:block/schema property)
         {:keys [type]} property-schema
         v' (or (resolve-tag v) v)
-        db-attribute? (contains? db-property/db-attribute-properties property-id)]
+        db-attribute? (contains? db-property/db-attribute-properties property-id)
+        db (db/get-db repo)]
     (cond
       db-attribute?
       (db/transact! repo [{:db/id (:db/id block) property-id v'}]
@@ -245,7 +243,7 @@
                                     (vec (remove string/blank? new-value*))
                                     (set (remove string/blank? new-value*)))
                                   new-value*)
-                      tx-data (build-property-value-tx-data block property-id new-value status?)]
+                      tx-data (build-property-value-tx-data db block property-id new-value status?)]
                   (db/transact! repo tx-data {:outliner-op :save-block}))))))))))
 
 (defn class-add-property!
@@ -297,6 +295,7 @@
             property-type (or type infer-schema :default)
             many? (db-property/many? property)
             status? (= :logseq.task/status (:db/ident property))
+            db (db/get-db repo)
             txs (->>
                  (mapcat
                   (fn [eid]
@@ -307,7 +306,7 @@
                                         (catch :default e
                                           (notification/show! (str e) :error false)
                                           nil))]
-                          (build-property-value-tx-data block property-id v* status?)))))
+                          (build-property-value-tx-data db block property-id v* status?)))))
                   block-eids)
                  (remove nil?))]
         (when (seq txs)
@@ -481,12 +480,6 @@
     {:page page-tx
      :blocks [new-block]}))
 
-(defn- get-property-hidden-page
-  [property]
-  (let [page-name (str db-property-build/hidden-page-name-prefix (:block/uuid property))]
-    (or (db/get-case-page page-name)
-        (db-property-build/build-property-hidden-page property))))
-
 (defn re-init-commands!
   "Update commands after task status and priority's closed values has been changed"
   [property]
@@ -524,7 +517,6 @@
                                  (notification/show! (str e) :error false)
                                  nil))
               block (when id (db/entity [:block/uuid id]))
-              value-block (when (uuid? value) (db/entity [:block/uuid value]))
               validate-message (validate-property-value
                                 (get-property-value-schema property-type property {:new-closed-value? true})
                                 resolved-value)]
@@ -545,10 +537,6 @@
           (nil? resolved-value)
           nil
 
-          (db/page? value-block)             ; page
-          {:block-id value
-           :tx-data [[:db/add [:block/uuid value] :property/value-property (:db/id property)]]}
-
           :else
           (let [block-id (or id (db/new-block-id))
                 icon (when-not (and (string? icon) (string/blank? icon)) icon)
@@ -560,29 +548,20 @@
                               (outliner-core/block-with-updated-at
                                {:block/uuid id
                                 :block/content resolved-value
+                                :block/closed-value-property (:db/id property)
                                 :block/schema (if description
                                                 (assoc schema :description description)
                                                 (dissoc schema :description))})
                                icon
                                (assoc :logseq.property/icon icon)))]
-                          (let [hidden-tx
-                                (if (contains? db-property-type/ref-property-types (:type property-schema))
-                                  []
-                                  (let [page (get-property-hidden-page property)
-                                        max-order (:block/order (last (:property/closed-values property)))
-                                        new-block (-> (db-property-build/build-closed-value-block block-id resolved-value [:block/uuid (:block/uuid page)]
-                                                                                                  property {:icon icon
-                                                                                                            :description description})
-                                                      (assoc :block/order (db-order/gen-key max-order nil)))]
-                                    (cond-> []
-                                      (not (e/entity? page))
-                                      (conj page)
-                                      true
-                                      (conj new-block))))]
-                            (conj hidden-tx
-                                  (outliner-core/block-with-updated-at
-                                   {:db/id (:db/id property)
-                                    :block/schema (merge {:type property-type} property-schema)}))))]
+                          (let [max-order (:block/order (last (:property/closed-values property)))
+                                new-block (-> (db-property-build/build-closed-value-block block-id resolved-value
+                                                                                                property {:icon icon
+                                                                                                          :description description})
+                                              (assoc :block/order (db-order/gen-key max-order nil)))]
+                            [new-block
+                             (outliner-core/block-with-updated-at
+                              {:db/id (:db/id property)})]))]
             {:block-id block-id
              :tx-data tx-data}))))))
 
@@ -591,64 +570,18 @@
   [property values]
   (assert (e/entity? property))
   (when (seq values)
-    (let [values' (remove string/blank? values)
-          property-schema (:block/schema property)]
-      (if (every? uuid? values')
-        (p/let [values (keep #(db/entity [:block/uuid %]) values')]
-          (when (seq values)
-            (let [property-tx {:db/ident (:db/ident property)
-                               :db/valueType :db.type/ref
-                               :db/cardinality (:db/cardinality property)
-                               :block/schema property-schema}
-                  value-property-tx (map (fn [id]
-                                           {:db/id id
-                                            :block/type "closed value"
-                                            :block/closed-value-property (:db/id property)})
-                                         (map :db/id values))]
-              (db/transact! (state/get-current-repo) (cons property-tx value-property-tx)
-                            {:outliner-op :insert-blocks}))))
-        (p/let [property-id (:db/ident property)
-                page (get-property-hidden-page property)
-                page-tx (when-not (e/entity? page) page)
-                page-id (:block/uuid page)
-                *max-key (atom nil)
-                closed-value-blocks (doall
-                                     (map (fn [value]
-                                            (let [b (db-property-build/build-closed-value-block
-                                                     (db/new-block-id)
-                                                     value
-                                                     [:block/uuid page-id]
-                                                     property
-                                                     {})]
-                                              (assoc b :block/order (db-order/gen-key @*max-key nil))))
-                                          values'))
-                value->block-id (zipmap
-                                 (map :block/content closed-value-blocks)
-                                 (map :block/uuid closed-value-blocks))
-                property-tx {:db/ident (:db/ident property)
-                             :db/valueType :db.type/ref
-                             :db/cardinality (:db/cardinality property)
-                             :block/schema property-schema}
-                property-values (db-async/<get-block-property-values (state/get-current-repo) (:db/ident property))
-                block-values (->> property-values
-                                  (remove #(uuid? (first %))))
-                id-values (filter second block-values)
-                ;; Order matters here, retract old property values first and then update the property schema
-                ;; Otherwise, the UI Datascript will throw tempid errors
-                tx-data (concat
-                         ;; retract old property values
-                         (map (fn [[id _value]] [:db/retract id property-id]) id-values)
-                         (when page-tx [page-tx])
-                         closed-value-blocks
-                         [property-tx]
-                         (map (fn [[id value]]
-                                (let [value' (if (set? value)
-                                               (set (map #(vector :block/uuid (value->block-id %)) value))
-                                               [:block/uuid (value->block-id value)])]
-                                  {:db/id id property-id value'}))
-                              id-values))]
-          (db/transact! (state/get-current-repo) tx-data
-                        {:outliner-op :insert-blocks}))))))
+    (let [values' (remove string/blank? values)]
+      (assert (every? uuid? values') "existing values should all be UUIDs")
+      (p/let [values (keep #(db/entity [:block/uuid %]) values')]
+        (when (seq values)
+          (let [value-property-tx (map (fn [id]
+                                         {:db/id id
+                                          :block/type "closed value"
+                                          :block/closed-value-property (:db/id property)})
+                                       (map :db/id values))
+                property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
+            (db/transact! (state/get-current-repo) (cons property-tx value-property-tx)
+                          {:outliner-op :save-blocks})))))))
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"

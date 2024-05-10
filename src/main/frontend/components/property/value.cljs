@@ -25,7 +25,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [datascript.impl.entity :as de]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (rum/defc property-empty-value
   [& {:as opts}]
@@ -67,6 +68,19 @@
   (state/set-state! :editor/editing-property-value-id {})
   (state/clear-edit!))
 
+(defn <create-new-block!
+  [block property value & {:keys [edit-block?]
+                           :or {edit-block? true}}]
+  (p/let [{:keys [block-id result]} (db-property-handler/create-property-text-block!
+                                     block property value editor-handler/wrap-parse-block {})]
+    (p/do!
+     result
+     (exit-edit-property)
+     (let [block (db/entity [:block/uuid block-id])]
+       (when edit-block?
+         (editor-handler/edit-block! block :max {:container-id :unknown-container}))
+       block))))
+
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
   Otherwise, add a block's property and its value. Creates a new property as needed"
@@ -90,7 +104,13 @@
                       (db-property/create-user-property-ident-from-name property-key))
                      :logseq.property/empty-placeholder])
                   [property-key property-value])]
-            (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
+            (p/let [property (db/entity property-key)
+                    value (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                                   (not (int? property-value')))
+                            (p/let [result (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})]
+                              (:db/id result))
+                            property-value')]
+              (property-handler/set-block-property! repo (:block/uuid block) property-id value)))))
       (when exit-edit?
         (shui/popup-hide!)
         (exit-edit-property))))))
@@ -354,16 +374,6 @@
                      :input-opts input-opts)]
     (select-page property opts')))
 
-(defn <create-new-block!
-  [block property value]
-  (p/let [{:keys [block-id result]} (db-property-handler/create-property-text-block!
-                                     block property value editor-handler/wrap-parse-block {})]
-    (p/do!
-     result
-     (exit-edit-property)
-     (let [block (db/entity [:block/uuid block-id])]
-       (editor-handler/edit-block! block :max {:container-id :unknown-container})))))
-
 (defn <create-new-block-from-template!
   "`template`: tag block"
   [block property template]
@@ -389,6 +399,7 @@
             property (db/sub-block (:db/id property))
             type (:type schema)
             closed-values? (seq (:property/closed-values property))
+            ref-type? (db-property-type/ref-property-types type)
             items (if closed-values?
                     (keep (fn [block]
                             (let [icon (pu/get-block-property-value block :logseq.property/icon)
@@ -404,6 +415,14 @@
                                    (if (coll? value)
                                      (map (fn [v] {:value v}) value)
                                      [{:value value}])))
+                         (map (fn [{:keys [value]}]
+                                (if (and ref-type? (number? value))
+                                  (when-let [e (db/entity value)]
+                                    {:label (or (:block/content e)
+                                                (:block/original-name e))
+                                     :value value})
+                                  {:label value
+                                   :vaue value})))
                          (distinct)))
             items (->> (if (= :date type)
                          (map (fn [m] (let [label (:block/original-name (db/entity (:value m)))]
@@ -421,33 +440,31 @@
                                     (remove nil?))
                                [selected-choices'])]
         (select-aux block property
-                    (cond->
-                     {:multiple-choices? multiple-choices?
-                      :items items
-                      :selected-choices selected-choices
-                      :dropdown? dropdown?
-                      :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
-                      :input-default-placeholder "Select"
-                      :extract-chosen-fn :value
-                      :content-props content-props
-                      :on-chosen on-chosen
-                      :input-opts (fn [_]
-                                    {:on-blur (fn []
-                                                (exit-edit-property)
-                                                (when-let [f (:on-chosen select-opts)] (f)))
-                                     :on-click (fn []
-                                                 (when *show-new-property-config?
-                                                   (reset! *show-new-property-config? false)))
-                                     :on-key-down
-                                     (fn [e]
-                                       (case (util/ekey e)
-                                         "Escape"
-                                         (do
-                                           (exit-edit-property)
-                                           (when-let [f (:on-chosen select-opts)] (f)))
-                                         nil))})}
-                      closed-values?
-                      (assoc :extract-fn :label)))))))
+                    {:multiple-choices? multiple-choices?
+                     :items items
+                     :selected-choices selected-choices
+                     :dropdown? dropdown?
+                     :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
+                     :input-default-placeholder "Select"
+                     :extract-chosen-fn :value
+                     :extract-fn :label
+                     :content-props content-props
+                     :on-chosen on-chosen
+                     :input-opts (fn [_]
+                                   {:on-blur (fn []
+                                               (exit-edit-property)
+                                               (when-let [f (:on-chosen select-opts)] (f)))
+                                    :on-click (fn []
+                                                (when *show-new-property-config?
+                                                  (reset! *show-new-property-config? false)))
+                                    :on-key-down
+                                    (fn [e]
+                                      (case (util/ekey e)
+                                        "Escape"
+                                        (do
+                                          (exit-edit-property)
+                                          (when-let [f (:on-chosen select-opts)] (f)))
+                                        nil))})})))))
 
 (rum/defc property-normal-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -578,8 +595,9 @@
        closed-values?
        (closed-value-item value opts)
 
-       (= type :number)
-       [:span.number (str value)]
+       (de/entity? value)
+       (when-let [content (:block/content value)]
+         (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros))))
 
        :else
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
@@ -701,9 +719,7 @@
       :style {:min-height 24}
       :on-click (fn []
                   (when (and (= type :default) (nil? value))
-                    (<create-new-block! block property ""))
-                  (when (= type :string)
-                    (set-editing! block property editor-id dom-id value opts)))}
+                    (<create-new-block! block property "")))}
      (if (and (string/blank? value) template?)
        (when-let [template (first (:property/schema.classes schema))]
          [:a.fade-link.pointer.text-sm.jtrigger
