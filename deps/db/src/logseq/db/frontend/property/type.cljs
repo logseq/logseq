@@ -24,9 +24,13 @@
 (assert (set/subset? closed-value-property-types (set (conj user-built-in-property-types :string)))
         "All closed value types are valid property types")
 
+(def value-ref-property-types
+  "Property value ref types"
+  #{:default :url :number})
+
 (def ref-property-types
   "User facing ref types"
-  #{:default :page :date :number :url})
+  (into #{:page :date} value-ref-property-types))
 
 (assert (set/subset? ref-property-types
                      (set user-built-in-property-types))

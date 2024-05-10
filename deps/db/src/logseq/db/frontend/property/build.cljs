@@ -2,7 +2,8 @@
   "Builds core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property.type :as db-property-type]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [datascript.core :as d]))
 
 (defonce hidden-page-name-prefix "$$$")
 
@@ -66,3 +67,15 @@
                      (:closed-values property))]
             closed-value-blocks-tx))]
     (into [property-tx] hidden-tx)))
+
+(defn property-create-new-block
+  [block property value parse-block]
+  (-> {:block/uuid (d/squuid)
+       :block/format :markdown
+       :block/content value
+       :block/page (:db/id (:block/page block))
+       :block/parent (:db/id block)
+       :logseq.property/created-from-property (or (:db/id property)
+                                                  {:db/ident (:db/ident property)})}
+      sqlite-util/block-with-timestamps
+      parse-block))
