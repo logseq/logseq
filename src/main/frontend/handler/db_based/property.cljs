@@ -28,9 +28,9 @@
 ;;           min, max -> string length, number range, cardinality size limit
 
 (defn- build-property-value-tx-data
-  ([db block property-id value]
-   (build-property-value-tx-data db block property-id value (= property-id :logseq.task/status)))
-  ([db block property-id value status?]
+  ([block property-id value]
+   (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
+  ([block property-id value status?]
    (when (some? value)
      (let [block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                         property-id value)
@@ -119,8 +119,7 @@
    with the given property-id or :property-name option. When a property is created
    it is ensured to have a unique :db/ident"
   [repo property-id schema {:keys [property-name properties]}]
-  (let [db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))
-        db (db/get-db repo)]
+  (let [db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (db/entity db-ident))]
       (let [changed-property-attrs
@@ -145,7 +144,7 @@
                             (when (seq properties)
                               (mapcat
                                (fn [[property-id v]]
-                                 (build-property-value-tx-data db property property-id v)) properties)))
+                                 (build-property-value-tx-data property property-id v)) properties)))
             many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
         (when (seq tx-data)
           (db/transact! repo tx-data {:outliner-op :update-property
@@ -202,8 +201,7 @@
         property-schema (:block/schema property)
         {:keys [type]} property-schema
         v' (or (resolve-tag v) v)
-        db-attribute? (contains? db-property/db-attribute-properties property-id)
-        db (db/get-db repo)]
+        db-attribute? (contains? db-property/db-attribute-properties property-id)]
     (cond
       db-attribute?
       (db/transact! repo [{:db/id (:db/id block) property-id v'}]
@@ -242,7 +240,7 @@
                                     (vec (remove string/blank? new-value*))
                                     (set (remove string/blank? new-value*)))
                                   new-value*)
-                      tx-data (build-property-value-tx-data db block property-id new-value status?)]
+                      tx-data (build-property-value-tx-data block property-id new-value status?)]
                   (db/transact! repo tx-data {:outliner-op :save-block}))))))))))
 
 (defn class-add-property!
@@ -294,7 +292,6 @@
             property-type (or type infer-schema :default)
             many? (db-property/many? property)
             status? (= :logseq.task/status (:db/ident property))
-            db (db/get-db repo)
             txs (->>
                  (mapcat
                   (fn [eid]
@@ -305,7 +302,7 @@
                                         (catch :default e
                                           (notification/show! (str e) :error false)
                                           nil))]
-                          (build-property-value-tx-data db block property-id v* status?)))))
+                          (build-property-value-tx-data block property-id v* status?)))))
                   block-eids)
                  (remove nil?))]
         (when (seq txs)
