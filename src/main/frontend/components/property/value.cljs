@@ -105,13 +105,11 @@
                       (db-property/create-user-property-ident-from-name property-key))
                      :logseq.property/empty-placeholder])
                   [property-key property-value])]
-            (p/let [property (db/entity property-key)
-                    value (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
-                                   (not (int? property-value')))
-                            (p/let [result (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})]
-                              (:db/id result))
-                            property-value')]
-              (property-handler/set-block-property! repo (:block/uuid block) property-id value)))))
+            (p/let [property (db/entity property-key)]
+              (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                       (not (int? property-value')))
+                (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
+                (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))))
       (when exit-edit?
         (shui/popup-hide!)
         (exit-edit-property))))))

@@ -23,15 +23,17 @@
 (use-fixtures :each start-and-destroy-db)
 
 (deftest get-block-property-values-test
-  (outliner-property/set-block-property! repo fbid :user.property/property-1 "value 1" {:property-type :string})
-  (outliner-property/set-block-property! repo sbid :user.property/property-1 "value 2" {:property-type :string})
-  (is (= (model/get-block-property-values :user.property/property-1)
-         ["value 1" "value 2"])))
+  (let [conn (db/get-db false)]
+    (outliner-property/set-block-property! conn fbid :user.property/property-1 "value 1" {:property-type :string})
+    (outliner-property/set-block-property! conn sbid :user.property/property-1 "value 2" {:property-type :string})
+    (is (= (model/get-block-property-values :user.property/property-1)
+           ["value 1" "value 2"]))))
 
 (deftest get-db-property-values-test
-  (outliner-property/set-block-property! repo fbid :user.property/property-1 "1" {})
-  (outliner-property/set-block-property! repo sbid :user.property/property-1 "2" {})
-  (is (= [1 2] (model/get-block-property-values :user.property/property-1))))
+  (let [conn (db/get-db false)]
+    (outliner-property/set-block-property! conn fbid :user.property/property-1 "1" {})
+    (outliner-property/set-block-property! conn sbid :user.property/property-1 "2" {})
+    (is (= [1 2] (model/get-block-property-values :user.property/property-1)))))
 
 ;; (deftest get-db-property-values-test-with-pages
 ;;   (let [opts {:redirect? false :create-first-block? false}
@@ -74,10 +76,11 @@
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)
         class1 (db/get-page "class1")
-        class2 (db/get-page "class2")]
-    (outliner-property/upsert-property! repo :user.property/property-1 {:type :page} {})
-    (outliner-property/class-add-property! repo (:db/id class1) :user.property/property-1)
-    (outliner-property/class-add-property! repo (:db/id class2) :user.property/property-1)
+        class2 (db/get-page "class2")
+        conn (db/get-db false)]
+    (outliner-property/upsert-property! conn :user.property/property-1 {:type :page} {})
+    (outliner-property/class-add-property! conn (:db/id class1) :user.property/property-1)
+    (outliner-property/class-add-property! conn (:db/id class2) :user.property/property-1)
     (let [property (db/entity :user.property/property-1)
           classes (model/get-classes-with-property (:db/ident property))]
       (is (= (set (map :db/id classes))

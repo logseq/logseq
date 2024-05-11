@@ -78,7 +78,7 @@
    [:upsert-closed-value
     [:catn
      [:op :keyword]
-     [:args [:tuple ::property-id ::closed-value-config]]]]
+     [:args [:tuple ::property-id ::option]]]]
    [:delete-closed-value
     [:catn
      [:op :keyword]
@@ -91,6 +91,14 @@
 (def ^:private ops-schema
   [:schema {:registry {::id int?
                        ::block map?
+                       ::schema map?
+                       ;; FIXME: use eid integer
+                       ::block-id :any
+                       ::block-ids [:sequential ::block-id]
+                       ::class-id int?
+                       ::property-id [:or int? keyword? nil?]
+                       ::value :any
+                       ::values [:sequential ::value]
                        ::option [:maybe map?]
                        ::blocks [:sequential ::block]
                        ::ids [:sequential ::id]}}
@@ -100,6 +108,7 @@
 
 (defn apply-ops!
   [repo conn ops date-formatter opts]
+  ;; (prn :debug :outliner-ops ops)
   (assert (ops-validator ops) ops)
   (let [opts' (assoc opts
                      :transact-opts {:conn conn}
