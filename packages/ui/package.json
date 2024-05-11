@@ -8,6 +8,7 @@
     "build:ui:only": "parcel build --target ui",
     "build:ui": "rm -rf .parcel-cache && yarn build:ui:only",
     "watch:storybook": "storybook dev -p 6006",
+    "preinstall": "cd primitives/ && yarn install && yarn build",
     "postinstall": "yarn build:ui"
   },
   "dependencies": {
@@ -85,7 +86,8 @@
     },
     "react/jsx-dev-runtime": "./node_modules/react/jsx-dev-runtime.js",
     "react/jsx-runtime": "./node_modules/react/jsx-runtime.js",
-    "@/*": "./@/$1"
+    "@/*": "./@/$1",
+    "@radix-ui/react-*": "./primitives/packages/react/$1"
   },
   "targets": {
     "main": false,

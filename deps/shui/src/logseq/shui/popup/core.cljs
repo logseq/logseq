@@ -164,6 +164,7 @@
                          :top y
                          :left x}} ""))
        (let [content-props (cond-> (merge {:onEscapeKeyDown #(hide! id)
+                                           :disableOutsideScroll false
                                            :onPointerDownOutside #(hide! id)}
                                           content-props)
                              (and (not force-popover?)
@@ -184,16 +185,6 @@
   < rum/static
   []
   (let [[popups _set-popups!] (use-atom *popups)]
-
-    (rum/use-effect!
-      (fn []
-        (let [^js cls (.-classList js/document.documentElement)
-              s "has-x-popups"]
-          (if (and (counted? popups) (> (count popups) 0))
-            (.add cls s) (.remove cls s))
-          #(.remove cls s)))
-      [popups])
-
     [:<>
      (for [config popups
            :when (and (map? config) (:id config) (not (:all? config)))]
