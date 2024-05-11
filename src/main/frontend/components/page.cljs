@@ -11,7 +11,7 @@
             [frontend.components.icon :as icon-component]
             [frontend.components.db-based.page :as db-page]
             [frontend.components.class :as class-component]
-            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.outliner.property :as outliner-property]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
@@ -355,7 +355,7 @@
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
                                             {:on-chosen (fn [_e icon]
-                                                          (db-property-handler/set-block-property!
+                                                          (outliner-property/set-block-property!
                                                            repo
                                                            (:db/id page)
                                                            (pu/get-pid :logseq.property/icon)

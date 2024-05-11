@@ -17,7 +17,8 @@
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [datascript.core :as d]))
 
 (def fuzzy-search fuzzy/fuzzy-search)
 
@@ -137,7 +138,7 @@
   (when-let [repo (state/get-current-repo)]
     (p/let [page (db/entity page-id)
             alias-names (conj (set (map util/safe-page-name-sanity-lc
-                                     (db/get-page-alias-names repo page-id)))
+                                        (db/get-page-alias-names repo page-id)))
                               (:block/original-name page))
             q (string/join " " alias-names)
             result (block-search repo q {:limit 100})
@@ -145,7 +146,7 @@
             result (when (seq eids)
                      (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id page) (ldb/write-transit-str eids)))
             result' (when result (ldb/read-transit-str result))]
-      (when result' (db/transact! repo result'))
+      (when result' (d/transact! (db/get-db repo false) result'))
       (some->> result'
                db-model/sort-by-order-recursive
                db-utils/group-by-page))))

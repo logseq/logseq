@@ -1,12 +1,13 @@
 (ns frontend.handler.db-based.property-test
-  (:require [frontend.handler.db-based.property :as db-property-handler]
+  (:require [logseq.outliner.property :as outliner-property]
             [frontend.db :as db]
             [clojure.test :refer [deftest is testing are use-fixtures]]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.handler.page :as page-handler]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [frontend.handler.editor :as editor-handler]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -34,7 +35,7 @@
 ;; update-property!
 (deftest ^:large-vars/cleanup-todo block-property-test
   (testing "Add a property to a block"
-    (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value" {:property-type :string})
+    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-1 "value" {:property-type :string})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity :user.property/property-1)]
@@ -54,7 +55,7 @@
         "value")))
 
   (testing "Add another property"
-    (db-property-handler/set-block-property! repo fbid :user.property/property-2 "1" {})
+    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-2 "1" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity :user.property/property-2)]
@@ -74,7 +75,7 @@
         1)))
 
   (testing "Update property value"
-    (db-property-handler/set-block-property! repo fbid :user.property/property-2 2 {})
+    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-2 2 {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -85,7 +86,7 @@
         2)))
 
   (testing "Wrong type property value shouldn't transacted"
-    (db-property-handler/set-block-property! repo fbid :user.property/property-2 "Not a number" {})
+    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-2 "Not a number" {})
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -96,28 +97,29 @@
         2)))
 
   (testing "Add a multi-values property"
-    (db-property-handler/upsert-property! repo :user.property/property-3 {:type :number :cardinality :many} {})
-    (db-property-handler/set-block-property! repo fbid :user.property/property-3 1 {})
-    (db-property-handler/set-block-property! repo fbid :user.property/property-3 2 {})
-    (db-property-handler/set-block-property! repo fbid :user.property/property-3 3 {})
-    (let [block (db/entity [:block/uuid fbid])
-          properties (:block/properties block)
-          property (db/entity :user.property/property-3)]
+    (let [conn (db/get-db false)]
+      (outliner-property/upsert-property! conn :user.property/property-3 {:type :number :cardinality :many} {})
+      (outliner-property/set-block-property! conn fbid :user.property/property-3 1 {})
+      (outliner-property/set-block-property! conn fbid :user.property/property-3 2 {})
+      (outliner-property/set-block-property! conn fbid :user.property/property-3 3 {})
+      (let [block (db/entity [:block/uuid fbid])
+            properties (:block/properties block)
+            property (db/entity :user.property/property-3)]
       ;; ensure property exists
-      (are [x y] (= x y)
-        (:block/schema property)
-        {:type :number}
-        (:block/type property)
-        #{"property"})
+        (are [x y] (= x y)
+          (:block/schema property)
+          {:type :number}
+          (:block/type property)
+          #{"property"})
       ;; check block's properties
-      (are [x y] (= x y)
-        3
-        (count properties)
-        #{1 2 3}
-        (get properties :user.property/property-3))))
+        (are [x y] (= x y)
+          3
+          (count properties)
+          #{1 2 3}
+          (get properties :user.property/property-3)))))
 
   (testing "Remove a property"
-    (db-property-handler/remove-block-property! repo fbid :user.property/property-3)
+    (outliner-property/remove-block-property! (db/get-db false) fbid :user.property/property-3)
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -129,9 +131,10 @@
 
   (testing "Batch set properties"
     (let [k :user.property/property-4
-          v "batch value"]
-      (db-property-handler/upsert-property! repo :user.property/property-4 {:type :string} {})
-      (db-property-handler/batch-set-property! repo [fbid sbid] k v)
+          v "batch value"
+          conn (db/get-db false)]
+      (outliner-property/upsert-property! conn :user.property/property-4 {:type :string} {})
+      (outliner-property/batch-set-property! conn [fbid sbid] k v)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
@@ -142,7 +145,7 @@
 
   (testing "Batch remove properties"
     (let [k :user.property/property-4]
-      (db-property-handler/batch-remove-property! repo [fbid sbid] k)
+      (outliner-property/batch-remove-property! (db/get-db false) [fbid sbid] k)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
@@ -173,16 +176,18 @@
         #{"class"}))
 
     (testing "Class add property"
-      (db-property-handler/class-add-property! repo c1id :user.property/property-1)
-      (db-property-handler/class-add-property! repo c1id :user.property/property-2)
+      (let [conn (db/get-db false)]
+        (outliner-property/class-add-property! conn c1id :user.property/property-1)
+        (outliner-property/class-add-property! conn c1id :user.property/property-2)
       ;; repeated adding property-2
-      (db-property-handler/class-add-property! repo c1id :user.property/property-2)
+        (outliner-property/class-add-property! conn c1id :user.property/property-2)
       ;; add new property with same base db-ident as property-1
-      (db-property-handler/class-add-property! repo c1id ":property-1")
-      (is (= 3 (count (:class/schema.properties (db/entity (:db/id c1)))))))
+        (outliner-property/class-add-property! conn c1id ":property-1")
+        (is (= 3 (count (:class/schema.properties (db/entity (:db/id c1))))))))
 
     (testing "Class remove property"
-      (db-property-handler/class-remove-property! repo c1id :user.property/property-1)
+      (let [conn (db/get-db false)]
+        (outliner-property/class-remove-property! conn c1id :user.property/property-1))
       (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
     (testing "Add classes to a block"
       (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
@@ -195,13 +200,14 @@
         (is (= 2 (count (:block/tags (db/entity [:block/uuid fbid]))))))
     (testing "Get block's classes properties"
       ;; set c2 as parent of c3
-      (let [c3 (db/get-page "class3")]
+      (let [c3 (db/get-page "class3")
+            conn (db/get-db false)]
         (db/transact! [{:db/id (:db/id c3)
-                        :class/parent (:db/id c2)}]))
-      (db-property-handler/class-add-property! repo c2id :user.property/property-3)
-      (db-property-handler/class-add-property! repo c2id :user.property/property-4)
+                        :class/parent (:db/id c2)}])
+        (outliner-property/class-add-property! conn c2id :user.property/property-3)
+        (outliner-property/class-add-property! conn c2id :user.property/property-4)
       (is (= 4 (count (:classes-properties
-                       (db-property-handler/get-block-classes-properties (:db/id (db/entity [:block/uuid fbid]))))))))))
+                       (outliner-property/get-block-classes-properties @conn (:db/id (db/entity [:block/uuid fbid])))))))))))
 
 
 ;; convert-property-input-string
@@ -210,7 +216,7 @@
     (let [test-uuid (random-uuid)]
       (are [x y]
            (= (let [[schema-type value] x]
-                (db-property-handler/convert-property-input-string schema-type value)) y)
+                (outliner-property/convert-property-input-string schema-type value)) y)
         [:number "1"] 1
         [:number "1.2"] 1.2
         [:url test-uuid] test-uuid
@@ -220,15 +226,17 @@
 
 (deftest upsert-property!
   (testing "Update an existing property"
-    (let [repo (state/get-current-repo)]
-      (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p0"})
-      (db-property-handler/upsert-property! repo :user.property/p0 {:type :default :cardinality :many} {})
+    (let [repo (state/get-current-repo)
+          conn (db/get-db false)]
+      (outliner-property/upsert-property! conn nil {:type :default} {:property-name "p0"})
+      (outliner-property/upsert-property! conn :user.property/p0 {:type :default :cardinality :many} {})
       (is (db-property/many? (db/entity repo :user.property/p0)))))
   (testing "Multiple properties that generate the same initial :db/ident"
-    (let [repo (state/get-current-repo)]
-      (db-property-handler/upsert-property! repo nil {:type :default} {:property-name "p1"})
-      (db-property-handler/upsert-property! repo nil {} {:property-name ":p1"})
-      (db-property-handler/upsert-property! repo nil {} {:property-name "1p1"})
+    (let [repo (state/get-current-repo)
+          conn (db/get-db false)]
+      (outliner-property/upsert-property! conn nil {:type :default} {:property-name "p1"})
+      (outliner-property/upsert-property! conn nil {} {:property-name ":p1"})
+      (outliner-property/upsert-property! conn nil {} {:property-name "1p1"})
 
       (is (= {:block/name "p1" :block/original-name "p1" :block/schema {:type :default}}
              (select-keys (db/entity repo :user.property/p1) [:block/name :block/original-name :block/schema]))
@@ -242,5 +250,101 @@
 
 ;; template (TBD, template implementation not settle down yet)
 ;; property-create-new-block-from-template
+
+(defn- get-value-ids
+  [k]
+  (map :block/uuid (:property/closed-values (db/entity k))))
+
+(defn- get-closed-values
+  "Get value from block ids"
+  [values]
+  (set (map #(:block/content (db/entity [:block/uuid %])) values)))
+
+;; closed values related
+;; upsert-closed-value
+;; add-existing-values-to-closed-values!
+;; delete-closed-value
+(deftest closed-values-test
+  (testing "Create properties and closed values"
+    (let [conn (db/get-db false)]
+      (outliner-property/set-block-property! conn fbid :user.property/property-1 "1" {})
+      (outliner-property/set-block-property! conn sbid :user.property/property-1 "2" {}))
+    (let [k :user.property/property-1
+          property (db/entity k)
+          conn (db/get-db false)]
+      (outliner-property/add-existing-values-to-closed-values! conn property [1 2])
+      (testing "Add existing values to closed values"
+        (let [values (get-value-ids k)]
+          (is (every? uuid? values))
+          (is (= #{1 2} (get-closed-values values)))
+          (is (every? #(contains? (:block/type (db/entity [:block/uuid %])) "closed value")
+                      values))))
+      (testing "Add non-numbers shouldn't work"
+        (let [result (outliner-property/upsert-closed-value! conn property {:value "not a number"})]
+          (is (= result :value-invalid))
+          (let [values (get-value-ids k)]
+            (is (= #{1 2} (get-closed-values values))))))
+
+      (testing "Add existing value"
+        (let [result (outliner-property/upsert-closed-value! conn property {:value 2})]
+          (is (= result :value-exists))))
+
+      (testing "Add new value"
+        (let [{:keys [block-id tx-data]} (outliner-property/upsert-closed-value! conn property {:value 3})]
+          (db/transact! tx-data)
+          (let [b (db/entity [:block/uuid block-id])]
+            (is (= 3 (:block/content b)))
+            (is (contains? (:block/type b) "closed value"))
+            (let [values (get-value-ids k)]
+              (is (= #{1 2 3} (get-closed-values values))))
+
+            (testing "Update closed value"
+              (let [{:keys [tx-data]} (outliner-property/upsert-closed-value! conn property {:id block-id
+                                                                                             :value 4
+                                                                                             :description "choice 4"})]
+                (db/transact! tx-data)
+                (let [b (db/entity [:block/uuid block-id])]
+                  (is (= 4 (:block/content b)))
+                  (is (= "choice 4" (:description (:block/schema b))))
+                  (is (contains? (:block/type b) "closed value"))
+                  (outliner-property/delete-closed-value! conn property (db/entity [:block/uuid block-id]))
+                  (testing "Delete closed value"
+                    (is (nil? (db/entity [:block/uuid block-id])))
+                    (is (= 2 (count (:property/closed-values (db/entity k)))))))))))))))
+
+;; property-create-new-block
+;; get-property-block-created-block
+(deftest text-block-test
+  (testing "Add property and create a block value"
+    (let [fb (db/entity [:block/uuid fbid])
+          k :user.property/property-1
+          conn (db/get-db false)]
+      ;; add property
+      (outliner-property/upsert-property! conn k {:type :default} {})
+      (let [property (db/entity k)
+            {:keys [block-id]} (outliner-property/create-property-text-block! conn fb property "Block content" editor-handler/wrap-parse-block)
+            {:keys [from-property-id]} (outliner-property/get-property-block-created-block @conn [:block/uuid block-id])]
+        (is (= from-property-id (:db/id property)))))))
+
+;; collapse-expand-property!
+(deftest collapse-expand-property-test
+  (testing "Collapse and expand property"
+    (let [conn (db/get-db false)
+          fb (db/entity [:block/uuid fbid])
+          k :user.property/property-1]
+      ;; add property
+      (outliner-property/upsert-property! conn k {:type :default} {})
+      (let [property (db/entity k)]
+        (outliner-property/create-property-text-block! conn fb property "Block content" editor-handler/wrap-parse-block)
+            ;; collapse property-1
+        (outliner-property/collapse-expand-property! conn fb property true)
+        (is (=
+             [(:db/id property)]
+             (map :db/id (:block/collapsed-properties (db/entity [:block/uuid fbid])))))
+
+            ;; expand property-1
+        (outliner-property/collapse-expand-property! conn fb property false)
+        (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid]))))))))
+
 
 #_(cljs.test/run-tests)

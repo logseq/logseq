@@ -55,9 +55,3 @@
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
     (db-property/get-closed-property-values db property-id)))
-
-(defn get-closed-value-entity-by-name
-  [property-id value-name]
-  (let [repo (state/get-current-repo)
-        db (db/get-db repo)]
-    (db-property/get-closed-value-entity-by-name db property-id value-name)))

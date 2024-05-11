@@ -51,7 +51,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.property.util :as pu]
-            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.outliner.property :as outliner-property]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.intent :as mobile-intent]
             [frontend.modules.outliner.tree :as tree]
@@ -634,7 +634,7 @@
            :on-pointer-down
            (fn [e]
              (util/stop e)
-             (db-property-handler/delete-property-value! repo
+             (outliner-property/delete-property-value! repo
                                                          block
                                                          :block/tags
                                                          (:db/id page-entity)))}
@@ -2267,7 +2267,7 @@
 
 (rum/defc block-closed-values-properties
   [block]
-  (let [closed-values-properties (db-property-handler/get-block-other-position-properties (:db/id block))]
+  (let [closed-values-properties (outliner-property/get-block-other-position-properties (db/get-db) (:db/id block))]
     (when (seq closed-values-properties)
       [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-full
        (for [pid closed-values-properties]

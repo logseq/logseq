@@ -10,7 +10,7 @@
             [frontend.db.async :as db-async]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
-            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.outliner.property :as outliner-property]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
@@ -111,7 +111,7 @@
               (js/confirm "Are you sure you want to delete this property?"))
       (let [repo (state/get-current-repo)
             f (if (and class? class-schema?)
-                db-property-handler/class-remove-property!
+                outliner-property/class-remove-property!
                 property-handler/remove-block-property!)
             property-id (:db/ident property)]
         (f repo (:block/uuid block) property-id)))))
@@ -240,7 +240,7 @@
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
-                                                        (db-property-handler/upsert-property!
+                                                        (outliner-property/upsert-property!
                                                          (state/get-current-repo)
                                                          (:db/ident property)
                                                          (:block/schema property)
@@ -248,7 +248,7 @@
 
               (when icon-value
                 [:a.fade-link.flex {:on-click (fn [_e]
-                                                (db-property-handler/remove-block-property!
+                                                (outliner-property/remove-block-property!
                                                  (state/get-current-repo)
                                                  (:db/ident property)
                                                  :logseq.property/icon))
@@ -405,7 +405,7 @@
         (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/<add-property! entity property-uuid-or-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (p/do!
-           (db-property-handler/upsert-property! repo nil {} {:property-name property-uuid-or-name})
+           (outliner-property/upsert-property! repo nil {} {:property-name property-uuid-or-name})
            true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
@@ -518,7 +518,7 @@
            new-property?
            (property-input block *property-key *property-value opts)
 
-           (and (or (db-property-handler/block-has-viewable-properties? block)
+           (and (or (outliner-property/block-has-viewable-properties? block)
                     (:page-configure? opts))
                 (not config/publishing?)
                 (not (:in-block-container? opts)))
@@ -574,7 +574,7 @@
        [:a.block-control
         {:on-click (fn [event]
                      (util/stop event)
-                     (db-property-handler/collapse-expand-property! repo block property (not collapsed?)))}
+                     (outliner-property/collapse-expand-property! repo block property (not collapsed?)))}
         [:span {:class (cond
                          (or collapsed? @*hover?)
                          "control-show cursor-pointer"
@@ -588,7 +588,7 @@
                          {:on-chosen
                           (fn [_e icon]
                             (when icon
-                              (p/let [_ (db-property-handler/upsert-property! repo
+                              (p/let [_ (outliner-property/upsert-property! repo
                                                                               (:db/ident property)
                                                                               (:block/schema property)
                                                                               {:properties {:logseq.property/icon icon}})]
@@ -724,7 +724,7 @@
 (defn- async-load-classes!
   [block]
   (let [repo (state/get-current-repo)
-        classes (concat (:block/tags block) (db-property-handler/get-class-parents (:block/tags block)))]
+        classes (concat (:block/tags block) (outliner-property/get-class-parents (:block/tags block)))]
     (doseq [class classes]
       (db-async/<get-block repo (:db/id class) :children? false))
     classes))
@@ -762,7 +762,7 @@
                                                     (and (not (get-in ent [:block/schema :public?]))
                                                          (ldb/built-in? ent))))))
                                              properties))
-        {:keys [classes all-classes classes-properties]} (db-property-handler/get-block-classes-properties (:db/id block))
+        {:keys [classes all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
         one-class? (= 1 (count classes))
         block-own-properties (->> (concat (when (seq (:block/alias block))
                                             [[:block/alias (:block/alias block)]])
