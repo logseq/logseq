@@ -7,67 +7,112 @@
   nil)
 
 (defn- op-transact!
-  [fn-var & args]
-  {:pre [(var? fn-var)]}
+  [result]
   (when (nil? *outliner-ops*)
-    (throw (js/Error. (str (:name (meta fn-var)) " is not used in (transact! ...)"))))
-  (let [result (apply @fn-var args)]
-    (conj! *outliner-ops* result)
-    result))
-
-(defn save-block
-  [block opts]
-  (when-let [block' (if (de/entity? block)
-                      (assoc (.-kv ^js block) :db/id (:db/id block))
-                      block)]
-    [:save-block [block' opts]]))
-
-(defn insert-blocks
-  [blocks target-block opts]
-  (let [id (:db/id target-block)]
-    [:insert-blocks [blocks id opts]]))
-
-(defn delete-blocks
-  [blocks opts]
-  (let [ids (map :db/id blocks)]
-    [:delete-blocks [ids opts]]))
-
-(defn move-blocks
-  [blocks target-block sibling?]
-  (let [ids (map :db/id blocks)
-        target-id (:db/id target-block)]
-    [:move-blocks [ids target-id sibling?]]))
-
-(defn move-blocks-up-down
-  [blocks up?]
-  (let [ids (map :db/id blocks)]
-    [:move-blocks-up-down [ids up?]]))
-
-(defn indent-outdent-blocks
-  [blocks indent? & {:as opts}]
-  (let [ids (map :db/id blocks)]
-    [:indent-outdent-blocks [ids indent? opts]]))
+    (throw (js/Error. (str (name (first result)) " not used in (transact! ...)"))))
+  (conj! *outliner-ops* result)
+  result)
 
 (defn save-block!
   [block & {:as opts}]
-  (op-transact! #'save-block block opts))
+  (op-transact!
+   (when-let [block' (if (de/entity? block)
+                       (assoc (.-kv ^js block) :db/id (:db/id block))
+                       block)]
+     [:save-block [block' opts]])))
 
 (defn insert-blocks!
   [blocks target-block opts]
-  (op-transact! #'insert-blocks blocks target-block opts))
+  (op-transact!
+   (let [id (:db/id target-block)]
+    [:insert-blocks [blocks id opts]])))
 
 (defn delete-blocks!
   [blocks opts]
-  (op-transact! #'delete-blocks blocks opts))
+  (op-transact!
+   (let [ids (map :db/id blocks)]
+    [:delete-blocks [ids opts]])))
 
 (defn move-blocks!
   [blocks target-block sibling?]
-  (op-transact! #'move-blocks blocks target-block sibling?))
+  (op-transact!
+   (let [ids (map :db/id blocks)
+        target-id (:db/id target-block)]
+    [:move-blocks [ids target-id sibling?]])))
 
 (defn move-blocks-up-down!
   [blocks up?]
-  (op-transact! #'move-blocks-up-down blocks up?))
+  (op-transact!
+   (let [ids (map :db/id blocks)]
+    [:move-blocks-up-down [ids up?]])))
 
 (defn indent-outdent-blocks!
   [blocks indent? & {:as opts}]
-  (op-transact! #'indent-outdent-blocks blocks indent? opts))
+  (op-transact!
+   (let [ids (map :db/id blocks)]
+    [:indent-outdent-blocks [ids indent? opts]])))
+
+(defn upsert-property!
+  [property-id schema property-opts]
+  (op-transact!
+   [:upsert-property [property-id schema property-opts]]))
+
+(defn set-block-property!
+  [block-eid property-id value property-opts]
+  (op-transact!
+   [:set-block-property [block-eid property-id value property-opts]]))
+
+(defn remove-block-property!
+  [block-eid property-id]
+  (op-transact!
+   [:remove-block-property [block-eid property-id]]))
+
+(defn delete-property-value!
+  [block-eid property-id property-value]
+  (op-transact!
+   [:delete-property-value [block-eid property-id property-value]]))
+
+(defn create-property-text-block!
+  [block-id property-id value opts]
+  (op-transact!
+   [:create-property-text-block [block-id property-id value opts]]))
+
+(defn collapse-expand-block-property!
+  [block-id property-id collapse?]
+  (op-transact!
+   [:collapse-expand-block-property [block-id property-id collapse?]]))
+
+(defn batch-set-property!
+  [block-ids property-id value]
+  (op-transact!
+   [:batch-set-property [block-ids property-id value]]))
+
+(defn batch-remove-property!
+  [block-ids property-id]
+  (op-transact!
+   [:batch-remove-property [block-ids property-id]]))
+
+(defn class-add-property!
+  [class-id property-id]
+  (op-transact!
+   [:class-add-property [class-id property-id]]))
+
+(defn class-remove-property!
+  [class-id property-id]
+  (op-transact!
+   [:class-remove-property [class-id property-id]]))
+
+(defn upsert-closed-value!
+  [property-id closed-value-config]
+  (op-transact!
+   [:upsert-closed-value [property-id closed-value-config]]))
+
+(defn delete-closed-value!
+  [property-id value-block-id]
+  (op-transact!
+   [:delete-closed-value [property-id value-block-id]]))
+
+(defn add-existing-values-to-closed-values!
+  [property-id values]
+  (op-transact!
+   [:add-existing-values-to-closed-values [property-id values]]))

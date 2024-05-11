@@ -26,7 +26,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [frontend.handler.file-based.status :as file-based-status]
-            [logseq.outliner.property :as outliner-property]))
+            [frontend.handler.db-based.property :as db-property-handler]))
 
 ;; TODO: move to frontend.handler.editor.commands
 
@@ -661,7 +661,7 @@
 (defn- db-based-set-status
   [status]
   (when-let [block (state/get-edit-block)]
-    (outliner-property/batch-set-property-closed-value! (db/get-db false) [(:block/uuid block)] :logseq.task/status status)))
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/status status)))
 
 (defmethod handle-step :editor/set-status [[_ status] format]
   (if (config/db-based-graph? (state/get-current-repo))
@@ -681,7 +681,7 @@
 (defn- db-based-set-priority
   [priority]
   (when-let [block (state/get-edit-block)]
-    (outliner-property/batch-set-property-closed-value! (db/get-db false) [(:block/uuid block)] :logseq.task/priority priority)))
+    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/priority priority)))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
   (if (config/db-based-graph? (state/get-current-repo))

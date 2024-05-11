@@ -1,6 +1,6 @@
 (ns frontend.handler.property
   "Property fns for both file and DB graphs"
-  (:require [logseq.outliner.property :as outliner-property]
+  (:require [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.config :as config]
@@ -10,7 +10,7 @@
   [repo block-id property-id-or-key]
   (if (config/db-based-graph? repo)
     (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
-      (outliner-property/remove-block-property! repo eid property-id-or-key))
+      (db-property-handler/remove-block-property! eid property-id-or-key))
     (file-property-handler/remove-block-property! block-id property-id-or-key)))
 
 (defn set-block-property!
@@ -18,8 +18,8 @@
   (if (config/db-based-graph? repo)
     (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
       (if (or (nil? v) (and (coll? v) (empty? v)))
-       (outliner-property/remove-block-property! repo eid key)
-       (outliner-property/set-block-property! repo eid key v opts)))
+        (db-property-handler/remove-block-property! eid key)
+       (db-property-handler/set-block-property! eid key v opts)))
     (file-property-handler/set-block-property! block-id key v)))
 
 (defn add-page-property!
@@ -56,13 +56,13 @@
 (defn batch-remove-block-property!
   [repo block-ids key]
   (if (config/db-based-graph? repo)
-    (outliner-property/batch-remove-property! repo block-ids key)
+    (db-property-handler/batch-remove-property! block-ids key)
     (file-property-handler/batch-remove-block-property! block-ids key)))
 
 (defn batch-set-block-property!
   [repo block-ids key value]
   (if (config/db-based-graph? repo)
     (if (nil? value)
-      (outliner-property/batch-remove-property! repo block-ids key)
-      (outliner-property/batch-set-property! repo block-ids key value))
+      (db-property-handler/batch-remove-property! block-ids key)
+      (db-property-handler/batch-set-property! block-ids key value))
     (file-property-handler/batch-set-block-property! block-ids key value)))

@@ -51,6 +51,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property :as db-property-handler]
             [logseq.outliner.property :as outliner-property]
             [frontend.mobile.util :as mobile-util]
             [frontend.mobile.intent :as mobile-intent]
@@ -634,8 +635,7 @@
            :on-pointer-down
            (fn [e]
              (util/stop e)
-             (outliner-property/delete-property-value! repo
-                                                         block
+             (db-property-handler/delete-property-value! (:db/id block)
                                                          :block/tags
                                                          (:db/id page-entity)))}
           (ui/icon "x" {:size 15})]))]))

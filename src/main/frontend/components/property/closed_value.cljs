@@ -10,6 +10,7 @@
             [frontend.components.icon :as icon-component]
             [frontend.handler.property :as property-handler]
             [logseq.outliner.property :as outliner-property]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.config :as config]
             [frontend.components.property.value :as property-value]
             [frontend.db :as db]
@@ -21,13 +22,19 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.core :as outliner-core]))
 
+(defn- re-init-commands!
+  "Update commands after task status and priority's closed values has been changed"
+  [property]
+  (when (contains? #{:logseq.task/status :logseq.task/priority} (:db/ident property))
+    (state/pub-event! [:init/commands])))
+
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
-  (p/let [{:keys [block-id tx-data]} (outliner-property/upsert-closed-value! (db/get-db false) property item)]
+  (p/let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value! property item)]
     (p/do!
      (when (seq tx-data) (db/transact! (state/get-current-repo) tx-data {:outliner-op :upsert-closed-value}))
-     (when (seq tx-data) (outliner-property/re-init-commands! property))
+     (when (seq tx-data) (re-init-commands! property))
      block-id)))
 
 (rum/defc item-value
@@ -164,7 +171,9 @@
        (assoc opts
               :delete-choice
               (fn []
-                (outliner-property/delete-closed-value! (db/get-db false) property block))
+                (p/do!
+                 (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
+                 (re-init-commands! property)))
               :update-icon
               (fn [icon]
                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon icon)))
@@ -185,7 +194,7 @@
    (ui/button
     "Add choices"
     {:on-click (fn []
-                 (p/let [_ (outliner-property/add-existing-values-to-closed-values! (db/get-db false) property values)]
+                 (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property) values)]
                    (toggle-fn)))})])
 
 (rum/defc choices < rum/reactive

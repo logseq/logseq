@@ -11,6 +11,7 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
             [logseq.outliner.property :as outliner-property]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
@@ -110,11 +111,11 @@
             ;; Only ask for confirmation on class schema properties
               (js/confirm "Are you sure you want to delete this property?"))
       (let [repo (state/get-current-repo)
-            f (if (and class? class-schema?)
-                outliner-property/class-remove-property!
-                property-handler/remove-block-property!)
+            [f id] (if (and class? class-schema?)
+                     [db-property-handler/class-remove-property! (:db/id block)]
+                     [property-handler/remove-block-property! (:block/uuid block)])
             property-id (:db/ident property)]
-        (f repo (:block/uuid block) property-id)))))
+        (f repo id property-id)))))
 
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
@@ -240,16 +241,14 @@
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
                                           {:on-chosen (fn [_e icon]
-                                                        (outliner-property/upsert-property!
-                                                         (state/get-current-repo)
+                                                        (db-property-handler/upsert-property!
                                                          (:db/ident property)
                                                          (:block/schema property)
                                                          {:properties {:logseq.property/icon icon}}))})
 
               (when icon-value
                 [:a.fade-link.flex {:on-click (fn [_e]
-                                                (outliner-property/remove-block-property!
-                                                 (state/get-current-repo)
+                                                (db-property-handler/remove-block-property!
                                                  (:db/ident property)
                                                  :logseq.property/icon))
                                     :title "Delete this icon"}
@@ -405,7 +404,7 @@
         (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/<add-property! entity property-uuid-or-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (p/do!
-           (outliner-property/upsert-property! repo nil {} {:property-name property-uuid-or-name})
+           (db-property-handler/upsert-property! nil {} {:property-name property-uuid-or-name})
            true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))
@@ -574,7 +573,7 @@
        [:a.block-control
         {:on-click (fn [event]
                      (util/stop event)
-                     (outliner-property/collapse-expand-property! repo block property (not collapsed?)))}
+                     (db-property-handler/collapse-expand-block-property! (:db/id block) (:db/id property) (not collapsed?)))}
         [:span {:class (cond
                          (or collapsed? @*hover?)
                          "control-show cursor-pointer"
@@ -588,8 +587,7 @@
                          {:on-chosen
                           (fn [_e icon]
                             (when icon
-                              (p/let [_ (outliner-property/upsert-property! repo
-                                                                              (:db/ident property)
+                              (p/let [_ (db-property-handler/upsert-property! (:db/ident property)
                                                                               (:block/schema property)
                                                                               {:properties {:logseq.property/icon icon}})]
                                 (shui/popup-hide! id))))}))]

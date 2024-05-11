@@ -2,7 +2,6 @@
   "Property related operations"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [datascript.impl.entity :as e]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -308,19 +307,20 @@
 
 (defn delete-property-value!
   "Delete value if a property has multiple values"
-  [conn block property-id property-value]
+  [conn block-eid property-id property-value]
   (when-let [property (d/entity @conn property-id)]
-    (when (and block (not= property-id (:db/ident block)) (db-property/many? property))
-      (d/transact! conn
-                   [[:db/retract (:db/id block) property-id property-value]]
-                   {:outliner-op :save-block}))))
+    (let [block (d/entity @conn block-eid)]
+      (when (and block (not= property-id (:db/ident block)) (db-property/many? property))
+       (d/transact! conn
+                    [[:db/retract (:db/id block) property-id property-value]]
+                    {:outliner-op :save-block})))))
 
-(defn collapse-expand-property!
+(defn collapse-expand-block-property!
   "Notice this works only if the value itself if a block (property type should be either :default or :template)"
-  [conn block property collapse?]
+  [conn block-id property-id collapse?]
   (let [f (if collapse? :db/add :db/retract)]
     (d/transact! conn
-                 [[f (:db/id block) :block/collapsed-properties (:db/id property)]]
+                 [[f block-id :block/collapsed-properties property-id]]
                  {:outliner-op :save-block})))
 
 (defn get-class-parents
@@ -379,48 +379,30 @@
      (and (seq properties)
           (not= properties [:logseq.property/icon])))))
 
-(defn property-create-new-block-from-template
-  [block property template]
-  (let [block-id (ldb/new-block-id)
-        new-block (-> {:block/uuid block-id
-                       :block/format :markdown
-                       :block/content ""
-                       :block/tags #{(:db/id template)}
-                       :block/page (if (:block/page block)
-                                     (:db/id (:block/page block))
-                                     ;; page block
-                                     (:db/id block))
-                       :block/parent (:db/id block)
-                       :logseq.property/created-from-property (:db/id property)
-                       :logseq.property/created-from-template [:block/uuid (:block/uuid template)]}
-                      sqlite-util/block-with-timestamps)]
-    new-block))
-
-(defn re-init-commands!
-  "Update commands after task status and priority's closed values has been changed"
-  [property]
-  ;; (when (contains? #{:logseq.task/status :logseq.task/priority} (:db/ident property))
-  ;;   (state/pub-event! [:init/commands]))
-  )
-
 (defn create-property-text-block!
-  [conn block property value parse-block]
-  (assert (e/entity? property))
-  (let [new-value-block (db-property-build/build-property-value-block block property value parse-block)]
-    (d/transact! conn [new-value-block] {:outliner-op :insert-blocks})
-    (let [property-id (:db/ident property)
-          result (when property-id
-                   (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
-                     (set-block-property! conn (:db/id block) property-id block-id {})))]
-      {:block-id (:block/uuid new-value-block)
-       :result result})))
+  "`template-id`: which template the new block belongs to"
+  [conn block-id property-id value {:keys [template-id]}]
+  (let [property (d/entity @conn property-id)
+        block (when block-id (d/entity @conn block-id))]
+    (when property
+      (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
+                              (int? template-id)
+                              (assoc :block/tags template-id
+                                     :logseq.property/created-from-template template-id))]
+        (d/transact! conn [new-value-block] {:outliner-op :insert-blocks})
+        (let [property-id (:db/ident property)]
+          (when (and property-id block)
+            (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
+              (set-block-property! conn (:db/id block) property-id block-id {})))
+          (:block/uuid new-value-block))))))
 
 (defn upsert-closed-value!
   "id should be a block UUID or nil"
-  [conn property {:keys [id value icon description]
+  [conn property-id {:keys [id value icon description]
                   :or {description ""}}]
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
+        property (d/entity db property-id)
         property-type (get-in property [:block/schema :type] :default)]
     (when (contains? db-property-type/closed-value-property-types property-type)
       (let [property (d/entity @conn (:db/id property))
@@ -429,7 +411,10 @@
             closed-values (:property/closed-values property)
             default-closed-values? (and (= :default property-type) (seq closed-values))
             value (if (and default-closed-values? (string? value) (not (string/blank? value)))
-                    (let [result (create-property-text-block! conn nil property value nil)]
+                    (let [result (create-property-text-block! conn nil
+                                                              (:db/id property)
+                                                              value
+                                                              {})]
                       (:db/id (d/entity @conn [:block/uuid (:block-id result)])))
                     value)
             resolved-value (try
@@ -489,37 +474,37 @@
 
 (defn add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids"
-  [conn property values]
-  (assert (e/entity? property))
-  (when (seq values)
-    (let [values' (remove string/blank? values)]
-      (assert (every? uuid? values') "existing values should all be UUIDs")
-      (let [values (keep #(d/entity @conn [:block/uuid %]) values')]
-        (when (seq values)
-          (let [value-property-tx (map (fn [id]
-                                         {:db/id id
-                                          :block/type "closed value"
-                                          :block/closed-value-property (:db/id property)})
-                                       (map :db/id values))
-                property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
-            (d/transact! conn (cons property-tx value-property-tx)
-                         {:outliner-op :save-blocks})))))))
+  [conn property-id values]
+  (when-let [property (d/entity @conn property-id)]
+    (when (seq values)
+      (let [values' (remove string/blank? values)]
+        (assert (every? uuid? values') "existing values should all be UUIDs")
+        (let [values (keep #(d/entity @conn [:block/uuid %]) values')]
+          (when (seq values)
+            (let [value-property-tx (map (fn [id]
+                                           {:db/id id
+                                            :block/type "closed value"
+                                            :block/closed-value-property (:db/id property)})
+                                         (map :db/id values))
+                  property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
+              (d/transact! conn (cons property-tx value-property-tx)
+                           {:outliner-op :save-blocks}))))))))
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"
-  [conn property value-block]
-  (cond
-    (ldb/built-in? value-block)
-    (do
+  [conn property-id value-block-id]
+  (when-let [value-block (d/entity @conn value-block-id)]
+    (cond
+      (ldb/built-in? value-block)
+      (do
       ;; (notification/show! "The choice can't be deleted because it's built-in." :warning)
-      false)
+        false)
 
-    :else
-    (let [property (d/entity @conn (:db/id property))
-          tx-data [[:db/retractEntity (:db/id value-block)]
-                   (outliner-core/block-with-updated-at
-                    {:db/id (:db/id property)})]]
-      (d/transact! conn tx-data))))
+      :else
+      (let [tx-data [[:db/retractEntity (:db/id value-block)]
+                     (outliner-core/block-with-updated-at
+                      {:db/id property-id})]]
+        (d/transact! conn tx-data)))))
 
 (defn get-property-block-created-block
   "Get the root block and property that created this property block."
@@ -528,18 +513,9 @@
         created-from-property (:logseq.property/created-from-property block)]
     {:from-property-id (:db/id created-from-property)}))
 
-(defn batch-set-property-closed-value!
-  [conn block-ids db-ident closed-value]
-  (if-let [closed-value-entity (db-property/get-closed-value-entity-by-name @conn db-ident closed-value)]
-    (batch-set-property! conn
-                         block-ids
-                         db-ident
-                         (:db/id closed-value-entity))
-    (js/console.error (str "No entity found for closed value " (pr-str closed-value)))))
-
 (defn class-add-property!
-  [conn class-uuid property-id]
-  (when-let [class (d/entity @conn [:block/uuid class-uuid])]
+  [conn class-id property-id]
+  (when-let [class (d/entity @conn class-id)]
     (when (contains? (:block/type class) "class")
       (let [[db-ident property options]
             ;; strings come from user
@@ -566,8 +542,8 @@
                      {:outliner-op :save-block})))))
 
 (defn class-remove-property!
-  [conn class-uuid property-id]
-  (when-let [class (d/entity @conn [:block/uuid class-uuid])]
+  [conn class-id property-id]
+  (when-let [class (d/entity @conn class-id)]
     (when (contains? (:block/type class) "class")
       (when-let [property (d/entity @conn property-id)]
         (when-not (ldb/built-in-class-property? class property)

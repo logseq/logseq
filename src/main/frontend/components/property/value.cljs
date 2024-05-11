@@ -11,6 +11,7 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
             [logseq.outliner.property :as outliner-property]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
@@ -38,16 +39,14 @@
      (icon-component/icon-picker icon-value
                                  {:disabled? config/publishing?
                                   :on-chosen (fn [_e icon]
-                                               (outliner-property/set-block-property!
-                                                (state/get-current-repo)
+                                               (db-property-handler/set-block-property!
                                                 (:db/id block)
                                                 :logseq.property/icon
                                                 icon
                                                 {}))})
      (when (and icon-value (not config/publishing?))
        [:a.fade-link.flex {:on-click (fn [_e]
-                                       (outliner-property/remove-block-property!
-                                        (state/get-current-repo)
+                                       (db-property-handler/remove-block-property!
                                         (:db/id block)
                                         :logseq.property/icon))
                            :title "Delete this icon"}
@@ -70,9 +69,11 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (p/let [{:keys [block-id result]} (outliner-property/create-property-text-block!
-                                     (db/get-db false)
-                                     block property value editor-handler/wrap-parse-block)]
+  (p/let [{:keys [block-id result]} (db-property-handler/create-property-text-block!
+                                     (:db/id block)
+                                     (:db/id property)
+                                     value
+                                     {})]
     (p/do!
      result
      (exit-edit-property)
@@ -93,7 +94,7 @@
      (p/do!
       (when property-key
         (if (and class? class-schema?)
-          (outliner-property/class-add-property! repo (:block/uuid block) property-key)
+          (db-property-handler/class-add-property! (:db/id block) property-key)
           (let [[property-id property-value']
                 (if (string? property-key)
                   (if-let [ent (ldb/get-case-page (db/get-db repo) property-key)]
@@ -377,11 +378,15 @@
 (defn <create-new-block-from-template!
   "`template`: tag block"
   [block property template]
-  (let [repo (state/get-current-repo)
-        new-block (outliner-property/property-create-new-block-from-template block property template)]
-    (p/let [_ (db/transact! repo [new-block] {:outliner-op :insert-blocks})
-            _ (<add-property! block (:db/ident property) (:block/uuid new-block))]
-      new-block)))
+  (p/let [block-id (db-property-handler/create-property-text-block!
+                    (:db/id block)
+                    (:db/id property)
+                    ""
+                    {:template-id (:db/id template)})
+          new-block (db/entity [:block/uuid block-id])]
+    (shui/popup-hide!)
+    (exit-edit-property)
+    new-block))
 
 (rum/defcs select < rum/reactive
   {:init (fn [state]
@@ -821,7 +826,7 @@
          [editing?])
 
         (if (and dropdown? (not editing?))
-          (let [toggle-fn #(shui/popup-hide!)
+          (let [toggle-fn shui/popup-hide!
                 content-fn (fn [{:keys [_id content-props]}]
                              (select-cp {:content-props content-props}))]
             [:div.multi-values.jtrigger

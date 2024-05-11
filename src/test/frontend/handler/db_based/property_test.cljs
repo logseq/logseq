@@ -6,8 +6,7 @@
             [datascript.core :as d]
             [frontend.state :as state]
             [frontend.handler.page :as page-handler]
-            [logseq.db.frontend.property :as db-property]
-            [frontend.handler.editor :as editor-handler]))
+            [logseq.db.frontend.property :as db-property]))
 
 (def repo test-helper/test-db-name-db-version)
 
@@ -165,8 +164,8 @@
         _ (page-handler/create! "class3" opts)
         c1 (db/get-page "class1")
         c2 (db/get-page "class2")
-        c1id (:block/uuid c1)
-        c2id (:block/uuid c2)]
+        c1id (:db/id c1)
+        c2id (:db/id c2)]
 
     (testing "Create classes"
       (are [x y] (= x y)
@@ -272,7 +271,7 @@
     (let [k :user.property/property-1
           property (db/entity k)
           conn (db/get-db false)]
-      (outliner-property/add-existing-values-to-closed-values! conn property [1 2])
+      (outliner-property/add-existing-values-to-closed-values! conn (:db/id property) [1 2])
       (testing "Add existing values to closed values"
         (let [values (get-value-ids k)]
           (is (every? uuid? values))
@@ -280,17 +279,17 @@
           (is (every? #(contains? (:block/type (db/entity [:block/uuid %])) "closed value")
                       values))))
       (testing "Add non-numbers shouldn't work"
-        (let [result (outliner-property/upsert-closed-value! conn property {:value "not a number"})]
+        (let [result (outliner-property/upsert-closed-value! conn (:db/id property) {:value "not a number"})]
           (is (= result :value-invalid))
           (let [values (get-value-ids k)]
             (is (= #{1 2} (get-closed-values values))))))
 
       (testing "Add existing value"
-        (let [result (outliner-property/upsert-closed-value! conn property {:value 2})]
+        (let [result (outliner-property/upsert-closed-value! conn (:db/id property) {:value 2})]
           (is (= result :value-exists))))
 
       (testing "Add new value"
-        (let [{:keys [block-id tx-data]} (outliner-property/upsert-closed-value! conn property {:value 3})]
+        (let [{:keys [block-id tx-data]} (outliner-property/upsert-closed-value! conn (:db/id property) {:value 3})]
           (db/transact! tx-data)
           (let [b (db/entity [:block/uuid block-id])]
             (is (= 3 (:block/content b)))
@@ -299,15 +298,15 @@
               (is (= #{1 2 3} (get-closed-values values))))
 
             (testing "Update closed value"
-              (let [{:keys [tx-data]} (outliner-property/upsert-closed-value! conn property {:id block-id
-                                                                                             :value 4
-                                                                                             :description "choice 4"})]
+              (let [{:keys [tx-data]} (outliner-property/upsert-closed-value! conn (:db/id property) {:id block-id
+                                                                                               :value 4
+                                                                                               :description "choice 4"})]
                 (db/transact! tx-data)
                 (let [b (db/entity [:block/uuid block-id])]
                   (is (= 4 (:block/content b)))
                   (is (= "choice 4" (:description (:block/schema b))))
                   (is (contains? (:block/type b) "closed value"))
-                  (outliner-property/delete-closed-value! conn property (db/entity [:block/uuid block-id]))
+                  (outliner-property/delete-closed-value! conn (:db/id property) (:db/id (db/entity [:block/uuid block-id])))
                   (testing "Delete closed value"
                     (is (nil? (db/entity [:block/uuid block-id])))
                     (is (= 2 (count (:property/closed-values (db/entity k)))))))))))))))
@@ -322,7 +321,7 @@
       ;; add property
       (outliner-property/upsert-property! conn k {:type :default} {})
       (let [property (db/entity k)
-            {:keys [block-id]} (outliner-property/create-property-text-block! conn fb property "Block content" editor-handler/wrap-parse-block)
+            {:keys [block-id]} (outliner-property/create-property-text-block! conn (:db/id fb) (:db/id property) "Block content" {})
             {:keys [from-property-id]} (outliner-property/get-property-block-created-block @conn [:block/uuid block-id])]
         (is (= from-property-id (:db/id property)))))))
 
@@ -335,15 +334,19 @@
       ;; add property
       (outliner-property/upsert-property! conn k {:type :default} {})
       (let [property (db/entity k)]
-        (outliner-property/create-property-text-block! conn fb property "Block content" editor-handler/wrap-parse-block)
+        (outliner-property/create-property-text-block! conn
+                                                       (:db/id fb)
+                                                       (:db/id property)
+                                                       "Block content"
+                                                       {})
             ;; collapse property-1
-        (outliner-property/collapse-expand-property! conn fb property true)
+        (outliner-property/collapse-expand-block-property! conn (:db/id fb) (:db/id property) true)
         (is (=
              [(:db/id property)]
              (map :db/id (:block/collapsed-properties (db/entity [:block/uuid fbid])))))
 
             ;; expand property-1
-        (outliner-property/collapse-expand-property! conn fb property false)
+        (outliner-property/collapse-expand-block-property! conn (:db/id fb) (:db/id property) false)
         (is (nil? (:block/collapsed-properties (db/entity [:block/uuid fbid]))))))))
 
 

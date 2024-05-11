@@ -76,8 +76,8 @@
         class1 (db/get-page "class1")
         class2 (db/get-page "class2")]
     (outliner-property/upsert-property! repo :user.property/property-1 {:type :page} {})
-    (outliner-property/class-add-property! repo (:block/uuid class1) :user.property/property-1)
-    (outliner-property/class-add-property! repo (:block/uuid class2) :user.property/property-1)
+    (outliner-property/class-add-property! repo (:db/id class1) :user.property/property-1)
+    (outliner-property/class-add-property! repo (:db/id class2) :user.property/property-1)
     (let [property (db/entity :user.property/property-1)
           classes (model/get-classes-with-property (:db/ident property))]
       (is (= (set (map :db/id classes))

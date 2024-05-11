@@ -15,7 +15,6 @@
   (every? (fn [id]
             (:hide? (:block/schema (db/entity id)))) properties))
 
-;; FIXME: property no long has `:block/name` attribute
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
   property names and property values dereferenced where possible. A property's
