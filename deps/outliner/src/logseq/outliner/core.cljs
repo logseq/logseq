@@ -704,7 +704,7 @@
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
-  [conn date-formatter blocks delete-opts]
+  [_repo conn date-formatter blocks delete-opts]
   [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
@@ -937,8 +937,8 @@
   (op-transact! #'insert-blocks repo conn blocks target-block (assoc opts :outliner-op :insert-blocks)))
 
 (defn delete-blocks!
-  [_repo conn date-formatter blocks opts]
-  (op-transact! #'delete-blocks conn date-formatter blocks (assoc opts :outliner-op :delete-blocks)))
+  [repo conn date-formatter blocks opts]
+  (op-transact! #'delete-blocks repo conn date-formatter blocks (assoc opts :outliner-op :delete-blocks)))
 
 (defn move-blocks!
   [repo conn blocks target-block sibling?]
