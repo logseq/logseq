@@ -1,0 +1,4 @@
+[submodule "packages/ui/primitives"]
+	path = packages/ui/primitives
+	url = https://github.com/xyhp915/primitives.git
+	shallow = true
