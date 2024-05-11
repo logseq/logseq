@@ -4,7 +4,6 @@
             [malli.core :as m]
             [malli.transform :as mt]))
 
-
 (def general-attrs-schema-coll
   [[:updated-at {:optional true} :int]
    [:created-at {:optional true} :int]
@@ -22,13 +21,85 @@
 (def general-attr-set
   (into #{} (map first) general-attrs-schema-coll))
 
-(def block-type-schema [:enum "property" "class" "whiteboard" "hidden" "closed value" "macro"])
+;; (def block-type-schema [:enum "property" "class" "whiteboard" "hidden" "closed value" "macro"])
+
+;; (def block-pos-type-schema
+;;   [:enum :sibling :child :no-order])
+
 (def block-pos-schema
   ":sibling:  sibling of target-block(:target-uuid)
   :child: child of target-block(:target-uuid)
-  :no-order: this block doesn't have :block/order attr"
-  [:enum :sibling :child :no-order])
+  :no-order: this block doesn't have :block/order attr
+  :no-parent-sibling: this block doesn't have :block/parent,
+                      and it's sibling of target-uuid(if nil, it's the first one)"
+  [:catn
+   [:target-uuid [:maybe :uuid]]
+   [:pos [:enum :sibling :child :no-order :no-parent-sibling]]])
 
+(comment
+  (def to-ws-op-schema-deprecated
+    "TODO: remove this schema"
+    [:multi {:dispatch first :decode/string #(update % 0 keyword)}
+     [:move
+      [:cat :keyword
+       [:map
+        [:block-uuid :uuid]
+        [:target-uuid :uuid]
+        [:pos block-pos-type-schema]]]]
+     [:remove
+      [:cat :keyword
+       [:map
+        [:block-uuids [:sequential :uuid]]]]]
+
+     [:update
+      [:cat :keyword
+       [:map
+        [:block-uuid :uuid]
+        [:target-uuid {:optional true} :uuid]
+        [:pos {:optional true} block-pos-type-schema]
+        [:content {:optional true} :string]
+        [:updated-at {:optional true} :int]
+        [:created-at {:optional true} :int]
+        [:created-by {:optional true} :string]
+        [:tags {:optional true} [:map
+                                 [:add {:optional true} [:maybe [:set :uuid]]]
+                                 [:retract {:optional true} [:maybe [:set :uuid]]]]]
+        [:alias {:optional true} [:map
+                                  [:add {:optional true} [:maybe [:set :uuid]]]
+                                  [:retract {:optional true} [:maybe [:set :uuid]]]]]
+        [:type {:optional true} [:map
+                                 [:add {:optional true} [:maybe [:set block-type-schema]]]
+                                 [:retract {:optional true} [:maybe [:set block-type-schema]]]]]
+        [:schema {:optional true} :string ;transit-string
+         ]
+        [:properties {:optional true} [:map
+                                       [:add {:optional true} [:sequential [:cat :uuid :string ;; transit-string
+                                                                            ]]]
+                                       [:retract {:optional true} [:set :uuid]]]]
+        [:link {:optional true} :uuid]
+        [:journal-day {:optional true} :int]
+        [:ident {:optional true} :string]]]]
+     [:update-page
+      [:cat :keyword
+       [:map
+        [:block-uuid :uuid]
+        [:page-name :string]
+        [:original-name :string]]]]
+     [:remove-page
+      [:cat :keyword
+       [:map
+        [:block-uuid :uuid]]]]]))
+
+(def av-schema
+  [:cat
+   :keyword
+   [:or
+    :uuid   ;; reference type
+    :string ;; all other type value convert to string by transit
+    ]
+   :int     ;; t
+   :boolean ;; add(true) or retract
+   ])
 
 (def to-ws-op-schema
   [:multi {:dispatch first :decode/string #(update % 0 keyword)}
@@ -36,41 +107,11 @@
     [:cat :keyword
      [:map
       [:block-uuid :uuid]
-      [:target-uuid :uuid]
       [:pos block-pos-schema]]]]
    [:remove
     [:cat :keyword
      [:map
       [:block-uuids [:sequential :uuid]]]]]
-
-   [:update
-    [:cat :keyword
-     [:map
-      [:block-uuid :uuid]
-      [:target-uuid {:optional true} :uuid]
-      [:pos {:optional true} block-pos-schema]
-      [:content {:optional true} :string]
-      [:updated-at {:optional true} :int]
-      [:created-at {:optional true} :int]
-      [:created-by {:optional true} :string]
-      [:tags {:optional true} [:map
-                               [:add {:optional true} [:maybe [:set :uuid]]]
-                               [:retract {:optional true} [:maybe [:set :uuid]]]]]
-      [:alias {:optional true} [:map
-                                [:add {:optional true} [:maybe [:set :uuid]]]
-                                [:retract {:optional true} [:maybe [:set :uuid]]]]]
-      [:type {:optional true} [:map
-                               [:add {:optional true} [:maybe [:set block-type-schema]]]
-                               [:retract {:optional true} [:maybe [:set block-type-schema]]]]]
-      [:schema {:optional true} :string ;transit-string
-       ]
-      [:properties {:optional true} [:map
-                                     [:add {:optional true} [:sequential [:cat :uuid :string ;; transit-string
-                                                                          ]]]
-                                     [:retract {:optional true} [:set :uuid]]]]
-      [:link {:optional true} :uuid]
-      [:journal-day {:optional true} :int]
-      [:ident {:optional true} :string]]]]
    [:update-page
     [:cat :keyword
      [:map
@@ -80,7 +121,13 @@
    [:remove-page
     [:cat :keyword
      [:map
-      [:block-uuid :uuid]]]]])
+      [:block-uuid :uuid]]]]
+   [:update
+    [:cat :keyword
+     [:map
+      [:block-uuid :uuid]
+      [:pos block-pos-schema]
+      [:av-coll [:sequential av-schema]]]]]])
 
 (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema]))
 (def to-ws-ops-decoder (m/decoder [:sequential to-ws-op-schema] mt/string-transformer))

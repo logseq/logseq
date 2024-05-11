@@ -172,7 +172,7 @@
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
-        (p/let [_ (op-mem-layer/<init-load-from-indexeddb! repo)]
+        (p/let [_ (op-mem-layer/<init-load-from-indexeddb2! repo)]
           (db-listener/listen-db-changes! repo conn))))))
 
 (defn- iter->vec [iter]

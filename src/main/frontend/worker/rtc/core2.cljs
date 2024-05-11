@@ -131,7 +131,7 @@
 (defn- create-rtc-loop
   "Return a map with [:rtc-log-flow :rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
   TODO: auto refresh token if needed"
-  [user-uuid graph-uuid repo conn date-formatter token
+  [graph-uuid repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
   (let [ws-url              (or debug-ws-url (get-ws-url token))
         *auto-push?         (atom auto-push?)
@@ -163,7 +163,7 @@
 
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
-                     repo conn user-uuid graph-uuid date-formatter
+                     repo conn graph-uuid date-formatter
                      get-ws-create-task add-log-fn))))
            (m/ap)
            (m/reduce {} nil)
@@ -192,7 +192,7 @@
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
               {:keys [onstarted-task rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task]}
-              (create-rtc-loop user-uuid graph-uuid repo conn date-formatter token)
+              (create-rtc-loop graph-uuid repo conn date-formatter token)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
               start-ex (m/? onstarted-task)]
           (if (:ex-data start-ex)

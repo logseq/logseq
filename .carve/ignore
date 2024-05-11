@@ -79,7 +79,7 @@ frontend.db.model/get-all-classes
 ;; Initial loaded
 frontend.ui/_emoji-init-data
 ;; placeholder var for defonce
-frontend.worker.rtc.op-mem-layer/_sync-loop
+frontend.worker.rtc.op-mem-layer/_sync-loop-canceler
 ;; Used by shadow.cljs
 frontend.db-worker/init
 ;; WIP fn, remove when it's ready

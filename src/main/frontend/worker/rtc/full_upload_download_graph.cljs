@@ -64,7 +64,7 @@
             (op-mem-layer/init-empty-ops-store! repo)
             (op-mem-layer/update-graph-uuid! repo graph-uuid)
             (op-mem-layer/update-local-tx! repo 8)
-            (m/? (c.m/<! (op-mem-layer/<sync-to-idb-layer! repo)))
+            (m/? (op-mem-layer/new-task--sync-to-idb repo))
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
@@ -231,6 +231,6 @@
           (op-mem-layer/init-empty-ops-store! repo)
           (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
           (op-mem-layer/update-graph-uuid! repo graph-uuid)
-          (m/? (c.m/<! (op-mem-layer/<sync-to-idb-layer! repo)))
+          (m/? (op-mem-layer/new-task--sync-to-idb repo))
           (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
           (worker-state/set-rtc-downloading-graph! false))))))
