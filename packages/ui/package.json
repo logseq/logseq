@@ -8,7 +8,8 @@
     "build:ui:only": "parcel build --target ui",
     "build:ui": "rm -rf .parcel-cache && yarn build:ui:only",
     "watch:storybook": "storybook dev -p 6006",
-    "preinstall": "cd primitives/ && yarn install && yarn build",
+    "install:primitives": "rm -rf primitives/ && git clone https://github.com/xyhp915/primitives.git --depth=1",
+    "preinstall": "yarn install:primitives && cd primitives/ && yarn install && yarn build",
     "postinstall": "yarn build:ui"
   },
   "dependencies": {
