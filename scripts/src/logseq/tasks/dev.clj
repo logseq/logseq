@@ -38,7 +38,7 @@
   pass args through to cmd 'yarn cljs:run-test'"
   []
   (lint)
-  (test "-e" "long"))
+  (test "-e" "long" "-e" "fix-me"))
 
 
 (defn gen-malli-kondo-config

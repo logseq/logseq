@@ -1,131 +1,108 @@
 (ns frontend.worker.rtc.db-listener
   "listen datascript changes, infer operations from the db tx-report"
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [clojure.data :as data]
-            [clojure.set :as set]
-            [datascript.core :as d]
+  (:require [datascript.core :as d]
             [frontend.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [logseq.db :as ldb]))
 
+(defn- latest-add?->v->t
+  [add?->v->t]
+  (let [latest-add     (first (sort-by second > (seq (add?->v->t true))))
+        latest-retract (first (sort-by second > (seq (add?->v->t false))))]
+    (cond
+      (nil? latest-add)                               {false (conj {} latest-retract)}
+      (nil? latest-retract)                           {true (conj {} latest-add)}
+      (= (second latest-add) (second latest-retract)) {true (conj {} latest-add)
+                                                       false (conj {} latest-retract)}
+      (> (second latest-add) (second latest-retract)) {true (conj {} latest-add)}
+      :else                                           {false (conj {} latest-retract)})))
 
-(defn- diff-value-of-set-type-attr
-  [db-before db-after eid attr-name]
-  (let [current-value-set (set (get (d/entity db-after eid) attr-name))
-        old-value-set (set (get (d/entity db-before eid) attr-name))
-        add (set/difference current-value-set old-value-set)
-        retract (set/difference old-value-set current-value-set)]
-    (cond-> {}
-      (seq add) (conj [:add add])
-      (seq retract) (conj [:retract retract]))))
+(def ^:private const-concerned-attrs
+  #{:block/content :block/created-at :block/updated-at :block/alias
+    :block/tags :block/type :block/schema :block/link :block/journal-day})
 
+(defn- concerned-attr?
+  [attr]
+  (contains? const-concerned-attrs attr))
 
-(defn- diff-properties-value
-  [db-before db-after eid]
-  (let [current-value (:block/properties (d/entity db-after eid))
-        old-value (:block/properties (d/entity db-before eid))
-        [only-in-current-uuids only-in-old-uuids both-uuids] (map (comp set keys) (data/diff current-value old-value))
-        add-uuids only-in-current-uuids
-        retract-uuids (set/difference only-in-old-uuids add-uuids both-uuids)
-        update-uuids (set/intersection both-uuids only-in-old-uuids)
-        add-uuids* (set/union add-uuids update-uuids)]
-    (cond-> {}
-      (seq add-uuids*) (conj [:add add-uuids*])
-      (seq retract-uuids) (conj [:retract retract-uuids]))))
+(defn- ref-attr?
+  [db attr]
+  (= :db.type/ref (get-in (d/schema db) [attr :db/valueType])))
 
-(defn- entity-datoms=>ops
-  [db-before db-after id->attr->datom entity-datoms]
-  (let [e (ffirst entity-datoms)
-        attr->datom (id->attr->datom e)]
-    (when (seq attr->datom)
-      (let [updated-key-set (set (keys attr->datom))
-            {[_e _a block-uuid _t add1?] :block/uuid
-             [_e _a _v _t add2?]         :block/name
-             [_e _a _v _t add3?]         :block/parent
-             [_e _a _v _t add4?]         :block/order
-             [_e _a _v _t add5?]         :block/original-name} attr->datom
-            ops (cond
-                  (and (not add1?) block-uuid
-                       (not add2?) (contains? updated-key-set :block/name))
-                  [[:remove-page block-uuid]]
+;; (defn- card-many-attr?
+;;   [db attr]
+;;   (= :db.cardinality/many (get-in (d/schema db) [attr :db/cardinality])))
 
-                  (and (not add1?) block-uuid)
-                  [[:remove block-uuid]]
+(defn- update-op-av-coll
+  [db-before db-after a->add?->v->t]
+  (mapcat
+   (fn [[a add?->v->t]]
+     (mapcat
+      (fn [[add? v->t]]
+        (keep
+         (fn [[v t]]
+           (let [ref? (ref-attr? db-after a)]
+             (case [add? ref?]
+               [true true]
+               (when-let [v-uuid (:block/uuid (d/entity db-after v))]
+                 [a v-uuid t add?])
+               [false true]
+               (when-let [v-uuid (:block/uuid
+                                  (or (d/entity db-after v)
+                                      (d/entity db-before v)))]
+                 [a v-uuid t add?])
+               ([true false] [false false]) [a (ldb/write-transit-str v) t add?])))
+         v->t))
+      add?->v->t))
+   a->add?->v->t))
 
-                  :else
-                  (let [updated-general-attrs (seq (set/intersection
-                                                    updated-key-set
-                                                    #{:block/tags :block/alias :block/type :block/schema :block/content
-                                                      :block/properties :block/link :block/journal-day}))
-                        ops (cond-> []
-                              (or add3? add4?)
-                              (conj [:move])
+(defn max-t
+  [a->add?->v->t]
+  (apply max (mapcat vals (mapcat vals (vals a->add?->v->t)))))
 
-                              (or (and (contains? updated-key-set :block/name) add2?)
-                                  (and (contains? updated-key-set :block/original-name) add5?))
-                              (conj [:update-page]))
-                        update-op (->> updated-general-attrs
-                                       (keep
-                                        (fn [attr-name]
-                                          (case attr-name
-                                            (:block/link :block/schema :block/content :block/journal-day)
-                                            {(keyword (name attr-name)) nil}
+(defn- get-first-vt
+  [add?->v->t k]
+  (some-> add?->v->t (get k) first))
 
-                                            :block/alias
-                                            (let [diff-value (diff-value-of-set-type-attr db-before db-after e :block/alias)]
-                                              (when (seq diff-value)
-                                                (let [{:keys [add retract]} diff-value
-                                                      add (keep :block/uuid (d/pull-many db-after [:block/uuid]
-                                                                                         (map :db/id add)))
-                                                      retract (keep :block/uuid (d/pull-many db-before [:block/uuid]
-                                                                                             (map :db/id retract)))]
-                                                  {:alias (cond-> {}
-                                                            (seq add) (conj [:add add])
-                                                            (seq retract) (conj [:retract retract]))})))
+(defn- entity-datoms=>ops2
+  [db-before db-after e->a->add?->v->t entity-datoms]
+  (let [e                            (ffirst entity-datoms)
+        block-uuid                   (:block/uuid (d/entity db-after e))
+        a->add?->v->t                (e->a->add?->v->t e)
+        {add?->block-name->t          :block/name
+         add?->block-original-name->t :block/original-name
+         add?->block-uuid->t          :block/uuid
+         add?->block-parent->t        :block/parent
+         add?->block-order->t         :block/order}
+        a->add?->v->t
+        [retract-block-uuid t1]      (some-> add?->block-uuid->t (get false) first)
+        [retract-block-name _]       (some-> add?->block-name->t (get false) first)
+        [add-block-name t2]          (some-> add?->block-name->t latest-add?->v->t (get-first-vt true))
+        [add-block-original-name t3] (some-> add?->block-original-name->t
+                                             latest-add?->v->t
+                                             (get-first-vt true))
+        [add-block-parent t4]        (some-> add?->block-parent->t latest-add?->v->t (get-first-vt true))
+        [add-block-order t5]         (some-> add?->block-order->t latest-add?->v->t (get-first-vt true))
+        a->add?->v->t*               (into {} (filter (fn [[a _]] (concerned-attr? a)) a->add?->v->t))]
+    (cond
+      (and retract-block-uuid retract-block-name)
+      [[:remove-page t1 {:block-uuid retract-block-uuid}]]
 
-                                            :block/type
-                                            (let [diff-value (diff-value-of-set-type-attr db-before db-after e :block/type)]
-                                              (when (seq diff-value)
-                                                {:type diff-value}))
+      retract-block-uuid
+      [[:remove t1 {:block-uuid retract-block-uuid}]]
 
-                                            :block/tags
-                                            (let [diff-value (diff-value-of-set-type-attr db-before db-after e :block/tags)]
-                                              (when (seq diff-value)
-                                                (let [{:keys [add retract]} diff-value
-                                                      add (keep :block/uuid (d/pull-many db-after [:block/uuid]
-                                                                                         (map :db/id add)))
-                                                      retract (keep :block/uuid (d/pull-many db-before [:block/uuid]
-                                                                                             (map :db/id retract)))]
-                                                  {:tags (cond-> {}
-                                                           (seq add) (conj [:add add])
-                                                           (seq retract) (conj [:retract retract]))})))
-                                            :block/properties
-                                            (let [diff-value (diff-properties-value db-before db-after e)]
-                                              (when (seq diff-value)
-                                                (let [{:keys [add retract]} diff-value
-                                                      add (keep :block/uuid (d/pull-many
-                                                                             db-after [:block/uuid]
-                                                                             (map (fn [uuid] [:block/uuid uuid]) add)))]
-                                                  {:properties (cond-> {}
-                                                                 (seq add) (conj [:add add])
-                                                                 (seq retract) (conj [:retract retract]))})))
-                                            ;; else
-                                            nil)))
-                                       (apply merge))]
-                    (cond-> ops (seq update-op) (conj [:update update-op]))))
-            ops* (keep (fn [op]
-                         (let [block-uuid (some-> (d/entity db-after e) :block/uuid str)]
-                           (case (first op)
-                             :move        (when block-uuid ["move" {:block-uuid block-uuid}])
-                             :update      (when block-uuid
-                                            ["update" (cond-> {:block-uuid block-uuid}
-                                                        (second op) (conj [:updated-attrs (second op)]))])
-                             :update-page (when block-uuid ["update-page" {:block-uuid block-uuid}])
-                             :remove      ["remove" {:block-uuid (str (second op))}]
-                             :remove-page ["remove-page" {:block-uuid (str (second op))}])))
-                       ops)]
-        ops*))))
+      :else
+      (let [ops (cond-> []
+                  (or add-block-parent add-block-order)
+                  (conj [:move (or t4 t5) {:block-uuid block-uuid}])
+
+                  (or add-block-name add-block-original-name)
+                  (conj [:update-page (or t2 t3) {:block-uuid block-uuid}]))
+            update-op (when-let [av-coll (not-empty (update-op-av-coll db-before db-after a->add?->v->t*))]
+                        (let [t (max-t a->add?->v->t*)]
+                          [:update t {:block-uuid block-uuid :av-coll av-coll}]))]
+        (cond-> ops update-op (conj update-op))))))
 
 (defn- entity-datoms=>asset-op
   [db-after id->attr->datom entity-datoms]
@@ -148,30 +125,21 @@
                 :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
                 :remove-asset ["remove-asset" {:asset-uuid (str (second op))}]))))))))
 
-
 (defn generate-rtc-ops
-  [repo db-before db-after same-entity-datoms-coll id->attr->datom]
+  [repo db-before db-after same-entity-datoms-coll id->attr->datom e->a->v->add?->t]
   (let [asset-ops (keep (partial entity-datoms=>asset-op db-after id->attr->datom) same-entity-datoms-coll)
         ops (when (empty asset-ops)
-              (mapcat (partial entity-datoms=>ops db-before db-after id->attr->datom) same-entity-datoms-coll))
-        now-epoch*1000 (* 1000 (tc/to-long (t/now)))
-        ops* (map-indexed (fn [idx op]
-                            [(first op) (assoc (second op) :epoch (+ idx now-epoch*1000))]) ops)
-        epoch2 (+ now-epoch*1000 (count ops))
-        asset-ops* (map-indexed (fn [idx op]
-                                  [(first op) (assoc (second op) :epoch (+ idx epoch2))]) asset-ops)]
-    (when (seq ops*)
-      (op-mem-layer/add-ops! repo ops*))
-    (when (seq asset-ops*)
-      (op-mem-layer/add-asset-ops! repo asset-ops*))))
-
+              (mapcat (partial entity-datoms=>ops2 db-before db-after e->a->v->add?->t)
+                      same-entity-datoms-coll))]
+    (when (seq ops)
+      (op-mem-layer/add-ops! repo ops))))
 
 (sr/defkeyword :persist-op?
   "tx-meta option, generate rtc ops when not nil (default true)")
 
 (defmethod db-listener/listen-db-changes :gen-rtc-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
-             repo id->attr->datom same-entity-datoms-coll]}]
+             repo id->attr->datom e->a->add?->v->t same-entity-datoms-coll]}]
   (when (and (op-mem-layer/rtc-db-graph? repo)
              (:persist-op? tx-meta true))
-    (generate-rtc-ops repo db-before db-after same-entity-datoms-coll id->attr->datom)))
+    (generate-rtc-ops repo db-before db-after same-entity-datoms-coll id->attr->datom e->a->add?->v->t)))

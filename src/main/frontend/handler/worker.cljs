@@ -55,8 +55,9 @@
               ;; https://github.com/GoogleChromeLabs/comlink/blob/dffe9050f63b1b39f30213adeb1dd4b9ed7d2594/src/comlink.ts#L223-L236
               (if (and (= "HANDLER" (.-type data)) (= "throw" (.-name data)))
                 (if (.-isError (.-value data))
-                  (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
-                  (js/console.error "Unexpected webworker error:" data))
+                  (do (js/console.error "Unexpected webworker error:" (-> data bean/->clj (get-in [:value :value])))
+                      (js/console.log (get-in (bean/->clj data) [:value :value :stack])))
+                  (js/console.error "Unexpected webworker error :" data))
                 (if (string? data)
                   (let [[e payload] (ldb/read-transit-str data)]
                     (handle (keyword e) wrapped-worker payload))

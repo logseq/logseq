@@ -31,6 +31,14 @@
          (assoc m a datom))))
    {} entity-datoms))
 
+(defn- entity-datoms=>a->add?->v->t
+  [entity-datoms]
+  (reduce
+   (fn [m datom]
+     (let [[_e a v t add?] datom]
+       (assoc-in m [a add? v] t)))
+   {} entity-datoms))
+
 
 (defmulti listen-db-changes
   (fn [listen-key & _] listen-key))
@@ -103,10 +111,14 @@ generate undo ops.")
                              id-order (distinct (map first datom-vec-coll))
                              same-entity-datoms-coll (map id->same-entity-datoms id-order)
                              id->attr->datom (update-vals id->same-entity-datoms entity-datoms=>attr->datom)
+                             e->a->add?->v->t (update-vals
+                                               id->same-entity-datoms
+                                               entity-datoms=>a->add?->v->t)
                              args* (assoc tx-report
                                           :repo repo
                                           :conn conn
                                           :id->attr->datom id->attr->datom
+                                          :e->a->add?->v->t e->a->add?->v->t
                                           :same-entity-datoms-coll same-entity-datoms-coll)]
                          (doseq [[k handler-fn] handlers]
                            (handler-fn k args*))))))))))
