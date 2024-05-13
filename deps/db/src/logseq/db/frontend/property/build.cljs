@@ -1,7 +1,6 @@
 (ns logseq.db.frontend.property.build
   "Builds core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.order :as db-order]
             [datascript.core :as d]))
 
@@ -45,26 +44,18 @@
   (let [property-schema (:block/schema property)
         property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:original-name prop-name
                                                                                      :ref-type? true})
-                           property-attributes)
-        ref-type? (contains? (set (remove #{:default} db-property-type/ref-property-types))
-                             (get-in property [:block/schema :type]))
-        hidden-tx
-        ;; closed ref types don't have hidden tx
-        (if ref-type?
-          []
-          (let [closed-value-blocks-tx
-                (map (fn [{:keys [db-ident value icon description uuid]}]
-                       (cond->
-                        (build-closed-value-block
-                         uuid
-                         value
-                         property
-                         {:db-ident db-ident :icon icon :description description})
-                         true
-                         (assoc :block/order (db-order/gen-key))))
-                     (:closed-values property))]
-            closed-value-blocks-tx))]
-    (into [property-tx] hidden-tx)))
+                           property-attributes)]
+    (into [property-tx]
+          (map (fn [{:keys [db-ident value icon description uuid]}]
+                 (cond->
+                  (build-closed-value-block
+                   uuid
+                   value
+                   property
+                   {:db-ident db-ident :icon icon :description description})
+                   true
+                   (assoc :block/order (db-order/gen-key))))
+               (:closed-values property)))))
 
 (defn build-property-value-block
   [block property value]

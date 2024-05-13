@@ -118,9 +118,7 @@
    block
    property
    ;; FIXME: Remove when fixed in UI
-   (str value)
-   ;; TODO: One day would be nice to parse block for refs
-   #(assoc % :block/order (db-order/gen-key nil))))
+   (str value)))
 
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
@@ -128,7 +126,9 @@
   [new-block properties properties-config all-idents]
   (->> properties
        (map (fn [[k v]]
-              (when (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
+              (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
+                         ;; TODO: Support translate-property-value without this hack
+                         (not (vector? v)))
                 [k (if (set? v)
                      (set (map #(create-property-value new-block {:db/ident (get-ident all-idents k)} %) v))
                      (create-property-value new-block {:db/ident (get-ident all-idents k)} v))])))

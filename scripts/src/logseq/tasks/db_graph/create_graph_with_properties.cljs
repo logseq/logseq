@@ -90,18 +90,18 @@
        ;; Block property blocks and queries
        {:page {:block/original-name "Block Properties"}
         :blocks
-        ;; TODO: Fix :default
-        [#_{:block/content "default property block" :properties {:default "haha block"}}
+        [{:block/content "default property block" :properties {:default "haha"}}
+         {:block/content "default property block" :properties {:default-many #{"yee" "haw" "sir"}}}
          {:block/content "string property block" :properties {:string "haha"}}
          {:block/content "string-many property block" :properties {:string-many #{"yee" "haw" "sir"}}}
          {:block/content "string-closed property block" :properties {:string-closed (random-closed-value :string-closed)}}
          {:block/content "url property block" :properties {:url "https://logseq.com"}}
          {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
-        ;;  {:block/content "url-closed property block" :properties {:url-closed (random-closed-value :url-closed)}}
+         {:block/content "url-closed property block" :properties {:url-closed (random-closed-value :url-closed)}}
          {:block/content "checkbox property block" :properties {:checkbox true}}
          {:block/content "number property block" :properties {:number 5}}
          {:block/content "number-many property block" :properties {:number-many #{5 10}}}
-        ;;  {:block/content "number-closed property block" :properties {:number-closed (random-closed-value :number-closed)}}
+         {:block/content "number-closed property block" :properties {:number-closed (random-closed-value :number-closed)}}
          {:block/content "page property block" :properties {:page [:page "page 1"]}}
          {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
         ;;  ;; :page-closed and :date-closed disabled for now since they're not supported
@@ -110,7 +110,7 @@
          {:block/content "date-many property block" :properties {:date-many #{[:page (date-journal-title today)]
                                                                               [:page (date-journal-title yesterday)]}}}
          #_{:block/content "date-closed property block" :properties {:date-closed (random-closed-value :date-closed)}}]}
-       #_{:page {:block/original-name "Block Property Queries"}
+       {:page {:block/original-name "Block Property Queries"}
         :blocks
         [{:block/content "{{query (property :string \"haha\")}}"}
          {:block/content "{{query (property :string-many \"haw\")}}"}
@@ -130,17 +130,18 @@
          #_{:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
 
        ;; Page property pages and queries
-      ;;  {:page {:block/name "default page" :properties {:default "yolo block"}}}
+       {:page {:block/name "default page" :properties {:default "yolo"}}}
+       {:page {:block/name "default-many page" :properties {:default-many #{"yee" "haw" "sir"}}}}
        {:page {:block/name "string page" :properties {:string "yolo"}}}
        {:page {:block/name "string-many page" :properties {:string-many #{"yee" "haw" "sir"}}}}
-      ;;  {:page {:block/name "string-closed page" :properties {:string-closed (random-closed-value :string-closed)}}}
+       {:page {:block/name "string-closed page" :properties {:string-closed (random-closed-value :string-closed)}}}
        {:page {:block/name "url page" :properties {:url "https://logseq.com"}}}
        {:page {:block/name "url-many page" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}}
-      ;;  {:page {:block/name "url-closed page" :properties {:url-closed (random-closed-value :url-closed)}}}
+       {:page {:block/name "url-closed page" :properties {:url-closed (random-closed-value :url-closed)}}}
        {:page {:block/name "checkbox page" :properties {:checkbox true}}}
        {:page {:block/name "number page" :properties {:number 5}}}
        {:page {:block/name "number-many page" :properties {:number-many #{5 10}}}}
-      ;;  {:page {:block/name "number-closed page" :properties {:number-closed (random-closed-value :number-closed)}}}
+       {:page {:block/name "number-closed page" :properties {:number-closed (random-closed-value :number-closed)}}}
        {:page {:block/name "page page" :properties {:page [:page "page 1"]}}}
        {:page {:block/name "page-many page" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}}
       ;;  #_{:page {:block/name "page-closed page" :properties {:page-closed (random-closed-value :page-closed)}}}
@@ -148,7 +149,7 @@
        {:page {:block/name "date-many page" :properties {:date-many #{[:page (date-journal-title today)]
                                                                       [:page (date-journal-title yesterday)]}}}}
        #_{:page {:block/name "date-closed page" :properties {:date-closed (random-closed-value :date-closed)}}}
-       #_{:page {:block/original-name "Page Property Queries"}
+       {:page {:block/original-name "Page Property Queries"}
         :blocks
         [{:block/content "{{query (page-property :string \"yolo\")}}"}
          {:block/content "{{query (page-property :string-many \"haw\")}}"}
@@ -176,7 +177,7 @@
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:closed-values (closed-values-config (keyword (str (name %) "-closed")))
                                 :block/schema {:type %}})
-                      [:string :url :number :page :date]))
+                      [:string :url :number #_:page #_:date]))
           (into {}))}))
 
 (def spec
