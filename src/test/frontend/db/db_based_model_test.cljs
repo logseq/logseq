@@ -33,9 +33,10 @@
 (deftest get-db-property-values-test
   (let [conn (db/get-db false)]
     (outliner-property/upsert-property! conn :user.property/property-1 {:type :number} {:property-name "property 1"})
-    (outliner-property/set-block-property-raw-value! conn fbid :user.property/property-1 "1")
+    (outliner-property/set-block-property! conn fbid :user.property/property-1 "1")
     (outliner-property/set-block-property! conn sbid :user.property/property-1 "2")
-    (is (= [1 2] (model/get-block-property-values :user.property/property-1)))))
+    (is (= ["1" "2"]
+           (map (fn [id] (:block/content (d/entity @conn id))) (model/get-block-property-values :user.property/property-1))))))
 
 ;; (deftest get-db-property-values-test-with-pages
 ;;   (let [opts {:redirect? false :create-first-block? false}

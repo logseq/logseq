@@ -188,9 +188,39 @@
   [id]
   (if (uuid? id) [:block/uuid id] id))
 
+(declare set-block-property!)
+
+(defn create-property-text-block!
+  "`template-id`: which template the new block belongs to"
+  [conn block-id property-id value {:keys [template-id]}]
+  (let [property (d/entity @conn property-id)
+        block (when block-id (d/entity @conn block-id))]
+    (when property
+      (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
+                              (int? template-id)
+                              (assoc :block/tags template-id
+                                     :logseq.property/created-from-template template-id))]
+        (d/transact! conn [new-value-block] {:outliner-op :insert-blocks})
+        (let [property-id (:db/ident property)]
+          (when (and property-id block)
+            (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
+              (set-block-property! conn (:db/id block) property-id block-id)))
+          (:block/uuid new-value-block))))))
+
+(defn- get-property-value-eid
+  [db property-id raw-value]
+  (first
+   (d/q '[:find [?v ...]
+          :in $ ?property-id ?raw-value
+          :where
+          [?b ?property-id ?v]
+          [?v :block/content ?raw-value]]
+        db
+        property-id
+        raw-value)))
+
 (defn set-block-property!
-  "Updates a block property's value for the an existing property-id.
-  `v` should be a db interger id for ref-typed properties."
+  "Updates a block property's value for the an existing property-id."
   [conn block-eid property-id v]
   (let [block-eid (->eid block-eid)
         db @conn
@@ -200,20 +230,30 @@
         _ (assert (some? property) (str "Property " property-id " doesn't exists yet"))
         k-name (:block/original-name property)
         property-schema (:block/schema property)
-        {:keys [type]} property-schema
+        {:keys [type] :or {type :default}} property-schema
         v' (or (resolve-tag! conn v) v)
-        db-attribute? (contains? db-property/db-attribute-properties property-id)]
+        db-attribute? (contains? db-property/db-attribute-properties property-id)
+        ref-type? (db-property-type/ref-property-types type)]
     (cond
       db-attribute?
       (d/transact! conn [{:db/id (:db/id block) property-id v'}]
                    {:outliner-op :save-block})
 
       :else
-      (let [v'' (if property v' (or v' ""))]
+      (let [v' (if ref-type?
+                 (if (and (integer? v')
+                          (or (and (= type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity db v')))))
+                              (not= type :number)))
+                   v'
+                   (or (get-property-value-eid db property-id (str v'))
+                       (let [v-uuid (create-property-text-block! conn nil (:db/id property) (str v') {})]
+                         (:db/id (d/entity @conn [:block/uuid v-uuid])))))
+                 v')
+            v'' (if property v' (or v' ""))]
         (when (some? v'')
-          (let [infer-schema (when-not type (infer-schema-from-input-string v''))
-                property-type' (or type infer-schema :default)
-                schema (get-property-value-schema db property-type' (or property
+          (let [infer-schema (infer-schema-from-input-string v'')
+                property-type' (or type infer-schema)
+                schema (get-property-value-schema @conn property-type' (or property
                                                                         {:block/schema {:type property-type'}}))
                 existing-value (when-let [id (:db/ident property)]
                                  (get block id))
@@ -233,7 +273,7 @@
                                                       new-value*))]
                 (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                   ;; (notification/show! msg' :warning)
-                  (prn :debug :msg msg' :property k-name :v v))
+                  (prn :debug :msg msg' :property k-name :v new-value*))
                 (let [status? (= :logseq.task/status (:db/ident property))
                       ;; don't modify maps
                       new-value (if (or (sequential? new-value*) (set? new-value*))
@@ -243,31 +283,6 @@
                                   new-value*)
                       tx-data (build-property-value-tx-data block property-id new-value status?)]
                   (d/transact! conn tx-data {:outliner-op :save-block}))))))))))
-
-(defn create-property-text-block!
-  "`template-id`: which template the new block belongs to"
-  [conn block-id property-id value {:keys [template-id]}]
-  (let [property (d/entity @conn property-id)
-        block (when block-id (d/entity @conn block-id))]
-    (when property
-      (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
-                              (int? template-id)
-                              (assoc :block/tags template-id
-                                     :logseq.property/created-from-template template-id))]
-        (d/transact! conn [new-value-block] {:outliner-op :insert-blocks})
-        (let [property-id (:db/ident property)]
-          (when (and property-id block)
-            (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
-              (set-block-property! conn (:db/id block) property-id block-id)))
-          (:block/uuid new-value-block))))))
-
-(defn set-block-property-raw-value!
-  [conn block-eid property-id value]
-  (let [property (d/entity @conn property-id)]
-    (when (db-property-type/ref-property-types (get-in property [:block/schema type]))
-      (let [v-uuid (create-property-text-block! conn nil (:db/id property) (str value) {})
-            v-id (:db/id (d/entity @conn [:block/uuid v-uuid]))]
-        (set-block-property! conn block-eid property-id v-id)))))
 
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
@@ -406,15 +421,14 @@
 (defn upsert-closed-value!
   "id should be a block UUID or nil"
   [conn property-id {:keys [id value icon description]
-                  :or {description ""}}]
+                     :or {description ""}}]
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
         property (d/entity db property-id)
-        property-type (get-in property [:block/schema :type] :default)]
+        property-schema (:block/schema property)
+        property-type (get property-schema :type :default)]
     (when (contains? db-property-type/closed-value-property-types property-type)
-      (let [property (d/entity @conn (:db/id property))
-            value (if (string? value) (string/trim value) value)
-            property-schema (:block/schema property)
+      (let [value (if (string? value) (string/trim value) value)
             closed-values (:property/closed-values property)
             default-closed-values? (and (= :default property-type) (seq closed-values))
             value (if (and default-closed-values? (string? value) (not (string/blank? value)))
@@ -432,7 +446,7 @@
                                nil))
             block (when id (d/entity @conn [:block/uuid id]))
             validate-message (validate-property-value
-                              (get-property-value-schema db property-type property {:new-closed-value? true})
+                              (get-property-value-schema @conn property-type property {:new-closed-value? true})
                               resolved-value)]
         (cond
           (some (fn [b]
@@ -456,6 +470,7 @@
                 icon (when-not (and (string? icon) (string/blank? icon)) icon)
                 description (string/trim description)
                 description (when-not (string/blank? description) description)
+                resolved-value (if (= property-type :number) (str resolved-value) resolved-value)
                 tx-data (if block
                           [(let [schema (:block/schema block)]
                              (cond->

@@ -77,5 +77,6 @@
                      (:db/id block))
        :block/parent (:db/id block)
        :logseq.property/created-from-property (or (:db/id property)
-                                                  {:db/ident (:db/ident property)})}
+                                                  {:db/ident (:db/ident property)})
+       :block/order (db-order/gen-key)}
       sqlite-util/block-with-timestamps))

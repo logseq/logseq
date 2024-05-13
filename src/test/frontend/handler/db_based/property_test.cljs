@@ -65,7 +65,6 @@
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity :user.property/property-2)]
-      (prn :debug :properties properties)
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
@@ -78,23 +77,20 @@
         2
         (every? keyword? (map first properties))
         true
-        (second (second properties))
-        1)))
+        (:block/content (second (second properties)))
+        "1")))
 
   (testing "Update property value"
     (let [conn (db/get-db false)]
-      (prn :debug :property (d/entity @conn :user.property/property-2)
-           :block (:block/properties (db/entity [:block/uuid fbid])))
       (outliner-property/set-block-property! conn fbid :user.property/property-2 2))
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
-      (prn :debug :properties properties)
       ;; check block's properties
       (are [x y] (= x y)
         (count properties)
         2
-        (second (second properties))
-        2)))
+        (:block/content (second (second properties)))
+        "2")))
 
   (testing "Wrong type property value shouldn't transacted"
     (let [conn (db/get-db false)]
@@ -105,8 +101,8 @@
       (are [x y] (= x y)
         (count properties)
         2
-        (second (second properties))
-        2)))
+        (:block/content (second (second properties)))
+        "2")))
 
   (testing "Add a multi-values property"
     (let [conn (db/get-db false)]
@@ -128,8 +124,8 @@
         (are [x y] (= x y)
           3
           (count properties)
-          #{1 2 3}
-          (get properties :user.property/property-3)))))
+          #{"1" "2" "3"}
+          (set (map :block/content (get properties :user.property/property-3)))))))
 
   (testing "Remove a property"
     (outliner-property/remove-block-property! (db/get-db false) fbid :user.property/property-3)
@@ -285,19 +281,20 @@
       (outliner-property/set-block-property! conn sbid :user.property/property-1 "2"))
     (let [k :user.property/property-1
           property (db/entity k)
-          conn (db/get-db false)]
-      (outliner-property/add-existing-values-to-closed-values! conn (:db/id property) [1 2])
+          conn (db/get-db false)
+          values (map (fn [d] (:block/uuid (d/entity @conn (:v d)))) (d/datoms @conn :avet :user.property/property-1))]
+      (outliner-property/add-existing-values-to-closed-values! conn (:db/id property) values)
       (testing "Add existing values to closed values"
         (let [values (get-value-ids k)]
           (is (every? uuid? values))
-          (is (= #{1 2} (get-closed-values values)))
+          (is (= #{"1" "2"} (get-closed-values values)))
           (is (every? #(contains? (:block/type (db/entity [:block/uuid %])) "closed value")
                       values))))
       (testing "Add non-numbers shouldn't work"
         (let [result (outliner-property/upsert-closed-value! conn (:db/id property) {:value "not a number"})]
           (is (= result :value-invalid))
           (let [values (get-value-ids k)]
-            (is (= #{1 2} (get-closed-values values))))))
+            (is (= #{"1" "2"} (get-closed-values values))))))
 
       (testing "Add existing value"
         (let [result (outliner-property/upsert-closed-value! conn (:db/id property) {:value 2})]
@@ -307,10 +304,11 @@
         (let [{:keys [block-id tx-data]} (outliner-property/upsert-closed-value! conn (:db/id property) {:value 3})]
           (db/transact! tx-data)
           (let [b (db/entity [:block/uuid block-id])]
-            (is (= 3 (:block/content b)))
+            (is (= "3" (:block/content b)))
             (is (contains? (:block/type b) "closed value"))
             (let [values (get-value-ids k)]
-              (is (= #{1 2 3} (get-closed-values values))))
+              (is (= #{"1" "2" "3"}
+                     (get-closed-values values))))
 
             (testing "Update closed value"
               (let [{:keys [tx-data]} (outliner-property/upsert-closed-value! conn (:db/id property) {:id block-id
@@ -318,7 +316,7 @@
                                                                                                       :description "choice 4"})]
                 (db/transact! tx-data)
                 (let [b (db/entity [:block/uuid block-id])]
-                  (is (= 4 (:block/content b)))
+                  (is (= "4" (:block/content b)))
                   (is (= "choice 4" (:description (:block/schema b))))
                   (is (contains? (:block/type b) "closed value"))
                   (outliner-property/delete-closed-value! conn (:db/id property) (:db/id (db/entity [:block/uuid block-id])))
