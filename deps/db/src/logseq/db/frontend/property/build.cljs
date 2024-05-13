@@ -41,7 +41,7 @@
 (defn build-closed-values
   "Builds all the tx needed for property with closed values including
    the hidden page and closed value blocks as needed"
-  [db-ident prop-name property {:keys [property-attributes from-ui-thread?]}]
+  [db-ident prop-name property {:keys [property-attributes]}]
   (let [property-schema (:block/schema property)
         property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:original-name prop-name
                                                                                      :ref-type? true})
@@ -60,7 +60,7 @@
                          value
                          property
                          {:db-ident db-ident :icon icon :description description})
-                         (not from-ui-thread?)
+                         true
                          (assoc :block/order (db-order/gen-key))))
                      (:closed-values property))]
             closed-value-blocks-tx))]

@@ -77,12 +77,15 @@
     v-str))
 
 (defn- update-datascript-schema
-  [property {:keys [cardinality]}]
+  [property {:keys [type cardinality]}]
   (let [ident (:db/ident property)
-        cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)]
-    {:db/ident ident
-     :db/valueType :db.type/ref
-     :db/cardinality cardinality}))
+        cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
+        new-type (or type (get-in property [:block/schema :type]))]
+    (cond->
+     {:db/ident ident
+      :db/cardinality cardinality}
+      (db-property-type/ref-property-types new-type)
+      (assoc :db/valueType :db.type/ref))))
 
 (defn ensure-unique-db-ident
   "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
@@ -140,7 +143,7 @@
                                  (build-property-value-tx-data property property-id v)) properties)))
             many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
         (when (seq tx-data)
-          (d/transact! conn tx-data {:outliner-op :update-property
+          (d/transact! conn tx-data {:outliner-op :update-propertyxo
                                      :property-id (:db/id property)
                                      :many->one? many->one?})))
       (let [k-name (or (and property-name (name property-name))
@@ -149,8 +152,7 @@
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
         (d/transact! conn
-                     [(sqlite-util/build-new-property db-ident' schema {:original-name k-name
-                                                                        :from-ui-thread? true})]
+                     [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
                      {:outliner-op :new-property})))))
 
 (defn validate-property-value
@@ -240,7 +242,11 @@
                    {:outliner-op :save-block})
 
       :else
-      (let [v' (if ref-type?
+      (let [v' (cond
+                 (= v' :logseq.property/empty-placeholder)
+                 (if (= type :checkbox) false v')
+
+                 ref-type?
                  (if (and (integer? v')
                           (or (and (= type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity db v')))))
                               (not= type :number)))
@@ -248,13 +254,14 @@
                    (or (get-property-value-eid db property-id (str v'))
                        (let [v-uuid (create-property-text-block! conn nil (:db/id property) (str v') {})]
                          (:db/id (d/entity @conn [:block/uuid v-uuid])))))
+                 :else
                  v')
             v'' (if property v' (or v' ""))]
         (when (some? v'')
           (let [infer-schema (infer-schema-from-input-string v'')
                 property-type' (or type infer-schema)
                 schema (get-property-value-schema @conn property-type' (or property
-                                                                        {:block/schema {:type property-type'}}))
+                                                                           {:block/schema {:type property-type'}}))
                 existing-value (when-let [id (:db/ident property)]
                                  (get block id))
                 new-value* (if (= v'' :logseq.property/empty-placeholder)
@@ -266,11 +273,13 @@
                                  ;; (notification/show! (str e) :error false)
                                  nil)))]
             (when-not (= existing-value new-value*)
-              (if-let [msg (validate-property-value schema
+              (if-let [msg (and
+                            (not= new-value* :logseq.property/empty-placeholder)
+                            (validate-property-value schema
                                                     ;; normalize :many values for components that only provide single value
-                                                    (if (and (db-property/many? property) (not (coll? new-value*)))
-                                                      #{new-value*}
-                                                      new-value*))]
+                                                     (if (and (db-property/many? property) (not (coll? new-value*)))
+                                                       #{new-value*}
+                                                       new-value*)))]
                 (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                   ;; (notification/show! msg' :warning)
                   (prn :debug :msg msg' :property k-name :v new-value*))

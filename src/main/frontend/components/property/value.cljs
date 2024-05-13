@@ -89,7 +89,8 @@
                                        :or {exit-edit? true}}]
 
    (let [repo (state/get-current-repo)
-         class? (contains? (:block/type block) "class")]
+         class? (contains? (:block/type block) "class")
+         property (db/entity property-key)]
      (p/do!
       (when property-key
         (if (and class? class-schema?)
@@ -102,7 +103,9 @@
                     [(outliner-property/ensure-unique-db-ident
                       (db/get-db (state/get-current-repo))
                       (db-property/create-user-property-ident-from-name property-key))
-                     :logseq.property/empty-placeholder])
+                     (if (= :checkbox (get-in property [:block/schema :type]))
+                       false
+                       :logseq.property/empty-placeholder)])
                   [property-key property-value])]
             (p/let [property (db/entity property-key)]
               (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))

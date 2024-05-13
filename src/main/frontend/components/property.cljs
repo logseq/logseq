@@ -404,7 +404,7 @@
         (if (and (contains? (:block/type entity) "class") page-configure?)
           (pv/<add-property! entity property-uuid-or-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
           (p/do!
-           (db-property-handler/upsert-property! nil {} {:property-name property-uuid-or-name})
+           (db-property-handler/upsert-property! nil {:type :default} {:property-name property-uuid-or-name})
            true))
         (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
             (pv/exit-edit-property))))))

@@ -74,17 +74,16 @@
   "Build a standard new property so that it is is consistent across contexts. Takes
    an optional map with following keys:
    * :original-name - Case sensitive property name. Defaults to deriving this from db-ident
-   * :block-uuid - :block/uuid for property
-   * :from-ui-thread? - whether calls from the UI thread"
+   * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [original-name block-uuid ref-type? from-ui-thread?]}]
+  ([db-ident prop-schema {:keys [original-name block-uuid ref-type?]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
          prop-name (or original-name (name db-ident'))
-         block-order (when-not from-ui-thread? (db-order/gen-key nil))
-         classes (:classes prop-schema)]
+         classes (:classes prop-schema)
+         prop-schema (assoc prop-schema :type (get prop-schema :type :default))]
      (block-with-timestamps
       (cond->
        {:db/ident db-ident'
@@ -97,9 +96,8 @@
         :db/index true
         :db/cardinality (if (= :many (:cardinality prop-schema))
                           :db.cardinality/many
-                          :db.cardinality/one)}
-        block-order
-        (assoc :block/order block-order)
+                          :db.cardinality/one)
+        :block/order (db-order/gen-key)}
         (seq classes)
         (assoc :property/schema.classes classes)
         (or ref-type? (contains? (conj db-property-type/ref-property-types :entity) (:type prop-schema)))

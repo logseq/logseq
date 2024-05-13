@@ -26,7 +26,7 @@
 
 (def value-ref-property-types
   "Property value ref types"
-  #{:default :url :number})
+  #{:default :url :number :template})
 
 (def ref-property-types
   "User facing ref types"

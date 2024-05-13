@@ -4,6 +4,7 @@
             [frontend.modules.outliner.op :as outliner-op]
             [logseq.db.frontend.property :as db-property]
             [frontend.db :as db]
+            #_:clj-kondo/ignore
             [frontend.state :as state]))
 
 (defn upsert-property!
