@@ -69,11 +69,11 @@
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
   (p/let [new-block-id (db/new-block-id)
-          block-id (db-property-handler/create-property-text-block!
-                    (:db/id block)
-                    (:db/id property)
-                    value
-                    {:new-block-id new-block-id})]
+          _ (db-property-handler/create-property-text-block!
+             (:db/id block)
+             (:db/id property)
+             value
+             {:new-block-id new-block-id})]
     (p/do!
      (exit-edit-property)
      (let [block (db/entity [:block/uuid new-block-id])]
@@ -379,12 +379,12 @@
   "`template`: tag block"
   [block property template]
   (p/let [new-block-id (db/new-block-id)
-          block-id (db-property-handler/create-property-text-block!
-                    (:db/id block)
-                    (:db/id property)
-                    ""
-                    {:new-block-id new-block-id
-                     :template-id (:db/id template)})
+          _ (db-property-handler/create-property-text-block!
+             (:db/id block)
+             (:db/id property)
+             ""
+             {:new-block-id new-block-id
+              :template-id (:db/id template)})
           new-block (db/entity [:block/uuid new-block-id])]
     (shui/popup-hide!)
     (exit-edit-property)

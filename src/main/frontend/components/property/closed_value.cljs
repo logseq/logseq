@@ -9,7 +9,6 @@
             [frontend.components.dnd :as dnd]
             [frontend.components.icon :as icon-component]
             [frontend.handler.property :as property-handler]
-            [logseq.outliner.property :as outliner-property]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.config :as config]
             [frontend.components.property.value :as property-value]

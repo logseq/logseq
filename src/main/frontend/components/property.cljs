@@ -545,7 +545,6 @@
   (rum/local false ::hover?)
   [state block property {:keys [class-schema? block? collapsed? page-cp inline-text]}]
   (let [*hover? (::hover? state)
-        repo (state/get-current-repo)
         icon (:logseq.property/icon property)
         property-name (:block/original-name property)]
     [:div.flex.flex-row.items-center
