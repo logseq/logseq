@@ -58,9 +58,9 @@
    [:upsert-property [property-id schema property-opts]]))
 
 (defn set-block-property!
-  [block-eid property-id value property-opts]
+  [block-eid property-id value]
   (op-transact!
-   [:set-block-property [block-eid property-id value property-opts]]))
+   [:set-block-property [block-eid property-id value]]))
 
 (defn remove-block-property!
   [block-eid property-id]

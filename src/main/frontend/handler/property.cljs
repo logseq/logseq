@@ -14,12 +14,12 @@
     (file-property-handler/remove-block-property! block-id property-id-or-key)))
 
 (defn set-block-property!
-  [repo block-id key v & opts]
+  [repo block-id key v]
   (if (config/db-based-graph? repo)
     (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
       (if (or (nil? v) (and (coll? v) (empty? v)))
         (db-property-handler/remove-block-property! eid key)
-       (db-property-handler/set-block-property! eid key v opts)))
+        (db-property-handler/set-block-property! eid key v)))
     (file-property-handler/set-block-property! block-id key v)))
 
 (defn add-page-property!

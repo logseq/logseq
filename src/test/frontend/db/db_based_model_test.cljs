@@ -24,15 +24,17 @@
 
 (deftest get-block-property-values-test
   (let [conn (db/get-db false)]
-    (outliner-property/set-block-property! conn fbid :user.property/property-1 "value 1" {:property-type :string})
-    (outliner-property/set-block-property! conn sbid :user.property/property-1 "value 2" {:property-type :string})
+    (outliner-property/upsert-property! conn :user.property/property-1 {:type :string} {:property-name "property 1"})
+    (outliner-property/set-block-property! conn fbid :user.property/property-1 "value 1")
+    (outliner-property/set-block-property! conn sbid :user.property/property-1 "value 2")
     (is (= (model/get-block-property-values :user.property/property-1)
            ["value 1" "value 2"]))))
 
 (deftest get-db-property-values-test
   (let [conn (db/get-db false)]
-    (outliner-property/set-block-property! conn fbid :user.property/property-1 "1" {})
-    (outliner-property/set-block-property! conn sbid :user.property/property-1 "2" {})
+    (outliner-property/upsert-property! conn :user.property/property-1 {:type :number} {:property-name "property 1"})
+    (outliner-property/set-block-property-raw-value! conn fbid :user.property/property-1 "1")
+    (outliner-property/set-block-property! conn sbid :user.property/property-1 "2")
     (is (= [1 2] (model/get-block-property-values :user.property/property-1)))))
 
 ;; (deftest get-db-property-values-test-with-pages

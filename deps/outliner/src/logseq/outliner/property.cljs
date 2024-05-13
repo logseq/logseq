@@ -189,14 +189,15 @@
   (if (uuid? id) [:block/uuid id] id))
 
 (defn set-block-property!
-  "Updates a block property's value for the an existing property-id. If possibly
-  creating a new property, use upsert-property!"
-  [conn block-eid property-id v {:keys [property-name property-type]}]
+  "Updates a block property's value for the an existing property-id.
+  `v` should be a db interger id for ref-typed properties."
+  [conn block-eid property-id v]
   (let [block-eid (->eid block-eid)
         db @conn
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         property (d/entity @conn property-id)
+        _ (assert (some? property) (str "Property " property-id " doesn't exists yet"))
         k-name (:block/original-name property)
         property-schema (:block/schema property)
         {:keys [type]} property-schema
@@ -205,13 +206,13 @@
     (cond
       db-attribute?
       (d/transact! conn [{:db/id (:db/id block) property-id v'}]
-        {:outliner-op :save-block})
+                   {:outliner-op :save-block})
 
       :else
       (let [v'' (if property v' (or v' ""))]
         (when (some? v'')
           (let [infer-schema (when-not type (infer-schema-from-input-string v''))
-                property-type' (or type property-type infer-schema :default)
+                property-type' (or type infer-schema :default)
                 schema (get-property-value-schema db property-type' (or property
                                                                         {:block/schema {:type property-type'}}))
                 existing-value (when-let [id (:db/ident property)]
@@ -223,8 +224,7 @@
                                (catch :default e
                                  (js/console.error e)
                                  ;; (notification/show! (str e) :error false)
-                                 nil)))
-                ]
+                                 nil)))]
             (when-not (= existing-value new-value*)
               (if-let [msg (validate-property-value schema
                                                     ;; normalize :many values for components that only provide single value
@@ -233,9 +233,8 @@
                                                       new-value*))]
                 (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
                   ;; (notification/show! msg' :warning)
-                  )
-                (let [_ (upsert-property! conn property-id (assoc property-schema :type property-type') {:property-name property-name})
-                      status? (= :logseq.task/status (:db/ident property))
+                  (prn :debug :msg msg' :property k-name :v v))
+                (let [status? (= :logseq.task/status (:db/ident property))
                       ;; don't modify maps
                       new-value (if (or (sequential? new-value*) (set? new-value*))
                                   (if (= :coll property-type')
@@ -244,6 +243,31 @@
                                   new-value*)
                       tx-data (build-property-value-tx-data block property-id new-value status?)]
                   (d/transact! conn tx-data {:outliner-op :save-block}))))))))))
+
+(defn create-property-text-block!
+  "`template-id`: which template the new block belongs to"
+  [conn block-id property-id value {:keys [template-id]}]
+  (let [property (d/entity @conn property-id)
+        block (when block-id (d/entity @conn block-id))]
+    (when property
+      (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
+                              (int? template-id)
+                              (assoc :block/tags template-id
+                                     :logseq.property/created-from-template template-id))]
+        (d/transact! conn [new-value-block] {:outliner-op :insert-blocks})
+        (let [property-id (:db/ident property)]
+          (when (and property-id block)
+            (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
+              (set-block-property! conn (:db/id block) property-id block-id)))
+          (:block/uuid new-value-block))))))
+
+(defn set-block-property-raw-value!
+  [conn block-eid property-id value]
+  (let [property (d/entity @conn property-id)]
+    (when (db-property-type/ref-property-types (get-in property [:block/schema type]))
+      (let [v-uuid (create-property-text-block! conn nil (:db/id property) (str value) {})
+            v-id (:db/id (d/entity @conn [:block/uuid v-uuid]))]
+        (set-block-property! conn block-eid property-id v-id)))))
 
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
@@ -378,23 +402,6 @@
      (seq (:block/alias block-entity))
      (and (seq properties)
           (not= properties [:logseq.property/icon])))))
-
-(defn create-property-text-block!
-  "`template-id`: which template the new block belongs to"
-  [conn block-id property-id value {:keys [template-id]}]
-  (let [property (d/entity @conn property-id)
-        block (when block-id (d/entity @conn block-id))]
-    (when property
-      (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
-                              (int? template-id)
-                              (assoc :block/tags template-id
-                                     :logseq.property/created-from-template template-id))]
-        (d/transact! conn [new-value-block] {:outliner-op :insert-blocks})
-        (let [property-id (:db/ident property)]
-          (when (and property-id block)
-            (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
-              (set-block-property! conn (:db/id block) property-id block-id {})))
-          (:block/uuid new-value-block))))))
 
 (defn upsert-closed-value!
   "id should be a block UUID or nil"

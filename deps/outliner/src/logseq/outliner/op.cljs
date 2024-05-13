@@ -42,7 +42,7 @@
    [:set-block-property
     [:catn
      [:op :keyword]
-     [:args [:tuple ::block-id ::property-id ::value ::option]]]]
+     [:args [:tuple ::block-id ::property-id ::value]]]]
    [:remove-block-property
     [:catn
      [:op :keyword]

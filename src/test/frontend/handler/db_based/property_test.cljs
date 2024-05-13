@@ -34,7 +34,10 @@
 ;; update-property!
 (deftest ^:large-vars/cleanup-todo block-property-test
   (testing "Add a property to a block"
-    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-1 "value" {:property-type :string})
+    (let [conn (db/get-db false)]
+      (outliner-property/upsert-property! conn :user.property/property-1 {:type :string}
+                                          {:property-name "property 1"})
+      (outliner-property/set-block-property! conn fbid :user.property/property-1 "value"))
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity :user.property/property-1)]
@@ -54,10 +57,15 @@
         "value")))
 
   (testing "Add another property"
-    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-2 "1" {})
+    (let [conn (db/get-db false)]
+      (outliner-property/upsert-property! conn :user.property/property-2 {:type :number}
+                                          {:property-name "property 2"})
+      (outliner-property/set-block-property! conn fbid :user.property/property-2 "1"))
+
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)
           property (db/entity :user.property/property-2)]
+      (prn :debug :properties properties)
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
@@ -74,9 +82,13 @@
         1)))
 
   (testing "Update property value"
-    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-2 2 {})
+    (let [conn (db/get-db false)]
+      (prn :debug :property (d/entity @conn :user.property/property-2)
+           :block (:block/properties (db/entity [:block/uuid fbid])))
+      (outliner-property/set-block-property! conn fbid :user.property/property-2 2))
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
+      (prn :debug :properties properties)
       ;; check block's properties
       (are [x y] (= x y)
         (count properties)
@@ -85,7 +97,8 @@
         2)))
 
   (testing "Wrong type property value shouldn't transacted"
-    (outliner-property/set-block-property! (db/get-db false) fbid :user.property/property-2 "Not a number" {})
+    (let [conn (db/get-db false)]
+      (outliner-property/set-block-property! conn fbid :user.property/property-2 "Not a number"))
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -97,10 +110,11 @@
 
   (testing "Add a multi-values property"
     (let [conn (db/get-db false)]
-      (outliner-property/upsert-property! conn :user.property/property-3 {:type :number :cardinality :many} {})
-      (outliner-property/set-block-property! conn fbid :user.property/property-3 1 {})
-      (outliner-property/set-block-property! conn fbid :user.property/property-3 2 {})
-      (outliner-property/set-block-property! conn fbid :user.property/property-3 3 {})
+      (outliner-property/upsert-property! conn :user.property/property-3 {:type :number :cardinality :many}
+                                          {:property-name "property 3"})
+      (outliner-property/set-block-property! conn fbid :user.property/property-3 1)
+      (outliner-property/set-block-property! conn fbid :user.property/property-3 2)
+      (outliner-property/set-block-property! conn fbid :user.property/property-3 3)
       (let [block (db/entity [:block/uuid fbid])
             properties (:block/properties block)
             property (db/entity :user.property/property-3)]
@@ -266,8 +280,9 @@
 (deftest closed-values-test
   (testing "Create properties and closed values"
     (let [conn (db/get-db false)]
-      (outliner-property/set-block-property! conn fbid :user.property/property-1 "1" {})
-      (outliner-property/set-block-property! conn sbid :user.property/property-1 "2" {}))
+      (outliner-property/upsert-property! conn :user.property/property-1 {:type :number} {})
+      (outliner-property/set-block-property! conn fbid :user.property/property-1 "1")
+      (outliner-property/set-block-property! conn sbid :user.property/property-1 "2"))
     (let [k :user.property/property-1
           property (db/entity k)
           conn (db/get-db false)]
@@ -299,8 +314,8 @@
 
             (testing "Update closed value"
               (let [{:keys [tx-data]} (outliner-property/upsert-closed-value! conn (:db/id property) {:id block-id
-                                                                                               :value 4
-                                                                                               :description "choice 4"})]
+                                                                                                      :value 4
+                                                                                                      :description "choice 4"})]
                 (db/transact! tx-data)
                 (let [b (db/entity [:block/uuid block-id])]
                   (is (= 4 (:block/content b)))
@@ -321,7 +336,7 @@
       ;; add property
       (outliner-property/upsert-property! conn k {:type :default} {})
       (let [property (db/entity k)
-            {:keys [block-id]} (outliner-property/create-property-text-block! conn (:db/id fb) (:db/id property) "Block content" {})
+            block-id (outliner-property/create-property-text-block! conn (:db/id fb) (:db/id property) "Block content" {})
             {:keys [from-property-id]} (outliner-property/get-property-block-created-block @conn [:block/uuid block-id])]
         (is (= from-property-id (:db/id property)))))))
 

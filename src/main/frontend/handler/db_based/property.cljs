@@ -13,10 +13,10 @@
     (outliner-op/upsert-property! property-id schema property-opts)))
 
 (defn set-block-property!
-  [block-id property-id value opts]
+  [block-id property-id value]
   (ui-outliner-tx/transact!
    {:outliner-op :set-block-property}
-   (outliner-op/set-block-property! block-id property-id value opts)))
+   (outliner-op/set-block-property! block-id property-id value)))
 
 (defn remove-block-property!
   [block-id property-id]
