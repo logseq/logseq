@@ -93,7 +93,7 @@
           [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
            (for [class schema-classes]
              [:a.text-sm (str "#" (:block/original-name class))])]
-          (pv/property-empty-value))])]))
+          (pv/property-empty-btn-value))])]))
 
 (defn- property-type-label
   [property-type]
