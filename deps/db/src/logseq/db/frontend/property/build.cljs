@@ -13,6 +13,7 @@
      :block/page property-id
      :block/content value
      :block/closed-value-property property-id
+     :logseq.property/created-from-property property-id
      :block/parent property-id}))
 
 (defn build-closed-value-block
