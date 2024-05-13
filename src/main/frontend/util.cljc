@@ -1497,16 +1497,6 @@ Arg *stop: atom, reset to true to stop the loop"
          #(js/setTimeout % 16))))
 
 #?(:cljs
-   (defn tag?
-     "Whether `s` is a tag."
-     [s]
-     (and (string? s)
-          (string/starts-with? s "#")
-          (or
-           (not (string/includes? s " "))
-           (string/starts-with? s "#[[")
-           (string/ends-with? s "]]")))))
-#?(:cljs
    (defn parse-params
      "Parse URL parameters in hash(fragment) into a hashmap"
      []

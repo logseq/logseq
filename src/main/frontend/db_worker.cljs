@@ -368,7 +368,7 @@
                         (concat tx-data
                                 (db-fix/fix-cardinality-many->one @conn (:property-id tx-meta)))
                         tx-data)
-             tx-data' (if (contains? #{:new-property :insert-blocks} (:outliner-op tx-meta))
+             tx-data' (if (contains? #{:insert-blocks} (:outliner-op tx-meta))
                         (map (fn [m]
                                (if (and (map? m) (nil? (:block/order m)))
                                  (assoc m :block/order (db-order/gen-key nil))

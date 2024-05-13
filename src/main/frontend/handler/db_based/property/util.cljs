@@ -15,7 +15,6 @@
   (every? (fn [id]
             (:hide? (:block/schema (db/entity id)))) properties))
 
-;; FIXME: property no long has `:block/name` attribute
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
   property names and property values dereferenced where possible. A property's
@@ -34,9 +33,3 @@
                   (set (map readable-property-val v))
                   (readable-property-val v))])))
        (into {})))
-
-(defn property-value-when-closed
-  "Returns property value if the given entity is type 'closed value' or nil"
-  [ent]
-  (when (contains? (:block/type ent) "closed value")
-    (:block/content ent)))

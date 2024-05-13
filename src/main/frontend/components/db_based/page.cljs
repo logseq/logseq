@@ -7,7 +7,7 @@
             [frontend.components.property.value :as pv]
             [frontend.config :as config]
             [frontend.db :as db]
-            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.outliner.property :as outliner-property]
             [frontend.ui :as ui]
             [frontend.state :as state]
             [rum.core :as rum]
@@ -26,7 +26,7 @@
         edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
                         :page-configure? configure?}
-        has-viewable-properties? (db-property-handler/block-has-viewable-properties? page)
+        has-viewable-properties? (outliner-property/block-has-viewable-properties? page)
         has-class-properties? (seq (:class/schema.properties page))
         hide-properties? (:logseq.property/hide-properties? page)]
     (when (or configure?
@@ -94,7 +94,7 @@
 (rum/defc page-properties-react < rum/reactive
   [page* page-opts]
   (let [page (db/sub-block (:db/id page*))]
-    (when (or (db-property-handler/block-has-viewable-properties? page)
+    (when (or (outliner-property/block-has-viewable-properties? page)
               ;; Allow class and property pages to add new property
               (some #{"class" "property"} (:block/type page)))
       (page-properties page page-opts))))

@@ -283,11 +283,12 @@
   [original-page-name date-formatter]
   (when original-page-name
     (let [page-name (common-util/page-name-sanity-lc original-page-name)
-          day (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter))]
-     (if day
-       (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
-         [original-page-name (common-util/page-name-sanity-lc original-page-name) day])
-       [original-page-name page-name day]))))
+          day (when date-formatter
+                (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter)))]
+      (if day
+        (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
+          [original-page-name (common-util/page-name-sanity-lc original-page-name) day])
+        [original-page-name page-name day]))))
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
 
