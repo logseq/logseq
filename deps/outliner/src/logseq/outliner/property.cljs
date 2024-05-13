@@ -194,11 +194,16 @@
 
 (defn create-property-text-block!
   "`template-id`: which template the new block belongs to"
-  [conn block-id property-id value {:keys [template-id]}]
+  [conn block-id property-id value {:keys [template-id new-block-id]}]
   (let [property (d/entity @conn property-id)
         block (when block-id (d/entity @conn block-id))]
     (when property
       (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
+                              true
+                              (assoc
+                               :block.temp/fully-loaded? true)
+                              new-block-id
+                              (assoc :block/uuid new-block-id)
                               (int? template-id)
                               (assoc :block/tags template-id
                                      :logseq.property/created-from-template template-id))]

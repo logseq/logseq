@@ -68,15 +68,15 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (p/let [{:keys [block-id result]} (db-property-handler/create-property-text-block!
-                                     (:db/id block)
-                                     (:db/id property)
-                                     value
-                                     {})]
+  (p/let [new-block-id (db/new-block-id)
+          block-id (db-property-handler/create-property-text-block!
+                    (:db/id block)
+                    (:db/id property)
+                    value
+                    {:new-block-id new-block-id})]
     (p/do!
-     result
      (exit-edit-property)
-     (let [block (db/entity [:block/uuid block-id])]
+     (let [block (db/entity [:block/uuid new-block-id])]
        (when edit-block?
          (editor-handler/edit-block! block :max {:container-id :unknown-container}))
        block))))
@@ -378,12 +378,14 @@
 (defn <create-new-block-from-template!
   "`template`: tag block"
   [block property template]
-  (p/let [block-id (db-property-handler/create-property-text-block!
+  (p/let [new-block-id (db/new-block-id)
+          block-id (db-property-handler/create-property-text-block!
                     (:db/id block)
                     (:db/id property)
                     ""
-                    {:template-id (:db/id template)})
-          new-block (db/entity [:block/uuid block-id])]
+                    {:new-block-id new-block-id
+                     :template-id (:db/id template)})
+          new-block (db/entity [:block/uuid new-block-id])]
     (shui/popup-hide!)
     (exit-edit-property)
     new-block))
