@@ -365,7 +365,11 @@
                                                              :class/schema.properties :class/parent
                                                              :db/cardinality :property/schema.classes])
                                        (seq props)
-                                       (assoc :block/properties (update-keys props name))
+                                       (assoc :block/properties (-> (update-keys props name)
+                                                                    (update-vals (fn [v]
+                                                                                   (if (:db/id v)
+                                                                                     (:block/content (d/entity db (:db/id v)))
+                                                                                     v)))))
                                        (seq (:class/schema.properties m))
                                        (update :class/schema.properties #(set (map :block/original-name %)))
                                        (some? (:class/parent m))
