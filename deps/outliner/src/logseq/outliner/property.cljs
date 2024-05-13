@@ -143,7 +143,7 @@
                                  (build-property-value-tx-data property property-id v)) properties)))
             many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
         (when (seq tx-data)
-          (d/transact! conn tx-data {:outliner-op :update-propertyxo
+          (d/transact! conn tx-data {:outliner-op :update-property
                                      :property-id (:db/id property)
                                      :many->one? many->one?})))
       (let [k-name (or (and property-name (name property-name))

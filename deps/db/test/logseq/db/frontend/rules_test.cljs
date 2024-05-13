@@ -21,8 +21,8 @@
 (deftest has-page-property-rule
   (let [conn (new-db-conn)
         page (sqlite-util/build-new-page "Page")
-        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo {})
-                             (sqlite-util/build-new-property :user.property/foo2 {})
+        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo {:type :string})
+                             (sqlite-util/build-new-property :user.property/foo2 {:type :string})
                              page
                              {:block/uuid (:block/uuid page) :user.property/foo "bar"}])]
     (is (= ["Page"]
@@ -45,8 +45,8 @@
   (let [conn (new-db-conn)
         page (sqlite-util/build-new-page "Page")
         page-a (sqlite-util/build-new-page "Page A")
-        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo {})
-                             (sqlite-util/build-new-property :user.property/foo2 {})
+        _ (d/transact! conn [(sqlite-util/build-new-property :user.property/foo {:type :string})
+                             (sqlite-util/build-new-property :user.property/foo2 {:type :string})
                              (sqlite-util/build-new-property :user.property/number-many {:type :number :cardinality :many})
                              (sqlite-util/build-new-property :user.property/page-many {:type :page :cardinality :many})
                              page
