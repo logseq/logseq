@@ -28,9 +28,14 @@
             [frontend.handler.property.util :as pu]
             [logseq.db.frontend.property.type :as db-property-type]))
 
-(rum/defc property-empty-value
+(rum/defc property-empty-btn-value
   [& {:as opts}]
   (shui/button (merge {:class "empty-btn" :variant :text} opts) "Empty"))
+
+(rum/defc property-empty-text-value
+  [& {:as opts}]
+  [:span.inline-flex.items-center.cursor-pointer
+   (merge {:class "empty-text-btn" :variant :text} opts) "Empty"])
 
 (rum/defc icon-row < rum/reactive
   [block]
@@ -483,14 +488,14 @@
     [:div.text-sm.opacity-70 "loading"]
     (let [multiple-values? (db-property/many? property)]
       (if value-block
-       [:div.property-block-container.content
+        [:div.property-block-container.content
         (block-cp [value-block] {:id (str (if multiple-values?
                                             (:block/uuid block)
                                             (:block/uuid value-block)))
                                  :editor-box editor-box
                                  :property-block? true
                                  :closed-values? closed-values?})]
-       (property-empty-value)))))
+        (property-empty-btn-value)))))
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
@@ -550,7 +555,7 @@
                   (:db/id v-block))
                 :else
                 invalid-warning)))
-          (property-empty-value))))))
+          (property-empty-btn-value))))))
 
 (rum/defc closed-value-item < rum/reactive
   [value {:keys [page-cp inline-text icon?]}]
@@ -590,7 +595,7 @@
     [:div.select-item
      (cond
        (= value :logseq.property/empty-placeholder)
-       (property-empty-value)
+       (property-empty-btn-value)
 
        (contains? #{:page :date} type)
        (when value
@@ -639,13 +644,9 @@
        :div.jtrigger.flex.flex-1.w-full
        {:ref *el
         :tabIndex 0
-        :on-key-down (fn [^js e]
-                       (when (contains? #{"Enter" " "} (.-key e))
-                         (.click (.-target e))
-                         (util/stop e)))
         :on-click #(show! (.-target %))}
        (if (string/blank? value)
-         (property-empty-value)
+         (property-empty-text-value)
          (value-f))))))
 
 (defn- save-text!
@@ -733,7 +734,7 @@
                                   opts)
 
          (and (= type :default) (nil? (:block/content value)))
-         [:div.jtrigger (property-empty-value)]
+         [:div.jtrigger (property-empty-btn-value)]
 
          (= type :default)
          (property-block-value value block property block-cp editor-box opts page-cp editor-id)
@@ -807,7 +808,7 @@
                            (when date?
                              [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                           (when-not editing?
-                            (property-empty-value))))
+                            (property-empty-btn-value))))
             select-cp (fn [select-opts]
                         (let [select-opts (merge {:multiple-choices? true
                                                   :dropdown? editing?
