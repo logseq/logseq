@@ -90,8 +90,9 @@
   (if new-closed-value?
     (number? id-or-value)
     (when-let [entity (d/entity db id-or-value)]
-      (number? (some-> (:block/content entity)
-                       parse-double)))))
+      (or (number? (:block/content entity))
+          ;; FIXME: UI concerns shouldn't be in this layer
+          (number? (some-> (:block/content entity) parse-double))))))
 
 (defn- property-value-block?
   [db s]
