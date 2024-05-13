@@ -26,7 +26,7 @@
 
 (def value-ref-property-types
   "Property value ref types"
-  #{:default :url :number})
+  #{:default :url :number :template})
 
 (def ref-property-types
   "User facing ref types"
@@ -73,9 +73,25 @@
   (some? (d/entity db id)))
 
 (defn- url-entity?
-  [db val]
-  (when-let [ent (d/entity db val)]
-    (url? (:block/content ent))))
+  [db val {:keys [new-closed-value?]}]
+  (if new-closed-value?
+    (url? val)
+    (when-let [ent (d/entity db val)]
+      (url? (:block/content ent)))))
+
+(defn- string-entity?
+  [db id-or-value _opts]
+  (or (string? id-or-value)
+    (when-let [entity (d/entity db id-or-value)]
+      (string? (:block/content entity)))))
+
+(defn- number-entity?
+  [db id-or-value {:keys [new-closed-value?]}]
+  (if new-closed-value?
+    (number? id-or-value)
+    (when-let [entity (d/entity db id-or-value)]
+      (number? (some-> (:block/content entity)
+                       parse-double)))))
 
 (defn- property-value-block?
   [db s]
@@ -94,17 +110,6 @@
     (and (some? (:block/original-name ent))
          (contains? (:block/type ent) "journal"))))
 
-(defn- string-or-closed-string?
-  [db s]
-  (or (string? s)
-      (when-let [entity (d/entity db s)]
-        (string? (:block/content entity)))))
-
-(defn- number-entity?
-  [db id]
-  (when-let [entity (d/entity db id)]
-    (number? (some-> (:block/content entity)
-                     parse-double))))
 
 (def built-in-validation-schemas
   "Map of types to malli validation schemas that validate a property value for that type"
@@ -113,7 +118,7 @@
               property-value-block?]
    :string   [:fn
               {:error/message "should be a string"}
-              string-or-closed-string?]
+              string-entity?]
    :number   [:fn
               {:error/message "should be a number"}
               number-entity?]

@@ -310,3 +310,9 @@
 (defn many?
   [property]
   (= (:db/cardinality property) :db.cardinality/many))
+
+(defn property-value-when-closed
+  "Returns property value if the given entity is type 'closed value' or nil"
+  [ent]
+  (when (contains? (:block/type ent) "closed value")
+    (:block/content ent)))

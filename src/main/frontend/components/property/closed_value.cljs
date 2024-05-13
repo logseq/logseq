@@ -21,13 +21,19 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.core :as outliner-core]))
 
+(defn- re-init-commands!
+  "Update commands after task status and priority's closed values has been changed"
+  [property]
+  (when (contains? #{:logseq.task/status :logseq.task/priority} (:db/ident property))
+    (state/pub-event! [:init/commands])))
+
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
-  (p/let [{:keys [block-id tx-data]} (db-property-handler/<upsert-closed-value property item)]
+  (p/let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value! property item)]
     (p/do!
      (when (seq tx-data) (db/transact! (state/get-current-repo) tx-data {:outliner-op :upsert-closed-value}))
-     (when (seq tx-data) (db-property-handler/re-init-commands! property))
+     (when (seq tx-data) (re-init-commands! property))
      block-id)))
 
 (rum/defc item-value
@@ -110,11 +116,10 @@
 
 (rum/defcs choice-with-close <
   (rum/local false ::hover?)
-  [state property item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
+  [state item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
   (let [*hover? (::hover? state)
         value (db-property/closed-value-name item)
         page? (:block/original-name item)
-        date? (= :date (:type (:block/schema property)))
         property-block? (db-property/property-created-block? item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
@@ -127,14 +132,6 @@
         property-block?
         [:a {:on-click toggle-fn}
          value]
-
-        date?
-        [:div.flex.flex-row.items-center.gap-1
-         (property-value/date-picker item
-                                     {:on-change (fn [page]
-                                                   (db-property-handler/replace-closed-value property
-                                                                                             (:db/id page)
-                                                                                             (:db/id item)))})]
 
         (and page? (:page-cp parent-opts))
         ((:page-cp parent-opts) {:preview? false} item)
@@ -169,12 +166,13 @@
           opts {:toggle-fn #(shui/popup-show! % content-fn)}]
 
       (choice-with-close
-       property
        block
        (assoc opts
               :delete-choice
               (fn []
-                (db-property-handler/delete-closed-value! property block))
+                (p/do!
+                 (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
+                 (re-init-commands! property)))
               :update-icon
               (fn [icon]
                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon icon)))
@@ -195,7 +193,7 @@
    (ui/button
     "Add choices"
     {:on-click (fn []
-                 (p/let [_ (db-property-handler/<add-existing-values-to-closed-values! property values)]
+                 (p/let [_ (db-property-handler/add-existing-values-to-closed-values! (:db/id property) values)]
                    (toggle-fn)))})])
 
 (rum/defc choices < rum/reactive
@@ -243,14 +241,14 @@
                    existing-values (seq (:property/closed-values property))
                    values (if (seq existing-values)
                             (let [existing-ids (set (map :db/id existing-values))]
-                              (remove (fn [[_ id]] (existing-ids id)) values))
+                              (remove (fn [id] (existing-ids id)) values))
                             values)]
              (shui/popup-show! (.-target e)
                                (fn [{:keys [id]}]
                                  (let [opts {:toggle-fn (fn [] (shui/popup-hide! id))}
                                        values' (->> (if (contains? db-property-type/ref-property-types (get-in property [:block/schema :type]))
-                                                      (map #(:block/uuid (db/entity (second %))) values)
-                                                      (map second values))
+                                                      (map #(:block/uuid (db/entity %)) values)
+                                                      values)
                                                     (remove string/blank?)
                                                     distinct)]
                                    (if (seq values')

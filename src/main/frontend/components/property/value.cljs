@@ -10,6 +10,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
+            [logseq.outliner.property :as outliner-property]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -19,7 +20,6 @@
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [promesa.core :as p]
-            [goog.dom :as gdom]
             [frontend.db.async :as db-async]
             [logseq.common.util.macro :as macro-util]
             [logseq.db :as ldb]
@@ -40,15 +40,12 @@
                                  {:disabled? config/publishing?
                                   :on-chosen (fn [_e icon]
                                                (db-property-handler/set-block-property!
-                                                (state/get-current-repo)
                                                 (:db/id block)
                                                 :logseq.property/icon
-                                                icon
-                                                {}))})
+                                                icon))})
      (when (and icon-value (not config/publishing?))
        [:a.fade-link.flex {:on-click (fn [_e]
                                        (db-property-handler/remove-block-property!
-                                        (state/get-current-repo)
                                         (:db/id block)
                                         :logseq.property/icon))
                            :title "Delete this icon"}
@@ -71,12 +68,15 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (p/let [{:keys [block-id result]} (db-property-handler/create-property-text-block!
-                                     block property value editor-handler/wrap-parse-block {})]
+  (p/let [new-block-id (db/new-block-id)
+          _ (db-property-handler/create-property-text-block!
+             (:db/id block)
+             (:db/id property)
+             value
+             {:new-block-id new-block-id})]
     (p/do!
-     result
      (exit-edit-property)
-     (let [block (db/entity [:block/uuid block-id])]
+     (let [block (db/entity [:block/uuid new-block-id])]
        (when edit-block?
          (editor-handler/edit-block! block :max {:container-id :unknown-container}))
        block))))
@@ -89,28 +89,29 @@
                                        :or {exit-edit? true}}]
 
    (let [repo (state/get-current-repo)
-         class? (contains? (:block/type block) "class")]
+         class? (contains? (:block/type block) "class")
+         property (db/entity property-key)]
      (p/do!
       (when property-key
         (if (and class? class-schema?)
-          (db-property-handler/class-add-property! repo (:block/uuid block) property-key)
+          (db-property-handler/class-add-property! (:db/id block) property-key)
           (let [[property-id property-value']
                 (if (string? property-key)
                   (if-let [ent (ldb/get-case-page (db/get-db repo) property-key)]
                     [(:db/ident ent) property-value]
                     ;; This is a new property. Create a new property id to use of set-block-property!
-                    [(db-property-handler/ensure-unique-db-ident
+                    [(outliner-property/ensure-unique-db-ident
                       (db/get-db (state/get-current-repo))
                       (db-property/create-user-property-ident-from-name property-key))
-                     :logseq.property/empty-placeholder])
+                     (if (= :checkbox (get-in property [:block/schema :type]))
+                       false
+                       :logseq.property/empty-placeholder)])
                   [property-key property-value])]
-            (p/let [property (db/entity property-key)
-                    value (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
-                                   (not (int? property-value')))
-                            (p/let [result (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})]
-                              (:db/id result))
-                            property-value')]
-              (property-handler/set-block-property! repo (:block/uuid block) property-id value)))))
+            (p/let [property (db/entity property-key)]
+              (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                       (not (int? property-value')))
+                (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
+                (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))))
       (when exit-edit?
         (shui/popup-hide!)
         (exit-edit-property))))))
@@ -377,11 +378,17 @@
 (defn <create-new-block-from-template!
   "`template`: tag block"
   [block property template]
-  (let [repo (state/get-current-repo)
-        {:keys [page blocks]} (db-property-handler/property-create-new-block-from-template block property template)]
-    (p/let [_ (db/transact! repo (if page (cons page blocks) blocks) {:outliner-op :insert-blocks})
-            _ (<add-property! block (:db/ident property) (:block/uuid (last blocks)))]
-      (last blocks))))
+  (p/let [new-block-id (db/new-block-id)
+          _ (db-property-handler/create-property-text-block!
+             (:db/id block)
+             (:db/id property)
+             ""
+             {:new-block-id new-block-id
+              :template-id (:db/id template)})
+          new-block (db/entity [:block/uuid new-block-id])]
+    (shui/popup-hide!)
+    (exit-edit-property)
+    new-block))
 
 (rum/defcs select < rum/reactive
   {:init (fn [state]
@@ -411,7 +418,7 @@
                                         value)
                                :value (:db/id block)})) (:property/closed-values property))
                     (->> values
-                         (mapcat (fn [[_id value]]
+                         (mapcat (fn [value]
                                    (if (coll? value)
                                      (map (fn [v] {:value v}) value)
                                      [{:value value}])))
@@ -686,14 +693,6 @@
         (editor-box editor-args editor-id config)])
      nil)])
 
-(defn- set-editing!
-  [block property editor-id dom-id v opts]
-  (let [v (str v)
-        cursor-range (if dom-id
-                       (some-> (gdom/getElement dom-id) util/caret-range)
-                       "")]
-    (state/set-editing! editor-id v property cursor-range (assoc opts :property-block block))))
-
 (defn- property-value-inner
   [block property value {:keys [inline-text block-cp page-cp
                                 editor-id dom-id row?
@@ -829,7 +828,7 @@
          [editing?])
 
         (if (and dropdown? (not editing?))
-          (let [toggle-fn #(shui/popup-hide!)
+          (let [toggle-fn shui/popup-hide!
                 content-fn (fn [{:keys [_id content-props]}]
                              (select-cp {:content-props content-props}))]
             [:div.multi-values.jtrigger

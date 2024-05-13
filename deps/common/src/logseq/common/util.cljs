@@ -60,6 +60,16 @@
   (when (string? tag-name)
     (not (re-find #"[#\t\r\n]+" tag-name))))
 
+(defn tag?
+  "Whether `s` is a tag."
+  [s]
+  (and (string? s)
+       (string/starts-with? s "#")
+       (or
+        (not (string/includes? s " "))
+        (string/starts-with? s "#[[")
+        (string/ends-with? s "]]"))))
+
 (defn safe-subs
   ([s start]
    (let [c (count s)]

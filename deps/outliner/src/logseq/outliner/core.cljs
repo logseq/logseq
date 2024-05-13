@@ -688,7 +688,7 @@
             page-blocks)))
 
 (defn ^:api delete-block
-  [_repo conn txs-state node {:keys [_date-formatter]}]
+  [conn txs-state node {:keys [_date-formatter]}]
   (otree/-del node txs-state conn)
   @txs-state)
 
@@ -704,7 +704,7 @@
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
-  [repo conn date-formatter blocks delete-opts]
+  [_repo conn date-formatter blocks delete-opts]
   [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
@@ -716,7 +716,7 @@
     (if (or
          (= 1 (count top-level-blocks))
          (= start-block end-block))
-      (delete-block repo conn txs-state start-block (assoc delete-opts :date-formatter date-formatter))
+      (delete-block conn txs-state start-block (assoc delete-opts :date-formatter date-formatter))
       (doseq [id block-ids]
         (let [node (d/entity @conn id)]
           (otree/-del node txs-state conn))))

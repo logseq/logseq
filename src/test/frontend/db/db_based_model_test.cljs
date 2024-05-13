@@ -4,7 +4,7 @@
             [frontend.db :as db]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [frontend.handler.db-based.property :as db-property-handler]
+            [logseq.outliner.property :as outliner-property]
             [frontend.handler.page :as page-handler]
             [logseq.db :as ldb]))
 
@@ -23,15 +23,20 @@
 (use-fixtures :each start-and-destroy-db)
 
 (deftest get-block-property-values-test
-  (db-property-handler/set-block-property! repo fbid :user.property/property-1 "value 1" {:property-type :string})
-  (db-property-handler/set-block-property! repo sbid :user.property/property-1 "value 2" {:property-type :string})
-  (is (= (model/get-block-property-values :user.property/property-1)
-         ["value 1" "value 2"])))
+  (let [conn (db/get-db false)]
+    (outliner-property/upsert-property! conn :user.property/property-1 {:type :string} {:property-name "property 1"})
+    (outliner-property/set-block-property! conn fbid :user.property/property-1 "value 1")
+    (outliner-property/set-block-property! conn sbid :user.property/property-1 "value 2")
+    (is (= (model/get-block-property-values :user.property/property-1)
+           ["value 1" "value 2"]))))
 
 (deftest get-db-property-values-test
-  (db-property-handler/set-block-property! repo fbid :user.property/property-1 "1" {})
-  (db-property-handler/set-block-property! repo sbid :user.property/property-1 "2" {})
-  (is (= [1 2] (model/get-block-property-values :user.property/property-1))))
+  (let [conn (db/get-db false)]
+    (outliner-property/upsert-property! conn :user.property/property-1 {:type :number} {:property-name "property 1"})
+    (outliner-property/set-block-property! conn fbid :user.property/property-1 "1")
+    (outliner-property/set-block-property! conn sbid :user.property/property-1 "2")
+    (is (= ["1" "2"]
+           (map (fn [id] (:block/content (d/entity @conn id))) (model/get-block-property-values :user.property/property-1))))))
 
 ;; (deftest get-db-property-values-test-with-pages
 ;;   (let [opts {:redirect? false :create-first-block? false}
@@ -39,9 +44,9 @@
 ;;         _ (page-handler/create! "page2" opts)
 ;;         p1id (:block/uuid (db/get-page "page1"))
 ;;         p2id (:block/uuid (db/get-page "page2"))]
-;;     (db-property-handler/upsert-property! repo "property-1" {:type :page} {})
-;;     (db-property-handler/set-block-property! repo fbid "property-1" p1id {})
-;;     (db-property-handler/set-block-property! repo sbid "property-1" p2id {})
+;;     (outliner-property/upsert-property! repo "property-1" {:type :page} {})
+;;     (outliner-property/set-block-property! repo fbid "property-1" p1id {})
+;;     (outliner-property/set-block-property! repo sbid "property-1" p2id {})
 ;;     (is (= '("[[page1]]" "[[page2]]") (model/get-db-property-values repo "property-1")))))
 
 (deftest get-all-classes-test
@@ -74,10 +79,11 @@
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)
         class1 (db/get-page "class1")
-        class2 (db/get-page "class2")]
-    (db-property-handler/upsert-property! repo :user.property/property-1 {:type :page} {})
-    (db-property-handler/class-add-property! repo (:block/uuid class1) :user.property/property-1)
-    (db-property-handler/class-add-property! repo (:block/uuid class2) :user.property/property-1)
+        class2 (db/get-page "class2")
+        conn (db/get-db false)]
+    (outliner-property/upsert-property! conn :user.property/property-1 {:type :page} {})
+    (outliner-property/class-add-property! conn (:db/id class1) :user.property/property-1)
+    (outliner-property/class-add-property! conn (:db/id class2) :user.property/property-1)
     (let [property (db/entity :user.property/property-1)
           classes (model/get-classes-with-property (:db/ident property))]
       (is (= (set (map :db/id classes))

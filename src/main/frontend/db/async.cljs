@@ -80,12 +80,28 @@
 (defn <get-block-property-values
   [graph property-id]
   (<q graph {:transact-db? false}
-      '[:find ?b ?v
+      '[:find [?v ...]
         :in $ ?property-id
         :where
         [?b ?property-id ?v]
         [(not= ?v :logseq.property/empty-placeholder)]]
       property-id))
+
+(comment
+  (defn <get-block-property-value-entity
+    [graph property-id value]
+    (p/let [result (<q graph {}
+                       '[:find [(pull ?vid [*]) ...]
+                         :in $ ?property-id ?value
+                         :where
+                         [?b ?property-id ?vid]
+                         [(not= ?vid :logseq.property/empty-placeholder)]
+                         (or
+                          [?vid :block/content ?value]
+                          [?vid :block/original-name ?value])]
+                       property-id
+                       value)]
+      (db/entity (:db/id (first result))))))
 
 ;; TODO: batch queries for better performance and UX
 (defn <get-block
