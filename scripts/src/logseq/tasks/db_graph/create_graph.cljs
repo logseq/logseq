@@ -53,7 +53,7 @@
 (defn- translate-property-value
   "Translates a property value for create-graph edn. A value wrapped in vector
   may indicate a reference type e.g. [:page \"some page\"]"
-  [val {:keys [page-uuids block-uuids]}]
+  [val page-uuids]
   (if (vector? val)
     (case (first val)
       ;; Converts a page name to block/uuid
@@ -62,44 +62,33 @@
         [:block/uuid page-uuid]
         (throw (ex-info (str "No uuid for page '" (second val) "'") {:name (second val)})))
       :block/uuid
-      val
-      ;; TODO: If not used by :default and replace uuid-maps with just page-uuids everywhere
-      :block
-      (or (block-uuids (second val))
-          (throw (ex-info (str "No uuid for block '" (second val) "'") {:name (second val)})))
-      (throw (ex-info "Invalid property value type. Valid values are :block and :page" {})))
+      val)
     val))
 
 (defn- get-ident [all-idents kw]
   (or (get all-idents kw)
       (throw (ex-info (str "No ident found for " kw) {}))))
 
-(defn- ->block-properties [properties uuid-maps all-idents]
+(defn- ->block-properties [properties page-uuids all-idents]
   (->>
    (map
     (fn [[prop-name val]]
       [(get-ident all-idents prop-name)
        ;; set indicates a :many value
        (if (set? val)
-         (set (map #(translate-property-value % uuid-maps) val))
-         (translate-property-value val uuid-maps))])
+         (set (map #(translate-property-value % page-uuids) val))
+         (translate-property-value val page-uuids))])
     properties)
    (into {})))
 
-(defn- create-uuid-maps
+(defn- create-page-uuids
   "Creates maps of unique page names, block contents and property names to their uuids"
   [pages-and-blocks]
-  (let [page-uuids (->> pages-and-blocks
-                        (map :page)
-                        (map (juxt #(or (:block/name %) (common-util/page-name-sanity-lc (:block/original-name %)))
-                                   :block/uuid))
-                        (into {}))
-        block-uuids (->> pages-and-blocks
-                         (mapcat :blocks)
-                         (map (juxt :block/content :block/uuid))
-                         (into {}))]
-    {:page-uuids page-uuids
-     :block-uuids block-uuids}))
+  (->> pages-and-blocks
+       (map :page)
+       (map (juxt #(or (:block/name %) (common-util/page-name-sanity-lc (:block/original-name %)))
+                  :block/uuid))
+       (into {})))
 
 (defn- build-property-refs [properties all-idents]
   (mapv
@@ -144,7 +133,7 @@
                    (set (map #(vector :block/uuid (:block/uuid %)) v))
                    (vector :block/uuid (:block/uuid v))))))
 
-(defn- ->block-tx [{:keys [properties] :as m} properties-config uuid-maps all-idents page-id]
+(defn- ->block-tx [{:keys [properties] :as m} properties-config page-uuids all-idents page-id]
   (let [new-block {:db/id (new-db-id)
                    :block/format :markdown
                    :block/page {:db/id page-id}
@@ -153,7 +142,7 @@
         pvalue-tx-m (->property-value-tx-m new-block properties properties-config all-idents)
         block-props (when (seq properties)
                       (->block-properties (merge properties (property-value-properties pvalue-tx-m))
-                                          uuid-maps all-idents))]
+                                          page-uuids all-idents))]
     (cond-> []
       ;; Place property values first since they are referenced by block
       (seq pvalue-tx-m)
@@ -165,7 +154,7 @@
                      (merge block-props
                             {:block/refs (build-property-refs properties all-idents)})))))))
 
-(defn- build-properties-tx [properties uuid-maps all-idents]
+(defn- build-properties-tx [properties page-uuids all-idents]
   (let [property-db-ids (->> (keys properties)
                              (map #(vector (name %) (new-db-id)))
                              (into {}))
@@ -181,54 +170,71 @@
                                    {:property-attributes
                                     {:db/id (or (property-db-ids (name prop-name))
                                                 (throw (ex-info "No :db/id for property" {:property prop-name})))}}))
-                                [(merge
-                                  (sqlite-util/build-new-property (get-ident all-idents prop-name)
-                                                                  (:block/schema prop-m)
-                                                                  {:block-uuid (:block/uuid prop-m)})
-                                  {:db/id (or (property-db-ids (name prop-name))
-                                              (throw (ex-info "No :db/id for property" {:property prop-name})))}
-                                  (when-let [props (not-empty (:properties prop-m))]
-                                    (merge
-                                     (->block-properties props uuid-maps all-idents)
-                                     {:block/refs (build-property-refs props all-idents)}))
-                                  (when (seq schema-classes)
-                                    {:property/schema.classes
-                                     (mapv #(hash-map :db/ident (get-ident all-idents %))
-                                           schema-classes)}))]))
+                                (let [new-block
+                                      (merge (sqlite-util/build-new-property (get-ident all-idents prop-name)
+                                                                             (:block/schema prop-m)
+                                                                             {:block-uuid (:block/uuid prop-m)})
+                                             {:db/id (or (property-db-ids (name prop-name))
+                                                         (throw (ex-info "No :db/id for property" {:property prop-name})))})
+                                      pvalue-tx-m (->property-value-tx-m new-block (:properties prop-m) properties all-idents)]
+                                  (cond-> []
+                                    (seq pvalue-tx-m)
+                                    (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+                                    true
+                                    (conj
+                                     (merge
+                                      new-block
+                                      (when-let [props (not-empty (:properties prop-m))]
+                                        (merge
+                                         (->block-properties (merge props (property-value-properties pvalue-tx-m)) page-uuids all-idents)
+                                         {:block/refs (build-property-refs props all-idents)}))
+                                      (when (seq schema-classes)
+                                        {:property/schema.classes
+                                         (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                               schema-classes)})))))))
                             properties))]
     new-properties-tx))
 
-(defn- build-classes-tx [classes uuid-maps all-idents]
+(defn- build-classes-tx [classes properties-config uuid-maps all-idents]
   (let [class-db-ids (->> (keys classes)
                           (map #(vector (name %) (new-db-id)))
                           (into {}))
-        classes-tx (mapv
-                    (fn [[class-name {:keys [class-parent schema-properties] :as class-m}]]
-                      (merge
-                       (->
-                        (sqlite-util/build-new-class
-                         {:block/name (common-util/page-name-sanity-lc (name class-name))
-                          :block/original-name (name class-name)
-                          :block/uuid (d/squuid)
-                          :db/ident (get-ident all-idents class-name)
-                          :db/id (or (class-db-ids (name class-name))
-                                     (throw (ex-info "No :db/id for class" {:class class-name})))})
-                        ;; TODO: Move this concern to schema script
-                        (dissoc :class/parent))
-                       (dissoc class-m :properties :class-parent :schema-properties)
-                       (when-let [props (not-empty (:properties class-m))]
-                         (merge
-                          (->block-properties props uuid-maps all-idents)
-                          {:block/refs (build-property-refs props all-idents)}))
-                       (when class-parent
-                         {:class/parent
-                          (or (class-db-ids class-parent)
-                              (throw (ex-info (str "No :db/id for " class-parent) {})))})
-                       (when schema-properties
-                         {:class/schema.properties
-                          (mapv #(hash-map :db/ident (get-ident all-idents (keyword %)))
-                                schema-properties)})))
-                    classes)]
+        classes-tx (vec
+                    (mapcat
+                     (fn [[class-name {:keys [class-parent schema-properties] :as class-m}]]
+                       (let [new-block
+                             (->
+                              (sqlite-util/build-new-class
+                               {:block/name (common-util/page-name-sanity-lc (name class-name))
+                                :block/original-name (name class-name)
+                                :block/uuid (d/squuid)
+                                :db/ident (get-ident all-idents class-name)
+                                :db/id (or (class-db-ids (name class-name))
+                                           (throw (ex-info "No :db/id for class" {:class class-name})))})
+                              ;; TODO: Move this concern to schema script
+                              (dissoc :class/parent))
+                             pvalue-tx-m (->property-value-tx-m new-block (:properties class-m) properties-config all-idents)]
+                         (cond-> []
+                           (seq pvalue-tx-m)
+                           (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+                           true
+                           (conj
+                            (merge
+                             new-block
+                             (dissoc class-m :properties :class-parent :schema-properties)
+                             (when-let [props (not-empty (:properties class-m))]
+                               (merge
+                                (->block-properties (merge props (property-value-properties pvalue-tx-m)) uuid-maps all-idents)
+                                {:block/refs (build-property-refs props all-idents)}))
+                             (when class-parent
+                               {:class/parent
+                                (or (class-db-ids class-parent)
+                                    (throw (ex-info (str "No :db/id for " class-parent) {})))})
+                             (when schema-properties
+                               {:class/schema.properties
+                                (mapv #(hash-map :db/ident (get-ident all-idents (keyword %)))
+                                      schema-properties)}))))))
+                     classes))]
     classes-tx))
 
 
@@ -279,8 +285,8 @@
     all-idents))
 
 (defn- build-pages-and-blocks-tx
-  [pages-and-blocks all-idents uuid-maps {:keys [page-id-fn properties]
-                                          :or {page-id-fn :db/id}}]
+  [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties]
+                                           :or {page-id-fn :db/id}}]
   (vec
    (mapcat
     (fn [{:keys [page blocks]}]
@@ -303,7 +309,7 @@
               new-page
               (when (seq (:properties page))
                 (->block-properties (merge (:properties page) (property-value-properties pvalue-tx-m))
-                                    uuid-maps
+                                    page-uuids
                                     all-idents))
               (when (seq (:properties page))
                 {:block/refs (build-property-refs (:properties page) all-idents)
@@ -312,7 +318,7 @@
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
-                         (->block-tx m properties uuid-maps all-idents (page-id-fn new-page))))
+                         (->block-tx m properties page-uuids all-idents (page-id-fn new-page))))
                  []
                  blocks))))
     pages-and-blocks)))
@@ -365,10 +371,10 @@
                                     (seq blocks)
                                     (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
                                 pages-and-blocks)
-        uuid-maps (create-uuid-maps pages-and-blocks')
+        page-uuids (create-page-uuids pages-and-blocks')
         all-idents (create-all-idents properties classes graph-namespace)
-        properties-tx (build-properties-tx properties uuid-maps all-idents)
-        classes-tx (build-classes-tx classes uuid-maps all-idents)
+        properties-tx (build-properties-tx properties page-uuids all-idents)
+        classes-tx (build-classes-tx classes properties page-uuids all-idents)
         class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
         ;; Replace idents with db-ids to avoid any upsert issues
         properties-tx' (mapv (fn [m]
@@ -380,7 +386,7 @@
                                                  cs)))
                                  m))
                              properties-tx)
-        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents uuid-maps options)]
+        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids options)]
     ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
     (vec (concat properties-tx'
                  classes-tx
