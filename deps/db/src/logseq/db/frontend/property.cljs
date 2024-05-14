@@ -92,7 +92,7 @@
    :logseq.task/status
    {:original-name "Status"
     :schema
-    {:type :string
+    {:type :default
      :public? true}
     :closed-values
     (mapv (fn [[db-ident value icon]]
@@ -109,7 +109,7 @@
    :logseq.task/priority
    {:original-name "Priority"
     :schema
-    {:type :string
+    {:type :default
      :public? true}
     :closed-values
     (mapv (fn [[db-ident value]]
@@ -135,7 +135,7 @@
    :logseq.property/color
    {:name :logseq.color
     :schema
-    {:type :string :hide? true :public? true}
+    {:type :default :hide? true :public? true}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property" (str "color." %))
                      :value %
@@ -150,7 +150,7 @@
    :logseq.property.table/headers
    {:name :logseq.table.headers
     :schema
-    {:type :string :hide? true :public? true :view-context :block}
+    {:type :default :hide? true :public? true :view-context :block}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "headers." %))
                      :value %
@@ -159,7 +159,7 @@
    :logseq.property.table/hover
    {:name :logseq.table.hover
     :schema
-    {:type :string :hide? true :public? true :view-context :block}
+    {:type :default :hide? true :public? true :view-context :block}
     :closed-values
     (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "hover." %))
                      :value %

@@ -18,10 +18,10 @@
   [:default :number :date :checkbox :url :page :template])
 
 (def closed-value-property-types
-  "Valid schema :type for closed values"
-  #{:default :string :number :url})
+  "Valid property :type for closed values"
+  #{:default :number :url})
 
-(assert (set/subset? closed-value-property-types (set (conj user-built-in-property-types :string)))
+(assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
 (def value-ref-property-types
