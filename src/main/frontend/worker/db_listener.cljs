@@ -85,7 +85,6 @@ generate undo ops.")
   (let [handlers (if (seq handler-keys)
                    (select-keys (methods listen-db-changes) handler-keys)
                    (methods listen-db-changes))]
-    (prn :listen-db-changes! (keys handlers))
     (d/unlisten! conn ::listen-db-changes!)
     (d/listen! conn ::listen-db-changes!
                (fn [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
@@ -106,6 +105,7 @@ generate undo ops.")
                                               :tx-meta tx-meta
                                               :tx-data tx-data
                                               :db-before db-before)
+                             ;; TODO: move to RTC because other modules do not need these
                              datom-vec-coll (map vec tx-data)
                              id->same-entity-datoms (group-by first datom-vec-coll)
                              id-order (distinct (map first datom-vec-coll))

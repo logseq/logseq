@@ -52,10 +52,6 @@
               (state/set-state! :editor/next-edit-block nil)))
 
           (react/refresh! repo affected-keys)
-          ;; (when-let [state (:ui/restore-cursor-state @state/state)]
-          ;;   (when (or undo? redo?)
-          ;;     (restore-cursor-and-app-state! state undo?)
-          ;;     (state/set-state! :ui/restore-cursor-state nil)))
 
           (state/set-state! :editor/start-pos nil)
 

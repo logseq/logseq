@@ -553,13 +553,14 @@ when undo this op, this original entity-map will be transacted back into db")
                        (:gen-undo-boundary-op? tx-meta true)
                        tx-meta)))
 
-(defn record-editor-info!
-  [repo page-block-uuid editor-info]
-  (swap! (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
-         update-in [repo page-block-uuid]
-         (fn [stack]
-           (when (seq stack)
-             (conj (vec stack) [::record-editor-info editor-info])))))
+(comment
+  (defn record-editor-info!
+    [repo page-block-uuid editor-info]
+    (swap! (:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
+           update-in [repo page-block-uuid]
+           (fn [stack]
+             (when (seq stack)
+               (conj (vec stack) [::record-editor-info editor-info]))))))
 
 ;;; listen db changes and push undo-ops (ends)
 

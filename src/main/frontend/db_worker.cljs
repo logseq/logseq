@@ -20,7 +20,8 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.search :as search]
             [frontend.worker.state :as worker-state]
-            [frontend.worker.undo-redo :as undo-redo]
+            ;; [frontend.worker.undo-redo :as undo-redo]
+            [frontend.worker.undo-redo2 :as undo-redo]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
@@ -657,18 +658,18 @@
      (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid))))
 
   (undo
-   [_this repo page-block-uuid-str]
+   [_this repo _page-block-uuid-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (undo-redo/undo repo (uuid page-block-uuid-str) conn))))
+     (ldb/write-transit-str (undo-redo/undo repo conn))))
 
   (redo
-   [_this repo page-block-uuid-str]
+   [_this repo _page-block-uuid-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (ldb/write-transit-str (undo-redo/redo repo (uuid page-block-uuid-str) conn))))
+     (ldb/write-transit-str (undo-redo/redo repo conn))))
 
   (record-editor-info
-   [_this repo page-block-uuid-str editor-info-str]
-   (undo-redo/record-editor-info! repo (uuid page-block-uuid-str) (ldb/read-transit-str editor-info-str))
+   [_this repo _page-block-uuid-str editor-info-str]
+   (undo-redo/record-editor-info! repo (ldb/read-transit-str editor-info-str))
    nil)
 
   (keep-alive
