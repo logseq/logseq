@@ -6,7 +6,7 @@
             [datascript.core :as d]
             [malli.core :as m]))
 
-(def ^:private op-schema
+(def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
    ;; blocks
    [:save-block
@@ -106,7 +106,7 @@
 
 (def ^:private ops-validator (m/validator ops-schema))
 
-(defn apply-ops!
+(defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
   ;; (prn :debug :outliner-ops ops)
   (assert (ops-validator ops) ops)
