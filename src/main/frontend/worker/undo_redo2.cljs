@@ -4,31 +4,21 @@
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]))
 
-(def ^:private boundary [::boundary])
-
 (defonce max-stack-length 500)
 (defonce *undo-ops (:undo/repo->ops @worker-state/*state))
 (defonce *redo-ops (:redo/repo->ops @worker-state/*state))
 
 (defn- conj-ops
   [col ops]
-  (let [result (apply (fnil conj []) col ops)]
+  (let [result ((fnil conj []) col ops)]
     (if (>= (count result) max-stack-length)
       (subvec result 0 (/ max-stack-length 2))
       result)))
 
-(defn- pop-ops-helper
+(defn- pop-stack
   [stack]
-  (loop [ops []
-         stack stack]
-    (let [last-op (peek stack)]
-      (cond
-        (empty? stack)
-        nil
-        (= boundary last-op)
-        [(reverse (conj ops last-op)) (pop stack)]
-        :else
-        (recur (conj ops last-op) (pop stack))))))
+  (when (seq stack)
+    [(last stack) (pop stack)]))
 
 (defn- push-undo-ops
   [repo ops]
@@ -37,7 +27,7 @@
 (defn- pop-undo-ops
   [repo]
   (let [undo-stack (get @*undo-ops repo)
-        [ops undo-stack*] (pop-ops-helper undo-stack)]
+        [ops undo-stack*] (pop-stack undo-stack)]
     (swap! *undo-ops assoc repo undo-stack*)
     ops))
 
@@ -56,7 +46,7 @@
 (defn- pop-redo-ops
   [repo]
   (let [undo-stack (get @*redo-ops repo)
-        [ops redo-stack*] (pop-ops-helper undo-stack)]
+        [ops redo-stack*] (pop-stack undo-stack)]
     (swap! *redo-ops assoc repo redo-stack*)
     ops))
 
@@ -174,8 +164,11 @@
   (swap! *undo-ops
          update repo
          (fn [stack]
-           (when (seq stack)
-             (conj stack [::record-editor-info editor-info])))))
+           (if (seq stack)
+             (update stack (dec (count stack))
+                     (fn [ops]
+                       (conj (vec ops) [::record-editor-info editor-info])))
+             stack))))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [repo tx-data tx-meta db-after db-before]}]
@@ -191,8 +184,7 @@
                        (filter
                         (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
                         all-ids))
-            ops (->> [boundary
-                      (when editor-info [::record-editor-info editor-info])
+            ops (->> [(when editor-info [::record-editor-info editor-info])
                       [::db-transact
                        {:tx-data tx-data
                         :tx-meta tx-meta
