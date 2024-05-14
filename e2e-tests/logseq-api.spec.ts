@@ -1,5 +1,6 @@
 import { test } from './fixtures'
 import { expect } from '@playwright/test'
+import { callPageAPI } from './utils'
 
 test('block related apis',
   async ({ page }) => {
@@ -92,14 +93,3 @@ test('block related apis',
     // await page.pause()
   })
 
-/**
- * @param page
- * @param method
- * @param args
- */
-export async function callPageAPI(page, method, ...args) {
-  return await page.evaluate(([method, args]) => {
-    // @ts-ignore
-    return window.logseq.api[method]?.(...args)
-  }, [method, args])
-}

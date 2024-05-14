@@ -1,5 +1,5 @@
-import * as fs from 'fs'
-import * as path from 'path'
+import fs from 'fs'
+import path from 'path'
 import { test as base, expect, ConsoleMessage, Locator } from '@playwright/test';
 import { ElectronApplication, Page, BrowserContext, _electron as electron } from 'playwright'
 import { loadLocalGraph, openLeftSidebar, randomString } from './utils';
