@@ -2,7 +2,8 @@
   "Batch process multiple transactions.
   When batch-processing, don't refresh ui."
   (:require [frontend.worker.state :as worker-state]
-            [frontend.schema-register :include-macros true :as sr]))
+            [frontend.schema-register :include-macros true :as sr]
+            [logseq.common.util :as common-util]))
 
 
 (sr/defkeyword :batch/txs
@@ -17,7 +18,8 @@
 (defn get-batch-txs
   []
   (->> (:batch/txs @worker-state/*state)
-       (sort-by :tx)))
+       (sort-by :tx)
+       (common-util/distinct-by-last-wins (fn [[e a _v _tx added]] [e a added]))))
 
 (defn set-batch-db-before!
   [db]
