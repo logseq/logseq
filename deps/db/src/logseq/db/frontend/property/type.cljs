@@ -94,11 +94,12 @@
           ;; FIXME: UI concerns shouldn't be in this layer
           (number? (some-> (:block/content entity) parse-double))))))
 
-(defn- property-value-block?
-  [db s]
-  (when-let [ent (d/entity db s)]
-    (and (:block/content ent)
-         (:logseq.property/created-from-property ent))))
+(defn- text-entity?
+  [db s {:keys [new-closed-value?]}]
+  (if new-closed-value?
+    (string? s)
+    (when-let [ent (d/entity db s)]
+      (string? (:block/content ent)))))
 
 (defn- page?
   [db val]
@@ -116,7 +117,7 @@
   "Map of types to malli validation schemas that validate a property value for that type"
   {:default  [:fn
               {:error/message "should be a text block"}
-              property-value-block?]
+              text-entity?]
    :string   [:fn
               {:error/message "should be a string"}
               string-entity?]

@@ -443,15 +443,6 @@
         property-type (get property-schema :type :default)]
     (when (contains? db-property-type/closed-value-property-types property-type)
       (let [value (if (string? value) (string/trim value) value)
-            closed-values (:property/closed-values property)
-            default-closed-values? (and (= :default property-type) (seq closed-values))
-            value (if (and default-closed-values? (string? value) (not (string/blank? value)))
-                    (let [result (create-property-text-block! conn nil
-                                                              (:db/id property)
-                                                              value
-                                                              {})]
-                      (:db/id (d/entity @conn [:block/uuid (:block-id result)])))
-                    value)
             resolved-value (try
                              (convert-property-input-string (:type property-schema) value)
                              (catch :default e
@@ -466,15 +457,16 @@
           (some (fn [b]
                   (and (= (str resolved-value) (str (or (db-property/property-value-when-closed b)
                                                         (:block/uuid b))))
-                       (not= id (:block/uuid b)))) closed-values)
+                       (not= id (:block/uuid b))))
+                (:property/closed-values property))
           (do
             ;; (notification/show! "Choice already exists" :warning)
-            :value-exists)
+            (doto :value-exists prn))
 
           validate-message
           (do
             ;; (notification/show! validate-message :warning)
-            :value-invalid)
+            (doto :value-invalid prn))
 
           (nil? resolved-value)
           nil
@@ -505,8 +497,7 @@
                             [new-block
                              (outliner-core/block-with-updated-at
                               {:db/id (:db/id property)})]))]
-            {:block-id block-id
-             :tx-data tx-data}))))))
+            (d/transact! conn tx-data {:outliner-op :save-block})))))))
 
 (defn add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids"
