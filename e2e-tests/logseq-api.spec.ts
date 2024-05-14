@@ -1,5 +1,6 @@
 import { test } from './fixtures'
 import { expect } from '@playwright/test'
+import { callPageAPI } from './utils'
 
 test('block related apis',
   async ({ page }) => {
@@ -90,21 +91,6 @@ test('block related apis',
 
     // await page.pause()
   })
-
-/**
- * @param page
- * @param method
- * @param args
- */
-export async function callPageAPI(page, method, ...args) {
-  return await page.evaluate(([method, args]) => {
-    const hasNs = method.indexOf('.') !== -1
-    const ns = hasNs ? method.split('.') : method
-    // @ts-ignore
-    const ctx = hasNs ? window.logseq.sdk[ns[0].toLowerCase()] : window.logseq.api
-    return ctx[hasNs ? ns[1] : method]?.(...args)
-  }, [method, args])
-}
 
 /**
  * load local tests plugin

@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
-import { callPageAPI, loadLocalE2eTestsPlugin } from './logseq-api.spec'
+import {loadLocalE2eTestsPlugin } from './logseq-api.spec'
+import { callPageAPI } from './utils'
 
 test.skip('enabled plugin system default', async ({ page }) => {
   const callAPI = callPageAPI.bind(null, page)
