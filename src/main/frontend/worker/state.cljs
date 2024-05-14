@@ -26,7 +26,12 @@
                        :rtc/downloading-graph? false
 
                        :undo/repo->page-block-uuid->undo-ops (atom {})
-                       :undo/repo->page-block-uuid->redo-ops (atom {})}))
+                       :undo/repo->page-block-uuid->redo-ops (atom {})
+
+                       ;; new implementation
+                       :undo/repo->ops (atom {})
+                       :redo/repo->ops (atom {})
+                       }))
 
 (defonce *rtc-ws-url (atom nil))
 
