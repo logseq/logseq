@@ -30,11 +30,9 @@
 (defn- <upsert-closed-value!
   "Create new closed value and returns its block UUID."
   [property item]
-  (p/let [{:keys [block-id tx-data]} (db-property-handler/upsert-closed-value! property item)]
-    (p/do!
-     (when (seq tx-data) (db/transact! (state/get-current-repo) tx-data {:outliner-op :upsert-closed-value}))
-     (when (seq tx-data) (re-init-commands! property))
-     block-id)))
+  (p/do!
+   (db-property-handler/upsert-closed-value! (:db/ident property) item)
+   (re-init-commands! property)))
 
 (rum/defc item-value
   [type *value]
