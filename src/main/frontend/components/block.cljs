@@ -3439,26 +3439,20 @@
     (let [top? (zero? idx)
           bottom? (= (count blocks) (inc idx))]
       (rum/with-key
-        (block-item (assoc config :top? top?)
-                    item
-                    {:top? top?
-                     :idx idx
-                     :bottom? bottom?})
-        (str "blocks-" (:block/uuid item)))
-      ;; (ui/lazy-visible
-      ;;  (fn []
-      ;;    (rum/with-key
-      ;;      (block-item (assoc config :top? top?)
-      ;;                  item
-      ;;                  {:top? top?
-      ;;                   :idx idx
-      ;;                   :bottom? bottom?})
-      ;;      (str "blocks-" (:block/uuid item))))
-      ;;  {:trigger-once? false
-      ;;   :fade-in? false
-      ;;   :initial-state false
-      ;;   :debug-id (str (:db/id item) "-" (:block/content item))})
-      )))
+        (ui/lazy-visible
+         (fn []
+           (rum/with-key
+             (block-item (assoc config :top? top?)
+                         item
+                         {:top? top?
+                          :idx idx
+                          :bottom? bottom?})
+             (str "blocks-" (:block/uuid item))))
+         {:trigger-once? true
+          :fade-in? false
+          :initial-state false
+          :debug-id (str (:db/id item) "-" (:block/content item))})
+        (str (:container-id config) "-" (:db/id item))))))
 
 (rum/defcs blocks-container < rum/static
   {:init (fn [state]
