@@ -3448,7 +3448,7 @@
                           :idx idx
                           :bottom? bottom?})
              (str "blocks-" (:block/uuid item))))
-         {:trigger-once? true
+         {:trigger-once? false
           :fade-in? false
           :initial-state false
           :debug-id (str (:db/id item) "-" (:block/content item))})
