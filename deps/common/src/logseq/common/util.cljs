@@ -176,6 +176,11 @@
                  xs seen)))]
     (step (seq coll) #{})))
 
+(defn distinct-by-last-wins
+     [f col]
+     {:pre [(sequential? col)]}
+     (reverse (distinct-by f (reverse col))))
+
 (defn normalize-format
   [format]
   (case (keyword format)
