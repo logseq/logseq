@@ -149,19 +149,6 @@
      properties)
     []))
 
-(defn- extract-refs-from-property-value
-  [value format]
-  (cond
-    (coll? value)
-    (filter (fn [v] (and (string? v) (not (string/blank? v)))) value)
-    (and (string? value) (= \" (first value) (last value)))
-    nil
-    (string? value)
-    (let [ast (gp-mldoc/inline->edn value (gp-mldoc/default-config format))]
-      (text/extract-refs-from-mldoc-ast ast))
-    :else
-    nil))
-
 (defn- get-page-ref-names-from-properties
   [properties user-config]
   (let [page-refs (->>
@@ -175,9 +162,8 @@
                               (keyword k))))
                    ;; get links ast
                    (map last)
-                   (mapcat (fn [value]
-                             (let [f (or (:extract-refs-from-property-value-fn user-config) extract-refs-from-property-value)]
-                               (f value (get user-config :format :markdown)))))
+                   (mapcat (or (:extract-refs-from-property-value-fn user-config)
+                               text/extract-refs-from-mldoc-ast))
                    ;; comma separated collections
                    (concat (->> (map second properties)
                                 (filter coll?)
@@ -527,7 +513,11 @@
                          id (get-custom-id-or-new-id {:properties properties})
                          property-refs (->> (get-page-refs-from-properties
                                              properties db date-formatter
-                                             user-config)
+                                             (assoc user-config
+                                                    :extract-refs-from-property-value-fn
+                                                    (fn [refs]
+                                                      (when (coll? refs)
+                                                        refs))))
                                             (map :block/original-name))
                          pre-block? (if (:heading properties) false true)
                          block {:block/uuid id

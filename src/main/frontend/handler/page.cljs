@@ -165,7 +165,7 @@
              last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
              txs      (concat txs last-txs)]
          (when (seq txs)
-           (db/transact! repo txs {:outliner-op :create-page})))
+           (db/transact! txs)))
 
        (when create-first-block?
          (when (or
