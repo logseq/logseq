@@ -434,7 +434,7 @@
                                                 (:block/original-name e))
                                      :value value})
                                   {:label value
-                                   :vaue value})))
+                                   :value value})))
                          (distinct)))
             items (->> (if (= :date type)
                          (map (fn [m] (let [label (:block/original-name (db/entity (:value m)))]

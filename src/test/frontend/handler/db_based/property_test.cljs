@@ -301,20 +301,18 @@
           (is (= result :value-exists))))
 
       (testing "Add new value"
-        (let [{:keys [block-id tx-data]} (outliner-property/upsert-closed-value! conn (:db/id property) {:value 3})]
-          (db/transact! tx-data)
-          (let [b (db/entity [:block/uuid block-id])]
-            (is (= "3" (:block/content b)))
-            (is (contains? (:block/type b) "closed value"))
+        (let [_ (outliner-property/upsert-closed-value! conn (:db/id property) {:value 3})]
+          (let [b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :block/content "3"]] @conn))]
+            (is (contains? (set (:block/type b)) "closed value"))
             (let [values (get-value-ids k)]
               (is (= #{"1" "2" "3"}
                      (get-closed-values values))))
 
             (testing "Update closed value"
-              (let [{:keys [tx-data]} (outliner-property/upsert-closed-value! conn (:db/id property) {:id block-id
-                                                                                                      :value 4
-                                                                                                      :description "choice 4"})]
-                (db/transact! tx-data)
+              (let [block-id (:block/uuid b)
+                    _ (outliner-property/upsert-closed-value! conn (:db/id property) {:id block-id
+                                                                                      :value 4
+                                                                                      :description "choice 4"})]
                 (let [b (db/entity [:block/uuid block-id])]
                   (is (= "4" (:block/content b)))
                   (is (= "choice 4" (:description (:block/schema b))))
