@@ -591,7 +591,8 @@
 
 (rum/defc select-item
   [property type value {:keys [page-cp inline-text _icon?] :as opts}]
-  (let [closed-values? (seq (:property/closed-values property))]
+  (let [closed-values? (seq (:property/closed-values property))
+        tag? (or (:tag? opts) (= (:db/ident property) :block/tags))]
     [:div.select-item
      (cond
        (= value :logseq.property/empty-placeholder)
@@ -601,6 +602,7 @@
        (when value
          (rum/with-key
            (page-cp {:disable-preview? true
+                     :tag? tag?
                      :hide-close-button? true} value)
            (:db/id value)))
 
@@ -808,7 +810,7 @@
                            (when date?
                              [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
                           (when-not editing?
-                            (property-empty-btn-value))))
+                            (property-empty-text-value))))
             select-cp (fn [select-opts]
                         (let [select-opts (merge {:multiple-choices? true
                                                   :dropdown? editing?
