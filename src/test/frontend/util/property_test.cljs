@@ -127,9 +127,4 @@
       {:title "foo"} [:title] {:pre-block? true :page-id 1}
       '()
       {:title "foo" :foo "bar"} [:title :foo] {:pre-block? true :page-id 1}
-      [[:foo "bar"]]
-      ;; normal block
-      {:logseq.table.version 2} [:logseq.table.version] {:pre-block? false}
-      '()
-      {:logseq.table.version 2 :foo "bar"} [:logseq.table.version :foo] {:pre-block? false}
       [[:foo "bar"]])))

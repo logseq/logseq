@@ -283,10 +283,6 @@
                         []))
                     :query-sort-by
                     (if (#{:page :block :created-at :updated-at} val) val (get-pid db val))
-                    (:logseq.color :logseq.table.headers :logseq.table.hover)
-                    (:block/uuid (db-property/get-closed-value-entity-by-name db prop val))
-                    :logseq.table.version
-                    (parse-long val)
                     :filters
                     (try (edn/read-string val)
                          (catch :default e
@@ -401,7 +397,9 @@
    ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
    :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting
    ;; deprecated in db graphs
-   :macros :logseq.query/nlp-date])
+   :macros :logseq.query/nlp-date
+   :logseq.color :logseq.table.borders :logseq.table.stripes :logseq.table.max-width
+   :logseq.table.version :logseq.table.compact :logseq.table.headers :logseq.table.hover])
 
 (defn- pre-update-properties
   "Updates page and block properties before their property types are inferred"
