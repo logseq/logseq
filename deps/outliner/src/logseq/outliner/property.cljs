@@ -219,9 +219,6 @@
         block (when block-id (d/entity @conn block-id))]
     (when property
       (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
-                              true
-                              (assoc
-                               :block.temp/fully-loaded? true)
                               new-block-id
                               (assoc :block/uuid new-block-id)
                               (int? template-id)
