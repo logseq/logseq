@@ -247,8 +247,10 @@
         raw-value)))
 
 (defn set-block-property!
-  "Updates a block property's value for an existing property-id. Property value
-  is translated from input, sanitized and validated. Also handle db attributes as properties"
+  "Updates a block property's value for an existing property-id and block.
+  Property value is sanitized and if property is a ref type, automatically
+  handles a raw property value i.e. you can pass \"value\" instead of the
+  property value entity. Also handle db attributes as properties"
   [conn block-eid property-id v]
   (let [block-eid (->eid block-eid)
         db @conn
@@ -256,53 +258,36 @@
         block (d/entity @conn block-eid)
         property (d/entity @conn property-id)
         _ (assert (some? property) (str "Property " property-id " doesn't exists yet"))
-        property-schema (:block/schema property)
-        {:keys [type] :or {type :default}} property-schema
+        property-type (get-in property [:block/schema :type] :default)
         v' (or (resolve-tag! conn v) v)
         db-attribute? (contains? db-property/db-attribute-properties property-id)
-        ref-type? (db-property-type/ref-property-types type)]
+        ref-type? (db-property-type/ref-property-types property-type)]
     (if db-attribute?
       (d/transact! conn [{:db/id (:db/id block) property-id v'}]
                    {:outliner-op :save-block})
-      (let [v' (cond
-                 (= v' :logseq.property/empty-placeholder)
-                 (if (= type :checkbox) false v')
+      (let [new-value* (cond
+                         (= v' :logseq.property/empty-placeholder)
+                         (if (= property-type :checkbox) false v')
 
-                 ref-type?
-                 (if (and (integer? v')
-                          (or (and (= type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity db v')))))
-                              (not= type :number)))
-                   v'
-                   (or (get-property-value-eid db property-id (str v'))
-                       (let [v-uuid (create-property-text-block! conn nil (:db/id property) (str v') {})]
-                         (:db/id (d/entity @conn [:block/uuid v-uuid])))))
-                 :else
-                 v')
-            v'' (if property v' (or v' ""))]
-        (when (some? v'')
-          (let [infer-schema (infer-schema-from-input-string v'')
-                property-type' (or type infer-schema)
-                existing-value (when-let [id (:db/ident property)]
-                                 (get block id))
-                new-value* (if (= v'' :logseq.property/empty-placeholder)
-                             v''
-                             (try
-                               (convert-property-input-string property-type' v'')
-                               (catch :default e
-                                 (js/console.error e)
-                                 (throw (ex-info "Property converted failed"
-                                                 {:type :notification
-                                                  :payload {:message (str e)
-                                                            :type :error}}))
-                                 nil)))
-                ;; don't modify maps
-                new-value (if (or (sequential? new-value*) (set? new-value*))
-                            (if (= :coll property-type')
-                              (vec (remove string/blank? new-value*))
-                              (set (remove string/blank? new-value*)))
-                            new-value*)]
-            (when-not (= existing-value new-value)
-              (raw-set-block-property! conn block property property-type' new-value))))))))
+                         ref-type?
+                         (if (and (integer? v')
+                                  (or (and (= property-type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity db v')))))
+                                      (not= property-type :number)))
+                           v'
+                           ;; Get or create a property value by its raw value
+                           (or (get-property-value-eid db property-id (str v'))
+                               (let [v-uuid (create-property-text-block! conn nil (:db/id property) (str v') {})]
+                                 (:db/id (d/entity @conn [:block/uuid v-uuid])))))
+                         :else
+                         v')
+            new-value (if (or (sequential? new-value*) (set? new-value*))
+                        (if (= :coll property-type)
+                          (vec (remove string/blank? new-value*))
+                          (set (remove string/blank? new-value*)))
+                        new-value*)
+            existing-value (get block property-id)]
+        (when-not (= existing-value new-value)
+          (raw-set-block-property! conn block property property-type new-value))))))
 
 (defn batch-set-property!
   "Notice that this works only for properties with cardinality equals to `one`."
