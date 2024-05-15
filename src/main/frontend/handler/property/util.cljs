@@ -9,7 +9,7 @@
             [logseq.db.frontend.property.util :as db-property-util]))
 
 (defn lookup
-  "Get the value of coll's (a map) by db-ident. For file and db graphs"
+  "Get the property value by a built-in property's db-ident from coll. For file and db graphs"
   [coll key]
   (let [repo (state/get-current-repo)]
     (db-property-util/lookup repo coll key)))
