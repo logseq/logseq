@@ -3,8 +3,7 @@
   (:require [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]
-            [clojure.set :as set]
-            [logseq.db :as ldb]))
+            [clojure.set :as set]))
 
 ;; TODO: add malli schema for op
 ;; Each `op` is a combination of `::record-editor-info`, `::db-transact` and maybe

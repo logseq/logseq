@@ -96,7 +96,8 @@
   {:did-mount open-root-block!}
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
-    (let [hiccup (component-block/->hiccup blocks config {})]
+    (let [long-page? (> (count (:block/_page page-e)) 300)
+          hiccup (component-block/->hiccup blocks (assoc config :long-page? long-page?) {})]
       [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
