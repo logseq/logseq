@@ -3,11 +3,44 @@
   (:require [datascript.core :as d]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [frontend.schema-register :include-macros true :as sr]
+            [malli.core :as m]
+            [malli.util :as mu]))
 
-;; TODO: add malli schema for op
-;; Each `op` is a combination of `::record-editor-info`, `::db-transact` and maybe
-;; other UI states such as `::ui/route` and `:ui/sidebar-blocks`.
+;; TODO: add other UI states such as `::ui/route` and `:ui/sidebar-blocks`.
+(sr/defkeyword :gen-undo-ops?
+  "tx-meta option, generate undo ops from tx-data when true (default true)")
+
+(sr/defkeyword ::record-editor-info
+  "record current editor and cursor")
+
+(sr/defkeyword ::db-transact
+  "record db tx-data/tx-meta")
+
+(def ^:private undo-op-item-schema
+  (mu/closed-schema
+   [:multi {:dispatch first}
+    [::record-editor-info
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:container-id [:or :int [:enum :unknown-container]]]
+       [:start-pos [:maybe :int]]
+       [:end-pos [:maybe :int]]]]]
+    [::db-transact
+     [:cat :keyword
+      [:map
+       [:tx-data [:sequential [:fn
+                               {:error/message "should be a Datom"}
+                               d/datom?]]]
+       [:tx-meta [:map {:closed false}
+                  [:outliner-op :keyword]]]
+       [:added-ids [:set :int]]
+       [:retracted-ids [:set :int]]]]]]))
+
+(def ^:private undo-op-validator (m/validator [:sequential undo-op-item-schema]))
+
 (defonce max-stack-length 500)
 (defonce *undo-ops (:undo/repo->ops @worker-state/*state))
 (defonce *redo-ops (:redo/repo->ops @worker-state/*state))
@@ -26,10 +59,12 @@
 
 (defn- push-undo-op
   [repo op]
+  (assert (undo-op-validator op) {:op op})
   (swap! *undo-ops update repo conj-op op))
 
 (defn- push-redo-op
   [repo op]
+  (assert (undo-op-validator op) {:op op})
   (swap! *redo-ops update repo conj-op op))
 
 (comment
@@ -285,12 +320,14 @@
                        (filter
                         (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
                         all-ids))
-            tx-data' (remove (fn [d] (contains? #{:block/path-refs} (:a d))) tx-data)
+            tx-data' (->> (remove (fn [d] (contains? #{:block/path-refs} (:a d))) tx-data)
+                          vec)
             op (->> [(when editor-info [::record-editor-info editor-info])
                      [::db-transact
                       {:tx-data tx-data'
                        :tx-meta tx-meta
                        :added-ids added-ids
                        :retracted-ids retracted-ids}]]
-                    (remove nil?))]
+                    (remove nil?)
+                    vec)]
         (push-undo-op repo op)))))
