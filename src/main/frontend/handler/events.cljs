@@ -404,6 +404,22 @@
 (defmethod handle :modal/display-file-version-selector  [[_ versions path  get-content]]
   (state/set-modal! #(git-component/file-version-selector versions path get-content)))
 
+(defmethod handle :graph/sync-context []
+  (let [context {:dev? config/dev?
+                 :node-test? util/node-test?
+                 :validate-db-options (:dev/validate-db-options (state/get-config))
+                 :importing? (:graph/importing @state/state)
+                 :date-formatter (state/get-date-formatter)
+                 :journal-file-name-format (or (state/get-journal-file-name-format)
+                                               date/default-journal-filename-formatter)
+                 :export-bullet-indentation (state/get-export-bullet-indentation)
+                 :preferred-format (state/get-preferred-format)
+                 :journals-directory (config/get-journals-directory)
+                 :whiteboards-directory (config/get-whiteboards-directory)
+                 :pages-directory (config/get-pages-directory)}
+        worker ^Object @state/*db-worker]
+    (when worker (.set-context worker (ldb/write-transit-str context)))))
+
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded
 ;; FIXME: config may not be loaded when the graph is ready.
@@ -413,14 +429,17 @@
     (p/let [dir               (config/get-repo-dir repo)
             dir-exists?       (fs/dir-exists? dir)]
       (when (and (not dir-exists?)
-              (not util/nfs?))
+                 (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (p/let [;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-          _ (js/setTimeout #(mobile/mobile-postinit) 1000)
-          ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-          _ (repo-handler/graph-ready! repo)
-          _ (when-not (config/db-based-graph? repo)
-              (fs-watcher/load-graph-files! repo))]))
+  (p/do!
+   (state/pub-event! [:graph/sync-context])
+    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
+   (when (mobile-util/native-ios?)
+     (js/setTimeout #(mobile/mobile-postinit) 1000))
+    ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+   (repo-handler/graph-ready! repo)
+   (when-not (config/db-based-graph? repo)
+     (fs-watcher/load-graph-files! repo))))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))

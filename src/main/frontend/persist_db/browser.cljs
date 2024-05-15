@@ -77,7 +77,8 @@
                                       {:git/current-repo (state/get-current-repo)
                                        :config (:config @state/state)}))
                   _ (sync-app-state! wrapped-worker)
-                  _ (ask-persist-permission!)]
+                  _ (ask-persist-permission!)
+                  _ (state/pub-event! [:graph/sync-context])]
             (ldb/register-transact-fn!
              (fn worker-transact!
                [repo tx-data tx-meta]

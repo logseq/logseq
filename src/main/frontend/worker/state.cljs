@@ -81,6 +81,12 @@
   [context]
   (swap! *state assoc :worker/context context))
 
+(defn update-context!
+  [context]
+  (swap! *state update :worker/context
+         (fn [c]
+           (merge c context))))
+
 (defn get-config
   [repo]
   (get-in @*state [:config repo]))
