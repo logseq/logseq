@@ -2,7 +2,8 @@
   "Property related util fns. Fns used in both DB and file graphs should go here"
   (:require [logseq.db.frontend.property :as db-property]
             [datascript.core :as d]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn get-pid
   "Get a built-in property's id (keyword name for file graph and db-ident for db
@@ -13,18 +14,21 @@
     (get-in db-property/built-in-properties [db-ident :name])))
 
 (defn lookup
-  "Get the value of coll by db-ident. For file and db graphs"
+  "Get the property value by a built-in property's db-ident from coll. For file and db graphs"
   [repo coll db-ident]
-  (get coll (get-pid repo db-ident)))
+  (if (sqlite-util/db-based-graph? repo)
+    (let [val (get coll db-ident)]
+      (if (db-property-type/value-ref-property-types (get-in db-property/built-in-properties [db-ident :schema :type]))
+        (:block/content val)
+        val))
+    (get coll (get-pid repo db-ident))))
 
 (defn get-block-property-value
   "Get the value of built-in block's property by its db-ident"
   [repo db block db-ident]
-  (when db
-    (let [block (or (d/entity db (:db/id block)) block)]
-      (if (sqlite-util/db-based-graph? repo)
-        (get block db-ident)
-        (lookup repo (:block/properties block) db-ident)))))
+  (assert db "DB required")
+  (let [block (or (d/entity db (:db/id block)) block)]
+    (lookup repo (:block/properties block) db-ident)))
 
 (defn shape-block?
   [repo db block]

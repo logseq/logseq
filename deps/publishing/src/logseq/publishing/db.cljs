@@ -13,7 +13,7 @@
   (when-some [props (and block page (:block/properties block))]
     ;; Can't use db-property-util/lookup b/c repo isn't available
     (let [prop-lookup-fn (if (entity-plus/db-based-graph? db)
-                           #(get %1 %2)
+                           #(:block/content (get %1 %2))
                            #(get %1 (keyword (name %2))))]
       (when-some [uuid (:block/uuid block)]
         (when-some [stamp (prop-lookup-fn props :logseq.property/hl-stamp)]
