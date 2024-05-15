@@ -94,7 +94,11 @@
 
   (testing "Wrong type property value shouldn't transacted"
     (let [conn (db/get-db false)]
-      (outliner-property/set-block-property! conn fbid :user.property/property-2 "Not a number"))
+      (is
+       (thrown-with-msg?
+        js/Error
+        #"Schema validation failed"
+        (outliner-property/set-block-property! conn fbid :user.property/property-2 "Not a number"))))
     (let [block (db/entity [:block/uuid fbid])
           properties (:block/properties block)]
       ;; check block's properties
@@ -291,14 +295,20 @@
           (is (every? #(contains? (:block/type (db/entity [:block/uuid %])) "closed value")
                       values))))
       (testing "Add non-numbers shouldn't work"
-        (let [result (outliner-property/upsert-closed-value! conn (:db/id property) {:value "not a number"})]
-          (is (= result :value-invalid))
-          (let [values (get-value-ids k)]
-            (is (= #{"1" "2"} (get-closed-values values))))))
+        (is
+         (thrown-with-msg?
+          js/Error
+          #"Property converted failed"
+          (outliner-property/upsert-closed-value! conn (:db/id property) {:value "not a number"})))
+        (let [values (get-value-ids k)]
+          (is (= #{"1" "2"} (get-closed-values values)))))
 
       (testing "Add existing value"
-        (let [result (outliner-property/upsert-closed-value! conn (:db/id property) {:value 2})]
-          (is (= result :value-exists))))
+        (is
+         (thrown-with-msg?
+          js/Error
+          #"Closed value choice already exists"
+          (outliner-property/upsert-closed-value! conn (:db/id property) {:value 2}))))
 
       (testing "Add new value"
         (let [_ (outliner-property/upsert-closed-value! conn (:db/id property) {:value 3})
