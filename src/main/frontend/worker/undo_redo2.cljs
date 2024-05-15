@@ -28,12 +28,86 @@
   [repo op]
   (swap! *undo-ops update repo conj-op op))
 
+(defn- push-redo-op
+  [repo op]
+  (swap! *redo-ops update repo conj-op op))
+
+(comment
+  ;; This version checks updated datoms by other clients, allows undo and redo back
+  ;; to the current state.
+  ;; The con is that it'll undo the changes by others.
+  (defn- pop-undo-op
+   [repo conn]
+   (let [undo-stack (get @*undo-ops repo)
+         [op undo-stack*] (pop-stack undo-stack)]
+     (swap! *undo-ops assoc repo undo-stack*)
+     (mapv (fn [item]
+             (if (= (first item) ::db-transact)
+               (let [m (second item)
+                     tx-data' (mapv
+                               (fn [{:keys [e a v tx add] :as datom}]
+                                 (let [one-value? (= :db.cardinality/one (:db/cardinality (d/entity @conn a)))
+                                       new-value (when (and one-value? add) (get (d/entity @conn e) a))
+                                       value-not-matched? (and (some? new-value) (not= v new-value))]
+                                   (if value-not-matched?
+                                    ;; another client might updated `new-value`, the datom below will be used
+                                    ;; to restore the the current state when redo this undo.
+                                     (d/datom e a new-value tx add)
+                                     datom)))
+                               (:tx-data m))]
+                 [::db-transact (assoc m :tx-data tx-data')])
+               item))
+           op))))
+
 (defn- pop-undo-op
-  [repo]
+  [repo conn]
   (let [undo-stack (get @*undo-ops repo)
         [op undo-stack*] (pop-stack undo-stack)]
     (swap! *undo-ops assoc repo undo-stack*)
-    op))
+    (let [op' (mapv (fn [item]
+                      (if (= (first item) ::db-transact)
+                        (let [m (second item)
+                              tx-data' (vec
+                                        (keep
+                                         (fn [{:keys [e a v _tx add] :as datom}]
+                                           (let [one-value? (= :db.cardinality/one (:db/cardinality (d/entity @conn a)))
+                                                 new-value (when (and one-value? add) (get (d/entity @conn e) a))
+                                                 value-not-matched? (and (some? new-value) (not= v new-value))]
+                                             (when-not value-not-matched?
+                                               datom)))
+                                         (:tx-data m)))]
+                          (if (seq tx-data')
+                            [::db-transact (assoc m :tx-data tx-data')]
+                            ::db-transact-no-tx-data))
+                        item))
+                    op)]
+      (when-not (some #{::db-transact-no-tx-data} op')
+        op'))))
+
+(defn- pop-redo-op
+  [repo conn]
+  (let [redo-stack (get @*redo-ops repo)
+        [op redo-stack*] (pop-stack redo-stack)]
+    (swap! *redo-ops assoc repo redo-stack*)
+    (let [op' (mapv (fn [item]
+                      (if (= (first item) ::db-transact)
+                        (let [m (second item)
+                              tx-data' (vec
+                                        (keep
+                                         (fn [{:keys [e a v _tx add] :as datom}]
+                                           (let [one-value? (= :db.cardinality/one (:db/cardinality (d/entity @conn a)))
+                                                 new-value (when (and one-value? (not add)) (get (d/entity @conn e) a))
+                                                 value-not-matched? (and (some? new-value) (not= v new-value))]
+                                             (when-not value-not-matched?
+                                               datom)))
+                                         (:tx-data m)))]
+                          (if (seq tx-data')
+                            [::db-transact (assoc m :tx-data tx-data')]
+                            ::db-transact-no-tx-data))
+                        item))
+                    op)]
+      (when-not (some #{::db-transact-no-tx-data} op')
+        op'))))
 
 (defn- empty-undo-stack?
   [repo]
@@ -42,17 +116,6 @@
 (defn- empty-redo-stack?
   [repo]
   (empty? (get @*redo-ops repo)))
-
-(defn- push-redo-op
-  [repo op]
-  (swap! *redo-ops update repo conj-op op))
-
-(defn- pop-redo-op
-  [repo]
-  (let [undo-stack (get @*redo-ops repo)
-        [op redo-stack*] (pop-stack undo-stack)]
-    (swap! *redo-ops assoc repo redo-stack*)
-    op))
 
 (defn- get-moved-blocks
   [e->datoms]
@@ -77,16 +140,16 @@
 (defn- reverse-datoms
   [conn datoms schema added-ids retracted-ids undo? redo?]
   (keep
-   (fn [[id attr value _tx add?]]
-     (let [ref? (= :db.type/ref (get-in schema [attr :db/valueType]))
+   (fn [[e a v _tx add?]]
+     (let [ref? (= :db.type/ref (get-in schema [a :db/valueType]))
            op (if (or (and redo? add?) (and undo? (not add?)))
                 :db/add
                 :db/retract)]
        (when (or (not ref?)
-                 (d/entity @conn value)
-                 (and (retracted-ids value) undo?)
-                 (and (added-ids value) redo?)) ; entity exists
-         [op id attr value])))
+                 (d/entity @conn v)
+                 (and (retracted-ids v) undo?)
+                 (and (added-ids v) redo?)) ; entity exists
+         [op e a v])))
    datoms))
 
 (defn- moved-block-or-target-deleted?
@@ -107,17 +170,16 @@
                           (nil? (d/entity @conn before-parent)))))))))))
 
 (defn get-reversed-datoms
-  [conn redo? {:keys [tx-data added-ids retracted-ids]}]
+  [conn undo? {:keys [tx-data added-ids retracted-ids]}]
   (try
     (when (and (seq added-ids) (seq retracted-ids))
       (throw (ex-info "entities are created and deleted in the same tx"
                       {:error :entities-created-and-deleted-same-tx})))
-    (let [undo? (not redo?)
+    (let [redo? (not undo?)
           e->datoms (->> (if redo? tx-data (reverse tx-data))
                          (group-by :e))
           schema (:schema @conn)
           added-and-retracted-ids (set/union added-ids retracted-ids)
-          reverse-datoms-f (fn [datoms] (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?))
           moved-blocks (get-moved-blocks e->datoms)]
       (->>
        (mapcat
@@ -152,7 +214,7 @@
 
               ;; reverse datoms
               :else
-              (reverse-datoms-f datoms))))
+              (reverse-datoms conn datoms schema added-ids retracted-ids undo? redo?))))
         e->datoms)
        (remove nil?)))
     (catch :default e
@@ -163,58 +225,40 @@
                            (:error (ex-data e)))
         (throw e)))))
 
-(defn undo
-  [repo conn]
-  (if-let [op (not-empty (pop-undo-op repo))]
+(defn- undo-redo-aux
+  [repo conn undo?]
+  (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo conn))]
     (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
-                                             (second %)) op)]
+                                                      (second %)) op)]
       (when (seq tx-data)
-        (let [reversed-tx-data (get-reversed-datoms conn false data)
+        (let [reversed-tx-data (get-reversed-datoms conn undo? data)
               tx-meta' (-> tx-meta
                            (dissoc :pipeline-replace?
                                    :batch-tx/batch-tx-mode?)
                            (assoc
                             :gen-undo-ops? false
-                            :undo? true))]
+                            :undo? undo?))]
           (when (seq reversed-tx-data)
             (d/transact! conn reversed-tx-data tx-meta')
-            (push-redo-op repo op)
+            ((if undo? push-redo-op push-undo-op) repo op)
             (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                                       (map second))
                   block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (first editor-cursors))]))]
-              {:undo? true
+              {:undo? undo?
                :editor-cursors editor-cursors
                :block-content block-content})))))
 
-    (when (empty-undo-stack? repo)
-      (prn "No further undo information")
-      ::empty-undo-stack)))
+    (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
+      (prn (str "No further " (if undo? "undo" "redo") " information"))
+      (if undo? ::empty-undo-stack ::empty-redo-stack))))
+
+(defn undo
+  [repo conn]
+  (undo-redo-aux repo conn true))
 
 (defn redo
   [repo conn]
-  (if-let [op (not-empty (pop-redo-op repo))]
-    (let [{:keys [tx-meta tx-data] :as data} (some #(when (= ::db-transact (first %))
-                                                      (second %)) op)]
-      (when (seq tx-data)
-        (let [reversed-tx-data (get-reversed-datoms conn true data)
-              tx-meta' (-> tx-meta
-                           (dissoc :pipeline-replace?
-                                   :batch-tx/batch-tx-mode?)
-                           (assoc
-                            :gen-undo-ops? false
-                            :redo? true))]
-          (d/transact! conn reversed-tx-data tx-meta')
-          (push-undo-op repo op)
-          (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
-                                    (map second))
-                block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (last editor-cursors))]))]
-            {:redo? true
-             :editor-cursors editor-cursors
-             :block-content block-content}))))
-
-    (when (empty-redo-stack? repo)
-      (prn "No further redo information")
-      ::empty-redo-stack)))
+  (undo-redo-aux repo conn false))
 
 (defn record-editor-info!
   [repo editor-info]
