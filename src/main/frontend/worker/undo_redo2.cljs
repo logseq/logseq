@@ -4,13 +4,16 @@
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]))
 
+;; TODO: add malli schema for op
+;; Each `op` is a combination of `::record-editor-info`, `::db-transact` and maybe
+;; other UI states such as `::ui/route` and `:ui/sidebar-blocks`.
 (defonce max-stack-length 500)
 (defonce *undo-ops (:undo/repo->ops @worker-state/*state))
 (defonce *redo-ops (:redo/repo->ops @worker-state/*state))
 
-(defn- conj-ops
-  [col ops]
-  (let [result ((fnil conj []) col ops)]
+(defn- conj-op
+  [col op]
+  (let [result (conj (if (empty? col) [] col) op)]
     (if (>= (count result) max-stack-length)
       (subvec result 0 (/ max-stack-length 2))
       result)))
@@ -20,16 +23,16 @@
   (when (seq stack)
     [(last stack) (pop stack)]))
 
-(defn- push-undo-ops
-  [repo ops]
-  (swap! *undo-ops update repo conj-ops ops))
+(defn- push-undo-op
+  [repo op]
+  (swap! *undo-ops update repo conj-op op))
 
-(defn- pop-undo-ops
+(defn- pop-undo-op
   [repo]
   (let [undo-stack (get @*undo-ops repo)
-        [ops undo-stack*] (pop-stack undo-stack)]
+        [op undo-stack*] (pop-stack undo-stack)]
     (swap! *undo-ops assoc repo undo-stack*)
-    ops))
+    op))
 
 (defn- empty-undo-stack?
   [repo]
@@ -39,16 +42,16 @@
   [repo]
   (empty? (get @*redo-ops repo)))
 
-(defn- push-redo-ops
-  [repo ops]
-  (swap! *redo-ops update repo conj-ops ops))
+(defn- push-redo-op
+  [repo op]
+  (swap! *redo-ops update repo conj-op op))
 
-(defn- pop-redo-ops
+(defn- pop-redo-op
   [repo]
   (let [undo-stack (get @*redo-ops repo)
-        [ops redo-stack*] (pop-stack undo-stack)]
+        [op redo-stack*] (pop-stack undo-stack)]
     (swap! *redo-ops assoc repo redo-stack*)
-    ops))
+    op))
 
 (defn- get-moved-blocks
   [e->datoms]
@@ -116,9 +119,9 @@
 
 (defn undo
   [repo conn]
-  (if-let [ops (not-empty (pop-undo-ops repo))]
+  (if-let [op (not-empty (pop-undo-op repo))]
     (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
-                                             (second %)) ops)]
+                                             (second %)) op)]
       (when (seq tx-data)
         (let [reversed-tx-data (get-reversed-datoms conn false data)
               tx-meta' (-> tx-meta
@@ -129,8 +132,8 @@
                             :undo? true))]
           (when (seq reversed-tx-data)
             (d/transact! conn reversed-tx-data tx-meta')
-            (push-redo-ops repo ops)
-            (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) ops)
+            (push-redo-op repo op)
+            (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                                       (map second))
                   block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (first editor-cursors))]))]
               {:undo? true
@@ -143,9 +146,9 @@
 
 (defn redo
   [repo conn]
-  (if-let [ops (not-empty (pop-redo-ops repo))]
+  (if-let [op (not-empty (pop-redo-op repo))]
     (let [{:keys [tx-meta tx-data] :as data} (some #(when (= ::db-transact (first %))
-                                                      (second %)) ops)]
+                                                      (second %)) op)]
       (when (seq tx-data)
         (let [reversed-tx-data (get-reversed-datoms conn true data)
               tx-meta' (-> tx-meta
@@ -155,8 +158,8 @@
                             :gen-undo-ops? false
                             :redo? true))]
           (d/transact! conn reversed-tx-data tx-meta')
-          (push-undo-ops repo ops)
-          (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) ops)
+          (push-undo-op repo op)
+          (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                                     (map second))
                 block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (last editor-cursors))]))]
             {:redo? true
@@ -174,8 +177,8 @@
          (fn [stack]
            (if (seq stack)
              (update stack (dec (count stack))
-                     (fn [ops]
-                       (conj (vec ops) [::record-editor-info editor-info])))
+                     (fn [op]
+                       (conj (vec op) [::record-editor-info editor-info])))
              stack))))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
@@ -193,11 +196,11 @@
                         (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
                         all-ids))
             tx-data' (remove (fn [d] (contains? #{:block/path-refs} (:a d))) tx-data)
-            ops (->> [(when editor-info [::record-editor-info editor-info])
-                      [::db-transact
-                       {:tx-data tx-data'
-                        :tx-meta tx-meta
-                        :added-ids added-ids
-                        :retracted-ids retracted-ids}]]
-                     (remove nil?))]
-        (push-undo-ops repo ops)))))
+            op (->> [(when editor-info [::record-editor-info editor-info])
+                     [::db-transact
+                      {:tx-data tx-data'
+                       :tx-meta tx-meta
+                       :added-ids added-ids
+                       :retracted-ids retracted-ids}]]
+                    (remove nil?))]
+        (push-undo-op repo op)))))
