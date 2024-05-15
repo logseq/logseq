@@ -500,6 +500,8 @@
    :block/content ""
    :block/format :markdown})
 
+;; TODO: why not generate a UUID for all local graphs?
+;; And prefer this local graph UUID when picking an ID for new rtc graph?
 (defn get-graph-rtc-uuid
   [db]
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
