@@ -663,10 +663,14 @@
   ([state e input]
    (let [composing? (util/native-event-is-composing? e)
          e-type (gobj/getValueByKeys e "type")
+         composing-end? (= e-type "compositionend")
          !input (::input state)
+         input-ref @(::input-ref state)
          !load-results-throttled (::load-results-throttled state)]
+
      ;; update the input value in the UI
      (reset! !input input)
+     (set! (.-value input-ref) input)
 
      (reset! (::input-changed? state) true)
 
@@ -675,7 +679,7 @@
        (reset! !load-results-throttled (gfun/throttle load-results 50)))
 
      ;; retrieve the load-results function and update all the results
-     (when (or (not composing?) (= e-type "compositionend"))
+     (when (or (not composing?) composing-end?)
        (when-let [load-results-throttled @!load-results-throttled]
          (load-results-throttled :default state))))))
 
@@ -757,7 +761,7 @@
       [all-items])
     (rum/use-effect! (fn [] (load-results :default state)) [])
     [:div {:class "bg-gray-02 border-b border-1 border-gray-07"}
-     [:input#search
+     [:input.cp__cmdk-search-input
       {:class "text-xl bg-transparent border-none w-full outline-none px-3 py-3"
        :auto-focus true
        :autoComplete "off"
@@ -787,7 +791,7 @@
                                   (and backspace? (= input ""))))
                           (reset! (::filter state) nil)
                           (load-results :default state))))
-       :value input}]]))
+       :default-value input}]]))
 
 (defn rand-tip
   []
