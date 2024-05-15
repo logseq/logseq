@@ -199,8 +199,7 @@
 
 (def hidden-editable-block-properties
   "Properties that are hidden in a block (block property)"
-  (into #{:logseq.query/nlp-date}
-        gp-property/editable-view-and-table-properties))
+  #{:logseq.query/nlp-date})
 
 (assert (set/subset? hidden-editable-block-properties (gp-property/editable-built-in-properties))
         "Hidden editable page properties must be valid editable properties")

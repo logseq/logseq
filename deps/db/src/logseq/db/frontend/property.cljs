@@ -131,47 +131,6 @@
 
    ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
-   ;; color props
-   :logseq.property/color
-   {:name :logseq.color
-    :schema
-    {:type :default :hide? true :public? true}
-    :closed-values
-    (mapv #(hash-map :db-ident (keyword "logseq.property" (str "color." %))
-                     :value %
-                     :uuid (random-uuid))
-          ;; Stringified version of frontend.colors/COLORS. Too basic to couple
-          ["tomato" "red" "crimson" "pink" "plum" "purple" "violet" "indigo" "blue" "cyan" "teal" "green" "grass" "orange" "brown"])}
-   ;; table-v2 props
-   :logseq.property.table/version {:name :logseq.table.version
-                                   :schema {:type :number :hide? true :public? true :view-context :block}}
-   :logseq.property.table/compact {:name :logseq.table.compact
-                                   :schema {:type :checkbox :hide? true :public? true :view-context :block}}
-   :logseq.property.table/headers
-   {:name :logseq.table.headers
-    :schema
-    {:type :default :hide? true :public? true :view-context :block}
-    :closed-values
-    (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "headers." %))
-                     :value %
-                     :uuid (random-uuid))
-          ["uppercase" "capitalize" "capitalize-first" "lowercase"])}
-   :logseq.property.table/hover
-   {:name :logseq.table.hover
-    :schema
-    {:type :default :hide? true :public? true :view-context :block}
-    :closed-values
-    (mapv #(hash-map :db-ident (keyword "logseq.property.table" (str "hover." %))
-                     :value %
-                     :uuid (random-uuid))
-          ["row" "col" "both" "none"])}
-   :logseq.property.table/borders {:name :logseq.table.borders
-                                   :schema {:type :checkbox :hide? true :public? true :view-context :block}}
-   :logseq.property.table/stripes {:name :logseq.table.stripes
-                                   :schema {:type :checkbox :hide? true :public? true :view-context :block}}
-   :logseq.property.table/max-width {:name :logseq.table.max-width
-                                     :schema {:type :number :hide? true :public? true :view-context :block}}
-
    :logseq.property/icon {:original-name "Icon"
                           :schema {:type :map}}
    :logseq.property/public {:schema

@@ -49,15 +49,6 @@
   "Properties used by logseq that user can edit and that can have linkable property values"
   #{:alias :aliases :tags})
 
-;; file based graphs only (or maybe not for backward compatibility with markdown tables)
-(def editable-view-and-table-properties
-  "Properties used by view and table component"
-  #{;; view props
-    :logseq.color
-    ;; table props
-    :logseq.table.version :logseq.table.compact :logseq.table.headers :logseq.table.hover
-    :logseq.table.borders :logseq.table.stripes :logseq.table.max-width})
-
 (defn editable-built-in-properties
   "Properties used by logseq that user can edit"
   []
@@ -65,8 +56,7 @@
                :logseq.query/nlp-date
                ;; org-mode only
                :macro :filetags}
-             editable-linkable-built-in-properties
-             editable-view-and-table-properties))
+             editable-linkable-built-in-properties))
 
 (defn hidden-built-in-properties
   "Properties used by logseq that user can't edit or see"
