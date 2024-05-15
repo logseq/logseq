@@ -87,8 +87,6 @@
           moved-blocks (get-moved-blocks e->datoms)
           schema (:schema @conn)
           added-and-retracted-ids (set/union added-ids retracted-ids)
-          rtc-graph? (some? (ldb/get-graph-rtc-uuid @conn))
-          dev? (:dev? (worker-state/get-context))
           transact-reverse-datoms-f (fn [datoms]
                                       (keep
                                        (fn [[id attr value _tx add?]]
@@ -96,64 +94,60 @@
                                                op (if (or (and redo? add?) (and undo? (not add?)))
                                                     :db/add
                                                     :db/retract)]
-                                           (when-not (and ref?
-                                                          (not (d/entity @conn value))
-                                                          (not (and (retracted-ids value) undo?))
-                                                          (not (and (added-ids value) redo?))) ; ref has been deleted
+                                           (when (or (not ref?)
+                                                     (d/entity @conn value)
+                                                     (and (retracted-ids value) undo?)
+                                                     (and (added-ids value) redo?)) ; entity exists
                                              [op id attr value])))
                                        datoms))]
       (->>
        (mapcat
         (fn [[e datoms]]
           (let [entity (d/entity @conn e)]
-            ;; FIXME: files graphs may need to reset undo stack when there're changes from disk
-            (if-not (or rtc-graph? dev?) ; treat all graphs as rtc graphs to experience errors asap
-              (transact-reverse-datoms-f datoms)
-              (cond
-                ;; entity has been deleted
-                (and (nil? entity)
-                     (not (contains? added-and-retracted-ids e)))
-                (throw (ex-info "Entity has been deleted"
-                                {:error :entity-deleted}))
+            (cond
+              ;; entity has been deleted
+              (and (nil? entity)
+                   (not (contains? added-and-retracted-ids e)))
+              (throw (ex-info "Entity has been deleted"
+                              {:error :entity-deleted}))
 
-                ;; block has been moved or target got deleted by another client
-                (and (moved-blocks e)
-                     (let [b (d/entity @conn e)
-                           cur-parent (:db/id (:block/parent b))
-                           move-datoms (filter (fn [d] (contains? #{:block/parent} (:a d))) datoms)]
-                       (when cur-parent
-                         (let [before-parent (some (fn [d] (when (and (= :block/parent (:a d)) (not (:added d))) (:v d))) move-datoms)
-                               after-parent (some (fn [d] (when (and (= :block/parent (:a d)) (:added d)) (:v d))) move-datoms)]
-                           (and before-parent after-parent ; parent changed
-                                (if redo?
-                                  (or (not= cur-parent before-parent)
-                                      (nil? (d/entity @conn after-parent)))
-                                  (or (not= cur-parent after-parent)
-                                      (nil? (d/entity @conn before-parent)))))))))
-                (throw (ex-info (str "This block has been moved or its target has been deleted"
-                                     {:redo? redo?})
-                                {:error :block-moved-or-target-deleted}))
+              ;; block has been moved or target got deleted by another client
+              (and (moved-blocks e)
+                   (let [b (d/entity @conn e)
+                         cur-parent (:db/id (:block/parent b))
+                         move-datoms (filter (fn [d] (contains? #{:block/parent} (:a d))) datoms)]
+                     (when cur-parent
+                       (let [before-parent (some (fn [d] (when (and (= :block/parent (:a d)) (not (:added d))) (:v d))) move-datoms)
+                             after-parent (some (fn [d] (when (and (= :block/parent (:a d)) (:added d)) (:v d))) move-datoms)]
+                         (and before-parent after-parent ; parent changed
+                              (if redo?
+                                (or (not= cur-parent before-parent)
+                                    (nil? (d/entity @conn after-parent)))
+                                (or (not= cur-parent after-parent)
+                                    (nil? (d/entity @conn before-parent)))))))))
+              (throw (ex-info (str "This block has been moved or its target has been deleted"
+                                   {:redo? redo?})
+                              {:error :block-moved-or-target-deleted}))
 
-                ;; new children blocks have been added
-                (or (and (contains? retracted-ids e) redo?
-                         (other-children-exist? entity retracted-ids)) ; redo delete-blocks
-                    (and (contains? added-ids e) undo?                 ; undo insert-blocks
-                         (other-children-exist? entity added-ids)))
-                (throw (ex-info "Children still exists"
-                                {:error :block-children-exists}))
+              ;; new children blocks have been added
+              (or (and (contains? retracted-ids e) redo?
+                       (other-children-exist? entity retracted-ids)) ; redo delete-blocks
+                  (and (contains? added-ids e) undo?                 ; undo insert-blocks
+                       (other-children-exist? entity added-ids)))
+              (throw (ex-info "Children still exists"
+                              {:error :block-children-exists}))
 
                 ;; The entity should be deleted instead of retracting its attributes
-                (or (and (contains? retracted-ids e) redo?) ; redo delete-blocks
-                    (and (contains? added-ids e) undo?)) ; undo insert-blocks
-                [[:db/retractEntity e]]
+              (or (and (contains? retracted-ids e) redo?) ; redo delete-blocks
+                  (and (contains? added-ids e) undo?)) ; undo insert-blocks
+              [[:db/retractEntity e]]
 
-                ;; reverse datoms
-                :else
-                (transact-reverse-datoms-f datoms)))))
+              ;; reverse datoms
+              :else
+              (transact-reverse-datoms-f datoms))))
         e->datoms)
        (remove nil?)))
     (catch :default e
-      (throw e)
       (when-not (contains? #{:entities-created-and-deleted-same-tx
                              :block-moved-or-target-deleted :block-children-exists
                              :entity-deleted}
