@@ -43,10 +43,10 @@
     (p/do!
      @*last-request
      (when-let [repo (state/get-current-repo)]
-       (when-let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
-                                                 db/entity
-                                                 :block/uuid
-                                                 str)]
+       (let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
+                                            db/entity
+                                            :block/uuid
+                                            str)]
          (when (db-transact/request-finished?)
            (state/set-editor-op! :undo)
            (util/stop e)
@@ -65,15 +65,15 @@
     (p/do!
      @*last-request
      (when-let [repo (state/get-current-repo)]
-       (when-let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
-                                                 db/entity
-                                                 :block/uuid
-                                                 str)]
+       (let [current-page-uuid-str (some->> (page-util/get-latest-edit-page-id)
+                                            db/entity
+                                            :block/uuid
+                                            str)]
          (when (db-transact/request-finished?)
            (state/set-editor-op! :redo)
            (util/stop e)
            (state/clear-editor-action!)
            (let [^js worker @state/*db-worker]
-              (reset! *last-request (.redo worker repo current-page-uuid-str))
-              (p/let [result @*last-request]
-                (restore-cursor! (ldb/read-transit-str result))))))))))
+             (reset! *last-request (.redo worker repo current-page-uuid-str))
+             (p/let [result @*last-request]
+               (restore-cursor! (ldb/read-transit-str result))))))))))
