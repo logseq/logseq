@@ -1147,7 +1147,7 @@
 
 (declare save-current-block!)
 
-;; FIXME: doesn't work on Web (Chrome)
+;; FIXME: shortcut `mod+.` doesn't work on Web (Chrome)
 (defn zoom-in! []
   (if (state/editing?)
     (when-let [id (some-> (state/get-edit-block)
@@ -1156,6 +1156,7 @@
                           db/entity
                           :block/uuid)]
       (state/clear-editor-action!)
+      (state/set-editing-block-id! [:unknown-container id])
       (p/do!
        (save-current-block!)
        (route-handler/redirect-to-page! id)))
@@ -1170,6 +1171,7 @@
        (state/clear-editor-action!)
        (save-current-block!)
        (when block-id
+         (state/set-editing-block-id! [:unknown-container block-id])
          (let [block-parent (db/get-block-parent block-id)]
            (if-let [id (and
                         (nil? (:block/name block-parent))
