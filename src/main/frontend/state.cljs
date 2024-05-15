@@ -667,7 +667,7 @@ Similar to re-frame subscriptions"
 
 (defn set-editing-block-id!
   [container-block]
-  (swap! (:editor/editing? @state) assoc container-block true))
+  (reset! (:editor/editing? @state) {container-block true}))
 
 (defn sub-editing?
   [container-block]
