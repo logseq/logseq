@@ -113,7 +113,7 @@
                  [["Pages"          :pages          (visible-items :pages)]]
 
                  include-slash?
-                 [["Filters" :filters (visible-items :filters)]
+                 [
                   (when page-exists?
                     ["Pages" :pages (visible-items :pages)])
 
@@ -122,7 +122,8 @@
 
                   ["Current page"   :current-page   (visible-items :current-page)]
                   ["Blocks"         :blocks         (visible-items :blocks)]
-                  ["Files"          :files          (visible-items :files)]]
+                  ["Files"          :files          (visible-items :files)]
+                  ["Filters" :filters (visible-items :filters)]]
 
                  filter-group
                  [(when (= filter-group :blocks)
@@ -139,11 +140,11 @@
                    [["Pages"          :pages          (visible-items :pages)]
                     (when-not page-exists?
                       ["Create"         :create       (create-items input)])
-                    ["Filters"        :filters        (visible-items :filters)]
                     ["Commands"       :commands       (visible-items :commands)]
                     ["Current page"   :current-page   (visible-items :current-page)]
                     ["Blocks"         :blocks         (visible-items :blocks)]
-                    ["Files"          :files          (visible-items :files)]]
+                    ["Files"          :files          (visible-items :files)]
+                    ["Filters"        :filters        (visible-items :filters)]]
                    (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
