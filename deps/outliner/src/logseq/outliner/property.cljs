@@ -204,8 +204,11 @@
                                              #{new-value}
                                              new-value)))]
       (let [msg' (str "\"" k-name "\"" " " (if (coll? msg) (first msg) msg))]
-        ;; (notification/show! msg' :warning)
-        (prn :debug :msg msg' :property k-name :v new-value))
+        (throw (ex-info "Schema validation failed"
+                        {:type :notification
+                         :payload {:message msg'
+                                   :type :warning}}))
+        (prn :error :msg msg' :property k-name :v new-value))
       (let [status? (= :logseq.task/status (:db/ident property))
             tx-data (build-property-value-tx-data block property-id new-value status?)]
         (d/transact! conn tx-data {:outliner-op :save-block})))))
@@ -287,7 +290,10 @@
                                (convert-property-input-string property-type' v'')
                                (catch :default e
                                  (js/console.error e)
-                                 ;; (notification/show! (str e) :error false)
+                                 (throw (ex-info "Property converted failed"
+                                                 {:type :notification
+                                                  :payload {:message (str e)
+                                                            :type :error}}))
                                  nil)))
                 ;; don't modify maps
                 new-value (if (or (sequential? new-value*) (set? new-value*))
@@ -318,8 +324,10 @@
                         (when-let [v* (try
                                         (convert-property-input-string property-type v)
                                         (catch :default e
-                                          (prn :err e)
-                                          ;; (notification/show! (str e) :error false)
+                                          (throw (ex-info "Property converted failed"
+                                                 {:type :notification
+                                                  :payload {:message (str e)
+                                                            :type :error}}))
                                           nil))]
                           (build-property-value-tx-data block property-id v* status?)))))
                   block-eids)
@@ -478,7 +486,10 @@
                              (convert-property-input-string (:type property-schema) value')
                              (catch :default e
                                (js/console.error e)
-                                 ;; (notification/show! (str e) :error false)
+                               (throw (ex-info "Property converted failed"
+                                               {:type :notification
+                                                :payload {:message (str e)
+                                                          :type :error}}))
                                nil))
             validate-message (validate-property-value
                               (get-property-value-schema @conn property-type property {:new-closed-value? true})
@@ -489,16 +500,22 @@
                                                         (:block/uuid b))))
                        (not= id (:block/uuid b))))
                 (:property/closed-values property))
-          (do
-            ;; (notification/show! "Choice already exists" :warning)
-            (prn :value-exists)
-            :value-exists)
+
+          ;; Make sure to update frontend.handler.db-based.property-test when updating ex-info message
+          (throw (ex-info "Closed value choice already exists"
+                          {:error :value-exists
+                           :type :notification
+                           :payload {:message "Choice already exists"
+                                     :type :warning}}))
 
           validate-message
-          (do
-            ;; (notification/show! validate-message :warning)
-            (prn :value-invalid)
-            :value-invalid)
+
+          ;; Make sure to update frontend.handler.db-based.property-test when updating ex-info message
+          (throw (ex-info "Invalid property value"
+                          {:error :value-invalid
+                           :type :notification
+                           :payload {:message validate-message
+                                     :type :warning}}))
 
           (nil? resolved-value)
           nil

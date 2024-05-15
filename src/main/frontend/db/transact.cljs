@@ -28,6 +28,10 @@
     (async/go (async/>! requests new-request))
     resp))
 
+(defn remove-request!
+  [request-id]
+  (swap! *unfinished-request-ids disj request-id))
+
 (defn listen-for-requests []
   (async/go-loop []
     (when-let [{:keys [id request response]} (async/<! requests)]
@@ -36,14 +40,12 @@
           (if (:ex-data result)
             (do
               (js/console.error (:ex-message result) (:ex-data result))
-              (p/reject! response result)
-              (swap! *unfinished-request-ids disj id))
-            (do
-              (p/resolve! response result)
-              (swap! *unfinished-request-ids disj id))))
+              (p/reject! response result))
+            (p/resolve! response result))
+          (remove-request! id))
         (catch :default e
           (p/reject! response e)
-          (swap! *unfinished-request-ids disj id)))
+          (remove-request! id)))
       (recur))))
 
 (defn transact [worker-transact repo tx-data tx-meta]
