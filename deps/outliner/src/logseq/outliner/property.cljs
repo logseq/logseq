@@ -46,29 +46,11 @@
      (fn property-value-schema [property-val]
        (db-malli-schema/validate-property-value db schema-fn [property property-val] {:new-closed-value? new-closed-value?}))]))
 
-(defn- fail-parse-long
-  [v-str]
-  (let [result (parse-long v-str)]
-    (or result
-        (throw (js/Error. (str "Can't convert \"" v-str "\" to a number"))))))
-
 (defn- fail-parse-double
   [v-str]
   (let [result (parse-double v-str)]
     (or result
         (throw (js/Error. (str "Can't convert \"" v-str "\" to a number"))))))
-
-(defn- infer-schema-from-input-string
-  [v-str]
-  (try
-    (cond
-      (fail-parse-long v-str) :number
-      (fail-parse-double v-str) :number
-      (common-util/url? v-str) :url
-      (contains? #{"true" "false"} (string/lower-case v-str)) :checkbox
-      :else :default)
-    (catch :default _e
-      :default)))
 
 (defn ^:api convert-property-input-string
   [schema-type v-str]
@@ -207,8 +189,7 @@
         (throw (ex-info "Schema validation failed"
                         {:type :notification
                          :payload {:message msg'
-                                   :type :warning}}))
-        (prn :error :msg msg' :property k-name :v new-value))
+                                   :type :warning}})))
       (let [status? (= :logseq.task/status (:db/ident property))
             tx-data (build-property-value-tx-data block property-id new-value status?)]
         (d/transact! conn tx-data {:outliner-op :save-block})))))
@@ -246,6 +227,13 @@
         property-id
         raw-value)))
 
+(defn- find-or-create-property-value
+  "Find or create a property value. Only to be used with properties that have ref types"
+  [conn property-id v]
+  (or (get-property-value-eid @conn property-id (str v))
+      (let [v-uuid (create-property-text-block! conn nil property-id (str v) {})]
+        (:db/id (d/entity @conn [:block/uuid v-uuid])))))
+
 (defn set-block-property!
   "Updates a block property's value for an existing property-id and block.
   Property value is sanitized and if property is a ref type, automatically
@@ -257,7 +245,7 @@
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         property (d/entity @conn property-id)
-        _ (assert (some? property) (str "Property " property-id " doesn't exists yet"))
+        _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         property-type (get-in property [:block/schema :type] :default)
         v' (or (resolve-tag! conn v) v)
         db-attribute? (contains? db-property/db-attribute-properties property-id)
@@ -274,12 +262,10 @@
                                   (or (and (= property-type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity db v')))))
                                       (not= property-type :number)))
                            v'
-                           ;; Get or create a property value by its raw value
-                           (or (get-property-value-eid db property-id (str v'))
-                               (let [v-uuid (create-property-text-block! conn nil (:db/id property) (str v') {})]
-                                 (:db/id (d/entity @conn [:block/uuid v-uuid])))))
+                           (find-or-create-property-value conn property-id v'))
                          :else
                          v')
+            ;; don't modify maps
             new-value (if (or (sequential? new-value*) (set? new-value*))
                         (if (= :coll property-type)
                           (vec (remove string/blank? new-value*))
@@ -290,35 +276,29 @@
           (raw-set-block-property! conn block property property-type new-value))))))
 
 (defn batch-set-property!
-  "Notice that this works only for properties with cardinality equals to `one`."
+  "Sets properties for multiple blocks. Automatically handles property value refs.
+   Does no validation of property values.
+   NOTE: This fn only works for properties with cardinality equal to `one`."
   [conn block-ids property-id v]
   (assert property-id "property-id is nil")
   (let [block-eids (map ->eid block-ids)
-        property (d/entity @conn property-id)]
-    (when property
-      (let [type (:type (:block/schema property))
-            infer-schema (when-not type (infer-schema-from-input-string v))
-            property-type (or type infer-schema :default)
-            many? (db-property/many? property)
-            status? (= :logseq.task/status (:db/ident property))
-            txs (->>
-                 (mapcat
-                  (fn [eid]
-                    (when-let [block (d/entity @conn eid)]
-                      (when (and (some? v) (not many?))
-                        (when-let [v* (try
-                                        (convert-property-input-string property-type v)
-                                        (catch :default e
-                                          (throw (ex-info "Property converted failed"
-                                                 {:type :notification
-                                                  :payload {:message (str e)
-                                                            :type :error}}))
-                                          nil))]
-                          (build-property-value-tx-data block property-id v* status?)))))
-                  block-eids)
-                 (remove nil?))]
-        (when (seq txs)
-          (d/transact! conn txs {:outliner-op :save-block}))))))
+        property (d/entity @conn property-id)
+        _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
+        _ (assert (not (db-property/many? property)) "Property must be cardinality :one in batch-set-property!")
+        property-type (get-in property [:block/schema :type] :default)
+        _ (assert v "Can't set a nil property value must be not nil")
+        v' (if (db-property-type/value-ref-property-types property-type)
+             (find-or-create-property-value conn property-id v)
+             v)
+        status? (= :logseq.task/status (:db/ident property))
+        txs (mapcat
+             (fn [eid]
+               (if-let [block (d/entity @conn eid)]
+                 (build-property-value-tx-data block property-id v' status?)
+                 (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
+             block-eids)]
+    (when (seq txs)
+      (d/transact! conn txs {:outliner-op :save-block}))))
 
 (defn batch-remove-property!
   [conn block-ids property-id]
@@ -428,7 +408,7 @@
 
 (defn- build-closed-value-tx
   [db property property-type resolved-value {:keys [id icon description]
-                                          :or {description ""}}]
+                                             :or {description ""}}]
   (let [block (when id (d/entity db [:block/uuid id]))
         block-id (or id (ldb/new-block-id))
         icon (when-not (and (string? icon) (string/blank? icon)) icon)
