@@ -79,7 +79,7 @@
    :logseq.property/hl-color {:schema {:type :default
                                        :hide? true}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
-                                     :schema {:type :string
+                                     :schema {:type :default
                                               :hide? true}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page
                                  :schema {:type :map

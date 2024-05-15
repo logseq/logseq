@@ -464,10 +464,13 @@
            rest))))
 
 (defn- blocks-with-ordered-list-props
-  [repo conn blocks target-block sibling?]
-  (let [db @conn
-        target-block (if sibling? target-block (when target-block (ldb/get-down target-block)))
-        list-type-fn (fn [block] (db-property-util/get-block-property-value repo db block :logseq.property/order-list-type))
+  [repo blocks target-block sibling?]
+  (let [target-block (if sibling? target-block (when target-block (ldb/get-down target-block)))
+        list-type-fn (fn [block]
+                       (if (sqlite-util/db-based-graph? repo)
+                         ;; Get raw id since insert-blocks doesn't auto-handle raw property values
+                         (:db/id (:logseq.property/order-list-type block))
+                         (get (:block/properties block) (db-property-util/get-pid repo :logseq.property/order-list-type))))
         db-based? (sqlite-util/db-based-graph? repo)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
@@ -644,7 +647,7 @@
                                      (string/blank? (:block/content target-block))
                                      (> (count blocks) 1)))
         blocks' (let [blocks' (blocks-with-level blocks)]
-                  (cond->> (blocks-with-ordered-list-props repo conn blocks' target-block sibling?)
+                  (cond->> (blocks-with-ordered-list-props repo blocks' target-block sibling?)
                     update-timestamps?
                     (mapv (fn [b] (block-with-timestamps (dissoc b :block/created-at :block/updated-at))))
                     true
