@@ -353,6 +353,14 @@
      (let [search-result-eids (ldb/read-transit-str search-result-eids-str)]
        (ldb/write-transit-str (ldb/get-page-unlinked-refs @conn page-id search-result-eids)))))
 
+  (set-context
+   [_this context]
+   (let [context (if (string? context)
+                   (ldb/read-transit-str context)
+                   context)]
+     (when context (worker-state/update-context! context))
+     nil))
+
   (transact
    [_this repo tx-data tx-meta context]
    (when repo (worker-state/set-db-latest-tx-time! repo))

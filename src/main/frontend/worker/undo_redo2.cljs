@@ -88,6 +88,7 @@
           schema (:schema @conn)
           added-and-retracted-ids (set/union added-ids retracted-ids)
           rtc-graph? (some? (ldb/get-graph-rtc-uuid @conn))
+          dev? (:dev? (worker-state/get-context))
           transact-reverse-datoms-f (fn [datoms]
                                       (keep
                                        (fn [[id attr value _tx add?]]
@@ -106,7 +107,7 @@
         (fn [[e datoms]]
           (let [entity (d/entity @conn e)]
             ;; FIXME: files graphs may need to reset undo stack when there're changes from disk
-            (if-not rtc-graph?
+            (if-not (or rtc-graph? dev?) ; treat all graphs as rtc graphs to experience errors asap
               (transact-reverse-datoms-f datoms)
               (cond
                 ;; entity has been deleted
