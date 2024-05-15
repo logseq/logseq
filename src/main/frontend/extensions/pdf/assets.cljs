@@ -211,6 +211,7 @@
                          (assoc :id (str id)))
                  properties (wrap-props props)]
              (when (string? text)
+               ;; FIXME: Handle properties for db graphs
                (editor-handler/api-insert-new-block!
                 text (merge {:page        (:block/name ref-page)
                              :custom-uuid id

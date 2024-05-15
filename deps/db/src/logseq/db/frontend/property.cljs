@@ -41,7 +41,7 @@
                                         :public? true
                                         :view-context :page
                                         :cardinality :many}}
-   :logseq.property/background-color {:schema {:type :string :hide? true}}
+   :logseq.property/background-color {:schema {:type :default :hide? true}}
    :logseq.property/background-image {:schema
                                       {:type :string
                                        :view-context :block
@@ -76,7 +76,7 @@
                                       :hide? true}}
    :logseq.property/hl-stamp {:schema {:type :number
                                        :hide? true}}
-   :logseq.property/hl-color {:schema {:type :string
+   :logseq.property/hl-color {:schema {:type :default
                                        :hide? true}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :string
