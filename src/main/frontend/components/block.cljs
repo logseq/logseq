@@ -3433,26 +3433,31 @@
                (str "-" (:block/uuid original-block))))))))
 
 
+;; TODO: improve lazy experience and enable it for long list
 (defn- block-list
-  [config blocks]
-  (for [[idx item] (medley/indexed blocks)]
-    (let [top? (zero? idx)
-          bottom? (= (count blocks) (inc idx))]
-      (rum/with-key
-        (ui/lazy-visible
-         (fn []
-           (rum/with-key
-             (block-item (assoc config :top? top?)
-                         item
-                         {:top? top?
-                          :idx idx
-                          :bottom? bottom?})
-             (str "blocks-" (:block/uuid item))))
-         {:trigger-once? false
-          :fade-in? false
-          :initial-state false
-          :debug-id (str (:db/id item) "-" (:block/content item))})
-        (str (:container-id config) "-" (:db/id item))))))
+  [{:keys [long-page?] :as config} blocks]
+  (let [edit-block-id (:db/id (state/get-edit-block))]
+    (for [[idx item] (medley/indexed blocks)]
+      (let [top? (zero? idx)
+            bottom? (= (count blocks) (inc idx))
+            block-render (fn []
+                           (rum/with-key
+                             (block-item (assoc config :top? top?)
+                                         item
+                                         {:top? top?
+                                          :idx idx
+                                          :bottom? bottom?})
+                             (str "blocks-" (:block/uuid item))))]
+        (if long-page?
+          (rum/with-key
+            (ui/lazy-visible
+             block-render
+             {:trigger-once? false
+              :fade-in? false
+              :initial-state (= edit-block-id (:db/id item))
+              :debug-id (str (:db/id item) "-" (:block/content item))})
+            (str (:container-id config) "-" (:db/id item)))
+          (block-render))))))
 
 (rum/defcs blocks-container < rum/static
   {:init (fn [state]
