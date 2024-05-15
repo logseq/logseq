@@ -50,37 +50,45 @@
     (swap! *redo-ops assoc repo redo-stack*)
     ops))
 
+(defn- get-moved-blocks
+  [e->datoms]
+  (->>
+   (keep (fn [[e datoms]]
+           (when (some
+                  (fn [k]
+                    (and (some (fn [d] (and (= k (:a d)) (:added d))) datoms)
+                         (some (fn [d] (and (= k (:a d)) (not (:added d)))) datoms)))
+                  [:block/parent :block/order])
+             e)) e->datoms)
+   (set)))
+
 (defn get-reversed-datoms
-  [conn redo? {:keys [tx-data tx-meta added-ids retracted-ids]}]
+  [conn redo? {:keys [tx-data added-ids retracted-ids]}]
   (try
     (let [e->datoms (->> (if redo? tx-data (reverse tx-data))
                          (group-by :e))
+          moved-blocks (get-moved-blocks e->datoms)
           schema (:schema @conn)]
       (->>
        (mapcat
         (fn [[e datoms]]
           (cond
-            ;; block has been moved by another client
-            (and
-             (= :move-blocks (:outliner-op tx-meta))
-             (let [b (d/entity @conn e)
-                   cur-parent (:db/id (:block/parent b))
-                   cur-order (:block/order b)
-                   move-datoms (filter (fn [d] (contains? #{:block/parent :block/order} (:a d))) datoms)
-                   cur [cur-parent cur-order]]
-               (when (and cur-parent cur-order)
-                 (let [before-parent (some (fn [d] (when (and (= :block/parent (:a d)) (not (:added d))) (:v d))) move-datoms)
-                       after-parent (some (fn [d] (when (and (= :block/parent (:a d)) (:added d)) (:v d))) move-datoms)
-                       before-order (some (fn [d] (when (and (= :block/order (:a d)) (not (:added d))) (:v d))) move-datoms)
-                       after-order (some (fn [d] (when (and (= :block/order (:a d)) (:added d)) (:v d))) move-datoms)
-                       before [before-parent before-order]
-                       after [after-parent after-order]]
-                   (if redo?
-                     (not= cur before)
-                     (not= cur after))))))
+            ;; block has been moved or target got deleted by another client
+            (and (moved-blocks e)
+                 (let [b (d/entity @conn e)
+                       cur-parent (:db/id (:block/parent b))
+                       move-datoms (filter (fn [d] (contains? #{:block/parent} (:a d))) datoms)]
+                   (when cur-parent
+                     (let [before-parent (some (fn [d] (when (and (= :block/parent (:a d)) (not (:added d))) (:v d))) move-datoms)
+                           after-parent (some (fn [d] (when (and (= :block/parent (:a d)) (:added d)) (:v d))) move-datoms)]
+                       (if redo?
+                         (or (not= cur-parent before-parent)
+                             (nil? (d/entity @conn after-parent)))
+                         (or (not= cur-parent after-parent)
+                             (nil? (d/entity @conn before-parent))))))))
             ;; skip this tx
-            (throw (ex-info "This block has been moved"
-                            {:error :block-moved}))
+            (throw (ex-info "This block has been moved or its target has been deleted"
+                            {:error :block-moved-or-target-deleted}))
 
             ;; The entity should be deleted instead of retracting its attributes
             (or (and (contains? retracted-ids e) redo?)
@@ -103,7 +111,7 @@
         e->datoms)
        (remove nil?)))
     (catch :default e
-      (when (not= :block-moved (:error (ex-data e)))
+      (when (not= :block-moved-or-target-deleted (:error (ex-data e)))
         (throw e)))))
 
 (defn undo
@@ -184,9 +192,10 @@
                        (filter
                         (fn [id] (and (nil? (d/entity db-before id)) (d/entity db-after id)))
                         all-ids))
+            tx-data' (remove (fn [d] (contains? #{:block/path-refs} (:a d))) tx-data)
             ops (->> [(when editor-info [::record-editor-info editor-info])
                       [::db-transact
-                       {:tx-data tx-data
+                       {:tx-data tx-data'
                         :tx-meta tx-meta
                         :added-ids added-ids
                         :retracted-ids retracted-ids}]]
