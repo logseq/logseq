@@ -323,7 +323,8 @@
                  themes
                  (search/fuzzy-search themes @!input :limit 100 :extract-fn :name))
         themes (cons {:name "Logseq Default theme"
-                      :pid  "logseq-classic-theme"
+                      :pid "logseq-classic-theme"
+                      :mode (state/sub :ui/theme)
                       :url nil} themes)
         selected (state/sub :plugin/selected-theme)]
     (swap! !results assoc-in [group :status] :loading)
