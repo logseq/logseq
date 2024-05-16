@@ -568,6 +568,11 @@
      (worker-state/set-new-state! new-state)
      nil))
 
+  (sync-ui-state
+   [_this repo state-str]
+   (undo-redo/record-ui-state! repo state-str)
+   nil)
+
   ;; Export
   (block->content
    [this repo block-uuid-str tree->file-opts context]

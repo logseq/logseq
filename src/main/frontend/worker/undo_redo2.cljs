@@ -8,7 +8,7 @@
             [malli.core :as m]
             [malli.util :as mu]))
 
-;; TODO: add other UI states such as `::ui/route` and `:ui/sidebar-blocks`.
+;; TODO: add other UI states such as `::ui-updates`.
 (sr/defkeyword :gen-undo-ops?
   "tx-meta option, generate undo ops from tx-data when true (default true)")
 
@@ -16,7 +16,10 @@
   "record current editor and cursor")
 
 (sr/defkeyword ::db-transact
-  "record db tx-data/tx-meta")
+  "db tx")
+
+(sr/defkeyword ::ui-state
+  "ui state such as route && sidebar blocks")
 
 (def ^:private undo-op-item-schema
   (mu/closed-schema
@@ -37,7 +40,9 @@
        [:tx-meta [:map {:closed false}
                   [:outliner-op :keyword]]]
        [:added-ids [:set :int]]
-       [:retracted-ids [:set :int]]]]]]))
+       [:retracted-ids [:set :int]]]]]
+    [::ui-state
+     [:cat :keyword :string]]]))
 
 (def ^:private undo-op-validator (m/validator [:sequential undo-op-item-schema]))
 
@@ -263,25 +268,34 @@
 (defn- undo-redo-aux
   [repo conn undo?]
   (if-let [op (not-empty ((if undo? pop-undo-op pop-redo-op) repo conn))]
-    (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
-                                                      (second %)) op)]
-      (when (seq tx-data)
-        (let [reversed-tx-data (get-reversed-datoms conn undo? data)
-              tx-meta' (-> tx-meta
-                           (dissoc :pipeline-replace?
-                                   :batch-tx/batch-tx-mode?)
-                           (assoc
-                            :gen-undo-ops? false
-                            :undo? undo?))]
-          (when (seq reversed-tx-data)
-            (d/transact! conn reversed-tx-data tx-meta')
-            ((if undo? push-redo-op push-undo-op) repo op)
-            (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
-                                      (map second))
-                  block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (first editor-cursors))]))]
-              {:undo? undo?
-               :editor-cursors editor-cursors
-               :block-content block-content})))))
+    (cond
+      (= ::ui-state (ffirst op))
+      (do
+        ((if undo? push-redo-op push-undo-op) repo op)
+        (let [ui-state-str (second (first op))]
+          {:undo? undo?
+           :ui-state-str ui-state-str}))
+
+      :else
+      (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
+                                                        (second %)) op)]
+        (when (seq tx-data)
+          (let [reversed-tx-data (get-reversed-datoms conn undo? data)
+                tx-meta' (-> tx-meta
+                             (dissoc :pipeline-replace?
+                                     :batch-tx/batch-tx-mode?)
+                             (assoc
+                              :gen-undo-ops? false
+                              :undo? undo?))]
+            (when (seq reversed-tx-data)
+              (d/transact! conn reversed-tx-data tx-meta')
+              ((if undo? push-redo-op push-undo-op) repo op)
+              (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
+                                        (map second))
+                    block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (first editor-cursors))]))]
+                {:undo? undo?
+                 :editor-cursors editor-cursors
+                 :block-content block-content}))))))
 
     (when ((if undo? empty-undo-stack? empty-redo-stack?) repo)
       (prn (str "No further " (if undo? "undo" "redo") " information"))
@@ -305,6 +319,11 @@
                      (fn [op]
                        (conj (vec op) [::record-editor-info editor-info])))
              stack))))
+
+(defn record-ui-state!
+  [repo ui-state-str]
+  (when ui-state-str
+    (push-undo-op repo [[::ui-state ui-state-str]])))
 
 (defmethod db-listener/listen-db-changes :gen-undo-ops
   [_ {:keys [repo tx-data tx-meta db-after db-before]}]

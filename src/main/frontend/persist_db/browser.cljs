@@ -39,6 +39,28 @@
                  (when (seq new-state)
                    (.sync-app-state worker (ldb/write-transit-str new-state)))))))
 
+(defn get-route-data
+    [route-match]
+    (when (seq route-match)
+      {:to (get-in route-match [:data :name])
+       :path-params (:path-params route-match)
+       :query-params (:query-params route-match)}))
+
+(defn- sync-ui-state!
+  [^js worker]
+  (add-watch state/state
+             :sync-ui-state
+             (fn [_ _ prev current]
+               (let [f (fn [state]
+                         (-> (select-keys state [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
+                             (assoc :route-data (get-route-data (:route-match state)))))
+                     old-state (f prev)
+                     new-state (f current)]
+                 (when (not= new-state old-state)
+                   (.sync-ui-state worker (state/get-current-repo)
+                                   (ldb/write-transit-str {:old-state old-state
+                                                           :new-state new-state})))))))
+
 (defn transact!
   [^js worker repo tx-data tx-meta]
   (let [tx-meta' (ldb/write-transit-str tx-meta)
@@ -77,6 +99,7 @@
                                       {:git/current-repo (state/get-current-repo)
                                        :config (:config @state/state)}))
                   _ (sync-app-state! wrapped-worker)
+                  _ (sync-ui-state! wrapped-worker)
                   _ (ask-persist-permission!)
                   _ (state/pub-event! [:graph/sync-context])]
             (ldb/register-transact-fn!
