@@ -226,7 +226,6 @@
                   (recur (conj r uuid) rest-uuids* (first rest-uuids*)))))))]
     (mapv move-ops-map sorted-uuids)))
 
-
 (defn- apply-remote-remove-page-ops
   [repo conn remove-page-ops]
   (doseq [op remove-page-ops]
@@ -281,7 +280,6 @@
      :update-ops-map update-ops-map
      :update-page-ops-map update-page-ops-map
      :remove-page-ops-map remove-page-ops-map}))
-
 
 (defn- check-block-pos
   "NOTE: some blocks don't have :block/order (e.g. whiteboard blocks)"
