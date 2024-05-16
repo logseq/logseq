@@ -35,7 +35,7 @@
 (deftest ^:large-vars/cleanup-todo block-property-test
   (testing "Add a property to a block"
     (let [conn (db/get-db false)]
-      (outliner-property/upsert-property! conn :user.property/property-1 {:type :string}
+      (outliner-property/upsert-property! conn :user.property/property-1 {:type :default}
                                           {:property-name "property 1"})
       (outliner-property/set-block-property! conn fbid :user.property/property-1 "value"))
     (let [block (db/entity [:block/uuid fbid])
@@ -44,7 +44,7 @@
       ;; ensure property exists
       (are [x y] (= x y)
         (:block/schema property)
-        {:type :string}
+        {:type :default}
         (:block/type property)
         #{"property"})
       ;; check block's properties
@@ -53,7 +53,7 @@
         1
         (keyword? (ffirst properties))
         true
-        (second (first properties))
+        (:block/content (second (first properties)))
         "value")))
 
   (testing "Add another property"
@@ -146,14 +146,14 @@
     (let [k :user.property/property-4
           v "batch value"
           conn (db/get-db false)]
-      (outliner-property/upsert-property! conn :user.property/property-4 {:type :string} {})
+      (outliner-property/upsert-property! conn :user.property/property-4 {:type :default} {})
       (outliner-property/batch-set-property! conn [fbid sbid] k v)
       (let [fb (db/entity [:block/uuid fbid])
             sb (db/entity [:block/uuid sbid])]
         (are [x y] (= x y)
-          (get (:block/properties fb) k)
+          (:block/content (get (:block/properties fb) k))
           v
-          (get (:block/properties sb) k)
+          (:block/content (get (:block/properties sb) k))
           v))))
 
   (testing "Batch remove properties"
