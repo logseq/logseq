@@ -36,60 +36,6 @@
    [:target-uuid [:maybe :uuid]]
    [:pos [:enum :sibling :child :no-order :no-parent-sibling]]])
 
-(comment
-  (def to-ws-op-schema-deprecated
-    "TODO: remove this schema"
-    [:multi {:dispatch first :decode/string #(update % 0 keyword)}
-     [:move
-      [:cat :keyword
-       [:map
-        [:block-uuid :uuid]
-        [:target-uuid :uuid]
-        [:pos block-pos-type-schema]]]]
-     [:remove
-      [:cat :keyword
-       [:map
-        [:block-uuids [:sequential :uuid]]]]]
-
-     [:update
-      [:cat :keyword
-       [:map
-        [:block-uuid :uuid]
-        [:target-uuid {:optional true} :uuid]
-        [:pos {:optional true} block-pos-type-schema]
-        [:content {:optional true} :string]
-        [:updated-at {:optional true} :int]
-        [:created-at {:optional true} :int]
-        [:created-by {:optional true} :string]
-        [:tags {:optional true} [:map
-                                 [:add {:optional true} [:maybe [:set :uuid]]]
-                                 [:retract {:optional true} [:maybe [:set :uuid]]]]]
-        [:alias {:optional true} [:map
-                                  [:add {:optional true} [:maybe [:set :uuid]]]
-                                  [:retract {:optional true} [:maybe [:set :uuid]]]]]
-        [:type {:optional true} [:map
-                                 [:add {:optional true} [:maybe [:set block-type-schema]]]
-                                 [:retract {:optional true} [:maybe [:set block-type-schema]]]]]
-        [:schema {:optional true} :string ;transit-string
-         ]
-        [:properties {:optional true} [:map
-                                       [:add {:optional true} [:sequential [:cat :uuid :string ;; transit-string
-                                                                            ]]]
-                                       [:retract {:optional true} [:set :uuid]]]]
-        [:link {:optional true} :uuid]
-        [:journal-day {:optional true} :int]
-        [:ident {:optional true} :string]]]]
-     [:update-page
-      [:cat :keyword
-       [:map
-        [:block-uuid :uuid]
-        [:page-name :string]
-        [:original-name :string]]]]
-     [:remove-page
-      [:cat :keyword
-       [:map
-        [:block-uuid :uuid]]]]]))
-
 (def av-schema
   [:cat
    :keyword
@@ -132,6 +78,13 @@
 (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema]))
 (def to-ws-ops-decoder (m/decoder [:sequential to-ws-op-schema] mt/string-transformer))
 
+(def ^:private extra-attr-map-schema
+  [:map-of
+   :keyword
+   [:or
+    [:or :uuid :string]
+    [:sequential [:or :uuid :string]]]])
+
 (def data-from-ws-schema
   [:map
    [:req-id :string]
@@ -143,37 +96,32 @@
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
       [:move
-       (apply conj
-              [:map
-               [:op :keyword]
-               [:self :uuid]
-               [:parents [:sequential :uuid]]
-               [:left [:maybe :uuid]]   ;nil when it's :no-order block
-               [:content {:optional true} :string]
-               [:hash {:optional true} :int]]
-              general-attrs-schema-coll)]
+       [:map
+        [:op :keyword]
+        [:self :uuid]
+        [:parents [:sequential :uuid]]
+        [:left [:maybe :uuid]]   ;nil when it's :no-order block
+        [:hash {:optional true} :int]
+        [::m/default extra-attr-map-schema]]]
       [:remove
        [:map
         [:op :keyword]
         [:block-uuid :uuid]]]
       [:update-attrs
-       (apply conj
-              [:map
-               [:op :keyword]
-               [:self :uuid]
-               [:parents {:optional true} [:sequential :uuid]]
-               [:left {:optional true} [:maybe :uuid]] ;nil when it's :no-order block
-               [:content {:optional true} :string]
-               [:hash {:optional true} :int]]
-              general-attrs-schema-coll)]
+       [:map
+        [:op :keyword]
+        [:self :uuid]
+        [:parents {:optional true} [:sequential :uuid]]
+        [:left {:optional true} [:maybe :uuid]] ;nil when it's :no-order block
+        [:hash {:optional true} :int]
+        [::m/default extra-attr-map-schema]]]
       [:update-page
-       (apply conj
-              [:map
-               [:op :keyword]
-               [:self :uuid]
-               [:page-name :string]
-               [:original-name :string]]
-              general-attrs-schema-coll)]
+       [:map
+        [:op :keyword]
+        [:self :uuid]
+        [:page-name :string]
+        [:block/original-name :string]
+        [::m/default extra-attr-map-schema]]]
       [:remove-page
        [:map
         [:op :keyword]
