@@ -59,6 +59,8 @@
                (:closed-values property)))))
 
 (defn build-property-value-block
+  "Builds a property value entity given a block map/entity, a property entity or
+  ident and its property value"
   [block property value]
   (-> {:block/uuid (d/squuid)
        :block/format :markdown
@@ -69,6 +71,6 @@
                      (:db/id block))
        :block/parent (:db/id block)
        :logseq.property/created-from-property (or (:db/id property)
-                                                  {:db/ident (:db/ident property)})
+                                                  (when (keyword? property) {:db/ident property}))
        :block/order (db-order/gen-key)}
       sqlite-util/block-with-timestamps))

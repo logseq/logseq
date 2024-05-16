@@ -13,7 +13,7 @@
    * :schema - Property's schema. Required key. Has the following common keys:
      * :type - Property type
      * :cardinality - property cardinality. Default to one/single cardinality if not set
-     * :hide? - Boolean which hides property when set on a block
+     * :hide? - Boolean which hides property when set on a block or exported e.g. slides
      * :public? - Boolean which allows property to be used by user e.g. add and remove property to blocks/pages
      * :view-context - Keyword to indicate which view contexts a property can be
        seen in when :public? is set. Valid values are :page and :block. Property can
@@ -43,7 +43,7 @@
                                         :cardinality :many}}
    :logseq.property/background-color {:schema {:type :default :hide? true}}
    :logseq.property/background-image {:schema
-                                      {:type :string
+                                      {:type :default
                                        :view-context :block
                                        :public? true}}
    ;; number (1-6) or boolean for auto heading
@@ -146,9 +146,9 @@
                                               :view-context :page
                                               :public? true}}
    :logseq.property.pdf/file
-   {:schema {:type :string :hide? true :public? true :view-context :page}}
+   {:schema {:type :default :hide? true :public? true :view-context :page}}
    :logseq.property.pdf/file-path
-   {:schema {:type :string :hide? true :public? true :view-context :page}}))
+   {:schema {:type :default :hide? true :public? true :view-context :page}}))
 
 (def built-in-properties
   (->> built-in-properties*
