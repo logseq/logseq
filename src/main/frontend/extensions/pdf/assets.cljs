@@ -130,7 +130,7 @@
 (defn update-hl-block!
   [highlight]
   (when-let [block (db-model/get-block-by-uuid (:id highlight))]
-    (doseq [[k v] {(pu/get-pid :logseq.property/hl-stamp)
+    (doseq [[k v] {(pu/get-pid :logseq.property.pdf/hl-stamp)
                    (if (area-highlight? highlight)
                      (get-in highlight [:content :image])
                      (js/Date.now))
@@ -200,11 +200,11 @@
                  wrap-props #(if-let [stamp (:image content)]
                                (assoc %
                                       (pu/get-pid :logseq.property/hl-type) :area
-                                      (pu/get-pid :logseq.property/hl-stamp) stamp)
+                                      (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
                                %)
                  props (cond->
                         {(pu/get-pid :logseq.property/ls-type)  :annotation
-                         (pu/get-pid :logseq.property/hl-page)  page
+                         (pu/get-pid :logseq.property.pdf/hl-page)  page
                          (pu/get-pid :logseq.property/hl-color) (:color properties)}
                          (not (config/db-based-graph? (state/get-current-repo)))
                           ;; force custom uuid
@@ -239,7 +239,7 @@
         page      (db-utils/pull (:db/id (:block/page block)))
         page-name (:block/original-name page)
         file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
-        hl-page   (pu/get-block-property-value block :logseq.property/hl-page)]
+        hl-page   (pu/get-block-property-value block :logseq.property.pdf/hl-page)]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
               hls (and hls (:highlights hls))]

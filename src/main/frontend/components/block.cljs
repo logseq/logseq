@@ -1948,12 +1948,12 @@
 
                       [:span.hl-page
                        [:strong.forbid-edit (str "P" (or
-                                                      (pu/lookup properties :logseq.property/hl-page)
+                                                      (pu/lookup properties :logseq.property.pdf/hl-page)
                                                       "?"))]
                        [:label.blank " "]]
 
                       (when (and area?
-                                 (pu/lookup properties :logseq.property/hl-stamp))
+                                 (pu/lookup properties :logseq.property.pdf/hl-stamp))
                         (pdf-assets/area-display t))])]
        (remove-nils
         (concat
