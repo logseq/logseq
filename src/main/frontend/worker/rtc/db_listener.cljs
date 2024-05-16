@@ -18,21 +18,17 @@
       (> (second latest-add) (second latest-retract)) {true (conj {} latest-add)}
       :else                                           {false (conj {} latest-retract)})))
 
-(def ^:private const-concerned-attrs
+(def ^:private watched-attrs
   #{:block/content :block/created-at :block/updated-at :block/alias
     :block/tags :block/type :block/schema :block/link :block/journal-day})
 
-(defn- concerned-attr?
+(defn- watched-attr?
   [attr]
-  (contains? const-concerned-attrs attr))
+  (contains? watched-attrs attr))
 
 (defn- ref-attr?
   [db attr]
   (= :db.type/ref (get-in (d/schema db) [attr :db/valueType])))
-
-;; (defn- card-many-attr?
-;;   [db attr]
-;;   (= :db.cardinality/many (get-in (d/schema db) [attr :db/cardinality])))
 
 (defn- update-op-av-coll
   [db-before db-after a->add?->v->t]
@@ -57,7 +53,7 @@
       add?->v->t))
    a->add?->v->t))
 
-(defn max-t
+(defn- max-t
   [a->add?->v->t]
   (apply max (mapcat vals (mapcat vals (vals a->add?->v->t)))))
 
@@ -65,7 +61,7 @@
   [add?->v->t k]
   (some-> add?->v->t (get k) first))
 
-(defn- entity-datoms=>ops2
+(defn- entity-datoms=>ops
   [db-before db-after e->a->add?->v->t entity-datoms]
   (let [e                            (ffirst entity-datoms)
         block-uuid                   (:block/uuid (d/entity db-after e))
@@ -84,7 +80,7 @@
                                              (get-first-vt true))
         [add-block-parent t4]        (some-> add?->block-parent->t latest-add?->v->t (get-first-vt true))
         [add-block-order t5]         (some-> add?->block-order->t latest-add?->v->t (get-first-vt true))
-        a->add?->v->t*               (into {} (filter (fn [[a _]] (concerned-attr? a)) a->add?->v->t))]
+        a->add?->v->t*               (into {} (filter (fn [[a _]] (watched-attr? a)) a->add?->v->t))]
     (cond
       (and retract-block-uuid retract-block-name)
       [[:remove-page t1 {:block-uuid retract-block-uuid}]]
@@ -125,11 +121,11 @@
                 :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
                 :remove-asset ["remove-asset" {:asset-uuid (str (second op))}]))))))))
 
-(defn generate-rtc-ops
+(defn- generate-rtc-ops
   [repo db-before db-after same-entity-datoms-coll id->attr->datom e->a->v->add?->t]
   (let [asset-ops (keep (partial entity-datoms=>asset-op db-after id->attr->datom) same-entity-datoms-coll)
         ops (when (empty asset-ops)
-              (mapcat (partial entity-datoms=>ops2 db-before db-after e->a->v->add?->t)
+              (mapcat (partial entity-datoms=>ops db-before db-after e->a->v->add?->t)
                       same-entity-datoms-coll))]
     (when (seq ops)
       (op-mem-layer/add-ops! repo ops))))
