@@ -153,6 +153,7 @@
       :editor/code-block-context             {}
 
       :db/properties-changed-pages           {}
+      :history/paused?                       (atom false)
       :editor/cursor-range                   (atom nil)
       :editor/container-id                   (atom nil)
       :editor/next-edit-block                (atom nil)
@@ -1341,20 +1342,6 @@ Similar to re-frame subscriptions"
   (let [items (map second (:sidebar/blocks @state))]
     (doseq [item items]
       (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
-
-(defn get-current-edit-block-and-position
-  []
-  (let [edit-input-id (get-edit-input-id)
-        edit-block (get-edit-block)
-        block-element (when edit-input-id (gdom/getElement (string/replace edit-input-id "edit-block" "ls-block")))
-        container (when block-element
-                    (util/get-block-container block-element))]
-    (when container
-      {:last-edit-block edit-block
-       :container       (gobj/get container "id")
-       :pos             @(:editor/start-pos @state)
-       :end-pos         (or (cursor/pos (gdom/getElement edit-input-id))
-                            (count (:block/content edit-block)))})))
 
 (defn clear-edit!
   []
