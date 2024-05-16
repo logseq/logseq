@@ -10,7 +10,6 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [frontend.handler.property :as property-handler]
-            [logseq.outliner.property :as outliner-property]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -88,35 +87,21 @@
 
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
-  Otherwise, add a block's property and its value. Creates a new property as needed"
+  Otherwise, add a block's property and its value"
   ([block property-key property-value] (<add-property! block property-key property-value {}))
-  ([block property-key property-value {:keys [exit-edit? class-schema?]
+  ([block property-id property-value' {:keys [exit-edit? class-schema?]
                                        :or {exit-edit? true}}]
-
    (let [repo (state/get-current-repo)
-         class? (contains? (:block/type block) "class")
-         property (db/entity property-key)]
+         class? (contains? (:block/type block) "class")]
+     (assert (qualified-keyword? property-id) "property to add must be a keyword")
      (p/do!
-      (when property-key
-        (if (and class? class-schema?)
-          (db-property-handler/class-add-property! (:db/id block) property-key)
-          (let [[property-id property-value']
-                (if (string? property-key)
-                  (if-let [ent (ldb/get-case-page (db/get-db repo) property-key)]
-                    [(:db/ident ent) property-value]
-                    ;; This is a new property. Create a new property id to use of set-block-property!
-                    [(outliner-property/ensure-unique-db-ident
-                      (db/get-db (state/get-current-repo))
-                      (db-property/create-user-property-ident-from-name property-key))
-                     (if (= :checkbox (get-in property [:block/schema :type]))
-                       false
-                       :logseq.property/empty-placeholder)])
-                  [property-key property-value])]
-            (p/let [property (db/entity property-key)]
-              (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
-                       (not (int? property-value')))
-                (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
-                (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))))
+      (if (and class? class-schema?)
+        (db-property-handler/class-add-property! (:db/id block) property-id)
+        (p/let [property (db/entity property-id)]
+          (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                   (not (int? property-value')))
+            (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
+            (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?
         (shui/popup-hide!)
         (exit-edit-property))))))

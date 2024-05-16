@@ -535,30 +535,12 @@
 (defn class-add-property!
   [conn class-id property-id]
   (when-let [class (d/entity @conn class-id)]
-    (when (contains? (:block/type class) "class")
-      (let [[db-ident property options]
-            ;; strings come from user
-            (if (string? property-id)
-              (if-let [ent (ldb/get-case-page @conn property-id)]
-                [(:db/ident ent) ent {}]
-                ;; creates ident beforehand b/c needed in later transact and this avoids
-                ;; making this whole fn async for now
-                [(ensure-unique-db-ident
-                  @conn
-                  (db-property/create-user-property-ident-from-name property-id))
-                 nil
-                 {:property-name property-id}])
-              [property-id (d/entity @conn property-id) {}])
-            property-type (get-in property [:block/schema :type])
-            _ (upsert-property! conn
-                                db-ident
-                                (cond-> (:block/schema property)
-                                  (some? property-type)
-                                  (assoc :type property-type))
-                                options)]
-        (d/transact! conn
-                     [[:db/add (:db/id class) :class/schema.properties db-ident]]
-                     {:outliner-op :save-block})))))
+    (if (contains? (:block/type class) "class")
+      (d/transact! conn
+                   [[:db/add (:db/id class) :class/schema.properties property-id]]
+                   {:outliner-op :save-block})
+      (throw (ex-info "Can't add a property to a block that isn't a class"
+                      {:class-id class-id :property-id property-id})))))
 
 (defn class-remove-property!
   [conn class-id property-id]
