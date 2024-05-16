@@ -143,6 +143,14 @@
      (state/set-block-component-editing-mode! false)
      state)})
 
+(def container-id
+  "Notice: the last parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
+  {:init (fn [state]
+           (let [config (last (:rum/args state))
+                 key (select-keys config [:id :sidebar? :whiteboard?])
+                 container-id (state/get-container-id key)]
+             (assoc state :container-id container-id)))})
+
 (defn perf-measure-mixin
   "Does performance measurements in development."
   [desc]

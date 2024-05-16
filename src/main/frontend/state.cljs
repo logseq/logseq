@@ -296,6 +296,7 @@
 
       :ui/loading?                           {}
       :ui/container-id                       (atom 0)
+      :ui/cached-key->container-id           (atom {})
       :feature/enable-sync?                  (storage/get :logseq-sync-enabled)
       :feature/enable-sync-diff-merge?       ((fnil identity true) (storage/get :logseq-sync-diff-merge-enabled))
 
@@ -2400,6 +2401,20 @@ Similar to re-frame subscriptions"
 (defn get-next-container-id
   []
   (swap! (:ui/container-id @state) inc))
+
+(defn get-container-id
+  "Either cached container-id or a new id"
+  [key]
+  (when (seq key)
+    (or (get @(:ui/cached-key->container-id @state) key)
+        (let [id (get-next-container-id)]
+          (swap! (:ui/cached-key->container-id @state) assoc key id)
+          id))))
+
+(comment
+  (defn remove-container-key!
+    [key]
+    (swap! (:ui/cached-key->container-id @state) dissoc key)))
 
 (defn get-editor-info
   []
