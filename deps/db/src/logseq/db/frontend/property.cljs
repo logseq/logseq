@@ -72,12 +72,16 @@
                                       :hide? true}}
    :logseq.property/hl-type {:schema {:type :keyword
                                       :hide? true}}
-   :logseq.property/hl-page {:schema {:type :number
-                                      :hide? true}}
-   :logseq.property/hl-stamp {:schema {:type :number
-                                       :hide? true}}
    :logseq.property/hl-color {:schema {:type :default
                                        :hide? true}}
+   :logseq.property.pdf/hl-page {:schema {:type :number
+                                          :hide? true}}
+   :logseq.property.pdf/hl-stamp {:schema {:type :number
+                                           :hide? true}}
+   :logseq.property.pdf/file
+   {:schema {:type :default :hide? true :public? true :view-context :page}}
+   :logseq.property.pdf/file-path
+   {:schema {:type :default :hide? true :public? true :view-context :page}}
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default
                                               :hide? true}}
@@ -144,11 +148,7 @@
                                              {:type :checkbox
                                               :hide? true
                                               :view-context :page
-                                              :public? true}}
-   :logseq.property.pdf/file
-   {:schema {:type :default :hide? true :public? true :view-context :page}}
-   :logseq.property.pdf/file-path
-   {:schema {:type :default :hide? true :public? true :view-context :page}}))
+                                              :public? true}}))
 
 (def built-in-properties
   (->> built-in-properties*
@@ -171,8 +171,7 @@
         "All db attribute properties are configured in built-in-properties")
 
 (def logseq-property-namespaces
-  #{"logseq.property" "logseq.property.table" "logseq.property.tldraw"
-    "logseq.property.pdf" "logseq.task"})
+  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"

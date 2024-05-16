@@ -16,9 +16,9 @@
                            #(:block/content (get %1 %2))
                            #(get %1 (keyword (name %2))))]
       (when-some [uuid (:block/uuid block)]
-        (when-some [stamp (prop-lookup-fn props :logseq.property/hl-stamp)]
+        (when-some [stamp (prop-lookup-fn props :logseq.property.pdf/hl-stamp)]
           (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
-                hl-page        (prop-lookup-fn props :logseq.property/hl-page)
+                hl-page        (prop-lookup-fn props :logseq.property.pdf/hl-page)
                 encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
                 group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
             (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png"))))))))
