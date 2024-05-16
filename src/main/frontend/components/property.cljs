@@ -401,8 +401,10 @@
                                                              :exit-edit? page-configure?})))
       ;; new property entered
       (if (db-property/valid-property-name? property-uuid-or-name)
-        (if (and (contains? (:block/type entity) "class") page-configure?)
-          (pv/<add-property! entity property-uuid-or-name "" {:class-schema? class-schema? :exit-edit? page-configure?})
+        (if (and (contains? (:block/type entity) "class") page-configure? class-schema?)
+          (p/let [_ (db-property-handler/upsert-property! nil {:type :default} {:property-name property-uuid-or-name})
+                  new-property-id (:db/ident (ldb/get-case-page (db/get-db repo) property-uuid-or-name))]
+            (pv/<add-property! entity new-property-id "" {:class-schema? class-schema? :exit-edit? page-configure?}))
           (p/do!
            (db-property-handler/upsert-property! nil {:type :default} {:property-name property-uuid-or-name})
            true))
