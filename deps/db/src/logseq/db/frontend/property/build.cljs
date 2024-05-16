@@ -74,3 +74,27 @@
                                                   (when (keyword? property) {:db/ident property}))
        :block/order (db-order/gen-key)}
       sqlite-util/block-with-timestamps))
+
+(defn build-property-values-tx-m
+  "Builds a map of property names to their property value blocks to be transacted, given a block
+   and a properties map with raw property values"
+  [block properties]
+  ;; Build :db/id out of uuid if block doesn't have one for tx purposes
+  (let [block' (if (:db/id block) block (assoc block :db/id [:block/uuid (:block/uuid block)]))]
+    (->> properties
+         (map (fn [[k v]]
+                [k
+                 (if (set? v)
+                   (set (map #(build-property-value-block block' k %) v))
+                   (build-property-value-block block' k v))]))
+         (into {}))))
+
+(defn build-properties-with-ref-values
+  "Given a properties map with property values to be transacted e.g. from
+  build-property-values-tx-m, build a properties map to be transacted with the block"
+  [prop-vals-tx-m]
+  (update-vals prop-vals-tx-m
+               (fn [v]
+                 (if (set? v)
+                   (set (map #(vector :block/uuid (:block/uuid %)) v))
+                   (vector :block/uuid (:block/uuid v))))))
