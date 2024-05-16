@@ -682,12 +682,6 @@ independent of format as format specific heading characters are stripped"
   [page-name]
   (ldb/journal-page? (ldb/get-page (conn/get-db) page-name)))
 
-(defn get-block-property-values
-  "Get blocks which have this property."
-  [property-id]
-  (let [db (conn/get-db)]
-    (map :v (d/datoms db :avet property-id))))
-
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
   [property-id]

@@ -93,8 +93,6 @@
         [{:block/content "default property block" :properties {:default "haha"}}
          {:block/content "default property block" :properties {:default-many #{"yee" "haw" "sir"}}}
          {:block/content "default-closed property block" :properties {:default-closed (random-closed-value :default-closed)}}
-         {:block/content "string property block" :properties {:string "haha"}}
-         {:block/content "string-many property block" :properties {:string-many #{"yee" "haw" "sir"}}}
          {:block/content "url property block" :properties {:url "https://logseq.com"}}
          {:block/content "url-many property block" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
          {:block/content "url-closed property block" :properties {:url-closed (random-closed-value :url-closed)}}
@@ -133,8 +131,6 @@
        {:page {:block/name "default page" :properties {:default "yolo"}}}
        {:page {:block/name "default-many page" :properties {:default-many #{"yee" "haw" "sir"}}}}
        {:page {:block/name "default-closed page" :properties {:default-closed (random-closed-value :default-closed)}}}
-       {:page {:block/name "string page" :properties {:string "yolo"}}}
-       {:page {:block/name "string-many page" :properties {:string-many #{"yee" "haw" "sir"}}}}
        {:page {:block/name "url page" :properties {:url "https://logseq.com"}}}
        {:page {:block/name "url-many page" :properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}}
        {:page {:block/name "url-closed page" :properties {:url-closed (random-closed-value :url-closed)}}}
@@ -170,7 +166,7 @@
 
      ;; Properties
      :properties
-     (->> [:default :string :url :checkbox :number :page :date]
+     (->> [:default :url :checkbox :number :page :date]
           (mapcat #(cond-> [[% {:block/schema {:type %}}]]
                      (db-property-type/property-type-allows-schema-attribute? % :cardinality)
                      (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
