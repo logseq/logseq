@@ -110,6 +110,12 @@
     true
     (cfgs/get-item :feature/enable-automatic-chmod?)))
 
+(defn- file-watcher-enabled?
+  []
+  (if (= nil (cfgs/get-item :feature/enable-file-watcher?))
+    true
+    (cfgs/get-item :feature/enable-file-watcher?)))
+
 (defmethod handle :copyFile [_window [_ _repo from-path to-path]]
   (logger/info ::copy-file from-path to-path)
   (fs-extra/copy from-path to-path))
@@ -589,7 +595,9 @@
   ;; Only close file watcher when:
   ;;    1. there is no one window on the same dir
   ;;    2. reset file watcher to resend `add` event on window refreshing
-  (when dir
+  (when (and dir
+             (or (file-watcher-enabled?)
+                 (:global-dir options)))
     (logger/debug ::watch-dir {:path dir})
     (watcher/watch-dir! dir options)
     nil))
