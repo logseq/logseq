@@ -27,6 +27,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db.model :as model]
+            [frontend.mixins :as mixins]
             [frontend.db-mixins :as db-mixins]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
@@ -2513,11 +2514,8 @@
             (when-let [refs-cp (state/get-component :block/linked-references)]
               (refs-cp uuid)))]))]))
 
-(rum/defcs single-block-cp <
-  {:init (fn [state]
-           (let [container-id (swap! (:ui/container-id @state/state) inc)]
-             (assoc state ::container-id container-id)))}
-  [state block-uuid]
+(rum/defcs single-block-cp < mixins/container-id
+  [state block-uuid _config]
   (let [uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
         block (db/entity [:block/uuid uuid])
         config {:id (str uuid)
@@ -3459,16 +3457,13 @@
             (str (:container-id config) "-" (:db/id item)))
           (block-render))))))
 
-(rum/defcs blocks-container < rum/static
-  {:init (fn [state]
-           (let [container-id (swap! (:ui/container-id @state/state) inc)]
-             (assoc state ::container-id container-id)))}
+(rum/defcs blocks-container < mixins/container-id rum/static
   [state blocks config]
   (let [doc-mode? (:document/mode? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
        {:class (when doc-mode? "document-mode")}
-       (block-list (assoc config :container-id (::container-id state))
+       (block-list (assoc config :container-id (:container-id state))
                    blocks)])))
 
 (rum/defcs breadcrumb-with-container < rum/reactive db-mixins/query
