@@ -102,10 +102,10 @@
   #(swap! current-db-id dec))
 
 (defn- create-property-value
-  [block property value]
+  [block property-ident value]
   (db-property-build/build-property-value-block
    block
-   property
+   property-ident
    ;; FIXME: Remove when fixed in UI
    (str value)))
 
@@ -119,8 +119,8 @@
                          ;; TODO: Support translate-property-value without this hack
                          (not (vector? v)))
                 [k (if (set? v)
-                     (set (map #(create-property-value new-block {:db/ident (get-ident all-idents k)} %) v))
-                     (create-property-value new-block {:db/ident (get-ident all-idents k)} v))])))
+                     (set (map #(create-property-value new-block (get-ident all-idents k) %) v))
+                     (create-property-value new-block (get-ident all-idents k) v))])))
        (into {})))
 
 (defn- property-value-properties

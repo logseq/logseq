@@ -13,7 +13,9 @@
             [logseq.db.frontend.content :as db-content]
             [medley.core :as medley]
             [frontend.worker.date :as date]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.frontend.property.build :as db-property-build]))
 
 (defn properties-block
   [repo conn config date-formatter properties format page]
@@ -39,10 +41,24 @@
                                                                          (:db/id (d/entity @conn [:block/uuid %])))
                                                               tags)}))]
       (if (sqlite-util/db-based-graph? repo)
-        [(merge page'
-                ;; FIXME: Add refs for properties?
-                properties
-                (when class? {:block/type "class"}))]
+        (let [property-vals-tx-m
+              ;; Builds property values for built-in :one properties like logseq.property.pdf/file
+              (->> properties
+                   (keep (fn [[k v]]
+                           (when (db-property-util/built-in-has-ref-value? k)
+                             [k
+                              (db-property-build/build-property-value-block {:db/id page-entity} k v)])))
+                   (into {}))]
+          (cond-> [(merge page'
+                         (when class? {:block/type "class"}))]
+           (seq property-vals-tx-m)
+           (into (vals property-vals-tx-m))
+           true
+           (conj (merge {:block/uuid (:block/uuid page)}
+                       ;; FIXME: Add refs for properties?
+                        properties
+                       ;; Replace property values with their refs
+                        (update-vals property-vals-tx-m #(vector :block/uuid (:block/uuid %)))))))
         (let [file-page (merge page'
                                (when (seq properties) {:block/properties properties}))]
           (if (and (seq properties)

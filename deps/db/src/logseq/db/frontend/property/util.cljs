@@ -13,14 +13,18 @@
     db-ident
     (get-in db-property/built-in-properties [db-ident :name])))
 
+(defn built-in-has-ref-value?
+  "Given a built-in's db-ident, determine if its property value is a ref"
+  [db-ident]
+  (contains? db-property-type/value-ref-property-types
+             (get-in db-property/built-in-properties [db-ident :schema :type])))
+
 (defn lookup
   "Get the property value by a built-in property's db-ident from coll. For file and db graphs"
   [repo coll db-ident]
   (if (sqlite-util/db-based-graph? repo)
     (let [val (get coll db-ident)]
-      (if (db-property-type/value-ref-property-types (get-in db-property/built-in-properties [db-ident :schema :type]))
-        (:block/content val)
-        val))
+      (if (built-in-has-ref-value? db-ident) (:block/content val) val))
     (get coll (get-pid repo db-ident))))
 
 (defn get-block-property-value
