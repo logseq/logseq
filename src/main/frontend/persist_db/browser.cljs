@@ -51,15 +51,16 @@
   (add-watch state/state
              :sync-ui-state
              (fn [_ _ prev current]
-               (let [f (fn [state]
-                         (-> (select-keys state [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
-                             (assoc :route-data (get-route-data (:route-match state)))))
-                     old-state (f prev)
-                     new-state (f current)]
-                 (when (not= new-state old-state)
-                   (.sync-ui-state worker (state/get-current-repo)
-                                   (ldb/write-transit-str {:old-state old-state
-                                                           :new-state new-state})))))))
+               (when-not @(:history/paused? @state/state)
+                 (let [f (fn [state]
+                           (-> (select-keys state [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
+                               (assoc :route-data (get-route-data (:route-match state)))))
+                       old-state (f prev)
+                       new-state (f current)]
+                   (when (not= new-state old-state)
+                     (.sync-ui-state worker (state/get-current-repo)
+                                     (ldb/write-transit-str {:old-state old-state
+                                                             :new-state new-state}))))))))
 
 (defn transact!
   [^js worker repo tx-data tx-meta]
