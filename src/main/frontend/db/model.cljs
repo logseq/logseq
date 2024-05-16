@@ -764,7 +764,7 @@ independent of format as format specific heading characters are stripped"
 ;; FIXME: use `Untitled` instead of UUID for db based graphs
 (defn untitled-page?
   [page-name]
-  (when (ldb/get-page (conn/get-db) page-name)
+  (when (some->> page-name (ldb/get-page (conn/get-db)))
     (some? (parse-uuid page-name))))
 
 (defn get-all-whiteboards
