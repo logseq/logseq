@@ -109,6 +109,7 @@
    ;; FIXME: Remove when fixed in UI
    (str value)))
 
+;; TODO: Use build-property-values-tx-m
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
    This map is used for both creating the new property values and then adding them to a block"

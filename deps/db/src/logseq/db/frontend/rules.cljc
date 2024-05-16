@@ -183,7 +183,9 @@
     :page-property
     '[[(page-property ?p ?prop ?val)
        [?p :block/name]
-       [?p ?prop ?val]
+       [?p ?prop ?pv]
+       (or [?pv :block/content ?val]
+           [?pv :block/original-name ?val])
        [?prop-e :db/ident ?prop]
        [?prop-e :block/type "property"]]
       ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
@@ -226,7 +228,9 @@
 
     :property
     '[(property ?b ?prop ?val)
-      [?b ?prop ?val]
+      [?b ?prop ?pv]
+      (or [?pv :block/content ?val]
+          [?pv :block/original-name ?val])
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]

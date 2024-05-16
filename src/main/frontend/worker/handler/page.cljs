@@ -42,13 +42,14 @@
                                                               tags)}))]
       (if (sqlite-util/db-based-graph? repo)
         (let [property-vals-tx-m
-              ;; Builds property values for built-in :one properties like logseq.property.pdf/file
-              (->> properties
-                   (keep (fn [[k v]]
-                           (when (db-property-util/built-in-has-ref-value? k)
-                             [k
-                              (db-property-build/build-property-value-block {:db/id page-entity} k v)])))
-                   (into {}))]
+              ;; Builds property values for built-in properties like logseq.property.pdf/file
+              (db-property-build/build-property-values-tx-m
+               page'
+               (->> properties
+                    (keep (fn [[k v]]
+                            (when (db-property-util/built-in-has-ref-value? k)
+                              [k v])))
+                    (into {})))]
           (cond-> [(merge page'
                          (when class? {:block/type "class"}))]
            (seq property-vals-tx-m)
@@ -57,8 +58,7 @@
            (conj (merge {:block/uuid (:block/uuid page)}
                        ;; FIXME: Add refs for properties?
                         properties
-                       ;; Replace property values with their refs
-                        (update-vals property-vals-tx-m #(vector :block/uuid (:block/uuid %)))))))
+                        (db-property-build/build-properties-with-ref-values property-vals-tx-m)))))
         (let [file-page (merge page'
                                (when (seq properties) {:block/properties properties}))]
           (if (and (seq properties)
