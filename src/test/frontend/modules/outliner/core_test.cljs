@@ -101,7 +101,8 @@
                  (concat [{:db/id 1
                            :block/uuid 1
                            :block/name "Test page"}]
-                         blocks))))
+                         blocks)
+                 {:outliner-op :insert-blocks})))
 
 (def tree
   [[22 [[2 [[3 [[4]
@@ -124,8 +125,8 @@
 
 (defn- transact-opts
   []
-  {:transact-opts {:repo test-db
-                   :conn (db/get-db test-db false)}})
+  {:outliner-op :test
+   :transact-opts {:conn (db/get-db test-db false)}})
 
 (deftest test-delete-block
   (testing "
@@ -519,38 +520,38 @@
 tags:: tag1, tag2
 - block #blarg #bar"}])
   (testing "save deletes a page's tags"
-      (let [conn (db/get-db test-helper/test-db false)
-            pre-block (->> (d/q '[:find (pull ?b [*])
-                                  :where [?b :block/pre-block? true]]
+    (let [conn (db/get-db test-db false)
+          pre-block (->> (d/q '[:find (pull ?b [*])
+                                :where [?b :block/pre-block? true]]
+                              @conn)
+                         ffirst)
+          _ (save-block! (-> pre-block
+                             (update :block/properties dissoc :tags)
+                             (update :block/properties-text-values dissoc :tags)))
+          updated-page (-> (d/q '[:find (pull ?bp [* {:block/alias [*]}])
+                                  :where [?b :block/pre-block? true]
+                                  [?b :block/page ?bp]]
                                 @conn)
-                           ffirst)
-            _ (save-block! (-> pre-block
-                               (update :block/properties dissoc :tags)
-                               (update :block/properties-text-values dissoc :tags)))
-            updated-page (-> (d/q '[:find (pull ?bp [* {:block/alias [*]}])
-                                    :where [?b :block/pre-block? true]
-                                    [?b :block/page ?bp]]
-                                  @conn)
-                             ffirst)]
-        (is (nil? (:block/tags updated-page))
-            "Page's tags are deleted")
-        (is (= #{"foo" "bar"} (set (map :block/name (:block/alias updated-page))))
-            "Page's aliases remain the same")
-        (is (= {:block/properties {:alias #{"foo" "bar"}}
-                :block/properties-text-values {:alias "foo, bar"}}
-               (select-keys updated-page [:block/properties :block/properties-text-values]))
-            "Page property attributes are correct")
-        (is (= {:block/properties {:alias #{"foo" "bar"}}
-                :block/properties-text-values {:alias "foo, bar"}}
-               (-> (d/q '[:find (pull ?b [*])
-                          :where [?b :block/pre-block? true]]
-                        @conn)
-                   ffirst
-                   (select-keys [:block/properties :block/properties-text-values])))
-            "Pre-block property attributes are correct")))
+                           ffirst)]
+      (is (nil? (:block/tags updated-page))
+          "Page's tags are deleted")
+      (is (= #{"foo" "bar"} (set (map :block/name (:block/alias updated-page))))
+          "Page's aliases remain the same")
+      (is (= {:block/properties {:alias #{"foo" "bar"}}
+              :block/properties-text-values {:alias "foo, bar"}}
+             (select-keys updated-page [:block/properties :block/properties-text-values]))
+          "Page property attributes are correct")
+      (is (= {:block/properties {:alias #{"foo" "bar"}}
+              :block/properties-text-values {:alias "foo, bar"}}
+             (-> (d/q '[:find (pull ?b [*])
+                        :where [?b :block/pre-block? true]]
+                      @conn)
+                 ffirst
+                 (select-keys [:block/properties :block/properties-text-values])))
+          "Pre-block property attributes are correct")))
 
   (testing "save deletes orphaned pages when a block's refs change"
-    (let [conn (db/get-db test-helper/test-db false)
+    (let [conn (db/get-db test-db false)
           pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))
           _ (assert (set/subset? #{"blarg" "bar"} pages) "Pages from block exist")
           block-with-refs (ffirst (d/q '[:find (pull ?b [* {:block/refs [*]}])
@@ -600,8 +601,8 @@ tags:: tag1, tag2
                                   blocks
                                   target
                                   {:sibling? (gen/generate gen/boolean)
-                                   :keep-uuid? true
-                                   :replace-empty-target? false})))
+                                   :keep-uuid? (gen/generate gen/boolean)
+                                   :replace-empty-target? (gen/generate gen/boolean)})))
 
 (defn transact-random-tree!
   []
@@ -730,53 +731,56 @@ tags:: tag1, tag2
               (let [total (get-blocks-count)]
                 (is (= total (count @*random-blocks)))))))))))
 
+(defn run-random-mixed-ops!
+  [*random-blocks]
+  (let [ops [;; insert
+             (fn []
+               (let [blocks (gen-blocks)]
+                 (swap! *random-blocks (fn [old]
+                                         (set/union old (set (map :block/uuid blocks)))))
+                 (insert-blocks! blocks (get-random-block))))
+
+             ;; delete
+             (fn []
+               (let [blocks (get-random-blocks)]
+                 (when (seq blocks)
+                   (swap! *random-blocks (fn [old]
+                                           (set/difference old (set (map :block/uuid blocks)))))
+                   (outliner-tx/transact! (transact-opts)
+                                          (outliner-core/delete-blocks! test-db (db/get-db test-db false)
+                                                                        (state/get-date-formatter)
+                                                                        blocks {})))))
+
+             ;; move
+             (fn []
+               (let [blocks (get-random-blocks)]
+                 (when (seq blocks)
+                   (outliner-tx/transact! (transact-opts)
+                                          (outliner-core/move-blocks! test-db
+                                                                      (db/get-db test-db false)
+                                                                      blocks (get-random-block) (gen/generate gen/boolean))))))
+
+             ;; move up down
+             (fn []
+               (let [blocks (get-random-blocks)]
+                 (when (seq blocks)
+                   (outliner-tx/transact! (transact-opts)
+                                          (outliner-core/move-blocks-up-down! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean))))))
+
+             ;; indent outdent
+             (fn []
+               (let [blocks (get-random-blocks)]
+                 (when (seq blocks)
+                   (outliner-tx/transact! (transact-opts)
+                                          (outliner-core/indent-outdent-blocks! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean))))))]]
+    (dotimes [_i 100]
+      ((rand-nth ops)))))
+
 (deftest ^:long random-mixed-ops
   (testing "Random mixed operations"
-    (transact-random-tree!)
-    (let [c1 (get-blocks-ids)
-          *random-blocks (atom c1)
-          ops [;; insert
-               (fn []
-                 (let [blocks (gen-blocks)]
-                   (swap! *random-blocks (fn [old]
-                                           (set/union old (set (map :block/uuid blocks)))))
-                   (insert-blocks! blocks (get-random-block))))
-
-               ;; delete
-               (fn []
-                 (let [blocks (get-random-blocks)]
-                   (when (seq blocks)
-                     (swap! *random-blocks (fn [old]
-                                             (set/difference old (set (map :block/uuid blocks)))))
-                     (outliner-tx/transact! (transact-opts)
-                                            (outliner-core/delete-blocks! test-db (db/get-db test-db false)
-                                                                          (state/get-date-formatter)
-                                                                          blocks {})))))
-
-               ;; move
-               (fn []
-                 (let [blocks (get-random-blocks)]
-                   (when (seq blocks)
-                     (outliner-tx/transact! (transact-opts)
-                                            (outliner-core/move-blocks! test-db
-                                                                        (db/get-db test-db false)
-                                                                        blocks (get-random-block) (gen/generate gen/boolean))))))
-
-               ;; move up down
-               ;; (fn []
-               ;;   (let [blocks (get-random-blocks)]
-               ;;     (when (seq blocks)
-               ;;       (outliner-tx/transact! (transact-opts)
-               ;;                              (outliner-core/move-blocks-up-down! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean))))))
-
-               ;; indent outdent
-               (fn []
-                 (let [blocks (get-random-blocks)]
-                   (when (seq blocks)
-                     (outliner-tx/transact! (transact-opts)
-                                            (outliner-core/indent-outdent-blocks! test-db (db/get-db test-db false) blocks (gen/generate gen/boolean))))))]]
-      (dotimes [_i 100]
-        ((rand-nth ops)))
+    (let [*random-blocks (atom (get-blocks-ids))]
+      (transact-random-tree!)
+      (run-random-mixed-ops! *random-blocks)
       (let [total (get-blocks-count)
             page-id 1]
 
@@ -787,11 +791,7 @@ tags:: tag1, tag2
 
         ;; 2. verify page's length + page itself = total blocks
         (is (= (inc (db-model/get-page-blocks-count test-db page-id))
-               total))
-
-        ;; 3. verify the outliner parent/left structure
-        ;; TODO
-        ))))
+               total))))))
 
 (deftest test-non-consecutive-blocks->vec-tree
   (let [blocks [{:block/page #:db{:id 2313},
