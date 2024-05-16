@@ -32,17 +32,19 @@
                                                                       (assert (some? (:db/id entity)))
                                                                       (assoc (.-kv entity)
                                                                              :db/id (:db/id entity)))))
-                            (merge (cljs-bean.transit/writer-handlers)))]
+                            (merge (cljs-bean.transit/writer-handlers)))
+        writer (transit/writer :json {:handlers write-handlers})]
     (fn write-transit-str* [o]
-      (try (transit/write (transit/writer :json {:handlers write-handlers}) o)
+      (try (transit/write writer o)
            (catch :default e
              (prn ::write-transit-str o)
              (throw e))))))
 
 (def read-transit-str
   (let [read-handlers (assoc dt/read-handlers
-                             "datascript/Entity" identity)]
-    (fn read-transit-str* [s] (transit/read (transit/reader :json {:handlers read-handlers}) s))))
+                             "datascript/Entity" identity)
+        reader (transit/reader :json {:handlers read-handlers})]
+    (fn read-transit-str* [s] (transit/read reader s))))
 
 (defn db-based-graph?
   [graph-name]

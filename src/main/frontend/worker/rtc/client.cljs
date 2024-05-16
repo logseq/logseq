@@ -51,7 +51,7 @@
           (swap! *sent assoc ws false))
         (when (not (@*sent ws))
           (m/? (c.m/backoff
-                (take 5 c.m/delays)     ;retry 5 times (32s) if remote-graph is creating
+                (take 5 (drop 2 c.m/delays))     ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
                 (register-graph-updates get-ws-create-task graph-uuid)))
           (swap! *sent assoc ws true))
         ws))))
@@ -293,7 +293,6 @@
       (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
                                  (sort-remote-ops
                                   remote-ops))]
-        (assert (= (count remote-ops) (count ops-for-remote)))
         (op-mem-layer/new-branch! repo)
         (let [local-tx (op-mem-layer/get-local-tx repo)
               r (m/? (send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
