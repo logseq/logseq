@@ -24,13 +24,6 @@
 (def ^:private undo-op-item-schema
   (mu/closed-schema
    [:multi {:dispatch first}
-    [::record-editor-info
-     [:cat :keyword
-      [:map
-       [:block-uuid :uuid]
-       [:container-id [:or :int [:enum :unknown-container]]]
-       [:start-pos [:maybe :int]]
-       [:end-pos [:maybe :int]]]]]
     [::db-transact
      [:cat :keyword
       [:map
@@ -41,6 +34,15 @@
                   [:outliner-op :keyword]]]
        [:added-ids [:set :int]]
        [:retracted-ids [:set :int]]]]]
+
+    [::record-editor-info
+     [:cat :keyword
+      [:map
+       [:block-uuid :uuid]
+       [:container-id [:or :int [:enum :unknown-container]]]
+       [:start-pos [:maybe :int]]
+       [:end-pos [:maybe :int]]]]]
+
     [::ui-state
      [:cat :keyword :string]]]))
 
@@ -75,7 +77,7 @@
 (comment
   ;; This version checks updated datoms by other clients, allows undo and redo back
   ;; to the current state.
-  ;; The con is that it'll undo the changes by others.
+  ;; The downside is that it'll undo the changes made by others.
   (defn- pop-undo-op
    [repo conn]
    (let [undo-stack (get @*undo-ops repo)
@@ -210,7 +212,7 @@
                           (nil? (d/entity @conn before-parent)))))))))))
 
 (defn get-reversed-datoms
-  [conn undo? {:keys [tx-data added-ids retracted-ids]}]
+  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op}]
   (try
     (when (and (seq added-ids) (seq retracted-ids))
       (throw (ex-info "entities are created and deleted in the same tx"
@@ -230,13 +232,14 @@
               (and (nil? entity)
                    (not (contains? added-and-retracted-ids e)))
               (throw (ex-info "Entity has been deleted"
-                              {:error :entity-deleted}))
+                              (merge op {:error :entity-deleted
+                                         :undo? undo?})))
 
               ;; block has been moved or target got deleted by another client
               (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?)
-              (throw (ex-info (str "This block has been moved or its target has been deleted"
-                                   {:redo? redo?})
-                              {:error :block-moved-or-target-deleted}))
+              (throw (ex-info "This block has been moved or its target has been deleted"
+                              (merge op {:error :block-moved-or-target-deleted
+                                         :undo? undo?})))
 
               ;; new children blocks have been added
               (or (and (contains? retracted-ids e) redo?
@@ -244,7 +247,8 @@
                   (and (contains? added-ids e) undo?                 ; undo insert-blocks
                        (other-children-exist? entity added-ids)))
               (throw (ex-info "Children still exists"
-                              {:error :block-children-exists}))
+                              (merge op {:error :block-children-exists
+                                         :undo? undo?})))
 
               ;; The entity should be deleted instead of retracting its attributes
               (and entity
