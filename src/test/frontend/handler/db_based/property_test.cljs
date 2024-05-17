@@ -190,18 +190,18 @@
 
     (testing "Class add property"
       (let [conn (db/get-db false)]
+        (outliner-property/upsert-property! conn :user.property/property-1 {:type :default :cardinality :many} {})
+        (outliner-property/upsert-property! conn :user.property/property-2 {:type :default :cardinality :many} {})
         (outliner-property/class-add-property! conn c1id :user.property/property-1)
         (outliner-property/class-add-property! conn c1id :user.property/property-2)
-      ;; repeated adding property-2
+        ;; repeated adding property-2
         (outliner-property/class-add-property! conn c1id :user.property/property-2)
-      ;; add new property with same base db-ident as property-1
-        (outliner-property/class-add-property! conn c1id ":property-1")
-        (is (= 3 (count (:class/schema.properties (db/entity (:db/id c1))))))))
+        (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1))))))))
 
     (testing "Class remove property"
       (let [conn (db/get-db false)]
         (outliner-property/class-remove-property! conn c1id :user.property/property-1))
-      (is (= 2 (count (:class/schema.properties (db/entity (:db/id c1)))))))
+      (is (= 1 (count (:class/schema.properties (db/entity (:db/id c1)))))))
     (testing "Add classes to a block"
       (test-helper/save-block! repo fbid "Block 1" {:tags ["class1" "class2" "class3"]})
       (is (= 3 (count (:block/tags (db/entity [:block/uuid fbid]))))))
@@ -217,9 +217,11 @@
             conn (db/get-db false)]
         (db/transact! [{:db/id (:db/id c3)
                         :class/parent (:db/id c2)}])
+        (outliner-property/upsert-property! conn :user.property/property-3 {:type :default :cardinality :many} {})
+        (outliner-property/upsert-property! conn :user.property/property-4 {:type :default :cardinality :many} {})
         (outliner-property/class-add-property! conn c2id :user.property/property-3)
         (outliner-property/class-add-property! conn c2id :user.property/property-4)
-      (is (= 4 (count (:classes-properties
+      (is (= 3 (count (:classes-properties
                        (outliner-property/get-block-classes-properties @conn (:db/id (db/entity [:block/uuid fbid])))))))))))
 
 
