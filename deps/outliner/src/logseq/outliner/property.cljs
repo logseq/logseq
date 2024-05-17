@@ -518,7 +518,12 @@
                       {:type :notification
                        :payload {:message "The choice can't be deleted because it's built-in."
                                  :type :warning}}))
-
+      (seq (d/q '[:find ?b :in $ ?pvalue-id :where [?b _ ?pvalue-id]]
+                @conn (:db/id value-block)))
+      (throw (ex-info "The choice can't be deleted"
+                      {:type :notification
+                       :payload {:message "The choice can't be deleted because it's being used."
+                                 :type :warning}}))
       :else
       (let [tx-data [[:db/retractEntity (:db/id value-block)]
                      (outliner-core/block-with-updated-at
