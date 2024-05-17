@@ -585,7 +585,7 @@
            [:div {:key "page-unlinked-references"}
             (reference/unlinked-references page)])]))))
 
-(rum/defcs page < rum/reactive db-mixins/query
+(rum/defcs page-aux < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)
@@ -602,12 +602,16 @@
                      (when (::page-name state) (state/sub-async-query-loading (::page-name state))))]
     (if loading?
       [:div.space-y-2
-                    (shui/skeleton {:class "h-6 w-full"})
-                    (shui/skeleton {:class "h-6 w-full"})]
-      (rum/with-key
-        (page-inner option)
-        (or (:page-name option)
-            (get-page-name state))))))
+       (shui/skeleton {:class "h-6 w-full"})
+       (shui/skeleton {:class "h-6 w-full"})]
+      (page-inner option))))
+
+(rum/defcs page
+  [state option]
+  (rum/with-key
+    (page-aux option)
+    (or (:page-name option)
+        (get-page-name state))))
 
 (rum/defc contents-page < rum/reactive
   {:init (fn [state]
