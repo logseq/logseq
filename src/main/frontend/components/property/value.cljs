@@ -463,25 +463,19 @@
                                           (when-let [f (:on-chosen select-opts)] (f)))
                                         nil))})})))))
 
-(rum/defc property-normal-block-value < rum/reactive db-mixins/query
-  {:init (fn [state]
-           (when-let [block-id (:block/uuid (nth (:rum/args state) 2))]
-             (db-async/<get-block (state/get-current-repo) block-id :children? true))
-           state)}
+(rum/defc property-normal-block-value
   [block property value-block block-cp editor-box opts]
-  (if (and (:block/uuid value-block) (state/sub-async-query-loading (:block/uuid value-block)))
-    [:div.text-sm.opacity-70 "loading"]
-    (let [multiple-values? (db-property/many? property)]
-      (if value-block
-        [:div.property-block-container.content
-         (let [config {:id (str (if multiple-values?
-                                  (:block/uuid block)
-                                  (:block/uuid value-block)))
-                       :container-id (:container-id opts)
-                       :editor-box editor-box
-                       :property-block? true}]
-           (block-cp config [value-block]))]
-        (property-empty-btn-value)))))
+  (let [multiple-values? (db-property/many? property)]
+    (if value-block
+      [:div.property-block-container.content
+       (let [config {:id (str (if multiple-values?
+                                (:block/uuid block)
+                                (:block/uuid value-block)))
+                     :container-id (:container-id opts)
+                     :editor-box editor-box
+                     :property-block? true}]
+         (block-cp config [value-block]))]
+      (property-empty-btn-value))))
 
 (rum/defc property-template-value < rum/reactive
   {:init (fn [state]
@@ -507,8 +501,9 @@
 (rum/defcs property-block-value < rum/reactive
   (rum/local nil ::template-instance)
   {:init (fn [state]
-           (when-let [block-id (:block/uuid (first (:rum/args state)))]
-             (db-async/<get-block (state/get-current-repo) block-id :children? true))
+           (let [block (first (:rum/args state))]
+             (when-let [block-id (or (:db/id block) (:block/uuid block))]
+               (db-async/<get-block (state/get-current-repo) block-id :children? true)))
            state)}
   [state value block property block-cp editor-box opts page-cp editor-id]
   (let [*template-instance (::template-instance state)
