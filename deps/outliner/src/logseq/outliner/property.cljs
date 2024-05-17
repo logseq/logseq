@@ -234,43 +234,43 @@
       (let [v-uuid (create-property-text-block! conn nil property-id (str v) {})]
         (:db/id (d/entity @conn [:block/uuid v-uuid])))))
 
+(defn- convert-ref-property-value
+  "Converts a ref property's value whether it's an integer or a string. Creates
+   a property ref value for a string value if necessary"
+  [conn property-id v property-type]
+  (if (and (integer? v)
+           (or (not= property-type :number)
+               ;; Allows :number property to use number as a ref (for closed value) or value. Number value maybe only used in tests
+               (and (= property-type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v)))))))
+    v
+    ;; only value-ref-property types should call this
+    (find-or-create-property-value conn property-id v)))
+
 (defn set-block-property!
-  "Updates a block property's value for an existing property-id and block.
-  Property value is sanitized and if property is a ref type, automatically
-  handles a raw property value i.e. you can pass \"value\" instead of the
-  property value entity. Also handle db attributes as properties"
+  "Updates a block property's value for an existing property-id and block.  If
+  property is a ref type, automatically handles a raw property value i.e. you
+  can pass \"value\" instead of the property value entity. Also handle db
+  attributes as properties"
   [conn block-eid property-id v]
   (let [block-eid (->eid block-eid)
-        db @conn
         _ (assert (qualified-keyword? property-id) "property-id should be a keyword")
         block (d/entity @conn block-eid)
         property (d/entity @conn property-id)
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         property-type (get-in property [:block/schema :type] :default)
         v' (or (resolve-tag! conn v) v)
-        db-attribute? (contains? db-property/db-attribute-properties property-id)
-        ref-type? (db-property-type/ref-property-types property-type)]
+        db-attribute? (contains? db-property/db-attribute-properties property-id)]
     (if db-attribute?
       (d/transact! conn [{:db/id (:db/id block) property-id v'}]
                    {:outliner-op :save-block})
-      (let [new-value* (cond
+      (let [new-value (cond
                          (= v' :logseq.property/empty-placeholder)
                          (if (= property-type :checkbox) false v')
 
-                         ref-type?
-                         (if (and (integer? v')
-                                  (or (and (= property-type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity db v')))))
-                                      (not= property-type :number)))
-                           v'
-                           (find-or-create-property-value conn property-id v'))
+                         (db-property-type/ref-property-types property-type)
+                         (convert-ref-property-value conn property-id v property-type)
                          :else
                          v')
-            ;; don't modify maps
-            new-value (if (or (sequential? new-value*) (set? new-value*))
-                        (if (= :coll property-type)
-                          (vec (remove string/blank? new-value*))
-                          (set (remove string/blank? new-value*)))
-                        new-value*)
             existing-value (get block property-id)]
         (when-not (= existing-value new-value)
           (raw-set-block-property! conn block property property-type new-value))))))
@@ -288,7 +288,7 @@
         property-type (get-in property [:block/schema :type] :default)
         _ (assert v "Can't set a nil property value must be not nil")
         v' (if (db-property-type/value-ref-property-types property-type)
-             (find-or-create-property-value conn property-id v)
+             (convert-ref-property-value conn property-id v property-type)
              v)
         status? (= :logseq.task/status (:db/ident property))
         txs (mapcat
