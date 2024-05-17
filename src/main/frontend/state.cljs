@@ -2426,11 +2426,12 @@ Similar to re-frame subscriptions"
 (defn get-container-id
   "Either cached container-id or a new id"
   [key]
-  (when (seq key)
+  (if (seq key)
     (or (get @(:ui/cached-key->container-id @state) key)
         (let [id (get-next-container-id)]
           (swap! (:ui/cached-key->container-id @state) assoc key id)
-          id))))
+          id))
+    (get-next-container-id)))
 
 (comment
   (defn remove-container-key!
@@ -2441,6 +2442,6 @@ Similar to re-frame subscriptions"
   []
   (when-let [edit-block (get-edit-block)]
     {:block-uuid (:block/uuid edit-block)
-     :container-id @(:editor/container-id @state)
+     :container-id (or @(:editor/container-id @state) :unknown-container)
      :start-pos @(:editor/start-pos @state)
      :end-pos (get-edit-pos)}))

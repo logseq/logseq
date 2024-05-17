@@ -468,7 +468,7 @@
            (when-let [block-id (:block/uuid (nth (:rum/args state) 2))]
              (db-async/<get-block (state/get-current-repo) block-id :children? true))
            state)}
-  [block property value-block block-cp editor-box & {:keys [closed-values?]}]
+  [block property value-block block-cp editor-box opts]
   (if (and (:block/uuid value-block) (state/sub-async-query-loading (:block/uuid value-block)))
     [:div.text-sm.opacity-70 "loading"]
     (let [multiple-values? (db-property/many? property)]
@@ -477,9 +477,9 @@
          (let [config {:id (str (if multiple-values?
                                   (:block/uuid block)
                                   (:block/uuid value-block)))
+                       :container-id (:container-id opts)
                        :editor-box editor-box
-                       :property-block? true
-                       :closed-values? closed-values?}]
+                       :property-block? true}]
            (block-cp config [value-block]))]
         (property-empty-btn-value)))))
 
@@ -523,7 +523,7 @@
             (when v-block
               (cond
                 (:block/page v-block)
-                (property-normal-block-value block property v-block block-cp editor-box)
+                (property-normal-block-value block property v-block block-cp editor-box opts)
 
                 (and class? (seq (:class/schema.properties v-block)))
                 (if template-instance
@@ -787,7 +787,8 @@
     (if (= type :default)
       [:div.property-block-container.content
        (let [config {:editor-box editor-box
-                     :id (str (:block/uuid block))}]
+                     :id (str (:block/uuid block))
+                     :container-id (:container-id opts)}]
          (block-cp config (sort-by :block/order v)))]
       (let [values-cp (fn [toggle-fn]
                         (if (seq items)
