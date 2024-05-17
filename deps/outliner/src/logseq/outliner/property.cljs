@@ -514,10 +514,10 @@
   (when-let [value-block (d/entity @conn value-block-id)]
     (cond
       (ldb/built-in? value-block)
-      (do
-      ;; (notification/show! "The choice can't be deleted because it's built-in." :warning)
-        (prn "The choice can't be deleted because it's built-in.")
-        false)
+      (throw (ex-info "The choice can't be deleted"
+                      {:type :notification
+                       :payload {:message "The choice can't be deleted because it's built-in."
+                                 :type :warning}}))
 
       :else
       (let [tx-data [[:db/retractEntity (:db/id value-block)]
