@@ -17,7 +17,23 @@
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [missionary.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [malli.core :as ma]
+            [malli.transform :as mt]))
+
+
+(def ^:private remote-block-schema
+  "Blocks stored in remote have some differences in format from the client's.
+  Use this schema's coercer to decode."
+  [:map
+   [:block/type {:optional true}
+    [:sequential [:string {:decode/string (fn [x]
+                                            (if (keyword? x)
+                                              (string/replace (name x) "#" " ")
+                                              x))}]]]
+   [:malli.core/default [:map-of :keyword :any]]])
+
+(def ^:private remote-blocks-coercer (ma/coercer [:sequential remote-block-schema] mt/string-transformer))
 
 (def ^:private transit-r (transit/reader :json))
 
@@ -68,14 +84,6 @@
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
-(def ^:private block-type-kw->str
-  {:block-type/property     "property"
-   :block-type/class        "class"
-   :block-type/whiteboard   "whiteboard"
-   :block-type/macro        "macro"
-   :block-type/hidden       "hidden"
-   :block-type/closed-value "closed value"})
-
 (defn- remote-block-index->block-order*
   [same-parent-blocks]
   (let [orders (db-order/gen-n-keys (count same-parent-blocks) nil nil)]
@@ -90,28 +98,29 @@
   (let [blocks-coll (vals (group-by :block/parent blocks))]
     (mapcat remote-block-index->block-order* blocks-coll)))
 
+(defn- db-ident-or-db-id-str
+  [x]
+  ;; (or ;; (:db/ident x)
+  ;;  )
+  (some-> (:db/id x) str))
+
 (defn- replace-db-id-with-temp-id
   [blocks]
   (mapv
    (fn [block]
      (let [db-id            (:db/id block)
-           block-parent     (:db/id (:block/parent block))
-           block-alias      (map :db/id (:block/alias block))
-           block-tags       (map :db/id (:block/tags block))
-           block-type       (keep block-type-kw->str (:block/type block))
+           block-parent     (db-ident-or-db-id-str (:block/parent block))
+           block-alias      (map db-ident-or-db-id-str (:block/alias block))
+           block-tags       (map db-ident-or-db-id-str (:block/tags block))
            block-schema     (some->> (:block/schema block)
                                      (transit/read transit-r))
-           block-properties (some->> (:block/properties block)
-                                     (transit/read transit-r))
-           block-link       (:db/id (:block/link block))]
+           block-link       (db-ident-or-db-id-str (:block/link block))]
        (cond-> (assoc block :db/id (str db-id))
-         block-parent      (assoc :block/parent (str block-parent))
-         (seq block-alias) (assoc :block/alias (map str block-alias))
-         (seq block-tags)  (assoc :block/tags (map str block-tags))
-         (seq block-type)  (assoc :block/type block-type)
+         block-parent      (assoc :block/parent block-parent)
+         (seq block-alias) (assoc :block/alias block-alias)
+         (seq block-tags)  (assoc :block/tags block-tags)
          block-schema      (assoc :block/schema block-schema)
-         block-properties  (assoc :block/properties block-properties)
-         block-link        (assoc :block/link (str block-link)))))
+         block-link        (assoc :block/link block-link))))
    blocks))
 
 (def page-of-block
@@ -166,20 +175,25 @@
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
+        blocks (remote-blocks-coercer blocks)
         blocks* (remote-block-index->block-order (replace-db-id-with-temp-id blocks))
         blocks-with-page-id (fill-block-fields blocks*)
         tx-data (concat blocks-with-page-id
                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
         ^js worker-obj (:worker/object @worker-state/*state)]
+    (prn :debug-repo repo)
+    (prn :debug-tx-data tx-data)
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
       (m/?
        (c.m/await-promise
         (p/do!
-         (.createOrOpenDB worker-obj repo {:close-other-db? false})
-         (.exportDB worker-obj repo)
-         (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
-         (transact-block-refs! repo))))
+          (.createOrOpenDB worker-obj repo {:close-other-db? false})
+          (.exportDB worker-obj repo)
+          (prn :xdb2 @(frontend.worker.state/get-datascript-conn repo))
+
+          (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
+          (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
