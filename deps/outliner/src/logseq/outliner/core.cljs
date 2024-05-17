@@ -812,6 +812,7 @@
                     block (d/entity @conn (:db/id block))]
                 (when-not (move-to-original-position? [block] target-block sibling? false)
                   (let [tx-data (move-block conn block target-block sibling?)]
+                    (prn "==>> move blocks tx:" tx-data)
                     (ldb/transact! conn tx-data {:sibling? sibling?
                                                  :outliner-op (or outliner-op :move-blocks)}))))))
           nil)))))
