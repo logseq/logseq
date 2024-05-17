@@ -2808,11 +2808,9 @@
 
 (defn indent-outdent
   [indent?]
-  (let [_editor (state/get-input)
-        {:keys [block]} (get-state)]
+  (let [{:keys [block]} (get-state)]
     (when block
       (block-handler/indent-outdent-blocks! [block] indent? save-current-block!))))
-
 
 (defn keydown-tab-handler
   [direction]

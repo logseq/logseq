@@ -20,7 +20,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.rum :as r]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [clojure.set :as set]))
 
 (defonce *profile-state
   (atom {}))
@@ -1156,6 +1157,39 @@ Similar to re-frame subscriptions"
   [start-block]
   (set-state! :selection/start-block start-block))
 
+(defn get-selection-blocks
+  []
+  (util/sort-by-height @(:selection/blocks @state)))
+
+(defn get-selection-block-ids
+  []
+  (get-selected-block-ids (get-selection-blocks)))
+
+(defn- dom-clear-selection!
+  []
+  (doseq [node (dom/by-class "ls-block selected")]
+    (dom/remove-class! node "selected")))
+
+(defn mark-dom-blocks-as-selected
+  ([]
+   (mark-dom-blocks-as-selected (get-selection-block-ids)))
+  ([ids]
+   (doseq [id ids]
+     (doseq [node (array-seq (gdom/getElementsByClass (str "id" id)))]
+       (dom/add-class! node "selected")))))
+
+(defn- set-selection-blocks-aux!
+  [blocks]
+  (let [selected-ids (set (get-selected-block-ids @(:selection/blocks @state)))
+        _ (set-state! :selection/blocks blocks)
+        new-ids (set (get-selection-block-ids))
+        added (set/difference new-ids selected-ids)
+        removed (set/difference selected-ids new-ids)]
+    (mark-dom-blocks-as-selected added)
+    (doseq [id removed]
+      (doseq [node (array-seq (gdom/getElementsByClass (str "id" id)))]
+        (dom/remove-class! node "selected")))))
+
 (defn set-selection-blocks!
   ([blocks]
    (set-selection-blocks! blocks :down))
@@ -1163,7 +1197,7 @@ Similar to re-frame subscriptions"
    (when (seq blocks)
      (let [blocks (vec (util/sort-by-height (remove nil? blocks)))]
        (set-state! :selection/mode true)
-       (set-state! :selection/blocks blocks)
+       (set-selection-blocks-aux! blocks)
        (set-state! :selection/direction direction)))))
 
 (defn into-selection-mode!
@@ -1172,21 +1206,12 @@ Similar to re-frame subscriptions"
 
 (defn clear-selection!
   []
+  (dom-clear-selection!)
   (set-state! :selection/mode false)
   (set-state! :selection/blocks nil)
   (set-state! :selection/direction :down)
   (set-state! :selection/start-block nil)
   (set-state! :selection/selected-all? false))
-
-(defn get-selection-blocks
-  []
-  (let [blocks (util/sort-by-height (bean/->clj (dom/by-class "ls-block selected")))]
-    (set-state! :selection/blocks blocks)
-    blocks))
-
-(defn get-selection-block-ids
-  []
-  (get-selected-block-ids (get-selection-blocks)))
 
 (defn get-selection-start-block-or-first
   []
@@ -1209,19 +1234,15 @@ Similar to re-frame subscriptions"
         blocks (-> (if (sequential? block-or-blocks)
                      (apply conj selection-blocks block-or-blocks)
                      (conj selection-blocks block-or-blocks))
-                   distinct
-                   util/sort-by-height
-                   vec)]
-    (set-state! :selection/mode true)
-    (set-state! :selection/blocks blocks)
-    (set-state! :selection/direction direction)))
+                   distinct)]
+    (set-selection-blocks! blocks direction)))
 
 (defn drop-selection-block!
   [block]
   (set-state! :selection/mode true)
-  (set-state! :selection/blocks (-> (remove #(= block %) (get-selection-blocks))
-                                    util/sort-by-height
-                                    vec)))
+  (set-selection-blocks-aux! (-> (remove #(= block %) (get-selection-blocks))
+                                 util/sort-by-height
+                                 vec)))
 
 (defn drop-last-selection-block!
   []
@@ -1237,7 +1258,7 @@ Similar to re-frame subscriptions"
                     util/sort-by-height
                     vec)]
     (set-state! :selection/mode true)
-    (set-state! :selection/blocks blocks')
+    (set-selection-blocks-aux! blocks')
     last-block))
 
 (defn get-selection-direction

@@ -2886,9 +2886,8 @@
         attrs (on-drag-and-mouse-attrs block original-block uuid top? block-id *move-to)
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
-        selected? (when-not (:slide? config)
-                    (state/sub-block-selected? uuid))
-        children (ldb/get-children block)]
+        children (ldb/get-children block)
+        selected? (contains? (set (state/get-selection-block-ids)) (:block/uuid block))]
     (when-not (= (:editor/deleting-block @state/state) (:block/uuid block))
       [:div.ls-block
        (cond->
@@ -2952,8 +2951,7 @@
                             :block-id block-id
                             :collapsed? collapsed?
                             :*control-show? *control-show?
-                            :edit? edit?
-                            :selected? selected?})))
+                            :edit? edit?})))
 
         (when (and @*show-left-menu? (not in-whiteboard?))
           (block-left-menu config block))
@@ -2969,8 +2967,7 @@
                                       {:edit-input-id edit-input-id
                                        :block-id block-id
                                        :edit? edit?
-                                       :hide-block-refs-count? hide-block-refs-count?
-                                       :selected? selected?}))])
+                                       :hide-block-refs-count? hide-block-refs-count?}))])
 
         (when (and @*show-right-menu? (not in-whiteboard?))
           (block-right-menu config block edit?))]
@@ -2980,8 +2977,7 @@
           (db-properties-cp config
                             block
                             edit-input-id
-                            {:selected? selected?
-                             :in-block-container? true})])
+                            {:in-block-container? true})])
 
        (when-not (or (:hide-children? config) in-whiteboard?)
          (let [config' (-> (update config :level inc)
@@ -3407,7 +3403,7 @@
 
 (rum/defc block-item <
   {:should-update (fn [old-state new-state]
-                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :selected? :edit? :hide-bullet?]
+                    (let [config-compare-keys [:show-cloze? :hide-children? :own-order-list-type :own-order-list-index :original-block :edit? :hide-bullet?]
                           b1                  (second (:rum/args old-state))
                           b2                  (second (:rum/args new-state))
                           result              (or
