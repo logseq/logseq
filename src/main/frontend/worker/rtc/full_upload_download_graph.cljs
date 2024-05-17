@@ -247,4 +247,5 @@
           (op-mem-layer/update-graph-uuid! repo graph-uuid)
           (m/? (op-mem-layer/new-task--sync-to-idb repo))
           (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
-          (worker-state/set-rtc-downloading-graph! false))))))
+          (worker-state/set-rtc-downloading-graph! false)
+          nil)))))
