@@ -144,10 +144,10 @@
      state)})
 
 (def container-id
-  "Notice: the last parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
+  "Notice: the first parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
   {:init (fn [state]
-           (let [config (last (:rum/args state))
-                 key (select-keys config [:id :sidebar? :whiteboard?])
+           (let [config (first (:rum/args state))
+                 key (select-keys config [:id :sidebar? :whiteboard? :embed?])
                  container-id (state/get-container-id key)]
              (assoc state :container-id container-id)))})
 

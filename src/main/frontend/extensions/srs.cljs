@@ -451,11 +451,11 @@
            [:div {:style {:margin-top 20}}
             (component-block/breadcrumb {} repo root-block-id {})])
          (component-block/blocks-container
-          current-blocks
           (merge (show-cycle-config card @phase)
                  {:id (str root-block-id)
                   :editor-box editor/box
-                  :review-cards? true}))
+                  :review-cards? true})
+          current-blocks)
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))

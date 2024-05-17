@@ -41,8 +41,9 @@
 (rum/defc block-cp
   [props]
   (let [block-id (uuid (gobj/get props "blockId"))]
-    ((state/get-component :block/single-block) block-id {:id (str block-id)
-                                                         :whiteboard? true})))
+    ((state/get-component :block/single-block)
+     {:id (str block-id) :whiteboard? true}
+     block-id)))
 
 (rum/defc breadcrumb
   [props]

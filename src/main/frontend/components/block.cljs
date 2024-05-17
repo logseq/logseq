@@ -831,7 +831,7 @@
                              :embed? true
                              :embed-parent (:block config)
                              :ref? false)]
-          (blocks-container [block] config'))]])))
+          (blocks-container config' [block]))]])))
 
 (rum/defc page-embed < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -859,14 +859,15 @@
                 (not= (util/page-name-sanity-lc (get config :id ""))
                       page-name))
            (if whiteboard-page?
-               ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
-               (let [blocks (ldb/get-children block)]
-                 (blocks-container blocks (assoc config
-                                                 :db/id (:db/id block)
-                                                 :id page-name
-                                                 :embed? true
-                                                 :page-embed? true
-                                                 :ref? false)))))]))))
+             ((state/get-component :whiteboard/tldraw-preview) (:block/uuid block))
+             (let [blocks (ldb/get-children block)
+                   config' (assoc config
+                                  :db/id (:db/id block)
+                                  :id page-name
+                                  :embed? true
+                                  :page-embed? true
+                                  :ref? false)]
+               (blocks-container config' blocks))))]))))
 
 (defn- get-label-text
   [label]
@@ -965,8 +966,8 @@
                                                    :max-height 600}}
                                           [(breadcrumb config repo block-id {:indent? true})
                                            (blocks-container
-                                            (db/get-block-and-children repo block-id)
-                                            (assoc config :id (str id) :preview? true))]])
+                                            (assoc config :id (str id) :preview? true)
+                                            (db/get-block-and-children repo block-id))]])
                           :interactive true
                           :in-editor?  true
                           :delay       [1000, 100]} inner)
@@ -2515,7 +2516,7 @@
               (refs-cp uuid)))]))]))
 
 (rum/defcs single-block-cp < mixins/container-id
-  [state block-uuid _config]
+  [state _config block-uuid]
   (let [uuid (if (string? block-uuid) (uuid block-uuid) block-uuid)
         block (db/entity [:block/uuid uuid])
         config {:id (str uuid)
@@ -2833,14 +2834,12 @@
 
 (rum/defcs ^:large-vars/cleanup-todo block-container-inner < rum/reactive db-mixins/query
   {:init (fn [state]
-           (let [id (random-uuid)
-                 *ref (atom nil)
+           (let [*ref (atom nil)
                  block (nth (:rum/args state) 3)
                  block-id (:block/uuid block)
                  repo (state/get-current-repo)]
              (db-async/<get-block repo block-id :children? false)
              (assoc state
-                    ::sub-id id
                     ::ref *ref)))}
   [state container-state repo config* block {:keys [navigating-block navigated?]}]
   (let [*ref (::ref state)
@@ -3000,7 +2999,9 @@
   (rum/local false ::show-block-right-menu?)
   {:init (fn [state]
            (let [[config block] (:rum/args state)
-                 block-id (:block/uuid block)]
+                 block-id (:block/uuid block)
+                 linked-block? (or (:block/link block)
+                                   (:original-block config))]
              (cond
                (root-block? config block)
                (state/set-collapsed-block! block-id false)
@@ -3011,9 +3012,12 @@
 
                :else
                nil)
-             (assoc state
-                    ::control-show? (atom false)
-                    ::navigating-block (atom (:block/uuid block)))))
+             (cond->
+              (assoc state
+                     ::control-show? (atom false)
+                     ::navigating-block (atom (:block/uuid block)))
+               linked-block?
+               (assoc ::container-id (state/get-next-container-id)))))
    :will-unmount (fn [state]
                    ;; restore root block's collapsed state
                    (let [[config block] (:rum/args state)
@@ -3025,10 +3029,13 @@
   (let [repo (state/get-current-repo)
         *navigating-block (get state ::navigating-block)
         navigating-block (rum/react *navigating-block)
-        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)]
+        navigated? (and (not= (:block/uuid block) navigating-block) navigating-block)
+        config' (if-let [container-id (::container-id state)]
+                  (assoc config :container-id container-id)
+                  config)]
     (when (:block/uuid block)
       (rum/with-key
-        (block-container-inner state repo config block
+        (block-container-inner state repo config' block
                                {:navigating-block navigating-block :navigated? navigated?})
         (str "block-inner" (:block/uuid block))))))
 
@@ -3422,7 +3429,8 @@
                (not (:block-children? config))
                (assoc :block.temp/top? top?
                       :block.temp/bottom? bottom?))
-        config' (assoc config :block/uuid (:block/uuid item)
+        config' (assoc config
+                       :block/uuid (:block/uuid item)
                        :loop-linked? loop-linked?)]
     (when-not (and loop-linked? (:block/name linked-block))
       (rum/with-key (block-container config' item)
@@ -3458,7 +3466,7 @@
           (block-render))))))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
-  [state blocks config]
+  [state config blocks]
   (let [doc-mode? (:document/mode? config)]
     (when (seq blocks)
       [:div.blocks-container.flex-1
@@ -3489,10 +3497,11 @@
        (breadcrumb config (state/get-current-repo) (or navigating-block (:block/uuid (first blocks)))
                    {:show-page? false
                     :navigating-block *navigating-block}))
-     (blocks-container blocks (assoc config
-                                     :breadcrumb-show? false
-                                     :navigating-block *navigating-block
-                                     :navigated? navigated?))]))
+     (let [config' (assoc config
+                          :breadcrumb-show? false
+                          :navigating-block *navigating-block
+                          :navigated? navigated?)]
+       (blocks-container config' blocks))]))
 
 (defn hidden-page->source-page
   [page]
@@ -3576,8 +3585,8 @@
                   [:div
                    (page-cp config page)
                    (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-                  (when-not whiteboard? (blocks-container blocks config))
+                  (when-not whiteboard? (blocks-container config blocks))
                   {})])))))]
 
      :else
-     (blocks-container blocks config))])
+     (blocks-container config blocks))])
