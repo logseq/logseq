@@ -839,6 +839,7 @@
                         (fn [{:keys [id]}]
                           [:div {:on-click #(shui/popup-hide! id)} content])
                         {:content-props {:class "w-[280px] ls-context-menu-content"}
+                         :root-props {:onOpenChange #(when-not % (state/clear-selection!))}
                          :as-dropdown? true}))
 
                     handled
