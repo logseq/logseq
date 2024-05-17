@@ -2809,10 +2809,8 @@
 (defn indent-outdent
   [indent?]
   (let [editor (state/get-input)
-        pos (some-> editor cursor/pos)
         {:keys [block]} (get-state)]
     (when block
-      (state/set-editor-last-pos! pos)
       (block-handler/indent-outdent-blocks! [block] indent? save-current-block!))))
 
 
@@ -3084,7 +3082,9 @@
           (state/set-last-key-code! {:key-code key-code
                                      :code code
                                      :key k
-                                     :shift? (.-shiftKey e)}))))))
+                                     :shift? (.-shiftKey e)}))
+        (when-not (state/get-editor-action)
+          (state/set-editor-last-pos! current-pos))))))
 
 (defn editor-on-click!
   [id]
