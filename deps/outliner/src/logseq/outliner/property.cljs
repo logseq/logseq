@@ -65,12 +65,16 @@
   [property {:keys [type cardinality]}]
   (let [ident (:db/ident property)
         cardinality (if (= cardinality :many) :db.cardinality/many :db.cardinality/one)
-        new-type (or type (get-in property [:block/schema :type]))]
-    (cond->
-     {:db/ident ident
-      :db/cardinality cardinality}
-      (db-property-type/ref-property-types new-type)
-      (assoc :db/valueType :db.type/ref))))
+        old-type (get-in property [:block/schema :type])
+        old-ref-type? (db-property-type/ref-property-types old-type)
+        ref-type? (db-property-type/ref-property-types type)]
+    [(cond->
+      {:db/ident ident
+       :db/cardinality cardinality}
+       ref-type?
+       (assoc :db/valueType :db.type/ref))
+     (when (and old-ref-type? (not ref-type?))
+       [:db/retract (:db/id property) :db/valueType])]))
 
 (defn ^:api ensure-unique-db-ident
   "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
@@ -120,7 +124,7 @@
                   (and (:cardinality schema) (not= (:cardinality schema) (keyword (name (:db/cardinality property)))))
                   (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property)))
                   (seq (:property/closed-values property)))
-              (conj (update-datascript-schema property schema)))
+              (concat (update-datascript-schema property schema)))
             tx-data (concat property-tx-data
                             (when (seq properties)
                               (mapcat
