@@ -474,12 +474,13 @@
     (let [multiple-values? (db-property/many? property)]
       (if value-block
         [:div.property-block-container.content
-        (block-cp [value-block] {:id (str (if multiple-values?
-                                            (:block/uuid block)
-                                            (:block/uuid value-block)))
-                                 :editor-box editor-box
-                                 :property-block? true
-                                 :closed-values? closed-values?})]
+         (let [config {:id (str (if multiple-values?
+                                  (:block/uuid block)
+                                  (:block/uuid value-block)))
+                       :editor-box editor-box
+                       :property-block? true
+                       :closed-values? closed-values?}]
+           (block-cp config [value-block]))]
         (property-empty-btn-value)))))
 
 (rum/defc property-template-value < rum/reactive
@@ -785,8 +786,9 @@
     ;; TODO: closed values select for default type
     (if (= type :default)
       [:div.property-block-container.content
-       (block-cp (sort-by :block/order v) {:editor-box editor-box
-                                           :id (str (:block/uuid block))})]
+       (let [config {:editor-box editor-box
+                     :id (str (:block/uuid block))}]
+         (block-cp config (sort-by :block/order v)))]
       (let [values-cp (fn [toggle-fn]
                         (if (seq items)
                           (concat
