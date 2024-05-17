@@ -883,41 +883,45 @@
        nil)]))
 
 (defn- editor-on-blur
-  [^js e]
-  (cond
-    (let [action (state/get-editor-action)]
-      (or (contains?
-            #{:commands :block-commands
-              :page-search :page-search-hashtag :block-search :template-search
-              :property-search :property-value-search
-              :datepicker} action)
-        (and (keyword? action)
-          (= (namespace action) "editor.action"))))
+  [^js e *ref]
+  (when-not (= @*ref js/document.activeElement)
+    (cond
+      (let [action (state/get-editor-action)]
+        (or (contains?
+             #{:commands :block-commands
+               :page-search :page-search-hashtag :block-search :template-search
+               :property-search :property-value-search
+               :datepicker} action)
+            (and (keyword? action)
+                 (= (namespace action) "editor.action"))))
     ;; FIXME: This should probably be handled as a keydown handler in editor, but this handler intercepts Esc first
-    (util/stop e)
+      (util/stop e)
 
     ;; editor/input component handles Escape directly, so just prevent handling it here
-    (= :input (state/get-editor-action))
-    nil
+      (= :input (state/get-editor-action))
+      nil
 
-    :else
-    (let [{:keys [on-hide value]} (editor-handler/get-state)]
-      (when on-hide
-        (on-hide value nil)))))
+      :else
+      (let [{:keys [on-hide value]} (editor-handler/get-state)]
+        (when on-hide
+          (on-hide value :blur))))))
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
-           (assoc state ::id (str (random-uuid))))
+           (assoc state ::id (str (random-uuid))
+                  ::ref (atom nil)))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
   [state {:keys [format block parent-block on-hide]} id config]
-  (let [content (state/sub-edit-content (:block/uuid block))
+  (let [*ref (::ref state)
+        content (state/sub-edit-content (:block/uuid block))
         heading-class (get-editor-style-class block content format)
         opts (cond->
               {:id                id
+               :ref               #(reset! *ref %)
                :cacheMeasurements (editor-row-height-unchanged?) ;; check when content updated (as the content variable is binded)
                :default-value     (or content "")
                :minRows           (if (state/enable-grammarly?) 2 1)
@@ -927,7 +931,7 @@
                :on-blur           (fn [e]
                                     (if-let [on-blur (:on-blur config)]
                                       (on-blur e)
-                                      (editor-on-blur e)))
+                                      (editor-on-blur e *ref)))
                :on-key-down       (fn [e]
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
