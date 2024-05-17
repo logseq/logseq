@@ -436,7 +436,7 @@
   ([_state block-value]
    (when (not config/publishing?)
      (when-let [state (get-state)]
-       (state/set-editor-op! :insert-block)
+       (state/set-editor-op! :insert-blocks)
        (let [{:keys [block value config]} state
              value (if (string? block-value) block-value value)
              block-id (:block/uuid block)
