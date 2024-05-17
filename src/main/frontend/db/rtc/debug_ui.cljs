@@ -145,21 +145,22 @@
                   :on-click (fn []
                               (when-let [graph-name (:download-graph-to-repo state)]
                                 (when-let [graph-uuid (:graph-uuid-to-download state)]
-                                  (prn :download-graph graph-uuid :to graph-name)
-                                  (p/let [token (state/get-auth-id-token)
-                                          ^object worker @db-browser/*worker
-                                          download-info-uuid (.rtc-request-download-graph worker token graph-uuid)
-                                          result (.rtc-wait-download-graph-info-ready
-                                                  worker token download-info-uuid graph-uuid 60000)
-                                          {:keys [_download-info-uuid
-                                                  download-info-s3-url
-                                                  _download-info-tx-instant
-                                                  _download-info-t
-                                                  _download-info-created-at]
-                                           :as result} (ldb/read-transit-str result)]
-                                    (when (not= result :timeout)
-                                      (assert (some? download-info-s3-url) result)
-                                      (.rtc-download-graph-from-s3 worker graph-uuid graph-name download-info-s3-url))))))})
+                                  (let [^object worker @db-browser/*worker]
+                                    (prn :download-graph graph-uuid :to graph-name)
+                                    (p/let [token (state/get-auth-id-token)
+                                            download-info-uuid (.rtc-request-download-graph worker token graph-uuid)
+                                            download-info-uuid (ldb/read-transit-str download-info-uuid)
+                                            result (.rtc-wait-download-graph-info-ready
+                                                    worker token download-info-uuid graph-uuid 60000)
+                                            {:keys [_download-info-uuid
+                                                    download-info-s3-url
+                                                    _download-info-tx-instant
+                                                    _download-info-t
+                                                    _download-info-created-at]
+                                             :as result} (ldb/read-transit-str result)]
+                                      (when (not= result :timeout)
+                                        (assert (some? download-info-s3-url) result)
+                                        (.rtc-download-graph-from-s3 worker graph-uuid graph-name download-info-s3-url)))))))})
 
       [:b "➡"]
       [:div.flex.flex-row.items-center.gap-2
