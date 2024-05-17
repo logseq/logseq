@@ -108,7 +108,7 @@
 
 (defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
-  ;; (prn :debug :outliner-ops ops)
+   (prn :debug :outliner-ops ops)
   (assert (ops-validator ops) ops)
   (let [opts' (assoc opts
                      :transact-opts {:conn conn}
