@@ -300,7 +300,7 @@
         (is
          (thrown-with-msg?
           js/Error
-          #"Property converted failed"
+          #"Can't convert"
           (outliner-property/upsert-closed-value! conn (:db/id property) {:value "not a number"})))
         (let [values (get-value-ids k)]
           (is (= #{"1" "2"} (get-closed-values values)))))

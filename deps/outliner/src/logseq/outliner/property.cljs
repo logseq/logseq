@@ -50,7 +50,10 @@
   [v-str]
   (let [result (parse-double v-str)]
     (or result
-        (throw (js/Error. (str "Can't convert \"" v-str "\" to a number"))))))
+        (throw (ex-info (str "Can't convert \"" v-str "\" to a number")
+                        {:type :notification
+                         :payload {:message (str "Can't convert \"" v-str "\" to a number")
+                                   :type :error}})))))
 
 (defn ^:api convert-property-input-string
   [schema-type v-str]
@@ -447,15 +450,7 @@
         property-type (get property-schema :type :default)]
     (when (contains? db-property-type/closed-value-property-types property-type)
       (let [value' (if (string? value) (string/trim value) value)
-            resolved-value (try
-                             (convert-property-input-string (:type property-schema) value')
-                             (catch :default e
-                               (js/console.error e)
-                               (throw (ex-info "Property converted failed"
-                                               {:type :notification
-                                                :payload {:message (str e)
-                                                          :type :error}}))
-                               nil))
+            resolved-value (convert-property-input-string (:type property-schema) value')
             validate-message (validate-property-value
                               (get-property-value-schema @conn property-type property {:new-closed-value? true})
                               resolved-value)]
@@ -474,7 +469,6 @@
                                      :type :warning}}))
 
           validate-message
-
           ;; Make sure to update frontend.handler.db-based.property-test when updating ex-info message
           (throw (ex-info "Invalid property value"
                           {:error :value-invalid
