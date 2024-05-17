@@ -15,7 +15,7 @@
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.handler.page.file-based.rename :as file-worker-page-rename]
             [frontend.worker.handler.page.db-based.rename :as db-worker-page-rename]
-            [frontend.worker.rtc.core2 :as rtc-core2]
+            [frontend.worker.rtc.core :as rtc-core]
             [frontend.worker.rtc.db-listener]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.search :as search]
@@ -597,15 +597,15 @@
   (rtc-start2
    [this repo token]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--rtc-start repo token))))
+     (js/Promise. (rtc-core/new-task--rtc-start repo token))))
 
   (rtc-stop2
    [this]
-   (rtc-core2/rtc-stop))
+   (rtc-core/rtc-stop))
 
   (rtc-toggle-auto-push
    [this]
-   (rtc-core2/rtc-toggle-auto-push))
+   (rtc-core/rtc-toggle-auto-push))
 
   (rtc-grant-graph-access2
    [this token graph-uuid target-user-uuids-str target-user-emails-str]
@@ -613,71 +613,71 @@
          target-user-emails (ldb/read-transit-str target-user-emails-str)]
      (with-write-transit-str
        (js/Promise.
-        (rtc-core2/new-task--grant-access-to-others token graph-uuid
+        (rtc-core/new-task--grant-access-to-others token graph-uuid
                                                     :target-user-uuids target-user-uuids
                                                     :target-user-emails target-user-emails)))))
 
   (rtc-get-graphs2
    [this token]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--get-graphs token))))
+     (js/Promise. (rtc-core/new-task--get-graphs token))))
 
   (rtc-delete-graph2
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--delete-graph token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--delete-graph token graph-uuid))))
 
   (rtc-get-users-info2
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--get-user-info token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--get-user-info token graph-uuid))))
 
   (rtc-get-block-content-versions2
    [this token graph-uuid block-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--get-block-content-versions token graph-uuid block-uuid))))
+     (js/Promise. (rtc-core/new-task--get-block-content-versions token graph-uuid block-uuid))))
 
   (rtc-get-debug-state2
    [this]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--get-debug-state))))
+     (js/Promise. (rtc-core/new-task--get-debug-state))))
 
   (rtc-async-upload-graph2
    [this repo token remote-graph-name]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--upload-graph token repo remote-graph-name))))
+     (js/Promise. (rtc-core/new-task--upload-graph token repo remote-graph-name))))
 
   ;; ================================================================
   (rtc-request-download-graph
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--request-download-graph token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--request-download-graph token graph-uuid))))
 
   (rtc-wait-download-graph-info-ready
    [this token download-info-uuid graph-uuid timeout-ms]
    (with-write-transit-str
      (js/Promise.
-      (rtc-core2/new-task--wait-download-info-ready token download-info-uuid graph-uuid timeout-ms))))
+      (rtc-core/new-task--wait-download-info-ready token download-info-uuid graph-uuid timeout-ms))))
 
   (rtc-download-graph-from-s3
    [this graph-uuid graph-name s3-url]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--download-graph-from-s3 graph-uuid graph-name s3-url))))
+     (js/Promise. (rtc-core/new-task--download-graph-from-s3 graph-uuid graph-name s3-url))))
 
   (rtc-download-info-list
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--download-info-list token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--download-info-list token graph-uuid))))
 
   (rtc-snapshot-graph
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--snapshot-graph token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--snapshot-graph token graph-uuid))))
 
   (rtc-snapshot-list
    [this token graph-uuid]
    (with-write-transit-str
-     (js/Promise. (rtc-core2/new-task--snapshot-list token graph-uuid))))
+     (js/Promise. (rtc-core/new-task--snapshot-list token graph-uuid))))
 
   (undo
    [_this repo _page-block-uuid-str]

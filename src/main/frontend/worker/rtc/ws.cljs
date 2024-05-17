@@ -1,4 +1,4 @@
-(ns frontend.worker.rtc.ws2
+(ns frontend.worker.rtc.ws
   "Websocket wrapped by missionary.
   based on
   https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"

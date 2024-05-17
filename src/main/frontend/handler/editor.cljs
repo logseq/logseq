@@ -2808,7 +2808,7 @@
 
 (defn indent-outdent
   [indent?]
-  (let [editor (state/get-input)
+  (let [_editor (state/get-input)
         {:keys [block]} (get-state)]
     (when block
       (block-handler/indent-outdent-blocks! [block] indent? save-current-block!))))

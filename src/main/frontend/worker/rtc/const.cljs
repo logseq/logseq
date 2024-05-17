@@ -192,7 +192,7 @@
      [:map
       [:req-id :string]
       [:action :string]
-      [:graph-uuid {:optional true} :uuid]]] ;TODO: remove optional
+      [:graph-uuid :uuid]]]
     ["delete-graph"
      [:map
       [:req-id :string]

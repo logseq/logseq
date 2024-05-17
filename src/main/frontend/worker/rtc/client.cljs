@@ -7,7 +7,7 @@
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
-            [frontend.worker.rtc.ws2 :as ws]
+            [frontend.worker.rtc.ws :as ws]
             [logseq.db :as ldb]
             [missionary.core :as m]))
 
