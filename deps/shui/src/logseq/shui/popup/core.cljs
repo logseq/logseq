@@ -70,7 +70,7 @@
           (.focus target))))))
 
 (defn show!
-  [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props] :as opts}]
+  [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props on-hide] :as opts}]
   (let [*target (volatile! nil)
         position (cond
                    (vector? event) event
@@ -100,6 +100,7 @@
          :as-dropdown? as-dropdown?
          :as-content? as-content?
          :root-props root-props
+         :on-hide on-hide
          :content-props (cond-> content-props
                           (not (nil? align))
                           (assoc :align (name align)))}))))
@@ -123,7 +124,7 @@
 
 (rum/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
-           auto-side? _auto-focus? _target root-props content-props]
+           auto-side? _auto-focus? _target root-props content-props on-hide]
     :as _props}]
   ;; disableOutsidePointerEvents
   ;(rum/use-effect!
@@ -151,7 +152,12 @@
                              (if (> (- th bh) 100)
                                "top" "bottom"))))
           content-props (cond-> content-props
-                          auto-side? (assoc :side (auto-side-fn)))]
+                          auto-side? (assoc :side (auto-side-fn)))
+          hide (fn []
+                 (when (fn? on-hide)
+                   (on-hide))
+                 ;; Async so that popup closing will be in another run
+                 (js/setTimeout #(hide! id) 0))]
       (popup-root
        (merge root-props {:open open?})
        (popup-trigger
@@ -163,9 +169,9 @@
                          :width 1
                          :top y
                          :left x}} ""))
-       (let [content-props (cond-> (merge {:onEscapeKeyDown #(hide! id)
+       (let [content-props (cond-> (merge {:onEscapeKeyDown hide
                                            :disableOutsideScroll false
-                                           :onPointerDownOutside #(hide! id)}
+                                           :onPointerDownOutside hide}
                                           content-props)
                              (and (not force-popover?)
                                   (not as-dropdown?))
