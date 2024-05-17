@@ -28,7 +28,7 @@
                        (when-let [block (db-utils/entity [:block/uuid %])]
                          (db-property/closed-value-name block))
                        %)]
-                [(-> prop-ent :block/name keyword)
+                [(-> prop-ent :block/original-name keyword)
                 (if (set? v)
                   (set (map readable-property-val v))
                   (readable-property-val v))])))
