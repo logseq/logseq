@@ -85,6 +85,11 @@
   [a]
   (use-atom-fn a identity (fn [_ v] v)))
 
+(defn use-atom-in
+  [a ks]
+  (let [ks (if (keyword? ks) [ks] ks)]
+    (use-atom-fn a #(get-in % ks) (fn [a' v] (assoc-in a' ks v)))))
+
 (defn use-mounted
   []
   (let [*mounted (rum/use-ref false)]
