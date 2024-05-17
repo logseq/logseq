@@ -247,7 +247,10 @@
 
 (defn- with-write-transit-str
   [p]
-  (p/chain p ldb/write-transit-str))
+  (p/chain p
+           (fn [result]
+             (let [result (when-not (= result @worker-state/*state) result)]
+               (ldb/write-transit-str result)))))
 
 #_:clj-kondo/ignore
 (defclass DBWorker
