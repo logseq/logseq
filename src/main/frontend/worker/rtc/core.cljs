@@ -1,4 +1,4 @@
-(ns frontend.worker.rtc.core2
+(ns frontend.worker.rtc.core
   "Main(use missionary) ns for rtc related fns"
   (:require [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client :as r.client]
@@ -6,7 +6,7 @@
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
-            [frontend.worker.rtc.ws2 :as ws]
+            [frontend.worker.rtc.ws :as ws]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [goog.string :as gstring]
