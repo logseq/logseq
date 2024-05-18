@@ -644,7 +644,7 @@
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
   (let [*tippy-ref (rum/create-ref)
-        page-name (util/page-name-sanity-lc page-name)
+        page-name (when page-name (util/page-name-sanity-lc page-name))
         _  #_:clj-kondo/ignore (rum/defc html-template []
                                  (let [*el-popup (rum/use-ref nil)]
 
@@ -663,7 +663,7 @@
                                         #(.removeEventListener el-popup "keyup" cb)))
                                     [])
 
-                                   (let [redirect-page-name (or (model/get-redirect-page-name page-name (:block/alias? config))
+                                   (let [redirect-page-name (or (and page-name (model/get-redirect-page-name page-name (:block/alias? config)))
                                                                 page-name)]
                                      (when redirect-page-name
                                        [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none.rounded-md
@@ -2836,11 +2836,10 @@
   {:init (fn [state]
            (let [*ref (atom nil)
                  block (nth (:rum/args state) 3)
-                 block-id (:block/uuid block)
+                 block-id (:db/id block)
                  repo (state/get-current-repo)]
-             (db-async/<get-block repo block-id :children? false)
-             (assoc state
-                    ::ref *ref)))}
+             (db-async/<get-block repo block-id :children? true)
+             (assoc state ::ref *ref)))}
   [state container-state repo config* block {:keys [navigating-block navigated?]}]
   (let [*ref (::ref state)
         _ (when (:block/uuid block) (state/sub-async-query-loading (:block/uuid block)))
