@@ -54,6 +54,12 @@
   [db block]
   (update block :block/refs (fn [refs] (map (fn [ref] (d/pull db '[*] (:db/id ref))) refs))))
 
+(defn- with-block-link
+  [db block]
+  (if (:block/link block)
+    (update block :block/link (fn [link] (d/pull db '[*] (:db/id link))))
+    block))
+
 (defn with-parent
   [db block]
   (cond
@@ -148,12 +154,13 @@
         get-children (fn [block children]
                        (let [long-page? (and (> (count children) 500) (not (contains? (:block/type block) "whiteboard")))]
                          (if long-page?
-                           (map (fn [e]
-                                  (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed?]))
-                                children)
+                           (->> (map (fn [e]
+                                       (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))
+                                     children)
+                                (map #(with-block-link db %)))
                            (->> (d/pull-many db '[*] (map :db/id children))
                                 (map #(with-block-refs db %))
-                                (map mark-block-fully-loaded)
+                                (map #(with-block-link db %))
                                 (mapcat (fn [block]
                                           (let [e (d/entity db (:db/id block))]
                                             (conj
@@ -162,27 +169,19 @@
                                                [])
                                              block))))))))]
     (when block
-      (if (:block/page block) ; not a page
-        (let [block' (->> (d/pull db '[*] (:db/id block))
-                          (with-parent db)
-                          (with-block-refs db)
-                          mark-block-fully-loaded)]
-          (cond->
-           {:block block'
-            :properties (property-with-values db block)}
-            children?
-            (assoc :children (get-children block
-                                           (if nested-children?
-                                             (get-block-children db (:block/uuid block))
-                                             (:block/_parent block))))))
+      (let [block' (->> (d/pull db '[*] (:db/id block))
+                        (with-parent db)
+                        (with-block-refs db)
+                        (with-block-link db)
+                        mark-block-fully-loaded)]
         (cond->
-         {:block (->> (d/pull db '[*] (:db/id block))
-                      (with-tags db)
-                      mark-block-fully-loaded)
+         {:block block'
           :properties (property-with-values db block)}
           children?
-          (assoc :children
-                 (get-children block (:block/_page block))))))))
+          (assoc :children (get-children block
+                                         (if nested-children?
+                                           (get-block-children db (:block/uuid block))
+                                           (:block/_parent block)))))))))
 
 (defn get-latest-journals
   [db n]
