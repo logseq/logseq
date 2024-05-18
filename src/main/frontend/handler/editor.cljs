@@ -2831,108 +2831,110 @@
   "NOTE: Keydown cannot be used on Android platform"
   [format]
   (fn [e _key-code]
-    (let [input-id (state/get-edit-input-id)
-          input (state/get-input)
-          key (gobj/get e "key")
-          value (gobj/get input "value")
-          ctrlKey (gobj/get e "ctrlKey")
-          metaKey (gobj/get e "metaKey")
-          pos (cursor/pos input)
-          hashtag? (or (surround-by? input "#" " ")
-                       (surround-by? input "#" :end)
-                       (= key "#"))]
-      (when (and (not @(:editor/start-pos @state/state))
-                 (not (and key (string/starts-with? key "Arrow"))))
-        (state/set-state! :editor/start-pos pos))
+    (if (= :insert-blocks (state/get-editor-op))
+      (util/stop e)
+      (let [input-id (state/get-edit-input-id)
+            input (state/get-input)
+            key (gobj/get e "key")
+            value (gobj/get input "value")
+            ctrlKey (gobj/get e "ctrlKey")
+            metaKey (gobj/get e "metaKey")
+            pos (cursor/pos input)
+            hashtag? (or (surround-by? input "#" " ")
+                         (surround-by? input "#" :end)
+                         (= key "#"))]
+        (when (and (not @(:editor/start-pos @state/state))
+                   (not (and key (string/starts-with? key "Arrow"))))
+          (state/set-state! :editor/start-pos pos))
 
-      (cond
-        (and (contains? #{"ArrowLeft" "ArrowRight"} key)
-             (contains? #{:property-search :property-value-search} (state/get-editor-action)))
-        (state/clear-editor-action!)
+        (cond
+          (and (contains? #{"ArrowLeft" "ArrowRight"} key)
+               (contains? #{:property-search :property-value-search} (state/get-editor-action)))
+          (state/clear-editor-action!)
 
-        (and (util/goog-event-is-composing? e true) ;; #3218
-             (not hashtag?) ;; #3283 @Rime
-             (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
-        nil
+          (and (util/goog-event-is-composing? e true) ;; #3218
+               (not hashtag?) ;; #3283 @Rime
+               (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
+          nil
 
-        (or ctrlKey metaKey)
-        nil
+          (or ctrlKey metaKey)
+          nil
 
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
         ;; does not work if cursor is at the beginning of a block, hence the block
         ;; can't be deleted. Need to figure out why and find a better solution.
-        (and (mobile-util/native-platform?)
-             (= key "Backspace")
-             (zero? pos)
-             (string/blank? (.toString (js/window.getSelection))))
-        (keydown-backspace-handler false e)
+          (and (mobile-util/native-platform?)
+               (= key "Backspace")
+               (zero? pos)
+               (string/blank? (.toString (js/window.getSelection))))
+          (keydown-backspace-handler false e)
 
-        (and (= key "#")
-             (and (> pos 0)
-                  (= "#" (util/nth-safe value (dec pos)))))
-        (state/clear-editor-action!)
+          (and (= key "#")
+               (and (> pos 0)
+                    (= "#" (util/nth-safe value (dec pos)))))
+          (state/clear-editor-action!)
 
-        (and (contains? (set/difference (set (keys reversed-autopair-map))
-                                        #{"`"})
-                        key)
-             (= (get-current-input-char input) key))
-        (do
-          (util/stop e)
-          (cursor/move-cursor-forward input))
+          (and (contains? (set/difference (set (keys reversed-autopair-map))
+                                          #{"`"})
+                          key)
+               (= (get-current-input-char input) key))
+          (do
+            (util/stop e)
+            (cursor/move-cursor-forward input))
 
-        (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
-        nil
+          (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
+          nil
 
-        (some? @(:editor/action @state/state))
-        nil
+          (some? @(:editor/action @state/state))
+          nil
 
-        (and (not (string/blank? (util/get-selected-text)))
-             (contains? keycode/left-square-brackets-keys key))
-        (do
-          (autopair input-id "[" format nil)
-          (util/stop e))
+          (and (not (string/blank? (util/get-selected-text)))
+               (contains? keycode/left-square-brackets-keys key))
+          (do
+            (autopair input-id "[" format nil)
+            (util/stop e))
 
-        (and (not (string/blank? (util/get-selected-text)))
-             (contains? keycode/left-paren-keys key))
-        (do (util/stop e)
-            (autopair input-id "(" format nil))
+          (and (not (string/blank? (util/get-selected-text)))
+               (contains? keycode/left-paren-keys key))
+          (do (util/stop e)
+              (autopair input-id "(" format nil))
 
         ;; If you type `xyz`, the last backtick should close the first and not add another autopair
         ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
-        (-> (keys autopair-map)
-            set
-            (disj "(")
-            (contains? key)
-            (or (autopair-left-paren? input key)))
-        (let [curr (get-current-input-char input)
-              prev (util/nth-safe value (dec pos))]
-          (util/stop e)
-          (if (and (= key "`") (= "`" curr) (not= "`" prev))
-            (cursor/move-cursor-forward input)
-            (autopair input-id key format nil)))
+          (-> (keys autopair-map)
+              set
+              (disj "(")
+              (contains? key)
+              (or (autopair-left-paren? input key)))
+          (let [curr (get-current-input-char input)
+                prev (util/nth-safe value (dec pos))]
+            (util/stop e)
+            (if (and (= key "`") (= "`" curr) (not= "`" prev))
+              (cursor/move-cursor-forward input)
+              (autopair input-id key format nil)))
 
-        (let [sym "$"]
-          (and (= key sym)
-               (>= (count value) 1)
-               (> pos 0)
-               (= (nth value (dec pos)) sym)
-               (if (> (count value) pos)
-                 (not= (nth value pos) sym)
-                 true)))
-        (commands/simple-insert! input-id "$$" {:backward-pos 2})
+          (let [sym "$"]
+            (and (= key sym)
+                 (>= (count value) 1)
+                 (> pos 0)
+                 (= (nth value (dec pos)) sym)
+                 (if (> (count value) pos)
+                   (not= (nth value pos) sym)
+                   true)))
+          (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
-        (let [sym "^"]
-          (and (= key sym)
-               (>= (count value) 1)
-               (> pos 0)
-               (= (nth value (dec pos)) sym)
-               (if (> (count value) pos)
-                 (not= (nth value pos) sym)
-                 true)))
-        (commands/simple-insert! input-id "^^" {:backward-pos 2})
+          (let [sym "^"]
+            (and (= key sym)
+                 (>= (count value) 1)
+                 (> pos 0)
+                 (= (nth value (dec pos)) sym)
+                 (if (> (count value) pos)
+                   (not= (nth value pos) sym)
+                   true)))
+          (commands/simple-insert! input-id "^^" {:backward-pos 2})
 
-        :else
-        nil))))
+          :else
+          nil)))))
 
 (defn- input-page-ref?
   [k current-pos blank-selected? last-key-code]
