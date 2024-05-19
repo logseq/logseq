@@ -8,6 +8,7 @@ import { withClampedStyles } from './style-props'
 import { LogseqContext } from '../logseq-context'
 import * as React from 'react'
 
+// https://regex101.com/r/cazpoJ/2
 export const X_OR_TWITTER_REGEX = /https?:\/\/(x|twitter).com\/[0-9a-zA-Z_]{1,20}\/status\/([0-9]*)/
 
 export interface TweetShapeProps extends TLBoxShapeProps {
