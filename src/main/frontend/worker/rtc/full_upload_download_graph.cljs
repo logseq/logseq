@@ -3,7 +3,6 @@
   - download remote graph"
   (:require [cljs-http.client :as http]
             [clojure.string :as string]
-            [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client :as r.client]
@@ -11,31 +10,47 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.db :as ldb]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
-            [missionary.core :as m]
-            [promesa.core :as p]
             [malli.core :as ma]
-            [malli.transform :as mt]))
+            [malli.transform :as mt]
+            [missionary.core :as m]
+            [promesa.core :as p]))
 
 
-(def ^:private remote-block-schema
+(def ^:private normalized-remote-block-schema
   "Blocks stored in remote have some differences in format from the client's.
   Use this schema's coercer to decode."
   [:map
-   [:block/type {:optional true}
-    [:sequential [:string {:decode/string (fn [x]
-                                            (if (keyword? x)
-                                              (string/replace (name x) "#" " ")
-                                              x))}]]]
-   [:malli.core/default [:map-of :keyword :any]]])
+   [:db/id [:string {:decode/custom str}]]
+   [:block/uuid [:uuid {:decode/custom ldb/read-transit-str}]]
+   [:malli.core/default [:map-of :keyword
+                         [:any {:decode/custom
+                                (fn [x] ; convert db-id to db-id-string(as temp-id)
+                                  (cond
+                                    (and (coll? x)
+                                         (every? :db/id x))
+                                    (map (comp str :db/id) x)
 
-(def ^:private remote-blocks-coercer (ma/coercer [:sequential remote-block-schema] mt/string-transformer))
+                                    (:db/id x)
+                                    (str (:db/id x))
 
-(def ^:private transit-r (transit/reader :json))
+                                    (string? x)
+                                    (ldb/read-transit-str x)
+
+                                    (and (coll? x)
+                                         (every? string? x))
+                                    (map ldb/read-transit-str x)
+
+                                    :else x))}]]]])
+
+(def ^:private normalized-remote-blocks-coercer
+  (ma/coercer [:sequential normalized-remote-block-schema]
+              (mt/transformer {:name :custom} mt/string-transformer)))
 
 (defn- export-as-blocks
   [db]
@@ -49,11 +64,24 @@
                       (when (and (contains? #{:block/parent} (:a datom))
                                  (not (pos-int? (:v datom))))
                         (throw (ex-info "invalid block data" {:datom datom})))
-                      (if (contains? db-schema/card-many-attributes (:a datom))
-                        (update r (:a datom) conj (:v datom))
-                        (assoc r (:a datom) (:v datom))))
-                    {:db/id (:e (first datoms))}
-                    datoms)))))))
+                      (let [a (:a datom)
+                            card-many? (contains? db-schema/card-many-attributes a)
+                            ref? (contains? db-schema/ref-type-attributes a)]
+                        (case [ref? card-many?]
+                          [true true]
+                          (update r a conj (str (:v datom)))
+                          [true false]
+                          (assoc r a (str (:v datom)))
+                          [false true]
+                          (update r a conj (ldb/write-transit-str (:v datom)))
+                          [false false]
+                          (assoc r a (ldb/write-transit-str (:v datom))))))
+                    {:db/id (str (:e (first datoms)))}
+                    datoms))))
+         (map (fn [block]
+                (if (:db/ident block)
+                  (update block :db/ident ldb/read-transit-str)
+                  block))))))
 
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name]
@@ -65,7 +93,7 @@
             (r.client/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
             (m/sp
               (let [all-blocks (export-as-blocks @conn)]
-                (transit/write (transit/writer :json) all-blocks)))))]
+                (ldb/write-transit-str all-blocks)))))]
       (m/? (c.m/<! (http/put url {:body all-blocks-str :with-credentials? false})))
       (let [upload-resp
             (m/? (r.client/send&recv get-ws-create-task {:action "upload-graph"
@@ -97,31 +125,6 @@
   [blocks]
   (let [blocks-coll (vals (group-by :block/parent blocks))]
     (mapcat remote-block-index->block-order* blocks-coll)))
-
-(defn- db-ident-or-db-id-str
-  [x]
-  ;; (or ;; (:db/ident x)
-  ;;  )
-  (some-> (:db/id x) str))
-
-(defn- replace-db-id-with-temp-id
-  [blocks]
-  (mapv
-   (fn [block]
-     (let [db-id            (:db/id block)
-           block-parent     (db-ident-or-db-id-str (:block/parent block))
-           block-alias      (map db-ident-or-db-id-str (:block/alias block))
-           block-tags       (map db-ident-or-db-id-str (:block/tags block))
-           block-schema     (some->> (:block/schema block)
-                                     (transit/read transit-r))
-           block-link       (db-ident-or-db-id-str (:block/link block))]
-       (cond-> (assoc block :db/id (str db-id))
-         block-parent      (assoc :block/parent block-parent)
-         (seq block-alias) (assoc :block/alias block-alias)
-         (seq block-tags)  (assoc :block/tags block-tags)
-         block-schema      (assoc :block/schema block-schema)
-         block-link        (assoc :block/link block-link))))
-   blocks))
 
 (def page-of-block
   (memoize
@@ -175,25 +178,21 @@
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
-        blocks (remote-blocks-coercer blocks)
-        blocks* (remote-block-index->block-order (replace-db-id-with-temp-id blocks))
+        blocks (normalized-remote-blocks-coercer blocks)
+        blocks* (remote-block-index->block-order blocks)
         blocks-with-page-id (fill-block-fields blocks*)
         tx-data (concat blocks-with-page-id
                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
         ^js worker-obj (:worker/object @worker-state/*state)]
-    (prn :debug-repo repo)
-    (prn :debug-tx-data tx-data)
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
       (m/?
        (c.m/await-promise
         (p/do!
-          (.createOrOpenDB worker-obj repo {:close-other-db? false})
-          (.exportDB worker-obj repo)
-          (prn :xdb2 @(frontend.worker.state/get-datascript-conn repo))
-
-          (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
-          (transact-block-refs! repo))))
+         (.createOrOpenDB worker-obj repo {:close-other-db? false})
+         (.exportDB worker-obj repo)
+         (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
+         (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -240,7 +239,7 @@
           repo                        (str sqlite-util/db-version-prefix graph-name)]
       (if (not= 200 status)
         (throw (ex-info "download-graph from s3 failed" {:resp r}))
-        (let [all-blocks (transit/read transit-r body)]
+        (let [all-blocks (ldb/read-transit-str body)]
           (worker-state/set-rtc-downloading-graph! true)
           (op-mem-layer/init-empty-ops-store! repo)
           (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
