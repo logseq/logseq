@@ -378,10 +378,10 @@
             selection-end (util/get-selection-end input)
             [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
         (state/set-edit-content! edit-input-id new-content)))
-    (p/let [_ (let [sibling? (not= (:db/id left-or-parent) (:db/id (:block/parent block)))]
-                (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
-                                                                          :keep-uuid? true}))])
-    prev-block))
+    (let [sibling? (not= (:db/id left-or-parent) (:db/id (:block/parent block)))]
+      (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
+                                                                :keep-uuid? true})
+      [sibling? prev-block])))
 
 (defn insert-new-block-aux!
   [config
@@ -400,11 +400,11 @@
         next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
                               new-m)
                        (wrap-parse-block))
-        sibling? (when block-self? false)]
+        sibling? (or (:block/collapsed? (:block/link block)) (when block-self? false))]
     (util/set-change-value input fst-block-text)
     (outliner-insert-block! config current-block next-block {:sibling? sibling?
                                                              :keep-uuid? true})
-    (assoc next-block :block/content snd-block-text)))
+    [sibling? (assoc next-block :block/content snd-block-text)]))
 
 (defn clear-when-saved!
   []
@@ -441,14 +441,14 @@
           (util/rec-get-node "ls-block")))
 
 (defn- get-new-container-id
-  [op]
+  [op data]
   (let [{:keys [block block-container]} (get-state)]
     (when block
       (let [node block-container
             linked? (some? (dom/attr node "originalblockid"))]
         (case op
           :insert
-          (when linked?
+          (when (and linked? (:sibling? data))
             (some-> (util/rec-get-node node "blocks-container")
                     get-node-container-id))
 
@@ -461,13 +461,13 @@
           :move-up
           (let [parent (get-node-parent node)
                 prev (when parent (.-previousSibling parent))]
-            (when (dom/attr prev "originalblockid")
+            (when (and prev (dom/attr prev "originalblockid"))
               (get-node-container-id prev)))
 
           :move-down
           (let [parent (get-node-parent node)
                 next (when parent (.-nextSibling parent))]
-            (when (dom/attr next "originalblockid")
+            (when (and next (dom/attr next "originalblockid"))
               (get-node-container-id next)))
 
           :outdent
@@ -516,10 +516,10 @@
 
                          :else
                          insert-new-block-aux!)
-             next-block (insert-fn config block'' value)]
+             [sibling? next-block] (insert-fn config block'' value)]
          (clear-when-saved!)
          (state/set-state! :editor/next-edit-block {:block next-block
-                                                    :container-id (get-new-container-id :insert)
+                                                    :container-id (get-new-container-id :insert {:sibling? sibling?})
                                                     :pos 0}))))))
 
 (defn api-insert-new-block!
@@ -1767,7 +1767,7 @@
       (if edit-block-id
         (when-let [block (db/entity [:block/uuid edit-block-id])]
           (let [blocks [(assoc block :block/content (state/get-edit-content))]
-                container-id (get-new-container-id (if up? :move-up :move-down))]
+                container-id (get-new-container-id (if up? :move-up :move-down) {})]
             (p/do!
              (save-current-block!)
              (move-nodes blocks)
@@ -2843,7 +2843,7 @@
     (when block
       (let [node block-container
             prev-container-id (get-node-container-id node)
-            container-id (get-new-container-id (if indent? :indent :outdent))]
+            container-id (get-new-container-id (if indent? :indent :outdent) {})]
         (p/do!
          (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
          (when (and (not= prev-container-id container-id) container-id)
