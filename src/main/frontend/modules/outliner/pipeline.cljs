@@ -47,8 +47,8 @@
           ;; safe to edit the next block now since other blocks (e.g. prev editing block)
           ;; has been saved to the db now
               (when-let [next-edit-block @(:editor/next-edit-block @state/state)]
-                (let [{:keys [block pos]} next-edit-block]
-                  (editor-handler/edit-block! block pos)
+                (let [{:keys [block pos container-id]} next-edit-block]
+                  (editor-handler/edit-block! block pos {:container-id container-id})
                   (state/set-state! :editor/next-edit-block nil)))
 
               (react/refresh! repo affected-keys)

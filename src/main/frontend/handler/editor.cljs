@@ -427,7 +427,56 @@
          :block-parent-id block-parent-id
          :node node
          :value value
-         :pos pos}))))
+         :pos pos
+         :block-container (util/rec-get-node node "ls-block")}))))
+
+(defn- get-node-container-id
+  [node]
+  (some-> (dom/attr node "containerid")
+          util/safe-parse-int))
+
+(defn- get-node-parent
+  [node]
+  (some-> (gobj/get node "parentNode")
+          (util/rec-get-node "ls-block")))
+
+(defn- get-new-container-id
+  [op]
+  (let [{:keys [block block-container]} (get-state)]
+    (when block
+      (let [node block-container
+            linked? (some? (dom/attr node "originalblockid"))]
+        (case op
+          :insert
+          (when linked?
+            (some-> (util/rec-get-node node "blocks-container")
+                    get-node-container-id))
+
+          :indent
+          ;; Get prev sibling's container id
+          (when-let [prev (.-previousSibling node)]
+            (when (dom/attr prev "originalblockid")
+              (get-node-container-id prev)))
+
+          :move-up
+          (let [parent (get-node-parent node)
+                prev (when parent (.-previousSibling parent))]
+            (when (dom/attr prev "originalblockid")
+              (get-node-container-id prev)))
+
+          :move-down
+          (let [parent (get-node-parent node)
+                next (when parent (.-nextSibling parent))]
+            (when (dom/attr next "originalblockid")
+              (get-node-container-id next)))
+
+          :outdent
+          ;; Get embed block's root container id
+          (when-let [parent (some-> (gobj/get node "parentNode")
+                                    (util/rec-get-node "ls-block"))]
+            (when (dom/attr parent "originalblockid")
+              (some-> (util/rec-get-node parent "blocks-container")
+                      get-node-container-id))))))))
 
 (defn insert-new-block!
   "Won't save previous block content - remember to save!"
@@ -470,6 +519,7 @@
              next-block (insert-fn config block'' value)]
          (clear-when-saved!)
          (state/set-state! :editor/next-edit-block {:block next-block
+                                                    :container-id (get-new-container-id :insert)
                                                     :pos 0}))))))
 
 (defn api-insert-new-block!
@@ -1710,25 +1760,22 @@
                        (let [blocks' (block-handler/get-top-level-blocks blocks)
                              result (ui-outliner-tx/transact!
                                      {:outliner-op :move-blocks}
-                                      (outliner-op/move-blocks-up-down! blocks' up?))]
+                                     (outliner-op/move-blocks-up-down! blocks' up?))]
                          (when-let [block-node (util/get-first-block-by-id (:block/uuid (first blocks)))]
                            (.scrollIntoView block-node #js {:behavior "smooth" :block "nearest"}))
                          result))]
       (if edit-block-id
         (when-let [block (db/entity [:block/uuid edit-block-id])]
           (let [blocks [(assoc block :block/content (state/get-edit-content))]
-                pos (state/get-edit-pos)]
+                container-id (get-new-container-id (if up? :move-up :move-down))]
             (p/do!
              (save-current-block!)
              (move-nodes blocks)
-             (when-let [input-id (state/get-edit-input-id)]
-               (when-let [input (gdom/getElement input-id)]
+             (if container-id
+               (state/set-editing-block-id! [container-id edit-block-id])
+               (when-let [input (some-> (state/get-edit-input-id) gdom/getElement)]
                  (.focus input)
-                 (util/scroll-editor-cursor input))
-               (util/schedule (fn []
-                                (when-not (gdom/getElement input-id)
-                                 ;; could be crossing containers
-                                  (edit-block! block pos))))))))
+                 (util/scroll-editor-cursor input))))))
         (let [ids (state/get-selection-block-ids)]
           (when (seq ids)
             (let [lookup-refs (map (fn [id] [:block/uuid id]) ids)
@@ -2228,23 +2275,7 @@
                       {:last-pattern (str gp-property/colons " " q)})
     (state/clear-editor-action!)))
 
-(defn outdent-on-enter
-  [node]
-  (let [original-block (block-handler/get-current-editing-original-block)
-        parent-node (:block/parent node)
-        target (or original-block parent-node)
-        pos (state/get-edit-pos)
-        block node]
-    (p/do!
-     (ui-outliner-tx/transact!
-      {:outliner-op :move-blocks
-       :real-outliner-op :indent-outdent}
-      (save-current-block!)
-      (when target
-        (outliner-op/move-blocks! (block-handler/get-top-level-blocks [block])
-                                  target true)))
-     (when original-block
-       (util/schedule #(edit-block! block pos))))))
+(declare indent-outdent)
 
 (defn- last-top-level-child?
   [{:keys [id]} block]
@@ -2504,7 +2535,7 @@
              (string/blank? content)
              (not has-right?)
              (not (last-top-level-child? config block)))
-            (outdent-on-enter block)
+            (indent-outdent false)
 
             :else
             (profile
@@ -2808,9 +2839,15 @@
 
 (defn indent-outdent
   [indent?]
-  (let [{:keys [block]} (get-state)]
+  (let [{:keys [block block-container]} (get-state)]
     (when block
-      (block-handler/indent-outdent-blocks! [block] indent? save-current-block!))))
+      (let [node block-container
+            prev-container-id (get-node-container-id node)
+            container-id (get-new-container-id (if indent? :indent :outdent))]
+        (p/do!
+         (block-handler/indent-outdent-blocks! [block] indent? save-current-block!)
+         (when (and (not= prev-container-id container-id) container-id)
+           (state/set-editing-block-id! [container-id (:block/uuid block)])))))))
 
 (defn keydown-tab-handler
   [direction]
