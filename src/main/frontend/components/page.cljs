@@ -539,7 +539,7 @@
             (cond
               (and db-based? (not block?))
               (db-page/page-info page
-                                 (if (ldb/class? page)
+                                 (if (and (ldb/class? page) sidebar?)
                                    (atom true)
                                    (::show-page-info? state)))
 
