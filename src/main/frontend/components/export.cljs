@@ -156,23 +156,23 @@
       (when-not whiteboard?
         [:div.flex.pb-3
          (ui/button "Text"
-           :class "mr-4 w-20"
-           :on-click #(do (reset! *export-block-type :text)
-                          (reset! *content (export-helper root-block-uuids-or-page-uuid))))
+                    :class "mr-4 w-20"
+                    :on-click #(do (reset! *export-block-type :text)
+                                   (reset! *content (export-helper root-block-uuids-or-page-uuid))))
          (ui/button "OPML"
-           :class "mr-4 w-20"
-           :on-click #(do (reset! *export-block-type :opml)
-                          (reset! *content (export-helper root-block-uuids-or-page-uuid))))
+                    :class "mr-4 w-20"
+                    :on-click #(do (reset! *export-block-type :opml)
+                                   (reset! *content (export-helper root-block-uuids-or-page-uuid))))
          (ui/button "HTML"
-           :class "mr-4 w-20"
-           :on-click #(do (reset! *export-block-type :html)
-                          (reset! *content (export-helper root-block-uuids-or-page-uuid))))
+                    :class "mr-4 w-20"
+                    :on-click #(do (reset! *export-block-type :html)
+                                   (reset! *content (export-helper root-block-uuids-or-page-uuid))))
          (when-not (seq? root-block-uuids-or-page-uuid)
            (ui/button "PNG"
-             :class "w-20"
-             :on-click #(do (reset! *export-block-type :png)
-                            (reset! *content nil)
-                            (get-image-blob root-block-uuids-or-page-uuid (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
+                      :class "w-20"
+                      :on-click #(do (reset! *export-block-type :png)
+                                     (reset! *content nil)
+                                     (get-image-blob root-block-uuids-or-page-uuid (merge options {:transparent-bg? false}) (fn [blob] (reset! *content blob))))))])
 
       (if (= :png tp)
         [:div.flex.items-center.justify-center.relative
@@ -189,10 +189,10 @@
                                     (reset! *content nil)
                                     (get-image-blob root-block-uuids-or-page-uuid (merge options {:transparent-bg? e.currentTarget.checked}) (fn [blob] (reset! *content blob))))})]
         (let [options (->> text-indent-style-options
-                        (mapv (fn [opt]
-                                (if (= @*text-indent-style (:label opt))
-                                  (assoc opt :selected true)
-                                  opt))))]
+                           (mapv (fn [opt]
+                                   (if (= @*text-indent-style (:label opt))
+                                     (assoc opt :selected true)
+                                     opt))))]
           [:div [:div.flex.items-center
                  [:label.mr-4
                   {:style {:visibility (if (= :text tp) "visible" "hidden")}}
@@ -206,8 +206,8 @@
                                   (reset! *content (export-helper root-block-uuids-or-page-uuid))))}
                   (for [{:keys [label value selected]} options]
                     [:option (cond->
-                               {:key label
-                                :value (or value label)}
+                              {:key label
+                               :value (or value label)}
                                selected
                                (assoc :selected selected))
                      label])]]
@@ -250,7 +250,7 @@
                           :value (boolean (:newline-after-block @*text-other-options))
                           :on-change (fn [e]
                                        (state/update-export-block-text-other-options!
-                                         :newline-after-block (boolean (util/echecked? e)))
+                                        :newline-after-block (boolean (util/echecked? e)))
                                        (reset! *text-other-options (state/get-export-block-text-other-options))
                                        (reset! *content (export-helper root-block-uuids-or-page-uuid)))})
             [:div {:style {:visibility (if (#{:text} tp) "visible" "hidden")}}
@@ -284,15 +284,15 @@
       (when @*content
         [:div.mt-4.flex.flex-row.gap-2
          (ui/button (if @*copied? (t :export-copied-to-clipboard) (t :export-copy-to-clipboard))
-           :class "mr-4"
-           :on-click (fn []
-                       (if (= tp :png)
-                         (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
-                         (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
-                       (reset! *copied? true)))
+                    :class "mr-4"
+                    :on-click (fn []
+                                (if (= tp :png)
+                                  (js/navigator.clipboard.write [(js/ClipboardItem. #js {"image/png" @*content})])
+                                  (util/copy-to-clipboard! @*content :html (when (= tp :html) @*content)))
+                                (reset! *copied? true)))
          (ui/button (t :export-save-to-file)
-           :on-click #(let [file-name (if (uuid? root-block-uuids-or-page-uuid)
-                                        (-> (db/get-page root-block-uuids-or-page-uuid)
-                                          (util/get-page-original-name))
-                                        (t/now))]
-                        (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))
+                    :on-click #(let [file-name (if (uuid? root-block-uuids-or-page-uuid)
+                                                 (-> (db/get-page root-block-uuids-or-page-uuid)
+                                                     (util/get-page-original-name))
+                                                 (t/now))]
+                                 (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))
