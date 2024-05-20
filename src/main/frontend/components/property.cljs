@@ -483,6 +483,9 @@
                                    type (get-in property [:block/schema :type])]
                                (p/do!
                                 (pv/exit-edit-property)
+                                (when-not add-class-property?
+                                  (let [id (str "ls-property-" (:db/id entity) "-" (:db/id property) "-editor")]
+                                    (state/set-state! :editor/editing-property-value-id {id true})))
                                 (cond
                                   add-class-property?
                                   (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
