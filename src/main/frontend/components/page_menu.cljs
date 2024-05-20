@@ -104,13 +104,14 @@
              :options {:on-click #(delete-page-confirm! page)}})
 
           (when (and (not (mobile-util/native-platform?))
-                     (state/get-current-page))
+                  (not whiteboard?)
+                  (state/get-current-page))
             {:title (t :page/slide-view)
              :options {:on-click (fn []
                                    (state/sidebar-add-block!
-                                    repo
-                                    (:db/id page)
-                                    :page-slide-view))}})
+                                     repo
+                                     (:db/id page)
+                                     :page-slide-view))}})
 
           ;; TODO: In the future, we'd like to extract file-related actions
           ;; (such as open-in-finder & open-with-default-app) into a sub-menu of
@@ -153,7 +154,7 @@
                :options {:on-click #(commands/exec-plugin-simple-command!
                                      pid (assoc cmd :page page-name) action)}}))
 
-          (when db-based?
+          (when (and db-based? (not whiteboard?))
             {:title (t :page/toggle-properties)
              :options {:on-click (fn []
                                    (page-handler/toggle-properties! page))}})
