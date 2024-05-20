@@ -22,14 +22,9 @@
   [properties]
   (->> properties
        (map (fn [[k v]]
-              (let [prop-ent (db-utils/entity k)
-                    readable-property-val
-                    #(if (seq (:property/closed-values prop-ent)) ; closed values
-                       (when-let [block (db-utils/entity [:block/uuid %])]
-                         (db-property/closed-value-name block))
-                       %)]
+              (let [prop-ent (db-utils/entity k)]
                 [(-> prop-ent :block/original-name keyword)
                 (if (set? v)
-                  (set (map readable-property-val v))
-                  (readable-property-val v))])))
+                  (set (map db-property/get-property-value-name v))
+                  (db-property/get-property-value-name v))])))
        (into {})))
