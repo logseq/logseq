@@ -110,12 +110,10 @@
     (when (or (not (and class? class-schema?))
             ;; Only ask for confirmation on class schema properties
               (js/confirm "Are you sure you want to delete this property?"))
-      (let [repo (state/get-current-repo)
-            [f id] (if (and class? class-schema?)
-                     [db-property-handler/class-remove-property! (:db/id block)]
-                     [property-handler/remove-block-property! (:block/uuid block)])
-            property-id (:db/ident property)]
-        (f repo id property-id)))))
+      (let [repo (state/get-current-repo)]
+        (if (and class? class-schema?)
+          (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
+          (property-handler/remove-block-property! repo (:block/uuid block)  (:db/id property)))))))
 
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
@@ -404,7 +402,8 @@
         (if (and (contains? (:block/type entity) "class") page-configure? class-schema?)
           (p/let [_ (db-property-handler/upsert-property! nil {:type :default} {:property-name property-uuid-or-name})
                   new-property-id (:db/ident (ldb/get-case-page (db/get-db repo) property-uuid-or-name))]
-            (pv/<add-property! entity new-property-id "" {:class-schema? class-schema? :exit-edit? page-configure?}))
+            (pv/<add-property! entity new-property-id "" {:class-schema? class-schema? :exit-edit? false})
+            true)
           (p/do!
            (db-property-handler/upsert-property! nil {:type :default} {:property-name property-uuid-or-name})
            true))
@@ -424,7 +423,7 @@
                                         (map :block/original-name)
                                         set))))
      [])
-    [:div.ls-property-add.flex.flex-row.items-center
+    [:div.ls-property-add.flex.flex-row.items-center.property-key
      [:span.bullet-container.cursor [:span.bullet]]
      [:div.ls-property-key {:style {:padding-left 9
                                     :height "1.5em"}} ; TODO: ugly
@@ -470,17 +469,17 @@
      (if @*property-key
        (let [property (db/get-case-page @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
-          [:div.flex.flex-row.items-center.col-span-2
+          [:div.flex.flex-row.items-center.col-span-2.property-key
            [:span.bullet-container.cursor [:span.bullet]]
            [:div {:style {:padding-left 9}} @*property-key]]
           (when property
             [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
-             (when-not class-schema?
-               (if @*show-new-property-config?
-                 (schema-type property {:default-open? true
-                                        :in-block-container? in-block-container?
-                                        :block entity
-                                        :*show-new-property-config? *show-new-property-config?})
+             (if @*show-new-property-config?
+               (schema-type property {:default-open? true
+                                      :in-block-container? in-block-container?
+                                      :block entity
+                                      :*show-new-property-config? *show-new-property-config?})
+               (when-not class-schema?
                  (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
 
        (let [on-chosen (fn [{:keys [value label]}]

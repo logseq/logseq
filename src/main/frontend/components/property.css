@@ -181,7 +181,8 @@ input.simple-input:focus {
     }
 }
 
-.property-key .bullet-container, .property-key .bullet-container .bullet {
+.property-key .bullet-container, .property-key .bullet-container .bullet
+{
     border-radius: 0px;
 }
 
