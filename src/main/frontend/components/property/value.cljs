@@ -166,7 +166,7 @@
      (fn []
        (when editing?
          (some-> (rum/deref *trigger-ref)
-                 (.focus))))
+                 (.click))))
      [])
     [:div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
      (cond-> {}
