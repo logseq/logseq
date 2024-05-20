@@ -17,7 +17,6 @@
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
-            [frontend.handler.route :as route-handler]
             [promesa.core :as p]
             [frontend.db.async :as db-async]
             [logseq.common.util.macro :as macro-util]
@@ -118,11 +117,6 @@
        (when-not many?
          (shui/popup-hide!)
          (exit-edit-property))))))
-
-(defn- navigate-to-date-page
-  [value]
-  (when value
-    (route-handler/redirect-to-page! (date/js-date->journal-title value))))
 
 (rum/defc date-picker
   [value {:keys [on-change editing? multiple-values?]}]

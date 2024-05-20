@@ -778,20 +778,6 @@ Similar to re-frame subscriptions"
                 (uuid id)))
        (distinct)))
 
-(defn sub-block-selected?
-  [block-uuid]
-  (let [*cache (:ui/select-query-cache @state)
-        keys [::select-block block-uuid]
-        atom (or (get @*cache keys)
-                 (let [result (r/cached-derived-atom
-                               (:selection/blocks @state)
-                               keys
-                               (fn [s]
-                                 (contains? (set (get-selected-block-ids s)) block-uuid)))]
-                   (swap! *cache assoc keys result)
-                   result))]
-    (rum/react atom)))
-
 (defn block-content-max-length
   [repo]
   (or (:block/content-max-length (sub-config repo)) 10000))
@@ -1264,13 +1250,6 @@ Similar to re-frame subscriptions"
 (defn get-selection-direction
   []
   @(:selection/direction @state))
-
-(defn show-custom-context-menu!
-  [links position]
-  (swap! state assoc
-         :custom-context-menu/show? true
-         :custom-context-menu/links links
-         :custom-context-menu/position position))
 
 (defn hide-custom-context-menu!
   []
