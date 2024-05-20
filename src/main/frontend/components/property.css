@@ -1,6 +1,4 @@
 .property-configure {
-    min-width: 40rem;
-
     .form-input, .form-select {
         line-height: 1rem;
         padding: 0.25rem 0.5rem;
