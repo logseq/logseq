@@ -854,7 +854,8 @@
   (state/set-modal!
     #(vector :<>
        (class-component/configure page {})
-       (db-page/page-properties page {:configure? true}))
+       (db-page/page-properties page {:configure? true
+                                      :mode :class}))
     {:id :page-configure
      :label "page-configure"
      :container-overflow-visible? true}))
