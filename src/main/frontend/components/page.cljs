@@ -585,6 +585,16 @@
            [:div {:key "page-unlinked-references"}
             (reference/unlinked-references page)])]))))
 
+(rum/defc delay-skeleton
+  [children]
+  (let [[show? set-show!] (rum/use-state false)]
+    (rum/use-effect!
+      (fn []
+        (js/setTimeout #(set-show! true) 500))
+      [])
+    (when show?
+      [:div.space-y-2.min-h-48 children])))
+
 (rum/defcs page-aux < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
@@ -601,9 +611,10 @@
   (let [loading? (or (rum/react (::loading? state))
                      (when (::page-name state) (state/sub-async-query-loading (::page-name state))))]
     (if loading?
-      [:div.space-y-2
-       (shui/skeleton {:class "h-6 w-full"})
-       (shui/skeleton {:class "h-6 w-full"})]
+      (delay-skeleton
+        [:<>
+         (shui/skeleton {:class "h-6 w-full"})
+         (shui/skeleton {:class "h-6 w-full"})])
       (page-inner option))))
 
 (rum/defcs page
