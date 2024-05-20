@@ -5,13 +5,16 @@
             [logseq.db.frontend.property :as db-property]
             [frontend.db :as db]
             #_:clj-kondo/ignore
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [promesa.core :as p]
+            [logseq.db :as ldb]))
 
 (defn upsert-property!
   [property-id schema property-opts]
-  (ui-outliner-tx/transact!
-   {:outliner-op :upsert-property}
-    (outliner-op/upsert-property! property-id schema property-opts)))
+  (p/let [result (ui-outliner-tx/transact!
+                  {:outliner-op :upsert-property}
+                  (outliner-op/upsert-property! property-id schema property-opts))]
+    (ldb/read-transit-str result)))
 
 (defn set-block-property!
   [block-id property-id value]
