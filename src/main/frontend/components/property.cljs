@@ -100,8 +100,6 @@
   (case property-type
     :default
     "Text"
-    :string
-    "Text"
     ((comp string/capitalize name) property-type)))
 
 (defn- handle-delete-property!

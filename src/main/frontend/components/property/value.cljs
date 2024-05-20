@@ -609,7 +609,7 @@
           popup-content (fn content-fn [_]
                           [:div.property-select
                            (case type
-                             (:string :number :url :default)
+                             (:number :url :default)
                              (select block property select-opts' opts)
 
                              (:page :date)
@@ -629,49 +629,13 @@
          (property-empty-text-value)
          (value-f))))))
 
-(defn- save-text!
-  [repo block property value _editor-id e]
-  (let [new-value (util/evalue e)]
-    (when (not (state/get-editor-action))
-      (util/stop e)
-      (p/do!
-       (when (not= new-value value)
-         (property-handler/set-block-property! repo (:block/uuid block)
-                                               (:db/ident property)
-                                               (string/trim new-value)))
-       (exit-edit-property)))))
-
-(defn- new-text-editor-opts
-  [repo block property value editor-id]
-  {:style {:padding 0
-           :background "none"}
-   :on-blur
-   (fn [e]
-     (save-text! repo block property value editor-id e))
-   :on-key-down
-   (fn [e]
-     (let [enter? (= (util/ekey e) "Enter")
-           esc? (= (util/ekey e) "Escape")
-           backspace? (= (util/ekey e) "Backspace")]
-       ;; FIXME: backspace not working
-       (when (and (or enter? esc? backspace?)
-                  (not (state/get-editor-action)))
-         (when-not backspace? (util/stop e))
-         (when (or esc? enter?)
-           (save-text! repo block property value editor-id e)))))})
-
 (defn- property-editing
-  [block property value schema editor-box editor-args editor-id]
+  [block property schema]
   [:div.flex.flex-1
    (case (:type schema)
      :template
      (when-let [template (first (:property/schema.classes property))]
        (<create-new-block-from-template! block property template))
-     :string
-     (let [repo (state/get-current-repo)
-           config {:editor-opts (new-text-editor-opts repo block property value editor-id)}]
-       [:div
-        (editor-box editor-args editor-id config)])
      nil)])
 
 (defn- property-value-inner
@@ -723,13 +687,12 @@
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query rum/static
-  [state block property value {:keys [container-id editor-id editing? editor-box editor-args
-                                      on-chosen]
+  [state block property value {:keys [container-id editor-id editing? on-chosen]
                                :as opts}]
   (let [property (model/sub-block (:db/id property))
         schema (:block/schema property)
         type (get schema :type :default)
-        editing? (or (and editing? (not= :string type))
+        editing? (or editing?
                      (state/sub-property-value-editing? editor-id)
                      (state/sub-editing? [container-id (:block/uuid block) (:block/uuid property)]))
         select-type? (select-type? property type)
@@ -764,7 +727,7 @@
         ;; :others
           [:div.flex.flex-1
            (if editing?
-             (property-editing block property value schema editor-box editor-args editor-id)
+             (property-editing block property schema)
              (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values < rum/static
@@ -836,9 +799,6 @@
          type (some-> schema (get :type :default))
          multiple-values? (db-property/many? property)
          empty-value? (= :logseq.property/empty-placeholder v)
-         editor-args {:block property
-                      :parent-block block
-                      :format :markdown}
          v (cond
              (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
              v
@@ -859,6 +819,5 @@
         (property-scalar-value block property v
                                (merge
                                 opts
-                                {:editor-args editor-args
-                                 :editor-id editor-id
+                                {:editor-id editor-id
                                  :dom-id dom-id})))])))

@@ -11,7 +11,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:string :keyword :map :coll :any :entity})
+  #{:keyword :map :coll :any :entity})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -40,9 +40,8 @@
   "Map of types to their set of allowed :schema attributes"
   (merge-with into
               (zipmap closed-value-property-types (repeat #{:values}))
-              (zipmap #{:string :number :url} (repeat #{:position}))
+              (zipmap #{:number :url} (repeat #{:position}))
               {:default #{:cardinality}
-               :string #{:cardinality}
                :number #{:cardinality}
                :date #{:cardinality}
                :url #{:cardinality}
@@ -50,7 +49,7 @@
                :template #{:classes}
                :checkbox #{}}))
 
-(assert (= (set user-built-in-property-types) (set (remove #{:string} (keys user-built-in-allowed-schema-attributes))))
+(assert (= (set user-built-in-property-types) (set (keys user-built-in-allowed-schema-attributes)))
         "Each user built in type should have an allowed schema attribute")
 
 ;; Property value validation
@@ -78,12 +77,6 @@
     (url? val)
     (when-let [ent (d/entity db val)]
       (url? (:block/content ent)))))
-
-(defn- string-entity?
-  [db id-or-value _opts]
-  (or (string? id-or-value)
-    (when-let [entity (d/entity db id-or-value)]
-      (string? (:block/content entity)))))
 
 (defn- number-entity?
   [db id-or-value {:keys [new-closed-value?]}]
@@ -118,9 +111,6 @@
   {:default  [:fn
               {:error/message "should be a text block"}
               text-entity?]
-   :string   [:fn
-              {:error/message "should be a string"}
-              string-entity?]
    :number   [:fn
               {:error/message "should be a number"}
               number-entity?]
@@ -156,7 +146,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :string :url :number :date :page :template :entity})
+  #{:default :url :number :date :page :template :entity})
 
 ;; Helper fns
 ;; ==========
