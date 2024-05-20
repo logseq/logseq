@@ -74,10 +74,6 @@
     :else
     block))
 
-(defn- with-tags
-  [db block]
-  (update block :block/tags (fn [tags] (d/pull-many db '[*] (map :db/id tags)))))
-
 (defn- mark-block-fully-loaded
   [b]
   (assoc b :block.temp/fully-loaded? true))
