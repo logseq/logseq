@@ -299,7 +299,7 @@
    (concat
     [:map
      [:db/ident user-property-ident]
-     [:block/schema {:optional true} user-property-schema]]
+     [:block/schema user-property-schema]]
     property-attrs
     page-attrs
     page-or-block-attrs)))
