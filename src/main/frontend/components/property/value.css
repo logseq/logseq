@@ -1,0 +1,3 @@
+.property-value-inner:hover {
+    @apply bg-gray-02 rounded transition-[background-color] duration-300;
+}

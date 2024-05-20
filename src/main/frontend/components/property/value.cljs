@@ -833,43 +833,38 @@
           (select-cp {:content-props nil}))))))
 
 (rum/defcs property-value < rum/reactive
-  (rum/local false ::hover?)
   [state block property v opts]
-  (let [*hover? (::hover? state)]
-    (ui/catch-error
-     (ui/block-error "Something wrong" {})
-     (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
-           editor-id (str dom-id "-editor")
-           schema (:block/schema property)
-           type (some-> schema (get :type :default))
-           multiple-values? (db-property/many? property)
-           empty-value? (= :logseq.property/empty-placeholder v)
-           editor-args {:block property
-                        :parent-block block
-                        :format :markdown}
-           v (cond
-               (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
-               v
-               multiple-values?
-               #{v}
-               (set? v)
-               (first v)
-               :else
-               v)]
-       [:div.property-value-inner.w-full
-        {:data-type type
-         :class (str (when empty-value? "empty-value")
-                     (when @*hover? " ls-hover-property-value bg-gray-02"))
-         :on-mouse-over #(reset! *hover? true)
-         :on-mouse-out #(reset! *hover? false)}
-        (cond
-          multiple-values?
-          (multiple-values block property v opts schema)
+  (ui/catch-error
+   (ui/block-error "Something wrong" {})
+   (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+         editor-id (str dom-id "-editor")
+         schema (:block/schema property)
+         type (some-> schema (get :type :default))
+         multiple-values? (db-property/many? property)
+         empty-value? (= :logseq.property/empty-placeholder v)
+         editor-args {:block property
+                      :parent-block block
+                      :format :markdown}
+         v (cond
+             (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
+             v
+             multiple-values?
+             #{v}
+             (set? v)
+             (first v)
+             :else
+             v)]
+     [:div.property-value-inner.w-full
+      {:data-type type
+       :class (when empty-value? "empty-value")}
+      (cond
+        multiple-values?
+        (multiple-values block property v opts schema)
 
-          :else
-          (property-scalar-value block property v
-                                 (merge
-                                  opts
-                                  {:editor-args editor-args
-                                   :editor-id editor-id
-                                   :dom-id dom-id})))]))))
+        :else
+        (property-scalar-value block property v
+                               (merge
+                                opts
+                                {:editor-args editor-args
+                                 :editor-id editor-id
+                                 :dom-id dom-id})))])))
