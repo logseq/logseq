@@ -261,13 +261,7 @@
       {:data-html2canvas-ignore true} ; excludes title component from image export
       [:div.whiteboard-page-title
        {:style {:color "var(--ls-primary-text-color)"
-                :user-select "none"}
-        :on-context-menu (fn [e]
-                           (util/stop e)
-                           (common-handler/show-custom-context-menu!
-                            e
-                            (content/page-title-custom-context-menu-content page))
-                           (state/set-state! :page-title/context nil))}
+                :user-select "none"}}
        (page/page-title page {:*hover? (atom false)})]
 
       [:div.whiteboard-page-refs
