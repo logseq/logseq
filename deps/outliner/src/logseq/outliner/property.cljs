@@ -14,7 +14,8 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [malli.error :as me]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [clojure.set :as set]))
 
 ;; schema -> type, cardinality, object's class
 ;;           min, max -> string length, number range, cardinality size limit
@@ -138,7 +139,7 @@
                                  (build-property-value-tx-data property property-id v)) properties)))
             many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
         (when (seq tx-data)
-          (d/transact! conn tx-data {:outliner-op :update-property
+          (ldb/transact! conn tx-data {:outliner-op :update-property
                                      :property-id (:db/id property)
                                      :many->one? many->one?}))
         property)
@@ -147,7 +148,7 @@
             db-ident' (ensure-unique-db-ident @conn db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
-        (d/transact! conn
+        (ldb/transact! conn
                      [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
                      {:outliner-op :new-property})
         (d/entity @conn db-ident')))))
@@ -174,12 +175,12 @@
               e' (if e
                    (do
                      (when-not (contains? (:block/type e) "tag")
-                       (d/transact! conn [{:db/id (:db/id e)
+                       (ldb/transact! conn [{:db/id (:db/id e)
                                            :block/type (set (conj (:block/type e) "class"))}]))
                      e)
                    (let [m (assoc (page-name->map @conn tag true)
                                   :block/type #{"class"})]
-                     (d/transact! conn [m])
+                     (ldb/transact! conn [m])
                      m))]
           (:db/id e'))))))
 
@@ -207,7 +208,7 @@
                                    :type :warning}})))
       (let [status? (= :logseq.task/status (:db/ident property))
             tx-data (build-property-value-tx-data block property-id new-value status?)]
-        (d/transact! conn tx-data {:outliner-op :save-block})))))
+        (ldb/transact! conn tx-data {:outliner-op :save-block})))))
 
 (defn create-property-text-block!
   "Creates a property value block for the given property and value. Adds it to
@@ -223,7 +224,7 @@
                               (int? template-id)
                               (assoc :block/tags template-id
                                      :logseq.property/created-from-template template-id))]
-        (d/transact! conn [new-value-block] {:outliner-op :insert-blocks})
+        (ldb/transact! conn [new-value-block] {:outliner-op :insert-blocks})
         (let [property-id (:db/ident property)]
           (when (and property-id block)
             (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
@@ -276,7 +277,7 @@
         v' (or (resolve-tag! conn v) v)
         db-attribute? (contains? db-property/db-attribute-properties property-id)]
     (if db-attribute?
-      (d/transact! conn [{:db/id (:db/id block) property-id v'}]
+      (ldb/transact! conn [{:db/id (:db/id block) property-id v'}]
                    {:outliner-op :save-block})
       (let [new-value (cond
                          (= v' :logseq.property/empty-placeholder)
@@ -313,36 +314,43 @@
                  (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
              block-eids)]
     (when (seq txs)
-      (d/transact! conn txs {:outliner-op :save-block}))))
+      (ldb/transact! conn txs {:outliner-op :save-block}))))
 
 (defn batch-remove-property!
   [conn block-ids property-id]
-  (let [block-eids (map ->eid block-ids)]
-    (when-let [property (d/entity @conn property-id)]
-      (let [txs (mapcat
-                 (fn [eid]
-                   (when-let [block (d/entity @conn eid)]
+  (let [block-eids (map ->eid block-ids)
+        blocks (keep (fn [id] (d/entity @conn id)) block-eids)
+        block-id-set (set (map :db/id blocks))]
+    (when (seq blocks)
+      (when-let [property (d/entity @conn property-id)]
+        (let [txs (mapcat
+                   (fn [block]
                      (let [value (get block property-id)
                            block-value? (= :default (get-in property [:block/schema :type] :default))
                            property-block (when block-value? (d/entity @conn (:db/id value)))
+                           blocks-with-this-value (and block-value?
+                                                       (set (map :e (d/datoms @conn :avet (:db/ident property) (:db/id value)))))
+                           ;; Delete property value block iff it's not a closed value and it's no longer used by other blocks
                            retract-blocks-tx (when (and property-block
-                                                        (some? (get property-block :logseq.property/created-from-property)))
+                                                        (some? (get property-block :logseq.property/created-from-property))
+                                                        (not (contains? (:block/type value) "closed value"))
+                                                        (empty? (set/difference blocks-with-this-value block-id-set)))
                                                (let [txs-state (atom [])]
                                                  (outliner-core/delete-block conn txs-state property-block {:children? true})
                                                  @txs-state))]
                        (concat
-                        [[:db/retract eid (:db/ident property)]]
-                        retract-blocks-tx))))
-                 block-eids)]
-        (when (seq txs)
-          (d/transact! conn txs {:outliner-op :save-block}))))))
+                        [[:db/retract (:db/id block) (:db/ident property)]]
+                        retract-blocks-tx)))
+                   blocks)]
+          (when (seq txs)
+            (ldb/transact! conn txs {:outliner-op :save-block})))))))
 
 (defn remove-block-property!
   [conn eid property-id]
   (let [eid (->eid eid)]
     (if (contains? db-property/db-attribute-properties property-id)
       (when-let [block (d/entity @conn eid)]
-        (d/transact! conn
+        (ldb/transact! conn
                      [[:db/retract (:db/id block) property-id]]
                      {:outliner-op :save-block}))
       (batch-remove-property! conn [eid] property-id))))
@@ -353,7 +361,7 @@
   (when-let [property (d/entity @conn property-id)]
     (let [block (d/entity @conn block-eid)]
       (when (and block (not= property-id (:db/ident block)) (db-property/many? property))
-        (d/transact! conn
+        (ldb/transact! conn
                      [[:db/retract (:db/id block) property-id property-value]]
                      {:outliner-op :save-block})))))
 
@@ -361,7 +369,7 @@
   "Notice this works only if the value itself if a block (property type should be either :default or :template)"
   [conn block-id property-id collapse?]
   (let [f (if collapse? :db/add :db/retract)]
-    (d/transact! conn
+    (ldb/transact! conn
                  [[f block-id :block/collapsed-properties property-id]]
                  {:outliner-op :save-block})))
 
@@ -492,7 +500,7 @@
           nil
 
           :else
-          (d/transact! conn
+          (ldb/transact! conn
                        (build-closed-value-tx @conn property property-type resolved-value opts)
                        {:outliner-op :save-block}))))))
 
@@ -511,7 +519,7 @@
                                             :block/closed-value-property (:db/id property)})
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
-              (d/transact! conn (cons property-tx value-property-tx)
+              (ldb/transact! conn (cons property-tx value-property-tx)
                            {:outliner-op :save-blocks}))))))))
 
 (defn delete-closed-value!
@@ -534,7 +542,7 @@
       (let [tx-data [[:db/retractEntity (:db/id value-block)]
                      (outliner-core/block-with-updated-at
                       {:db/id property-id})]]
-        (d/transact! conn tx-data)))))
+        (ldb/transact! conn tx-data)))))
 
 (defn get-property-block-created-block
   "Get the root block and property that created this property block."
@@ -547,7 +555,7 @@
   [conn class-id property-id]
   (when-let [class (d/entity @conn class-id)]
     (if (contains? (:block/type class) "class")
-      (d/transact! conn
+      (ldb/transact! conn
                    [[:db/add (:db/id class) :class/schema.properties property-id]]
                    {:outliner-op :save-block})
       (throw (ex-info "Can't add a property to a block that isn't a class"
@@ -559,5 +567,5 @@
     (when (contains? (:block/type class) "class")
       (when-let [property (d/entity @conn property-id)]
         (when-not (ldb/built-in-class-property? class property)
-          (d/transact! conn [[:db/retract (:db/id class) :class/schema.properties property-id]]
+          (ldb/transact! conn [[:db/retract (:db/id class) :class/schema.properties property-id]]
                        {:outliner-op :save-block}))))))
