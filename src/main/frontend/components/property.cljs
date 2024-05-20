@@ -435,7 +435,7 @@
                      (reset! *property-key nil))
                    state)}
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? in-block-container? page?]
+  [state entity *property-key *property-value {:keys [class-schema? in-block-container? page? page-configure?]
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         *property-schema (::property-schema state)
@@ -475,12 +475,22 @@
 
        (let [on-chosen (fn [{:keys [value label]}]
                          (reset! *property-key (if (uuid? value) label value))
-                         (when *show-new-property-config?
-                           (reset! *show-new-property-config? true))
-                         ;; (p/let [result (add-property-from-dropdown entity value opts)]
-                         ;;   (when (and (true? result) *show-new-property-config?)
-                         ;;     (reset! *show-new-property-config? true)))
-                         )
+                         (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
+                           (when (and *show-new-property-config? (not property))
+                             (reset! *show-new-property-config? true))
+                           (when property
+                             (let [add-class-property? (and (contains? (:block/type entity) "class") class-schema?)]
+                               (p/do!
+                                (pv/exit-edit-property)
+                                (cond
+                                  add-class-property?
+                                  (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
+                                                                                     :exit-edit? page-configure?})
+
+                                  (and (= :default (get-in property [:block/schema :type]))
+                                       (not (seq (:property/closed-values property))))
+                                  (pv/<create-new-block! entity property "")))))))
+
              input-opts {:on-blur (fn [] (pv/exit-edit-property))
                          :on-key-down
                          (fn [e]
