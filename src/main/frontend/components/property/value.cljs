@@ -285,7 +285,7 @@
                  (seq classes)
                  (mapcat
                   (fn [class]
-                    (if (= :logseq.class/base (:db/ident class))
+                    (if (= :logseq.class/Root (:db/ident class))
                       (->> (map first (model/get-all-classes repo))
                            (remove #{"Root class"}))
                       (some->> (model/get-class-objects repo (:db/id class))
@@ -300,7 +300,7 @@
                distinct
                (remove (fn [p] (or (ldb/hidden-page? p) (util/uuid-string? (str p))))))
         options (map (fn [p] {:value p}) pages)
-        classes' (remove (fn [class] (= :logseq.class/base (:db/ident class))) classes)
+        classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
                (merge
                 opts

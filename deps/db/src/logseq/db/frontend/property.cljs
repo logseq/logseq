@@ -35,7 +35,7 @@
                           :schema {:type :page
                                    :cardinality :many
                                    :public? true
-                                   :classes #{:logseq.class/base}}}
+                                   :classes #{:logseq.class/Root}}}
    :logseq.property/page-tags {:original-name "pageTags"
                                :schema {:type :page
                                         :public? true

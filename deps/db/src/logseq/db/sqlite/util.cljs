@@ -113,8 +113,8 @@
    (merge (cond->
            {:block/type "class"
             :block/format :markdown}
-            (not= (:db/ident block) :logseq.class/base)
-            (assoc :class/parent :logseq.class/base))
+            (not= (:db/ident block) :logseq.class/Root)
+            (assoc :class/parent :logseq.class/Root))
           block)))
 
 (defn build-new-page
