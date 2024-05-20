@@ -42,7 +42,7 @@
              (->> (keep :db/ident tx)
                   frequencies
                   (keep (fn [[k v]] (when (> v 1) k)))
-                  (remove #{:logseq.class/base})
+                  (remove #{:logseq.class/Root})
                   seq)]
     (throw (ex-info (str "The following :db/idents are not unique and clobbered each other: "
                          (vec conflicting-idents))
@@ -56,7 +56,7 @@
                       (kv :schema/version db-schema/version)
                       ;; Empty property value used by db.type/ref properties
                       {:db/ident :logseq.property/empty-placeholder}
-                      {:db/ident :logseq.class/base}]
+                      {:db/ident :logseq.class/Root}]
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content

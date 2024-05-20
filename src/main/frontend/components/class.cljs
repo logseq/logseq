@@ -64,7 +64,7 @@
       [:div.property-configure.grid.gap-2
        (when show-title? [:h1.title.mb-4 "Configure class"])
 
-       (when-not (= (:db/ident page) :logseq.class/base)
+       (when-not (= (:db/ident page) :logseq.class/Root)
          [:div.grid.grid-cols-5.gap-1.items-center.class-parent
           [:div.col-span-2 "Parent class:"]
           (if config/publishing?
