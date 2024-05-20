@@ -52,8 +52,10 @@
              (if first-child?
                (when-let [parent (:block/parent target-block)]
                  (outliner-op/move-blocks! blocks' parent false))
-               (when-let [before-node (ldb/get-left-sibling target-block)]
-                 (outliner-op/move-blocks! blocks' before-node true))))
+               (if-let [before-node (ldb/get-left-sibling target-block)]
+                 (outliner-op/move-blocks! blocks' before-node true)
+                 (when-let [parent (:block/parent target-block)]
+                   (outliner-op/move-blocks! blocks' parent false)))))
            (outliner-op/move-blocks! blocks' target-block (not nested?)))))
 
       :else
