@@ -176,7 +176,8 @@
   (when block
     (state/clear-edit!)
     (let [container-id (or container-id
-                           @(:editor/container-id @state/state))]
+                           @(:editor/container-id @state/state)
+                           :unknown-container)]
       (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range {:container-id container-id}))
     (mark-last-input-time! repo)))
 
