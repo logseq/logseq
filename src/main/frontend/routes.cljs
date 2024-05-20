@@ -16,8 +16,7 @@
             [frontend.components.imports :as imports]
             [frontend.config :as config]
             [logseq.db :as ldb]
-            [frontend.db :as db]
-            [rum.core :as rum]))
+            [frontend.db :as db]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes

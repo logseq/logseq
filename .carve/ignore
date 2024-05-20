@@ -86,3 +86,5 @@ frontend.db-worker/init
 frontend.worker.rtc.asset-sync/<loop-for-assets-sync
 ;; Future use?
 frontend.worker.rtc.hash/hash-blocks
+;; Repl fn
+frontend.rum/use-atom-in

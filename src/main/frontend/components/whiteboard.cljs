@@ -1,14 +1,12 @@
 (ns frontend.components.whiteboard
   "Whiteboard related components"
   (:require [cljs.math :as math]
-            [frontend.components.content :as content]
             [frontend.components.onboarding.quick-tour :as quick-tour]
             [frontend.components.page :as page]
             [frontend.components.reference :as reference]
             [frontend.context.i18n :refer [t]]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as model]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.modules.shortcut.core :as shortcut]
