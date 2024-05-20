@@ -538,7 +538,10 @@
 
             (cond
               (and db-based? (not block?))
-              (db-page/page-info page (::show-page-info? state))
+              (db-page/page-info page
+                                 (if (ldb/class? page)
+                                   (atom true)
+                                   (::show-page-info? state)))
 
               (and (not db-based?) (not block?))
               [:div.pb-2])

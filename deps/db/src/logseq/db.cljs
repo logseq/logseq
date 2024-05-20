@@ -507,6 +507,10 @@
   (when db (:graph/uuid (d/entity db :logseq.kv/graph-uuid))))
 
 (def page? sqlite-util/page?)
+(defn class?
+  [entity]
+  (contains? (:block/type entity) "class"))
+
 (def db-based-graph? entity-plus/db-based-graph?)
 
 ;; File based fns
