@@ -133,7 +133,35 @@
                  (js/Date. (date/journal-title->long title)))
         initial-day (some-> value' (.getTime) (js/Date.))
         initial-month (when value'
-                        (js/Date. (.getFullYear value') (.getMonth value')))]
+                        (js/Date. (.getFullYear value') (.getMonth value')))
+        content-fn
+        (fn [{:keys [id]}]
+          (let [select-handler!
+                (fn [^js d]
+                     ;; force local to UTC
+                  (when d
+                    (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
+                      (let [journal (date/js-date->journal-title gd)]
+                        (p/do!
+                         (shui/popup-hide! id)
+                         (when-not (db/get-case-page journal)
+                           (page-handler/<create! journal {:redirect? false
+                                                           :create-first-block? false}))
+                         (when (fn? on-change)
+                           (on-change (db/get-case-page journal)))
+                         (exit-edit-property))))))]
+            (shui/calendar
+             (cond->
+              {:mode "single"
+               :initial-focus true
+               :selected initial-day
+               :class-names {:months ""}
+               :on-day-key-down (fn [^js d _ ^js e]
+                                  (when (= "Enter" (.-key e))
+                                    (select-handler! d)))
+               :on-select select-handler!}
+               initial-month
+               (assoc :default-month initial-month)))))]
     (rum/use-effect!
      (fn []
        (when editing?
@@ -141,45 +169,27 @@
                  (.focus))))
      [])
     [:div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
-     (when page
+     (cond-> {}
+       (not multiple-values?)
+       ;; FIXME: min-h-6 not works
+       (assoc :class "jtrigger min-h-[24px]"
+              :ref *trigger-ref
+              :on-click (fn [e]
+                          (when-not config/publishing?
+                            (shui/popup-show! (.-target e) content-fn
+                                              {:align "start" :auto-focus? true})))))
+     (if page
        (when-let [page-cp (state/get-component :block/page-cp)]
          (rum/with-key
            (page-cp {:disable-preview? true
                      :hide-close-button? true} page)
-           (:db/id page))))
+           (:db/id page)))
+       (when-not multiple-values?
+         (property-empty-btn-value)))
 
-     (let [content-fn
-           (fn [{:keys [id]}]
-             (let [select-handler!
-                   (fn [^js d]
-                     ;; force local to UTC
-                     (when d
-                       (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
-                         (let [journal (date/js-date->journal-title gd)]
-                           (p/do!
-                            (shui/popup-hide! id)
-                            (when-not (db/get-case-page journal)
-                              (page-handler/<create! journal {:redirect? false
-                                                              :create-first-block? false}))
-                            (when (fn? on-change)
-                              (on-change (db/get-case-page journal)))
-                            (exit-edit-property))))))]
-               (shui/calendar
-                (cond->
-                 {:mode "single"
-                  :initial-focus true
-                  :selected initial-day
-                  :class-names {:months ""}
-                  :on-day-key-down (fn [^js d _ ^js e]
-                                     (when (= "Enter" (.-key e))
-                                       (select-handler! d)))
-                  :on-select select-handler!}
-                  initial-month
-                  (assoc :default-month initial-month)))))]
-
+     (when multiple-values?
        (shui/button
-        {:class (str "jtrigger h-6" (when-not value " empty-btn")
-                     (when-not multiple-values? " justify-start flex-1"))
+        {:class (str "jtrigger h-6" (when-not value " empty-btn"))
          :ref *trigger-ref
          :variant :text
          :size :sm
@@ -190,9 +200,7 @@
                          (util/stop e)
                          (shui/popup-show! (.-target e) content-fn
                                            {:align "start" :auto-focus? true}))))}
-        (if (and (nil? value) (not multiple-values?))
-          "Empty"
-          (ui/icon (if multiple-values? "calendar-plus" "calendar") {:size 16}))))]))
+        (ui/icon "calendar-plus" {:size 16})))]))
 
 
 (rum/defc property-value-date-picker
@@ -725,7 +733,7 @@
          :else
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
 
-(rum/defcs property-scalar-value < rum/reactive db-mixins/query
+(rum/defcs property-scalar-value < rum/reactive db-mixins/query rum/static
   [state block property value {:keys [container-id editor-id editing? editor-box editor-args
                                       on-chosen]
                                :as opts}]
@@ -770,7 +778,7 @@
              (property-editing block property value schema editor-box editor-args editor-id)
              (property-value-inner block property value opts))])))))
 
-(rum/defc multiple-values
+(rum/defc multiple-values < rum/static
   [block property v {:keys [on-chosen dropdown? editing? block-cp editor-box]
                      :or {dropdown? true}
                      :as opts} schema]
@@ -836,39 +844,44 @@
              (values-cp toggle-fn)])
           (select-cp {:content-props nil}))))))
 
-(rum/defc property-value < rum/reactive
-  [block property v opts]
-  (ui/catch-error
-   (ui/block-error "Something wrong" {})
-   (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
-         editor-id (str dom-id "-editor")
-         schema (:block/schema property)
-         type (some-> schema (get :type :default))
-         multiple-values? (db-property/many? property)
-         empty-value? (= :logseq.property/empty-placeholder v)
-         editor-args {:block property
-                      :parent-block block
-                      :format :markdown}
-         v (cond
-             (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
-             v
-             multiple-values?
-             #{v}
-             (set? v)
-             (first v)
-             :else
-             v)]
-     [:div.property-value-inner.w-full
-      {:data-type type
-       :class (when empty-value? "empty-value")}
-      (cond
-        multiple-values?
-        (multiple-values block property v opts schema)
+(rum/defcs property-value < rum/reactive
+  (rum/local false ::hover?)
+  [state block property v opts]
+  (let [*hover? (::hover? state)]
+    (ui/catch-error
+     (ui/block-error "Something wrong" {})
+     (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+           editor-id (str dom-id "-editor")
+           schema (:block/schema property)
+           type (some-> schema (get :type :default))
+           multiple-values? (db-property/many? property)
+           empty-value? (= :logseq.property/empty-placeholder v)
+           editor-args {:block property
+                        :parent-block block
+                        :format :markdown}
+           v (cond
+               (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
+               v
+               multiple-values?
+               #{v}
+               (set? v)
+               (first v)
+               :else
+               v)]
+       [:div.property-value-inner.w-full
+        {:data-type type
+         :class (str (when empty-value? "empty-value")
+                     (when @*hover? " ls-hover-property-value bg-gray-02"))
+         :on-mouse-over #(reset! *hover? true)
+         :on-mouse-out #(reset! *hover? false)}
+        (cond
+          multiple-values?
+          (multiple-values block property v opts schema)
 
-        :else
-        (property-scalar-value block property v
-                               (merge
-                                opts
-                                {:editor-args editor-args
-                                 :editor-id editor-id
-                                 :dom-id dom-id})))])))
+          :else
+          (property-scalar-value block property v
+                                 (merge
+                                  opts
+                                  {:editor-args editor-args
+                                   :editor-id editor-id
+                                   :dom-id dom-id})))]))))

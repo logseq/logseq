@@ -570,6 +570,7 @@
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e true))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
+      :on-click (fn [e] (util/stop e))
       :on-pointer-down (fn [e]
                          (if breadcrumb?
                            (.preventDefault e)

@@ -235,7 +235,7 @@
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]
                            (d/datoms db :eavt (:db/id e))))
-                       [:logseq.kv/db-type :logseq.kv/graph-uuid])
+                       [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
         latest-journals (get-latest-journals db 3)
         all-files (get-all-files db)
