@@ -479,7 +479,8 @@
                            (when (and *show-new-property-config? (not property))
                              (reset! *show-new-property-config? true))
                            (when property
-                             (let [add-class-property? (and (contains? (:block/type entity) "class") class-schema?)]
+                             (let [add-class-property? (and (contains? (:block/type entity) "class") class-schema?)
+                                   type (get-in property [:block/schema :type])]
                                (p/do!
                                 (pv/exit-edit-property)
                                 (cond
@@ -487,9 +488,14 @@
                                   (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
                                                                                      :exit-edit? page-configure?})
 
-                                  (and (= :default (get-in property [:block/schema :type]))
+                                  (and (= :default type)
                                        (not (seq (:property/closed-values property))))
-                                  (pv/<create-new-block! entity property "")))))))
+                                  (pv/<create-new-block! entity property "")
+
+                                  (not= :default type)
+                                  (property-handler/set-block-property! (state/get-current-repo) (:block/uuid entity)
+                                                                        (:db/ident property)
+                                                                        :logseq.property/empty-placeholder)))))))
 
              input-opts {:on-blur (fn [] (pv/exit-edit-property))
                          :on-key-down
