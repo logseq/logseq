@@ -703,33 +703,54 @@
                         "col-span-3 inline-grid")}
               (pv/property-value block property v opts)]))]))))
 
+(rum/defcs ordered-properties < rum/reactive
+  {:init (fn [state]
+           (assoc state ::properties-order (atom (mapv first (second (:rum/args state))))))
+   :should-update (fn [old-state new-state]
+                    (let [[_ p1 opts1] (:rum/args old-state)
+                          [_ p2 opts2] (:rum/args new-state)
+                          p1-set (set (map first p1))
+                          p2-set (set (map first p2))]
+                      (when-not (= p1-set p2-set)
+                        (reset! (::properties-order new-state) (mapv first p2)))
+                      (not= [p1-set opts1] [p2-set opts2])))}
+  [state block properties opts]
+  (let [*properties-order (::properties-order state)
+        properties-order (rum/react *properties-order)
+        m (zipmap (map first properties) (map second properties))
+        properties (mapv (fn [k] [k (get m k)]) properties-order)
+        choices (map (fn [[k v]]
+                       {:id (subs (str k) 1)
+                        :value k
+                        :content (property-cp block k v opts)}) properties)]
+    (dnd/items choices
+               {:on-drag-end (fn [properties-order {:keys [active-id over-id direction]}]
+                               (let [move-down? (= direction :down)
+                                     over (db/entity (keyword over-id))
+                                     active (db/entity (keyword active-id))
+                                     over-order (:block/order over)
+                                     new-order (if move-down?
+                                                 (let [next-order (db-order/get-next-order (db/get-db) nil (:db/id over))]
+                                                   (db-order/gen-key over-order next-order))
+                                                 (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
+                                                   (db-order/gen-key prev-order over-order)))]
+                                 ;; Reset *properties-order without waiting for `db/transact!` so that the UI will not be
+                                 ;; converted back to the old order and then the new order.
+                                 (reset! *properties-order properties-order)
+                                 (db/transact! (state/get-current-repo)
+                                               [{:db/id (:db/id active)
+                                                 :block/order new-order}
+                                                (outliner-core/block-with-updated-at
+                                                 {:db/id (:db/id block)})]
+                                               {:outliner-op :save-block})))})))
+
 (rum/defc properties-section < rum/reactive db-mixins/query
   [block properties opts]
   (when (seq properties)
       ;; Sort properties by :block/order
     (let [properties' (sort-by (fn [[k _v]]
-                                 (:block/order (db/entity k))) properties)
-          choices (map (fn [[k v]]
-                         {:id (subs (str k) 1)
-                          :value k
-                          :content (property-cp block k v opts)}) properties')]
-      (dnd/items choices
-                 {:on-drag-end (fn [_ {:keys [active-id over-id direction]}]
-                                 (let [move-down? (= direction :down)
-                                       over (db/entity (keyword over-id))
-                                       active (db/entity (keyword active-id))
-                                       over-order (:block/order over)
-                                       new-order (if move-down?
-                                                   (let [next-order (db-order/get-next-order (db/get-db) nil (:db/id over))]
-                                                     (db-order/gen-key over-order next-order))
-                                                   (let [prev-order (db-order/get-prev-order (db/get-db) nil (:db/id over))]
-                                                     (db-order/gen-key prev-order over-order)))]
-                                   (db/transact! (state/get-current-repo)
-                                                 [{:db/id (:db/id active)
-                                                   :block/order new-order}
-                                                  (outliner-core/block-with-updated-at
-                                                   {:db/id (:db/id block)})]
-                                                 {:outliner-op :save-block})))}))))
+                                 (:block/order (db/entity k))) properties)]
+      (ordered-properties block properties' opts))))
 
 (defn- async-load-classes!
   [block]
