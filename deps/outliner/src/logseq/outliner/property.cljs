@@ -134,7 +134,8 @@
         (when (seq tx-data)
           (d/transact! conn tx-data {:outliner-op :update-property
                                      :property-id (:db/id property)
-                                     :many->one? many->one?})))
+                                     :many->one? many->one?}))
+        property)
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
             db-ident' (ensure-unique-db-ident @conn db-ident)]
@@ -142,7 +143,8 @@
                 (prn "property-id: " property-id ", property-name: " property-name))
         (d/transact! conn
                      [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
-                     {:outliner-op :new-property})))))
+                     {:outliner-op :new-property})
+        (d/entity @conn db-ident')))))
 
 (defn- validate-property-value
   [schema value]

@@ -112,7 +112,7 @@
   (let [opts' (assoc opts
                      :transact-opts {:conn conn}
                      :local-tx? true)
-        *insert-result (atom nil)]
+        *result (atom nil)]
     (outliner-tx/transact!
      opts'
      (doseq [[op args] ops]
@@ -125,7 +125,7 @@
          (let [[blocks target-block-id opts] args]
            (when-let [target-block (d/entity @conn target-block-id)]
              (let [result (outliner-core/insert-blocks! repo conn blocks target-block opts)]
-               (reset! *insert-result result))))
+               (reset! *result result))))
 
          :delete-blocks
          (let [[block-ids opts] args
@@ -153,7 +153,7 @@
 
          ;; properties
          :upsert-property
-         (apply outliner-property/upsert-property! conn args)
+         (reset! *result (apply outliner-property/upsert-property! conn args))
 
          :set-block-property
          (apply outliner-property/set-block-property! conn args)
@@ -191,4 +191,4 @@
          :add-existing-values-to-closed-values
          (apply outliner-property/add-existing-values-to-closed-values! conn args))))
 
-    @*insert-result))
+    @*result))

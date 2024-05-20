@@ -113,13 +113,44 @@
       (let [repo (state/get-current-repo)]
         (if (and class? class-schema?)
           (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
-          (property-handler/remove-block-property! repo (:block/uuid block)  (:db/id property)))))))
+          (property-handler/remove-block-property! repo (:block/uuid block)  (:db/ident property)))))))
+
+(defn- <add-property-from-dropdown
+  "Adds an existing or new property from dropdown. Used from a block or page context.
+   For pages, used to add both schema properties or properties for a page"
+  [entity property-uuid-or-name schema {:keys [class-schema? page-configure?]}]
+  (p/let [repo (state/get-current-repo)
+          ;; Both conditions necessary so that a class can add its own page properties
+          add-class-property? (and (contains? (:block/type entity) "class") page-configure? class-schema?)
+          result (when (uuid? property-uuid-or-name)
+                   (db-async/<get-block repo property-uuid-or-name {:children? false}))
+          ;; In block context result is in :block
+          property (some-> (if (:block result) (:db/id (:block result)) (:db/id result))
+                           db/entity)]
+    ;; existing property selected or entered
+    (if property
+      (do
+        (when (and (not (get-in property [:block/schema :public?]))
+                   (ldb/built-in? property))
+          (notification/show! "This is a private built-in property that can't be used." :error))
+        property)
+      ;; new property entered
+      (if (db-property/valid-property-name? property-uuid-or-name)
+        (if add-class-property?
+          (p/let [result (db-property-handler/upsert-property! nil schema {:property-name property-uuid-or-name})
+                  property (db/entity (:db/id result))
+                  _ (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema? :exit-edit? false})]
+            property)
+          (p/let [result (db-property-handler/upsert-property! nil schema {:property-name property-uuid-or-name})]
+            (db/entity (:db/id result))))
+        (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
 
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
   [property {:keys [*property-name *property-schema built-in? disabled?
                     show-type-change-hints? in-block-container? block *show-new-property-config?
-                    default-open?]}]
+                    default-open? page-configure? class-schema?]
+             :as opts}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
         schema-types (->> (concat db-property-type/user-built-in-property-types
@@ -148,22 +179,24 @@
             (let [schema (or (and *property-schema @*property-schema)
                              (update-schema-fn property-schema))
                   repo (state/get-current-repo)]
-              (p/do!
-               (when block
-                 (pv/exit-edit-property))
-               (when *show-new-property-config?
-                 (reset! *show-new-property-config? false))
-               (components-pu/update-property! property property-name schema)
-               (when block
-                 (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
-                   (state/set-state! :editor/editing-property-value-id {id true}))
-                 (if (= type :default)
-                   (pv/<create-new-block! block property "")
-                   (property-handler/set-block-property! repo (:block/uuid block)
-                                                         (:db/ident (db/get-case-page property-name))
-                                                         :logseq.property/empty-placeholder)))))))}
+              (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
+                      property (or property' property)
+                      add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
+                (p/do!
+                 (when *show-new-property-config? (reset! *show-new-property-config? false))
+                 (when block (pv/exit-edit-property))
+                 (when block
+                   (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
+                     (state/set-state! :editor/editing-property-value-id {id true}))
+                   (if (= type :default)
+                     (when (and (not add-class-property?)
+                                (not (seq (:property/closed-values property))))
+                       (pv/<create-new-block! block property ""))
+                     (property-handler/set-block-property! repo (:block/uuid block)
+                                                           (:db/ident (db/get-case-page property-name))
+                                                           :logseq.property/empty-placeholder))))))))}
 
-        ;; only set when in property configure modal
+;; only set when in property configure modal
         (and *property-name (:type property-schema))
         (assoc :default-value (name (:type property-schema))))
       (shui/select-trigger
@@ -364,52 +397,6 @@
                      :disabled disabled?
                      :default-value description})])]]))]]))))
 
-(defn- add-property-from-dropdown
-  "Adds an existing or new property from dropdown. Used from a block or page context.
-   For pages, used to add both schema properties or properties for a page"
-  [entity property-uuid-or-name {:keys [class-schema? page-configure?]}]
-  (p/let [repo (state/get-current-repo)
-          ;; Both conditions necessary so that a class can add its own page properties
-          add-class-property? (and (contains? (:block/type entity) "class") class-schema?)
-          result (when (uuid? property-uuid-or-name)
-                   (db-async/<get-block repo property-uuid-or-name {:children? false}))
-          ;; In block context result is in :block
-          property (some-> (if (:block result) (:db/id (:block result)) (:db/id result))
-                           db/entity)]
-    ;; existing property selected or entered
-    (if property
-      (cond
-        (and (not (get-in property [:block/schema :public?]))
-             (ldb/built-in? property))
-        (do (notification/show! "This is a private built-in property that can't be used." :error)
-            (pv/exit-edit-property))
-
-        (and (not add-class-property?)
-             (= :default (get-in property [:block/schema :type]))
-             (not (seq (:property/closed-values property))))
-        (do
-          (pv/<create-new-block! entity property "")
-          nil)
-
-        :else
-        (when add-class-property?
-          (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
-                                                             ;; Only enter property names from sub-modal as inputting
-                                                             ;; property values is buggy in sub-modal
-                                                             :exit-edit? page-configure?})))
-      ;; new property entered
-      (if (db-property/valid-property-name? property-uuid-or-name)
-        (if (and (contains? (:block/type entity) "class") page-configure? class-schema?)
-          (p/let [_ (db-property-handler/upsert-property! nil {:type :default} {:property-name property-uuid-or-name})
-                  new-property-id (:db/ident (ldb/get-case-page (db/get-db repo) property-uuid-or-name))]
-            (pv/<add-property! entity new-property-id "" {:class-schema? class-schema? :exit-edit? false})
-            true)
-          (p/do!
-           (db-property-handler/upsert-property! nil {:type :default} {:property-name property-uuid-or-name})
-           true))
-        (do (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)
-            (pv/exit-edit-property))))))
-
 (rum/defc property-select
   [exclude-properties on-chosen input-opts]
   (let [[properties set-properties!] (rum/use-state nil)
@@ -442,6 +429,7 @@
 
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
+  (rum/local {} ::property-schema)
   {:will-unmount (fn [state]
                    (when-let [*property-key (nth (:rum/args state) 1)]
                      (reset! *property-key nil))
@@ -450,6 +438,7 @@
   [state entity *property-key *property-value {:keys [class-schema? in-block-container? page?]
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
+        *property-schema (::property-schema state)
         entity-properties (->> (keys (:block/properties entity))
                                (map #(:block/original-name (db/entity %)))
                                (remove nil?)
@@ -472,23 +461,27 @@
           [:div.flex.flex-row.items-center.col-span-2.property-key
            [:span.bullet-container.cursor [:span.bullet]]
            [:div {:style {:padding-left 9}} @*property-key]]
-          (when property
-            [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
-             (if @*show-new-property-config?
-               (schema-type property {:default-open? true
-                                      :in-block-container? in-block-container?
-                                      :block entity
-                                      :*show-new-property-config? *show-new-property-config?})
-               (when-not class-schema?
-                 (pv/property-value entity property @*property-value (assoc opts :editing? true))))])])
+          [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
+           (if @*show-new-property-config?
+             (schema-type property (merge opts
+                                          {:*property-name *property-key
+                                           :*property-schema *property-schema
+                                           :default-open? true
+                                           :in-block-container? in-block-container?
+                                           :block entity
+                                           :*show-new-property-config? *show-new-property-config?}))
+             (when (and property (not class-schema?))
+               (pv/property-value entity property @*property-value (assoc opts :editing? true))))]])
 
        (let [on-chosen (fn [{:keys [value label]}]
                          (reset! *property-key (if (uuid? value) label value))
-                         (p/let [result (add-property-from-dropdown entity value opts)]
-                           (when (and (true? result) *show-new-property-config?)
-                             (reset! *show-new-property-config? true))))
-             input-opts {:on-blur (fn []
-                                    (pv/exit-edit-property))
+                         (when *show-new-property-config?
+                           (reset! *show-new-property-config? true))
+                         ;; (p/let [result (add-property-from-dropdown entity value opts)]
+                         ;;   (when (and (true? result) *show-new-property-config?)
+                         ;;     (reset! *show-new-property-config? true)))
+                         )
+             input-opts {:on-blur (fn [] (pv/exit-edit-property))
                          :on-key-down
                          (fn [e]
                            (case (util/ekey e)
