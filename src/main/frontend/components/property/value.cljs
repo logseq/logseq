@@ -161,46 +161,41 @@
                                     (select-handler! d)))
                :on-select select-handler!}
                initial-month
-               (assoc :default-month initial-month)))))]
+               (assoc :default-month initial-month)))))
+        open-popup! (fn [e]
+                      (util/stop e)
+                      (when-not config/publishing?
+                        (shui/popup-show! (.-target e) content-fn
+                                          {:align "start" :auto-focus? true})))]
     (rum/use-effect!
      (fn []
        (when editing?
          (some-> (rum/deref *trigger-ref)
                  (.click))))
      [])
-    [:div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
-     (cond-> {}
-       (not multiple-values?)
-       ;; FIXME: min-h-6 not works
-       (assoc :class "jtrigger min-h-[24px]"
-              :ref *trigger-ref
-              :on-click (fn [e]
-                          (when-not config/publishing?
-                            (shui/popup-show! (.-target e) content-fn
-                                              {:align "start" :auto-focus? true})))))
-     (if page
-       (when-let [page-cp (state/get-component :block/page-cp)]
-         (rum/with-key
-           (page-cp {:disable-preview? true
-                     :hide-close-button? true} page)
-           (:db/id page)))
-       (when-not multiple-values?
-         (property-empty-btn-value)))
+    (if multiple-values?
+      (shui/button
+       {:class "jtrigger h-6 empty-btn"
+        :ref *trigger-ref
+        :variant :text
+        :size :sm
+        :on-click open-popup!}
+       (ui/icon "calendar-plus" {:size 16}))
+      (shui/trigger-as
+       :div.flex.flex-1.flex-row.gap-1.items-center.flex-wrap
+       {:tabIndex 0
+        :class "jtrigger min-h-[24px]"  ; FIXME: min-h-6 not works
+        :ref *trigger-ref
+        :on-click open-popup!}
 
-     (when multiple-values?
-       (shui/button
-        {:class (str "jtrigger h-6" (when-not value " empty-btn"))
-         :ref *trigger-ref
-         :variant :text
-         :size :sm
-         :on-click (fn [e]
-                     (if config/publishing?
-                       (navigate-to-date-page value)
-                       (do
-                         (util/stop e)
-                         (shui/popup-show! (.-target e) content-fn
-                                           {:align "start" :auto-focus? true}))))}
-        (ui/icon "calendar-plus" {:size 16})))]))
+       (if page
+         (when-let [page-cp (state/get-component :block/page-cp)]
+           (rum/with-key
+             (page-cp {:disable-preview? true
+                       :hide-close-button? true} page)
+             (:db/id page)))
+         (when-not multiple-values?
+           (property-empty-btn-value)))))))
 
 
 (rum/defc property-value-date-picker
@@ -814,13 +809,6 @@
                                                          select-opts
                                                          opts)
                              (select block property select-opts opts))]))]
-      ;; why this?
-        (rum/use-effect!
-         (fn []
-           (when editing?
-             (prn "TODO: editing multiple select immediately show...")))
-         [editing?])
-
         (if (and dropdown? (not editing?))
           (let [toggle-fn shui/popup-hide!
                 content-fn (fn [{:keys [_id content-props]}]
