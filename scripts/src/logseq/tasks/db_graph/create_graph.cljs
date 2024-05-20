@@ -67,7 +67,7 @@
 
 (defn- get-ident [all-idents kw]
   (or (get all-idents kw)
-      (throw (ex-info (str "No ident found for " kw) {}))))
+      (throw (ex-info (str "No ident found for " (pr-str kw)) {}))))
 
 (defn- ->block-properties [properties page-uuids all-idents]
   (->>
@@ -191,7 +191,7 @@
                                          {:block/refs (build-property-refs props all-idents)}))
                                       (when (seq schema-classes)
                                         {:property/schema.classes
-                                         (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                         (mapv #(hash-map :db/ident (get-ident all-idents (keyword %)))
                                                schema-classes)})))))))
                             properties))]
     new-properties-tx))
@@ -204,16 +204,13 @@
                     (mapcat
                      (fn [[class-name {:keys [class-parent schema-properties] :as class-m}]]
                        (let [new-block
-                             (->
-                              (sqlite-util/build-new-class
-                               {:block/name (common-util/page-name-sanity-lc (name class-name))
-                                :block/original-name (name class-name)
-                                :block/uuid (d/squuid)
-                                :db/ident (get-ident all-idents class-name)
-                                :db/id (or (class-db-ids (name class-name))
-                                           (throw (ex-info "No :db/id for class" {:class class-name})))})
-                              ;; TODO: Move this concern to schema script
-                              (dissoc :class/parent))
+                             (sqlite-util/build-new-class
+                              {:block/name (common-util/page-name-sanity-lc (name class-name))
+                               :block/original-name (name class-name)
+                               :block/uuid (d/squuid)
+                               :db/ident (get-ident all-idents class-name)
+                               :db/id (or (class-db-ids (name class-name))
+                                          (throw (ex-info "No :db/id for class" {:class class-name})))})
                              pvalue-tx-m (->property-value-tx-m new-block (:properties class-m) properties-config all-idents)]
                          (cond-> []
                            (seq pvalue-tx-m)
@@ -342,13 +339,13 @@
        :block/name is required and :properties can be passed to define page properties
      * :blocks - This is a vec of datascript attribute maps e.g. `{:block/content \"bar\"}`.
        :block/content is required and :properties can be passed to define block properties
-   * :properties - This is a map to configure properties where the keys are property names
+   * :properties - This is a map to configure properties where the keys are property name keywords
      and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
      Additional keys available:
      * :closed-values - Define closed values with a vec of maps. A map contains keys :uuid, :value and :icon.
      * :properties - Define properties on a property page.
      * :schema-classes - Vec of class names. Defines a property's range classes
-   * :classes - This is a map to configure classes where the keys are class names
+   * :classes - This is a map to configure classes where the keys are class name keywords
      and the values are maps of datascript attributes e.g. `{:block/original-name \"Foo\"}`.
      Additional keys available:
      * :properties - Define properties on a class page
@@ -359,7 +356,7 @@
     Default is :db/id
 
    The :properties in :pages-and-blocks, :properties and :classes is a map of
-   property names to property values.  Multiple property values for a many
+   property name keywords to property values.  Multiple property values for a many
    cardinality property are defined as a set. The following property types are
    supported: :default, :url, :checkbox, :number, :page and :date. :checkbox and
    :number values are written as booleans and integers/floats. :page references

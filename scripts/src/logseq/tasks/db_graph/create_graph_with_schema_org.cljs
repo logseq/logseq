@@ -236,13 +236,13 @@
 (defn- generate-classes
   [select-classes class-to-properties options]
   (let [classes (->> select-classes
-                     (map #(vector (strip-schema-prefix (get % "@id"))
+                     (map #(vector (keyword (strip-schema-prefix (get % "@id")))
                                    (->class-page % class-to-properties options)))
                      (into {}))]
     (assert (= ["Thing"] (keep #(when-not (:class-parent %)
                                   (:block/original-name %))
                                (vals classes)))
-            "Thing is the only class that doesn't have a parent class")
+            "Thing is the only class that doesn't have a schema.org parent class")
     classes))
 
 (defn- generate-properties
