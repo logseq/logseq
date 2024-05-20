@@ -6,22 +6,18 @@
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
-            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.format.mldoc :as mldoc]
             [frontend.config :as config]
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [logseq.db.frontend.property :as db-property]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
   [eid]
   (let [result* (db/pull eid)
         entity (db/entity eid)
-        ;; handles page uuids and closed values w/o knowing type
-        get-uuid-prop-value (fn [v]
-                              (or (db-pu/get-property-name v)
-                                  (:block/content (db/entity [:block/uuid v]))))
         result (cond-> result*
                  (and (seq (:block/properties entity)) (config/db-based-graph? (state/get-current-repo)))
                  (assoc :block.debug/properties
@@ -30,13 +26,9 @@
                                     [k
                                      (cond
                                        (de/entity? v)
-                                       (:block/original-name v)
+                                       (db-property/get-property-value-name v)
                                        (and (set? v) (every? de/entity? v))
-                                       (set (map :block/original-name v))
-                                       (and (set? v) (uuid? (first v)))
-                                       (set (map get-uuid-prop-value v))
-                                       (uuid? v)
-                                       (get-uuid-prop-value v)
+                                       (set (map db-property/get-property-value-name v))
                                        :else
                                        v)]))
                              (into {})))

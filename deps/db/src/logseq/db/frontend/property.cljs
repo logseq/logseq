@@ -220,6 +220,13 @@
   (or (:block/original-name ent)
       (:block/content ent)))
 
+(defn get-property-value-name
+  "Gets a readable name for the property value of a ref type property. Different
+   than closed-value-name as there implementation will likely differ"
+  [ent]
+  (or (:block/original-name ent)
+      (:block/content ent)))
+
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"
