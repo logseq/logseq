@@ -226,7 +226,8 @@
                              (when-let [props (not-empty (:properties class-m))]
                                (merge
                                 (->block-properties (merge props (property-value-properties pvalue-tx-m)) uuid-maps all-idents)
-                                {:block/refs (build-property-refs props all-idents)}))
+                                ;; TODO: Re-enable when this is also done in the app as this can cause block loading problems
+                                #_{:block/refs (build-property-refs props all-idents)}))
                              (when class-parent
                                {:class/parent
                                 (or (class-db-ids class-parent)
