@@ -104,7 +104,13 @@
    it is ensured to have a unique :db/ident"
   [conn property-id schema {:keys [property-name properties]}]
   (let [db @conn
-        db-ident (or property-id (db-property/create-user-property-ident-from-name property-name))]
+        db-ident (or property-id
+                     (try (db-property/create-user-property-ident-from-name property-name)
+                          (catch :default e
+                            (throw (ex-info (str e)
+                                            {:type :notification
+                                             :payload {:message "Property failed to create. Please try a different property name."
+                                                       :type :error}})))))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
       (let [changed-property-attrs
