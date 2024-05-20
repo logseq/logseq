@@ -1221,7 +1221,7 @@
        (state/clear-editor-action!)
        (save-current-block!)
        (when block-id
-         (state/set-editing-block-id! [:unknown-container block-id])
+         (state/set-editing-block-id! [:unknown-container (:block/uuid (state/get-edit-block))])
          (let [block-parent (db/get-block-parent block-id)]
            (if-let [id (and
                         (nil? (:block/name block-parent))
