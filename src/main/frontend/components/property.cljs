@@ -709,11 +709,14 @@
    :should-update (fn [old-state new-state]
                     (let [[_ p1 opts1] (:rum/args old-state)
                           [_ p2 opts2] (:rum/args new-state)
-                          p1-set (set (map first p1))
+                          p1-keys (map first p1)
+                          p1-set (set p1-keys)
+                          p1-m (zipmap (map first p1) (map second p1))
+                          p2-m (zipmap (map first p2) (map second p2))
                           p2-set (set (map first p2))]
                       (when-not (= p1-set p2-set)
                         (reset! (::properties-order new-state) (mapv first p2)))
-                      (not= [p1-set opts1] [p2-set opts2])))}
+                      (not= [p1-set (map p1-m p1-keys) opts1] [p2-set (map p2-m p1-keys) opts2])))}
   [state block properties opts]
   (let [*properties-order (::properties-order state)
         properties-order (rum/react *properties-order)
