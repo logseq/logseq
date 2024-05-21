@@ -330,7 +330,7 @@
                            property-block (when block-value? (d/entity @conn (:db/id value)))
                            blocks-with-this-value (and block-value?
                                                        (set (map :e (d/datoms @conn :avet (:db/ident property) (:db/id value)))))
-                           ;; Delete property value block iff it's not a closed value and it's no longer used by other blocks
+                           ;; Delete property value block if it's not a closed value and it's no longer used by other blocks
                            retract-blocks-tx (when (and property-block
                                                         (some? (get property-block :logseq.property/created-from-property))
                                                         (not (contains? (:block/type value) "closed value"))
