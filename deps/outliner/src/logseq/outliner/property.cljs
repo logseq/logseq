@@ -25,12 +25,19 @@
    (build-property-value-tx-data block property-id value (= property-id :logseq.task/status)))
   ([block property-id value status?]
    (when (some? value)
-     (let [block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
+     (let [old-value (get block property-id)
+           multiple-values-empty? (and (coll? old-value)
+                                       (= 1 (count old-value))
+                                       (= :logseq.property/empty-placeholder (:db/ident (first old-value))))
+           block (assoc (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                         property-id value)
            block-tx-data (cond-> block
                            status?
                            (assoc :block/tags :logseq.class/task))]
-       [block-tx-data]))))
+       [(when multiple-values-empty?
+          [:db/retract (:db/id block) property-id :logseq.property/empty-placeholder])
+        block-tx-data]))))
+
 
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
