@@ -56,7 +56,7 @@
 
 (defn- select-type?
   [property type]
-  (or (contains? #{:page :number :url :date} type)
+  (or (contains? #{:page :object :number :url :date} type)
       ;; closed values
       (seq (:property/closed-values property))))
 
@@ -259,47 +259,49 @@
     ;          {:id value :value label}) items') nil opts)
     ))
 
+(defn- get-title
+  [e]
+  (or (:block/original-name e)
+      (:block/content e)))
+
 (defn select-page
   [property
    {:keys [block multiple-choices? dropdown? input-opts] :as opts}]
   (let [repo (state/get-current-repo)
+        object? (= :object (get-in property [:block/schema :type]))
         classes (:property/schema.classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         selected-choices (when block
-                           (->>
-                            (if tags-or-alias?
-                              (->> (if tags?
-                                     (:block/tags block)
-                                     (:block/alias block))
-                                   (map (fn [e] (:block/original-name e))))
-                              (when-let [v (get block (:db/ident property))]
-                                (if (coll? v)
-                                  (map :block/original-name v)
-                                  [(:block/original-name v)])))
-                            (remove nil?)))
-        closed-values (seq (:property/closed-values property))
-        pages (->>
-               (cond
-                 (seq classes)
-                 (mapcat
-                  (fn [class]
-                    (if (= :logseq.class/Root (:db/ident class))
-                      (->> (map first (model/get-all-classes repo))
-                           (remove #{"Root class"}))
-                      (some->> (model/get-class-objects repo (:db/id class))
-                               (map #(:block/original-name (db/entity %))))))
-                  classes)
+                           (if tags-or-alias?
+                             (->> (if tags?
+                                    (:block/tags block)
+                                    (:block/alias block))
+                                  (map (fn [e] (:db/id e))))
+                             (when-let [v (get block (:db/ident property))]
+                               (if (every? de/entity? v)
+                                 (map :db/id v)
+                                 [(:db/id v)]))))
+        objects (->>
+                 (cond
+                   (seq classes)
+                   (mapcat
+                    (fn [class]
+                      (if (= :logseq.class/Root (:db/ident class))
+                        (->> (model/get-all-classes repo)
+                             (keep (fn [[_ id]]
+                                     (let [e (db/entity [:block/uuid id])]
+                                       (when-not (= :logseq.class/Root (:db/ident e))
+                                         e)))))
+                        (->> (model/get-class-objects repo (:db/id class))
+                             (keep db/entity))))
+                    classes)
 
-                 (and block closed-values)
-                 (map (fn [e] (:block/original-name e)) closed-values)
-
-                 :else
-                 (model/get-all-page-original-names repo))
-               distinct
-               (remove (fn [p] (or (ldb/hidden-page? p) (util/uuid-string? (str p))))))
-        options (map (fn [p] {:value p}) pages)
+                   :else
+                   (model/get-all-pages repo)))
+        options (map (fn [object] {:label (get-title object)
+                                   :value (:db/id object)}) objects)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
                (merge
@@ -314,30 +316,33 @@
                                               alias?
                                               "Set alias"
                                               multiple-choices?
-                                              "Choose pages"
+                                              (str "Choose " (if object? "objects" "pages"))
                                               :else
-                                              "Choose page")
-                 :show-new-when-not-exact-match? (not (and block closed-values))
+                                              (str "Choose " (if object? "object" "page")))
+                 :show-new-when-not-exact-match? (not object?)
                  :extract-chosen-fn :value
+                 :extract-fn :label
                  ;; Provides additional completion for inline classes on new pages
-                 :transform-fn (fn [results input]
-                                 (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
-                                   (let [repo (state/get-current-repo)
-                                         class-names (map :block/original-name classes')
-                                         descendent-classes (->> classes'
-                                                                 (mapcat #(model/get-class-children repo (:db/id %)))
-                                                                 (map #(:block/original-name (db/entity repo %))))]
-                                     (->> (concat class-names descendent-classes)
-                                          (filter #(string/includes? % class-input))
-                                          (mapv #(hash-map :value (str new-page "#" %)))))
-                                   results))
+
+                 ;; FIXME: re-enable it
+                 ;; :transform-fn (fn [results input]
+                 ;;                 (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
+                 ;;                   (let [repo (state/get-current-repo)
+                 ;;                         descendent-classes (->> classes'
+                 ;;                                                 (mapcat #(model/get-class-children repo (:db/id %))))]
+                 ;;                     (->> (concat classes' descendent-classes)
+                 ;;                          (filter #(string/includes? (:block/original-name %) class-input))
+                 ;;                          (mapv (fn [p]
+                 ;;                                  {:value (:db/id p)
+                 ;;                                   :label (str new-page "#" (:block/original-name p))}))))
+                 ;;                   results))
                  :input-opts input-opts
                  :on-chosen (fn [chosen selected?]
-                              (let [page* (string/trim (if (string? chosen) chosen (:value chosen)))]
-                                (when-not (string/blank? page*)
-                                  (p/let [id (<create-page-if-not-exists! property classes' page*)]
-                                    (when id
-                                      (add-or-remove-property-value block property id selected?))))))}))]
+                              (p/let [id (if (integer? chosen) chosen
+                                             (when-not (string/blank? (string/trim chosen))
+                                               (<create-page-if-not-exists! property classes' chosen)))]
+                                (when id
+                                  (add-or-remove-property-value block property id selected?))))}))]
     (select-aux block property opts')))
 
 (defn property-value-select-page
@@ -576,13 +581,16 @@
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value)
 
-       (contains? #{:page :date} type)
+       (ldb/page? value)
        (when value
          (rum/with-key
            (page-cp {:disable-preview? true
                      :tag? tag?
                      :hide-close-button? true} value)
            (:db/id value)))
+
+       (= type :object)
+       (inline-text {} :markdown (:block/content value))
 
        closed-values?
        (closed-value-item value opts)
@@ -612,7 +620,7 @@
                              (:number :url :default)
                              (select block property select-opts' opts)
 
-                             (:page :date)
+                             (:object :page :date)
                              (property-value-select-page block property select-opts' opts))])
           show! (fn [target]
                   (when-not (or (util/link? target) (.closest target "a") config/publishing?)
@@ -761,7 +769,7 @@
                                                                (when on-chosen (on-chosen)))}
                                                  select-opts)]
                           [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
-                           (if (= :page type)
+                           (if (contains? #{:page :object} type)
                              (property-value-select-page block property
                                                          select-opts
                                                          opts)

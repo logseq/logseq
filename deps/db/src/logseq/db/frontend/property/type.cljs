@@ -15,7 +15,7 @@
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :number :date :checkbox :url :page :template])
+  [:default :number :date :checkbox :url :page :object :template])
 
 (def closed-value-property-types
   "Valid property :type for closed values"
@@ -30,7 +30,7 @@
 
 (def ref-property-types
   "User facing ref types"
-  (into #{:page :date} value-ref-property-types))
+  (into #{:page :date :object} value-ref-property-types))
 
 (assert (set/subset? ref-property-types
                      (set user-built-in-property-types))
@@ -46,6 +46,7 @@
                :date #{:cardinality}
                :url #{:cardinality}
                :page #{:cardinality :classes}
+               :object #{:cardinality :classes}
                :template #{:classes}
                :checkbox #{}}))
 
@@ -87,6 +88,7 @@
           ;; FIXME: UI concerns shouldn't be in this layer
           (number? (some-> (:block/content entity) parse-double))))))
 
+
 (defn- text-entity?
   [db s {:keys [new-closed-value?]}]
   (if new-closed-value?
@@ -98,6 +100,11 @@
   [db val]
   (when-let [ent (d/entity db val)]
     (some? (:block/original-name ent))))
+
+(defn- object?
+  [db val]
+  (when-let [ent (d/entity db val)]
+    (seq (:block/tags ent))))
 
 (defn- date?
   [db val]
@@ -124,6 +131,9 @@
    :page     [:fn
               {:error/message "should be a page"}
               page?]
+   :object   [:fn
+              {:error/message "should be a page/block with tags"}
+              object?]
    ;; TODO: strict check on template
    :template [:fn
               {:error/message "should has #template"}
@@ -146,7 +156,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :url :number :date :page :template :entity})
+  #{:default :url :number :date :page :object :template :entity})
 
 ;; Helper fns
 ;; ==========

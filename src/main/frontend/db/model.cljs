@@ -40,22 +40,18 @@
 
 (defn get-all-pages
   [repo]
-  (->>
-   (d/q
-    '[:find [(pull ?page [*]) ...]
-      :where
-      [?page :block/name]]
-     (conn/get-db repo))
-   (remove hidden-page?)))
-
-(defn get-all-page-original-names
-  [repo]
   (let [db (conn/get-db repo)]
     (->>
      (d/datoms db :avet :block/name)
-     (map #(:block/original-name (d/entity db (:e %))))
+     (map #(d/entity db (:e %)))
      (remove hidden-page?)
-     (remove nil?))))
+     (remove (fn [page]
+             (common-util/uuid-string? (:block/name page)))))))
+
+(defn get-all-page-original-names
+  [repo]
+  (->> (get-all-pages repo)
+       (map :block/original-name)))
 
 (defn get-page-alias
   [repo page-name]
@@ -812,7 +808,7 @@ independent of format as format specific heading characters are stripped"
         (:class-parent rules/rules))
    distinct))
 
-;; FIXME: async query
+;; FIXME: async query && use d/datoms instead of datalog
 (defn get-class-objects
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]

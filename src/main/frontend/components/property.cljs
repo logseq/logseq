@@ -300,20 +300,11 @@
                                     :disabled? disabled?
                                     :show-type-change-hints? true}))]
 
-          (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
-            [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-             [:label "Multiple values:"]
-             (let [many? (db-property/many? property)]
-               (shui/checkbox
-                {:checked           many?
-                 :disabled          disabled?
-                 :on-checked-change (fn []
-                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
-                                      (save-property-fn))}))])
-
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
             (case (:type @*property-schema)
-              :page
+              ;; Question: 1. should we still suppport classes for `page` type?
+              ;;           2. flexible query instead of classes? e.g. find all papers are related to either Clojure or OCaml `(and (tag :paper) (or (tag :clojure) (tag :ocaml)))`
+              :object
               (when (empty? (:property/closed-values property))
                 [:div.grid.grid-cols-4.gap-1.items-center.leading-8
                  [:label "Specify classes:"]
@@ -327,6 +318,17 @@
                                              :disabled? disabled?))]
 
               nil))
+
+          (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
+            [:div.grid.grid-cols-4.gap-1.items-center.leading-8
+             [:label "Multiple values:"]
+             (let [many? (db-property/many? property)]
+               (shui/checkbox
+                {:checked           many?
+                 :disabled          disabled?
+                 :on-checked-change (fn []
+                                      (swap! *property-schema assoc :cardinality (if many? :one :many))
+                                      (save-property-fn))}))])
 
           (when (and enable-closed-values? (empty? (:property/schema.classes property)))
             [:div.grid.grid-cols-4.gap-1.items-start.leading-8
