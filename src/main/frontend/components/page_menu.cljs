@@ -45,9 +45,8 @@
 
 (defn ^:large-vars/cleanup-todo page-menu
   [page]
-  (when page
-    (let [page-name (:block/name page)
-          repo (state/sub :git/current-repo)
+  (when-let [page-name (and page (db/page? page) (:block/name page))]
+    (let [repo (state/sub :git/current-repo)
           page-original-name (:block/original-name page)
           whiteboard? (contains? (set (:block/type page)) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
