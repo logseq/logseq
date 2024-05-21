@@ -35,12 +35,17 @@
 
           :else
           (do
-            (let [tx-data' (if (contains? #{:create-property-text-block :insert-blocks} (:outliner-op tx-meta))
-                             (let [update-blocks-fully-loaded (keep (fn [datom] (when (= :block/uuid (:a datom))
-                                                                                  {:db/id (:e datom)
-                                                                                   :block.temp/fully-loaded? true})) tx-data)]
-                               (concat update-blocks-fully-loaded tx-data))
-                             tx-data)]
+            (let [tx-data' (concat
+                            (map
+                             (fn [id]
+                               [:db/retractEntity [:block/uuid id]])
+                             deleted-block-uuids)
+                            (if (contains? #{:create-property-text-block :insert-blocks} (:outliner-op tx-meta))
+                              (let [update-blocks-fully-loaded (keep (fn [datom] (when (= :block/uuid (:a datom))
+                                                                                   {:db/id (:e datom)
+                                                                                    :block.temp/fully-loaded? true})) tx-data)]
+                                (concat update-blocks-fully-loaded tx-data))
+                              tx-data))]
               (d/transact! conn tx-data' tx-meta))
 
             (when-not (:graph/importing @state/state)

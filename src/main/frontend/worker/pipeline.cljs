@@ -85,14 +85,17 @@
                       (when (d/entity @conn page-id)
                         (file/sync-to-file repo page-id tx-meta)))))
               deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
-              block-refs (rebuild-block-refs tx-report blocks)
+              blocks' (remove (fn [b] (deleted-block-uuids (:block/uuid b))) blocks)
+              block-refs (when (seq blocks')
+                           (rebuild-block-refs tx-report blocks'))
               refs-tx-report (when (seq block-refs)
                                (ldb/transact! conn block-refs {:pipeline-replace? true}))
               replace-tx (concat
                           ;; block path refs
-                          (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report))
-                                blocks' (map (fn [b] (or (d/entity db-after (:db/id b)) b)) blocks)]
-                            (set (compute-block-path-refs-tx tx-report blocks')))
+                          (when (seq blocks')
+                            (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report))
+                                  blocks' (map (fn [b] (or (d/entity db-after (:db/id b)) b)) blocks)]
+                              (set (compute-block-path-refs-tx tx-report blocks'))))
 
                           ;; update block/tx-id
                           (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
