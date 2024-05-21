@@ -29,19 +29,19 @@
 (defn- get-remote-updates
   "Return a flow: receive messages from ws, and filter messages with :req-id=`push-updates`."
   [get-ws-create-task]
-  (m/stream
-   (m/ap
-     (loop []
-       (let [ws (m/? get-ws-create-task)
-             x (try
-                 (m/?> (m/eduction
-                        (filter (fn [data] (= "push-updates" (:req-id data))))
-                        (ws/recv-flow ws)))
-                 (catch js/CloseEvent _
-                   sentinel))]
-         (if (identical? x sentinel)
-           (recur)
-           (m/amb x (recur))))))))
+  (m/ap
+   (loop []
+     (let [ws (m/? get-ws-create-task)
+           x (try
+               (m/?> (m/eduction
+                      (filter (fn [data] (= "push-updates" (:req-id data))))
+                      (map (fn [data] (prn :get-remote-updates (:t data)) data))
+                      (ws/recv-flow ws)))
+               (catch js/CloseEvent _
+                 sentinel))]
+       (if (identical? x sentinel)
+         (recur)
+         x)))))
 
 (defn- create-local-updates-check-flow
   "Return a flow: emit if need to push local-updates"

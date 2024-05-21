@@ -127,18 +127,18 @@
     (.close (:raw-ws m-ws))))
 
 (defn send
-  "Returns a task: send message and return mws"
+  "Returns a task: send message"
   [mws message]
   (m/sp
     (let [decoded-message (rtc-const/data-to-ws-coercer message)
           message-str (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message)))]
-      (m/? ((:send mws) message-str))
-      mws)))
+      (m/? ((:send mws) message-str)))))
 
 (defn recv-flow
   [m-ws]
   (m/eduction
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
+   ;; (map (fn [x] (prn :recv (:req-id x) (tc/to-string (t/now))) x))
    (map rtc-const/data-from-ws-coercer)
    (:recv-flow m-ws)))
 
@@ -149,8 +149,8 @@
   {:pre [(pos-int? timeout-ms)
          (some? (:req-id message))]}
   (m/sp
-    (let [mws (m/? (send mws message))
-          req-id (:req-id message)
+    (m/? (send mws message))
+    (let [req-id (:req-id message)
           result (m/?
                   (m/timeout
                    (m/reduce
@@ -160,7 +160,8 @@
                     (recv-flow mws))
                    timeout-ms))]
       (when-not result
-        (throw (ex-info (str "recv timeout (" timeout-ms "ms)") {:missionary/retry true})))
+        (throw (ex-info (str "recv timeout (" timeout-ms "ms)") {:missionary/retry true
+                                                                 :message message})))
       result)))
 
 (defn send&recv
@@ -176,7 +177,7 @@
       (if-let [s3-presign-url (:s3-presign-url resp)]
         (let [{:keys [status body]} (m/? (c.m/<! (http/get s3-presign-url {:with-credentials? false})))]
           (if (http/unexceptional-status? status)
-            (js->clj (js/JSON.parse body) :keywordize-keys true)
+            (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
             {:req-id req-id
              :ex-message "get s3 object failed"
              :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))

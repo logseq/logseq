@@ -175,7 +175,7 @@
           {:placeholder "Select a graph-uuid"}))
         (shui/select-content
          (shui/select-group
-          (for [{:keys [graph-uuid graph-status]} (:remote-graphs state)]
+          (for [{:keys [graph-uuid graph-status]} (sort-by :graph-uuid (:remote-graphs state))]
             (shui/select-item {:value graph-uuid :disabled (some? graph-status)} graph-uuid)))))
 
        [:b "＋"]
