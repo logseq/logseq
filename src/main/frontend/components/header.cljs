@@ -132,7 +132,7 @@
 
 (rum/defc toolbar-dots-menu < rum/reactive
   [{:keys [current-repo t]}]
-  (let [page-menu (page-menu/page-menu nil)
+  (let [page-menu (page-menu/page-menu (some-> (sidebar/get-current-page) (db/get-page)))
         page-menu-and-hr (when (seq page-menu)
                            (concat page-menu [{:hr true}]))
         login? (and (state/sub :auth/id-token) (user-handler/logged-in?))
