@@ -52,6 +52,11 @@
   {:init (fn [state]
            (assoc state ::selected-choices
                   (atom (set (:selected-choices (first (:rum/args state)))))))
+   :will-remount (fn [_old-state new-state]
+                   (let [choices (set (:selected-choices (first (:rum/args new-state))))]
+                     (when (not= choices @(::selected-choices new-state))
+                       (reset! (::selected-choices new-state) choices))
+                     new-state))
    :will-unmount (fn [state]
                    (state/set-state! [:ui/open-select] nil)
                    state)}
