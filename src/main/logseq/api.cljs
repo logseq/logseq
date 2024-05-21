@@ -808,14 +808,14 @@
   (fn [block-uuid key]
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
-      (when-let [block (db-model/query-block-by-uuid block-uuid)]
+      (when-let [block (db-model/get-block-by-uuid block-uuid)]
         (pu/lookup-by-name (:block/properties block) key)))))
 
 (def ^:export get_block_properties
   (fn [block-uuid]
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
-      (when-let [block (db-model/query-block-by-uuid block-uuid)]
+      (when-let [block (db-model/get-block-by-uuid block-uuid)]
         (let [properties (if (config/db-based-graph? (state/get-current-repo))
                            (db-pu/readable-properties (:block/properties block))
                            (:block/properties block))]
