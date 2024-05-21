@@ -70,7 +70,8 @@
           (.focus target))))))
 
 (defn show!
-  [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props on-hide] :as opts}]
+  [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props
+                               on-before-hide on-after-hide] :as opts}]
   (let [*target (volatile! nil)
         position (cond
                    (vector? event) event
@@ -78,7 +79,7 @@
                    (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
                      (instance? js/goog.events.BrowserEvent event))
                    (do (vreset! *target (.-target (or (.-nativeEvent event) event)))
-                       [(.-clientX event) (.-clientY event)])
+                     [(.-clientX event) (.-clientY event)])
 
                    (instance? js/Element event)
                    (let [^js rect (.getBoundingClientRect event)
@@ -87,11 +88,11 @@
                          height (.-height rect)
                          bottom (.-bottom rect)]
                      (do (vreset! *target event)
-                         [(+ left (case (keyword align)
-                                    :start 0
-                                    :end width
-                                    (/ width 2)))
-                          (- bottom height) width height]))
+                       [(+ left (case (keyword align)
+                                  :start 0
+                                  :end width
+                                  (/ width 2)))
+                        (- bottom height) width height]))
                    :else [0 0])]
     (upsert-popup!
       (merge opts
@@ -100,7 +101,8 @@
          :as-dropdown? as-dropdown?
          :as-content? as-content?
          :root-props root-props
-         :on-hide on-hide
+         :on-before-hide on-before-hide
+         :on-after-hide on-after-hide
          :content-props (cond-> content-props
                           (not (nil? align))
                           (assoc :align (name align)))}))))
@@ -110,12 +112,16 @@
   ([id] (hide! id 0 {}))
   ([id delay] (hide! id delay {}))
   ([id delay {:keys [all?]}]
-   (let [f #(if all?
-              (reset! *popups [])
-              (detach-popup! id))]
-     (if (and (number? delay) (> delay 0))
-       (js/setTimeout f delay)
-       (f)))))
+   (when-let [popup (get-popup id)]
+     (let [config (last popup)
+           f #(if all?
+                (reset! *popups [])
+                (do (detach-popup! id)
+                  (some-> (:on-after-hide config) (apply []))))]
+       (some-> (:on-before-hide config) (apply []))
+       (if (and (number? delay) (> delay 0))
+         (js/setTimeout f delay)
+         (f))))))
 
 (defn hide-all!
   []
@@ -124,7 +130,8 @@
 
 (rum/defc x-popup
   [{:keys [id open? content position as-dropdown? as-content? force-popover?
-           auto-side? _auto-focus? _target root-props content-props on-hide]
+           auto-side? _auto-focus? _target root-props content-props
+           _on-before-hide _on-after-hide]
     :as _props}]
   ;; disableOutsidePointerEvents
   ;(rum/use-effect!
@@ -153,39 +160,35 @@
                                "top" "bottom"))))
           content-props (cond-> content-props
                           auto-side? (assoc :side (auto-side-fn)))
-          hide (fn []
-                 (when (fn? on-hide)
-                   (on-hide))
-                 ;; Async so that popup closing will be in another run
-                 (js/setTimeout #(hide! id) 0))]
+          hide (fn [] (hide! id 1))]
       (popup-root
-       (merge root-props {:open open?})
-       (popup-trigger
-        {:as-child true}
-        (button {:class "overflow-hidden fixed p-0 opacity-0"
-                 :style {:height (if (and (number? height)
-                                          (> height 0))
-                                   height 1)
-                         :width 1
-                         :top y
-                         :left x}} ""))
-       (let [content-props (cond-> (merge {:onEscapeKeyDown hide
-                                           :disableOutsideScroll false
-                                           :onPointerDownOutside hide}
-                                          content-props)
-                             (and (not force-popover?)
-                                  (not as-dropdown?))
-                             (assoc :on-key-down (fn [^js e]
-                                                   (some-> content-props :on-key-down (apply [e]))
-                                                   (set! (. e -defaultPrevented) true))
-                                    :on-pointer-move #(set! (. % -defaultPrevented) true)))
-             content (if (fn? content)
-                       (content (cond-> {:id id}
-                                  as-content?
-                                  (assoc :content-props content-props))) content)]
-         (if as-content?
-           content
-           (popup-content content-props content)))))))
+        (merge root-props {:open open?})
+        (popup-trigger
+          {:as-child true}
+          (button {:class "overflow-hidden fixed p-0 opacity-0"
+                   :style {:height (if (and (number? height)
+                                         (> height 0))
+                                     height 1)
+                           :width 1
+                           :top y
+                           :left x}} ""))
+        (let [content-props (cond-> (merge {:onEscapeKeyDown hide
+                                            :disableOutsideScroll false
+                                            :onPointerDownOutside hide}
+                                      content-props)
+                              (and (not force-popover?)
+                                (not as-dropdown?))
+                              (assoc :on-key-down (fn [^js e]
+                                                    (some-> content-props :on-key-down (apply [e]))
+                                                    (set! (. e -defaultPrevented) true))
+                                :on-pointer-move #(set! (. % -defaultPrevented) true)))
+              content (if (fn? content)
+                        (content (cond-> {:id id}
+                                   as-content?
+                                   (assoc :content-props content-props))) content)]
+          (if as-content?
+            content
+            (popup-content content-props content)))))))
 
 (rum/defc install-popups
   < rum/static
