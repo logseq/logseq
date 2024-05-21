@@ -433,10 +433,8 @@
                         (let [value (if (map? chosen) (:value chosen) chosen)]
                           (add-or-remove-property-value block property value selected?)))
             selected-choices' (get block (:db/ident property))
-            selected-choices (if (coll? selected-choices')
-                               (->> selected-choices'
-                                    (map (fn [x] (if (= :date type) (:db/id x) x)))
-                                    (remove nil?))
+            selected-choices (if (every? de/entity? selected-choices')
+                               (map :db/id selected-choices')
                                [selected-choices'])]
         (select-aux block property
                     {:multiple-choices? multiple-choices?
