@@ -164,7 +164,7 @@
             [:div.flex.flex-row.items-center.gap-1
              [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
              (mode-switch types *mode)]
-            [:div.absolute.right-0.top-0
+            [:div.absolute.right-1.top-1
              (shui/button
               {:variant :ghost :size :sm
                :class "px-1 py-1 h-6 w-6"}
