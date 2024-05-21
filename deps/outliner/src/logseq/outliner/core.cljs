@@ -194,14 +194,16 @@
   [db block]
   (let [properties (:block/properties (d/entity db (:db/id block)))
         property-key-refs (keys properties)
-        named-block? (fn [block] (and (de/entity? block) (:block/name block)))
+        page-or-object? (fn [block] (and (de/entity? block)
+                                         (or (ldb/page? block)
+                                             (seq (:block/tags block)))))
         property-value-refs (->> (vals properties)
                                  (mapcat (fn [v]
                                            (cond
-                                             (named-block? v)
+                                             (page-or-object? v)
                                              [(:db/id v)]
 
-                                             (and (coll? v) (every? named-block? v))
+                                             (and (coll? v) (every? page-or-object? v))
                                              (map :db/id v)
 
                                              :else
