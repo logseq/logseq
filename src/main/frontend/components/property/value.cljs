@@ -299,7 +299,7 @@
                     classes)
 
                    :else
-                   (model/get-all-pages repo)))
+                   (remove ldb/built-in? (model/get-all-pages repo))))
         options (map (fn [object] {:label (get-title object)
                                    :value (:db/id object)}) objects)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
