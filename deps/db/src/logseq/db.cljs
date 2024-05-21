@@ -72,8 +72,8 @@
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
      (when (seq tx-data)
 
-       ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)))
-       ;; (cljs.pprint/pprint tx-data)
+      ;;  (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
+      ;;  (cljs.pprint/pprint tx-data)
 
        (let [f (or @*transact-fn d/transact!)]
          (f repo-or-conn tx-data tx-meta))))))

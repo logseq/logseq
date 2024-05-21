@@ -107,10 +107,9 @@
                            (do
                              (when-not (exists? js/process) (d/store @conn))
                              tx-report))
-              fix-tx-data (validate-db! repo conn tx-report context)
+              _ (validate-db! repo conn tx-report context)
               full-tx-data (concat (:tx-data tx-report)
                                    (:tx-data refs-tx-report)
-                                   fix-tx-data
                                    (:tx-data tx-report'))
               final-tx-report (assoc tx-report' :tx-data full-tx-data)
               affected-query-keys (when-not (:importing? context)
