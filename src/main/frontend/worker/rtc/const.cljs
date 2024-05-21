@@ -4,28 +4,6 @@
             [malli.core :as m]
             [malli.transform :as mt]))
 
-(def general-attrs-schema-coll
-  [[:updated-at {:optional true} :int]
-   [:created-at {:optional true} :int]
-   [:created-by {:optional true} :string]
-   [:alias {:optional true} [:maybe [:sequential :uuid]]]
-   [:type {:optional true} [:maybe [:sequential :string]]]
-   [:schema {:optional true} [:maybe :string]]
-   [:tags {:optional true} [:maybe [:sequential :uuid]]]
-   [:properties {:optional true} [:maybe :string ; transit-json-string
-                                  ]]
-   [:link {:optional true} [:maybe :uuid]]
-   [:journal-day {:optional true} [:maybe :int]]
-   [:ident {:optional true} [:maybe :string]]])
-
-(def general-attr-set
-  (into #{} (map first) general-attrs-schema-coll))
-
-;; (def block-type-schema [:enum "property" "class" "whiteboard" "hidden" "closed value" "macro"])
-
-;; (def block-pos-type-schema
-;;   [:enum :sibling :child :no-order])
-
 (def block-pos-schema
   ":sibling:  sibling of target-block(:target-uuid)
   :child: child of target-block(:target-uuid)

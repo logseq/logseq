@@ -32,7 +32,7 @@
                                          :block/path-refs [{:db/id new-tag-id}])
                                   %)
                                blocks)
-          refs-tx (worker-pipeline/compute-block-path-refs-tx {:tx-meta {:outliner-op :save-block} :db-after @conn} modified-blocks)
+          refs-tx (#'worker-pipeline/compute-block-path-refs-tx {:tx-meta {:outliner-op :save-block} :db-after @conn} modified-blocks)
           _ (d/transact! conn refs-tx)
           updated-blocks (->> (get-blocks @conn)
                               (map #(hash-map :block/content (:block/content %)
