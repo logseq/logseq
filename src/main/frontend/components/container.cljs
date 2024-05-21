@@ -700,14 +700,12 @@
 (defn- hide-context-menu-and-clear-selection
   [e]
   (state/hide-custom-context-menu!)
-  (let [block (.closest (.-target e) ".ls-block")]
-    (when-not (or (gobj/get e "shiftKey")
-                  (util/meta-key? e)
-                  (state/get-edit-input-id)
-                  (and block
-                       (or (= block (.-target e))
-                           (.contains block (.-target e)))))
-      (editor-handler/clear-selection!))))
+  (when-not (or (gobj/get e "shiftKey")
+              (util/meta-key? e)
+              (state/get-edit-input-id)
+              (some-> (.-target e) (.closest ".ls-block"))
+              (some-> (.-target e) (.closest "[data-keep-selection]")))
+    (editor-handler/clear-selection!)))
 
 (rum/defc render-custom-context-menu
   [links position]
@@ -837,8 +835,11 @@
                     (fn [content]
                       (shui/popup-show! e
                         (fn [{:keys [id]}]
-                          [:div {:on-click #(shui/popup-hide! id)} content])
-                        {:on-hide state/clear-selection!
+                          [:div {:on-click #(shui/popup-hide! id)
+                                 :data-keep-selection true}
+                           content])
+                        {:on-before-hide state/dom-clear-selection!
+                         :on-after-hide state/state-clear-selection!
                          :content-props {:class "w-[280px] ls-context-menu-content"}
                          :as-dropdown? true}))
 

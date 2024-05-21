@@ -1151,7 +1151,7 @@ Similar to re-frame subscriptions"
   []
   (get-selected-block-ids (get-selection-blocks)))
 
-(defn- dom-clear-selection!
+(defn dom-clear-selection!
   []
   (doseq [node (dom/by-class "ls-block selected")]
     (dom/remove-class! node "selected")))
@@ -1190,14 +1190,18 @@ Similar to re-frame subscriptions"
   []
   (set-state! :selection/mode true))
 
-(defn clear-selection!
+(defn state-clear-selection!
   []
-  (dom-clear-selection!)
   (set-state! :selection/mode false)
   (set-state! :selection/blocks nil)
   (set-state! :selection/direction :down)
   (set-state! :selection/start-block nil)
   (set-state! :selection/selected-all? false))
+
+(defn clear-selection!
+  []
+  (dom-clear-selection!)
+  (state-clear-selection!))
 
 (defn get-selection-start-block-or-first
   []
