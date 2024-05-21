@@ -64,6 +64,13 @@
                   content)) content matches)
       content)))
 
+(defn get-matched-special-ids
+  [content]
+  (->> (re-seq special-id-ref-pattern content)
+       (distinct)
+       (map second)
+       (map uuid)))
+
 (defn page-ref->special-id-ref
   "Convert page ref to special id refs e.g. `[[page name]] -> [[~^...]]"
   [content refs]

@@ -8,21 +8,34 @@
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.outliner.core :as outliner-core]))
 
-(defn- path-refs-need-recalculated?
+(defn- refs-need-recalculated?
   [tx-meta]
   (let [outliner-op (:outliner-op tx-meta)]
     (not (or
           (contains? #{:collapse-expand-blocks :delete-blocks} outliner-op)
           (:undo? tx-meta) (:redo? tx-meta)))))
 
-(defn compute-block-path-refs-tx
+(defn- compute-block-path-refs-tx
   [{:keys [tx-meta] :as tx-report} blocks]
-  (when (or (and (:outliner-op tx-meta) (path-refs-need-recalculated? tx-meta))
+  (when (or (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
             (:from-disk? tx-meta)
             (:new-graph? tx-meta))
     (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
+
+(defn- rebuild-block-refs
+  [{:keys [tx-meta db-after]} blocks]
+  (when (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
+    (mapcat (fn [block]
+              (when (d/entity db-after (:db/id block))
+                (let [refs (outliner-core/rebuild-block-refs db-after block)]
+                  (when (seq refs)
+                    [[:db/retract (:db/id block) :block/refs]
+                     {:db/id (:db/id block)
+                      :block/refs refs}]))))
+            blocks)))
 
 (defn validate-db!
   [repo conn tx-report context]
@@ -72,27 +85,31 @@
                       (when (d/entity @conn page-id)
                         (file/sync-to-file repo page-id tx-meta)))))
               deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
+              block-refs (rebuild-block-refs tx-report blocks)
+              refs-tx-report (when (seq block-refs)
+                               (ldb/transact! conn block-refs {:pipeline-replace? true}))
               replace-tx (concat
-                        ;; block path refs
-                          (set (compute-block-path-refs-tx tx-report blocks))
+                          ;; block path refs
+                          (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report))
+                                blocks' (map (fn [b] (or (d/entity db-after (:db/id b)) b)) blocks)]
+                            (set (compute-block-path-refs-tx tx-report blocks')))
 
                           ;; update block/tx-id
                           (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))
                                                        (concat pages blocks))
-                                tx-id (get-in tx-report [:tempids :db/current-tx])]
+                                tx-id (get-in (or refs-tx-report tx-report) [:tempids :db/current-tx])]
                             (keep (fn [b]
                                     (when-let [db-id (:db/id b)]
                                       {:db/id db-id
                                        :block/tx-id tx-id})) updated-blocks)))
-              tx-report' (or
-                          (when (seq replace-tx)
-                          ;; TODO: remove this since transact! is really slow
-                            (ldb/transact! conn replace-tx {:pipeline-replace? true}))
-                          (do
-                            (when-not (exists? js/process) (d/store @conn))
-                            tx-report))
+              tx-report' (if (seq replace-tx)
+                           (ldb/transact! conn replace-tx {:pipeline-replace? true})
+                           (do
+                             (when-not (exists? js/process) (d/store @conn))
+                             tx-report))
               fix-tx-data (validate-db! repo conn tx-report context)
               full-tx-data (concat (:tx-data tx-report)
+                                   (:tx-data refs-tx-report)
                                    fix-tx-data
                                    (:tx-data tx-report'))
               final-tx-report (assoc tx-report' :tx-data full-tx-data)

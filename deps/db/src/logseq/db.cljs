@@ -511,6 +511,10 @@
   [entity]
   (contains? (:block/type entity) "class"))
 
+(defn closed-value?
+  [entity]
+  (contains? (:block/type entity) "closed value"))
+
 (def db-based-graph? entity-plus/db-based-graph?)
 
 ;; File based fns

@@ -10,6 +10,7 @@
             [logseq.common.util :as common-util]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]
+            [logseq.db :as ldb]
             [malli.core :as m]
             [malli.util :as mu]))
 
@@ -353,7 +354,7 @@ when undo this op, this original entity-map will be transacted back into db")
                                            (nil? block-origin-link))
                                       (conj [:db/retract db-id :block/link]))
               _ (when (seq retract-attrs-tx-data)
-                  (d/transact! conn retract-attrs-tx-data {:gen-undo-ops? false}))
+                  (ldb/transact! conn retract-attrs-tx-data {:gen-undo-ops? false}))
               new-block (cond-> block-entity
                           (some? block-origin-content)
                           (assoc :block/content block-origin-content)
