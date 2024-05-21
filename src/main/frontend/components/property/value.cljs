@@ -752,14 +752,15 @@
                      :container-id (:container-id opts)}]
          (block-cp config (sort-by :block/order v)))]
       (let [values-cp (fn [toggle-fn]
-                        (if (seq items)
-                          (concat
-                           (for [item items]
-                             (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-                           (when date?
-                             [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
-                          (when-not editing?
-                            (property-empty-text-value))))
+                        (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
+                          (if (and (seq items) not-empty-value?)
+                            (concat
+                             (for [item items]
+                               (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                             (when date?
+                               [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+                            (when-not editing?
+                              (property-empty-text-value)))))
             select-cp (fn [select-opts]
                         (let [select-opts (merge {:multiple-choices? true
                                                   :dropdown? editing?
