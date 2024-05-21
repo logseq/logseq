@@ -302,7 +302,7 @@
 
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
             (case (:type @*property-schema)
-              ;; Question: 1. should we still suppport classes for `page` type?
+              ;; Question: 1. should we still support classes for `page` type?
               ;;           2. flexible query instead of classes? e.g. find all papers are related to either Clojure or OCaml `(and (tag :paper) (or (tag :clojure) (tag :ocaml)))`
               :object
               (when (empty? (:property/closed-values property))

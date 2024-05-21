@@ -101,7 +101,7 @@
   (when-let [ent (d/entity db val)]
     (some? (:block/original-name ent))))
 
-(defn- object?
+(defn- object-entity?
   [db val]
   (when-let [ent (d/entity db val)]
     (seq (:block/tags ent))))
@@ -133,7 +133,7 @@
               page?]
    :object   [:fn
               {:error/message "should be a page/block with tags"}
-              object?]
+              object-entity?]
    ;; TODO: strict check on template
    :template [:fn
               {:error/message "should has #template"}
