@@ -60,6 +60,12 @@
                             class?]])
 ;; Helper fns
 ;; ==========
+(defn- empty-placeholder-value? [db property property-val]
+  (if (= :db.type/ref (:db/valueType property))
+    (and (integer? property-val)
+         (= :logseq.property/empty-placeholder (:db/ident (d/entity db property-val))))
+    (= :logseq.property/empty-placeholder property-val)))
+
 (defn validate-property-value
   "Validates the property value in a property tuple. The property value is
   expected to be a coll if the property has a :many cardinality. validate-fn is
@@ -81,13 +87,11 @@
                                (contains? (set (map :db/id (:property/closed-values property))) val)))
                         validate-fn')]
     (if (db-property/many? property)
-      (every? validate-fn'' property-val)
+      (or (every? validate-fn'' property-val)
+          (empty-placeholder-value? db property (first property-val)))
       (or (validate-fn'' property-val)
           ;; also valid if value is empty-placeholder
-          (if (= :db.type/ref (:db/valueType property))
-            (and (integer? property-val)
-                 (= :logseq.property/empty-placeholder (:db/ident (d/entity db property-val))))
-            (= :logseq.property/empty-placeholder property-val))))))
+          (empty-placeholder-value? db property property-val)))))
 
 (defn update-properties-in-schema
   "Needs to be called on the DB schema to add the datascript db to it"
