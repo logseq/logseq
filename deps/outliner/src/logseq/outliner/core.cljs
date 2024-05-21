@@ -11,7 +11,6 @@
             [malli.core :as m]
             [malli.util :as mu]
             [logseq.db :as ldb]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.frontend.property.util :as db-property-util]
