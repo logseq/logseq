@@ -2,7 +2,6 @@
   "Fns about applying remote updates"
   (:require [clojure.data :as data]
             [clojure.set :as set]
-            [cognitect.transit :as transit]
             [datascript.core :as d]
             [frontend.schema-register :as sr]
             [frontend.worker.batch-tx :as batch-tx]
@@ -21,8 +20,6 @@
 (sr/defkeyword ::need-pull-remote-data
   "remote-update's :remote-t-before > :local-tx,
    so need to pull earlier remote-data from websocket.")
-
-(def ^:private transit-r (transit/reader :json))
 
 (defmulti ^:private transact-db! (fn [action & _args] action))
 
@@ -302,7 +299,7 @@
         first-remote-parent (first parents)]
     (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
       (let [page-name (:block/name local-parent)
-            properties* (transit/read transit-r properties)
+            properties* (ldb/read-transit-str properties)
             shape-property-id (db-property-util/get-pid repo :logseq.property.tldraw/shape)
             shape (and (map? properties*)
                        (get properties* shape-property-id))]
@@ -357,17 +354,25 @@
 
 (defn- diff-block-map->tx-data
   [db e local-block-map remote-block-map]
-  (mapcat
-   (fn [[k local-v]]
-     (let [remote-v (get remote-block-map k)]
-       (seq (diff-block-kv->tx-data db (d/schema db) e k local-v remote-v))))
-   local-block-map))
+  (let [db-schema (d/schema db)
+        tx-data1
+        (mapcat
+         (fn [[k local-v]]
+           (let [remote-v (get remote-block-map k)]
+             (seq (diff-block-kv->tx-data db db-schema e k local-v remote-v))))
+         local-block-map)
+        tx-data2
+        (mapcat
+         (fn [[k remote-v]]
+           (let [local-v (get local-block-map k)]
+             (seq (diff-block-kv->tx-data db db-schema e k local-v remote-v))))
+         (apply dissoc remote-block-map (keys local-block-map)))]
+    (concat tx-data1 tx-data2)))
 
 (defn- remote-op-value->tx-data
-  [conn block-uuid op-value]
-  (let [db @conn
-        db-schema (d/schema db)
-        ent (d/entity @conn [:block/uuid block-uuid])
+  [db block-uuid op-value]
+  (let [db-schema (d/schema db)
+        ent (d/entity db [:block/uuid block-uuid])
         local-block-map (->> (select-keys ent watched-attrs)
                              (map (fn [[k v]]
                                     (let [k-schema (get db-schema k)
@@ -378,7 +383,7 @@
                                          [true true]
                                          (keep (fn [x] (when-let [e (:db/id x)] (:block/uuid (d/entity db e)))) v)
                                          [true false]
-                                         (let [v* (some->> (:db/id v) (d/entity @conn) :block/uuid)]
+                                         (let [v* (some->> (:db/id v) (d/entity db) :block/uuid)]
                                            (assert (some? v*) v)
                                            v*)
                                          ;; else
@@ -387,19 +392,15 @@
     (diff-block-map->tx-data db (:db/id ent) local-block-map op-value)))
 
 (defn- update-block-attrs
-  [repo conn block-uuid {:keys [parents properties _content] :as op-value}]
-  (let [key-set (set/intersection
-                 (conj rtc-const/general-attr-set :content)
-                 (set (keys op-value)))]
-    (when (seq key-set)
-      (let [first-remote-parent (first parents)
-            local-parent (d/entity @conn [:block/uuid first-remote-parent])
-            whiteboard-page-block? (whiteboard-page-block? local-parent)]
-        (if (and whiteboard-page-block? properties)
-          (upsert-whiteboard-block repo conn op-value)
-          (when-let [tx-data (seq (remote-op-value->tx-data conn block-uuid op-value))]
-            (ldb/transact! conn tx-data {:persist-op? false
-                                         :gen-undo-ops? false})))))))
+  [repo conn block-uuid {:keys [parents _content] :as op-value}]
+  (let [first-remote-parent (first parents)
+        local-parent (d/entity @conn [:block/uuid first-remote-parent])
+        whiteboard-page-block? (whiteboard-page-block? local-parent)]
+    (if whiteboard-page-block?
+      (upsert-whiteboard-block repo conn op-value)
+      (when-let [tx-data (seq (remote-op-value->tx-data @conn block-uuid op-value))]
+        (ldb/transact! conn tx-data {:persist-op? false
+                                     :gen-undo-ops? false})))))
 
 (defn- apply-remote-update-ops
   [repo conn update-ops]
