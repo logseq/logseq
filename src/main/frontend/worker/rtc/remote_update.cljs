@@ -6,7 +6,6 @@
             [frontend.schema-register :as sr]
             [frontend.worker.batch-tx :as batch-tx]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.db-based.rename :as worker-page-rename]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
@@ -345,7 +344,7 @@
           [[:db/add e k remote-v*]]))
 
       [false true]
-      (let [_ (assert (coll? remote-v) {:remote-v remote-v :a k :e e})
+      (let [_ (assert (or (nil? remote-v) (coll? remote-v)) {:remote-v remote-v :a k :e e})
             remote-v* (set (map ldb/read-transit-str remote-v))
             [local-only remote-only] (data/diff (set local-v) remote-v*)]
         (cond-> []
@@ -389,18 +388,19 @@
                                          ;; else
                                          v)])))
                              (into {}))]
-    (diff-block-map->tx-data db (:db/id ent) local-block-map op-value)))
+    (diff-block-map->tx-data db (:db/id ent) local-block-map (select-keys op-value watched-attrs))))
 
 (defn- update-block-attrs
-  [repo conn block-uuid {:keys [parents _content] :as op-value}]
-  (let [first-remote-parent (first parents)
-        local-parent (d/entity @conn [:block/uuid first-remote-parent])
-        whiteboard-page-block? (whiteboard-page-block? local-parent)]
-    (if whiteboard-page-block?
-      (upsert-whiteboard-block repo conn op-value)
-      (when-let [tx-data (seq (remote-op-value->tx-data @conn block-uuid op-value))]
-        (ldb/transact! conn tx-data {:persist-op? false
-                                     :gen-undo-ops? false})))))
+  [repo conn block-uuid {:keys [parents] :as op-value}]
+  (when (some (fn [k] (= "block" (namespace k))) (keys op-value)) ; there exists some :block/xxx attrs
+    (let [first-remote-parent (first parents)
+          local-parent (d/entity @conn [:block/uuid first-remote-parent])
+          whiteboard-page-block? (whiteboard-page-block? local-parent)]
+      (if whiteboard-page-block?
+        (upsert-whiteboard-block repo conn op-value)
+        (when-let [tx-data (seq (remote-op-value->tx-data @conn block-uuid op-value))]
+          (ldb/transact! conn tx-data {:persist-op? false
+                                       :gen-undo-ops? false}))))))
 
 (defn- apply-remote-update-ops
   [repo conn update-ops]
@@ -434,20 +434,9 @@
     (doseq [{:keys [self _page-name]
              original-name :block/original-name
              :as op-value} update-page-ops]
-      (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
-            create-opts {:create-first-block? false
+      (let [create-opts {:create-first-block? false
                          :uuid self :persist-op? false}]
-        (cond
-          ;; a client-page has same uuid as remote but different page-names,
-          ;; then we need to rename the client-page to remote-page-name
-          (and old-page-original-name (not= old-page-original-name original-name))
-          (worker-page-rename/rename! repo conn config old-page-original-name original-name {:persist-op? false})
-
-          ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
-          ;; just create-page
-          :else
-          (worker-page/create! repo conn config original-name create-opts))
-
+        (worker-page/create! repo conn config (ldb/read-transit-str original-name) create-opts)
         (update-block-attrs repo conn self op-value)))))
 
 (defn apply-remote-update
