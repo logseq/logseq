@@ -356,13 +356,12 @@
           (seq remote-only) (concat (map (fn [v] [:db/add e k v]) remote-only)))))))
 
 (defn- diff-block-map->tx-data
-  [db local-block-map remote-block-map]
-  (let [e (:db/id local-block-map)]
-    (mapcat
-     (fn [[k local-v]]
-       (let [remote-v (get remote-block-map k)]
-         (seq (diff-block-kv->tx-data db (d/schema db) e k local-v remote-v))))
-     local-block-map)))
+  [db e local-block-map remote-block-map]
+  (mapcat
+   (fn [[k local-v]]
+     (let [remote-v (get remote-block-map k)]
+       (seq (diff-block-kv->tx-data db (d/schema db) e k local-v remote-v))))
+   local-block-map))
 
 (defn- remote-op-value->tx-data
   [conn block-uuid op-value]
@@ -384,8 +383,8 @@
                                            v*)
                                          ;; else
                                          v)])))
-                             (into {:db/id (:db/id ent)}))]
-    (diff-block-map->tx-data db local-block-map op-value)))
+                             (into {}))]
+    (diff-block-map->tx-data db (:db/id ent) local-block-map op-value)))
 
 (defn- update-block-attrs
   [repo conn block-uuid {:keys [parents properties _content] :as op-value}]
@@ -482,7 +481,7 @@
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
 
-          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true}
+          (batch-tx/with-batch-tx-mode conn {:rtc-tx? true :persist-op? false :gen-undo-ops? false}
             (js/console.groupCollapsed "rtc/apply-remote-ops-log")
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))

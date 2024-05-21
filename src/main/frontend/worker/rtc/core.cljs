@@ -160,7 +160,7 @@
              (case (:type event)
                :remote-update
                (r.remote-update/apply-remote-update repo conn date-formatter event add-log-fn)
-
+               ;; TODO: add case: fetch earlier remote data
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
                      repo conn graph-uuid date-formatter
