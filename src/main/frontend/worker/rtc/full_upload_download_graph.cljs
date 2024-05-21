@@ -178,7 +178,8 @@
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
-        blocks (normalized-remote-blocks-coercer blocks)
+        blocks (worker-util/profile :normalize-remote-blocks
+                 (normalized-remote-blocks-coercer blocks))
         blocks* (remote-block-index->block-order blocks)
         blocks-with-page-id (fill-block-fields blocks*)
         tx-data (concat blocks-with-page-id
