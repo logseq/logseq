@@ -101,9 +101,9 @@
                                                          :graph-name remote-graph-name}))]
         (if-let [graph-uuid (:graph-uuid upload-resp)]
           (let [^js worker-obj (:worker/object @worker-state/*state)]
-            (d/transact! conn
-                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}
-                          {:db/ident :logseq.kv/graph-local-tx :graph/local-tx "0"}])
+            (ldb/transact! conn
+                           [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}
+                            {:db/ident :logseq.kv/graph-local-tx :graph/local-tx "0"}])
             (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:graph/uuid graph-uuid}))))
             (op-mem-layer/init-empty-ops-store! repo)
             (op-mem-layer/update-graph-uuid! repo graph-uuid)
@@ -157,23 +157,18 @@
 (defn- transact-block-refs!
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [date-formatter (worker-state/get-date-formatter repo)
-          db @conn
+    (let [db @conn
           ;; get all the block datoms
           datoms (d/datoms db :avet :block/uuid)
           refs-tx (keep
                    (fn [d]
                      (let [block (d/entity @conn (:e d))
-                           block' (let [content (:block/content block)]
-                                    (if (and content (string/includes? content (str page-ref/left-brackets db-content/page-ref-special-chars)))
-                                      (assoc block :block/content (db-content/db-special-id-ref->page db content))
-                                      block))
-                           refs (outliner-core/rebuild-block-refs repo conn date-formatter block' {})]
+                           refs (outliner-core/rebuild-block-refs @conn block)]
                        (when (seq refs)
                          {:db/id (:db/id block)
                           :block/refs refs})))
                    datoms)]
-      (d/transact! conn refs-tx {:outliner-op :rtc-download-rebuild-block-refs}))))
+      (ldb/transact! conn refs-tx {:outliner-op :rtc-download-rebuild-block-refs}))))
 
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]

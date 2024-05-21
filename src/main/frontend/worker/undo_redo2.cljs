@@ -6,7 +6,8 @@
             [clojure.set :as set]
             [frontend.schema-register :include-macros true :as sr]
             [malli.core :as m]
-            [malli.util :as mu]))
+            [malli.util :as mu]
+            [logseq.db :as ldb]))
 
 ;; TODO: add other UI states such as `::ui-updates`.
 (sr/defkeyword :gen-undo-ops?
@@ -292,7 +293,7 @@
                               :gen-undo-ops? false
                               :undo? undo?))]
             (when (seq reversed-tx-data)
-              (d/transact! conn reversed-tx-data tx-meta')
+              (ldb/transact! conn reversed-tx-data tx-meta')
               ((if undo? push-redo-op push-undo-op) repo op)
               (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                                         (map second))

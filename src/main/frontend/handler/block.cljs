@@ -10,6 +10,7 @@
    [logseq.outliner.core :as outliner-core]
    [frontend.modules.outliner.ui :as ui-outliner-tx]
    [frontend.modules.outliner.op :as outliner-op]
+   [logseq.outliner.op]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.drawer :as drawer]

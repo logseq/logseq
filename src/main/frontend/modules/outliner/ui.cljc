@@ -2,7 +2,8 @@
   #?(:cljs (:require-macros [frontend.modules.outliner.ui]))
   #?(:cljs (:require [frontend.state :as state]
                      [frontend.db :as db]
-                     [logseq.outliner.op])))
+                     [logseq.outliner.op]
+                     [frontend.modules.outliner.op])))
 
 (defmacro transact!
   [opts & body]
@@ -16,12 +17,13 @@
              ~@body
              (let [r# (persistent! frontend.modules.outliner.op/*outliner-ops*)
                    worker# @state/*db-worker]
-               (if (and test?# (seq r#))
-                 (logseq.outliner.op/apply-ops! (state/get-current-repo)
-                                                (db/get-db false)
-                                                r#
-                                                (state/get-date-formatter)
-                                                ~opts)
+               (if test?#
+                 (when (seq r#)
+                   (logseq.outliner.op/apply-ops! (state/get-current-repo)
+                                                  (db/get-db false)
+                                                  r#
+                                                  (state/get-date-formatter)
+                                                  ~opts))
                  (when (and worker# (seq r#))
                    (let [request-id# (state/get-worker-next-request-id)
                          request# #(.apply-outliner-ops ^Object worker# (state/get-current-repo)

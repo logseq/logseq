@@ -191,64 +191,44 @@
     :else (throw (js/Error. (str "invalid ref " ref)))))
 
 (defn ^:api rebuild-block-refs
-  [repo conn date-formatter block new-properties]
-  (let [db @conn
-        property-key-refs (keys new-properties)
-        property-value-refs (->> (vals new-properties)
+  [db block]
+  (let [properties (:block/properties (d/entity db (:db/id block)))
+        property-key-refs (keys properties)
+        named-block? (fn [block] (and (de/entity? block) (:block/name block)))
+        property-value-refs (->> (vals properties)
                                  (mapcat (fn [v]
                                            (cond
-                                             (and (coll? v) (uuid? (first v)))
-                                             v
+                                             (named-block? v)
+                                             [(:db/id v)]
 
-                                             (uuid? v)
-                                             (when-let [_entity (d/entity db [:block/uuid v])]
-                                               [v])
-
-                                             (and (coll? v) (string? (first v)))
-                                             (mapcat #(gp-block/extract-refs-from-text repo db % date-formatter) v)
-
-                                             (string? v)
-                                             (gp-block/extract-refs-from-text repo db v date-formatter)
+                                             (and (coll? v) (every? named-block? v))
+                                             (map :db/id v)
 
                                              :else
                                              nil))))
-        property-refs (->> (concat property-key-refs property-value-refs)
-                           (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
-                           (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
+        property-refs (concat property-key-refs property-value-refs)
+        content-refs (let [content (or (:block/raw-content block)
+                                       (:block/content block))]
+                       (when (string? content)
+                         (->> (db-content/get-matched-special-ids content)
+                              (map (fn [id]
+                                     (when-let [e (d/entity db [:block/uuid id])]
+                                       (:db/id e)))))))]
+    (->> (concat (map ref->eid (:block/tags block))
+                 (when-let [id (:db/id (:block/link block))]
+                   [id])
+                 property-refs content-refs)
+         (remove nil?))))
 
-        content-refs (when-let [content (:block/content block)]
-                       (gp-block/extract-refs-from-text repo db content date-formatter))]
-    (concat property-refs content-refs
-            (when (sqlite-util/db-based-graph? repo)
-              (map ref->eid (:block/tags block))))))
-
-(defn- rebuild-refs
-  [repo conn date-formatter txs-state block m]
+(defn- add-tag-types
+  [repo txs-state m]
   (when (sqlite-util/db-based-graph? repo)
-    (let [content (:block/content m)
-          block' (if (and (string? content) (not (re-find db-content/special-id-ref-pattern content))) ; not raw content
-                   (assoc block :block/content content)
-                   block)
-          refs' (rebuild-block-refs repo conn date-formatter block' {})
-          refs (->> refs'
-                    (concat (:block/refs m))
-                    (remove nil?))
-          add-tag-type (map
+    (let [add-tag-type (map
                         (fn [t]
                           {:db/id (ref->eid t)
                            :block/type "class"})
-                        (:block/tags m))
-          refs (map (fn [ref]
-                      (if (and (map? ref)
-                               (:block/name ref))
-                        (let [page-id (:db/id (ldb/get-page @conn (:block/name ref)))]
-                          (cond-> ref
-                            (some? page-id)
-                            (assoc :db/id page-id)))
-                        ref)) refs)]
-      (swap! txs-state (fn [txs] (concat txs [{:db/id (:db/id block)
-                                               :block/refs refs}]
-                                         add-tag-type))))))
+                        (:block/tags m))]
+      (swap! txs-state (fn [txs] (concat txs add-tag-type))))))
 
 (defn- fix-tag-ids
   [m]
@@ -269,8 +249,8 @@
 
 (extend-type Entity
   otree/INode
-  (-save [this txs-state conn repo date-formatter {:keys [retract-attributes? retract-attributes]
-                                                   :or {retract-attributes? true}}]
+  (-save [this txs-state conn repo _date-formatter {:keys [retract-attributes? retract-attributes]
+                                                    :or {retract-attributes? true}}]
     (assert (ds/outliner-txs-state? txs-state)
             "db should be satisfied outliner-tx-state?")
     (let [data this
@@ -337,7 +317,7 @@
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
 
-      (rebuild-refs repo conn date-formatter txs-state block-entity m)
+      (add-tag-types repo txs-state m)
 
       this))
 
