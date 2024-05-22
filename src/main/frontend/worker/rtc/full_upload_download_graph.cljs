@@ -25,6 +25,7 @@
   [:map
    [:db/id [:string {:decode/custom str}]]
    [:block/uuid [:uuid {:decode/custom ldb/read-transit-str}]]
+   [:block/order {:optional true} :string]
    [:malli.core/default [:map-of :keyword
                          [:any {:decode/custom
                                 (fn [x] ; convert db-id to db-id-string(as temp-id)
@@ -76,9 +77,9 @@
                     {:db/id (str (:e (first datoms)))}
                     datoms))))
          (map (fn [block]
-                (if (:db/ident block)
-                  (update block :db/ident ldb/read-transit-str)
-                  block))))))
+                (cond-> block
+                  (:db/ident block) (update :db/ident ldb/read-transit-str)
+                  (:block/order block) (update :block/order ldb/read-transit-str)))))))
 
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name]
