@@ -196,9 +196,7 @@
 
 (rum/defc choices < rum/reactive
   [property opts]
-  (let [schema (:block/schema property)
-        values (:property/closed-values property)
-        property-type (:type schema)
+  (let [values (:property/closed-values property)
         dropdown-opts {:modal-class (util/hiccup->class
                                      "origin-top-right.absolute.left-0.rounded-md.shadow-lg")}]
     [:div.closed-values.flex.flex-col
