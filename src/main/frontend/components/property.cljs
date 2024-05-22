@@ -489,7 +489,8 @@
                                        (not (seq (:property/closed-values property))))
                                   (pv/<create-new-block! entity property "")
 
-                                  (not= :default type)
+                                  (or (not= :default type)
+                                      (and (= :default type) (seq (:property/closed-values property))))
                                   (property-handler/set-block-property! (state/get-current-repo) (:block/uuid entity)
                                                                         (:db/ident property)
                                                                         :logseq.property/empty-placeholder))
