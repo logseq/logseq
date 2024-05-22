@@ -347,7 +347,7 @@
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
           (is (= #{uuid2-client} (set (map :block/uuid page-blocks)))))))))
 
-(deftest ^:fix-me apply-remote-remove-ops-test2
+(deftest apply-remote-remove-ops-test2
   (testing "
 origin:
 - 1
@@ -359,7 +359,10 @@ client: ;; move 3 as child of 2
   - 3
 server: ;; remove 2
 - 1
-- 3"
+- 3
+result:
+- 3
+- 1"
     (let [repo (state/get-current-repo)
           conn (conn/get-db repo false)
           date-formatter (common-config/get-date-formatter (worker-state/get-config repo))
@@ -378,13 +381,13 @@ server: ;; remove 2
         ;;   - 3
         repo conn
         [{:block/uuid uuid1 :block/content "1"
-          :block/left [:block/uuid page-uuid]
+          :block/order "a0"
           :block/parent [:block/uuid page-uuid]}
          {:block/uuid uuid2 :block/content "2"
-          :block/left [:block/uuid uuid1]
+          :block/order "a1"
           :block/parent [:block/uuid page-uuid]}
          {:block/uuid uuid3 :block/content "3"
-          :block/left [:block/uuid uuid2]
+          :block/order "a0"
           :block/parent [:block/uuid uuid2]}]
         (ldb/get-page @conn page-name)
         {:sibling? false :keep-uuid? true}))
@@ -399,8 +402,7 @@ server: ;; remove 2
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-remove-ops repo conn date-formatter remove-ops)
         (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
-          (is (= #{uuid1 uuid3} (set (map :block/uuid page-blocks))))
-          (is (= page-uuid (:block/uuid (:block/left (d/entity @conn [:block/uuid uuid3]))))))))))
+          (is (= [uuid3 uuid1] (map :block/uuid (sort-by :block/order page-blocks)))))))))
 
 
 (deftest ^:fix-me apply-remote-update&remove-page-ops-test
@@ -415,7 +417,7 @@ server: ;; remove 2
                           {page1-uuid {:op :update-page
                                        :self page1-uuid
                                        :page-name (str page1-uuid)
-                                       :original-name (str page1-uuid)}}}
+                                       :block/original-name (str page1-uuid)}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
@@ -429,7 +431,7 @@ server: ;; remove 2
                           {page1-uuid {:op :update-page
                                        :self page1-uuid
                                        :page-name (str page1-uuid "-rename")
-                                       :original-name (str page1-uuid "-rename")}}}
+                                       :block/original-name (str page1-uuid "-rename")}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
@@ -483,17 +485,17 @@ server: ;; remove 2
                           {page2-uuid {:op :update-page
                                        :self page2-uuid
                                        :page-name page-name
-                                       :original-name page-name}
+                                       :block/original-name page-name}
                            uuid1-remote {:op :move
                                          :self uuid1-remote
                                          :parents [page2-uuid]
                                          :left page2-uuid
-                                         :content "uuid1-remote"}
+                                         :block/content "uuid1-remote"}
                            uuid2-remote {:op :move
                                          :self uuid2-remote
                                          :parents [page2-uuid]
                                          :left uuid1-remote
-                                         :content "uuid2-remote"}}}
+                                         :block/content "uuid2-remote"}}}
             all-ops (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))
             update-page-ops (vals (:update-page-ops-map all-ops))
             move-ops (#'r.remote/move-ops-map->sorted-move-ops (:move-ops-map all-ops))]

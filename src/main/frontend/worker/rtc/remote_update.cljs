@@ -471,14 +471,16 @@
               update-page-ops (vals update-page-ops-map)
               remove-page-ops (vals remove-page-ops-map)]
 
+          (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true :persist-op? false :gen-undo-ops? false}
-            (js/console.groupCollapsed "rtc/apply-remote-ops-log")
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
-            (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
             (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn update-ops))
-            (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
-            (js/console.groupEnd))
+            (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops)))
+          ;; NOTE: we cannot set :persist-op? = true when batch-tx/with-batch-tx-mode (already set to false)
+          ;; and there're some transactions in `apply-remote-remove-ops` need to :persist-op?=true
+          (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
+          (js/console.groupEnd)
 
           (op-mem-layer/update-local-tx! repo remote-t))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
