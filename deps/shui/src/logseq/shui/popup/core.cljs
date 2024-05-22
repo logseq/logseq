@@ -64,14 +64,15 @@
   (let [[index config] (get-popup id)]
     (when index
       (swap! *popups #(->> % (medley/remove-nth index) (vec)))
-      (let [{:keys [auto-focus? target]} config]
+      (let [{:keys [auto-focus? target trigger-id]} config]
         (when (and auto-focus? target)
-          (d/add-class! target "ls-popup-closed")
-          (.focus target))))))
+          (when-let [target (if trigger-id (js/document.getElementById trigger-id) target)]
+            (d/add-class! target "ls-popup-closed")
+            (.focus target)))))))
 
 (defn show!
   [^js event content & {:keys [id as-dropdown? as-content? align root-props content-props
-                               on-before-hide on-after-hide] :as opts}]
+                               on-before-hide on-after-hide trigger-id] :as opts}]
   (let [*target (volatile! nil)
         position (cond
                    (vector? event) event
@@ -97,6 +98,7 @@
     (upsert-popup!
       (merge opts
         {:id (or id (gen-id)) :target (deref *target)
+         :trigger-id trigger-id
          :open? true :content content :position position
          :as-dropdown? as-dropdown?
          :as-content? as-content?
