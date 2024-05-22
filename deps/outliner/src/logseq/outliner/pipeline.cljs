@@ -24,57 +24,74 @@
 ;; 2. Its children' block/path-refs might need to be updated too.
 (defn- compute-block-path-refs
   [{:keys [db-before db-after]} blocks*]
-  (let [blocks (remove :block/name blocks*)
-        *computed-ids (atom #{})]
-    (mapcat (fn [block]
-              (when (and (not (@*computed-ids (:block/uuid block))) ; not computed yet
-                         (not (:block/name block)))
-                (let [parents (ldb/get-block-parents db-after (:block/uuid block) {})
-                      parents-refs (->> (mapcat :block/path-refs parents)
-                                        (map :db/id))
-                      old-refs (if db-before
-                                 (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
-                                 #{})
-                      new-refs (set (concat
-                                     (some-> (:db/id (:block/page block)) vector)
-                                     (map :db/id (:block/refs block))
-                                     parents-refs))
-                      refs-changed? (not= old-refs new-refs)
-                      children (ldb/get-block-children-ids db-after (:block/uuid block))
-                            ;; Builds map of children ids to their parent id and :block/refs ids
-                      children-maps (into {}
-                                          (map (fn [id]
-                                                 (let [entity (d/entity db-after [:block/uuid id])]
-                                                   [(:db/id entity)
-                                                    {:parent-id (get-in entity [:block/parent :db/id])
-                                                     :block-ref-ids (map :db/id (:block/refs entity))}]))
-                                               children))
-                      children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
-                                           {:db/id id
+  (let [*computed-ids (atom #{})
+        blocks (remove (fn [block]
+                         (let [from-property (:logseq.property/created-from-property block)
+                               default? (= :default (get-in from-property [:block/schema :type]))]
+                           (and from-property (not default?))))
+                blocks*)]
+    (->>
+     (mapcat (fn [block]
+               (when-not (@*computed-ids (:block/uuid block))
+                 (let [page? (ldb/page? block)
+                       from-property (:logseq.property/created-from-property block)
+                       parents (when-not page?
+                                 (ldb/get-block-parents db-after (:block/uuid block) {}))
+                       parents-refs (->> (cond->>
+                                          (mapcat :block/path-refs parents)
+                                           from-property
+                                           (remove (fn [parent] (and (ldb/property? parent) (not= (:db/id parent) (:db/id from-property))))))
+                                         (map :db/id))
+                       old-refs (if db-before
+                                  (set (map :db/id (:block/path-refs (d/entity db-before (:db/id block)))))
+                                  #{})
+                       new-refs (set (concat
+                                      (some-> (:db/id (:block/page block)) vector)
+                                      (map :db/id (:block/refs block))
+                                      parents-refs))
+                       refs-changed? (not= old-refs new-refs)
+                       children (when refs-changed?
+                                  (when-not page?
+                                    (ldb/get-block-children-ids db-after (:block/uuid block))))
+                       ;; Builds map of children ids to their parent id and :block/refs ids
+                       children-maps (into {}
+                                           (keep (fn [id]
+                                                   (when-let [entity (d/entity db-after [:block/uuid id])]
+                                                     (let [from-property (:logseq.property/created-from-property entity)
+                                                           default? (= :default (get-in from-property [:block/schema :type]))
+                                                           page? (ldb/page? entity)]
+                                                       (when-not (or page? (and from-property (not default?)))
+                                                         [(:db/id entity)
+                                                          {:parent-id (get-in entity [:block/parent :db/id])
+                                                           :block-ref-ids (map :db/id (:block/refs entity))}]))))
+                                                 children))
+                       children-refs (map (fn [[id {:keys [block-ref-ids] :as child-map}]]
+                                            {:db/id id
                                                   ;; Recalculate :block/path-refs as db contains stale data for this attribute
-                                            :block/path-refs
-                                            (set/union
+                                             :block/path-refs
+                                             (set/union
                                                    ;; Refs from top-level parent
-                                             new-refs
+                                              new-refs
                                                    ;; Refs from current block
-                                             block-ref-ids
+                                              block-ref-ids
                                                    ;; Refs from parents in between top-level
                                                    ;; parent and current block
-                                             (loop [parent-refs #{}
-                                                    parent-id (:parent-id child-map)]
-                                               (if-let [parent (children-maps parent-id)]
-                                                 (recur (into parent-refs (:block-ref-ids parent))
-                                                        (:parent-id parent))
+                                              (loop [parent-refs #{}
+                                                     parent-id (:parent-id child-map)]
+                                                (if-let [parent (children-maps parent-id)]
+                                                  (recur (into parent-refs (:block-ref-ids parent))
+                                                         (:parent-id parent))
                                                        ;; exits when top-level parent is reached
-                                                 parent-refs)))})
-                                         children-maps)]
-                  (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
-                  (concat
-                   (when (and (seq new-refs) refs-changed?)
-                     [{:db/id (:db/id block)
-                       :block/path-refs new-refs}])
-                   children-refs))))
-            blocks)))
+                                                  parent-refs)))})
+                                          children-maps)]
+                   (swap! *computed-ids set/union (set (cons (:block/uuid block) children)))
+                   (concat
+                    (when (and (seq new-refs) refs-changed? (d/entity db-after (:db/id block)))
+                      [{:db/id (:db/id block)
+                        :block/path-refs new-refs}])
+                    children-refs))))
+             blocks)
+     distinct)))
 
 (defn compute-block-path-refs-tx
   "Main fn for computing path-refs"

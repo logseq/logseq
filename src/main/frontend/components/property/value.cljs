@@ -109,9 +109,7 @@
     (if selected?
       (<add-property! block (:db/ident property) value {:exit-edit? (not many?)})
       (p/do!
-       (db/transact! (state/get-current-repo)
-                     [[:db/retract (:db/id block) (:db/ident property) value]]
-                     {:outliner-op :save-block})
+       (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)
        (when (or (not many?)
                  ;; values will be cleared
                  (and many? (<= (count (get block (:db/ident property))) 1)))

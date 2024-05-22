@@ -79,13 +79,15 @@
 
 (defn <get-block-property-values
   [graph property-id]
-  (<q graph {:transact-db? false}
-      '[:find [?v ...]
-        :in $ ?property-id
-        :where
-        [?b ?property-id ?v]
-        [(not= ?v :logseq.property/empty-placeholder)]]
-      property-id))
+  (let [empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
+    (<q graph {:transact-db? false}
+        '[:find [?v ...]
+          :in $ ?property-id ?empty-id
+          :where
+          [?b ?property-id ?v]
+          [(not= ?v ?empty-id)]]
+        property-id
+        empty-id)))
 
 (comment
   (defn <get-block-property-value-entity

@@ -96,8 +96,8 @@
                           ;; block path refs
                           (when (seq blocks')
                             (let [db-after (or (:db-after refs-tx-report) (:db-after tx-report))
-                                  blocks' (map (fn [b] (or (d/entity db-after (:db/id b)) b)) blocks')]
-                              (set (compute-block-path-refs-tx tx-report blocks'))))
+                                  blocks' (keep (fn [b] (d/entity db-after (:db/id b))) blocks')]
+                              (compute-block-path-refs-tx tx-report blocks')))
 
                           ;; update block/tx-id
                           (let [updated-blocks (remove (fn [b] (contains? (set deleted-block-uuids) (:block/uuid b)))

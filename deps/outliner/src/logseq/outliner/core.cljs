@@ -19,7 +19,8 @@
             [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.worker.batch-tx :include-macros true :as batch-tx]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.property :as db-porperty]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -193,7 +194,10 @@
 (defn ^:api db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
-  (let [properties (:block/properties (d/entity db (:db/id block)))
+  (let [built-in-props (set (keys db-porperty/built-in-properties))
+        properties (->> (:block/properties (d/entity db (:db/id block)))
+                        (remove (fn [[k _v]] (built-in-props k)))
+                        (into {}))
         property-key-refs (keys properties)
         page-or-object? (fn [block] (and (de/entity? block)
                                          (or (ldb/page? block)
@@ -708,8 +712,8 @@
               (ldb/sort-page-random-blocks db blocks))
             page-blocks)))
 
-(defn ^:api delete-block
-  [conn txs-state node {:keys [_date-formatter]}]
+(defn- delete-block
+  [conn txs-state node]
   (otree/-del node txs-state conn)
   @txs-state)
 
@@ -725,7 +729,7 @@
 (defn ^:api ^:large-vars/cleanup-todo delete-blocks
   "Delete blocks from the tree.
   `blocks` need to be sorted by left&parent(from top to bottom)"
-  [_repo conn date-formatter blocks delete-opts]
+  [conn blocks]
   [:pre [(seq blocks)]]
   (let [top-level-blocks (filter-top-level-blocks @conn blocks)
         non-consecutive? (and (> (count top-level-blocks) 1) (seq (ldb/get-non-consecutive-blocks @conn top-level-blocks)))
@@ -737,7 +741,7 @@
     (if (or
          (= 1 (count top-level-blocks))
          (= start-block end-block))
-      (delete-block conn txs-state start-block (assoc delete-opts :date-formatter date-formatter))
+      (delete-block conn txs-state start-block)
       (doseq [id block-ids]
         (let [node (d/entity @conn id)]
           (otree/-del node txs-state conn))))
@@ -959,8 +963,8 @@
   (op-transact! #'insert-blocks repo conn blocks target-block (assoc opts :outliner-op :insert-blocks)))
 
 (defn delete-blocks!
-  [repo conn date-formatter blocks opts]
-  (op-transact! #'delete-blocks repo conn date-formatter blocks (assoc opts :outliner-op :delete-blocks)))
+  [_repo conn _date-formatter blocks _opts]
+  (op-transact! #'delete-blocks conn blocks))
 
 (defn move-blocks!
   [repo conn blocks target-block sibling?]

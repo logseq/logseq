@@ -510,7 +510,9 @@
 (defn class?
   [entity]
   (contains? (:block/type entity) "class"))
-
+(defn property?
+  [entity]
+  (contains? (:block/type entity) "property"))
 (defn closed-value?
   [entity]
   (contains? (:block/type entity) "closed value"))
