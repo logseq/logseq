@@ -182,7 +182,6 @@
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
-                 (when block (pv/exit-edit-property))
                  (when block
                    (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
                      (state/set-state! :editor/editing-property-value-id {id true}))
@@ -192,7 +191,8 @@
                        (pv/<create-new-block! block property ""))
                      (property-handler/set-block-property! repo (:block/uuid block)
                                                            (:db/ident (db/get-case-page property-name))
-                                                           :logseq.property/empty-placeholder))))))))}
+                                                           :logseq.property/empty-placeholder)))
+                 (when block (pv/exit-edit-property)))))))}
 
 ;; only set when in property configure modal
         (and *property-name (:type property-schema))
@@ -482,10 +482,6 @@
                              (let [add-class-property? (and (contains? (:block/type entity) "class") class-schema?)
                                    type (get-in property [:block/schema :type])]
                                (p/do!
-                                (pv/exit-edit-property)
-                                (when-not add-class-property?
-                                  (let [id (str "ls-property-" (:db/id entity) "-" (:db/id property) "-editor")]
-                                    (state/set-state! :editor/editing-property-value-id {id true})))
                                 (cond
                                   add-class-property?
                                   (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
@@ -498,7 +494,11 @@
                                   (not= :default type)
                                   (property-handler/set-block-property! (state/get-current-repo) (:block/uuid entity)
                                                                         (:db/ident property)
-                                                                        :logseq.property/empty-placeholder)))))))
+                                                                        :logseq.property/empty-placeholder))
+                                (pv/exit-edit-property)
+                                (when-not add-class-property?
+                                  (let [id (str "ls-property-" (:db/id entity) "-" (:db/id property) "-editor")]
+                                    (state/set-state! :editor/editing-property-value-id {id true}))))))))
 
              input-opts {:on-blur (fn [] (pv/exit-edit-property))
                          :on-key-down

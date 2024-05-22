@@ -114,7 +114,9 @@
        (db/transact! (state/get-current-repo)
                      [[:db/retract (:db/id block) (:db/ident property) value]]
                      {:outliner-op :save-block})
-       (when-not many?
+       (when (or (not many?)
+                 ;; values will be cleared
+                 (and many? (<= (count (get block (:db/ident property))) 1)))
          (shui/popup-hide!)
          (exit-edit-property))))))
 
@@ -248,8 +250,11 @@
         f' (fn [chosen selected?]
              (if (or (and (not multiple-choices?) (= chosen clear-value))
                      (and multiple-choices? (= chosen [clear-value])))
-               (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block)
-                                                        (:db/ident property))
+               (p/do!
+                (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block)
+                                                         (:db/ident property))
+                (shui/popup-hide!)
+                (exit-edit-property))
                (f chosen selected?)))]
     (select/select (assoc opts
                           :selected-choices selected-choices
