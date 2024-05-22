@@ -35,13 +35,6 @@
   (when-let [result-atom (get-in @query-state [k :result])]
     (reset! result-atom new-result)))
 
-(def kv conn/kv)
-
-(defn remove-key!
-  [repo-url key]
-  (db-utils/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
-  (set-new-result! [repo-url :kv key] nil))
-
 (defn clear-query-state!
   []
   (reset! query-state {}))
@@ -205,12 +198,6 @@
   [repo-url affected-keys]
   (when (and repo-url (seq affected-keys))
     (refresh-affected-queries! repo-url affected-keys)))
-
-(defn set-key-value
-  [repo-url key value]
-  (if value
-    (db-utils/transact! repo-url [(kv key value)])
-    (remove-key! repo-url key)))
 
 (defn sub-key-value
   ([key]

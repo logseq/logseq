@@ -4,7 +4,8 @@
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.property :as outliner-property]
             [datascript.core :as d]
-            [malli.core :as m]))
+            [malli.core :as m]
+            [logseq.db :as ldb]))
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -86,7 +87,13 @@
    [:add-existing-values-to-closed-values
     [:catn
      [:op :keyword]
-     [:args [:tuple ::property-id ::values]]]]])
+     [:args [:tuple ::property-id ::values]]]]
+
+   ;; transact
+   [:transact
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::tx-data ::tx-meta]]]]])
 
 (def ^:private ops-schema
   [:schema {:registry {::id int?
@@ -101,7 +108,9 @@
                        ::values [:sequential ::value]
                        ::option [:maybe map?]
                        ::blocks [:sequential ::block]
-                       ::ids [:sequential ::id]}}
+                       ::ids [:sequential ::id]
+                       ::tx-data [:sequential :any]
+                       ::tx-meta [:maybe map?]}}
    [:sequential op-schema]])
 
 (def ^:private ops-validator (m/validator ops-schema))
@@ -189,6 +198,9 @@
          (apply outliner-property/delete-closed-value! conn args)
 
          :add-existing-values-to-closed-values
-         (apply outliner-property/add-existing-values-to-closed-values! conn args))))
+         (apply outliner-property/add-existing-values-to-closed-values! conn args)
+
+         :transact
+         (apply ldb/transact! conn args))))
 
     @*result))

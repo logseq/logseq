@@ -2145,9 +2145,11 @@
         block-refs (->> (mapcat :block/refs blocks)
                         (set)
                         (filter (fn [ref] (and (vector? ref) (= :block/uuid (first ref))))))]
-    (when (seq block-refs)
-      (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
-    (paste-blocks blocks opts)))
+    (ui-outliner-tx/transact!
+     {:outliner-op :paste-blocks}
+     (when (seq block-refs)
+       (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
+     (paste-blocks blocks opts))))
 
 (defn insert-block-tree-after-target
   "`tree-vec`: a vector of blocks.

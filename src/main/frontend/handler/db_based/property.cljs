@@ -26,7 +26,7 @@
   [block-id property-id]
   (ui-outliner-tx/transact!
    {:outliner-op :remove-block-property}
-    (outliner-op/remove-block-property! block-id property-id)))
+   (outliner-op/remove-block-property! block-id property-id)))
 
 (defn delete-property-value!
   [block-id property-id property-value]

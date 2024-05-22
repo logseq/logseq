@@ -87,15 +87,6 @@
              (conn/get-db repo-url) pred)
         db-utils/seq-flatten)))
 
-(defn set-file-last-modified-at!
-  "Refresh file timestamps to DB"
-  [repo path last-modified-at]
-  (when (and repo path last-modified-at)
-    (db-utils/transact! repo
-                        [{:file/path path
-                          :file/last-modified-at last-modified-at}]
-                        {:skip-refresh? true})))
-
 (defn get-file-last-modified-at
   [repo path]
   (when (and repo path)
@@ -711,15 +702,6 @@ independent of format as format specific heading characters are stripped"
                    (remove nil?))]
     (when (seq pages)
       (mapv (fn [page] [:db.fn/retractEntity [:block/name page]]) (map util/page-name-sanity-lc pages)))))
-
-(defn set-file-content!
-  ([repo path content]
-   (set-file-content! repo path content {}))
-  ([repo path content opts]
-   (when (and repo path)
-     (let [tx-data {:file/path path
-                    :file/content content}]
-       (db-utils/transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
 
 ;; TODO: check whether this works when adding pdf back on Web
 (defn get-pre-block

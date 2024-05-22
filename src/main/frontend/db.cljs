@@ -5,10 +5,13 @@
             [frontend.db.query-custom]
             [frontend.db.query-react]
             [frontend.db.react :as react]
-            [frontend.db.transact :as db-transact]
             [frontend.db.utils]
             [frontend.namespaces :refer [import-vars]]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.state :as state]
+            [frontend.config :as config]))
 
 (import-vars
  [frontend.db.conn
@@ -23,7 +26,7 @@
 
  [frontend.db.utils
   group-by-page seq-flatten
-  entity pull pull-many transact! get-key-value]
+  entity pull pull-many get-key-value]
 
  [frontend.db.model
   delete-blocks get-pre-block
@@ -39,14 +42,14 @@
   get-page-referenced-blocks get-page-referenced-blocks-full get-page-referenced-pages
   get-all-pages get-pages-relation get-pages-that-mentioned-page
   journal-page? page? page-alias-set sub-block
-  set-file-last-modified-at! page-empty? page-exists? get-alias-source-page
-  set-file-content! has-children? whiteboard-page?
+  page-empty? page-exists? get-alias-source-page
+  has-children? whiteboard-page?
   get-namespace-pages get-all-namespace-relation]
 
  [frontend.db.react
-  get-current-page set-key-value
-  remove-key! remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
-  kv q
+  get-current-page
+  remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
+  q
   query-state query-components remove-custom-query! set-new-result! sub-key-value]
 
  [frontend.db.query-custom
@@ -62,4 +65,35 @@
    (conn/start! repo option)))
 
 (def new-block-id ldb/new-block-id)
-(def request-finished? db-transact/request-finished?)
+
+(defn transact!
+  ([tx-data]
+   (transact! (state/get-current-repo) tx-data nil))
+  ([repo tx-data]
+   (transact! repo tx-data nil))
+  ([repo tx-data tx-meta]
+   (if config/publishing?
+     ;; :save-block is for query-table actions like sorting and choosing columns
+     (when (or (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
+               (:init-db? tx-meta))
+       (conn/transact! repo tx-data tx-meta))
+     (ui-outliner-tx/transact! tx-meta
+                               (outliner-op/transact! tx-data tx-meta)))))
+
+(defn set-file-last-modified-at!
+  "Refresh file timestamps to DB"
+  [repo path last-modified-at]
+  (when (and repo path last-modified-at)
+    (transact! repo
+               [{:file/path path
+                 :file/last-modified-at last-modified-at}]
+               {:skip-refresh? true})))
+
+(defn set-file-content!
+  ([repo path content]
+   (set-file-content! repo path content {}))
+  ([repo path content opts]
+   (when (and repo path)
+     (let [tx-data {:file/path path
+                    :file/content content}]
+       (transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
