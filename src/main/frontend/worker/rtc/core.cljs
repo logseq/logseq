@@ -173,7 +173,7 @@
            (m/reduce {} nil)
            (m/?))
           (catch Cancelled e
-            (add-log-fn {:type :rtc/cancelled})
+            (add-log-fn {:type :rtc/cancelled :graph-uuid graph-uuid})
             (throw e)))))}))
 
 (def ^:private empty-rtc-loop-metadata
@@ -283,6 +283,7 @@
                 {:graph-uuid graph-uuid
                  :user-uuid user-uuid
                  :unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
+                 :local-tx (op-mem-layer/get-local-tx repo)
                  :rtc-state rtc-state
                  :rtc-lock rtc-lock
                  :rtc-logs rtc-logs
