@@ -4,6 +4,8 @@
                          :sha     "0a3ce97e0f3d6afffc395e5a901312d208ce68e2"}
   datascript-transit/datascript-transit {:mvn/version "0.3.0"
                                          :exclusions [datascript/datascript]}
+  logseq/clj-fractional-indexing        {:git/url "https://github.com/logseq/clj-fractional-indexing"
+                                         :sha     "7182b7878410f78536dc2b6df35ed32ef9cd6b61"}
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
   com.cognitect/transit-cljs   {:mvn/version "0.8.280"}
   logseq/common                {:local/root "../common"}
