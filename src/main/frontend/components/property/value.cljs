@@ -65,7 +65,6 @@
   (state/set-state! :editor/new-property-key nil)
   (state/set-state! :editor/new-property-input-id nil)
   (state/set-state! :editor/properties nil)
-  (state/set-state! :editor/editing-property-value-id {})
   (state/clear-edit!))
 
 (defn <create-new-block!
@@ -699,13 +698,12 @@
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query rum/static
-  [state block property value {:keys [container-id editor-id editing? on-chosen]
+  [state block property value {:keys [container-id editing? on-chosen]
                                :as opts}]
   (let [property (model/sub-block (:db/id property))
         schema (:block/schema property)
         type (get schema :type :default)
         editing? (or editing?
-                     (state/sub-property-value-editing? editor-id)
                      (state/sub-editing? [container-id (:block/uuid block) (:block/uuid property)]))
         select-type? (select-type? property type)
         closed-values? (seq (:property/closed-values property))
@@ -731,7 +729,7 @@
             (shui/checkbox {:class "jtrigger flex flex-row items-center"
                             :disabled config/publishing?
                             :checked value
-                            :auto-focus editing?
+                            :auto-focus true
                             :on-checked-change add-property!
                             :on-key-down (fn [e]
                                            (when (= (util/ekey e) "Enter")

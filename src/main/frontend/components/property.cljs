@@ -183,8 +183,6 @@
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
                  (when block
-                   (let [id (str "ls-property-" (:db/id block) "-" (:db/id property) "-editor")]
-                     (state/set-state! :editor/editing-property-value-id {id true}))
                    (if (= type :default)
                      (when (and (not add-class-property?)
                                 (not (seq (:property/closed-values property))))
@@ -495,10 +493,7 @@
                                   (property-handler/set-block-property! (state/get-current-repo) (:block/uuid entity)
                                                                         (:db/ident property)
                                                                         :logseq.property/empty-placeholder))
-                                (pv/exit-edit-property)
-                                (when-not add-class-property?
-                                  (let [id (str "ls-property-" (:db/id entity) "-" (:db/id property) "-editor")]
-                                    (state/set-state! :editor/editing-property-value-id {id true}))))))))
+                                (pv/exit-edit-property))))))
 
              input-opts {:on-blur (fn [] (pv/exit-edit-property))
                          :on-key-down
