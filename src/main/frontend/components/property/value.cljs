@@ -64,7 +64,6 @@
   []
   (state/set-state! :editor/new-property-key nil)
   (state/set-state! :editor/new-property-input-id nil)
-  (state/set-state! :editor/properties nil)
   (state/clear-edit!))
 
 (defn <create-new-block!
@@ -625,15 +624,18 @@
 
                              (:object :page :date)
                              (property-value-select-page block property select-opts' opts))])
+          trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
           show! (fn [target]
                   (when-not (or (util/link? target) (.closest target "a") config/publishing?)
                     (shui/popup-show! target popup-content
                                       {:align "start"
                                        :as-dropdown? true
-                                       :auto-focus? true})))]
+                                       :auto-focus? true
+                                       :trigger-id trigger-id})))]
       (shui/trigger-as
        :div.jtrigger.flex.flex-1.w-full
        {:ref *el
+        :id trigger-id
         :tabIndex 0
         :on-click #(show! (.-target %))}
        (if (string/blank? value)

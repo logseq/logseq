@@ -251,22 +251,14 @@
                                                     distinct)]
                                    (if (seq values')
                                      (add-existing-values property values' opts)
-                                     (if (= :page property-type)
-                                       (property-value/select-page property
-                                                                   {:multiple-choices? false
-                                                                    :dropdown? false
-                                                                    :close-modal? false
-                                                                    :on-chosen (fn [chosen]
-                                                                                 (p/let [_closed-value (<upsert-closed-value! property {:value chosen})]
-                                                                                   (shui/popup-hide! id)))})
-                                       (item-config
-                                        property
-                                        nil
-                                        (assoc opts :on-save
-                                               (fn [value icon description]
-                                                 (<upsert-closed-value! property {:value value
-                                                                                  :description description
-                                                                                  :icon icon}))))))))
+                                     (item-config
+                                      property
+                                      nil
+                                      (assoc opts :on-save
+                                             (fn [value icon description]
+                                               (<upsert-closed-value! property {:value value
+                                                                                :description description
+                                                                                :icon icon})))))))
                                {:content-props {:class "w-auto"}})))}
         (ui/icon "plus" {:size 16})
         "Add choice"))]))
