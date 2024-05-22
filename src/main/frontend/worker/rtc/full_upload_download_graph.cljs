@@ -9,7 +9,6 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
@@ -110,20 +109,6 @@
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
-(defn- remote-block-index->block-order*
-  [same-parent-blocks]
-  (let [orders (db-order/gen-n-keys (count same-parent-blocks) nil nil)]
-    (map (fn [order block]
-           (-> block
-               (assoc :block/order order)
-               (dissoc :block/index)))
-         orders (sort-by :block/index same-parent-blocks))))
-
-(defn- remote-block-index->block-order
-  [blocks]
-  (let [blocks-coll (vals (group-by :block/parent blocks))]
-    (mapcat remote-block-index->block-order* blocks-coll)))
-
 (def page-of-block
   (memoize
    (fn [id->block-map block]
@@ -173,8 +158,7 @@
   (let [{:keys [t blocks]} all-blocks
         blocks (worker-util/profile :normalize-remote-blocks
                  (normalized-remote-blocks-coercer blocks))
-        blocks* (remote-block-index->block-order blocks)
-        blocks-with-page-id (fill-block-fields blocks*)
+        blocks-with-page-id (fill-block-fields blocks)
         tx-data (concat blocks-with-page-id
                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
         ^js worker-obj (:worker/object @worker-state/*state)]
