@@ -947,33 +947,33 @@
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 
 (defn- op-transact!
-  [fn-var & args]
-  {:pre [(var? fn-var)]}
-  (let [result (apply @fn-var args)]
+  [f & args]
+  {:pre [(fn? f)]}
+  (let [result (apply f args)]
     (when result
       (ldb/transact! (second args) (:tx-data result) (:tx-meta result)))
     result))
 
 (defn save-block!
   [repo conn date-formatter block & {:as opts}]
-  (op-transact! #'save-block repo conn date-formatter block opts))
+  (op-transact! save-block repo conn date-formatter block opts))
 
 (defn insert-blocks!
   [repo conn blocks target-block opts]
-  (op-transact! #'insert-blocks repo conn blocks target-block (assoc opts :outliner-op :insert-blocks)))
+  (op-transact! insert-blocks repo conn blocks target-block (assoc opts :outliner-op :insert-blocks)))
 
 (defn delete-blocks!
-  [_repo conn _date-formatter blocks _opts]
-  (op-transact! #'delete-blocks conn blocks))
+  [repo conn _date-formatter blocks _opts]
+  (op-transact! (fn [_repo conn blocks] (#'delete-blocks conn blocks)) repo conn blocks))
 
 (defn move-blocks!
   [repo conn blocks target-block sibling?]
-  (op-transact! #'move-blocks repo conn blocks target-block {:sibling? sibling?
+  (op-transact! move-blocks repo conn blocks target-block {:sibling? sibling?
                                                              :outliner-op :move-blocks}))
 (defn move-blocks-up-down!
   [repo conn blocks up?]
-  (op-transact! #'move-blocks-up-down repo conn blocks up?))
+  (op-transact! move-blocks-up-down repo conn blocks up?))
 
 (defn indent-outdent-blocks!
   [repo conn blocks indent? & {:as opts}]
-  (op-transact! #'indent-outdent-blocks repo conn blocks indent? opts))
+  (op-transact! indent-outdent-blocks repo conn blocks indent? opts))
