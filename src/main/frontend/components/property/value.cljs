@@ -234,12 +234,13 @@
   (let [selected-choices (->> selected-choices
                               (remove nil?)
                               (remove #(= :logseq.property/empty-placeholder %)))
-        clear-value (str "No " (:block/original-name property))
+        clear-value (str "Remove property " (:block/original-name property))
         items' (->>
                 (if (and (seq selected-choices) (not multiple-choices?))
-                  (cons {:value clear-value
-                         :label clear-value}
-                        items)
+                  (concat items
+                          [{:value clear-value
+                            :label clear-value
+                            :clear? true}])
                   items)
                 (remove #(= :logseq.property/empty-placeholder (:value %))))
         k :on-chosen
