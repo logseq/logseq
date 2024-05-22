@@ -16,11 +16,10 @@
             [logseq.graph-parser.block :as gp-block]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -171,62 +170,6 @@
                                       merge-tx))))))
      (reset! (:editor/create-page? @state/state) false))))
 
-(defn- ref->eid
-  "ref: entity, map, int, eid"
-  [ref]
-  (cond
-    (:db/id ref)
-    (:db/id ref)
-
-    (:block/uuid ref)
-    [:block/uuid (:block/uuid ref)]
-
-    (and (vector? ref)
-         (= (count ref) 2)
-         (= :block/uuid (first ref)))
-    [:block/uuid (second ref)]
-
-    (int? ref)
-    ref
-
-    :else (throw (js/Error. (str "invalid ref " ref)))))
-
-(defn ^:api db-rebuild-block-refs
-  "Rebuild block refs for DB graphs"
-  [db block]
-  (let [built-in-props (set (keys db-property/built-in-properties))
-        properties (->> (:block/properties (d/entity db (:db/id block)))
-                        (remove (fn [[k _v]] (built-in-props k)))
-                        (into {}))
-        property-key-refs (keys properties)
-        page-or-object? (fn [block] (and (de/entity? block)
-                                         (or (ldb/page? block)
-                                             (seq (:block/tags block)))))
-        property-value-refs (->> (vals properties)
-                                 (mapcat (fn [v]
-                                           (cond
-                                             (page-or-object? v)
-                                             [(:db/id v)]
-
-                                             (and (coll? v) (every? page-or-object? v))
-                                             (map :db/id v)
-
-                                             :else
-                                             nil))))
-        property-refs (concat property-key-refs property-value-refs)
-        content-refs (let [content (or (:block/raw-content block)
-                                       (:block/content block))]
-                       (when (string? content)
-                         (->> (db-content/get-matched-special-ids content)
-                              (map (fn [id]
-                                     (when-let [e (d/entity db [:block/uuid id])]
-                                       (:db/id e)))))))]
-    (->> (concat (map ref->eid (:block/tags block))
-                 (when-let [id (:db/id (:block/link block))]
-                   [id])
-                 property-refs content-refs)
-         (remove nil?))))
-
 (defn- file-rebuild-block-refs
   [repo db date-formatter {:block/keys [properties] :as block}]
   (let [property-key-refs (keys properties)
@@ -259,7 +202,7 @@
 (defn ^:api rebuild-block-refs
   [repo db date-formatter block]
   (if (sqlite-util/db-based-graph? repo)
-    (db-rebuild-block-refs db block)
+    (outliner-pipeline/db-rebuild-block-refs db block)
     (file-rebuild-block-refs repo db date-formatter block)))
 
 (defn- add-tag-types
@@ -267,7 +210,7 @@
   (when (sqlite-util/db-based-graph? repo)
     (let [add-tag-type (map
                         (fn [t]
-                          {:db/id (ref->eid t)
+                          {:db/id (outliner-pipeline/ref->eid t)
                            :block/type "class"})
                         (:block/tags m))]
       (swap! txs-state (fn [txs] (concat txs add-tag-type))))))
@@ -320,7 +263,7 @@
               db-based?
               (update :block/tags (fn [tags]
                                       (concat (keep :db/id (:block/tags block-entity))
-                                              (keep ref->eid tags)))))]
+                                              (keep outliner-pipeline/ref->eid tags)))))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)

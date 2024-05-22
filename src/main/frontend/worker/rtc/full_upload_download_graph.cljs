@@ -11,7 +11,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.outliner.core :as outliner-core]
+            [logseq.outliner.pipeline :as outliner-pipeline]
             [malli.core :as ma]
             [malli.transform :as mt]
             [missionary.core :as m]
@@ -146,7 +146,7 @@
           refs-tx (keep
                    (fn [d]
                      (let [block (d/entity @conn (:e d))
-                           refs (outliner-core/db-rebuild-block-refs @conn block)]
+                           refs (outliner-pipeline/db-rebuild-block-refs @conn block)]
                        (when (seq refs)
                          {:db/id (:db/id block)
                           :block/refs refs})))

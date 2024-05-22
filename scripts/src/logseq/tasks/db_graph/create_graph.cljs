@@ -90,12 +90,6 @@
                   :block/uuid))
        (into {})))
 
-(defn- build-property-refs [properties all-idents]
-  (mapv
-   (fn [prop-name]
-     {:db/ident (get-ident all-idents prop-name)})
-   (keys properties)))
-
 (def current-db-id (atom 0))
 (def new-db-id
   "Provides the next temp :db/id to use in a create-graph transact!"
@@ -140,10 +134,7 @@
                    :block/page {:db/id page-id}
                    :block/order (db-order/gen-key nil)
                    :block/parent {:db/id page-id}}
-        pvalue-tx-m (->property-value-tx-m new-block properties properties-config all-idents)
-        block-props (when (seq properties)
-                      (->block-properties (merge properties (property-value-properties pvalue-tx-m))
-                                          page-uuids all-idents))]
+        pvalue-tx-m (->property-value-tx-m new-block properties properties-config all-idents)]
     (cond-> []
       ;; Place property values first since they are referenced by block
       (seq pvalue-tx-m)
@@ -152,8 +143,8 @@
       (conj (merge (dissoc m :properties)
                    (sqlite-util/block-with-timestamps new-block)
                    (when (seq properties)
-                     (merge block-props
-                            {:block/refs (build-property-refs properties all-idents)})))))))
+                     (->block-properties (merge properties (property-value-properties pvalue-tx-m))
+                                         page-uuids all-idents)))))))
 
 (defn- build-properties-tx [properties page-uuids all-idents]
   (let [property-db-ids (->> (keys properties)
@@ -186,9 +177,7 @@
                                      (merge
                                       new-block
                                       (when-let [props (not-empty (:properties prop-m))]
-                                        (merge
-                                         (->block-properties (merge props (property-value-properties pvalue-tx-m)) page-uuids all-idents)
-                                         {:block/refs (build-property-refs props all-idents)}))
+                                        (->block-properties (merge props (property-value-properties pvalue-tx-m)) page-uuids all-idents))
                                       (when (seq schema-classes)
                                         {:property/schema.classes
                                          (mapv #(hash-map :db/ident (get-ident all-idents (keyword %)))
@@ -221,10 +210,7 @@
                              new-block
                              (dissoc class-m :properties :class-parent :schema-properties)
                              (when-let [props (not-empty (:properties class-m))]
-                               (merge
-                                (->block-properties (merge props (property-value-properties pvalue-tx-m)) uuid-maps all-idents)
-                                ;; TODO: Re-enable when this is also done in the app as this can cause block loading problems
-                                #_{:block/refs (build-property-refs props all-idents)}))
+                               (->block-properties (merge props (property-value-properties pvalue-tx-m)) uuid-maps all-idents))
                              (when class-parent
                                {:class/parent
                                 (or (class-db-ids class-parent)
@@ -309,11 +295,7 @@
               (when (seq (:properties page))
                 (->block-properties (merge (:properties page) (property-value-properties pvalue-tx-m))
                                     page-uuids
-                                    all-idents))
-              (when (seq (:properties page))
-                {:block/refs (build-property-refs (:properties page) all-idents)
-                 ;; app doesn't do this yet but it should to link property to page
-                 :block/path-refs (build-property-refs (:properties page) all-idents)})))))
+                                    all-idents))))))
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
