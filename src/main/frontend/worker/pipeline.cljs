@@ -4,6 +4,7 @@
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
             [frontend.worker.util :as worker-util]
+            [frontend.worker.state :as worker-state]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -26,11 +27,12 @@
     (outliner-pipeline/compute-block-path-refs-tx tx-report blocks)))
 
 (defn- rebuild-block-refs
-  [{:keys [tx-meta db-after]} blocks]
+  [repo {:keys [tx-meta db-after]} blocks]
   (when (and (:outliner-op tx-meta) (refs-need-recalculated? tx-meta))
     (mapcat (fn [block]
               (when (d/entity db-after (:db/id block))
-                (let [refs (outliner-core/rebuild-block-refs db-after block)]
+                (let [date-formatter (worker-state/get-date-formatter repo)
+                      refs (outliner-core/rebuild-block-refs repo db-after date-formatter block)]
                   (when (seq refs)
                     [[:db/retract (:db/id block) :block/refs]
                      {:db/id (:db/id block)
@@ -87,7 +89,7 @@
               deleted-block-uuids (set (outliner-pipeline/filter-deleted-blocks (:tx-data tx-report)))
               blocks' (remove (fn [b] (deleted-block-uuids (:block/uuid b))) blocks)
               block-refs (when (seq blocks')
-                           (rebuild-block-refs tx-report blocks'))
+                           (rebuild-block-refs repo tx-report blocks'))
               refs-tx-report (when (seq block-refs)
                                (ldb/transact! conn block-refs {:pipeline-replace? true}))
               replace-tx (concat
