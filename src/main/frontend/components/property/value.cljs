@@ -164,9 +164,8 @@
     (rum/use-effect!
      (fn []
        (when editing?
-         (some-> (rum/deref *trigger-ref)
-                 (.click))))
-     [])
+         (.click (rum/deref *trigger-ref))))
+     [editing?])
     (if multiple-values?
       (shui/button
        {:class "jtrigger h-6 empty-btn"
@@ -611,7 +610,7 @@
     (rum/use-effect!
      (fn []
        (when (:editing? opts)
-         (.click (.-current *el))))
+         (.click (rum/deref *el))))
      [(:editing? opts)])
     (let [schema (:block/schema property)
           type (get schema :type :default)
@@ -743,13 +742,17 @@
              (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values < rum/static
-  [block property v {:keys [on-chosen dropdown? editing? block-cp editor-box]
-                     :or {dropdown? true}
+  [block property v {:keys [on-chosen editing? block-cp editor-box]
                      :as opts} schema]
   (let [type (get schema :type :default)
         date? (= type :date)
         *el (rum/use-ref nil)
         items (if (coll? v) v (when v [v]))]
+    (rum/use-effect!
+     (fn []
+       (when (and editing? (not= type :default))
+         (.click (rum/deref *el))))
+     [editing?])
     ;; TODO: closed values select for default type
     (if (= type :default)
       [:div.property-block-container.content
@@ -769,38 +772,36 @@
                               (property-empty-text-value)))))
             select-cp (fn [select-opts]
                         (let [select-opts (merge {:multiple-choices? true
-                                                  :dropdown? editing?
                                                   :on-chosen (fn []
                                                                (when on-chosen (on-chosen)))}
-                                                 select-opts)]
-                          [:div.property-select (cond-> {} editing? (assoc :class "h-6"))
+                                                 select-opts
+                                                 {:dropdown? false})]
+                          [:div.property-select
                            (if (contains? #{:page :object} type)
                              (property-value-select-page block property
                                                          select-opts
                                                          opts)
                              (select block property select-opts opts))]))]
-        (if (and dropdown? (not editing?))
-          (let [toggle-fn shui/popup-hide!
-                content-fn (fn [{:keys [_id content-props]}]
-                             (select-cp {:content-props content-props}))]
-            [:div.multi-values.jtrigger
-             {:tab-index "0"
-              :ref *el
-              :on-click (fn [^js e]
-                          (let [target (.-target e)]
-                            (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                              (shui/popup-show! (rum/deref *el) content-fn
-                                                {:as-dropdown? true :as-content? false
-                                                 :align "start" :auto-focus? true}))))
-              :on-key-down (fn [^js e]
-                             (case (.-key e)
-                               (" " "Enter")
-                               (do (some-> (rum/deref *el) (.click))
-                                   (util/stop e))
-                               :dune))
-              :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
-             (values-cp toggle-fn)])
-          (select-cp {:content-props nil}))))))
+        (let [toggle-fn shui/popup-hide!
+              content-fn (fn [{:keys [_id content-props]}]
+                           (select-cp {:content-props content-props}))]
+          [:div.multi-values.jtrigger
+           {:tab-index "0"
+            :ref *el
+            :on-click (fn [^js e]
+                        (let [target (.-target e)]
+                          (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                            (shui/popup-show! (rum/deref *el) content-fn
+                                              {:as-dropdown? true :as-content? false
+                                               :align "start" :auto-focus? true}))))
+            :on-key-down (fn [^js e]
+                           (case (.-key e)
+                             (" " "Enter")
+                             (do (some-> (rum/deref *el) (.click))
+                                 (util/stop e))
+                             :dune))
+            :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
+           (values-cp toggle-fn)])))))
 
 (rum/defcs property-value < rum/reactive
   [state block property v opts]
