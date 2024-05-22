@@ -20,7 +20,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.property :as db-porperty]))
+            [logseq.db.frontend.property :as db-property]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -194,7 +194,7 @@
 (defn ^:api db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
-  (let [built-in-props (set (keys db-porperty/built-in-properties))
+  (let [built-in-props (set (keys db-property/built-in-properties))
         properties (->> (:block/properties (d/entity db (:db/id block)))
                         (remove (fn [[k _v]] (built-in-props k)))
                         (into {}))

@@ -14,6 +14,7 @@
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [clojure.string :as string]
+            [clojure.edn :as edn]
             [datascript.core :as d]
             ["path" :as node-path]
             ["os" :as os]
@@ -340,6 +341,9 @@
   "Options spec"
   {:help {:alias :h
           :desc "Print help"}
+   :config {:alias :c
+            :coerce edn/read-string
+            :desc "EDN map to add to config.edn"}
    :debug {:alias :d
            :desc "Prints additional debug info and a schema.edn for debugging"}
    :subset {:alias :s
@@ -388,7 +392,7 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (create-graph/init-conn dir db-name)
+        conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
         init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
                                     options)
         blocks-tx (create-graph/create-blocks-tx init-data)]
