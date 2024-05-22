@@ -24,7 +24,9 @@
   rum/reactive
   []
   (let [state (rum/react debug-state)
-        rtc-state (:rtc-state state)]
+        rtc-state (:rtc-state state)
+        rtc-lock (:rtc-lock state)
+        rtc-logs (:rtc-logs state)]
     [:div
      {:on-click (fn [^js e]
                   (when-let [^js btn (.closest (.-target e) ".ui__button")]
@@ -38,7 +40,7 @@
                       (p/let [result (.rtc-get-debug-state2 worker)
                               new-state (ldb/read-transit-str result)]
                         (swap! debug-state (fn [old] (merge old new-state))))))}
-       (shui/tabler-icon "refresh") "local-state")
+       (shui/tabler-icon "refresh") "state")
 
       (shui/button
        {:size :sm
@@ -75,6 +77,7 @@
        (-> {:user-uuid (user/user-uuid)
             :graph (:graph-uuid state)
             :rtc-state rtc-state
+            :rtc-logs rtc-logs
             :local-tx (:local-tx state)
             :pending-block-update-count (:unpushed-block-update-count state)
             :remote-graphs (:remote-graphs state)
@@ -86,8 +89,7 @@
            (fipp/pprint {:width 20})
            with-out-str)]]
 
-     (if (or (nil? rtc-state)
-             (= :closed rtc-state))
+     (if (nil? rtc-lock)
        (shui/button
         {:variant :outline
          :class "text-green-rx-09 border-green-rx-10 hover:text-green-rx-10"

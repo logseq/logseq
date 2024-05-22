@@ -159,8 +159,12 @@
            (let [event (m/?> mixed-flow)]
              (case (:type event)
                :remote-update
-               (r.remote-update/apply-remote-update repo conn date-formatter event add-log-fn)
-               ;; TODO: add case: fetch earlier remote data
+               (try (r.remote-update/apply-remote-update repo conn date-formatter event add-log-fn)
+                    (catch :default e
+                      (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                        (m/? (r.client/new-task--pull-remote-data
+                              repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
+
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
                      repo conn graph-uuid date-formatter
@@ -178,6 +182,7 @@
    :rtc-log-flow nil
    :rtc-state-flow nil
    :*rtc-auto-push? nil
+   :*rtc-lock nil
    :canceler nil})
 
 (defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata))
@@ -203,6 +208,7 @@
                                             :rtc-log-flow rtc-log-flow
                                             :rtc-state-flow rtc-state-flow
                                             :*rtc-auto-push? *rtc-auto-push?
+                                            :*rtc-lock *rtc-lock
                                             :canceler canceler})
                 nil)))
         (r.ex/->map r.ex/ex-local-not-rtc-graph))
@@ -267,19 +273,22 @@
   []
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-      (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push?]}
+      (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-lock rtc-log-flow]}
             (m/?< rtc-loop-metadata-flow)]
         (try
-          (when (and repo rtc-state-flow *rtc-auto-push?)
+          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock rtc-log-flow)
             (m/?<
              (m/latest
-              (fn [rtc-state rtc-auto-push?]
+              (fn [rtc-state rtc-auto-push? rtc-lock rtc-logs]
                 {:graph-uuid graph-uuid
                  :user-uuid user-uuid
                  :unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
                  :rtc-state rtc-state
+                 :rtc-lock rtc-lock
+                 :rtc-logs rtc-logs
                  :auto-push? rtc-auto-push?})
-              rtc-state-flow (m/watch *rtc-auto-push?))))
+              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock)
+              (m/reductions (fn [r log] (if log (take 10 (conj r log)) r)) nil rtc-log-flow))))
           (catch Cancelled _))))))
 
 (defn new-task--get-debug-state
