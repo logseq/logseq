@@ -13,6 +13,7 @@
             [logseq.db :as ldb]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.db :as gp-db]
+            [logseq.graph-parser.block :as gp-block]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.content :as db-content]
@@ -189,7 +190,8 @@
 
     :else (throw (js/Error. (str "invalid ref " ref)))))
 
-(defn ^:api rebuild-block-refs
+(defn ^:api db-rebuild-block-refs
+  "Rebuild block refs for DB graphs"
   [db block]
   (let [properties (:block/properties (d/entity db (:db/id block)))
         property-key-refs (keys properties)
@@ -220,6 +222,41 @@
                    [id])
                  property-refs content-refs)
          (remove nil?))))
+
+(defn- file-rebuild-block-refs
+  [repo db date-formatter {:block/keys [properties] :as block}]
+  (let [property-key-refs (keys properties)
+        property-value-refs (->> (vals properties)
+                                 (mapcat (fn [v]
+                                           (cond
+                                             (and (coll? v) (uuid? (first v)))
+                                             v
+
+                                             (uuid? v)
+                                             (when-let [_entity (d/entity db [:block/uuid v])]
+                                               [v])
+
+                                             (and (coll? v) (string? (first v)))
+                                             (mapcat #(gp-block/extract-refs-from-text repo db % date-formatter) v)
+
+                                             (string? v)
+                                             (gp-block/extract-refs-from-text repo db v date-formatter)
+
+                                             :else
+                                             nil))))
+        property-refs (->> (concat property-key-refs property-value-refs)
+                           (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
+                           (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
+
+        content-refs (when-let [content (:block/content block)]
+                       (gp-block/extract-refs-from-text repo db content date-formatter))]
+    (concat property-refs content-refs)))
+
+(defn ^:api rebuild-block-refs
+  [repo db date-formatter block]
+  (if (sqlite-util/db-based-graph? repo)
+    (db-rebuild-block-refs db block)
+    (file-rebuild-block-refs repo db date-formatter block)))
 
 (defn- add-tag-types
   [repo txs-state m]

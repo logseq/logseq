@@ -146,7 +146,7 @@
           refs-tx (keep
                    (fn [d]
                      (let [block (d/entity @conn (:e d))
-                           refs (outliner-core/rebuild-block-refs @conn block)]
+                           refs (outliner-core/db-rebuild-block-refs @conn block)]
                        (when (seq refs)
                          {:db/id (:db/id block)
                           :block/refs refs})))
