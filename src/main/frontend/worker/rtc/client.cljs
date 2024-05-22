@@ -81,7 +81,6 @@
   [db attr]
   (= :db.cardinality/many (get-in (d/schema db) [attr :db/cardinality])))
 
-
 (defn- remove-redundant-av
   "Remove previous av if later-av has same [a v] or a"
   [db av-coll]
@@ -325,3 +324,22 @@
                 (r.remote-update/apply-remote-update
                  repo conn date-formatter {:type :remote-update :value r} add-log-fn)
                 (add-log-fn {:type ::push-client-updates :remote-t (:t r)}))))))))
+
+(defn new-task--pull-remote-data
+  [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
+  (m/sp
+    (let [local-tx (op-mem-layer/get-local-tx repo)
+          r (m/? (send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+                                                :ops [] :t-before (or local-tx 1)}))]
+      (if-let [remote-ex (:ex-data r)]
+        (do (add-log-fn remote-ex)
+            (case (:type remote-ex)
+              :graph-lock-failed nil
+              :graph-lock-missing (throw r.ex/ex-remote-graph-lock-missing)
+              :rtc.exception/get-s3-object-failed nil
+              ;;else
+              (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
+        (do (assert (pos? (:t r)) r)
+            (r.remote-update/apply-remote-update
+             repo conn date-formatter {:type :remote-update :value r} add-log-fn)
+            (add-log-fn {:type ::pull-remote-data :remote-t (:t r) :local-t local-tx}))))))
