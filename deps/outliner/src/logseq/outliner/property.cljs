@@ -2,6 +2,7 @@
   "Property related operations"
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
@@ -333,18 +334,20 @@
         (let [txs (mapcat
                    (fn [block]
                      (let [value (get block property-id)
-                           block-value? (= :default (get-in property [:block/schema :type] :default))
-                           property-block (when block-value? (d/entity @conn (:db/id value)))
-                           blocks-with-this-value (and block-value?
-                                                       (set (map :e (d/datoms @conn :avet (:db/ident property) (:db/id value)))))
-                           ;; Delete property value block if it's not a closed value and it's no longer used by other blocks
-                           retract-blocks-tx (when (and property-block
-                                                        (some? (get property-block :logseq.property/created-from-property))
-                                                        (not (contains? (:block/type value) "closed value"))
-                                                        (empty? (set/difference blocks-with-this-value block-id-set)))
-                                               (let [txs-state (atom [])]
-                                                 (outliner-core/delete-block conn txs-state property-block {:children? true})
-                                                 @txs-state))]
+                           entities (cond
+                                      (de/entity? value) [value]
+                                      (every? de/entity? value) value
+                                      :else nil)
+                           deleting-entities (filter
+                                              (fn [value]
+                                                (and
+                                                 (:logseq.property/created-from-property value)
+                                                 (not (or (ldb/page? value) (ldb/closed-value? value)))
+                                                 (empty? (set/difference (set (map :e (d/datoms @conn :avet (:db/ident property) (:db/id value)))) block-id-set))))
+                                              entities)
+                           ;; Delete property value block if it's no longer used by other blocks
+                           retract-blocks-tx (when (seq deleting-entities)
+                                               (:tx-data (outliner-core/delete-blocks conn deleting-entities)))]
                        (concat
                         [[:db/retract (:db/id block) (:db/ident property)]]
                         retract-blocks-tx)))
@@ -368,9 +371,13 @@
   (when-let [property (d/entity @conn property-id)]
     (let [block (d/entity @conn block-eid)]
       (when (and block (not= property-id (:db/ident block)) (db-property/many? property))
-        (ldb/transact! conn
-                     [[:db/retract (:db/id block) property-id property-value]]
-                     {:outliner-op :save-block})))))
+        (let [current-val (get block property-id)
+              fv (first current-val)]
+          (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))
+            (remove-block-property! conn (:db/id block) property-id)
+            (ldb/transact! conn
+                           [[:db/retract (:db/id block) property-id property-value]]
+                           {:outliner-op :save-block})))))))
 
 (defn collapse-expand-block-property!
   "Notice this works only if the value itself if a block (property type should be either :default or :template)"
