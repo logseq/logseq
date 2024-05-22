@@ -8,13 +8,30 @@
             [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.datascript-report :as ds-report]))
 
+
+(defn- rebuild-block-refs
+  [{:keys [db-after]} blocks]
+  (mapcat (fn [block]
+            (when (d/entity db-after (:db/id block))
+              (let [refs (outliner-pipeline/db-rebuild-block-refs db-after block)]
+                (when (seq refs)
+                  [[:db/retract (:db/id block) :block/refs]
+                   {:db/id (:db/id block)
+                    :block/refs refs}]))))
+          blocks))
+
 (defn- invoke-hooks
   "Modified copy of frontend.worker.pipeline/invoke-hooks that doesn't
   handle :block/tx-id"
   [conn tx-report]
   (when (not (get-in tx-report [:tx-meta :pipeline-replace?]))
     (let [{:keys [blocks]} (ds-report/get-blocks-and-pages tx-report)
-          block-path-refs-tx (distinct (outliner-pipeline/compute-block-path-refs-tx tx-report blocks))]
+          refs-tx-report (when-let [refs-tx (and (seq blocks) (rebuild-block-refs tx-report blocks))]
+                           (d/transact! conn refs-tx {:pipeline-replace? true}))
+          blocks' (if refs-tx-report
+                    (keep (fn [b] (d/entity (:db-after refs-tx-report) (:db/id b))) blocks)
+                    blocks)
+          block-path-refs-tx (distinct (outliner-pipeline/compute-block-path-refs-tx tx-report blocks'))]
       (when (seq block-path-refs-tx)
         (d/transact! conn block-path-refs-tx {:pipeline-replace? true})))))
 

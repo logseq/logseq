@@ -1,8 +1,12 @@
 (ns logseq.outliner.pipeline
   "Core fns for use with frontend worker and node"
   (:require [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [clojure.set :as set]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 (defn filter-deleted-blocks
   [datoms]
@@ -29,7 +33,7 @@
                          (let [from-property (:logseq.property/created-from-property block)
                                default? (= :default (get-in from-property [:block/schema :type]))]
                            (and from-property (not default?))))
-                blocks*)]
+                       blocks*)]
     (->>
      (mapcat (fn [block]
                (when-not (@*computed-ids (:block/uuid block))
@@ -99,3 +103,60 @@
   (let [refs-tx (compute-block-path-refs tx-report blocks)
         truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)]
     (concat truncate-refs-tx refs-tx)))
+
+(defn ref->eid
+  "ref: entity, map, int, eid"
+  [ref]
+  (cond
+    (:db/id ref)
+    (:db/id ref)
+
+    (:block/uuid ref)
+    [:block/uuid (:block/uuid ref)]
+
+    (and (vector? ref)
+         (= (count ref) 2)
+         (= :block/uuid (first ref)))
+    [:block/uuid (second ref)]
+
+    (int? ref)
+    ref
+
+    :else (throw (js/Error. (str "invalid ref " ref)))))
+
+(defn db-rebuild-block-refs
+  "Rebuild block refs for DB graphs"
+  [db block]
+  (let [built-in-props (set (keys db-property/built-in-properties))
+        ;; explicit lookup in order to be nbb compatible
+        properties (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
+                        (remove (fn [[k _v]] (built-in-props k)))
+                        (into {}))
+        property-key-refs (keys properties)
+        page-or-object? (fn [block] (and (de/entity? block)
+                                         (or (ldb/page? block)
+                                             (seq (:block/tags block)))))
+        property-value-refs (->> (vals properties)
+                                 (mapcat (fn [v]
+                                           (cond
+                                             (page-or-object? v)
+                                             [(:db/id v)]
+
+                                             (and (coll? v) (every? page-or-object? v))
+                                             (map :db/id v)
+
+                                             :else
+                                             nil))))
+        property-refs (concat property-key-refs property-value-refs)
+        content-refs (let [content (or (:block/raw-content block)
+                                       (:block/content block))]
+                       (when (string? content)
+                         (->> (db-content/get-matched-special-ids content)
+                              (map (fn [id]
+                                     (when-let [e (d/entity db [:block/uuid id])]
+                                       (:db/id e)))))))]
+    (->> (concat (map ref->eid (:block/tags block))
+                 (when-let [id (:db/id (:block/link block))]
+                   [id])
+                 property-refs content-refs)
+         (remove nil?))))
