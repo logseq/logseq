@@ -169,21 +169,22 @@
             metadata' (cond
                         ;; group
                         (some #(= "group" (:type %)) new-shapes)
-                        (assoc metadata :whiteboard/op :group)
+                        (assoc metadata :outliner-op :group)
 
                         ;; ungroup
                         (and (not-empty deleted-shapes) (every? #(= "group" (:type %)) deleted-shapes))
-                        (assoc metadata :whiteboard/op :un-group)
+                        (assoc metadata :outliner-op :un-group)
 
                         ;; arrow
                         (some #(and (= "line" (:type %))
                                     (= "arrow " (:end (:decorations %)))) new-shapes)
 
-                        (assoc metadata :whiteboard/op :new-arrow)
+                        (assoc metadata :outliner-op :new-arrow)
+
                         :else
-                        metadata)]
+                        (assoc metadata :outliner-op :save-whiteboard))]
         (swap! *last-shapes-nonce assoc-in [repo page-uuid] new-id-nonces)
-        (if (contains? #{:new-arrow} (:whiteboard/op metadata'))
+        (if (contains? #{:new-arrow} (:outliner-op metadata'))
           (state/set-state! :whiteboard/pending-tx-data
                             {:tx-data tx-data
                              :metadata metadata'})
@@ -222,7 +223,7 @@
   ([name]
    (p/let [uuid (or (and name (parse-uuid name)) (d/squuid))
            name (or name (str uuid))
-           _ (db/transact! (get-default-new-whiteboard-tx name uuid))]
+           _ (db/transact! (state/get-current-repo) (get-default-new-whiteboard-tx name uuid) {:outliner-op :create-page})]
      uuid)))
 
 (defn <create-new-whiteboard-and-redirect!
@@ -278,7 +279,8 @@
                :block/format :markdown
                :block/page (:db/id page-entity)
                :block/parent (:db/id page-entity)})
-          _ (db/transact! repo [tx] {:whiteboard/transact? true})]
+          _ (db/transact! repo [tx] {:outliner-op :insert-blocks
+                                     :whiteboard/transact? true})]
     new-block-id))
 
 (defn inside-portal?

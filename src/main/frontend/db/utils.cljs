@@ -3,7 +3,6 @@
   (:require [datascript.core :as d]
             [frontend.state :as state]
             [frontend.db.conn :as conn]
-            [frontend.config :as config]
             [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
@@ -62,23 +61,6 @@
      (let [selector (if (some #{:db/id} selector) selector (conj selector :db/id))]
        (->> (d/pull-many db selector eids)
             (map #(update-block-content % (:db/id %))))))))
-
-(if config/publishing?
-  (defn- transact!*
-    [repo-url tx-data tx-meta]
-    ;; :save-block is for query-table actions like sorting and choosing columns
-    (when (or (#{:collapse-expand-blocks :save-block} (:outliner-op tx-meta))
-              (:init-db? tx-meta))
-      (conn/transact! repo-url tx-data tx-meta)))
-  (def transact!* conn/transact!))
-
-(defn transact!
-  ([tx-data]
-   (transact! (state/get-current-repo) tx-data))
-  ([repo-url tx-data]
-   (transact! repo-url tx-data nil))
-  ([repo-url tx-data tx-meta]
-   (transact!* repo-url tx-data tx-meta)))
 
 (defn get-key-value
   ([key]

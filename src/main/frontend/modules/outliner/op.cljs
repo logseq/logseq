@@ -116,3 +116,8 @@
   [property-id values]
   (op-transact!
    [:add-existing-values-to-closed-values [property-id values]]))
+
+(defn transact!
+  [tx-data tx-meta]
+  (op-transact!
+   [:transact [tx-data tx-meta]]))

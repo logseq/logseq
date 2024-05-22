@@ -1,14 +1,15 @@
 (ns frontend.modules.outliner.ui
   #?(:cljs (:require-macros [frontend.modules.outliner.ui]))
   #?(:cljs (:require [frontend.state :as state]
-                     [frontend.db :as db]
+                     [frontend.db.transact]
+                     [frontend.db.conn]
                      [logseq.outliner.op]
                      [frontend.modules.outliner.op])))
 
 (defmacro transact!
   [opts & body]
   `(let [test?# frontend.util/node-test?]
-     (when (or test?# (db/request-finished?))
+     (when (or test?# (frontend.db.transact/request-finished?))
        (let [ops# frontend.modules.outliner.op/*outliner-ops*
              editor-info# (state/get-editor-info)]
          (if ops#
@@ -20,7 +21,7 @@
                (if test?#
                  (when (seq r#)
                    (logseq.outliner.op/apply-ops! (state/get-current-repo)
-                                                  (db/get-db false)
+                                                  (frontend.db.conn/get-db false)
                                                   r#
                                                   (state/get-date-formatter)
                                                   ~opts))
