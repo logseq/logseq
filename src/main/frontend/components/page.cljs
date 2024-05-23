@@ -359,7 +359,7 @@
                                                           (db-property-handler/set-block-property!
                                                            (:db/id page)
                                                            (pu/get-pid :logseq.property/icon)
-                                                           icon))
+                                                           (select-keys icon [:id :type])))
                                              :icon-props {:size 38}})
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1

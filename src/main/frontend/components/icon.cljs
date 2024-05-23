@@ -16,6 +16,8 @@
             [frontend.config :as config]
             [frontend.handler.property.util :as pu]))
 
+(defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
+
 (defn icon
   [icon & [opts]]
   (cond
@@ -53,9 +55,6 @@
                       (remove #{"Ab" "Ab 2" "Ab Off"}))]
       (reset! *tabler-icons result)
       result)))
-
-(defonce emojis
-  (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
 (defn- search-tabler-icons
   [q]
