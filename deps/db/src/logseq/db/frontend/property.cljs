@@ -105,7 +105,7 @@
             {:db-ident db-ident
              :value value
              :uuid (random-uuid)
-             :icon {:type :tabler-icon :id icon :name icon}})
+             :icon {:type :tabler-icon :id icon}})
           [[:logseq.task/status.backlog "Backlog" "Backlog"]
            [:logseq.task/status.todo "Todo" "Todo"]
            [:logseq.task/status.doing "Doing" "InProgress50"]
@@ -124,7 +124,7 @@
             {:db-ident db-ident
              :value value
              :uuid (random-uuid)
-             :icon {:type :tabler-icon :id icon :name icon}})
+             :icon {:type :tabler-icon :id icon}})
           [[:logseq.task/priority.urgent "Urgent" "cell-signal-5"]
            [:logseq.task/priority.high "High" "cell-signal-4"]
            [:logseq.task/priority.medium "Medium" "cell-signal-3"]
