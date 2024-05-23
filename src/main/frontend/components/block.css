@@ -91,7 +91,7 @@
 }
 
 .block-content-or-editor-wrap {
-  @apply flex flex-1 flex-row flex-wrap gap-1 items-center;
+  @apply flex flex-1 flex-row flex-wrap gap-1;
 }
 
 .block-head-wrap {

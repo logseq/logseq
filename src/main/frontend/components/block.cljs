@@ -2261,24 +2261,26 @@
 
 (rum/defc tags
   [config block]
-  (when (seq (:block/tags block))
-    [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
-     (for [tag (:block/tags block)]
-       (page-cp (assoc config
-                       :tag? true
-                       :disable-preview? true) tag))]))
+  (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/task)) (:block/tags block))]
+    (when (seq block-tags)
+      [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
+       (for [tag block-tags]
+         (page-cp (assoc config
+                         :tag? true
+                         :disable-preview? true) tag))])))
 
 (rum/defc block-closed-values-properties
-  [block]
-  (let [closed-values-properties (outliner-property/get-block-other-position-properties (db/get-db) (:db/id block))]
+  [block position]
+  (let [closed-values-properties (outliner-property/get-block-other-position-properties (db/get-db) (:db/id block) position)]
     (when (seq closed-values-properties)
-      [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-full
+      [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
        (for [pid closed-values-properties]
          (when-let [property (db/entity pid)]
            (pv/property-value block property (get block pid)
                               {:icon? true
                                :page-cp page-cp
-                               :inline-text inline-text})))])))
+                               :inline-text inline-text
+                               :other-position? true})))])))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
@@ -2318,13 +2320,13 @@
     [:div.block-content.inline
      (cond-> {:id (str "block-content-" uuid)
               :on-pointer-up (fn [e]
-                             (when (and
-                                    (state/in-selection-mode?)
-                                    (not (string/includes? content "```"))
-                                    (not (gobj/get e "shiftKey"))
-                                    (not (util/meta-key? e)))
+                               (when (and
+                                      (state/in-selection-mode?)
+                                      (not (string/includes? content "```"))
+                                      (not (gobj/get e "shiftKey"))
+                                      (not (util/meta-key? e)))
                                ;; clear highlighted text
-                               (util/clear-selection!)))}
+                                 (util/clear-selection!)))}
        (not slide?)
        (merge attrs))
 
@@ -2347,15 +2349,15 @@
               :else
               (build-block-title config block))
 
-            [:div.flex.flex-row.items-center.gap-1
-             (when (and db-based? (seq block-tags))
-               (tags config block))
+            (when-not (:block-ref? config)
+              [:div.flex.flex-row.items-center.gap-1
+               (when (and db-based? (seq block-tags))
+                 (tags config block))
 
-             (when (and (:original-block config) (not (:block/name block)))
-               [:a.fade-link {:title "Embed block"
-                              :href (rfe/href :page {:name (str (:block/uuid block))})}
-                (ui/icon "link")])]]
-           ))
+               (when (and (:original-block config) (not (:block/name block)))
+                 [:a.fade-link {:title "Embed block"
+                                :href (rfe/href :page {:name (str (:block/uuid block))})}
+                  (ui/icon "link")])])]))
 
        (file-block/clock-summary-cp block body)]
 
@@ -2449,7 +2451,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
     [:div.block-content-or-editor-wrap
-     (when db-based? (block-closed-values-properties block))
+     (when db-based? (block-closed-values-properties block :beginning-block))
      (if (and edit? editor-box)
        [:div.editor-wrapper.flex.flex-1
         {:id editor-id}
@@ -2472,8 +2474,9 @@
                                      config))]
           [:div.flex.flex-1.flex-row.gap-1.items-start
            editor-cp
-           (when (and (seq (:block/tags block)) db-based?)
-             [:div {:style {:margin-top 2}} (tags config block)])])]
+           (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/task)) (:block/tags block))]
+             (when (and (seq block-tags) db-based?)
+             [:div {:style {:margin-top 2}} (tags config block)]))])]
        (let [refs-count (if (seq (:block/_refs block))
                           (count (:block/_refs block))
                           (rum/react *refs-count))]
@@ -2514,7 +2517,8 @@
 
           (when (and (not hide-block-refs?) (> refs-count 0))
             (when-let [refs-cp (state/get-component :block/linked-references)]
-              (refs-cp uuid)))]))]))
+              (refs-cp uuid)))]))
+     (when db-based? (block-closed-values-properties block :ending-block))]))
 
 (rum/defcs single-block-cp < mixins/container-id
   [state _config block-uuid]

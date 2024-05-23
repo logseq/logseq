@@ -231,12 +231,15 @@
   (let [selected-choices (->> selected-choices
                               (remove nil?)
                               (remove #(= :logseq.property/empty-placeholder %)))
-        clear-value (str "Remove property " (:block/original-name property))
+        clear-value (str "No " (:block/original-name property))
+        clear-value-label [:div.flex.flex-row.items-center.gap-2
+                           (ui/icon "x")
+                           [:div clear-value]]
         items' (->>
                 (if (and (seq selected-choices) (not multiple-choices?))
                   (concat items
                           [{:value clear-value
-                            :label clear-value
+                            :label clear-value-label
                             :clear? true}])
                   items)
                 (remove #(= :logseq.property/empty-placeholder (:value %))))
@@ -630,7 +633,7 @@
                                        :auto-focus? true
                                        :trigger-id trigger-id})))]
       (shui/trigger-as
-       :div.jtrigger.flex.flex-1.w-full
+       (if (:other-position? opts) :div :div.jtrigger.flex.flex-1.w-full)
        {:ref *el
         :id trigger-id
         :tabIndex 0
@@ -820,9 +823,10 @@
              (first v)
              :else
              v)]
-     [:div.property-value-inner.w-full
+     [:div.property-value-inner
       {:data-type type
-       :class (when empty-value? "empty-value")}
+       :class (str (when empty-value? "empty-value")
+                   (when-not (:other-position? opts) " w-full"))}
       (cond
         multiple-values?
         (multiple-values block property v opts schema)

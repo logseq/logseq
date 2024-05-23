@@ -191,26 +191,6 @@
           (dissoc :block/deadline)))
     block))
 
-(defn- update-block-scheduled
-  "Should have same implementation as update-block-deadline"
-  [block db {:keys [user-config]}]
-  (if-let [scheduled (:block/scheduled block)]
-    (let [scheduled-prop (:block/uuid (d/entity db :logseq.task/scheduled))
-          scheduled-page (or (ffirst (d/q '[:find (pull ?b [:block/uuid])
-                                           :in $ ?journal-day
-                                           :where [?b :block/journal-day ?journal-day]]
-                                         db scheduled))
-                            (assoc (sqlite-util/build-new-page
-                                    (date-time-util/int->journal-title scheduled (common-config/get-date-formatter user-config)))
-                                   :block/type "journal"
-                                   :block/journal-day scheduled))]
-      (-> block
-          (update :block/properties assoc scheduled-prop (:block/uuid scheduled-page))
-          (update :block/refs (fnil into []) [:logseq.task/scheduled scheduled-page])
-          (update :block/path-refs (fnil into []) [:logseq.task/scheduled scheduled-page])
-          (dissoc :block/scheduled)))
-    block))
-
 (defn- text-with-refs?
   "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
   instead of `#Logseq #awesome`. If so the property type is :default instead of :page"
@@ -564,7 +544,6 @@
         (update-block-marker db options)
         (update-block-priority db options)
         (update-block-deadline db options)
-        (update-block-scheduled db options)
         add-missing-timestamps
         ;; ((fn [x] (prn :block-out x) x))
         ;; TODO: org-mode content needs to be handled

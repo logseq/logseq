@@ -59,6 +59,7 @@
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.frontend.property :as db-property]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
@@ -3426,13 +3427,14 @@
      (let [repo (state/get-current-repo)]
        (if-let [block (db/entity [:block/uuid block-id])]
          (let [db-based? (config/db-based-graph? repo)
-               tags (:block/tags (db/entity (:db/id block)))]
+               tags (:block/tags (db/entity (:db/id block)))
+               property-keys (remove db-property/db-attribute-properties (keys (:block/properties block)))]
            (or (db-model/has-children? block-id)
                (valid-dsl-query-block? block)
                (valid-custom-query-block? block)
                (and db-based?
-                    (seq (:block/properties block))
-                    (not (db-pu/all-hidden-properties? (keys (:block/properties block)))))
+                    (seq property-keys)
+                    (not (db-pu/all-hidden-properties? property-keys)))
                (and db-based? (seq tags)
                     (some (fn [t]
                             (let [properties (map :db/ident (:class/schema.properties (:block/schema t)))]

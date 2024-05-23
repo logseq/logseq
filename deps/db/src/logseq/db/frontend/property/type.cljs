@@ -40,7 +40,7 @@
   "Map of types to their set of allowed :schema attributes"
   (merge-with into
               (zipmap closed-value-property-types (repeat #{:values}))
-              (zipmap #{:number :url} (repeat #{:position}))
+              (zipmap #{:number :url :default} (repeat #{:position}))
               {:default #{:cardinality}
                :number #{:cardinality}
                :date #{:cardinality}
