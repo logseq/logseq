@@ -31,6 +31,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.handler.db-based.property :as db-p]
             [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
@@ -51,7 +52,8 @@
             [frontend.handler.search :as search-handler]
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
-            [logseq.db.frontend.property.util :as db-property-util]))
+            [logseq.db.frontend.property.util :as db-property-util]
+            [logseq.db.frontend.property :as ldb-property]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -791,15 +793,22 @@
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
-      (property-handler/set-block-property!
-       (state/get-current-repo)
-       block-uuid key value))))
+            repo (state/get-current-repo)
+            _ (db-async/<get-block repo block-uuid :children? false)
+            db? (config/db-based-graph? repo)
+            key (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
+            key (if db? (ldb-property/create-user-property-ident-from-name key) key)
+            _ (when db? (db-p/upsert-property! key {} {}))]
+      (property-handler/set-block-property! repo block-uuid key value))))
 
 (def ^:export remove_block_property
   (fn [block-uuid key]
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
-            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
+            _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)
+            db? (config/db-based-graph? (state/get-current-repo))
+            key-ns? (and (keyword? key) (namespace key))
+            key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
+            key (if (and db? (not key-ns?)) (ldb-property/create-user-property-ident-from-name key) key)]
       (property-handler/remove-block-property!
       (state/get-current-repo)
       block-uuid key))))
@@ -809,7 +818,13 @@
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
             _ (db-async/<get-block (state/get-current-repo) block-uuid :children? false)]
       (when-let [block (db-model/get-block-by-uuid block-uuid)]
-        (pu/lookup-by-name (:block/properties block) key)))))
+        (let [properties (:block/properties block)
+              property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
+              property-value (or (get properties key)
+                               (get properties property-name)
+                               (get properties (keyword (str "user.property/" property-name))))
+              property-value (if-let [property-id (:db/id property-value)] (db/pull property-id) property-value)]
+          (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))
 
 (def ^:export get_block_properties
   (fn [block-uuid]
