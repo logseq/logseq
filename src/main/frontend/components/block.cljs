@@ -2271,12 +2271,14 @@
                          :disable-preview? true) tag))])))
 
 (rum/defc block-positioned-properties
-  [block position]
+  [config block position]
   (let [properties (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
-        opts {:icon? true
-              :page-cp page-cp
-              :inline-text inline-text
-              :other-position? true}]
+        opts (merge config
+                    {:icon? true
+                     :page-cp page-cp
+                     :block-cp blocks-container
+                     :inline-text inline-text
+                     :other-position? true})]
     (when (seq properties)
       (case position
         :block-below
@@ -2461,7 +2463,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
     [:div.block-content-or-editor-wrap
-     (when db-based? (block-positioned-properties block :block-left))
+     (when db-based? (block-positioned-properties config block :block-left))
      (if (and edit? editor-box)
        [:div.editor-wrapper.flex.flex-1
         {:id editor-id}
@@ -2528,7 +2530,7 @@
           (when (and (not hide-block-refs?) (> refs-count 0))
             (when-let [refs-cp (state/get-component :block/linked-references)]
               (refs-cp uuid)))]))
-     (when db-based? (block-positioned-properties block :block-right))]))
+     (when db-based? (block-positioned-properties config block :block-right))]))
 
 (rum/defcs single-block-cp < mixins/container-id
   [state _config block-uuid]
@@ -2987,7 +2989,7 @@
         (when (and @*show-right-menu? (not in-whiteboard?))
           (block-right-menu config block edit?))]
 
-       (when db-based? (block-positioned-properties block :block-below))
+       (when db-based? (block-positioned-properties config block :block-below))
 
        (when (and db-based? (not collapsed?))
          [:div {:style {:padding-left 29}}
