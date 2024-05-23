@@ -173,7 +173,8 @@
                  (re-init-commands! property)))
               :update-icon
               (fn [icon]
-                (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon icon)))
+                (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon
+                                                      (select-keys icon [:id :type]))))
        parent-opts))))
 
 (rum/defc add-existing-values
