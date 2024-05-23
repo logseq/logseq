@@ -68,9 +68,23 @@
   (exportOPML [_this content config title references]
     (parse-export-opml content config title references)))
 
+(declare plain->text)
+
+(defn- last-text
+  [ast]
+  (cond (nil? ast) ""
+        (string? ast) ast
+        (vector? ast) (cond
+                        (= 1 (count ast)) ""
+                        (string? (last ast)) (last ast)
+                        :else (plain->text (last ast)))
+        :else (str ast)))
+
+;; convert [["Emphasis" [["Bold"] [["Plain" "good"]]]]] to "good"
+;; No idea why "Bold" is enclosed in another vector
 (defn plain->text
   [plains]
-  (string/join (map last plains)))
+  (string/join (map last-text plains)))
 
 (defn properties?
   [ast]
