@@ -8,8 +8,19 @@
             [logseq.db.frontend.rules :as rules]
             [nbb.core :as nbb]
             [clojure.string :as string]
+            [clojure.pprint :as pprint]
+            [babashka.cli :as cli]
+            ["child_process" :as child-process]
             ["path" :as node-path]
             ["os" :as os]))
+
+(defn- sh
+  "Run shell cmd synchronously and print to inherited streams by default. Aims
+  to be similar to babashka.tasks/shell"
+  [cmd opts]
+  (child-process/spawnSync (first cmd)
+                           (clj->js (rest cmd))
+                           (clj->js (merge {:stdio "inherit"} opts))))
 
 (defn- get-dir-and-db-name
   "Gets dir and db name for use with open-db!"
@@ -20,26 +31,45 @@
       ((juxt node-path/dirname node-path/basename) graph-dir'))
     [(node-path/join (os/homedir) "logseq" "graphs") graph-dir]))
 
+(def spec
+  "Options spec"
+  {:help {:alias :h
+          :desc "Print help"}
+   :verbose {:alias :v
+             :desc "Print more info"}
+   :raw {:alias :r
+         :desc "Print results plainly. Useful when piped to bb"}
+   :entity {:alias :e
+            :coerce []
+            :desc "Lookup entities instead of query"}})
+
 (defn -main [args]
-  (when (< (count args) 2)
-    (println "Usage: $0 GRAPH QUERY")
-    (js/process.exit 1))
-  (let [[graph-dir query*] args
+  (let [[graph-dir & args'] args
+        options (cli/parse-opts args' {:spec spec})
+        _ (when (or (nil? graph-dir) (:help options))
+            (println (str "Usage: $0 GRAPH-NAME [& ARGS] [OPTIONS]\nOptions:\n"
+                          (cli/format-opts {:spec spec})))
+            (js/process.exit 1))
         [dir db-name] (get-dir-and-db-name graph-dir)
         conn (sqlite-db/open-db! dir db-name)
-        results (if ((set args) "-e")
-                  (map #(when-let [ent (d/entity @conn (edn/read-string %))]
+        results (if (:entity options)
+                  (map #(when-let [ent (d/entity @conn
+                                                 (if (string? %) (edn/read-string %) %))]
                           (cond-> (into {:db/id (:db/id ent)} ent)
                             (seq (:block/properties ent))
                             (update :block/properties (fn [props] (map (fn [m] (into {} m)) props)))))
-                       (drop 2 args))
+                       (:entity options))
                   ;; assumes no :in are in queries
-                  (let [query (into (edn/read-string query*) [:in '$ '%])
+                  (let [query (into (edn/read-string (first args')) [:in '$ '%])
                         res (d/q query @conn (rules/extract-rules rules/db-query-dsl-rules))]
                     ;; Remove nesting for most queries which just have one :find binding
                     (if (= 1 (count (first res))) (mapv first res) res)))]
-    (when ((set args) "-v") (println "DB contains" (count (d/datoms @conn :eavt)) "datoms"))
-    (prn results)))
+    (when (:verbose options) (println "DB contains" (count (d/datoms @conn :eavt)) "datoms"))
+    (if (:raw options)
+      (prn results)
+      (if (zero? (.-status (child-process/spawnSync "which" #js ["puget"])))
+        (sh ["puget"] {:input (pr-str results) :stdio ["pipe" "inherit" "inherit"]})
+        (pprint/pprint results)))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
   (-main *command-line-args*))
