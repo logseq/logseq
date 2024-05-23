@@ -67,7 +67,8 @@
             [logseq.graph-parser.utf8 :as utf8]
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [logseq.outliner.property :as outliner-property]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -3428,7 +3429,9 @@
        (if-let [block (db/entity [:block/uuid block-id])]
          (let [db-based? (config/db-based-graph? repo)
                tags (:block/tags (db/entity (:db/id block)))
-               property-keys (remove db-property/db-attribute-properties (keys (:block/properties block)))]
+               property-keys (->> (keys (:block/properties block))
+                                  (remove db-property/db-attribute-properties)
+                                  (remove #(outliner-property/property-with-other-position? (db/entity %))))]
            (or (db-model/has-children? block-id)
                (valid-dsl-query-block? block)
                (valid-custom-query-block? block)

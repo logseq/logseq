@@ -18,7 +18,8 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [promesa.core :as p]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.outliner.op]))
 
 (defn- remove-non-existed-refs!
   [refs]

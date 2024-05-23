@@ -2,6 +2,7 @@
   "db based property handler"
   (:require [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
+            [logseq.outliner.op]
             [logseq.db.frontend.property :as db-property]
             [frontend.db :as db]
             #_:clj-kondo/ignore

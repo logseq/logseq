@@ -419,20 +419,25 @@
      :all-classes all-classes           ; block own classes + parent classes
      :classes-properties all-properties}))
 
-(defn- closed-value-other-position?
+(defn- property-with-position?
   [db property-id block-properties position]
   (and
    (some? (get block-properties property-id))
    (let [schema (:block/schema (d/entity db property-id))]
      (= (:position schema) position))))
 
-(defn get-block-other-position-properties
+(defn property-with-other-position?
+  [property]
+  (let [schema (:block/schema property)]
+    (not (contains? #{:properties nil} (:position schema)))))
+
+(defn get-block-positioned-properties
   [db eid position]
   (let [block (d/entity db eid)
         own-properties (keys (:block/properties block))]
     (->> (:classes-properties (get-block-classes-properties db eid))
          (concat own-properties)
-         (filter (fn [id] (closed-value-other-position? db id (:block/properties block) position)))
+         (filter (fn [id] (property-with-position? db id (:block/properties block) position)))
          (distinct)
          (map #(d/entity db %))
          (ldb/sort-by-order)
