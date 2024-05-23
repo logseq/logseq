@@ -342,23 +342,22 @@
                            (fn [item]
                              (assoc item :selected
                                     (or (and position (= (:value item) position))
-                                        (and (nil? position) (= (:value item) "properties")))))
+                                        (and (nil? position) (= (:value item) :properties)))))
                            [{:label "Block properties"
-                             :value "properties"}
+                             :value :properties}
                             {:label "Beginning of the block"
-                             :value "block-beginning"}
-                        ;; {:label "Ending of the block"
-                        ;;  :value "block-ending"}
-                            ])]
+                             :value :beginning-block}
+                            {:label "Ending of the block"
+                             :value :ending-block}])]
               [:div.grid.grid-cols-4.gap-1.items-center.leading-8
                [:label.col-span-1 "UI position:"]
                [:div.col-span-2
                 (shui/select
                  (cond-> {:disabled config/publishing?
                           :on-value-change (fn [v]
-                                             (swap! *property-schema assoc :position v)
+                                             (swap! *property-schema assoc :position (keyword v))
                                              (save-property-fn))}
-                   (string? position)
+                   (keyword? position)
                    (assoc :default-value position))
                  (shui/select-trigger
                   {:class "!px-2 !py-0 !h-8"}

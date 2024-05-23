@@ -136,9 +136,9 @@
   (let [built-in-props (set (keys db-property/built-in-properties))
         ;; explicit lookup in order to be nbb compatible
         properties (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
-                        (remove (fn [[k _v]] (built-in-props k)))
                         (into {}))
-        property-key-refs (keys properties)
+        property-key-refs (->> (keys properties)
+                               (remove built-in-props))
         page-or-object? (fn [block] (and (de/entity? block)
                                          (or (ldb/page? block)
                                              (seq (:block/tags block)))))

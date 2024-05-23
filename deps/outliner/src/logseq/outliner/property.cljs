@@ -420,20 +420,23 @@
      :classes-properties all-properties}))
 
 (defn- closed-value-other-position?
-  [db property-id block-properties]
+  [db property-id block-properties position]
   (and
    (some? (get block-properties property-id))
    (let [schema (:block/schema (d/entity db property-id))]
-     (= (:position schema) "block-beginning"))))
+     (= (:position schema) position))))
 
 (defn get-block-other-position-properties
-  [db eid]
+  [db eid position]
   (let [block (d/entity db eid)
         own-properties (keys (:block/properties block))]
     (->> (:classes-properties (get-block-classes-properties db eid))
          (concat own-properties)
-         (filter (fn [id] (closed-value-other-position? db id (:block/properties block))))
-         (distinct))))
+         (filter (fn [id] (closed-value-other-position? db id (:block/properties block) position)))
+         (distinct)
+         (map #(d/entity db %))
+         (ldb/sort-by-order)
+         (map :db/ident))))
 
 (defn block-has-viewable-properties?
   [block-entity]

@@ -97,7 +97,10 @@
    {:original-name "Status"
     :schema
     {:type :default
-     :public? true}
+     :public? true
+     :position :beginning-block
+     :hide? true
+     :shortcut "s"}
     :closed-values
     (mapv (fn [[db-ident value icon]]
             {:db-ident db-ident
@@ -114,20 +117,20 @@
    {:original-name "Priority"
     :schema
     {:type :default
-     :public? true}
+     :public? true
+     :position :beginning-block
+     :hide? true
+     :shortcut "p"}
     :closed-values
-    (mapv (fn [[db-ident value]]
+    (mapv (fn [[db-ident value icon]]
             {:db-ident db-ident
              :value value
-             :uuid (random-uuid)})
-          [[:logseq.task/priority.urgent "Urgent"]
-           [:logseq.task/priority.high "High"]
-           [:logseq.task/priority.medium "Medium"]
-           [:logseq.task/priority.low "Low"]])}
-   :logseq.task/scheduled
-   {:original-name "Scheduled"
-    :schema {:type :date
-             :public? true}}
+             :uuid (random-uuid)
+             :icon {:type :tabler-icon :id icon :name icon}})
+          [[:logseq.task/priority.urgent "Urgent" "cell-signal-5"]
+           [:logseq.task/priority.high "High" "cell-signal-4"]
+           [:logseq.task/priority.medium "Medium" "cell-signal-3"]
+           [:logseq.task/priority.low "Low" "cell-signal-2"]])}
    :logseq.task/deadline
    {:original-name "Deadline"
     :schema {:type :date
