@@ -159,7 +159,7 @@
 }
 
 
-.closed-values-properties {
+.positioned-properties {
     .select-item {
         @apply flex items-center;
     }

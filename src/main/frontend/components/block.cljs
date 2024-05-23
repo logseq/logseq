@@ -2063,6 +2063,7 @@
   (property-component/properties-area block
                                       edit-input-id
                                       (merge
+                                       config
                                        {:inline-text inline-text
                                         :page-cp page-cp
                                         :block-cp blocks-container
@@ -2269,18 +2270,27 @@
                          :tag? true
                          :disable-preview? true) tag))])))
 
-(rum/defc block-closed-values-properties
+(rum/defc block-positioned-properties
   [block position]
-  (let [closed-values-properties (outliner-property/get-block-other-position-properties (db/get-db) (:db/id block) position)]
-    (when (seq closed-values-properties)
-      [:div.closed-values-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
-       (for [pid closed-values-properties]
-         (when-let [property (db/entity pid)]
-           (pv/property-value block property (get block pid)
-                              {:icon? true
-                               :page-cp page-cp
-                               :inline-text inline-text
-                               :other-position? true})))])))
+  (let [properties (outliner-property/get-block-positioned-properties (db/get-db) (:db/id block) position)
+        opts {:icon? true
+              :page-cp page-cp
+              :inline-text inline-text
+              :other-position? true}]
+    (when (seq properties)
+      (case position
+        :block-below
+        [:div.positioned-properties.flex.flex-row.gap-2.item-center.ml-2.pl-8.flex-nowrap.text-sm
+         (for [pid properties]
+           (let [property (db/entity pid)
+                 v (get block pid)]
+             [:div.flex.flex-row.items-center.gap-1.px-1.hover:bg-secondary.rounded
+              [:div.opacity-50.hover:opacity-100 (str (:block/original-name property) ":")]
+              (pv/property-value block property v opts)]))]
+        [:div.positioned-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
+         (for [pid properties]
+           (when-let [property (db/entity pid)]
+             (pv/property-value block property (get block pid) opts)))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
@@ -2451,7 +2461,7 @@
         repo (state/get-current-repo)
         db-based? (config/db-based-graph? repo)]
     [:div.block-content-or-editor-wrap
-     (when db-based? (block-closed-values-properties block :beginning-block))
+     (when db-based? (block-positioned-properties block :block-left))
      (if (and edit? editor-box)
        [:div.editor-wrapper.flex.flex-1
         {:id editor-id}
@@ -2518,7 +2528,7 @@
           (when (and (not hide-block-refs?) (> refs-count 0))
             (when-let [refs-cp (state/get-component :block/linked-references)]
               (refs-cp uuid)))]))
-     (when db-based? (block-closed-values-properties block :ending-block))]))
+     (when db-based? (block-positioned-properties block :block-right))]))
 
 (rum/defcs single-block-cp < mixins/container-id
   [state _config block-uuid]
@@ -2891,7 +2901,8 @@
         own-number-list? (:own-order-number-list? config)
         order-list? (boolean own-number-list?)
         children (ldb/get-children block)
-        selected? (contains? (set (state/get-selection-block-ids)) (:block/uuid block))]
+        selected? (contains? (set (state/get-selection-block-ids)) (:block/uuid block))
+        db-based? (config/db-based-graph? repo)]
     (when-not (= (:editor/deleting-block @state/state) (:block/uuid block))
       [:div.ls-block
        (cond->
@@ -2976,7 +2987,9 @@
         (when (and @*show-right-menu? (not in-whiteboard?))
           (block-right-menu config block edit?))]
 
-       (when (and (config/db-based-graph? repo) (not collapsed?))
+       (when db-based? (block-positioned-properties block :block-below))
+
+       (when (and db-based? (not collapsed?))
          [:div {:style {:padding-left 29}}
           (db-properties-cp config
                             block

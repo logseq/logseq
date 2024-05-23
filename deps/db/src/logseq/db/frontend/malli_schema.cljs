@@ -255,7 +255,7 @@
 (def property-type-schema-attrs
   "Property :schema attributes that vary by :type"
   [;; For closed values
-   [:position {:optional true} [:enum :properties :beginning-block :ending-block]]])
+   [:position {:optional true} [:enum :properties :block-left :block-right :block-below]]])
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"

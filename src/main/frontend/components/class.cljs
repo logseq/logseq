@@ -7,7 +7,8 @@
             [frontend.ui :as ui]
             [rum.core :as rum]
             [frontend.components.block :as block]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [logseq.db.frontend.property :as db-property]))
 
 (rum/defc class-select
   [page class on-select]
@@ -45,14 +46,19 @@
 
 (rum/defc page-parent
   [page parent]
-  (let [parent-id (:block/uuid parent)]
+  (let [repo (state/get-current-repo)
+        parent-id (:block/uuid parent)]
     (class-select page parent-id (fn [value]
                                    (if (uuid? value)
                                      (db/transact!
+                                      repo
                                       [{:db/id (:db/id page)
-                                        :class/parent [:block/uuid value]}])
+                                        :class/parent [:block/uuid value]}]
+                                      {:outliner-op :save-block})
                                      (db/transact!
-                                      [[:db.fn/retractAttribute (:db/id page) :class/parent]]))))))
+                                      repo
+                                      [[:db.fn/retractAttribute (:db/id page) :class/parent]]
+                                      {:outliner-op :save-block}))))))
 
 (rum/defcs configure < rum/reactive
   "Configure a class page"
