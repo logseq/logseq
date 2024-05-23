@@ -29,7 +29,7 @@
   {:default-closed
    (mapv #(hash-map :value %
                     :uuid (random-uuid)
-                    :icon {:id % :name % :type :emoji})
+                    :icon {:id % :type :emoji})
          ["joy" "sob" "upside_down_face"])
    :url-closed
    (mapv #(hash-map :value %

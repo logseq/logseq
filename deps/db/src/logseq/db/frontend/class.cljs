@@ -9,7 +9,7 @@
    {:original-name "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
 
-   :logseq.class/card {:original-name "Card"
+   :logseq.class/Card {:original-name "Card"
                        ;; :schema {:property []}
                        }
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
