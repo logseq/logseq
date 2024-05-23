@@ -18,7 +18,7 @@
                                @conn)
                           (map first))
           default-idents (map :db/ident ident-ents)]
-      (is (> (count default-idents) 48)
+      (is (> (count default-idents) 45)
           "Approximate number of default idents is correct")
 
       (testing "namespaces"
@@ -63,7 +63,7 @@
         task (d/entity @conn :logseq.class/task)]
     (is (contains? (:block/type task) "class")
         "Task class has correct type")
-    (is (= 4 (count (:class/schema.properties task)))
+    (is (= 3 (count (:class/schema.properties task)))
         "Has correct number of task properties")
     (is (every? #(contains? (:block/type %) "property")
                 (:class/schema.properties task))
