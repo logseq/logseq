@@ -9,14 +9,12 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [malli.core :as ma]
             [malli.transform :as mt]
             [missionary.core :as m]
             [promesa.core :as p]))
-
 
 (def ^:private normalized-remote-block-schema
   "Blocks stored in remote have some differences in format from the client's.
@@ -49,9 +47,30 @@
   (ma/coercer [:sequential normalized-remote-block-schema]
               (mt/transformer {:name :custom} mt/string-transformer)))
 
+(defn- schema->ref-type-attrs
+  [db-schema]
+  (set
+   (keep
+    (fn [[attr-name attr-body-map]]
+      (when (= :db.type/ref (:db/valueType attr-body-map))
+        attr-name))
+    db-schema)))
+
+(defn- schema->card-many-attrs
+  [db-schema]
+  (set
+   (keep
+    (fn [[attr-name attr-body-map]]
+      (when (= :db.cardinality/many (:db/cardinality attr-body-map))
+        attr-name))
+    db-schema)))
+
 (defn- export-as-blocks
   [db]
-  (let [datoms (d/datoms db :eavt)]
+  (let [datoms (d/datoms db :eavt)
+        db-schema (d/schema db)
+        card-many-attrs (schema->card-many-attrs db-schema)
+        ref-type-attrs (schema->ref-type-attrs db-schema)]
     (->> datoms
          (partition-by :e)
          (keep (fn [datoms]
@@ -62,8 +81,8 @@
                                  (not (pos-int? (:v datom))))
                         (throw (ex-info "invalid block data" {:datom datom})))
                       (let [a (:a datom)
-                            card-many? (contains? db-schema/card-many-attributes a)
-                            ref? (contains? db-schema/ref-type-attributes a)]
+                            card-many? (contains? card-many-attrs a)
+                            ref? (contains? ref-type-attrs a)]
                         (case [ref? card-many?]
                           [true true]
                           (update r a conj (str (:v datom)))
@@ -157,7 +176,7 @@
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
         blocks (worker-util/profile :normalize-remote-blocks
-                 (normalized-remote-blocks-coercer blocks))
+                                    (normalized-remote-blocks-coercer blocks))
         blocks-with-page-id (fill-block-fields blocks)
         tx-data (concat blocks-with-page-id
                         [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])

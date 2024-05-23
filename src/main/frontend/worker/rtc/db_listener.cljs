@@ -4,7 +4,8 @@
             [frontend.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [clojure.string :as string]))
 
 (defn- latest-add?->v->t
   [add?->v->t]
@@ -23,8 +24,12 @@
     :block/tags :block/type :block/schema :block/link :block/journal-day})
 
 (defn- watched-attr?
+  ;; TODO: class related attrs?
   [attr]
-  (contains? watched-attrs attr))
+  (or (contains? watched-attrs attr)
+      (let [ns (namespace attr)]
+        (or (= "logseq.task" ns)        ;e.g. :logseq.task/status
+            (string/ends-with? ns ".property"))))) ; :logseq.property/xxx, :user.property/xxx
 
 (defn- ref-attr?
   [db attr]
