@@ -395,7 +395,7 @@
 
 (def db-ident-keys
   "Enumerates all possible keys db-ident key vals"
-  [[:logseq.db/type :string]
+  [[:db/type :string]
    [:schema/version :int]
    [:graph/uuid :string]
    [:graph/local-tx :string]])
