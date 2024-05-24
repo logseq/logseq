@@ -118,16 +118,6 @@
                      (create-property-value new-block (get-ident all-idents k) v))])))
        (into {})))
 
-(defn- property-value-properties
-  "Converts a property-value-tx map for addition to a block by replacing values with references
-   to the property value entities"
-  [pvalue-tx]
-  (update-vals pvalue-tx
-               (fn [v]
-                 (if (set? v)
-                   (set (map #(vector :block/uuid (:block/uuid %)) v))
-                   (vector :block/uuid (:block/uuid v))))))
-
 (defn- ->block-tx [{:keys [properties] :as m} properties-config page-uuids all-idents page-id]
   (let [new-block {:db/id (new-db-id)
                    :block/format :markdown
@@ -143,7 +133,7 @@
       (conj (merge (dissoc m :properties)
                    (sqlite-util/block-with-timestamps new-block)
                    (when (seq properties)
-                     (->block-properties (merge properties (property-value-properties pvalue-tx-m))
+                     (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                          page-uuids all-idents)))))))
 
 (defn- build-properties-tx [properties page-uuids all-idents]
@@ -177,7 +167,7 @@
                                      (merge
                                       new-block
                                       (when-let [props (not-empty (:properties prop-m))]
-                                        (->block-properties (merge props (property-value-properties pvalue-tx-m)) page-uuids all-idents))
+                                        (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) page-uuids all-idents))
                                       (when (seq schema-classes)
                                         {:property/schema.classes
                                          (mapv #(hash-map :db/ident (get-ident all-idents (keyword %)))
@@ -210,7 +200,7 @@
                              new-block
                              (dissoc class-m :properties :class-parent :schema-properties)
                              (when-let [props (not-empty (:properties class-m))]
-                               (->block-properties (merge props (property-value-properties pvalue-tx-m)) uuid-maps all-idents))
+                               (->block-properties (merge props (db-property-build/build-properties-with-ref-values pvalue-tx-m)) uuid-maps all-idents))
                              (when class-parent
                                {:class/parent
                                 (or (class-db-ids class-parent)
@@ -293,7 +283,7 @@
              (merge
               new-page
               (when (seq (:properties page))
-                (->block-properties (merge (:properties page) (property-value-properties pvalue-tx-m))
+                (->block-properties (merge (:properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                     page-uuids
                                     all-idents))))))
          ;; blocks tx
@@ -304,10 +294,32 @@
                  blocks))))
     pages-and-blocks)))
 
+(defn- split-blocks-tx
+  "Splits a vec of maps tx into maps that can immediately be transacted,
+  :init-tx, and maps that need to be transacted after :init-tx, :block-props-tx, in order to use
+   the correct schema e.g. user properties with :db/cardinality"
+  [blocks-tx]
+  (let [property-idents (keep #(when (:db/cardinality %) (:db/ident %)) blocks-tx)
+        [init-tx block-props-tx]
+        (reduce (fn [[init-tx* block-props-tx*] m]
+                  (let [props (select-keys m property-idents)]
+                    [(conj init-tx* (apply dissoc m property-idents))
+                     (if (seq props)
+                       (conj block-props-tx*
+                             (merge {:block/uuid (or (:block/uuid m)
+                                                     (throw (ex-info "No :block/uuid for block" {:block m})))}
+                                    props))
+                       block-props-tx*)]))
+                [[] []]
+                blocks-tx)]
+    {:init-tx init-tx
+     :block-props-tx block-props-tx}))
+
 (defn create-blocks-tx
-  "Given an EDN map for defining pages, blocks and properties, this creates a
-  vector of transactable data for use with d/transact!. The blocks that can be created
-   have the following limitations:
+  "Given an EDN map for defining pages, blocks and properties, this creates a map
+ with two keys of transactable data for use with d/transact!. The :init-tx key
+ must be transacted first and the :block-props-tx can be transacted after.
+ The blocks that can be created have the following limitations:
 
  * Only top level blocks can be easily defined. Other level blocks can be
    defined but they require explicit setting of attributes like :block/order and :block/parent
@@ -369,6 +381,6 @@
                              properties-tx)
         pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids options)]
     ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
-    (vec (concat properties-tx'
-                 classes-tx
-                 pages-and-blocks-tx))))
+    (split-blocks-tx (concat properties-tx'
+                             classes-tx
+                             pages-and-blocks-tx))))

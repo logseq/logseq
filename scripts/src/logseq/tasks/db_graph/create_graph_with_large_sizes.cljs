@@ -67,11 +67,11 @@
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name)
         _ (println "Building tx ...")
-        blocks-tx (create-graph/create-blocks-tx (create-init-data options))]
-    (println "Built" (count blocks-tx) "tx," (count (filter :block/original-name blocks-tx)) "pages and"
-             (count (filter :block/content blocks-tx)) "blocks ...")
+        {:keys [init-tx]} (create-graph/create-blocks-tx (create-init-data options))]
+    (println "Built" (count init-tx) "tx," (count (filter :block/original-name init-tx)) "pages and"
+             (count (filter :block/content init-tx)) "blocks ...")
     ;; Vary the chunking with page size up to a max to avoid OOM
-    (let [tx-chunks (partition-all (min (:pages options) 30000) blocks-tx)]
+    (let [tx-chunks (partition-all (min (:pages options) 30000) init-tx)]
       (loop [chunks tx-chunks
              chunk-num 1]
         (when-let [chunk (first chunks)]
