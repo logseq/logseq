@@ -203,8 +203,8 @@
 
         blocks-with-page-id (fill-block-fields blocks)
         tx-data (concat blocks-with-page-id
-                        [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}
-                         {:db/ident :logseq.kv/db-type :db/type "db"}])
+                        [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
+        init-tx-data [{:db/ident :logseq.kv/db-type :db/type "db"}]
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
@@ -213,6 +213,7 @@
         (p/do!
          (.createOrOpenDB worker-obj repo {:close-other-db? false})
          (.exportDB worker-obj repo)
+         (.transact worker-obj repo init-tx-data {:rtc-download-graph? true} (worker-state/get-context))
          (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
          (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
