@@ -439,7 +439,7 @@
  :command.sidebar/close-top                       "우축 사이드바의 최상단 항목 닫기"
  :command.ui/clear-all-notifications              "모든 알람 제거"
  :command.ui/install-plugins-from-file            "plugins.edn에서 플러그인 설치"
- :command-palette/toggle                          "명령어 검색"
- :go/search-in-page                               "현재 페이지에서 블록 검색"
+ :command.command-palette/toggle                  "명령어 검색"
+ :command.go/search-in-page                       "현재 페이지에서 블록 검색"
  }
   
