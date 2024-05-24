@@ -195,16 +195,17 @@
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
-        blocks-tx (create-graph/create-blocks-tx (create-init-data))
+        {:keys [init-tx block-props-tx]} (create-graph/create-blocks-tx (create-init-data))
         existing-names (set (map :v (d/datoms @conn :avet :block/original-name)))
-        conflicting-names (set/intersection existing-names (set (keep :block/original-name blocks-tx)))]
+        conflicting-names (set/intersection existing-names (set (keep :block/original-name init-tx)))]
     (when (seq conflicting-names)
       (println "Error: Following names conflict -" (string/join "," conflicting-names))
       (js/process.exit 1))
     (println "DB dir: " (node-path/join dir db-name))
-    (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
-             (count (filter :block/content blocks-tx)) "blocks ...")
-    (d/transact! conn blocks-tx)
+    (println "Generating" (count (filter :block/name init-tx)) "pages and"
+             (count (filter :block/content init-tx)) "blocks ...")
+    (d/transact! conn init-tx)
+    (d/transact! conn block-props-tx)
     (println "Created graph" (str db-name " with " (count (d/datoms @conn :eavt)) " datoms!"))))
 
 (when (= nbb/*file* (:file (meta #'-main)))

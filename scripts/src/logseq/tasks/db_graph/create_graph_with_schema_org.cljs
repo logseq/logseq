@@ -63,14 +63,13 @@
         class-name (strip-schema-prefix (class-m "@id"))
         url (str "https://schema.org/" (get inverted-renamed-classes class-name class-name))]
     (cond-> {:block/original-name class-name
-             :block/type "class"
              :properties (cond-> {:url url}
                            (class-m "rdfs:comment")
                            (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class'
       (assoc :class-parent (strip-schema-prefix parent-class'))
       (seq properties)
-      (assoc :schema-properties (map strip-schema-prefix properties)))))
+      (assoc :schema-properties (mapv strip-schema-prefix properties)))))
 
 (def schema->logseq-data-types
   "Schema datatypes, https://schema.org/DataType, mapped to their Logseq equivalents"
@@ -356,7 +355,8 @@
                      (d/q '[:find [(pull ?b [*
                                              {:class/schema.properties [:block/original-name]}
                                              {:property/schema.classes [:block/original-name]}
-                                             {:class/parent [:block/original-name]}]) ...]
+                                             {:class/parent [:block/original-name]}
+                                             {:block/refs [:block/original-name]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
                           db))]
@@ -367,7 +367,7 @@
                                    (let [props (db-property/properties m)]
                                      (cond-> (select-keys m [:block/name :block/type :block/original-name :block/schema :db/ident
                                                              :class/schema.properties :class/parent
-                                                             :db/cardinality :property/schema.classes])
+                                                             :db/cardinality :property/schema.classes :block/refs])
                                        (seq props)
                                        (assoc :block/properties (-> (update-keys props name)
                                                                     (update-vals (fn [v]
@@ -379,7 +379,9 @@
                                        (some? (:class/parent m))
                                        (update :class/parent :block/original-name)
                                        (seq (:property/schema.classes m))
-                                       (update :property/schema.classes #(set (map :block/original-name %)))))))
+                                       (update :property/schema.classes #(set (map :block/original-name %)))
+                                       (seq (:block/refs m))
+                                       (update :block/refs #(set (map :block/original-name %)))))))
                             set)))))
 
 (defn -main [args]
@@ -395,11 +397,12 @@
         conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
         init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
                                     options)
-        blocks-tx (create-graph/create-blocks-tx init-data)]
-    (println "Generating" (str (count (filter :block/name blocks-tx)) " pages with "
+        {:keys [init-tx block-props-tx]} (create-graph/create-blocks-tx init-data)]
+    (println "Generating" (str (count (filter :block/name init-tx)) " pages with "
                                (count (:classes init-data)) " classes and "
                                (count (:properties init-data)) " properties ..."))
-    (d/transact! conn blocks-tx)
+    (d/transact! conn init-tx)
+    (d/transact! conn block-props-tx)
     (when (:verbose options) (println "Transacted" (count (d/datoms @conn :eavt)) "datoms"))
     (when (:debug options) (write-debug-file @conn))
     (println "Created graph" (str db-name "!"))))

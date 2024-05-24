@@ -14,6 +14,7 @@
 (defn- create-init-data []
   (let [[actor-id person-id comment-id attendee-id duration-id] (repeatedly random-uuid)
         person-db-id (create-graph/new-db-id)]
+    ;; FIXME: Update to latest format
     {:pages-and-blocks
      [{:page
        {:block/name "person"
@@ -51,8 +52,10 @@
        :block/schema {:type :page
                       :classes #{person-id}
                       :cardinality :many}}
-      :comment {:block/uuid comment-id}
-      :duration {:block/uuid duration-id}}}))
+      :comment {:block/uuid comment-id
+                :block/schema {:type :default}}
+      :duration {:block/uuid duration-id
+                 :block/schema {:type :default}}}}))
 
 (defn -main [args]
   (when (not= 1 (count args))
@@ -63,10 +66,11 @@
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name)
-        blocks-tx (create-graph/create-blocks-tx (create-init-data))]
-    (println "Generating" (count (filter :block/name blocks-tx)) "pages and"
-             (count (filter :block/content blocks-tx)) "blocks ...")
-    (d/transact! conn blocks-tx)
+        {:keys [init-tx block-props-tx]} (create-graph/create-blocks-tx (create-init-data))]
+    (println "Generating" (count (filter :block/name init-tx)) "pages and"
+             (count (filter :block/content init-tx)) "blocks ...")
+    (d/transact! conn init-tx)
+    (d/transact! conn block-props-tx)
     (println "Created graph" (str db-name "!"))))
 
 (when (= nbb/*file* (:file (meta #'-main)))
