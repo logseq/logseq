@@ -28,13 +28,11 @@
 
 
 (defn kv
-  "Creates a key-value pair tx with the key under the :db/ident namespace :logseq.kv.
-   For example, the :db/type key is stored under an entity with ident :logseq.kv/db-type"
+  "Creates a key-value pair tx with the key and value respectively stored under
+  :db/ident and :kv/value.  The key must be under the namespace :logseq.kv"
   [key value]
-  {:db/ident (keyword "logseq.kv"
-                      (if (namespace key)
-                        (str (namespace key) "-" (name key))
-                        (name key)))
+  {:pre [(= "logseq.kv" (namespace key))]}
+  {:db/ident key
    :kv/value value})
 
 (def built-in-pages-names
@@ -55,8 +53,8 @@
   "Builds tx of initial data for a new graph including key values, initial files,
    built-in properties and built-in classes"
   [config-content]
-  (let [initial-data [(kv :db/type "db")
-                      (kv :schema/version db-schema/version)
+  (let [initial-data [(kv :logseq.kv/db-type "db")
+                      (kv :logseq.kv/schema-version db-schema/version)
                       ;; Empty property value used by db.type/ref properties
                       {:db/ident :logseq.property/empty-placeholder}
                       {:db/ident :logseq.class/Root}]

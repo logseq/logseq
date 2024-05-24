@@ -393,19 +393,12 @@
    [:asset/uuid :uuid]
    [:asset/meta :map]])
 
-(def db-ident-keys
-  "Enumerates all possible keys db-ident key vals"
-  [[:kv/value :any]])
-
 (def db-ident-key-val
-  "A key-val map consists of a :db/ident and a specific key val"
-  (into [:or]
-        (map (fn [kv]
-               [:map
-                [:db/ident logseq-ident]
-                kv
-                [:block/tx-id {:optional true} :int]])
-             db-ident-keys)))
+  "A key value map with :db/ident and :kv/value"
+  [:map
+   [:db/ident logseq-ident]
+   [:kv/value :any]
+   [:block/tx-id {:optional true} :int]])
 
 (def property-value-placeholder
   [:map
@@ -483,7 +476,7 @@
 
 (let [malli-non-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
                                (concat (rest file-block) (rest asset-block)
-                                       db-ident-keys (rest class-page))
+                                        (rest db-ident-key-val) (rest class-page))
                                (remove #(= (last %) [:set :int]))
                                (map first)
                                set)]
