@@ -504,7 +504,7 @@
 ;; And prefer this local graph UUID when picking an ID for new rtc graph?
 (defn get-graph-rtc-uuid
   [db]
-  (when db (:key/value (d/entity db :logseq.kv/graph-uuid))))
+  (when db (:kv/value (d/entity db :logseq.kv/graph-uuid))))
 
 (def page? sqlite-util/page?)
 (defn class?
