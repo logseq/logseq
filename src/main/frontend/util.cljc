@@ -208,7 +208,7 @@
    (defn- get-computed-bg-color
      []
      ;; window.getComputedStyle(document.body, null).getPropertyValue('background-color');
-     (let [styles (js/window.getComputedStyle (js/document.querySelector "#app-container"))
+     (let [styles (js/window.getComputedStyle js/document.body)
            bg-color (gobj/get styles "background-color")
            ;; convert rgb(r,g,b) to #rrggbb
            rgb2hex (fn [rgb]
@@ -219,9 +219,9 @@
                                   %))
                           (string/join)
                           (str "#")))]
-       (when (string/starts-with? bg-color "rgb(")
+       (when (string/starts-with? bg-color "rgb")
          (let [rgb (-> bg-color
-                       (string/replace #"^rgb\(" "")
+                       (string/replace #"^rgb[^\d]+" "")
                        (string/replace #"\)$" "")
                        (string/split #","))
                rgb (take 3 rgb)]
@@ -231,26 +231,27 @@
 #?(:cljs
    (defn set-android-theme
      []
-     (when (mobile-util/native-android?)
-       (when-let [bg-color (try (get-computed-bg-color)
-                                (catch :default _
-                                  nil))]
-         (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
-         (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))))
+     (let [f #(when (mobile-util/native-android?)
+                (when-let [bg-color (try (get-computed-bg-color)
+                                         (catch :default _
+                                           nil))]
+                  (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
+                  (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))]
+       (js/setTimeout f 32))))
 
 #?(:cljs
    (defn set-theme-light
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (set-android-theme))))
+       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
+       (set-android-theme))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (set-android-theme))))
+       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
+       (set-android-theme))))
 
 (defn find-first
   [pred coll]
@@ -684,7 +685,7 @@
    (defn safe-dec-current-pos-from-end
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -692,15 +693,16 @@
              (- current-pos (.-length (.pop input))))
            (catch :default e
              (js/console.error e)
-             (dec current-pos))))
-       (dec current-pos))))
+             (dec current-pos)))
+         (dec current-pos))
+       current-pos)))
 
 #?(:cljs
    ;; for widen char
    (defn safe-inc-current-pos-from-start
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substr input current-pos 20))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -708,8 +710,9 @@
              (+ current-pos (.-length (.shift input))))
            (catch :default e
              (js/console.error e)
-             (inc current-pos))))
-       (inc current-pos))))
+             (inc current-pos)))
+         (inc current-pos))
+       current-pos)))
 
 #?(:cljs
    (defn kill-line-before!
