@@ -395,10 +395,7 @@
 
 (def db-ident-keys
   "Enumerates all possible keys db-ident key vals"
-  [[:db/type :string]
-   [:schema/version :int]
-   [:graph/uuid :string]
-   [:graph/local-tx :string]])
+  [[:key/value :any]])
 
 (def db-ident-key-val
   "A key-val map consists of a :db/ident and a specific key val"
