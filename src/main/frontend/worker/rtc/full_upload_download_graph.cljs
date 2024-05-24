@@ -195,31 +195,6 @@
                    datoms)]
       (ldb/transact! conn refs-tx {:outliner-op :rtc-download-rebuild-block-refs}))))
 
-(defn- block->schema-map
-  "Convert to a schema map if this block contains schema-related attrs, else return nil"
-  [block]
-  (let [db-ident (:db/ident block)]
-    (when (and db-ident
-               (or (:db/valueType block)
-                   (:db/cardinality block)))
-      (let [db-value-type (:db/valueType block)
-            db-card (:db/cardinality block)
-            db-index (:db/index block)
-            block-uuid (:block/uuid block)]
-        (cond-> {:db/ident db-ident}
-          db-value-type (assoc :db/valueType db-value-type)
-          db-card (assoc :db/cardinality db-card)
-          db-index (assoc :db/index (boolean db-index))
-          block-uuid (assoc :block/uuid block-uuid))))))
-
-(defn- blocks->schema-tx-data
-  [blocks]
-  (keep block->schema-map blocks))
-
-(defn- remove-schema-attrs
-  [blocks]
-  (map #(dissoc % :db/valueType :db/cardinality :db/index) blocks))
-
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
@@ -228,11 +203,26 @@
                                     (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks (worker-util/profile :normalize-remote-blocks
                                     (normalized-remote-blocks-coercer blocks))
-        schema-tx-data (blocks->schema-tx-data blocks)
-        blocks-with-page-id (remove-schema-attrs (fill-block-fields blocks))
-        tx-data (concat blocks-with-page-id
-                        [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
-        init-tx-data (cons {:db/ident :logseq.kv/db-type :kv/value "db"} schema-tx-data)
+        blocks (map (fn [block]
+                      (if-let [schema (:client/schema block)]
+                        (dissoc (merge block schema) :client/schema)
+                        block))
+                    blocks)
+        {db-attrs true other-blocks false} (group-by (fn [block]
+                                                       (boolean
+                                                        (and (:db/ident block)
+                                                             (:db/cardinality block)))) blocks)
+        blocks-with-page-id (fill-block-fields other-blocks)
+        db-attr-temp-ids (map
+                          (fn [attr]
+                            (select-keys attr [:db/id :db/ident]))
+                          db-attrs)
+        tx-data (concat
+                 db-attr-temp-ids
+                 blocks-with-page-id
+                 [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
+        init-tx-data (cons {:db/ident :logseq.kv/db-type :kv/value "db"}
+                           db-attrs)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
