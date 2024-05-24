@@ -413,7 +413,7 @@
                          (ldb/read-transit-str tx-data)
                          tx-data)]
            (js/console.error e)
-           (prn :debug :tx-data tx-data))))))
+           (prn :debug :tx-data @conn tx-data))))))
 
   (getInitialData
    [_this repo]
