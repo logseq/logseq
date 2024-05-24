@@ -182,6 +182,7 @@
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
+                 (components-pu/update-property! property property-name schema)
                  (when block
                    (if (= type :default)
                      (when (and (not add-class-property?)
