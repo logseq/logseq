@@ -2,6 +2,7 @@
   "- upload local graph to remote
   - download remote graph"
   (:require [cljs-http.client :as http]
+            [clojure.set :as set]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client :as r.client]
@@ -21,7 +22,8 @@
   Use this schema's coercer to decode."
   [:map
    [:db/id [:string {:decode/custom str}]]
-   [:block/uuid [:uuid {:decode/custom ldb/read-transit-str}]]
+   [:db/ident {:optional true} :keyword]
+   [:block/uuid {:optional true} [:uuid {:decode/custom ldb/read-transit-str}]]
    [:block/order {:optional true} :string]
    [:malli.core/default [:map-of :keyword
                          [:any {:decode/custom
@@ -156,6 +158,24 @@
                 b)))
           blocks)))
 
+(defn- blocks->card-one-attrs
+  [blocks]
+  (set
+   (keep
+    (fn [block]
+      (when-let [db-ident (:db/ident block)]
+        (when (= :db.cardinality/one (:db/cardinality block))
+          db-ident)))
+    blocks)))
+
+(defn- convert-card-one-value-from-value-coll
+  [card-one-attrs block]
+  (let [card-one-attrs-in-block (set/intersection (set (keys block)) card-one-attrs)]
+    (merge block
+           (update-vals (select-keys block card-one-attrs-in-block)
+                        (fn [v]
+                          (if (coll? v) (first v) v))))))
+
 (defn- transact-block-refs!
   [repo]
   (when-let [conn (worker-state/get-datascript-conn repo)]
@@ -175,11 +195,16 @@
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
+        card-one-attrs (blocks->card-one-attrs blocks)
+        blocks (worker-util/profile :convert-card-one-value-from-value-coll
+                                    (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks (worker-util/profile :normalize-remote-blocks
                                     (normalized-remote-blocks-coercer blocks))
+
         blocks-with-page-id (fill-block-fields blocks)
         tx-data (concat blocks-with-page-id
-                        [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}])
+                        [{:db/ident :logseq.kv/graph-uuid :graph/uuid graph-uuid}
+                         {:db/ident :logseq.kv/db-type :db/type "db"}])
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
