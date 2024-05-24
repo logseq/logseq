@@ -58,37 +58,31 @@
                 (if (de/entity? block) block (d/entity db (:db/id block))))))))
 
 (defn- remove-orphaned-page-refs!
-  [db {db-id :db/id} txs-state *old-refs new-refs {:keys [db-graph?]}]
-  (let [old-refs (if db-graph?
-                   ;; remove class and property related refs because this fn is only meant
-                   ;; to cleanup refs in content
-                   (remove #(some #{"class" "property"} (:block/type %))
-                           *old-refs)
-                   *old-refs)]
-    (when (not= old-refs new-refs)
-      (let [new-refs (set (map (fn [ref]
-                                 (or (:block/name ref)
-                                     (and (:db/id ref)
-                                          (:block/name (d/entity db (:db/id ref)))))) new-refs))
-            old-pages (->> (keep :db/id old-refs)
-                           (d/pull-many db '[*])
-                           (remove (fn [e] (contains? new-refs (:block/name e))))
-                           (map :block/name)
-                           (remove nil?))
-            orphaned-pages (when (seq old-pages)
-                             (ldb/get-orphaned-pages db {:pages old-pages
-                                                         :built-in-pages-names
-                                                         (if db-graph?
-                                                           sqlite-create-graph/built-in-pages-names
-                                                           gp-db/built-in-pages-names)
-                                                         :empty-ref-f (fn [page]
-                                                                        (let [refs (:block/_refs page)]
-                                                                          (and (or (zero? (count refs))
-                                                                                   (= #{db-id} (set (map :db/id refs))))
-                                                                               (not (some #{"class" "property"} (:block/type page))))))}))]
-        (when (seq orphaned-pages)
-          (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
-            (swap! txs-state (fn [state] (vec (concat state tx))))))))))
+  [db {db-id :db/id} txs-state old-refs new-refs {:keys [db-graph?]}]
+  (when (not= old-refs new-refs)
+    (let [new-refs (set (map (fn [ref]
+                               (or (:block/name ref)
+                                   (and (:db/id ref)
+                                        (:block/name (d/entity db (:db/id ref)))))) new-refs))
+          old-pages (->> (keep :db/id old-refs)
+                         (d/pull-many db '[*])
+                         (remove (fn [e] (contains? new-refs (:block/name e))))
+                         (map :block/name)
+                         (remove nil?))
+          orphaned-pages (when (seq old-pages)
+                           (ldb/get-orphaned-pages db {:pages old-pages
+                                                       :built-in-pages-names
+                                                       (if db-graph?
+                                                         sqlite-create-graph/built-in-pages-names
+                                                         gp-db/built-in-pages-names)
+                                                       :empty-ref-f (fn [page]
+                                                                      (let [refs (:block/_refs page)]
+                                                                        (and (or (zero? (count refs))
+                                                                                 (= #{db-id} (set (map :db/id refs))))
+                                                                             (not (some #{"class" "property"} (:block/type page))))))}))]
+      (when (seq orphaned-pages)
+        (let [tx (mapv (fn [page] [:db/retractEntity (:db/id page)]) orphaned-pages)]
+          (swap! txs-state (fn [state] (vec (concat state tx)))))))))
 
 (defn- update-page-when-save-block
   [txs-state block-entity m]
@@ -116,10 +110,15 @@
       (swap! txs-state into txs))))
 
 (defn- remove-orphaned-refs-when-save
-  [db txs-state block-entity m opts]
+  [db txs-state block-entity m {:keys [db-graph?] :as opts}]
   (let [remove-self-page #(remove (fn [b]
                                     (= (:db/id b) (:db/id (:block/page block-entity)))) %)
-        old-refs (remove-self-page (:block/refs block-entity))
+        ;; only provide content based refs for db graphs instead of removing
+        ;; as calculating all non-content refs is more complex
+        old-refs (if db-graph?
+                   (let [content-refs (set (outliner-pipeline/block-content-refs db block-entity))]
+                     (filter #(contains? content-refs (:db/id %)) (:block/refs block-entity)))
+                   (remove-self-page (:block/refs block-entity)))
         new-refs (remove-self-page (:block/refs m))]
     (remove-orphaned-page-refs! db block-entity txs-state old-refs new-refs opts)))
 
