@@ -37,3 +37,19 @@ in db-version, page-references(e.g. [[page-name]]) are stored as [[~^uuid]]."
   "like `:block/content`,
 but when eval `(:block/raw-content block-entity)`, return raw-content of this block"
   :string)
+
+(sr/defkeyword :kv/value
+  "Used to store key-value, the value could be anything, e.g. {:db/ident :logseq.kv/xxx :kv/value value}"
+  :any)
+
+(sr/defkeyword :class/parent
+  "A class's parent class")
+
+(sr/defkeyword :class/schema.properties
+  "Class properties that all of its objects can use, notice that it's different from this class's own properties.")
+
+(sr/defkeyword :block/closed-value-property
+  "The property that this closed value (an Entity) belongs to.")
+
+(sr/defkeyword :property/schema.classes
+  "The classes that this property value must to sastify (being an object of a class)")

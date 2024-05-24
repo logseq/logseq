@@ -35,7 +35,7 @@
                       (if (namespace key)
                         (str (namespace key) "-" (name key))
                         (name key)))
-   :key/value value})
+   :kv/value value})
 
 (def built-in-pages-names
   #{"Contents"})

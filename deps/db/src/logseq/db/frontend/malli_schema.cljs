@@ -395,7 +395,7 @@
 
 (def db-ident-keys
   "Enumerates all possible keys db-ident key vals"
-  [[:key/value :any]])
+  [[:kv/value :any]])
 
 (def db-ident-key-val
   "A key-val map consists of a :db/ident and a specific key val"

@@ -120,9 +120,9 @@
         (if-let [graph-uuid (:graph-uuid upload-resp)]
           (let [^js worker-obj (:worker/object @worker-state/*state)]
             (ldb/transact! conn
-                           [{:db/ident :logseq.kv/graph-uuid :key/value graph-uuid}
-                            {:db/ident :logseq.kv/graph-local-tx :key/value "0"}])
-            (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:key/value graph-uuid}))))
+                           [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
+                            {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
+            (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
             (op-mem-layer/init-empty-ops-store! repo)
             (op-mem-layer/update-graph-uuid! repo graph-uuid)
             (op-mem-layer/update-local-tx! repo 8)
@@ -203,8 +203,8 @@
 
         blocks-with-page-id (fill-block-fields blocks)
         tx-data (concat blocks-with-page-id
-                        [{:db/ident :logseq.kv/graph-uuid :key/value graph-uuid}])
-        init-tx-data [{:db/ident :logseq.kv/db-type :key/value "db"}]
+                        [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
+        init-tx-data [{:db/ident :logseq.kv/db-type :kv/value "db"}]
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
@@ -268,6 +268,6 @@
           (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
           (op-mem-layer/update-graph-uuid! repo graph-uuid)
           (m/? (op-mem-layer/new-task--sync-to-idb repo))
-          (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:key/value graph-uuid}))))
+          (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
           (worker-state/set-rtc-downloading-graph! false)
           nil)))))
