@@ -200,9 +200,9 @@
                                     (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks (worker-util/profile :normalize-remote-blocks
                                     (normalized-remote-blocks-coercer blocks))
-
-        blocks-with-page-id (fill-block-fields blocks)
-        tx-data (concat blocks-with-page-id
+        {db-idents true other-blocks false} (group-by :db/ident (fill-block-fields blocks))
+        tx-data (concat db-idents       ; db-idents before other blocks
+                        other-blocks
                         [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
         init-tx-data [{:db/ident :logseq.kv/db-type :kv/value "db"}]
         ^js worker-obj (:worker/object @worker-state/*state)]
