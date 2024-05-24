@@ -130,6 +130,17 @@
 
     :else (throw (js/Error. (str "invalid ref " ref)))))
 
+(defn block-content-refs
+  "Return ref block ids for given block"
+  [db block]
+  (let [content (or (:block/raw-content block)
+                    (:block/content block))]
+    (when (string? content)
+      (->> (db-content/get-matched-special-ids content)
+           (map (fn [id]
+                  (when-let [e (d/entity db [:block/uuid id])]
+                    (:db/id e))))))))
+
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
@@ -154,13 +165,7 @@
                                              :else
                                              nil))))
         property-refs (concat property-key-refs property-value-refs)
-        content-refs (let [content (or (:block/raw-content block)
-                                       (:block/content block))]
-                       (when (string? content)
-                         (->> (db-content/get-matched-special-ids content)
-                              (map (fn [id]
-                                     (when-let [e (d/entity db [:block/uuid id])]
-                                       (:db/id e)))))))]
+        content-refs (block-content-refs db block)]
     (->> (concat (map ref->eid (:block/tags block))
                  (when-let [id (:db/id (:block/link block))]
                    [id])
