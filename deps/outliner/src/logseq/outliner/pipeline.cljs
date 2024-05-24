@@ -165,4 +165,7 @@
                  (when-let [id (:db/id (:block/link block))]
                    [id])
                  property-refs content-refs)
+         ;; Remove self-ref to avoid recursive bugs
+         (remove #(and (:db/ident block)
+                       (= % (:db/ident block))))
          (remove nil?))))
