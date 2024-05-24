@@ -21,10 +21,10 @@
 
 (def ^:private watched-attrs
   #{:block/content :block/created-at :block/updated-at :block/alias
-    :block/tags :block/type :block/schema :block/link :block/journal-day})
+    :block/tags :block/type :block/schema :block/link :block/journal-day
+    :class/parent :class/schema.properties :property/schema.classes})
 
 (defn- watched-attr?
-  ;; TODO: class related attrs?
   [attr]
   (or (contains? watched-attrs attr)
       (let [ns (namespace attr)]
