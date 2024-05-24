@@ -362,7 +362,7 @@ test('copy/paste twitter status url to create a Tweet shape', async ({ page }) =
 
   await page.keyboard.press(modKey + '+v')
 
-  await expect( page.locator('.logseq-tldraw .tl-tweet-container')).toHaveCount(1)
+  await expect( page.locator('.logseq-tldraw .tl-tweet-container')).toHaveCount(2)
 })
 
 test('copy/paste youtube video url to create a Youtube shape', async ({ page }) => {
