@@ -6,6 +6,7 @@
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
   {:db/ident        {:db/unique :db.unique/identity}
+   :key/value       {}
 
    :recent/pages {}
 

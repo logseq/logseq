@@ -31,8 +31,11 @@
   "Creates a key-value pair tx with the key under the :db/ident namespace :logseq.kv.
    For example, the :db/type key is stored under an entity with ident :logseq.kv/db-type"
   [key value]
-  {:db/ident (keyword "logseq.kv" (str (namespace key) "-" (name key)))
-   key value})
+  {:db/ident (keyword "logseq.kv"
+                      (if (namespace key)
+                        (str (namespace key) "-" (name key))
+                        (name key)))
+   :key/value value})
 
 (def built-in-pages-names
   #{"Contents"})
