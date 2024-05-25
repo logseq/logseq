@@ -146,7 +146,7 @@
   [block]
   (cond-> block
     (:block/journal-day block) (assoc :block/type "journal")
-    true                       (assoc :block/format :markdown)))
+    (:block/uuid block)        (assoc :block/format :markdown)))
 
 (defn- fill-block-fields
   [blocks]
@@ -195,6 +195,15 @@
                    datoms)]
       (ldb/transact! conn refs-tx {:outliner-op :rtc-download-rebuild-block-refs}))))
 
+(defn- filter-tempid-source-blocks
+  [blocks]
+  (keep
+   (fn [block]
+     (when (or (:db/ident block)
+               (:block/uuid block))
+       (select-keys block [:db/id :db/ident :block/uuid])))
+   blocks))
+
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
@@ -203,26 +212,22 @@
                                     (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks (worker-util/profile :normalize-remote-blocks
                                     (normalized-remote-blocks-coercer blocks))
-        blocks (map (fn [block]
-                      (if-let [schema (:client/schema block)]
-                        (dissoc (merge block schema) :client/schema)
-                        block))
-                    blocks)
-        {db-attrs true other-blocks false} (group-by (fn [block]
-                                                       (boolean
-                                                        (and (:db/ident block)
-                                                             (:db/cardinality block)))) blocks)
-        blocks-with-page-id (fill-block-fields other-blocks)
-        db-attr-temp-ids (map
-                          (fn [attr]
-                            (select-keys attr [:db/id :db/ident]))
-                          db-attrs)
+        blocks (map #(dissoc % :client/schema) blocks) ;TODO: remove this
+        tempid-source-blocks (filter-tempid-source-blocks blocks)
+        blocks (fill-block-fields blocks)
+        {db-schema-def-blocks true other-blocks false}
+        (group-by (fn [block]
+                    (boolean
+                     (and (:db/ident block)
+                          (or (:db/cardinality block)
+                              (:db/valueType block))))) blocks)
         tx-data (concat
-                 db-attr-temp-ids
-                 blocks-with-page-id
-                 [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
+                 tempid-source-blocks
+                 other-blocks
+                 [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
+                  {:db/ident :logseq.kv/db-type :kv/value "db"}])
         init-tx-data (cons {:db/ident :logseq.kv/db-type :kv/value "db"}
-                           db-attrs)
+                           db-schema-def-blocks)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
