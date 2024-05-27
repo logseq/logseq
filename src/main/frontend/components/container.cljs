@@ -703,11 +703,11 @@
   [e]
   (state/hide-custom-context-menu!)
   (when-not (or (gobj/get e "shiftKey")
-              (util/meta-key? e)
-              (state/get-edit-input-id)
-              (some-> (.-target e) (d/has-class? "cp__select-input"))
-              (some-> (.-target e) (.closest ".ls-block"))
-              (some-> (.-target e) (.closest "[data-keep-selection]")))
+                (util/meta-key? e)
+                (state/get-edit-input-id)
+                (= (shui-dialog/get-last-modal-id) :property-dialog)
+                (some-> (.-target e) (.closest ".ls-block"))
+                (some-> (.-target e) (.closest "[data-keep-selection]")))
     (editor-handler/clear-selection!)))
 
 (rum/defc render-custom-context-menu
