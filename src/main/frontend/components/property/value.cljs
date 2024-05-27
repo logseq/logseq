@@ -209,7 +209,7 @@
         [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
                                   [nil page* nil])
         id (:db/id (ldb/get-case-page (db/get-db) page))
-        class? (= :block/tags (:block/ident property))]
+        class? (= :block/tags (:db/ident property))]
     (if (nil? id)
       (let [inline-class-uuid
             (when inline-class
