@@ -8,7 +8,6 @@
   {:init (fn [state]
            (assoc state ::property-key (atom (:property-key (last (:rum/args state))))))}
   [state block opts]
-  (let [*property-key (::property-key state)
-        *property-value (::property-value state)]
+  (let [*property-key (::property-key state)]
     [:div.ls-property-dialog
-     (property-component/property-input block *property-key *property-value opts)]))
+     (property-component/property-input block *property-key opts)]))

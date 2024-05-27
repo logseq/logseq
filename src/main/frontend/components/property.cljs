@@ -433,7 +433,7 @@
                      (reset! *property-key nil))
                    state)}
   shortcut/disable-all-shortcuts
-  [state entity *property-key *property-value {:keys [class-schema? in-block-container? page? page-configure?]
+  [state entity *property-key {:keys [class-schema? in-block-container? page? page-configure?]
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         *property-schema (::property-schema state)
@@ -465,7 +465,7 @@
                                            :block entity
                                            :*show-new-property-config? *show-new-property-config?}))
              (when (and property (not class-schema?))
-               (pv/property-value entity property @*property-value (assoc opts :editing? true))))]])
+               (pv/property-value entity property (get entity (:db/ident property)) (assoc opts :editing? true))))]])
 
        (let [on-chosen (fn [{:keys [value label]}]
                          (reset! *property-key (if (uuid? value) label value))
