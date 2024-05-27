@@ -116,6 +116,42 @@
          (shui/popup-hide!)
          (exit-edit-property))))))
 
+(rum/defc calendar-inner <
+  {:will-unmount (fn [state]
+                   (shui/dialog-close!)
+                   state)}
+  [id on-change value]
+  (let [initial-day (some-> value (.getTime) (js/Date.))
+        initial-month (when value
+                        (js/Date. (.getFullYear value) (.getMonth value)))
+        select-handler!
+        (fn [^js d]
+          ;; force local to UTC
+          (when d
+            (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
+              (let [journal (date/js-date->journal-title gd)]
+                (p/do!
+                 (shui/popup-hide! id)
+                 (when-not (db/get-case-page journal)
+                   (page-handler/<create! journal {:redirect? false
+                                                   :create-first-block? false}))
+                 (when (fn? on-change)
+                   (on-change (db/get-case-page journal)))
+                 (exit-edit-property)
+                 (shui/dialog-close!))))))]
+    (shui/calendar
+     (cond->
+      {:mode "single"
+       :initial-focus true
+       :selected initial-day
+       :class-names {:months ""}
+       :on-day-key-down (fn [^js d _ ^js e]
+                          (when (= "Enter" (.-key e))
+                            (select-handler! d)))
+       :on-select select-handler!}
+       initial-month
+       (assoc :default-month initial-month)))))
+
 (rum/defc date-picker
   [value {:keys [on-change editing? multiple-values?]}]
   (let [*trigger-ref (rum/use-ref nil)
@@ -123,38 +159,7 @@
         title (when page (:block/original-name page))
         value' (when title
                  (js/Date. (date/journal-title->long title)))
-        initial-day (some-> value' (.getTime) (js/Date.))
-        initial-month (when value'
-                        (js/Date. (.getFullYear value') (.getMonth value')))
-        content-fn
-        (fn [{:keys [id]}]
-          (let [select-handler!
-                (fn [^js d]
-                     ;; force local to UTC
-                  (when d
-                    (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
-                      (let [journal (date/js-date->journal-title gd)]
-                        (p/do!
-                         (shui/popup-hide! id)
-                         (when-not (db/get-case-page journal)
-                           (page-handler/<create! journal {:redirect? false
-                                                           :create-first-block? false}))
-                         (when (fn? on-change)
-                           (on-change (db/get-case-page journal)))
-                         (exit-edit-property)
-                         (shui/dialog-close!))))))]
-            (shui/calendar
-             (cond->
-              {:mode "single"
-               :initial-focus true
-               :selected initial-day
-               :class-names {:months ""}
-               :on-day-key-down (fn [^js d _ ^js e]
-                                  (when (= "Enter" (.-key e))
-                                    (select-handler! d)))
-               :on-select select-handler!}
-               initial-month
-               (assoc :default-month initial-month)))))
+        content-fn (fn [{:keys [id]}] (calendar-inner id on-change value'))
         open-popup! (fn [e]
                       (util/stop e)
                       (when-not config/publishing?
@@ -188,7 +193,6 @@
              (:db/id page)))
          (when-not multiple-values?
            (property-empty-btn-value)))))))
-
 
 (rum/defc property-value-date-picker
   [block property value opts]
