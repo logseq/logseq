@@ -8,7 +8,8 @@ import { withClampedStyles } from './style-props'
 import { LogseqContext } from '../logseq-context'
 import * as React from 'react'
 
-export const TWITTER_REGEX = /https?:\/\/twitter.com\/[0-9a-zA-Z_]{1,20}\/status\/([0-9]*)/
+// https://regex101.com/r/cazpoJ/2
+export const X_OR_TWITTER_REGEX = /https?:\/\/(x|twitter).com\/[0-9a-zA-Z_]{1,20}\/status\/([0-9]*)/
 
 export interface TweetShapeProps extends TLBoxShapeProps {
   type: 'tweet'
@@ -34,7 +35,7 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
 
   @computed get embedId() {
     const url = this.props.url
-    const match = url.match(TWITTER_REGEX)
+    const match = url.match(X_OR_TWITTER_REGEX)
     const embedId = match?.[1] ?? url ?? ''
     return embedId
   }

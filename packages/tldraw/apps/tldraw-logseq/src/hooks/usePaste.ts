@@ -23,7 +23,7 @@ import {
   YouTubeShape,
   YOUTUBE_REGEX,
   TweetShape,
-  TWITTER_REGEX,
+  X_OR_TWITTER_REGEX,
   type Shape,
 } from '../lib'
 import { LogseqContext, LogseqContextValue } from '../lib/logseq-context'
@@ -320,7 +320,7 @@ const handleCreatingShapes = async (
         ]
       }
 
-      if (TWITTER_REGEX.test(rawText)) {
+      if (X_OR_TWITTER_REGEX.test(rawText)) {
         return [
           {
             ...TweetShape.defaultProps,
