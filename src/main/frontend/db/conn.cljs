@@ -73,12 +73,6 @@
   [repo]
   (swap! conns dissoc (datascript-db repo)))
 
-(defn kv
-  [key value & {:keys [id]}]
-  {:db/id (or id -1)
-   :db/ident key
-   key value})
-
 (if util/node-test?
   (defn transact!
     ([repo tx-data]

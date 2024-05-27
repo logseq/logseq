@@ -7,8 +7,7 @@
             [frontend.ui :as ui]
             [rum.core :as rum]
             [frontend.components.block :as block]
-            [logseq.shui.ui :as shui]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.shui.ui :as shui]))
 
 (rum/defc class-select
   [page class on-select]

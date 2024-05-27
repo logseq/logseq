@@ -29,9 +29,8 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.common.plugin :as plugin-common-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.db-based.property :as db-p]
+            [frontend.handler.db-based.property :as db-property-handler]
             [logseq.outliner.core :as outliner-core]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.handler.command-palette :as palette-handler]
@@ -53,7 +52,7 @@
             [logseq.api.block :as api-block]
             [logseq.db :as ldb]
             [logseq.db.frontend.property.util :as db-property-util]
-            [logseq.db.frontend.property :as ldb-property]))
+            [logseq.db.frontend.property :as db-property]))
 
 ;; Alert: this namespace shouldn't invoke any reactive queries
 
@@ -797,8 +796,8 @@
             _ (db-async/<get-block repo block-uuid :children? false)
             db? (config/db-based-graph? repo)
             key (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
-            key (if db? (ldb-property/create-user-property-ident-from-name key) key)
-            _ (when db? (db-p/upsert-property! key {} {}))]
+            key (if db? (db-property/create-user-property-ident-from-name key) key)
+            _ (when db? (db-property-handler/upsert-property! key {} {}))]
       (property-handler/set-block-property! repo block-uuid key value))))
 
 (def ^:export remove_block_property
@@ -808,7 +807,7 @@
             db? (config/db-based-graph? (state/get-current-repo))
             key-ns? (and (keyword? key) (namespace key))
             key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
-            key (if (and db? (not key-ns?)) (ldb-property/create-user-property-ident-from-name key) key)]
+            key (if (and db? (not key-ns?)) (db-property/create-user-property-ident-from-name key) key)]
       (property-handler/remove-block-property!
       (state/get-current-repo)
       block-uuid key))))
