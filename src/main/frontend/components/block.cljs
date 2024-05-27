@@ -2286,7 +2286,9 @@
            (let [property (db/entity pid)
                  v (get block pid)]
              [:div.flex.flex-row.items-center.gap-1.px-1.hover:bg-secondary.rounded
-              [:div.opacity-50.hover:opacity-100 (str (:block/original-name property) ":")]
+              [:div.flex.flex-row.opacity-50.hover:opacity-100
+               (property-component/property-key block property opts)
+               [:div ":"]]
               (pv/property-value block property v opts)]))]
         [:div.positioned-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
          (for [pid properties]
