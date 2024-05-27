@@ -35,6 +35,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.recent :as recent-handler]
             [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.handler.jump :as jump-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -897,7 +898,8 @@
 
                         (and (seq (state/get-selection-block-ids))
                              (not (or (.-ctrlKey e) (.-metaKey e) (.-altKey e)))
-                             (not (util/input? (.-target e))))
+                             (not (util/input? (.-target e)))
+                             (not (seq @jump-handler/*jump-data)))
                         (let [shift? (.-shiftKey e)
                               shortcut (if shift? (str "shift+" (.-key e)) (.-key e))]
                           (db-property-handler/set-property-by-shortcut! shortcut)))))))
