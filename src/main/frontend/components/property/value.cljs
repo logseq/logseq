@@ -206,16 +206,19 @@
 (defn- <create-page-if-not-exists!
   [property classes page]
   (let [page* (string/trim page)
-        [_ page inline-class] (or (seq (map string/trim (re-find #"(.*)#(.*)$" page*)))
-                                  [nil page* nil])
-        id (:db/id (ldb/get-case-page (db/get-db) page))
-        class? (= :block/tags (:db/ident property))]
+        ;; inline-class is only for input from :transform-fn
+        [page inline-class] (if (and (seq classes) (not (contains? db-property/db-attribute-properties (:db/ident property))))
+                                (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
+                                    [page* nil])
+                                [page* nil])
+        id (:db/id (ldb/get-case-page (db/get-db) page))]
     (if (nil? id)
       (let [inline-class-uuid
             (when inline-class
               (or (:block/uuid (ldb/get-case-page (db/get-db) inline-class))
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
-                      nil)))]
+                      nil)))
+            class? (= :block/tags (:db/ident property))]
         (p/let [page (page-handler/<create! page {:redirect? false
                                                   :create-first-block? false
                                                   :tags (if inline-class-uuid
@@ -288,25 +291,26 @@
                                (if (every? de/entity? v)
                                  (map :db/id v)
                                  [(:db/id v)]))))
-        objects (->>
-                 (cond
-                   (seq classes)
-                   (mapcat
-                    (fn [class]
-                      (if (= :logseq.class/Root (:db/ident class))
-                        (->> (model/get-all-classes repo)
-                             (keep (fn [[_ id]]
-                                     (let [e (db/entity [:block/uuid id])]
-                                       (when-not (= :logseq.class/Root (:db/ident e))
-                                         e)))))
-                        (->> (model/get-class-objects repo (:db/id class))
-                             (keep db/entity))))
-                    classes)
+        objects-or-pages
+        (->>
+         (cond
+           (seq classes)
+           (mapcat
+            (fn [class]
+              (if (= :logseq.class/Root (:db/ident class))
+                (->> (model/get-all-classes repo)
+                     (keep (fn [[_ id]]
+                             (let [e (db/entity [:block/uuid id])]
+                               (when-not (= :logseq.class/Root (:db/ident e))
+                                 e)))))
+                (->> (model/get-class-objects repo (:db/id class))
+                     (keep db/entity))))
+            classes)
 
-                   :else
-                   (remove ldb/built-in? (model/get-all-pages repo))))
+           :else
+           (remove ldb/built-in? (model/get-all-pages repo))))
         options (map (fn [object] {:label (get-title object)
-                                   :value (:db/id object)}) objects)
+                                   :value (:db/id object)}) objects-or-pages)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
                (merge
@@ -324,30 +328,34 @@
                                               (str "Choose " (if object? "objects" "pages"))
                                               :else
                                               (str "Choose " (if object? "object" "page")))
-                 :show-new-when-not-exact-match? (not object?)
+                 :show-new-when-not-exact-match? true
                  :extract-chosen-fn :value
                  :extract-fn :label
-                 ;; Provides additional completion for inline classes on new pages
 
-                 ;; FIXME: re-enable it
-                 ;; :transform-fn (fn [results input]
-                 ;;                 (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
-                 ;;                   (let [repo (state/get-current-repo)
-                 ;;                         descendent-classes (->> classes'
-                 ;;                                                 (mapcat #(model/get-class-children repo (:db/id %))))]
-                 ;;                     (->> (concat classes' descendent-classes)
-                 ;;                          (filter #(string/includes? (:block/original-name %) class-input))
-                 ;;                          (mapv (fn [p]
-                 ;;                                  {:value (:db/id p)
-                 ;;                                   :label (str new-page "#" (:block/original-name p))}))))
-                 ;;                   results))
                  :input-opts input-opts
                  :on-chosen (fn [chosen selected?]
                               (p/let [id (if (integer? chosen) chosen
                                              (when-not (string/blank? (string/trim chosen))
                                                (<create-page-if-not-exists! property classes' chosen)))]
-                                (when id
-                                  (add-or-remove-property-value block property id selected?))))}))]
+                                (if id
+                                  (add-or-remove-property-value block property id selected?)
+                                  (log/error :msg "No :db/id found or created for chosen" :chosen chosen))))})
+
+                (and (seq classes') (not tags-or-alias?))
+                (assoc
+                 ;; Provides additional completion for inline classes on new pages or objects
+                 :transform-fn (fn [results input]
+                                 (if-let [[_ new-page class-input] (and (empty? results) (re-find #"(.*)#(.*)$" input))]
+                                   (let [repo (state/get-current-repo)
+                                         descendent-classes (->> classes'
+                                                                 (mapcat #(model/get-class-children repo (:db/id %)))
+                                                                 (map #(db/entity repo %)))]
+                                     (->> (concat classes' descendent-classes)
+                                          (filter #(string/includes? (:block/original-name %) class-input))
+                                          (mapv (fn [p]
+                                                  {:value (str new-page "#" (:block/original-name p))
+                                                   :label (str new-page "#" (:block/original-name p))}))))
+                                   results))))]
     (select-aux block property opts')))
 
 (defn property-value-select-page
