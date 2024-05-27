@@ -133,7 +133,6 @@
       :editor/block                          (atom nil)
       :editor/new-property-input-id          (atom nil)
       :editor/new-property-key               (atom nil)
-      :editor/properties-container           (atom nil)
       :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
       :editor/last-input-time                (atom {})
@@ -1343,7 +1342,6 @@ Similar to re-frame subscriptions"
   (swap! state merge {:editor/last-saved-cursor nil})
   (set-state! :editor/content {})
   (set-state! :editor/block nil)
-  (set-state! :editor/properties-container nil)
   (set-state! :ui/select-query-cache {}))
 
 (defn into-code-editor-mode!

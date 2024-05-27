@@ -703,6 +703,7 @@
   (when-not (or (gobj/get e "shiftKey")
               (util/meta-key? e)
               (state/get-edit-input-id)
+              (some-> (.-target e) (d/has-class? "cp__select-input"))
               (some-> (.-target e) (.closest ".ls-block"))
               (some-> (.-target e) (.closest "[data-keep-selection]")))
     (editor-handler/clear-selection!)))

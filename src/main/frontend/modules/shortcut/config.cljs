@@ -349,7 +349,7 @@
    :editor/add-property                     {:binding "mod+p"
                                              :fn      (fn [e]
                                                         (.preventDefault e)
-                                                        (state/pub-event! [:editor/new-property]))}
+                                                        (state/pub-event! [:editor/new-property {}]))}
 
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
