@@ -479,8 +479,11 @@
                                       (assoc :block/order (db-order/gen-key max-order nil)))]
                     [new-block
                      (outliner-core/block-with-updated-at
-                      {:db/id (:db/id property)})]))]
-    tx-data))
+                      {:db/id (:db/id property)})]))
+        tx-data' (if (and (:db/id block) (nil? icon))
+                   (conj tx-data [:db/retract (:db/id block) :logseq.property/icon])
+                   tx-data)]
+    tx-data'))
 
 (defn upsert-closed-value!
   "id should be a block UUID or nil"
