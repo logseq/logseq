@@ -768,6 +768,13 @@ independent of format as format specific heading characters are stripped"
                    {:id (str uuid)
                     :nonce (:nonce shape)}))))))
 
+(defn get-all-properties
+  [repo]
+  (when-let [db (conn/get-db repo)]
+    (->> (d/datoms db :avet :block/type "property")
+         (map (fn [d]
+                (d/entity db (:e d)))))))
+
 (defn get-all-classes
   [repo]
   (d/q
