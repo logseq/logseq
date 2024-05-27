@@ -211,7 +211,6 @@
 
  :command.auto-complete/complete         "Automatisch aanvullen: Kies geselecteerd item"
  :command.auto-complete/next             "Automatisch aanvullen: Selecteer volgend item"
- :command.auto-complete/open-link        "Automatisch aanvullen: Open geselecteerd item in browser"
  :command.auto-complete/prev             "Automatisch aanvullen: Selecteer vorig item"
  :command.auto-complete/shift-complete   "Automatisch aanvullen: Open geselecteerd item in zijbalk"
  :command.cards/forgotten                "Kaarten: vergeten"

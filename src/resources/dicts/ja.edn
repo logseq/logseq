@@ -624,7 +624,6 @@
  :command.auto-complete/prev "自動補完：前の項目を選択"
  :command.auto-complete/next "自動補完：次の項目を選択"
  :command.auto-complete/shift-complete "自動補完：選択した項目をサイドバーで開く"
- :command.auto-complete/open-link "自動補完：選択したアイテムをブラウザで開く"
  :command.cards/toggle-answers "カード：答えや穴埋めを表示／隠す"
  :command.cards/next-card "カード：次のカード"
  :command.cards/forgotten "カード：忘れていた"

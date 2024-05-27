@@ -457,7 +457,6 @@
 
  :command.auto-complete/complete          "自动完成：选择当前项"
  :command.auto-complete/next              "自动完成：选择下一项"
- :command.auto-complete/open-link         "自动完成：在浏览器中打开当前项"
  :command.auto-complete/prev              "自动完成：选择上一项"
  :command.auto-complete/shift-complete    "自动完成：在侧边栏打开"
  :command.cards/forgotten                 "卡片：忘记了"

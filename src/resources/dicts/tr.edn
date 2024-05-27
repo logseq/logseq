@@ -643,7 +643,6 @@
  :command.auto-complete/prev           "Otomatik tamamlama: Önceki öğeyi seç"
  :command.auto-complete/next           "Otomatik tamamlama: Sonraki öğeyi seç"
  :command.auto-complete/shift-complete "Otomatik tamamlama: Seçili öğeyi kenar çubuğunda aç"
- :command.auto-complete/open-link      "Otomatik tamamlama: Seçili öğeyi tarayıcıda aç"
  :command.cards/toggle-answers         "Kartlar: cevapları ve cümle tamamlamayı göster/gizle"
  :command.cards/next-card              "Kartlar: sonraki kart"
  :command.cards/forgotten              "Kartlar: unutuldu"

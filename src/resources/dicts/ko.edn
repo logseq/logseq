@@ -366,7 +366,6 @@
  :command.auto-complete/prev                      "이전 항목 선택"
  :command.auto-complete/next                      "다음 항목 선택"
  :command.auto-complete/shift-complete            "선택 항목 열기"
- :command.auto-complete/open-link                 "링크 열기"
  :command.cards/forgotten                         "잊은 카드"
  :command.cards/next-card                         "다음 카드"
  :command.cards/recall                            "기억이 잘 안 난 카드"

@@ -226,17 +226,6 @@
       ((or on-shift-chosen on-chosen) (nth matched @current-idx) false)
       (and on-enter (on-enter state)))))
 
-(defn auto-complete-open-link
-  [state e]
-  (let [[matched {:keys [on-chosen-open-link]}] (:rum/args state)]
-    (when (and on-chosen-open-link (not (state/editing?)))
-      (let [current-idx (get state :frontend.ui/current-idx)]
-        (util/stop e)
-        (when (and (seq matched)
-                   (> (count matched)
-                      @current-idx))
-          (on-chosen-open-link (nth matched @current-idx) false))))))
-
 (defn toggle-cards!
   []
   (if (and (= :srs (:modal/id @state/state)) (:modal/show? @state/state))

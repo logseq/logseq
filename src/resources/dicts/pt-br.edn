@@ -609,7 +609,6 @@
 
  :command.auto-complete/complete "Auto-completar: Escolher item selecionado"
  :command.auto-complete/next "Auto-completar: Selecionar próximo item"
- :command.auto-complete/open-link "Auto-completar: Abrir item selecionado no navegador"
  :command.auto-complete/prev "Auto-completar: Selecionar item anterior"
  :command.auto-complete/shift-complete "Auto-completar: Abrir item selecionado na barra lateral"
  :command.cards/forgotten "Cartões: esquecidos"

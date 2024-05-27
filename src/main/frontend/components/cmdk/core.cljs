@@ -13,6 +13,7 @@
    [frontend.handler.page :as page-handler]
    [frontend.handler.route :as route-handler]
    [frontend.handler.whiteboard :as whiteboard-handler]
+   [frontend.handler.notification :as notification]
    [frontend.modules.shortcut.core :as shortcut]
    [frontend.search :as search]
    [frontend.state :as state]
@@ -464,11 +465,15 @@
       (let [file-fpath (path/path-join (config/get-repo-dir (state/get-current-repo)) file-path)]
         (ipc/ipc "openFileInFolder" file-fpath)))))
 
+(defn- page-item?
+  [item]
+  (let [block-uuid (:block/uuid (:source-block item))]
+    (or (boolean (:source-page item))
+        (and block-uuid (:block/name (db/entity [:block/uuid block-uuid]))))))
+
 (defmethod handle-action :open [_ state event]
   (when-let [item (some-> state state->highlighted-item)]
-    (let [block-uuid (:block/uuid (:source-block item))
-          page? (or (boolean (:source-page item))
-                  (and block-uuid (:block/name (db/entity [:block/uuid block-uuid]))))
+    (let [page? (page-item? item)
           block? (boolean (:source-block item))
           shift?  @(::shift? state)
           shift-or-sidebar? (or shift? (boolean (:open-sidebar? (:opts state))))
@@ -685,6 +690,39 @@
        (when-let [load-results-throttled @!load-results-throttled]
          (load-results-throttled :default state))))))
 
+(defn- open-current-item-link
+  "Opens a link for the current item if a page or block. For pages, opens the
+  first :url property if a db graph or for file graphs opens first property
+  value with a url. For blocks, opens the first url found in the block content"
+  [state]
+  (let [item (some-> state state->highlighted-item)
+        repo (state/get-current-repo)]
+    (cond
+      (page-item? item)
+      (p/let [page (some-> (get-highlighted-page-uuid-or-name state) db/get-page)
+              _ (db-async/<get-block repo (:block/uuid page) :children? false)
+              page' (db/entity repo [:block/uuid (:block/uuid page)])
+              link (if (config/db-based-graph? repo)
+                     (some (fn [[k v]]
+                             (when (= :url (get-in (db/entity repo k) [:block/schema :type]))
+                               (:block/content v)))
+                           (:block/properties page'))
+                     (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]
+        (if link
+          (js/window.open link)
+          (notification/show! "No link found in this page's properties." :warning)))
+
+      (:source-block item)
+      (p/let [block-id (:block/uuid (:source-block item))
+              _ (db-async/<get-block repo block-id :children? false)
+              block (db/entity [:block/uuid block-id])
+              link (re-find editor-handler/url-regex (:block/content block))]
+        (if link
+          (js/window.open link)
+          (notification/show! "No link found in this block's content." :warning)))
+      :else
+      (notification/show! "No link for this search item." :warning))))
+
 (defn- keydown-handler
   [state e]
   (let [shift? (.-shiftKey e)
@@ -730,6 +768,8 @@
       (and meta? (= keyname "c")) (do
                                     (copy-block-ref state)
                                     (util/stop-propagation e))
+      (and meta? (= keyname "o"))
+      (open-current-item-link state)
       :else nil)))
 
 (defn- keyup-handler

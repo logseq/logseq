@@ -358,7 +358,6 @@
  :command.editor/toggle-open-blocks       "Veksle åpne blokker (slå sammen eller utvid alle blokker)"
  :command.auto-complete/complete "Autofullfør: Bruk valgt punkt"
  :command.auto-complete/next "Autofullfør: Velg neste punkt"
- :command.auto-complete/open-link "Autofullfør: Åpne valgt punkt i nettleser"
  :command.auto-complete/prev "Autofullfør: Velg forrige punkt"
  :command.auto-complete/shift-complete "Autofullfør: Åpne valgt punkt i sidestolpen"
  :command.cards/forgotten "Kort: Glemte"

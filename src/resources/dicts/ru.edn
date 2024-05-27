@@ -461,7 +461,6 @@
  :command.auto-complete/prev                           "Автодополнение: Выбрать предыдущий"
  :command.auto-complete/next                           "Автодополнение: Выбрать следующий"
  :command.auto-complete/shift-complete                 "Автодополнение: Открыть выбранный элемент на боковой панели"
- :command.auto-complete/open-link                      "Автодополнение: Открыть выбранный элемент в браузере"
  :command.cards/toggle-answers                         "Карточки: показать/скрыть ответы/clozes"
  :command.cards/next-card                              "Карточки: следующая карточка"
  :command.cards/forgotten                              "Карточки: забытая"

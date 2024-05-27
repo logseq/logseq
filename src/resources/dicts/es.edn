@@ -109,7 +109,6 @@
  :color/yellow                                      "Amarillo"
  :command.auto-complete/complete                    "Auto-completar: Escoger elementos seleccionados"
  :command.auto-complete/next                        "Auto-completar: Seleccionar elemento siguiente"
- :command.auto-complete/open-link                   "Auto-completar: Abrir elemento seleccionado en navegador"
  :command.auto-complete/prev                        "Auto-completar: Seleccionar elemento anterior"
  :command.auto-complete/shift-complete              "Auto-completar: Abrir elemento seleccionado en barra lateral"
  :command.cards/forgotten                           "Tarjetas: olvidadas "

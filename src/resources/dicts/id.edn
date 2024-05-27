@@ -606,7 +606,6 @@
 
  :command.auto-complete/complete "Pelengkapan otomatis: Pilih item yang dipilih"
  :command.auto-complete/next "Pelengkapan otomatis: Pilih item berikutnya"
- :command.auto-complete/open-link "Pelengkapan otomatis: Buka item yang dipilih di browser"
  :command.auto-complete/prev "Pelengkapan otomatis: Pilih item sebelumnya"
  :command.auto-complete/shift-complete "APelengkapan otomatis: Buka item yang dipilih di sidebar"
  :command.cards/forgotten "Kartu: terlupakan"
