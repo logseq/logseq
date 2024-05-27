@@ -24,6 +24,7 @@
             [frontend.components.user.login :as login]
             [frontend.components.repo :as repo]
             [frontend.components.db-based.page :as db-page]
+            [frontend.components.property.dialog :as property-dialog]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [logseq.shui.ui :as shui]
@@ -956,22 +957,15 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :editor/new-property [[_ property-key]]
+(defmethod handle :editor/new-property [[_ {:keys [block] :as opts}]]
   (p/do!
    (editor-handler/save-current-block!)
-   (let [edit-block (state/get-edit-block)]
-     (when-let [block-id (or (:block/uuid edit-block)
-                             (first (state/get-selection-block-ids)))]
-       (let [block (db/entity [:block/uuid block-id])
-             collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
-                            (:block/collapsed? block))]
-         (when collapsed?
-           (editor-handler/set-blocks-collapsed! [block-id] false)))
-       (if edit-block (editor-handler/save-current-block!)
-           (state/clear-selection!))
-       (when property-key
-         (state/set-state! :editor/new-property-key property-key))
-       (property-handler/editing-new-property! (str "edit-block-" block-id))))))
+   (let [edit-block (if-let [block (state/get-edit-block)]
+                      block
+                      (db/entity [:block/uuid (first (state/get-selection-block-ids))]))
+         in-block-container? (boolean edit-block)
+         block (or block edit-block)]
+     (shui/dialog-open! #(property-dialog/dialog block (assoc opts :in-block-container? in-block-container?))))))
 
 (rum/defc multi-tabs-dialog
   []

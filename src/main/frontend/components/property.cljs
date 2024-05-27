@@ -175,23 +175,19 @@
             (when *property-schema
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
-                             (update-schema-fn property-schema))
-                  repo (state/get-current-repo)]
+                             (update-schema-fn property-schema))]
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
                  (components-pu/update-property! property property-name schema)
-                 (when block
-                   (if (= type :default)
-                     (when (and (not add-class-property?)
-                                (not (seq (:property/closed-values property))))
-                       (pv/<create-new-block! block property ""))
-                     (property-handler/set-block-property! repo (:block/uuid block)
-                                                           (:db/ident (db/get-case-page property-name))
-                                                           :logseq.property/empty-placeholder)))
-                 (when block (pv/exit-edit-property)))))))}
+                 (when (and block (not add-class-property?)
+                            (= type :default)
+                            (not (seq (:property/closed-values property))))
+                   (pv/<create-new-block! block property ""))
+                 (when block (pv/exit-edit-property))
+                 (shui/dialog-close!))))))}
 
 ;; only set when in property configure modal
         (and *property-name (:type property-schema))
@@ -409,14 +405,12 @@
                                         set))))
      [])
     [:div.ls-property-add.flex.flex-row.items-center.property-key
-     [:span.bullet-container.cursor [:span.bullet]]
-     [:div.ls-property-key {:style {:padding-left 9
-                                    :height "1.5em"}} ; TODO: ugly
+     [:div.ls-property-key
       (select/select {:items (map (fn [x]
                                     {:label (:block/original-name x)
                                      :value (:block/uuid x)}) properties)
                       :extract-fn :label
-                      :dropdown? true
+                      :dropdown? false
                       :close-modal? false
                       :new-case-sensitive? true
                       :show-new-when-not-exact-match? true
@@ -437,22 +431,17 @@
                                                :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         *property-schema (::property-schema state)
-        entity-properties (->> (keys (:block/properties entity))
-                               (map #(:block/original-name (db/entity %)))
-                               (remove nil?)
-                               (set))
         existing-tag-alias (->> db-property/db-attribute-properties
                                 (map db-property/built-in-properties)
                                 (keep #(when (get entity (:attribute %)) (:original-name %)))
                                 set)
-        exclude-property-names (set/union entity-properties existing-tag-alias)
+        exclude-property-names existing-tag-alias
         exclude-properties (fn [m]
                              (or (contains? exclude-property-names (:block/original-name m))
                                  ;; Filters out properties from being in wrong :view-context
                                  (and in-block-container? (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
-     (if in-block-container? {:style {:padding-left 22}} {})
      (if @*property-key
        (let [property (db/get-case-page @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
@@ -480,20 +469,15 @@
                              (let [add-class-property? (and (contains? (:block/type entity) "class") class-schema?)
                                    type (get-in property [:block/schema :type])]
                                (p/do!
-                                (cond
-                                  add-class-property?
-                                  (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
-                                                                                     :exit-edit? page-configure?})
+                                (when property
+                                  (cond
+                                    add-class-property?
+                                    (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
+                                                                                       :exit-edit? page-configure?})
 
-                                  (and (= :default type)
-                                       (not (seq (:property/closed-values property))))
-                                  (pv/<create-new-block! entity property "")
-
-                                  (or (not= :default type)
-                                      (and (= :default type) (seq (:property/closed-values property))))
-                                  (property-handler/set-block-property! (state/get-current-repo) (:block/uuid entity)
-                                                                        (:db/ident property)
-                                                                        :logseq.property/empty-placeholder))
+                                    (and (= :default type)
+                                         (not (seq (:property/closed-values property))))
+                                    (pv/<create-new-block! entity property "")))
                                 (pv/exit-edit-property))))))
 
              input-opts {:on-blur (fn [] (pv/exit-edit-property))
@@ -506,43 +490,23 @@
          (property-select exclude-properties on-chosen input-opts)))]))
 
 (rum/defcs new-property < rum/reactive
-  (rum/local false ::new-property?)
-  (rum/local nil ::property-key)
-  (rum/local nil ::property-value)
-  {:will-unmount (fn [state]
-                   (state/set-state! :editor/new-property-key nil)
-                   state)}
-  [state block id keyboard-triggered? opts]
-  (let [*new-property? (::new-property? state)
-        container-id (state/sub :editor/properties-container)
-        new-property? (or keyboard-triggered? (and @*new-property? (= container-id id)))]
+  [state block opts]
+  (when-not (:in-block-container? opts)
+    [:div.ls-new-property
+     (cond
+       (and (or (outliner-property/block-has-viewable-properties? block)
+                (:page-configure? opts))
+            (not config/publishing?)
+            (not (:in-block-container? opts)))
+       [:a.fade-link.flex.add-property
+        {:on-click (fn []
+                     (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
+        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+         (ui/icon "plus" {:size 15})
+         [:div.ml-2.text-sm "Add property"]]]
 
-    (when-not (and (:in-block-container? opts) (not keyboard-triggered?))
-      [:div.ls-new-property
-       (let [global-property-key (:editor/new-property-key @state/state)
-             *property-key (if @global-property-key global-property-key (::property-key state))
-             *property-value (::property-value state)]
-         (cond
-           new-property?
-           (property-input block *property-key *property-value opts)
-
-           (and (or (outliner-property/block-has-viewable-properties? block)
-                    (:page-configure? opts))
-                (not config/publishing?)
-                (not (:in-block-container? opts)))
-           [:a.fade-link.flex.add-property
-            {:on-click (fn []
-                         (reset! *property-key nil)
-                         (reset! *property-value nil)
-                         (state/set-state! :editor/block block)
-                         (state/set-state! :editor/properties-container id)
-                         (reset! *new-property? true))}
-            [:div.flex.flex-row.items-center {:style {:padding-left 1}}
-             (ui/icon "plus" {:size 15})
-             [:div.ml-2.text-sm "Add property"]]]
-
-           :else
-           [:div {:style {:height 28}}]))])))
+       :else
+       [:div {:style {:height 28}}])]))
 
 (defn- property-collapsed?
   [block property]
@@ -885,7 +849,7 @@
                                own-properties)]
          (properties-section block (if class-schema? properties own-properties') opts))
 
-       (rum/with-key (new-property block id keyboard-triggered? opts) (str id "-add-property"))
+       (rum/with-key (new-property block opts) (str id "-add-property"))
 
        (when (and (seq class->properties) (not one-class?))
          (let [class-properties-col (keep

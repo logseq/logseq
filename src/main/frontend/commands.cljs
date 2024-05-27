@@ -690,12 +690,12 @@
 
 (defmethod handle-step :editor/set-scheduled [[_]]
   (if (config/db-based-graph? (state/get-current-repo))
-    (state/pub-event! [:editor/new-property "Scheduled"])
+    (state/pub-event! [:editor/new-property {:property-key "Scheduled"}])
     (handle-step [:editor/show-date-picker :scheduled])))
 
 (defmethod handle-step :editor/set-deadline [[_]]
   (if (config/db-based-graph? (state/get-current-repo))
-    (state/pub-event! [:editor/new-property "Deadline"])
+    (state/pub-event! [:editor/new-property {:property-key "Deadline"}])
     (handle-step [:editor/show-date-picker :deadline])))
 
 (defmethod handle-step :editor/insert-properties [[_ _] _format]

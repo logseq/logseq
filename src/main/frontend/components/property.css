@@ -219,26 +219,6 @@ input.simple-input:focus {
         outline: none;
         box-shadow: none;
     }
-
-    .cp__select-input {
-        @apply px-4 py-2;
-    }
-}
-
-.ls-property-add {
-    .cp__select-input {
-        @apply text-sm p-0;
-    }
-}
-
-.property-configure {
-    .cp__select-input {
-        @apply px-4 py-2;
-    }
-}
-
-.ls-property-input {
-    min-height: 1.5em;
 }
 
 .page-title .page-tags {
@@ -297,4 +277,10 @@ a.control-link {
 
 .property-k:focus {
     @apply pr-1;
+}
+
+.ls-property-add {
+    .cp__select-input {
+        padding: 0.25em 0.75em;
+    }
 }

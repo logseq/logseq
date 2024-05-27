@@ -62,7 +62,6 @@
 
 (defn exit-edit-property
   []
-  (state/set-state! :editor/new-property-key nil)
   (state/set-state! :editor/new-property-input-id nil)
   (state/clear-edit!))
 
@@ -76,6 +75,7 @@
              value
              {:new-block-id new-block-id})]
     (p/do!
+     (shui/dialog-close!)
      (exit-edit-property)
      (let [block (db/entity [:block/uuid new-block-id])]
        (when edit-block?
@@ -101,6 +101,7 @@
             (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?
         (shui/popup-hide!)
+        (shui/dialog-close!)
         (exit-edit-property))))))
 
 (defn- add-or-remove-property-value
@@ -141,7 +142,8 @@
                                                            :create-first-block? false}))
                          (when (fn? on-change)
                            (on-change (db/get-case-page journal)))
-                         (exit-edit-property))))))]
+                         (exit-edit-property)
+                         (shui/dialog-close!))))))]
             (shui/calendar
              (cond->
               {:mode "single"
