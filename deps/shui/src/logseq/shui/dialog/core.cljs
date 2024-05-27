@@ -95,8 +95,12 @@
   [content-or-config & config']
   (alert! content-or-config (assoc (first config') :alert? :confirm)))
 
+(defn get-last-modal-id
+  []
+  (some-> (last @*modals) (:id)))
+
 (defn close!
-  ([] (close! (some-> (last @*modals) (:id))))
+  ([] (close! (get-last-modal-id)))
   ([id] (update-modal! id :open? false)))
 
 (defn close-all! []
