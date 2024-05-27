@@ -373,6 +373,7 @@
                           "Escape"
                           (do
                             (exit-edit-property)
+                            (shui/dialog-close!)
                             (when-let [f (:on-chosen opts)] (f)))
                           nil))})
         opts' (assoc opts
@@ -473,6 +474,7 @@
                                         "Escape"
                                         (do
                                           (exit-edit-property)
+                                          (shui/dialog-close!)
                                           (when-let [f (:on-chosen select-opts)] (f)))
                                         nil))})})))))
 
