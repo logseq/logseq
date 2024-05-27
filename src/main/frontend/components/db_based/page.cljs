@@ -22,22 +22,14 @@
    be displaying properties from both components at the same time"
   < rum/reactive
   [page {:keys [mode configure?]}]
-  (let [class? (= mode :class)
-        edit-input-id-prefix (str "edit-block-" (:block/uuid page))
+  (let [edit-input-id-prefix (str "edit-block-" (:block/uuid page))
         configure-opts {:selected? false
                         :page-configure? configure?}
         has-viewable-properties? (outliner-property/block-has-viewable-properties? page)
-        has-class-properties? (seq (:class/schema.properties page))
         hide-properties? (:logseq.property/hide-properties? page)]
-    (when (or configure?
-              (and
-               (not hide-properties?)
-               (or has-viewable-properties?
-                   has-class-properties?)))
+    (when (or configure? (and (not hide-properties?) has-viewable-properties?))
       [:div.ls-page-properties
-       {:class (util/classnames [{:no-properties (if class?
-                                                   (not has-class-properties?)
-                                                   (not has-viewable-properties?))}])}
+       {:class (util/classnames [{:no-properties (not has-viewable-properties?)}])}
        (if configure?
          (cond
            (= mode :class)
@@ -52,10 +44,11 @@
                                              (str edit-input-id-prefix "-page")
                                              (assoc configure-opts :class-schema? false :page? true)))
          ;; default view for page-inner
-         (component-block/db-properties-cp {:editor-box editor/box}
-                                           page
-                                           (str edit-input-id-prefix "-page")
-                                           (assoc configure-opts :class-schema? false :page? true)))])))
+         [:div.ml-1.mb-4
+          (component-block/db-properties-cp {:editor-box editor/box}
+                                            page
+                                            (str edit-input-id-prefix "-page")
+                                            (assoc configure-opts :class-schema? false :page? true))])])))
 
 (rum/defc tags
   [page]

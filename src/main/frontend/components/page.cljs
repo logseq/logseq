@@ -533,7 +533,7 @@
 
             (when (and db-based? (not block?) (:block/tags page))
               [:div.cursor-pointer
-               {:class (if sidebar? "ml-6" "ml-1")}
+               {:class (if sidebar? "ml-6" "ml-2")}
                (db-page/tags page)])
 
             (cond
@@ -553,10 +553,10 @@
                  [:div.mb-4
                   (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-             (when (and db-based? (not block?) (not preview?) (not (::show-page-info? state)))
+             (when (and db-based? (not block?) (not preview?) (not @(::show-page-info? state)))
                (db-page/page-properties-react page {:configure? false}))
 
-                   ;; blocks
+             ;; blocks
              (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?})]])
 
          (when today?

@@ -445,11 +445,11 @@
 
 (defn block-has-viewable-properties?
   [block-entity]
-  (let [properties (:block/properties block-entity)]
+  (let [properties (->> (keys (:block/properties block-entity))
+                        (remove #{:logseq.property/icon :logseq.property/built-in?}))]
     (or
      (seq (:block/alias block-entity))
-     (and (seq properties)
-          (not= properties [:logseq.property/icon])))))
+     (seq properties))))
 
 (defn- build-closed-value-tx
   [db property property-type resolved-value {:keys [id icon description]
