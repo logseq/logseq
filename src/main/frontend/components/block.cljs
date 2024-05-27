@@ -546,7 +546,7 @@
    page-name-in-block is the overridable name of the page (legacy)
 
    All page-names are sanitized except page-name-in-block"
-  [state config page-entity contents-page? children html-export? label whiteboard-page?]
+  [state {:keys [contents-page? whiteboard-page? html-export? meta-click?] :as config} page-entity children label]
   (let [*hover? (::hover? state)
         *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
@@ -570,10 +570,19 @@
       :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e true))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
-      :on-click (fn [e] (util/stop e))
+      :on-click (fn [e] (when-not meta-click? (util/stop e)))
       :on-pointer-down (fn [e]
-                         (if breadcrumb?
+                         (cond
+                           (and meta-click? (util/meta-key? e))
+                           (reset! *mouse-down? true)
+
+                           (and meta-click? (not (util/shift-key? e)))
+                           nil
+
+                           breadcrumb?
                            (.preventDefault e)
+
+                           :else
                            (do
                              (util/stop e)
                              (reset! *mouse-down? true))))
@@ -582,7 +591,7 @@
                          (state/clear-edit!)
                          (open-page-ref config page-entity e page-name contents-page?)
                          (reset! *mouse-down? false)))
-      :on-key-up (fn [e] (when (and e (= (.-key e) "Enter"))
+      :on-key-up (fn [e] (when (and e (= (.-key e) "Enter") (not meta-click?))
                            (state/clear-edit!)
                            (open-page-ref config page-entity e page-name contents-page?)))}
      (when-not hide-icon?
@@ -707,13 +716,13 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [html-export? label children contents-page? preview? disable-preview?] :as config} page]
+  [state {:keys [label children preview? disable-preview?] :as config} page]
   (let [page-entity (::page-entity state)]
     (when-let [page-entity (when page-entity (db/sub-block (:db/id page-entity)))]
       (let [page-name (or (:block/name page-entity)
                           (:block/name page))
             whiteboard-page? (model/whiteboard-page? page-name)
-            inner (page-inner config page-entity contents-page? children html-export? label whiteboard-page?)
+            inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) page-entity children label)
             modal? (:modal/show? @state/state)]
         (if (and (not (util/mobile?))
                  (not= page-name (:id config))
@@ -2281,7 +2290,7 @@
     (when (seq properties)
       (case position
         :block-below
-        [:div.positioned-properties.flex.flex-row.gap-2.item-center.ml-2.pl-8.flex-nowrap.text-sm
+        [:div.positioned-properties.flex.flex-row.gap-2.item-center.ml-2.pl-8.flex-wrap.text-sm.overflow-x-hidden.max-h-6
          (for [pid properties]
            (let [property (db/entity pid)
                  v (get block pid)]

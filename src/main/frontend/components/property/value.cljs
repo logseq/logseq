@@ -24,7 +24,8 @@
             [logseq.db.frontend.property :as db-property]
             [datascript.impl.entity :as de]
             [frontend.handler.property.util :as pu]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [dommy.core :as d]))
 
 (rum/defc property-empty-btn-value
   [& {:as opts}]
@@ -153,7 +154,7 @@
        (assoc :default-month initial-month)))))
 
 (rum/defc date-picker
-  [value {:keys [on-change editing? multiple-values?]}]
+  [value {:keys [on-change editing? multiple-values? other-position?]}]
   (let [*trigger-ref (rum/use-ref nil)
         page value
         title (when page (:block/original-name page))
@@ -161,10 +162,11 @@
                  (js/Date. (date/journal-title->long title)))
         content-fn (fn [{:keys [id]}] (calendar-inner id on-change value'))
         open-popup! (fn [e]
-                      (util/stop e)
-                      (when-not config/publishing?
-                        (shui/popup-show! (.-target e) content-fn
-                                          {:align "start" :auto-focus? true})))]
+                      (when-not (or (util/meta-key? e) (util/shift-key? e))
+                        (util/stop e)
+                        (when-not config/publishing?
+                          (shui/popup-show! (.-target e) content-fn
+                                            {:align "start" :auto-focus? true}))))]
     (rum/use-effect!
      (fn []
        (when editing?
@@ -184,12 +186,12 @@
         :class "jtrigger min-h-[24px]"  ; FIXME: min-h-6 not works
         :ref *trigger-ref
         :on-click open-popup!}
-
        (if page
          (when-let [page-cp (state/get-component :block/page-cp)]
            (rum/with-key
              (page-cp {:disable-preview? true
-                       :hide-close-button? true} page)
+                       :hide-close-button? true
+                       :meta-click? other-position?} page)
              (:db/id page)))
          (when-not multiple-values?
            (property-empty-btn-value)))))))
@@ -558,7 +560,7 @@
           (property-empty-btn-value))))))
 
 (rum/defc closed-value-item < rum/reactive
-  [value {:keys [page-cp inline-text icon?]}]
+  [value {:keys [inline-text icon?]}]
   (when value
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
@@ -566,12 +568,6 @@
               value' (db-property/closed-value-name block)
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
-            (:block/name block)
-            (rum/with-key
-              (page-cp {:disable-preview? true
-                        :hide-close-button? true} block)
-              (:db/id block))
-
             icon
             (if icon?
               (icon-component/icon icon)
@@ -590,9 +586,17 @@
             (inline-text {} :markdown (str value'))))))))
 
 (rum/defc select-item
-  [property type value {:keys [page-cp inline-text _icon?] :as opts}]
+  [property type value {:keys [page-cp inline-text other-position? _icon?] :as opts}]
   (let [closed-values? (seq (:property/closed-values property))
-        tag? (or (:tag? opts) (= (:db/ident property) :block/tags))]
+        tag? (or (:tag? opts) (= (:db/ident property) :block/tags))
+        inline-text-cp (fn [content]
+                         [:div.flex.flex-row.items-center
+                          (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros)))
+                          (when (and (= type :url) other-position?)
+                            (shui/button {:variant :ghost
+                                          :size :sm
+                                          :class "px-0 py-0 h-4"}
+                              (ui/icon "edit" {:size 14})))])]
     [:div.select-item
      (cond
        (= value :logseq.property/empty-placeholder)
@@ -603,7 +607,8 @@
          (rum/with-key
            (page-cp {:disable-preview? true
                      :tag? tag?
-                     :hide-close-button? true} value)
+                     :hide-close-button? true
+                     :meta-click? other-position?} value)
            (:db/id value)))
 
        (= type :object)
@@ -614,10 +619,10 @@
 
        (de/entity? value)
        (when-let [content (:block/content value)]
-         (inline-text {} :markdown (macro-util/expand-value-if-macro content (state/get-macros))))
+         (inline-text-cp content))
 
        :else
-       (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
+       (inline-text-cp (str value)))]))
 
 (rum/defc single-value-select
   [block property value value-f select-opts opts]
@@ -640,19 +645,29 @@
                              (:object :page :date)
                              (property-value-select-page block property select-opts' opts))])
           trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
-          show! (fn [target]
-                  (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                    (shui/popup-show! target popup-content
-                                      {:align "start"
-                                       :as-dropdown? true
-                                       :auto-focus? true
-                                       :trigger-id trigger-id})))]
+          show! (fn [e]
+                  (let [target (.-target e)
+                        node (.closest target "a")]
+                    (js/console.dir node)
+                    (when-not (or config/publishing?
+                                  (util/shift-key? e)
+                                  (util/meta-key? e)
+                                  (util/link? target)
+                                  (when-let [node (.closest target "a")]
+                                    (not (or (d/has-class? node "page-ref")
+                                             (d/has-class? node "tag")))))
+
+                      (shui/popup-show! target popup-content
+                                        {:align "start"
+                                         :as-dropdown? true
+                                         :auto-focus? true
+                                         :trigger-id trigger-id}))))]
       (shui/trigger-as
        (if (:other-position? opts) :div :div.jtrigger.flex.flex-1.w-full)
        {:ref *el
         :id trigger-id
         :tabIndex 0
-        :on-click #(show! (.-target %))}
+        :on-click show!}
        (if (string/blank? value)
          (property-empty-text-value)
          (value-f))))))
@@ -738,7 +753,7 @@
                              (assoc opts :editing? editing?))
         (case type
           :date
-          (property-value-date-picker block property value {:editing? editing?})
+          (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
           :checkbox
           (let [add-property! (fn []
