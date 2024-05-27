@@ -190,8 +190,10 @@
                                 (not (seq (:property/closed-values property))))
                        (pv/<create-new-block! block property ""))
                      (property-handler/set-block-property! repo (:block/uuid block)
-                                                           (:db/ident (db/get-case-page property-name))
-                                                           :logseq.property/empty-placeholder)))
+                                                           (:db/ident property)
+                                                           (if (= (get-in property [:block/schema :type]) :checkbox)
+                                                             false
+                                                             :logseq.property/empty-placeholder))))
                  (when block (pv/exit-edit-property))
                  (shui/dialog-close!))))))}
 
@@ -433,17 +435,16 @@
                      (reset! *property-key nil))
                    state)}
   shortcut/disable-all-shortcuts
-  [state entity *property-key {:keys [class-schema? in-block-container? page? page-configure?]
-                                               :as opts}]
+  [state block *property-key {:keys [class-schema? in-block-container? page? page-configure?]
+                              :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         *property-schema (::property-schema state)
         existing-tag-alias (->> db-property/db-attribute-properties
                                 (map db-property/built-in-properties)
-                                (keep #(when (get entity (:attribute %)) (:original-name %)))
+                                (keep #(when (get block (:attribute %)) (:original-name %)))
                                 set)
-        exclude-property-names existing-tag-alias
         exclude-properties (fn [m]
-                             (or (contains? exclude-property-names (:block/original-name m))
+                             (or (contains? existing-tag-alias (:block/original-name m))
                                  ;; Filters out properties from being in wrong :view-context
                                  (and in-block-container? (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
@@ -462,10 +463,10 @@
                                            :*property-schema *property-schema
                                            :default-open? true
                                            :in-block-container? in-block-container?
-                                           :block entity
+                                           :block block
                                            :*show-new-property-config? *show-new-property-config?}))
              (when (and property (not class-schema?))
-               (pv/property-value entity property (get entity (:db/ident property)) (assoc opts :editing? true))))]])
+               (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true))))]])
 
        (let [on-chosen (fn [{:keys [value label]}]
                          (reset! *property-key (if (uuid? value) label value))
@@ -473,18 +474,18 @@
                            (when (and *show-new-property-config? (not property))
                              (reset! *show-new-property-config? true))
                            (when property
-                             (let [add-class-property? (and (contains? (:block/type entity) "class") class-schema?)
+                             (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
                                    type (get-in property [:block/schema :type])]
                                (p/do!
                                 (when property
                                   (cond
                                     add-class-property?
-                                    (pv/<add-property! entity (:db/ident property) "" {:class-schema? class-schema?
-                                                                                       :exit-edit? page-configure?})
+                                    (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
+                                                                                      :exit-edit? page-configure?})
 
                                     (and (= :default type)
                                          (not (seq (:property/closed-values property))))
-                                    (pv/<create-new-block! entity property "")))
+                                    (pv/<create-new-block! block property "")))
                                 (pv/exit-edit-property))))))
 
              input-opts {:on-blur (fn [] (pv/exit-edit-property))

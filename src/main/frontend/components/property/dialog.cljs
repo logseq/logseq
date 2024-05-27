@@ -7,7 +7,7 @@
   (rum/local nil ::property-value)
   {:init (fn [state]
            (assoc state ::property-key (atom (:property-key (last (:rum/args state))))))}
-  [state block opts]
+  [state blocks opts]
   (let [*property-key (::property-key state)]
     [:div.ls-property-dialog
-     (property-component/property-input block *property-key opts)]))
+     (property-component/property-input (first blocks) *property-key opts)]))
