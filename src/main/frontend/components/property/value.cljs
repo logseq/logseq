@@ -810,7 +810,13 @@
   [state block property v opts]
   (ui/catch-error
    (ui/block-error "Something wrong" {})
-   (let [dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
+   (let [opts (merge opts
+                     {:page-cp (state/get-component :block/page-cp)
+                      :inline-text (state/get-component :block/inline-text)
+                      :editor-box (state/get-component :editor/box)
+                      :block-cp (state/get-component :block/blocks-container)
+                      :properties-cp (state/get-component :block/properties-cp)})
+         dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
          editor-id (str dom-id "-editor")
          schema (:block/schema property)
          type (some-> schema (get :type :default))

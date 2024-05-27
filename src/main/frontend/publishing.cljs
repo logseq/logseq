@@ -91,6 +91,12 @@
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/blocks-container block/blocks-container)
+  (state/set-component! :block/properties-cp block/db-properties-cp)
+  (state/set-component! :block/embed block/block-embed)
+  (state/set-component! :block/page-cp block/page-cp)
+  (state/set-component! :block/inline-text block/inline-text)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
