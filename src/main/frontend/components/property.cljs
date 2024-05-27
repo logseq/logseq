@@ -499,22 +499,14 @@
 
 (rum/defcs new-property < rum/reactive
   [state block opts]
-  (when-not (:in-block-container? opts)
+  (when (and (:page-configure? opts) (not config/publishing?))
     [:div.ls-new-property
-     (cond
-       (and (or (outliner-property/block-has-viewable-properties? block)
-                (:page-configure? opts))
-            (not config/publishing?)
-            (not (:in-block-container? opts)))
-       [:a.fade-link.flex.add-property
-        {:on-click (fn []
-                     (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
-        [:div.flex.flex-row.items-center {:style {:padding-left 1}}
-         (ui/icon "plus" {:size 15})
-         [:div.ml-2.text-sm "Add property"]]]
-
-       :else
-       [:div {:style {:height 28}}])]))
+     [:a.fade-link.flex.add-property
+      {:on-click (fn []
+                   (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
+      [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+       (ui/icon "plus" {:size 15})
+       [:div.ml-1.text-sm "Add property"]]]]))
 
 (defn- property-collapsed?
   [block property]
@@ -769,7 +761,7 @@
                                (ldb/built-in? ent))
                           ;; other position
                           (when-not (or (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
-                                        (= (str (:block/uuid block)) (str (state/get-current-page))))
+                                        (ldb/page? block))
                             (outliner-property/property-with-other-position? ent)))))))
                   properties))
         {:keys [classes all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
