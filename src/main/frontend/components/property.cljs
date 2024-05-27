@@ -453,9 +453,9 @@
      (if property-key
        (let [property (db/get-case-page @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
-          [:div.flex.flex-row.items-center.col-span-2.property-key
-           [:span.bullet-container.cursor [:span.bullet]]
-           [:div {:style {:padding-left 9}} @*property-key]]
+          [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
+           [:div [:span.bullet-container.cursor [:span.bullet]]]
+           [:div @*property-key]]
           [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
            (if @*show-new-property-config?
              (schema-type property (merge opts
@@ -524,11 +524,11 @@
 
 (rum/defcs property-key <
   (rum/local false ::hover?)
-  [state block property {:keys [class-schema? block? collapsed? page-cp inline-text]}]
+  [state block property {:keys [class-schema? block? collapsed? page-cp inline-text other-position?]}]
   (let [*hover? (::hover? state)
         icon (:logseq.property/icon property)
         property-name (:block/original-name property)]
-    [:div.flex.flex-row.items-center
+    [:div.flex.flex-row.items-center.gap-1
      {:on-mouse-over   #(reset! *hover? true)
       :on-mouse-leave  #(reset! *hover? false)
       :on-context-menu (fn [^js e]
@@ -562,34 +562,36 @@
          (ui/rotating-arrow collapsed?)]])
 
      ;; icon picker
-     (let [content-fn (fn [{:keys [id]}]
-                        (icon-component/icon-search
-                         {:on-chosen
-                          (fn [_e icon]
-                            (when icon
-                              (p/let [_ (db-property-handler/upsert-property! (:db/ident property)
-                                                                              (:block/schema property)
-                                                                              {:properties {:logseq.property/icon icon}})]
-                                (shui/popup-hide! id))))}))]
+     (when-not other-position?
+       (let [content-fn (fn [{:keys [id]}]
+                          (icon-component/icon-search
+                           {:on-chosen
+                            (fn [_e icon]
+                              (when icon
+                                (p/let [_ (db-property-handler/upsert-property! (:db/ident property)
+                                                                                (:block/schema property)
+                                                                                {:properties {:logseq.property/icon icon}})]
+                                  (shui/popup-hide! id))))}))]
 
-       (shui/trigger-as :button
-                        (-> (when-not config/publishing?
-                              {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
-                            (assoc :class "flex items-center"))
-                        (if icon
-                          (icon-component/icon icon)
-                          [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
-                           [:span.bullet]])))
+         (shui/trigger-as :button
+                          (-> (when-not config/publishing?
+                                {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
+                              (assoc :class "flex items-center"))
+                          (if icon
+                            (icon-component/icon icon)
+                            [:div
+                             [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
+                             [:span.bullet]]]))))
 
      (if config/publishing?
-       [:a.property-k.flex.select-none.jtrigger.pl-2
+       [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
         (:block/original-name property)]
 
        (shui/trigger-as :a
                         {:tabIndex 0
                          :title (str "Configure property: " (:block/original-name property))
-                         :class "property-k flex select-none jtrigger pl-2"
+                         :class "property-k flex select-none jtrigger"
                          :on-pointer-down (fn [^js e]
                                             (when (util/meta-key? e)
                                               (route-handler/redirect-to-page! (:block/uuid property))
@@ -653,8 +655,7 @@
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}
-         [:div.property-key
-          {:class "col-span-2"}
+         [:div.property-key.col-span-2
           (property-key block property (assoc (select-keys opts [:class-schema?])
                                               :block? block?
                                               :collapsed? collapsed?

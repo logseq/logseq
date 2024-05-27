@@ -275,8 +275,12 @@ a.control-link {
     }
 }
 
-.property-k:focus {
-    @apply pr-1;
+.ls-popup-closed:focus {
+    @apply font-bold outline-none;
+}
+
+.positioned-properties .property-k:focus {
+    @apply font-normal;
 }
 
 .ls-property-add {
