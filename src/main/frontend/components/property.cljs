@@ -175,17 +175,23 @@
             (when *property-schema
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
-                             (update-schema-fn property-schema))]
+                             (update-schema-fn property-schema))
+                  repo (state/get-current-repo)]
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
                  (components-pu/update-property! property property-name schema)
-                 (when (and block (not add-class-property?)
-                            (= type :default)
-                            (not (seq (:property/closed-values property))))
-                   (pv/<create-new-block! block property ""))
+                 (when block
+                   (if (= type :default)
+                     (when (and (not add-class-property?)
+
+                                (not (seq (:property/closed-values property))))
+                       (pv/<create-new-block! block property ""))
+                     (property-handler/set-block-property! repo (:block/uuid block)
+                                                           (:db/ident (db/get-case-page property-name))
+                                                           :logseq.property/empty-placeholder)))
                  (when block (pv/exit-edit-property))
                  (shui/dialog-close!))))))}
 
