@@ -742,7 +742,7 @@
    :will-remount (fn [state]
                    (let [block (db/entity (:db/id (::block state)))]
                      (assoc state ::classes (async-load-classes! block))))}
-  [state _target-block edit-input-id {:keys [in-block-container? page-configure? class-schema?] :as opts}]
+  [state _target-block {:keys [in-block-container? page-configure? class-schema?] :as opts}]
   (let [id (::id state)
         block (db/sub-block (:db/id (::block state)))
         _ (doseq [class (::classes state)]
@@ -825,12 +825,10 @@
                                        (if (seq cur-properties)
                                          (conj result [class cur-properties])
                                          result)))
-                              result))
-        keyboard-triggered? (= (state/sub :editor/new-property-input-id) edit-input-id)]
+                              result))]
     (when-not (and (empty? block-own-properties')
                    (empty? class->properties)
-                   (not (:page-configure? opts))
-                   (not keyboard-triggered?))
+                   (not (:page-configure? opts)))
       [:div.ls-properties-area
        (cond-> {:id id}
          (and in-block-container? class-schema?)

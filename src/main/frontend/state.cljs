@@ -131,8 +131,6 @@
       :editor/in-composition?                false
       :editor/content                        (atom {})
       :editor/block                          (atom nil)
-      :editor/new-property-input-id          (atom nil)
-      :editor/new-property-key               (atom nil)
       :editor/block-dom-id                   (atom nil)
       :editor/set-timestamp-block            (atom nil) ;; click rendered block timestamp-cp to set timestamp
       :editor/last-input-time                (atom {})

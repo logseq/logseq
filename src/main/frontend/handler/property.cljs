@@ -31,17 +31,6 @@
         (set-block-property! repo (:block/uuid page-entity) key value)
         (file-page-property/add-property! page-entity key value)))))
 
-(defn set-editing-new-property!
-  [value]
-  (state/set-state! :editor/new-property-input-id value))
-
-(defn editing-new-property!
-  ([]
-   (editing-new-property! (state/get-edit-input-id)))
-  ([input-id]
-   (set-editing-new-property! input-id)
-   (state/clear-edit!)))
-
 (defn remove-id-property
   [repo format content]
   (if (config/db-based-graph? repo)
