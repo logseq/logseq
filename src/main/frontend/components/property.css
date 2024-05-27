@@ -285,7 +285,7 @@ a.control-link {
     @apply font-bold outline-none;
 }
 
-.positioned-properties .property-k:focus {
+.positioned-properties .property-k:focus, .positioned-properties .ls-popup-closed:focus {
     @apply font-normal;
 }
 

@@ -516,7 +516,7 @@
 
 (rum/defcs property-key <
   (rum/local false ::hover?)
-  [state block property {:keys [class-schema? block? collapsed? page-cp inline-text other-position?]}]
+  [state block property {:keys [class-schema? collapsed? page-cp inline-text other-position?]}]
   (let [*hover? (::hover? state)
         icon (:logseq.property/icon property)
         property-name (:block/original-name property)]
@@ -541,18 +541,6 @@
                                                 "Delete property"]))]
                                            {:as-dropdown? true
                                             :content-props {:class "w-48"}}))}
-     (when block?
-       [:a.block-control
-        {:on-click (fn [event]
-                     (util/stop event)
-                     (db-property-handler/collapse-expand-block-property! (:db/id block) (:db/id property) (not collapsed?)))}
-        [:span {:class (cond
-                         (or collapsed? @*hover?)
-                         "control-show cursor-pointer"
-                         :else
-                         "control-hide")}
-         (ui/rotating-arrow collapsed?)]])
-
      ;; icon picker
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
