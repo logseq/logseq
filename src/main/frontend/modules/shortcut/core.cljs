@@ -135,6 +135,7 @@
               (let [id (keyword (.-identifier e))
                     shortcut-map (dh/shortcut-map handler-id state) ;; required to get shortcut map dynamically
                     dispatch-fn (get shortcut-map id)]
+                (state/set-state! :editor/latest-shortcut id)
                 ;; trigger fn
                 (when dispatch-fn
                   (plugin-handler/hook-lifecycle-fn! id dispatch-fn e))))

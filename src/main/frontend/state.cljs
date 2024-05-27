@@ -147,6 +147,7 @@
       :editor/record-status                  "NONE"
 
       :editor/code-block-context             {}
+      :editor/latest-shortcut                (atom nil)
 
       :db/properties-changed-pages           {}
       :history/paused?                       (atom false)
