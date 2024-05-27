@@ -2059,9 +2059,8 @@
            (let [container-id (or (:container-id (first (:rum/args state)))
                                   (state/get-next-container-id))]
              (assoc state ::initial-container-id container-id)))}
-  [state config block edit-input-id opts]
+  [state config block _edit-input-id opts]
   (property-component/properties-area block
-                                      edit-input-id
                                       (merge
                                        config
                                        {:inline-text inline-text

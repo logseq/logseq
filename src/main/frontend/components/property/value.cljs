@@ -62,7 +62,6 @@
 
 (defn exit-edit-property
   []
-  (state/set-state! :editor/new-property-input-id nil)
   (state/clear-edit!))
 
 (defn <create-new-block!
