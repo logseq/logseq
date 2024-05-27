@@ -960,16 +960,22 @@
 (defmethod handle :editor/new-property [[_ {:keys [block] :as opts}]]
   (p/do!
    (editor-handler/save-current-block!)
-   (let [edit-block (if-let [block (state/get-edit-block)]
-                      block
-                      (db/entity [:block/uuid (first (state/get-selection-block-ids))]))
+   (let [editing-block (state/get-edit-block)
+         pos (state/get-edit-pos)
+         edit-block-or-selected (or editing-block
+                                    (db/entity [:block/uuid (first (state/get-selection-block-ids))]))
          current-block (when-let [s (state/get-current-page)]
                          (when (util/uuid-string? s)
                            (db/entity [:block/uuid (uuid s)])))
-         in-block-container? (boolean edit-block)
-         block (or block edit-block current-block)]
+         in-block-container? (boolean edit-block-or-selected)
+         block (or block edit-block-or-selected current-block)]
      (shui/dialog-open! #(property-dialog/dialog block (assoc opts :in-block-container? in-block-container?))
-                        {:align "start"}))))
+                        {:id :property-dialog
+                         :align "start"
+                         :on-close (fn [_id]
+                                     (when-not (= (:db/id editing-block)
+                                                  (:db/id (state/get-edit-block)))
+                                       (editor-handler/edit-block! editing-block (or pos :max))))}))))
 
 (rum/defc multi-tabs-dialog
   []

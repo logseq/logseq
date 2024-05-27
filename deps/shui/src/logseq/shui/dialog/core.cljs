@@ -39,7 +39,7 @@
               (if (vector? v) (assoc config k (interpret v)) config)))
     config ks))
 
-;; {:id :title :description :content :footer :open? ...}
+;; {:id :title :description :content :footer :open? :on-close ...}
 (def ^:private *modals (atom []))
 (def ^:private *id (atom 0))
 (def ^:private gen-id #(reset! *id (inc @*id)))
@@ -57,7 +57,9 @@
           config (if (nil? val)
                    (medley/dissoc-in config ks)
                    (assoc-in config ks val))]
-      (swap! *modals assoc index config))))
+      (swap! *modals assoc index config)
+      (when (and (false? (:open? config)) (fn? (:on-close config)))
+        ((:on-close config) id)))))
 
 (defn upsert-modal!
   [config]
