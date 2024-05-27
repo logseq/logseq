@@ -551,3 +551,9 @@
         (d/pull-many db
                      '[:db/id :block/name :block/original-name]
                      ids)))))
+
+(defn get-all-properties
+  [db]
+  (->> (d/datoms db :avet :block/type "property")
+       (map (fn [d]
+              (d/entity db (:e d))))))

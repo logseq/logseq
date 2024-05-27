@@ -104,7 +104,7 @@
           [:<>
            (if (= :draw route-name)
              (view route-match)
-             (container/sidebar
+             (container/root-container
                route-match
                (view route-match)))
            (when config/lsp-enabled?

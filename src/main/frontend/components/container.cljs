@@ -34,6 +34,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.recent :as recent-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.mixins :as mixins]
             [frontend.mobile.action-bar :as action-bar]
             [frontend.mobile.footer :as footer]
@@ -875,7 +876,7 @@
   []
   nil)
 
-(rum/defcs ^:large-vars/cleanup-todo sidebar <
+(rum/defcs ^:large-vars/cleanup-todo root-container <
   (mixins/modal :modal/show?)
   rum/reactive
   (mixins/event-mixin
@@ -883,7 +884,8 @@
      (mixins/listen state js/window "pointerdown" hide-context-menu-and-clear-selection)
      (mixins/listen state js/window "keydown"
                     (fn [e]
-                      (when (= 27 (.-keyCode e))
+                      (cond
+                        (= 27 (.-keyCode e))
                         (if (and (state/modal-opened?)
                                  (not
                                   (and
@@ -891,7 +893,13 @@
                                    util/node-test?
                                    (state/editing?))))
                           (state/close-modal!)
-                          (hide-context-menu-and-clear-selection e)))))))
+                          (hide-context-menu-and-clear-selection e))
+
+                        (and (seq (state/get-selection-block-ids))
+                             (not (or (.-ctrlKey e) (.-metaKey e) (.-altKey e))))
+                        (let [shift? (.-shiftKey e)
+                              shortcut (if shift? (str "shift+" (.-key e)) (.-key e))]
+                          (db-property-handler/set-property-by-shortcut! shortcut)))))))
   [state route-match main-content]
   (let [{:keys [open-fn]} state
         current-repo (state/sub :git/current-repo)
@@ -958,7 +966,7 @@
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
       [:div.#app-container (cond-> {} selection-mode?
-                             (assoc :class "blocks-selection-mode"))
+                                   (assoc :class "blocks-selection-mode"))
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
         (header/header {:open-fn        open-fn
