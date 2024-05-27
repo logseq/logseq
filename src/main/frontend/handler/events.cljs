@@ -963,8 +963,11 @@
    (let [edit-block (if-let [block (state/get-edit-block)]
                       block
                       (db/entity [:block/uuid (first (state/get-selection-block-ids))]))
+         current-block (when-let [s (state/get-current-page)]
+                         (when (util/uuid-string? s)
+                           (db/entity [:block/uuid (uuid s)])))
          in-block-container? (boolean edit-block)
-         block (or block edit-block)]
+         block (or block edit-block current-block)]
      (shui/dialog-open! #(property-dialog/dialog block (assoc opts :in-block-container? in-block-container?))))))
 
 (rum/defc multi-tabs-dialog
