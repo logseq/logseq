@@ -446,9 +446,10 @@
                              (or (contains? exclude-property-names (:block/original-name m))
                                  ;; Filters out properties from being in wrong :view-context
                                  (and in-block-container? (= :page (get-in m [:block/schema :view-context])))
-                                 (and page? (= :block (get-in m [:block/schema :view-context])))))]
+                                 (and page? (= :block (get-in m [:block/schema :view-context])))))
+        property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
-     (if @*property-key
+     (if property-key
        (let [property (db/get-case-page @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
           [:div.flex.flex-row.items-center.col-span-2.property-key
