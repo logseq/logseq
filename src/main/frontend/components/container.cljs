@@ -896,7 +896,8 @@
                           (hide-context-menu-and-clear-selection e))
 
                         (and (seq (state/get-selection-block-ids))
-                             (not (or (.-ctrlKey e) (.-metaKey e) (.-altKey e))))
+                             (not (or (.-ctrlKey e) (.-metaKey e) (.-altKey e)))
+                             (not (util/input? (.-target e))))
                         (let [shift? (.-shiftKey e)
                               shortcut (if shift? (str "shift+" (.-key e)) (.-key e))]
                           (db-property-handler/set-property-by-shortcut! shortcut)))))))
