@@ -962,14 +962,18 @@
    (editor-handler/save-current-block!)
    (let [editing-block (state/get-edit-block)
          pos (state/get-edit-pos)
-         edit-block-or-selected (or editing-block
-                                    (db/entity [:block/uuid (first (state/get-selection-block-ids))]))
+         edit-block-or-selected (if editing-block
+                                  [editing-block]
+                                  (map #(db/entity [:block/uuid %])
+                                       (state/get-selection-block-ids)))
          current-block (when-let [s (state/get-current-page)]
                          (when (util/uuid-string? s)
                            (db/entity [:block/uuid (uuid s)])))
          in-block-container? (boolean edit-block-or-selected)
-         block (or block edit-block-or-selected current-block)]
-     (shui/dialog-open! #(property-dialog/dialog block (assoc opts :in-block-container? in-block-container?))
+         blocks (or (when block [block])
+                    edit-block-or-selected
+                    (when current-block [current-block]))]
+     (shui/dialog-open! #(property-dialog/dialog blocks (assoc opts :in-block-container? in-block-container?))
                         {:id :property-dialog
                          :align "start"
                          :on-close (fn [_id]

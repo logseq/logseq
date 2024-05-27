@@ -336,7 +336,7 @@
                      (let [value (get block property-id)
                            entities (cond
                                       (de/entity? value) [value]
-                                      (every? de/entity? value) value
+                                      (and (coll? value) (every? de/entity? value)) value
                                       :else nil)
                            deleting-entities (filter
                                               (fn [value]
