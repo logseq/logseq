@@ -744,66 +744,58 @@
              (property-value-inner block property value opts))])))))
 
 (rum/defc multiple-values < rum/static
-  [block property v {:keys [on-chosen editing? block-cp editor-box]
-                     :as opts} schema]
+  [block property v {:keys [on-chosen editing?] :as opts} schema]
   (let [type (get schema :type :default)
         date? (= type :date)
         *el (rum/use-ref nil)
         items (if (coll? v) v (when v [v]))]
     (rum/use-effect!
      (fn []
-       (when (and editing? (not= type :default))
+       (when editing?
          (.click (rum/deref *el))))
      [editing?])
-    ;; TODO: closed values select for default type
-    (if (= type :default)
-      [:div.property-block-container.content
-       (let [config {:editor-box editor-box
-                     :id (str (:block/uuid block))
-                     :container-id (:container-id opts)}]
-         (block-cp config (sort-by :block/order v)))]
-      (let [values-cp (fn [toggle-fn]
-                        (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
-                          (if (and (seq items) not-empty-value?)
-                            (concat
-                             (for [item items]
-                               (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-                             (when date?
-                               [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
-                            (when-not editing?
-                              (property-empty-text-value)))))
-            select-cp (fn [select-opts]
-                        (let [select-opts (merge {:multiple-choices? true
-                                                  :on-chosen (fn []
-                                                               (when on-chosen (on-chosen)))}
-                                                 select-opts
-                                                 {:dropdown? false})]
-                          [:div.property-select
-                           (if (contains? #{:page :object} type)
-                             (property-value-select-page block property
-                                                         select-opts
-                                                         opts)
-                             (select block property select-opts opts))]))]
-        (let [toggle-fn shui/popup-hide!
-              content-fn (fn [{:keys [_id content-props]}]
-                           (select-cp {:content-props content-props}))]
-          [:div.multi-values.jtrigger
-           {:tab-index "0"
-            :ref *el
-            :on-click (fn [^js e]
-                        (let [target (.-target e)]
-                          (when-not (or (util/link? target) (.closest target "a") config/publishing?)
-                            (shui/popup-show! (rum/deref *el) content-fn
-                                              {:as-dropdown? true :as-content? false
-                                               :align "start" :auto-focus? true}))))
-            :on-key-down (fn [^js e]
-                           (case (.-key e)
-                             (" " "Enter")
-                             (do (some-> (rum/deref *el) (.click))
-                                 (util/stop e))
-                             :dune))
-            :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
-           (values-cp toggle-fn)])))))
+    (let [values-cp (fn [toggle-fn]
+                      (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
+                        (if (and (seq items) not-empty-value?)
+                          (concat
+                           (for [item items]
+                             (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+                           (when date?
+                             [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+                          (when-not editing?
+                            (property-empty-text-value)))))
+          select-cp (fn [select-opts]
+                      (let [select-opts (merge {:multiple-choices? true
+                                                :on-chosen (fn []
+                                                             (when on-chosen (on-chosen)))}
+                                               select-opts
+                                               {:dropdown? false})]
+                        [:div.property-select
+                         (if (contains? #{:page :object} type)
+                           (property-value-select-page block property
+                                                       select-opts
+                                                       opts)
+                           (select block property select-opts opts))]))]
+      (let [toggle-fn shui/popup-hide!
+            content-fn (fn [{:keys [_id content-props]}]
+                         (select-cp {:content-props content-props}))]
+        [:div.multi-values.jtrigger
+         {:tab-index "0"
+          :ref *el
+          :on-click (fn [^js e]
+                      (let [target (.-target e)]
+                        (when-not (or (util/link? target) (.closest target "a") config/publishing?)
+                          (shui/popup-show! (rum/deref *el) content-fn
+                                            {:as-dropdown? true :as-content? false
+                                             :align "start" :auto-focus? true}))))
+          :on-key-down (fn [^js e]
+                         (case (.-key e)
+                           (" " "Enter")
+                           (do (some-> (rum/deref *el) (.click))
+                               (util/stop e))
+                           :dune))
+          :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
+         (values-cp toggle-fn)]))))
 
 (rum/defcs property-value < rum/reactive
   [state block property v opts]
