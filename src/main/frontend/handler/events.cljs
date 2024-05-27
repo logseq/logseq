@@ -968,7 +968,8 @@
                            (db/entity [:block/uuid (uuid s)])))
          in-block-container? (boolean edit-block)
          block (or block edit-block current-block)]
-     (shui/dialog-open! #(property-dialog/dialog block (assoc opts :in-block-container? in-block-container?))))))
+     (shui/dialog-open! #(property-dialog/dialog block (assoc opts :in-block-container? in-block-container?))
+                        {:align "start"}))))
 
 (rum/defc multi-tabs-dialog
   []
