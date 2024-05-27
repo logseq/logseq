@@ -323,7 +323,6 @@
  :command.auto-complete/prev                               "Автозаповнення: попередній елемент"
  :command.auto-complete/next                               "Автозаповнення: наступний елемент"
  :command.auto-complete/shift-complete                     "Автозаповнення: відкрити вибраний елемент на бічній панелі"
- :command.auto-complete/open-link                          "Автозаповнення: відкрити вибраний елемент у браузері"
  :command.cards/toggle-answers                             "Вкладки: Показати/Сховати відповіді"
  :command.cards/next-card                                  "Карти: ще одна картка"
  :command.cards/forgotten                                  "Карти: забуті"

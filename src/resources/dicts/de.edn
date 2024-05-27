@@ -579,7 +579,6 @@
 
  :command.auto-complete/complete         "Automatische Vervollständigung: Ausgewähltes Element auswählen"
  :command.auto-complete/next             "Automatische Vervollständigung: Nächstes Element auswählen"
- :command.auto-complete/open-link        "Automatische Vervollständigung: Ausgewähltes Element im Browser öffnen"
  :command.auto-complete/prev             "Automatische Vervollständigung: Vorheriges Element auswählen"
  :command.auto-complete/shift-complete   "Automatische Vervollständigung: Ausgewähltes Element in der Seitenleiste öffnen"
  :command.cards/forgotten                "Karten: Vergessen"

@@ -344,7 +344,6 @@
  :command.auto-complete/next              "Autocompletar: Selecione o próximo item"
  :command.auto-complete/prev              "Autocompletar: Selecione o item anterior"
  :command.auto-complete/shift-complete    "Autocompletar: Abra o item selecionado na barra lateral"
- :command.auto-complete/open-link         "Autocompletar: Abra o item selecionado no navegador"
  :command.cards/forgotten                 "Cartões: Esquecido"
  :command.cards/next-card                 "Cartões: Próximo cartão"
  :command.cards/recall                    "Cartões: Demorar um pouco para lembrar"

@@ -657,7 +657,6 @@
   :auto-complete/next           "Auto-complete: Select next item"
   :auto-complete/shift-complete "Auto-complete: Open selected item in sidebar"
   :auto-complete/meta-complete  "Auto-complete: Cmd + Enter to choose selected item"
-  :auto-complete/open-link      "Auto-complete: Open selected item in browser"
   :cards/toggle-answers         "Cards: show/hide answers/clozes"
   :cards/next-card              "Cards: next card"
   :cards/forgotten              "Cards: forgotten"

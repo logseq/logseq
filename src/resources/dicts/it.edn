@@ -205,7 +205,6 @@
  :command.auto-complete/prev "Auto completamento: Seleziona l'oggetto precedente"
  :command.auto-complete/next "Auto completamento: Seleziona l'oggetto successivo"
  :command.auto-complete/shift-complete "Auto completamento: Apri l'oggetto selezionato nel pannello laterale"
- :command.auto-complete/open-link "Auto completamento: Apri l'oggetto selezionato nel browser"
  :command.cards/toggle-answers "Carte: mostra/nascondi risposte/chiusure"
  :command.cards/next-card "Carte: prossima carta"
  :command.cards/forgotten "Carte: dimenticato"

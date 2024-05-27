@@ -612,7 +612,6 @@
  :command.auto-complete/prev                       "Automatické dokončovanie: Vybrať predchádzajúcu položku"
  :command.auto-complete/next                       "Automatické dokončovanie: Vybrať ďalšiu položku"
  :command.auto-complete/shift-complete             "Automatické dokončovanie: Otvoriť vybranú položku na bočnom paneli"
- :command.auto-complete/open-link                  "Automatické dokončovanie: Otvoriť vybranú položku v prehliadači"
  :command.cards/toggle-answers                     "Karty: Zobraziť/Skryť odpovede"
  :command.cards/next-card                          "Karty: Ďalšia karta"
  :command.cards/forgotten                          "Karty: Zabudnuté"

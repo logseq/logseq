@@ -236,7 +236,6 @@
  :command.auto-complete/prev                      "Auto uzupełnianie: Wybierz poprzednią opcję"
  :command.auto-complete/next                      "Auto uzupełnianie: Wybierz następną opcję"
  :command.auto-complete/shift-complete            "Auto uzupełnianie: Otwórz wybraną opcję w panelu bocznym"
- :command.auto-complete/open-link                 "Auto uzupełnianie: Otwórz wybraną opcję w przeglądarce"
  :command.cards/toggle-answers                    "Karty: pokaż/ukryj odpowiedzi/luki w tekście"
  :command.cards/next-card                         "Karty: następna karta"
  :command.cards/forgotten                         "Karty: zapomniane"

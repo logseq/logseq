@@ -165,9 +165,6 @@
                                              :fn      (fn [state e]
                                                         (ui-handler/auto-complete-complete state e))}
 
-   :auto-complete/open-link                 {:binding "mod+o"
-                                             :fn      ui-handler/auto-complete-open-link}
-
    :cards/toggle-answers                    {:binding "s"
                                              :fn      srs/toggle-answers}
 
@@ -942,7 +939,6 @@
       :auto-complete/complete
       :auto-complete/shift-complete
       :auto-complete/meta-complete
-      :auto-complete/open-link
       :git/commit
       :dev/show-block-data
       :dev/show-block-ast
