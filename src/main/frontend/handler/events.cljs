@@ -964,14 +964,13 @@
          pos (state/get-edit-pos)
          edit-block-or-selected (if editing-block
                                   [editing-block]
-                                  (map #(db/entity [:block/uuid %])
-                                       (state/get-selection-block-ids)))
+                                  (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
          current-block (when-let [s (state/get-current-page)]
                          (when (util/uuid-string? s)
                            (db/entity [:block/uuid (uuid s)])))
          in-block-container? (boolean edit-block-or-selected)
          blocks (or (when block [block])
-                    (seq edit-block-or-selected)
+                    edit-block-or-selected
                     (when current-block [current-block]))]
      (when (seq blocks)
        (shui/dialog-open! #(property-dialog/dialog blocks (assoc opts :in-block-container? in-block-container?))
