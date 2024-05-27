@@ -684,7 +684,7 @@
 
 (defn db-based-cycle-todo!
   [block]
-  (let [status-value (pu/get-block-property-value block :logseq.task/status)
+  (let [status-value (:logseq.task/status block)
         next-status (case (:db/ident status-value)
                       :logseq.task/status.todo
                       :logseq.task/status.doing
