@@ -4,6 +4,7 @@
 
 .ls-property-dialog {
     .ls-property-key {
-        min-height: 286px;
+        @apply overflow-y-hidden;
+        height: 286px;
     }
 }
