@@ -971,15 +971,16 @@
                            (db/entity [:block/uuid (uuid s)])))
          in-block-container? (boolean edit-block-or-selected)
          blocks (or (when block [block])
-                    edit-block-or-selected
+                    (seq edit-block-or-selected)
                     (when current-block [current-block]))]
-     (shui/dialog-open! #(property-dialog/dialog blocks (assoc opts :in-block-container? in-block-container?))
-                        {:id :property-dialog
-                         :align "start"
-                         :on-close (fn [_id]
-                                     (when-not (= (:db/id editing-block)
-                                                  (:db/id (state/get-edit-block)))
-                                       (editor-handler/edit-block! editing-block (or pos :max))))}))))
+     (when (seq blocks)
+       (shui/dialog-open! #(property-dialog/dialog blocks (assoc opts :in-block-container? in-block-container?))
+                          {:id :property-dialog
+                           :align "start"
+                           :on-close (fn [_id]
+                                       (when-not (= (:db/id editing-block)
+                                                    (:db/id (state/get-edit-block)))
+                                         (editor-handler/edit-block! editing-block (or pos :max))))})))))
 
 (rum/defc multi-tabs-dialog
   []
