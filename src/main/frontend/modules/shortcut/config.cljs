@@ -348,7 +348,7 @@
 
    :editor/add-property                     {:binding "mod+p"
                                              :fn      (fn [e]
-                                                        (.preventDefault e)
+                                                        (when e (.preventDefault e))
                                                         (state/pub-event! [:editor/new-property {}]))}
 
    :ui/toggle-brackets                      {:binding "mod+c mod+b"
@@ -405,7 +405,7 @@
                                              :fn      (fn [] (js/document.execCommand "copy"))}
 
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
-                                                         (state/get-current-repo))
+                                                        (state/get-current-repo))
                                              :binding []}
 
    :graph/open                              {:fn      #(do
@@ -425,7 +425,6 @@
                                              ;; TODO: Remove this once feature is released
                                              :inactive (not config/db-graph-enabled?)
                                              :binding false}
-
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
