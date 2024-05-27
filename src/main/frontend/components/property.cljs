@@ -444,7 +444,7 @@
                                 (keep #(when (get block (:attribute %)) (:original-name %)))
                                 set)
         exclude-properties (fn [m]
-                             (or (contains? existing-tag-alias (:block/original-name m))
+                             (or (and (not page?) (contains? existing-tag-alias (:block/original-name m)))
                                  ;; Filters out properties from being in wrong :view-context
                                  (and in-block-container? (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
