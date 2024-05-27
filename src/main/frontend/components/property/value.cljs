@@ -75,12 +75,12 @@
              value
              {:new-block-id new-block-id})]
     (p/do!
-     (shui/dialog-close!)
      (exit-edit-property)
      (let [block (db/entity [:block/uuid new-block-id])]
        (when edit-block?
          (editor-handler/edit-block! block :max {:container-id :unknown-container}))
-       block))))
+       block)
+     (shui/dialog-close!))))
 
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
