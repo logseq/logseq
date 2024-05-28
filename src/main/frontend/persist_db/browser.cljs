@@ -57,7 +57,9 @@
                                (assoc :route-data (get-route-data (:route-match state)))))
                        old-state (f prev)
                        new-state (f current)]
-                   (when (not= new-state old-state)
+                   (when (and (not= new-state old-state)
+                              (not (and (= (dissoc new-state :route-data) (dissoc old-state :route-data))
+                                        (not (contains? #{:page :page-block :home :all-journals} (:to (:route-data new-state)))))))
                      (.sync-ui-state worker (state/get-current-repo)
                                      (ldb/write-transit-str {:old-state old-state
                                                              :new-state new-state}))))))))
