@@ -104,6 +104,23 @@
             (nil? (d/entity db [:block/uuid v])))))
    av-coll))
 
+(defn- group-by-schema-attrs
+  [av-coll]
+  (let [{schema-av-coll true other-av-coll false}
+        (group-by (fn [av] (contains? #{:db/valueType :db/cardinality :db/index} (first av))) av-coll)]
+    [schema-av-coll other-av-coll]))
+
+(defn- schema-av-coll->update-schema-op
+  [block-uuid schema-av-coll]
+  (when (seq schema-av-coll)
+    [:update-schema
+     (select-keys
+      (->> schema-av-coll
+           (sort-by (fn [[_a _v t _add?]] t))
+           (keep (fn [[a v _t add?]] (when add? [a (ldb/read-transit-str v)])))
+           (apply conj {:block-uuid block-uuid}))
+      [:block-uuid :db/cardinality :db/valueType :db/index])]))
+
 (defmethod local-block-ops->remote-ops-aux :update-op
   [_ & {:keys [db block update-op left-uuid parent-uuid *remote-ops *depend-on-block-uuid-set]}]
   (let [block-uuid (:block/uuid block)
@@ -111,43 +128,50 @@
         av-coll (->> (:av-coll (last update-op))
                      (remove-redundant-av db)
                      (remove-non-exist-ref-av db))
-        depend-on-block-uuids (keep (fn [[_a v]] (when (uuid? v) v)) av-coll)]
+        [schema-av-coll other-av-coll] (group-by-schema-attrs av-coll)
+        update-schema-op (schema-av-coll->update-schema-op block-uuid schema-av-coll)
+        depend-on-block-uuids (keep (fn [[_a v]] (when (uuid? v) v)) other-av-coll)]
     (swap! *remote-ops conj
            [:update {:block-uuid block-uuid
                      :pos pos
-                     :av-coll av-coll}])
+                     :av-coll other-av-coll}])
+    (when update-schema-op
+      (swap! *remote-ops conj update-schema-op))
     (swap! *depend-on-block-uuid-set (partial apply conj) depend-on-block-uuids)))
 
 (defmethod local-block-ops->remote-ops-aux :update-page-op
-  [_ & {:keys [conn block-uuid *remote-ops]}]
+  [_ & {:keys [db block-uuid *remote-ops]}]
   (when-let [{page-name :block/name original-name :block/original-name}
-             (d/entity @conn [:block/uuid block-uuid])]
+             (d/entity db [:block/uuid block-uuid])]
     (swap! *remote-ops conj
            [:update-page {:block-uuid block-uuid
                           :page-name page-name
                           :original-name (or original-name page-name)}])))
 
 (defmethod local-block-ops->remote-ops-aux :remove-op
-  [_ & {:keys [conn remove-op *remote-ops]}]
+  [_ & {:keys [db remove-op *remote-ops]}]
   (when-let [block-uuid (:block-uuid (last remove-op))]
-    (when (nil? (d/entity @conn [:block/uuid block-uuid]))
+    (when (nil? (d/entity db [:block/uuid block-uuid]))
       (swap! *remote-ops conj [:remove {:block-uuids [block-uuid]}]))))
 
 (defmethod local-block-ops->remote-ops-aux :remove-page-op
-  [_ & {:keys [conn remove-page-op *remote-ops]}]
+  [_ & {:keys [db remove-page-op *remote-ops]}]
   (when-let [block-uuid (:block-uuid (last remove-page-op))]
-    (when (nil? (d/entity @conn [:block/uuid block-uuid]))
+    (when (nil? (d/entity db [:block/uuid block-uuid]))
       (swap! *remote-ops conj [:remove-page {:block-uuid block-uuid}]))))
 
 (defn- local-block-ops->remote-ops
-  [repo conn block-ops]
+  [db block-ops]
   (let [*depend-on-block-uuid-set (atom #{})
         *remote-ops (atom [])
         {move-op :move remove-op :remove update-op :update update-page-op :update-page remove-page-op :remove-page}
         block-ops]
+    (prn :debug0 [move-op update-op update-page-op])
     (when-let [block-uuid
                (some (comp :block-uuid last) [move-op update-op update-page-op])]
-      (when-let [block (d/entity @conn [:block/uuid block-uuid])]
+      (prn :debug1 block-uuid)
+      (when-let [block (d/entity db [:block/uuid block-uuid])]
+        (prn :debug2 block)
         (let [left-uuid (:block/uuid (ldb/get-left-sibling block))
               parent-uuid (some-> block :block/parent :block/uuid)]
           (when parent-uuid
@@ -162,7 +186,7 @@
           ;; remote-update-op
           (when update-op
             (local-block-ops->remote-ops-aux :update-op
-                                             :db @conn
+                                             :db db
                                              :block block
                                              :update-op update-op
                                              :parent-uuid parent-uuid
@@ -172,23 +196,20 @@
         ;; remote-update-page-op
         (when update-page-op
           (local-block-ops->remote-ops-aux :update-page-op
-                                           :repo repo
-                                           :conn conn
+                                           :db db
                                            :block-uuid block-uuid
                                            :*remote-ops *remote-ops))))
     ;; remote-remove-op
     (when remove-op
       (local-block-ops->remote-ops-aux :remove-op
-                                       :repo repo
-                                       :conn conn
+                                       :db db
                                        :remove-op remove-op
                                        :*remote-ops *remote-ops))
 
     ;; remote-remove-page-op
     (when remove-page-op
       (local-block-ops->remote-ops-aux :remove-page-op
-                                       :repo repo
-                                       :conn conn
+                                       :db db
                                        :remove-page-op remove-page-op
                                        :*remote-ops *remote-ops))
 
@@ -225,7 +246,7 @@
 
       (seq current-handling-block-ops)
       (let [{:keys [remote-ops depend-on-block-uuids]}
-            (local-block-ops->remote-ops repo conn current-handling-block-ops)]
+            (local-block-ops->remote-ops @conn current-handling-block-ops)]
         (recur nil nil
                (set/union (set depend-on-block-uuid-coll)
                           (op-mem-layer/intersection-block-uuids repo depend-on-block-uuids))
@@ -265,6 +286,10 @@
                            (some->> (get-in block-uuid->remote-ops [block-uuid :move])
                                     (vector :move)))
                          sorted-uuids)
+        update-schema-ops (keep
+                           (fn [[_ remote-ops]]
+                             (some->> (:update-schema remote-ops) (vector :update-schema)))
+                           block-uuid->remote-ops)
         remove-ops (merge-remove-remove-ops
                     (keep
                      (fn [[_ remote-ops]]
@@ -282,7 +307,7 @@
                          (fn [[_ remote-ops]]
                            (some->> (:remove-page remote-ops) (vector :remove-page)))
                          block-uuid->remote-ops)]
-    (concat update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
+    (concat update-page-ops remove-ops sorted-move-ops update-schema-ops update-ops remove-page-ops)))
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
