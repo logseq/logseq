@@ -634,7 +634,6 @@
           show! (fn [e]
                   (let [target (.-target e)
                         node (.closest target "a")]
-                    (js/console.dir node)
                     (when-not (or config/publishing?
                                   (util/shift-key? e)
                                   (util/meta-key? e)
