@@ -51,7 +51,14 @@
      [:map
       [:block-uuid :uuid]
       [:pos block-pos-schema]
-      [:av-coll [:sequential av-schema]]]]]])
+      [:av-coll [:sequential av-schema]]]]]
+   [:update-schema
+    [:cat :keyword
+     [:map
+      [:block-uuid :uuid]
+      [:db/cardinality {:optional true} :keyword]
+      [:db/valueType {:optional true} :keyword]
+      [:db/index {:optional true} :boolean]]]]])
 
 (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema]))
 (def to-ws-ops-decoder (m/decoder [:sequential to-ws-op-schema] mt/string-transformer))
