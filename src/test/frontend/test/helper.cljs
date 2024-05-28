@@ -274,4 +274,4 @@ This can be called in synchronous contexts as no async fns should be invoked"
   [repo block-uuid content {:keys [tags]}]
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
-    (page-handler/add-tag repo block-uuid tag)))
+    (page-handler/add-tag repo block-uuid (db/get-page tag))))

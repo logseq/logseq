@@ -15,7 +15,8 @@
             [frontend.worker.date :as date]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property.util :as db-property-util]
-            [logseq.db.frontend.property.build :as db-property-build]))
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.class :as db-class]))
 
 (defn properties-block
   [repo conn config date-formatter properties format page]
@@ -50,15 +51,14 @@
                             (when (db-property-util/built-in-has-ref-value? k)
                               [k v])))
                     (into {})))]
-          (cond-> [(merge page'
-                         (when class? {:block/type "class"}))]
-           (seq property-vals-tx-m)
-           (into (vals property-vals-tx-m))
-           true
-           (conj (merge {:block/uuid (:block/uuid page)}
+          (cond-> [(if class? (db-class/build-new-class @conn page') page')]
+            (seq property-vals-tx-m)
+            (into (vals property-vals-tx-m))
+            true
+            (conj (merge {:block/uuid (:block/uuid page)}
                        ;; FIXME: Add refs for properties?
-                        properties
-                        (db-property-build/build-properties-with-ref-values property-vals-tx-m)))))
+                         properties
+                         (db-property-build/build-properties-with-ref-values property-vals-tx-m)))))
         (let [file-page (merge page'
                                (when (seq properties) {:block/properties properties}))]
           (if (and (seq properties)

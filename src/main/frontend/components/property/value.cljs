@@ -219,15 +219,17 @@
               (or (:block/uuid (ldb/get-case-page (db/get-db) inline-class))
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))
-            class? (= :block/tags (:db/ident property))]
-        (p/let [page (page-handler/<create! page {:redirect? false
-                                                  :create-first-block? false
-                                                  :tags (if inline-class-uuid
-                                                          [inline-class-uuid]
-                                                          ;; Only 1st class b/c page normally has
-                                                          ;; one of and not all these classes
-                                                          (mapv :block/uuid (take 1 classes)))
-                                                  :class? class?})]
+            class? (= :block/tags (:db/ident property))
+            create-options {:redirect? false
+                            :create-first-block? false
+                            :tags (if inline-class-uuid
+                                    [inline-class-uuid]
+                                    ;; Only 1st class b/c page normally has
+                                    ;; one of and not all these classes
+                                    (mapv :block/uuid (take 1 classes)))}]
+        (p/let [page (if class?
+                       (page-handler/<create-class! page create-options)
+                       (page-handler/<create! page create-options))]
           (:db/id page)))
       id)))
 

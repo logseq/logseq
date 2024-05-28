@@ -512,14 +512,14 @@
         class (when create-class? (get-class-from-input @!input))]
     (p/do!
       (cond
-        create-class? (page-handler/<create! class
-                        {:redirect? false
-                         :create-first-block? false
-                         :class? true})
+        create-class?
+        (page-handler/<create-class! class
+                                     {:redirect? false
+                                      :create-first-block? false})
         create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
         create-page? (page-handler/<create! @!input {:redirect? true}))
       (if create-class?
-        (state/pub-event! [:class/configure (db/get-page class)])
+        (state/pub-event! [:class/configure (db/get-case-page class)])
         (state/close-modal!)))))
 
 (defn- get-filter-user-input
