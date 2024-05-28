@@ -30,4 +30,42 @@
                                           (tx-data=>e->a->add?->v->t (:tx-data remove-whiteboard-page-block))
                                           (map vec (:tx-data remove-whiteboard-page-block)))]
       (is (= [[:remove-page {:block-uuid block-uuid}]]
-             (map (fn [[op-type _t op-value]] [op-type op-value]) r))))))
+             (map (fn [[op-type _t op-value]] [op-type op-value]) r)))))
+
+  (testing "update-schema op"
+    (let [conn (d/conn-from-db empty-db)
+          tx-data [[:db/add 69 :db/index true]
+                   [:db/add 69 :block/uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"]
+                   [:db/add 69 :db/valueType :db.type/ref]
+                   [:db/add 69 :block/updated-at 1716882111476]
+                   [:db/add 69 :block/created-at 1716882111476]
+                   [:db/add 69 :block/schema {:type :number}]
+                   [:db/add 69 :block/format :markdown]
+                   [:db/add 69 :db/cardinality :db.cardinality/one]
+                   [:db/add 69 :db/ident :user.property/qqq]
+                   [:db/add 69 :block/type "property"]
+                   [:db/add 69 :block/order "b0T"]
+                   [:db/add 69 :block/name "qqq"]
+                   [:db/add 69 :block/original-name "qqq"]]
+          {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
+          ops (#'subject/entity-datoms=>ops db-before db-after
+                                            (tx-data=>e->a->add?->v->t tx-data)
+                                            (map vec tx-data))]
+      (is (=
+           [[:move {:block-uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"}]
+            [:update-page {:block-uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"}]
+            [:update {:block-uuid #uuid "66558abf-6512-469d-9e83-8f1ba0be9305"
+                      :av-coll
+                      [[:db/index "[\"~#'\",true]"]
+                       [:db/valueType "[\"~#'\",\"~:db.type/ref\"]"]
+                       [:block/updated-at "[\"~#'\",1716882111476]"]
+                       [:block/created-at "[\"~#'\",1716882111476]"]
+                       [:block/schema "[\"^ \",\"~:type\",\"~:number\"]"]
+                       [:db/cardinality "[\"~#'\",\"~:db.cardinality/one\"]"]
+                       [:db/ident "[\"~#'\",\"~:user.property/qqq\"]"]
+                       [:block/type "[\"~#'\",\"property\"]"]]}]]
+           (map (fn [[op-type _t op-value]]
+                  [op-type (cond-> op-value
+                             (:av-coll op-value)
+                             (assoc :av-coll (map #(take 2 %) (:av-coll op-value))))])
+                ops))))))
