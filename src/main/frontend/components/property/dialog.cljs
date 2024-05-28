@@ -1,10 +1,12 @@
 (ns frontend.components.property.dialog
   "Property && value choose"
-  (:require [rum.core :as rum]
-            [frontend.components.property :as property-component]
+  (:require [frontend.components.property :as property-component]
+            [rum.core :as rum]
+            [frontend.modules.shortcut.core :as shortcut]
             [logseq.db :as ldb]))
 
 (rum/defcs dialog <
+  shortcut/disable-all-shortcuts
   (rum/local nil ::property-value)
   {:init (fn [state]
            (assoc state ::property-key (atom (:property-key (last (:rum/args state))))))}
