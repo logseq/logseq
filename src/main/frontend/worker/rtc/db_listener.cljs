@@ -22,7 +22,8 @@
 (def ^:private watched-attrs
   #{:block/content :block/created-at :block/updated-at :block/alias
     :block/tags :block/type :block/schema :block/link :block/journal-day
-    :class/parent :class/schema.properties :property/schema.classes})
+    :class/parent :class/schema.properties :property/schema.classes
+    :db/ident :db/index :db/valueType :db/cardinality})
 
 (defn- watched-attr?
   [attr]
