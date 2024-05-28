@@ -46,4 +46,9 @@
                                :block/tags ["ref1"]}])
             op-value {:block/tags [ref-uuid2]}]
         (is (= #{[:db/retract (:db/id (d/entity db [:block/uuid block-uuid])) :block/tags [:block/uuid ref-uuid1]]}
-               (set (#'subject/remote-op-value->tx-data db block-uuid op-value))))))))
+               (set (#'subject/remote-op-value->tx-data db block-uuid op-value))))))
+    (testing ":block/updated-at"
+      (let [db (d/db-with db [{:block/uuid block-uuid
+                               :block/updated-at 1}])]
+        (is (= [[:db/retract 1 :block/updated-at 1]]
+               (#'subject/remote-op-value->tx-data db block-uuid {})))))))
