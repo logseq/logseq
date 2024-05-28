@@ -84,14 +84,6 @@
 
        (page-properties page (assoc page-opts :mode mode)))]))
 
-(rum/defc page-properties-react < rum/reactive
-  [page* page-opts]
-  (let [page (db/sub-block (:db/id page*))]
-    (when (or (outliner-property/block-has-viewable-properties? page)
-              ;; Allow class and property pages to add new property
-              (some #{"class" "property"} (:block/type page)))
-      (page-properties page page-opts))))
-
 (rum/defc mode-switch < rum/reactive
   [types *mode]
   (let [current-mode (rum/react *mode)
