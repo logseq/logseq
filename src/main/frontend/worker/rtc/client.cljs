@@ -166,12 +166,9 @@
         *remote-ops (atom [])
         {move-op :move remove-op :remove update-op :update update-page-op :update-page remove-page-op :remove-page}
         block-ops]
-    (prn :debug0 [move-op update-op update-page-op])
     (when-let [block-uuid
                (some (comp :block-uuid last) [move-op update-op update-page-op])]
-      (prn :debug1 block-uuid)
       (when-let [block (d/entity db [:block/uuid block-uuid])]
-        (prn :debug2 block)
         (let [left-uuid (:block/uuid (ldb/get-left-sibling block))
               parent-uuid (some-> block :block/parent :block/uuid)]
           (when parent-uuid
