@@ -976,6 +976,7 @@
        (shui/dialog-open! #(property-dialog/dialog blocks (assoc opts :in-block-container? in-block-container?))
                           {:id :property-dialog
                            :align "start"
+                           :content-props {:onOpenAutoFocus #(.preventDefault %)}
                            :on-close (fn [_id]
                                        (when (and (not (state/editing?)) editing-block
                                                   ;; block not changed

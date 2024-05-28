@@ -161,8 +161,11 @@
     (rum/use-effect!
      (fn []
        (when editing?
-         (.click (rum/deref *trigger-ref))))
+         (js/setTimeout
+           #(some-> (rum/deref *trigger-ref)
+              (.click)) 32)))
      [editing?])
+
     (if multiple-values?
       (shui/button
        {:class "jtrigger h-6 empty-btn"
