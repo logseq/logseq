@@ -2345,6 +2345,12 @@ Similar to re-frame subscriptions"
    (r/cached-derived-atom (:db/async-queries @state) [(get-current-repo) ::async-query (str k)]
                           (fn [s] (contains? s (str k))))))
 
+(defn get-async-query-loading
+  [k]
+  (assert (some? k))
+  (let [s @(:db/async-queries @state)]
+    (contains? s (str k))))
+
 (defn set-color-accent! [color]
   (swap! state assoc :ui/radix-color color)
   (storage/set :ui/radix-color color)
