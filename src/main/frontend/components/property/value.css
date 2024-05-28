@@ -1,10 +1,12 @@
-.property-value-inner:hover {
+.property-value-inner {
+  &:hover, .as-scalar-value-wrap:hover {
     @apply bg-gray-02 rounded transition-[background-color] duration-300;
+  }
 }
 
 .ls-property-dialog {
-    .ls-property-key {
-        @apply overflow-y-hidden;
-        height: 286px;
-    }
+  .ls-property-key {
+    @apply overflow-y-hidden;
+    height: 286px;
+  }
 }

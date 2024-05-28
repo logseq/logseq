@@ -743,14 +743,14 @@
           :checkbox
           (let [add-property! (fn []
                                 (<add-property! block (:db/ident property) (boolean (not value))))]
-            (shui/checkbox {:class "jtrigger flex flex-row items-center"
-                            :disabled config/publishing?
-                            :checked value
-                            :auto-focus true
-                            :on-checked-change add-property!
-                            :on-key-down (fn [e]
-                                           (when (= (util/ekey e) "Enter")
-                                             (add-property!)))}))
+            [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
+             (shui/checkbox {:class "jtrigger flex flex-row items-center"
+                             :disabled config/publishing?
+                             :checked value
+                             :on-checked-change add-property!
+                             :on-key-down (fn [e]
+                                            (when (= (util/ekey e) "Enter")
+                                              (add-property!)))})])
         ;; :others
           [:div.flex.flex-1
            (if editing?
