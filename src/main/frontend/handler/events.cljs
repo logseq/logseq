@@ -968,12 +968,11 @@
          current-block (when-let [s (state/get-current-page)]
                          (when (util/uuid-string? s)
                            (db/entity [:block/uuid (uuid s)])))
-         in-block-container? (boolean edit-block-or-selected)
          blocks (or (when block [block])
                     edit-block-or-selected
                     (when current-block [current-block]))]
      (when (seq blocks)
-       (shui/dialog-open! #(property-dialog/dialog blocks (assoc opts :in-block-container? in-block-container?))
+       (shui/dialog-open! #(property-dialog/dialog blocks opts)
                           {:id :property-dialog
                            :align "start"
                            :content-props {:onOpenAutoFocus #(.preventDefault %)}
