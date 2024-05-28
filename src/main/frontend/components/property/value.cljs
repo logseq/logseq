@@ -497,7 +497,7 @@
         (let [properties-cp (:properties-cp opts)]
           (when (and entity properties-cp)
             [:div.property-block-container.content.property-template
-             (properties-cp config entity (:editor-id config) (merge opts {:in-block-container? true}))]))))))
+             (properties-cp config entity (:editor-id config) opts)]))))))
 
 (defn- create-template-block!
   [block property v-block *template-instance]

@@ -282,7 +282,7 @@ a.control-link {
 }
 
 .ls-popup-closed:focus {
-    @apply font-bold outline-none;
+    @apply font-medium outline-none;
 }
 
 .positioned-properties .property-k:focus, .positioned-properties .ls-popup-closed:focus {

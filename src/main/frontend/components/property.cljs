@@ -146,7 +146,7 @@
 (rum/defc schema-type <
   shortcut/disable-all-shortcuts
   [property {:keys [*property-name *property-schema built-in? disabled?
-                    show-type-change-hints? in-block-container? block *show-new-property-config?
+                    show-type-change-hints? block *show-new-property-config?
                     default-open? page-configure? class-schema?]
              :as opts}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
@@ -157,7 +157,7 @@
                           (map (fn [type]
                                  {:label (property-type-label type)
                                   :value type})))]
-    [:div {:class (if in-block-container? "flex flex-1" "flex items-center col-span-2")}
+    [:div {:class "flex items-center col-span-2"}
      (shui/select
       (cond->
        {:default-open (boolean default-open?)
@@ -435,7 +435,7 @@
                      (reset! *property-key nil))
                    state)}
   shortcut/disable-all-shortcuts
-  [state block *property-key {:keys [class-schema? in-block-container? page? page-configure?]
+  [state block *property-key {:keys [class-schema? page? page-configure?]
                               :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
         *property-schema (::property-schema state)
@@ -446,7 +446,7 @@
         exclude-properties (fn [m]
                              (or (and (not page?) (contains? existing-tag-alias (:block/original-name m)))
                                  ;; Filters out properties from being in wrong :view-context
-                                 (and in-block-container? (= :page (get-in m [:block/schema :view-context])))
+                                 (and (not page?) (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
@@ -462,7 +462,6 @@
                                           {:*property-name *property-key
                                            :*property-schema *property-schema
                                            :default-open? true
-                                           :in-block-container? in-block-container?
                                            :block block
                                            :*show-new-property-config? *show-new-property-config?}))
              (when (and property (not class-schema?))
@@ -726,7 +725,7 @@
    :will-remount (fn [state]
                    (let [block (db/entity (:db/id (::block state)))]
                      (assoc state ::classes (async-load-classes! block))))}
-  [state _target-block {:keys [in-block-container? page-configure? class-schema?] :as opts}]
+  [state _target-block {:keys [page-configure? class-schema?] :as opts}]
   (let [id (::id state)
         block (db/sub-block (:db/id (::block state)))
         _ (doseq [class (::classes state)]
@@ -815,7 +814,7 @@
                    (not (:page-configure? opts)))
       [:div.ls-properties-area
        (cond-> {:id id}
-         (and in-block-container? class-schema?)
+         class-schema?
          (assoc :class "class-properties")
          true (assoc :tab-index 0
                      :on-key-up #(when-let [block (and (= "Escape" (.-key %))

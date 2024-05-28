@@ -100,9 +100,9 @@
 
 (defn set-property-by-shortcut!
   [shortcut]
-  ;; TODO: support setting multiple blocks property
   (let [properties (ldb/get-all-properties (db/get-db))
         ;; TODO: what if multiple properties have the same shortcut?
+        ;; maybe picking a property first?
         property (some (fn [p] (when (= shortcut (get-in p [:block/schema :shortcut])) p)) properties)]
     (when property
       (state/pub-event! [:editor/new-property {:property-key (:block/original-name property)}]))))
