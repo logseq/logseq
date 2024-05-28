@@ -634,8 +634,7 @@
                              (property-value-select-page block property select-opts' opts))])
           trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
           show! (fn [e]
-                  (let [target (.-target e)
-                        node (.closest target "a")]
+                  (let [target (.-target e)]
                     (when-not (or config/publishing?
                                   (util/shift-key? e)
                                   (util/meta-key? e)
