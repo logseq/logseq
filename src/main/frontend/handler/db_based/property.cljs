@@ -41,11 +41,12 @@
    {:outliner-op :create-property-text-block}
     (outliner-op/create-property-text-block! block-id property-id value opts)))
 
-(defn collapse-expand-block-property!
-  [block-id property-id collapse?]
-  (ui-outliner-tx/transact!
-   {:outliner-op :collapse-expand-block-property}
-   (outliner-op/collapse-expand-block-property! block-id property-id collapse?)))
+(comment
+  (defn collapse-expand-block-property!
+    [block-id property-id collapse?]
+    (ui-outliner-tx/transact!
+     {:outliner-op :collapse-expand-block-property}
+     (outliner-op/collapse-expand-block-property! block-id property-id collapse?))))
 
 (defn batch-set-property!
   [block-id property-id value]

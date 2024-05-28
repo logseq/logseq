@@ -175,27 +175,17 @@
             (when *property-schema
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
-                             (update-schema-fn property-schema))
-                  repo (state/get-current-repo)]
+                             (update-schema-fn property-schema))]
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
                  (components-pu/update-property! property property-name schema)
-                 (when block
-                   (if (= type :default)
-                     (when (and (not add-class-property?)
-
-                                (not (seq (:property/closed-values property))))
-                       (pv/<create-new-block! block property ""))
-                     (p/do!
-                      (property-handler/set-block-property! repo (:block/uuid block)
-                                                            (:db/ident property)
-                                                            (if (= (get-in property [:block/schema :type]) :checkbox)
-                                                              false
-                                                              :logseq.property/empty-placeholder))
-                      (shui/dialog-close!)))))))))}
+                 (when (and block (= type :default)
+                            (not add-class-property?)
+                            (not (seq (:property/closed-values property))))
+                   (pv/<create-new-block! block property "")))))))}
 
 ;; only set when in property configure modal
         (and *property-name (:type property-schema))
@@ -431,8 +421,13 @@
   (rum/local false ::show-new-property-config?)
   (rum/local {} ::property-schema)
   {:will-unmount (fn [state]
-                   (when-let [*property-key (nth (:rum/args state) 1)]
-                     (reset! *property-key nil))
+                   (let [args (:rum/args state)
+                         *property-key (second args)
+                         {:keys [original-block edit-original-block]} (last args)]
+                     (when *property-key (reset! *property-key nil))
+                     (when (and original-block edit-original-block
+                                (not= (:db/id original-block) (:db/id (state/get-edit-block)))) ; new block created
+                       (edit-original-block)))
                    state)}
   shortcut/disable-all-shortcuts
   [state block *property-key {:keys [class-schema? page? page-configure?]
@@ -475,26 +470,24 @@
                            (when property
                              (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
                                    type (get-in property [:block/schema :type])]
-                               (p/do!
-                                (when property
-                                  (cond
-                                    add-class-property?
+                               (when property
+                                 (cond
+                                   add-class-property?
+                                   (p/do!
                                     (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
                                                                                       :exit-edit? page-configure?})
+                                    (shui/dialog-close!))
 
-                                    (and (= :default type)
-                                         (not (seq (:property/closed-values property))))
+                                   (and (= :default type)
+                                        (not (seq (:property/closed-values property))))
+                                   (p/do!
                                     (pv/<create-new-block! block property "")
+                                    (shui/dialog-close!))
 
-                                    (or (not= :default type)
-                                        (and (= :default type) (seq (:property/closed-values property))))
-                                    (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block)
-                                                                          (:db/ident property)
-                                                                          (if (= (get-in property [:block/schema :type]) :checkbox)
-                                                                            false
-                                                                            :logseq.property/empty-placeholder))))
-                                (shui/dialog-close!))))))
-
+                                   (or (not= :default type)
+                                       (and (= :default type) (seq (:property/closed-values property))))
+                                   (p/do!
+                                    (reset! *show-new-property-config? false))))))))
              input-opts {}]
          (property-select exclude-properties on-chosen input-opts)))]))
 

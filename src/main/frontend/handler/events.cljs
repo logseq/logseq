@@ -970,18 +970,20 @@
                            (db/entity [:block/uuid (uuid s)])))
          blocks (or (when block [block])
                     edit-block-or-selected
-                    (when current-block [current-block]))]
+                    (when current-block [current-block]))
+         opts' (cond-> opts
+                 editing-block
+                 (assoc :original-block editing-block
+                        :edit-original-block
+                        (fn [{:keys [editing-default-property?]}]
+                          (when (and (not (state/editing?)) editing-block
+                                     (not editing-default-property?))
+                            (editor-handler/edit-block! editing-block (or pos :max))))))]
      (when (seq blocks)
-       (shui/dialog-open! #(property-dialog/dialog blocks opts)
+       (shui/dialog-open! #(property-dialog/dialog blocks opts')
                           {:id :property-dialog
                            :align "start"
-                           :content-props {:onOpenAutoFocus #(.preventDefault %)}
-                           :on-close (fn [_id]
-                                       (when (and (not (state/editing?)) editing-block
-                                                  ;; block not changed
-                                                  (= (:block/tx-id (first blocks))
-                                                     (:block/tx-id (db/entity (:db/id blocks)))))
-                                         (editor-handler/edit-block! editing-block (or pos :max))))})))))
+                           :content-props {:onOpenAutoFocus #(.preventDefault %)}})))))
 
 (rum/defc multi-tabs-dialog
   []
