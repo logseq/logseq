@@ -61,10 +61,6 @@
       ;; closed values
       (seq (:property/closed-values property))))
 
-(defn exit-edit-property
-  []
-  (state/clear-edit!))
-
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
@@ -75,11 +71,9 @@
              value
              {:new-block-id new-block-id})]
     (p/do!
-     (exit-edit-property)
-     (let [block (db/entity [:block/uuid new-block-id])]
+      (let [block (db/entity [:block/uuid new-block-id])]
        (when edit-block?
-         (editor-handler/edit-block! block :max {:container-id :unknown-container}))
-       block)
+         (editor-handler/edit-block! block :max {:container-id :unknown-container})))
      (shui/dialog-close!))))
 
 (defn <add-property!
@@ -101,8 +95,7 @@
             (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?
         (shui/popup-hide!)
-        (shui/dialog-close!)
-        (exit-edit-property))))))
+        (shui/dialog-close!))))))
 
 (defn- add-or-remove-property-value
   [block property value selected?]
@@ -114,8 +107,7 @@
        (when (or (not many?)
                  ;; values will be cleared
                  (and many? (<= (count (get block (:db/ident property))) 1)))
-         (shui/popup-hide!)
-         (exit-edit-property))))))
+         (shui/popup-hide!))))))
 
 (rum/defc calendar-inner <
   {:will-unmount (fn [state]
@@ -138,7 +130,6 @@
                                                    :create-first-block? false}))
                  (when (fn? on-change)
                    (on-change (db/get-case-page journal)))
-                 (exit-edit-property)
                  (shui/dialog-close!))))))]
     (shui/calendar
      (cond->
@@ -206,8 +197,7 @@
                                       (let [repo (state/get-current-repo)]
                                         (property-handler/set-block-property! repo (:block/uuid block)
                                                                               (:db/ident property)
-                                                                              (:db/id page))
-                                        (exit-edit-property)))}))))
+                                                                              (:db/id page))))}))))
 
 (defn- <create-page-if-not-exists!
   [property classes page]
@@ -261,8 +251,7 @@
                (p/do!
                 (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block)
                                                          (:db/ident property))
-                (shui/popup-hide!)
-                (exit-edit-property))
+                (shui/popup-hide!))
                (f chosen selected?)))]
     (select/select (assoc opts
                           :selected-choices selected-choices
@@ -368,9 +357,7 @@
   [block property opts
    {:keys [*show-new-property-config?]}]
   (let [input-opts (fn [_]
-                     {:on-blur (fn []
-                                 (exit-edit-property))
-                      :on-click (fn []
+                     {:on-click (fn []
                                   (when *show-new-property-config?
                                     (reset! *show-new-property-config? false)))
                       :on-key-down
@@ -378,7 +365,6 @@
                         (case (util/ekey e)
                           "Escape"
                           (do
-                            (exit-edit-property)
                             (shui/dialog-close!)
                             (when-let [f (:on-chosen opts)] (f)))
                           nil))})
@@ -399,7 +385,6 @@
               :template-id (:db/id template)})
           new-block (db/entity [:block/uuid new-block-id])]
     (shui/popup-hide!)
-    (exit-edit-property)
     new-block))
 
 (rum/defcs select < rum/reactive
@@ -469,7 +454,6 @@
                      :on-chosen on-chosen
                      :input-opts (fn [_]
                                    {:on-blur (fn []
-                                               (exit-edit-property)
                                                (when-let [f (:on-chosen select-opts)] (f)))
                                     :on-click (fn []
                                                 (when *show-new-property-config?
@@ -479,7 +463,6 @@
                                       (case (util/ekey e)
                                         "Escape"
                                         (do
-                                          (exit-edit-property)
                                           (shui/dialog-close!)
                                           (when-let [f (:on-chosen select-opts)] (f)))
                                         nil))})})))))

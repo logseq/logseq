@@ -189,13 +189,13 @@
 
                                 (not (seq (:property/closed-values property))))
                        (pv/<create-new-block! block property ""))
-                     (property-handler/set-block-property! repo (:block/uuid block)
-                                                           (:db/ident property)
-                                                           (if (= (get-in property [:block/schema :type]) :checkbox)
-                                                             false
-                                                             :logseq.property/empty-placeholder))))
-                 (when block (pv/exit-edit-property))
-                 (shui/dialog-close!))))))}
+                     (p/do!
+                      (property-handler/set-block-property! repo (:block/uuid block)
+                                                            (:db/ident property)
+                                                            (if (= (get-in property [:block/schema :type]) :checkbox)
+                                                              false
+                                                              :logseq.property/empty-placeholder))
+                      (shui/dialog-close!)))))))))}
 
 ;; only set when in property configure modal
         (and *property-name (:type property-schema))
@@ -485,16 +485,18 @@
 
                                     (and (= :default type)
                                          (not (seq (:property/closed-values property))))
-                                    (pv/<create-new-block! block property "")))
-                                (pv/exit-edit-property))))))
+                                    (pv/<create-new-block! block property "")
 
-             input-opts {:on-blur (fn [] (pv/exit-edit-property))
-                         :on-key-down
-                         (fn [e]
-                           (case (util/ekey e)
-                             "Escape"
-                             (pv/exit-edit-property)
-                             nil))}]
+                                    (or (not= :default type)
+                                        (and (= :default type) (seq (:property/closed-values property))))
+                                    (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block)
+                                                                          (:db/ident property)
+                                                                          (if (= (get-in property [:block/schema :type]) :checkbox)
+                                                                            false
+                                                                            :logseq.property/empty-placeholder))))
+                                (shui/dialog-close!))))))
+
+             input-opts {}]
          (property-select exclude-properties on-chosen input-opts)))]))
 
 (rum/defcs new-property < rum/reactive

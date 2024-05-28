@@ -977,8 +977,10 @@
                           {:id :property-dialog
                            :align "start"
                            :on-close (fn [_id]
-                                       (when-not (= (:db/id editing-block)
-                                                    (:db/id (state/get-edit-block)))
+                                       (when (and (not (state/editing?)) editing-block
+                                                  ;; block not changed
+                                                  (= (:block/tx-id (first blocks))
+                                                     (:block/tx-id (db/entity (:db/id blocks)))))
                                          (editor-handler/edit-block! editing-block (or pos :max))))})))))
 
 (rum/defc multi-tabs-dialog
