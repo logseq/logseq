@@ -110,10 +110,10 @@
 ;; components
 (rum/defc modal-inner
   [config]
-  (let [{:keys [id title description content footer on-open-change align open?]} config
+  (let [{:keys [id title description content footer on-open-change align open? root-props content-props]} config
         props (dissoc config
                 :id :title :description :content :footer
-                :align :on-open-change :open?)
+                :align :on-open-change :open? :root-props :content-props)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (rum/use-effect!
@@ -123,14 +123,15 @@
       [open?])
 
     (dialog
-      {:key            (str "modal-" id)
-       :open           open?
-       :on-open-change (fn [v]
-                         (let [set-open! #(update-modal! id :open? %)]
-                           (if (fn? on-open-change)
-                             (on-open-change {:value v :set-open! set-open!})
-                             (set-open! v))))}
-      (dialog-content props
+      (merge root-props
+        {:key (str "modal-" id)
+         :open open?
+         :on-open-change (fn [v]
+                           (let [set-open! #(update-modal! id :open? %)]
+                             (if (fn? on-open-change)
+                               (on-open-change {:value v :set-open! set-open!})
+                               (set-open! v))))})
+      (dialog-content (merge props content-props)
         (when title
           (dialog-header
             (when title (dialog-title title))
@@ -152,8 +153,8 @@
       [open?])
 
     (alert-dialog
-      {:key            (str "alert-" id)
-       :open           open?
+      {:key (str "alert-" id)
+       :open open?
        :on-open-change #(update-modal! id :open? %)}
       (alert-dialog-content props
         (alert-dialog-header
@@ -176,18 +177,18 @@
   (let [{:keys [deferred]} config]
     (alert-inner
       (assoc config :footer
-             [:<>
-              (base/button
-                {:key "cancel"
-                 :on-click #(do (close!) (p/reject! deferred false))
-                 :variant :outline
-                 :size :sm}
-                "Cancel")
-              (base/button
-                {:key "ok"
-                 :on-click #(do (close!) (p/resolve! deferred true))
-                 :size :sm
-                 } "OK")]))))
+        [:<>
+         (base/button
+           {:key "cancel"
+            :on-click #(do (close!) (p/reject! deferred false))
+            :variant :outline
+            :size :sm}
+           "Cancel")
+         (base/button
+           {:key "ok"
+            :on-click #(do (close!) (p/resolve! deferred true))
+            :size :sm
+            } "OK")]))))
 
 (rum/defc install-modals
   < rum/static
