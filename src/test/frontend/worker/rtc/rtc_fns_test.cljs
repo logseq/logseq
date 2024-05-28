@@ -76,7 +76,7 @@
       (is (empty? r)))))
 
 
-(deftest ^:fix-me gen-remote-ops-test
+(deftest gen-remote-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         [uuid1 uuid2 uuid3 uuid4] (repeatedly random-uuid)
@@ -91,23 +91,22 @@
       conn
       [{:block/uuid uuid2 :block/content "uuid2-block"}
        {:block/uuid uuid3 :block/content "uuid3-block"
-        :block/left [:block/uuid uuid2]
         :block/parent [:block/uuid uuid1]}
        {:block/uuid uuid4 :block/content "uuid4-block"
-        :block/left [:block/uuid uuid3]
         :block/parent [:block/uuid uuid1]}]
       (ldb/get-page @conn  "gen-remote-ops-test")
       {:sibling? true :keep-uuid? true}))
 
     (op-mem-layer/init-empty-ops-store! repo)
-    (op-mem-layer/add-ops! repo [["move" {:block-uuid (str uuid2) :epoch 1}]
-                                 ["move" {:block-uuid (str uuid4) :epoch 2}]
-                                 ["move" {:block-uuid (str uuid3) :epoch 3}]
-                                 ["update" {:block-uuid (str uuid4) :epoch 4}]])
+    (op-mem-layer/add-ops! repo [[:move 1 {:block-uuid uuid2}]
+                                 [:move 2 {:block-uuid uuid4}]
+                                 [:move 3 {:block-uuid uuid3}]
+                                 [:update 4 {:block-uuid uuid4
+                                             :av-coll [[:block/content (ldb/write-transit-str "uuid4-block") 4 true]]}]])
     (let [_ (op-mem-layer/new-branch! repo)
-          r1 (#'r.client/gen-block-uuid->remote-ops repo conn "user-uuid" :n 1)
+          r1 (#'r.client/gen-block-uuid->remote-ops repo conn :n 1)
           _ (op-mem-layer/rollback! repo)
-          r2 (#'r.client/gen-block-uuid->remote-ops repo conn "user-uuid" :n 2)]
+          r2 (#'r.client/gen-block-uuid->remote-ops repo conn :n 2)]
       (is (= {uuid2 [:move]}
              (update-vals r1 keys)))
       (is (= {uuid2 [:move]
