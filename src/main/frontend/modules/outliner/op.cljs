@@ -77,10 +77,11 @@
   (op-transact!
    [:create-property-text-block [block-id property-id value opts]]))
 
-(defn collapse-expand-block-property!
-  [block-id property-id collapse?]
-  (op-transact!
-   [:collapse-expand-block-property [block-id property-id collapse?]]))
+(comment
+  (defn collapse-expand-block-property!
+    [block-id property-id collapse?]
+    (op-transact!
+     [:collapse-expand-block-property [block-id property-id collapse?]])))
 
 (defn batch-set-property!
   [block-ids property-id value]
