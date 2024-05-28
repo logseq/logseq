@@ -12,3 +12,7 @@ logseq.db.frontend.rules/rules
 logseq.db.frontend.rules/rules-dependencies
 ;; API
 logseq.db.frontend.inputs/resolve-input
+;; API
+logseq.db.frontend.class/build-new-class
+;; API
+logseq.db.frontend.db-ident/ensure-unique-db-ident

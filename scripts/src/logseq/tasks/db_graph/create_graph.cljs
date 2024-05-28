@@ -17,7 +17,9 @@
             [nbb.classpath :as cp]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.order :as db-order]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.db-ident :as db-ident]))
 
 (defn- find-on-classpath [rel-path]
   (some (fn [dir]
@@ -241,7 +243,7 @@
   (let [property-idents (->> (keys properties)
                              (map #(vector %
                                            (if graph-namespace
-                                             (db-property/create-db-ident-from-name (str (name graph-namespace) ".property")
+                                             (db-ident/create-db-ident-from-name (str (name graph-namespace) ".property")
                                                                                     (name %))
                                              (db-property/create-user-property-ident-from-name (name %)))))
                              (into {}))
@@ -249,9 +251,9 @@
         class-idents (->> (keys classes)
                           (map #(vector %
                                         (if graph-namespace
-                                          (db-property/create-db-ident-from-name (str (name graph-namespace) ".class")
+                                          (db-ident/create-db-ident-from-name (str (name graph-namespace) ".class")
                                                                                  (name %))
-                                          (db-property/create-db-ident-from-name "user.class" (name %)))))
+                                          (db-class/create-user-class-ident-from-name (name %)))))
                           (into {}))
         _ (assert (= (count (set (vals class-idents))) (count classes)) "All class db-idents must be unique")
         all-idents (merge property-idents class-idents)]

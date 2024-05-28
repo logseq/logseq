@@ -236,7 +236,7 @@
     page-or-block-attrs)))
 
 (def class-attrs
-  [[:db/ident {:optional true} class-ident]
+  [[:db/ident class-ident]
    [:class/parent {:optional true} :int]
    [:class/schema.properties {:optional true} [:set :int]]])
 

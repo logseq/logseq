@@ -139,6 +139,8 @@
              logseq.common.util.macro macro-util
              logseq.db ldb
              logseq.db.frontend.content db-content
+             logseq.db.frontend.class db-class
+             logseq.db.frontend.db-ident db-ident
              logseq.db.frontend.inputs db-inputs
              logseq.db.frontend.order db-order
              logseq.db.frontend.property db-property

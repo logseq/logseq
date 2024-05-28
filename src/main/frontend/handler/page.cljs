@@ -41,11 +41,23 @@
             [logseq.graph-parser.db :as gp-db]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.db.frontend.class :as db-class]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
+
+(defn <create-class!
+  "Creates a class page and provides class-specific error handling"
+  [title options]
+  (-> (page-common-handler/<create! title (assoc options :class? true))
+      (p/catch (fn [e]
+                 (when (= :notification (:type (ex-data e)))
+                   (notification/show! (get-in (ex-data e) [:payload :message])
+                                       (get-in (ex-data e) [:payload :type])))
+                 ;; Re-throw as we don't want to proceed with a nonexistent class
+                 (throw e)))))
 
 (defn <unfavorite-page!
   [page-name]
@@ -278,13 +290,23 @@
     (let [current-selected (util/get-selected-text)]
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
-(defn add-tag [repo block-id tag & {:keys [tag-entity]}]
-  (let [tag-entity (or tag-entity (db/get-page tag))
-        tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
-                 [:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
-                 ;; TODO: Should classes counted as refs
-                 [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
-    (db/transact! repo tx-data {:outliner-op :save-block})))
+(defn add-tag [repo block-id tag-entity]
+  (try
+    (let [tx-data (cond-> []
+                    ;; Don't rebuild an existing class as it changes their :db/ident
+                    (not (contains? (:block/type tag-entity) "class"))
+                    (conj (db-class/build-new-class (conn/get-db)
+                                                    (select-keys tag-entity [:db/id :block/original-name])))
+                    true
+                    (into [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
+                         ;; TODO: Should classes counted as refs
+                           [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]))]
+      (db/transact! repo tx-data {:outliner-op :save-block}))
+    (catch :default e
+      (if (= :notification (:type (ex-data e)))
+        (notification/show! (get-in (ex-data e) [:payload :message])
+                            (get-in (ex-data e) [:payload :type]))
+        (throw e)))))
 
 (defn on-chosen-handler
   [input id _q pos format]
@@ -326,12 +348,14 @@
                (when (and (not (string/blank? tag)) (:block/uuid edit-block))
                  (p/let [tag-entity (get-page-fn tag)
                          _ (when-not tag-entity
-                             (<create! tag {:redirect? false
-                                            :create-first-block? false
-                                            :class? class?}))
+                             (if class?
+                               (<create-class! tag {:redirect false
+                                                    :create-first-block? false})
+                               (<create! tag {:redirect? false
+                                              :create-first-block? false})))
                          tag-entity (get-page-fn tag)]
                    (when class?
-                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag {:tag-entity tag-entity}))))))
+                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))
            (editor-handler/insert-command! id
                                            (if class? "" (str "#" wrapped-tag))
                                            format

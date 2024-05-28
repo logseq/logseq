@@ -11,6 +11,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
@@ -85,28 +86,6 @@
      (when (and old-ref-type? (not ref-type?))
        [:db/retract (:db/id property) :db/valueType])]))
 
-(defn ^:api ensure-unique-db-ident
-  "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
-  unique by adding a suffix with a unique number e.g. :db-ident-1 :db-ident-2"
-  [db db-ident]
-  (if (d/entity db db-ident)
-    (let [existing-idents
-          (d/q '[:find [?ident ...]
-                 :in $ ?ident-name
-                 :where
-                 [?b :db/ident ?ident]
-                 [(str ?ident) ?str-ident]
-                 [(clojure.string/starts-with? ?str-ident ?ident-name)]]
-               db
-               (str db-ident "-"))
-          new-ident (if-let [max-num (->> existing-idents
-                                          (keep #(parse-long (string/replace-first (str %) (str db-ident "-") "")))
-                                          (apply max))]
-                      (keyword (namespace db-ident) (str (name db-ident) "-" (inc max-num)))
-                      (keyword (namespace db-ident) (str (name db-ident) "-1")))]
-      new-ident)
-    db-ident))
-
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
    with the given property-id or :property-name option. When a property is created
@@ -153,7 +132,7 @@
         property)
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
-            db-ident' (ensure-unique-db-ident @conn db-ident)]
+            db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
         (ldb/transact! conn

@@ -2,7 +2,8 @@
   "Property related fns for DB graphs and frontend/datascript usage"
   (:require [datascript.core :as d]
             [clojure.string :as string]
-            [flatland.ordered.map :refer [ordered-map]]))
+            [flatland.ordered.map :refer [ordered-map]]
+            [logseq.db.frontend.db-ident :as db-ident]))
 
 ;; Main property vars
 ;; ==================
@@ -239,27 +240,10 @@
             (when (= (closed-value-name e) value-name)
               e)) values)))
 
-;; TODO: db ident should obey clojure's rules for keywords
-(defn create-db-ident-from-name
-  "Creates a :db/ident by sanitizing the given name.
-
-   NOTE: Only use this when creating a db-ident for a string name. Using this
-   in read-only contexts like querying can result in db-ident conflicts"
-  [user-namespace name-string]
-  (let [n (-> name-string
-              (string/replace #"(^:\s*|\s*:$)" "")
-              (string/replace #"\s*:\s*$" "")
-              (string/replace-first #"^\d+" "")
-              (string/replace " " "-")
-              (string/replace "#" "")
-              (string/trim))]
-    (assert (seq n) "name is not empty")
-    (keyword user-namespace n)))
-
 (defn create-user-property-ident-from-name
   "Creates a property :db/ident for a default user namespace"
   [property-name]
-  (create-db-ident-from-name "user.property" property-name))
+  (db-ident/create-db-ident-from-name "user.property" property-name))
 
 (defn get-class-ordered-properties
   [class-entity]
