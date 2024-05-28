@@ -602,10 +602,12 @@
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)
-                 *loading? (atom true)]
+                 *loading? (atom (state/get-async-query-loading page-name'))]
              (p/do!
-              (db-async/<get-block (state/get-current-repo) page-name')
-              (reset! *loading? false)
+              (when-not @*loading?
+                (db-async/<get-block (state/get-current-repo) page-name'))
+              (when-not @*loading?
+                (reset! *loading? false))
               (route-handler/update-page-title-and-label! (state/get-route-match)))
              (assoc state
                     ::page-name page-name'

@@ -12,7 +12,7 @@
   (let [;; Don't edit the journal title
         repo (state/sub :git/current-repo)]
     (page/page {:repo repo
-                :page-name (:block/name page)})))
+                :page-name (str (:block/uuid page))})))
 
 (rum/defc journals < rum/reactive
   [latest-journals]
