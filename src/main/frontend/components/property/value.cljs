@@ -64,14 +64,16 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (p/let [new-block-id (db/new-block-id)
-          _ (db-property-handler/create-property-text-block!
-             (:db/id block)
-             (:db/id property)
-             value
-             {:new-block-id new-block-id})]
+  (p/let [existing-value (get block (:db/ident property))
+          new-block-id (when-not existing-value (db/new-block-id))
+          _ (when-not existing-value
+              (db-property-handler/create-property-text-block!
+               (:db/id block)
+               (:db/id property)
+               value
+               {:new-block-id new-block-id}))]
     (p/do!
-      (let [block (db/entity [:block/uuid new-block-id])]
+     (let [block (or existing-value (db/entity [:block/uuid new-block-id]))]
        (when edit-block?
          (editor-handler/edit-block! block :max {:container-id :unknown-container})))
      (shui/dialog-close!))))
