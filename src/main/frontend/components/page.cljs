@@ -531,10 +531,6 @@
                     (plugins/hook-ui-slot :page-head-actions-slotted nil)
                     (plugins/hook-ui-items :pagebar)]))])
 
-            (when (and db-based? (not block?) (:block/tags page))
-              [:div.cursor-pointer.px-1
-               (db-page/tags page)])
-
             (cond
               (and db-based? (not block?))
               (db-page/page-info page

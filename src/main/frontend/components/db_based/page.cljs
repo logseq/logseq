@@ -49,15 +49,6 @@
                                            (str edit-input-id-prefix "-page")
                                            (assoc configure-opts :class-schema? false :page? true)))])))
 
-(rum/defc tags
-  [page]
-  (let [tags-property (db/entity :block/tags)]
-    (pv/property-value page tags-property
-                       (:block/tags page)
-                       {:page-cp (fn [config page]
-                                   (component-block/page-cp (assoc config :tag? true) page))
-                        :inline-text component-block/inline-text})))
-
 (rum/defcs page-configure < rum/reactive
   [state page *mode]
   (let [*mode *mode
@@ -119,8 +110,11 @@
         types (:block/type page)
         class? (contains? types "class")
         collapsed? (not @*show-info?)
-        has-properties? (seq (remove (set (keys db-property/built-in-properties))
-                                     (keys (:block/properties page))))
+        has-properties? (or
+                         (seq (:block/tags page))
+                         (seq (:block/alias page))
+                         (seq (remove (set (keys db-property/built-in-properties))
+                                      (keys (:block/properties page)))))
         show-info? (or @*show-info? has-properties?)]
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show

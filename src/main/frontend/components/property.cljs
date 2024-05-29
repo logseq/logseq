@@ -417,16 +417,20 @@
 (rum/defc property-icon
   [property property-type]
   (let [type (or (get-in property [:block/schema :type] property-type) :default)
-        icon (case type
-               :number "hash"
-               :date "calendar"
-               :checkbox "checkbox"
-               :url "link"
-               :page "file"
-               ;; FIXME: upgrade tabler icons
-               :object "topology-star"
-               :template "template"
-               "letter-t")]
+        ident (:db/ident property)
+        icon (cond
+               (= ident :block/tags)
+               "hash"
+               :else
+               (case type
+                 :number "number"
+                 :date "calendar"
+                 :checkbox "checkbox"
+                 :url "link"
+                 :page "file"
+                 :object "topology-star"
+                 :template "template"
+                 "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))
 
