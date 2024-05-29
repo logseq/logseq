@@ -173,4 +173,6 @@
          ;; Remove self-ref to avoid recursive bugs
          (remove #(and (:db/ident block)
                        (= % (:db/ident block))))
+         ;; Remove alias ref to avoid recursive display bugs
+         (remove #(contains? (set (map :db/id (:block/alias block))) %))
          (remove nil?))))
