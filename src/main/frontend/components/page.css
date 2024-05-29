@@ -381,7 +381,6 @@ html.is-native-ios {
 }
 
 .page-info {
-  @apply border rounded-md;
   padding-left: 1px;
 
   &-inner {
