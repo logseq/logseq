@@ -3003,7 +3003,7 @@
 
        (when (and db-based? (not collapsed?))
          [:div {:style {:padding-left 29}}
-          (db-properties-cp config block edit-input-id {})])
+          (db-properties-cp config block edit-input-id {:in-block-container? true})])
 
        (when-not (or (:hide-children? config) in-whiteboard?)
          (let [config' (-> (update config :level inc)
