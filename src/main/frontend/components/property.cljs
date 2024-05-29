@@ -181,9 +181,11 @@
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
                  (components-pu/update-property! property property-name schema)
-                 (when (and block (= type :default)
-                            (not add-class-property?)
-                            (not (seq (:property/closed-values property))))
+                 (cond
+                   add-class-property?
+                   (shui/dialog-close!)
+                   (and block (= type :default)
+                        (not (seq (:property/closed-values property))))
                    (pv/<create-new-block! block property "")))))))}
 
 ;; only set when in property configure modal
@@ -230,7 +232,7 @@
                    (when-let [*show-property-config? (:*show-new-property-config? (last (:rum/args state)))]
                      (reset! *show-property-config? false))
                    state)}
-  [state property {:keys [inline-text add-new-property?] :as opts}]
+  [state property {:keys [add-new-property?] :as opts}]
   (let [values (rum/react (::values state))]
     (when-not (= :loading values)
       (let [*property-name (::property-name state)
@@ -372,21 +374,17 @@
                                     (swap! *property-schema assoc :hide? (not hide?))
                                     (save-property-fn))})])
 
-          (let [description (:description @*property-schema)]
-            (when (or (not disabled?)
-                      (and disabled? (not (string/blank? description))))
-              [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-               [:label "Description:"]
-               [:div.col-span-3
-                (if (and disabled? inline-text)
-                  (inline-text {} :markdown description)
-                  [:div.mt-1
-                   (shui/textarea
-                    {:on-change (fn [e]
-                                  (swap! *property-schema assoc :description (util/evalue e)))
-                     :on-blur save-property-fn
-                     :disabled disabled?
-                     :default-value description})])]]))]]))))
+          (let [description (or (:description @*property-schema) "")]
+            [:div.grid.grid-cols-4.gap-1.items-start.leading-8
+             [:label "Description:"]
+             [:div.col-span-3
+              [:div.mt-1
+               (shui/textarea
+                {:on-change (fn [e]
+                              (swap! *property-schema assoc :description (util/evalue e)))
+                 :on-blur save-property-fn
+                 :disabled disabled?
+                 :default-value description})]]])]]))))
 
 (rum/defc property-select
   [exclude-properties on-chosen input-opts]
@@ -412,7 +410,7 @@
                       :new-case-sensitive? true
                       :show-new-when-not-exact-match? true
                       :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
-                      :input-default-placeholder "Add property"
+                      :input-default-placeholder "Add or change property"
                       :on-chosen on-chosen
                       :input-opts input-opts})]]))
 
