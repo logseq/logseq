@@ -501,9 +501,9 @@
 
   ;; page ops
   (page-search
-   [this repo q limit]
+   [this repo q options]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (search/page-search repo @conn q limit)))
+     (search/page-search repo @conn q (bean/->clj options))))
 
   (page-rename
    [this repo page-uuid-str new-name]

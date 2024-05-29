@@ -1650,13 +1650,13 @@
         (text-util/wrapped-by? value pos before end)))))
 
 (defn <get-matched-pages
-  "Return matched page names"
+  "Return matched page names that are not built-in pages"
   [q]
   (p/let [block (state/get-edit-block)
           editing-page (and block
                             (when-let [page-id (:db/id (:block/page block))]
                               (:block/name (db/entity page-id))))
-          pages (search/page-search q)]
+          pages (search/page-search q {:built-in? false})]
     (if editing-page
       ;; To prevent self references
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)

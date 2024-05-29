@@ -290,6 +290,7 @@
   (when p
     {:id (str (:block/uuid p))
      :name (:block/name p)
+     :built-in? (boolean (:logseq.property/built-in? p))
      :original-name (:block/original-name p)}))
 
 (defn- hidden-page?
@@ -399,8 +400,13 @@
       (seq (worker-util/search-normalize q true))))))
 
 (defn page-search
-  "Return a list of page names that match the query"
-  [repo db q limit]
+  "Return a list of page names that match the query. Takes the following
+  options:
+   * :limit - Number of pages to limit search results. Defaults to 100
+   * :built-in?  - Whether to return built-in pages for db graphs. Defaults to true"
+  [repo db q {:keys [limit built-in?]
+              :or {limit 100
+                   built-in? true}}]
   (when repo
     (let [q (worker-util/search-normalize q true)
           q (fuzzy/clean-str q)
@@ -408,9 +414,13 @@
       (when-not (string/blank? q)
         (let [indice (or (get-in @indices [repo :pages])
                          (build-page-indice repo db))
-              result (->> (.search indice q (clj->js {:limit limit}))
-                          (bean/->clj)
-                          (remove #(nil? (get-in % [:item :original-name]))))]
+              result (cond->>
+                      (->> (.search indice q (clj->js {:limit limit}))
+                           (bean/->clj)
+                           (remove #(nil? (get-in % [:item :original-name]))))
+
+                       (and (sqlite-util/db-based-graph? repo) (= false built-in?))
+                       (remove #(get-in % [:item :built-in?])))]
           (->> result
                (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :original-name]))))
                (map
