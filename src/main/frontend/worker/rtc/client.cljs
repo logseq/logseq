@@ -308,7 +308,7 @@
                          (fn [[_ remote-ops]]
                            (some->> (:remove-page remote-ops) (vector :remove-page)))
                          block-uuid->remote-ops)]
-    (concat update-page-ops remove-ops sorted-move-ops update-schema-ops update-ops remove-page-ops)))
+    (concat update-schema-ops update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
 
 (defn new-task--push-local-ops
   "Return a task: push local updates"
