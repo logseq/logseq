@@ -31,8 +31,7 @@
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
-            [frontend.config :as config]
-            [logseq.db.frontend.class :as db-class]))
+            [frontend.config :as config]))
 
 (rum/defcs commands < rum/reactive
   (rum/local [] ::matched-commands)
@@ -132,7 +131,9 @@
   (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
-                         (p/let [result (editor-handler/<get-matched-pages q)]
+                         (p/let [result (if db-tag?
+                                          (editor-handler/get-matched-classes q)
+                                          (editor-handler/<get-matched-pages q))]
                            (set-matched-pages! result))))
                      [q])
     (let [matched-pages (cond
