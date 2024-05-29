@@ -31,7 +31,8 @@
             [promesa.core :as p]
             [react-draggable]
             [rum.core :as rum]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.db.frontend.class :as db-class]))
 
 (rum/defcs commands < rum/reactive
   (rum/local [] ::matched-commands)
