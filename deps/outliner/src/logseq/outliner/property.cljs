@@ -4,7 +4,6 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [logseq.common.util :as common-util]
-            [logseq.common.util.page-ref :as page-ref]
             [logseq.db :as ldb]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.order :as db-order]
@@ -13,7 +12,6 @@
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.graph-parser.block :as gp-block]
             [logseq.outliner.core :as outliner-core]
             [malli.error :as me]
             [malli.util :as mu]
@@ -144,33 +142,6 @@
   [schema value]
   (me/humanize (mu/explain-data schema value)))
 
-(defn- page-name->map
-  "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
-  [db original-page-name with-id?]
-  (gp-block/page-name->map original-page-name with-id? db true nil))
-
-(defn- resolve-tag!
-  "Change `v` to a tag's db id if v is a string tag, e.g. `#book`"
-  [conn v]
-  (when (and (string? v)
-             (common-util/tag? (string/trim v)))
-    (let [tag-without-hash (common-util/safe-subs (string/trim v) 1)
-          tag (or (page-ref/get-page-name tag-without-hash) tag-without-hash)]
-      (when-not (string/blank? tag)
-        (let [db @conn
-              e (ldb/get-case-page db tag)
-              e' (if e
-                   (do
-                     (when-not (contains? (:block/type e) "tag")
-                       (ldb/transact! conn [{:db/id (:db/id e)
-                                           :block/type (set (conj (:block/type e) "class"))}]))
-                     e)
-                   (let [m (assoc (page-name->map @conn tag true)
-                                  :block/type #{"class"})]
-                     (ldb/transact! conn [m])
-                     m))]
-          (:db/id e'))))))
-
 (defn- ->eid
   [id]
   (if (uuid? id) [:block/uuid id] id))
@@ -261,19 +232,18 @@
         property (d/entity @conn property-id)
         _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
         property-type (get-in property [:block/schema :type] :default)
-        v' (or (resolve-tag! conn v) v)
         db-attribute? (contains? db-property/db-attribute-properties property-id)]
     (if db-attribute?
-      (ldb/transact! conn [{:db/id (:db/id block) property-id v'}]
+      (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
                    {:outliner-op :save-block})
       (let [new-value (cond
-                         (= v' :logseq.property/empty-placeholder)
-                         (if (= property-type :checkbox) false v')
+                         (= v :logseq.property/empty-placeholder)
+                         (if (= property-type :checkbox) false v)
 
                          (db-property-type/ref-property-types property-type)
                          (convert-ref-property-value conn property-id v property-type)
                          :else
-                         v')
+                         v)
             existing-value (get block property-id)]
         (when-not (= existing-value new-value)
           (raw-set-block-property! conn block property property-type new-value))))))
