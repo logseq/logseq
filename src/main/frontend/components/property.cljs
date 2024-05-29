@@ -859,5 +859,7 @@
                   (when (seq id-properties)
                     [:div
                      (when page-cp
-                       [:span.text-sm.ml-4 (page-cp {} class)])
+                       [:span.text-sm.opacity-30.hover:opacity-100
+                        {:class (when (:in-block-container? opts) "ml-5")}
+                        (page-cp {} class)])
                      (properties-section block id-properties opts)]))]))))])))
