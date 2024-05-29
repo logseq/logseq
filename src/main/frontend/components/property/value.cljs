@@ -64,19 +64,30 @@
 (defn <create-new-block!
   [block property value & {:keys [edit-block?]
                            :or {edit-block? true}}]
-  (p/let [existing-value (get block (:db/ident property))
-          new-block-id (when-not existing-value (db/new-block-id))
-          _ (when-not existing-value
-              (db-property-handler/create-property-text-block!
-               (:db/id block)
-               (:db/id property)
-               value
-               {:new-block-id new-block-id}))]
+  (p/let [block
+          (if (and (= :default (get-in property [:block/schema :type]))
+                   (not (db-property/many? property)))
+            (p/let [existing-value (get block (:db/ident property))
+                    new-block-id (when-not existing-value (db/new-block-id))
+                    _ (when-not existing-value
+                        (db-property-handler/create-property-text-block!
+                         (:db/id block)
+                         (:db/id property)
+                         value
+                         {:new-block-id new-block-id}))]
+              (or existing-value (db/entity [:block/uuid new-block-id])))
+            (p/let [new-block-id (db/new-block-id)
+                    _ (db-property-handler/create-property-text-block!
+                       (:db/id block)
+                       (:db/id property)
+                       value
+                       {:new-block-id new-block-id})]
+              (db/entity [:block/uuid new-block-id])))]
     (p/do!
-     (let [block (or existing-value (db/entity [:block/uuid new-block-id]))]
-       (when edit-block?
-         (editor-handler/edit-block! block :max {:container-id :unknown-container})))
+     (when edit-block?
+       (editor-handler/edit-block! block :max {:container-id :unknown-container}))
      (shui/dialog-close!))))
+    
 
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
