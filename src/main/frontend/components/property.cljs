@@ -416,6 +416,22 @@
                       :on-chosen on-chosen
                       :input-opts input-opts})]]))
 
+(rum/defc property-icon
+  [property property-type]
+  (let [type (or (get-in property [:block/schema :type] property-type) :default)
+        icon (case type
+               :number "hash"
+               :date "calendar"
+               :checkbox "checkbox"
+               :url "link"
+               :page "file"
+               ;; TODO: math-lower not supported yet
+               :object "math-lower"
+               :template "template"
+               "letter-t")]
+    (ui/icon icon {:class "opacity-50"
+                   :size 15})))
+
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
   (rum/local {} ::property-schema)
@@ -448,7 +464,7 @@
        (let [property (db/get-case-page @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
           [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
-           [:div [:span.bullet-container.cursor [:span.bullet]]]
+           (property-icon property (:type @*property-schema))
            [:div @*property-key]]
           [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
            (if @*show-new-property-config?
@@ -552,9 +568,7 @@
                               (assoc :class "flex items-center"))
                           (if icon
                             (icon-component/icon icon)
-                            [:div
-                             [:span.bullet-container.cursor (when collapsed? {:class "bullet-closed"})
-                             [:span.bullet]]]))))
+                            (property-icon property nil)))))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger

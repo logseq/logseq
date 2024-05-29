@@ -389,7 +389,7 @@
                                          (js/console.error error)))))
                            (reset! *creating-db? false)
                            (shui/dialog-close!))))))]
-    [:div.new-graph.flex.flex-col.p-4.gap-4
+    [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
      (shui/input
        {:value @*graph-name
         :disabled @*creating-db?
