@@ -122,12 +122,21 @@
                  (and many? (<= (count (get block (:db/ident property))) 1)))
          (shui/popup-hide!))))))
 
-(rum/defc calendar-inner <
-  {:will-unmount (fn [state]
+(rum/defcs calendar-inner <
+  (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
+  {:will-mount (fn [state]
+                 (js/setTimeout
+                   #(some-> @(::identity state)
+                      (js/document.getElementById)
+                      (.querySelector "[aria-selected=true]")
+                      (.focus)) 0)
+                 state)
+   :will-unmount (fn [state]
                    (shui/dialog-close!)
                    state)}
-  [id on-change value]
-  (let [initial-day (some-> value (.getTime) (js/Date.))
+  [state id on-change value]
+  (let [*ident (::identity state)
+        initial-day (or (some-> value (.getTime) (js/Date.)) (js/Date.))
         initial-month (when value
                         (js/Date. (.getFullYear value) (.getMonth value)))
         select-handler!
@@ -149,6 +158,7 @@
       {:mode "single"
        :initial-focus true
        :selected initial-day
+       :id @*ident
        :class-names {:months ""}
        :on-day-key-down (fn [^js d _ ^js e]
                           (when (= "Enter" (.-key e))
@@ -760,6 +770,7 @@
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
              (shui/checkbox {:class "jtrigger flex flex-row items-center"
                              :disabled config/publishing?
+                             :auto-focus editing?
                              :checked value
                              :on-checked-change add-property!
                              :on-key-down (fn [e]

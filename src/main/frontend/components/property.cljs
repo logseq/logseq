@@ -446,7 +446,6 @@
                                 (not= (:db/id original-block) (:db/id (state/get-edit-block)))) ; new block created
                        (edit-original-block)))
                    state)}
-  shortcut/disable-all-shortcuts
   [state block *property-key {:keys [class-schema? page? page-configure?]
                               :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)

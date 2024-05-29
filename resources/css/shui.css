@@ -236,6 +236,10 @@ html[data-theme=dark] {
   }
 }
 
+.ui__dialog-content {
+  @apply outline-none;
+}
+
 .ui__button-shortcut-key {
   @apply text-xs font-normal h-5 w-5 flex items-center justify-center rounded bg-gray-06-alpha;
 
