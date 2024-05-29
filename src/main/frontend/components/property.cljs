@@ -511,7 +511,7 @@
      [:a.fade-link.flex.add-property
       {:on-click (fn []
                    (state/pub-event! [:editor/new-property (merge opts {:block block})]))}
-      [:div.flex.flex-row.items-center {:style {:padding-left 1}}
+      [:div.flex.flex-row.items-center
        (ui/icon "plus" {:size 15})
        [:div.ml-1.text-sm "Add property"]]]]))
 

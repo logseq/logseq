@@ -98,7 +98,7 @@
   (when page-e
     (let [long-page? (> (count (:block/_page page-e)) 300)
           hiccup (component-block/->hiccup blocks (assoc config :long-page? long-page?) {})]
-      [:div.page-blocks-inner {:style {:margin-left (if (or sidebar? whiteboard?) 0 -20)}}
+      [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
                           {:hiccup   hiccup
@@ -508,7 +508,7 @@
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-           [:div.relative.grid.gap-4
+           [:div.relative.grid.gap-2
             (when (and (not sidebar?) (not block?))
               [:div.flex.flex-row.space-between
                (when (or (mobile-util/native-platform?) (util/mobile?))
@@ -532,8 +532,7 @@
                     (plugins/hook-ui-items :pagebar)]))])
 
             (when (and db-based? (not block?) (:block/tags page))
-              [:div.cursor-pointer
-               {:class (if sidebar? "ml-6" "ml-2")}
+              [:div.cursor-pointer.px-1
                (db-page/tags page)])
 
             (cond
@@ -556,34 +555,35 @@
              ;; blocks
              (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?})]])
 
-         (when today?
-           (today-queries repo today? sidebar?))
+         [:div {:style {:padding-left 9}}
+          (when today?
+            (today-queries repo today? sidebar?))
 
-         (when today?
-           (scheduled/scheduled-and-deadlines page-name))
+          (when today?
+            (scheduled/scheduled-and-deadlines page-name))
 
-         (when-not block?
-           (tagged-pages repo page page-original-name))
+          (when-not block?
+            (tagged-pages repo page page-original-name))
 
-               ;; referenced blocks
-         (when-not block-or-whiteboard?
-           (when (and page (not (false? linked-refs?)))
-             [:div {:key "page-references"}
-              (rum/with-key
-                (reference/references page)
-                (str route-page-name "-refs"))]))
+         ;; referenced blocks
+          (when-not block-or-whiteboard?
+            (when (and page (not (false? linked-refs?)))
+              [:div {:key "page-references"}
+               (rum/with-key
+                 (reference/references page)
+                 (str route-page-name "-refs"))]))
 
-         (when (contains? (:block/type page) "class")
-           (class-component/class-children page))
+          (when (contains? (:block/type page) "class")
+            (class-component/class-children page))
 
-         (when-not block-or-whiteboard?
-           (when (and (not journal?) (not db-based?))
-             (hierarchy/structures route-page-name)))
+          (when-not block-or-whiteboard?
+            (when (and (not journal?) (not db-based?))
+              (hierarchy/structures route-page-name)))
 
-         (when (and (not (false? unlinked-refs?))
-                    (not (or block-or-whiteboard? sidebar? home?)))
-           [:div {:key "page-unlinked-references"}
-            (reference/unlinked-references page)])]))))
+          (when (and (not (false? unlinked-refs?))
+                     (not (or block-or-whiteboard? sidebar? home?)))
+            [:div {:key "page-unlinked-references"}
+             (reference/unlinked-references page)])]]))))
 
 (rum/defc delay-skeleton
   [children]

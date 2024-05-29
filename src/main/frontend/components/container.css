@@ -670,10 +670,6 @@
     background: none;
   }
 
-  .references {
-    @apply mx-[28px];
-  }
-
   .sidebar-drop-indicator {
     @apply relative;
     height: 8px;

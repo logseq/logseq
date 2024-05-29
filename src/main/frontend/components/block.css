@@ -206,7 +206,7 @@
 }
 
 .block-control-wrap {
-  @apply h-[24px] mt-[1px] pr-[6px];
+  @apply h-[24px] mt-[1px];
 
   &.is-order-list {
     @apply mr-0 pr-0;
