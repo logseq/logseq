@@ -19,7 +19,8 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.worker.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
-            [logseq.outliner.pipeline :as outliner-pipeline]))
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [logseq.db.frontend.class :as db-class]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -205,16 +206,19 @@
     (file-rebuild-block-refs repo db date-formatter block)))
 
 (defn- add-tag-types
-  [repo txs-state m]
+  [repo db txs-state new-tags]
   (when (sqlite-util/db-based-graph? repo)
     (let [add-tag-type (map
                         (fn [t]
-                          {:db/id (outliner-pipeline/ref->eid t)
-                           :block/type "class"})
-                        (:block/tags m))]
+                          (db-class/build-new-class
+                           db
+                           {:db/id (outliner-pipeline/ref->eid t)
+                            :block/original-name (:block/original-name t)}))
+                        new-tags)]
       (swap! txs-state (fn [txs] (concat txs add-tag-type))))))
 
 (defn- fix-tag-ids
+  "Updates :block/tags to reference ids from :block/refs"
   [m]
   (let [refs (set (map :block/name (seq (:block/refs m))))
         tags (seq (:block/tags m))]
@@ -245,12 +249,14 @@
                    data)
                   db-based?
                   (dissoc :block/properties))
+          ;; new tags are needed in their original form before being altered
+          new-tags (:block/tags data')
           m* (-> data'
-                (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
-                        :block/title :block/body :block/level :block.temp/fully-loaded?)
-                common-util/remove-nils
-                block-with-updated-at
-                fix-tag-ids)
+                 (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
+                         :block/title :block/body :block/level :block.temp/fully-loaded?)
+                 common-util/remove-nils
+                 block-with-updated-at
+                 fix-tag-ids)
           db @conn
           db-id (:db/id this)
           block-uuid (:block/uuid this)
@@ -301,7 +307,7 @@
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
 
-      (add-tag-types repo txs-state m)
+      (add-tag-types repo db txs-state new-tags)
 
       this))
 

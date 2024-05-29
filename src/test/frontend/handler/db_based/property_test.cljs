@@ -176,16 +176,16 @@
         _ (page-handler/create! "class1" opts)
         _ (page-handler/create! "class2" opts)
         _ (page-handler/create! "class3" opts)
-        c1 (db/get-page "class1")
-        c2 (db/get-page "class2")
+        c1 (db/get-case-page "class1")
+        c2 (db/get-case-page "class2")
         c1id (:db/id c1)
         c2id (:db/id c2)]
 
     (testing "Create classes"
       (are [x y] (= x y)
-        (:block/type (db/get-page "class1"))
+        (:block/type (db/get-case-page "class1"))
         #{"class"}
-        (:block/type (db/get-page "class2"))
+        (:block/type (db/get-case-page "class2"))
         #{"class"}))
 
     (testing "Class add property"
@@ -213,7 +213,7 @@
         (is (= 2 (count (:block/tags (db/entity [:block/uuid fbid]))))))
     (testing "Get block's classes properties"
       ;; set c2 as parent of c3
-      (let [c3 (db/get-page "class3")
+      (let [c3 (db/get-case-page "class3")
             conn (db/get-db false)]
         (db/transact! [{:db/id (:db/id c3)
                         :class/parent (:db/id c2)}])
