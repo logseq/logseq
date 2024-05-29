@@ -336,7 +336,7 @@
                  (p/let [tag-entity (get-page-fn tag)
                          _ (when-not tag-entity
                              (if class?
-                               (<create-class! tag {:redirect false
+                               (<create-class! tag {:redirect? false
                                                     :create-first-block? false})
                                (<create! tag {:redirect? false
                                               :create-first-block? false})))
