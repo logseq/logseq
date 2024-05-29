@@ -41,8 +41,7 @@
             [logseq.graph-parser.db :as gp-db]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
-            [frontend.handler.property.util :as pu]
-            [logseq.db.frontend.class :as db-class]))
+            [frontend.handler.property.util :as pu]))
 
 (def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
@@ -291,22 +290,10 @@
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
 (defn add-tag [repo block-id tag-entity]
-  (try
-    (let [tx-data (cond-> []
-                    ;; Don't rebuild an existing class as it changes their :db/ident
-                    (not (contains? (:block/type tag-entity) "class"))
-                    (conj (db-class/build-new-class (conn/get-db)
-                                                    (select-keys tag-entity [:db/id :block/original-name])))
-                    true
-                    (into [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
-                         ;; TODO: Should classes counted as refs
-                           [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]))]
-      (db/transact! repo tx-data {:outliner-op :save-block}))
-    (catch :default e
-      (if (= :notification (:type (ex-data e)))
-        (notification/show! (get-in (ex-data e) [:payload :message])
-                            (get-in (ex-data e) [:payload :type]))
-        (throw e)))))
+  (let [tx-data [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
+                 ;; TODO: Move this to outliner.core to consistently add refs for tags
+                 [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
+    (db/transact! repo tx-data {:outliner-op :save-block})))
 
 (defn on-chosen-handler
   [input id _q pos format]
