@@ -425,8 +425,8 @@
                :checkbox "checkbox"
                :url "link"
                :page "file"
-               ;; TODO: math-lower not supported yet
-               :object "math-lower"
+               ;; FIXME: upgrade tabler icons
+               :object "topology-star"
                :template "template"
                "letter-t")]
     (ui/icon icon {:class "opacity-50"
@@ -525,7 +525,7 @@
 
 (rum/defcs property-key <
   (rum/local false ::hover?)
-  [state block property {:keys [class-schema? collapsed? page-cp inline-text other-position?]}]
+  [state block property {:keys [class-schema? page-cp inline-text other-position?]}]
   (let [*hover? (::hover? state)
         icon (:logseq.property/icon property)
         property-name (:block/original-name property)]
@@ -567,7 +567,7 @@
                                 {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
                               (assoc :class "flex items-center"))
                           (if icon
-                            (icon-component/icon icon)
+                            (icon-component/icon icon {:size 15})
                             (property-icon property nil)))))
 
      (if config/publishing?
