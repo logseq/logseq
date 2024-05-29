@@ -259,7 +259,7 @@
                                                         :initial (not collapsed?)
                                                         :p-4     (not (contains? #{:page :block :contents :search :shortcut-settings} block-type))
                                                         :pt-4    (not (contains? #{:search :shortcut-settings} block-type))
-                                                        :p-1     (not (contains? #{:search :shortcut-settings} block-type))}])}
+                                                        :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]
          (drop-indicator idx drag-to)]))))

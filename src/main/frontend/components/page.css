@@ -229,7 +229,7 @@
 }
 
 .ls-page-title {
-  @apply rounded-sm -mx-1.5 px-2 pt-1.5;
+  @apply rounded-sm;
 
   &.title {
     @apply mb-3;
@@ -315,16 +315,6 @@ html.is-native-iphone-without-notch {
   }
 }
 
-.cp__right-sidebar  {
-  .add-button-link {
-    margin-left: 21px;
-  }
-
-  .page-info {
-    @apply mx-2;
-  }
-}
-
 html.is-native-android,
 html.is-native-ios {
   .cp__all_pages {
@@ -391,7 +381,7 @@ html.is-native-ios {
 }
 
 .page-info {
-  @apply ml-[-4px] border rounded-md;
+  @apply border rounded-md;
 
   &-inner {
     @apply py-2;

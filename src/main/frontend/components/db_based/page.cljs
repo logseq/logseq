@@ -44,11 +44,10 @@
                                              (str edit-input-id-prefix "-page")
                                              (assoc configure-opts :class-schema? false :page? true)))
          ;; default view for page-inner
-         [:div.ml-1.mb-4
-          (component-block/db-properties-cp {:editor-box editor/box}
-                                            page
-                                            (str edit-input-id-prefix "-page")
-                                            (assoc configure-opts :class-schema? false :page? true))])])))
+         (component-block/db-properties-cp {:editor-box editor/box}
+                                           page
+                                           (str edit-input-id-prefix "-page")
+                                           (assoc configure-opts :class-schema? false :page? true)))])))
 
 (rum/defc tags
   [page]
@@ -147,7 +146,6 @@
                            (swap! *hover? not)))}
            [:<>
             [:div.flex.flex-row.items-center.gap-1
-             [:a.flex.fade-link.ml-3 (ui/icon "info-circle")]
              (mode-switch types *mode)]
             [:div.absolute.right-1.top-1
              (shui/button
