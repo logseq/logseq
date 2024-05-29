@@ -4,7 +4,6 @@
             [frontend.components.editor :as editor]
             [frontend.components.class :as class-component]
             [frontend.components.property :as property-component]
-            [frontend.components.property.value :as pv]
             [frontend.config :as config]
             [frontend.db :as db]
             [logseq.outliner.property :as outliner-property]
