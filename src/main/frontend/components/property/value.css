@@ -1,4 +1,4 @@
-.property-value-inner {
+.property-value-inner:not([data-type="default"]) {
   &:hover, .as-scalar-value-wrap:hover {
     @apply bg-gray-02 rounded transition-[background-color] duration-300;
   }
