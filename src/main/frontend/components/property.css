@@ -43,8 +43,12 @@
     grid-template-columns: repeat(auto-fit, 120px);
 }
 
+.ls-block .ls-properties-area {
+    margin-top: 2px;
+}
+
 .ls-properties-area {
-    @apply grid gap-1;
+    @apply grid;
 
     .property-pair {
         @apply grid grid-cols-5 gap-1;
@@ -235,9 +239,15 @@ a.control-link {
     }
 }
 
-.ls-page-properties .property-key, .ls-properties-area .property-key {
+.property-value-container {
+    min-height: 29px;
+}
+
+.ls-page-properties .property-key, .ls-properties-area .property-key
+{
     @apply flex flex-col justify-center;
 }
+
 .property-key {
     /* Same height with one-line block container */
     min-height: 29px;

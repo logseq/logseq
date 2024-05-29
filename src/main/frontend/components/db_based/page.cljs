@@ -157,7 +157,7 @@
         (if collapsed?
           (when (or (seq (:block/properties page))
                     (and class? (seq (:class/schema.properties page))))
-            [:div.px-2 {:style {:margin-left 2}}
+            [:div {:style {:margin-left 5}}
              (page-properties page {:mode @*mode})])
           [:div.px-3
            (page-configure page *mode)])]])))
