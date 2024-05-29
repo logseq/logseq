@@ -56,6 +56,7 @@
     [:cat :keyword
      [:map
       [:block-uuid :uuid]
+      [:db/ident :keyword]
       [:db/cardinality {:optional true} :keyword]
       [:db/valueType {:optional true} :keyword]
       [:db/index {:optional true} :boolean]]]]])
