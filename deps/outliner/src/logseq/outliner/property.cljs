@@ -428,6 +428,7 @@
                         (remove #{:logseq.property/icon :logseq.property/built-in?}))]
     (or
      (seq (:block/alias block-entity))
+     (seq (:block/tags block-entity))
      (seq properties))))
 
 (defn- build-closed-value-tx
