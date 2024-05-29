@@ -760,9 +760,7 @@
         {:keys [classes all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
         one-class? (= 1 (count classes))
         classes-properties-set (set classes-properties)
-        block-own-properties (->> (concat (when (seq (:block/alias block))
-                                            [[:block/alias (:block/alias block)]])
-                                          (seq properties))
+        block-own-properties (->> properties
                                   (remove (fn [[id _]] (classes-properties-set id)))
                                   remove-built-in-or-other-position-properties)
         root-block? (= (:id opts) (str (:block/uuid block)))
