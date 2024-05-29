@@ -613,17 +613,14 @@
     (when-let [property (db/sub-block (:db/id (db/entity k)))]
       (let [type (get-in property [:block/schema :type] :default)
             closed-values? (seq (:property/closed-values property))
-            v-block (when (integer? v) (db/entity v))
-            block? (and v-block
+            block? (and v
                         (not closed-values?)
-                        (:block/page v-block)
+                        (:block/page v)
                         (contains? #{:default :template} type))
             collapsed? (when block? (property-collapsed? block property))
             date? (= type :date)
             checkbox? (= type :checkbox)]
         [:div {:class (cond
-                        (and block? (not closed-values?))
-                        "flex flex-1 flex-col gap-1 property-block"
                         (or date? checkbox?)
                         "property-pair items-center"
                         :else
@@ -634,16 +631,16 @@
                                               :collapsed? collapsed?
                                               :inline-text inline-text
                                               :page-cp page-cp))]
-         (if (and (:class-schema? opts) (:page-configure? opts))
-           [:div.property-description.text-sm.opacity-70
-            {:class "col-span-3"}
-            (inline-text {} :markdown (get-in property [:block/schema :description]))]
-           (when-not collapsed?
-             [:div.property-value
-              {:class (if block?
-                        "block-property-value"
-                        "col-span-3 inline-grid")}
-              (pv/property-value block property v opts)]))]))))
+         [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
+          (when-not block? [:div.opacity-75 {:style {:margin-left 5}}
+                            [:span.bullet-container.cursor [:span.bullet]]])
+          [:div.flex.flex-1
+           (if (and (:class-schema? opts) (:page-configure? opts))
+             [:div.property-description.text-sm.opacity-70
+              (inline-text {} :markdown (get-in property [:block/schema :description]))]
+             (when-not collapsed?
+               [:div.property-value.flex.flex-1
+                (pv/property-value block property v opts)]))]]]))))
 
 (rum/defcs ordered-properties < rum/reactive
   {:init (fn [state]
