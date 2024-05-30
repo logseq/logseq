@@ -88,6 +88,7 @@
         [:parents [:sequential :uuid]]
         [:left [:maybe :uuid]]   ;nil when it's :no-order block
         [:hash {:optional true} :int]
+        [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]
       [:remove
        [:map
@@ -100,6 +101,7 @@
         [:parents {:optional true} [:sequential :uuid]]
         [:left {:optional true} [:maybe :uuid]] ;nil when it's :no-order block
         [:hash {:optional true} :int]
+        [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]
       [:update-page
        [:map
@@ -107,6 +109,7 @@
         [:self :uuid]
         [:page-name :string]
         [:block/original-name :string]
+        [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]
       [:remove-page
        [:map

@@ -392,6 +392,12 @@
                              (into {}))]
     (diff-block-map->tx-data db (:db/id ent) local-block-map (select-keys op-value watched-attrs))))
 
+(defn- remote-op-value->schema-tx-data
+  [block-uuid op-value]
+  (when-let [schema-map (some-> op-value :client/schema ldb/read-transit-str)]
+    (when-let [db-ident (:db/ident op-value)]
+      [(merge {:block/uuid block-uuid :db/ident db-ident} schema-map)])))
+
 (defn- update-block-attrs
   [repo conn block-uuid {:keys [parents] :as op-value}]
   (when (some (fn [k] (= "block" (namespace k))) (keys op-value)) ; there exists some :block/xxx attrs
@@ -400,9 +406,10 @@
           whiteboard-page-block? (whiteboard-page-block? local-parent)]
       (if whiteboard-page-block?
         (upsert-whiteboard-block repo conn op-value)
-        (when-let [tx-data (seq (remote-op-value->tx-data @conn block-uuid op-value))]
-          (ldb/transact! conn tx-data {:persist-op? false
-                                       :gen-undo-ops? false}))))))
+        (do (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]
+              (ldb/transact! conn schema-tx-data {:persist-op? false :gen-undo-ops? false}))
+            (when-let [tx-data (seq (remote-op-value->tx-data @conn block-uuid (dissoc op-value :client/schema)))]
+              (ldb/transact! conn tx-data {:persist-op? false :gen-undo-ops? false})))))))
 
 (defn- apply-remote-update-ops
   [repo conn update-ops]
