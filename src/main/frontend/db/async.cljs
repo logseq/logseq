@@ -111,6 +111,8 @@
                          :or {children? true
                               nested-children? false}}]
   (let [name' (str name-or-uuid)
+        *async-queries (:db/async-queries @state/state)
+        async-requested? (get @*async-queries name')
         e (cond
             (number? name-or-uuid)
             (db/entity name-or-uuid)
@@ -121,10 +123,11 @@
         id (or (and (:block/uuid e) (str (:block/uuid e)))
                (and (util/uuid-string? name') name')
                name-or-uuid)]
-    (if (:block.temp/fully-loaded? e)
+    (if (or (:block.temp/fully-loaded? e) async-requested?)
       e
       (when-let [^Object sqlite @db-browser/*worker]
-        (state/update-state! :db/async-queries (fn [s] (conj s name')))
+        (swap! *async-queries assoc name' true)
+        (state/update-state! :db/async-query-loading (fn [s] (conj s name')))
         (p/let [result (.get-block-and-children sqlite graph id (ldb/write-transit-str
                                                                  {:children? children?
                                                                   :nested-children? nested-children?}))
@@ -135,7 +138,7 @@
                 affected-keys (->> (keep :db/id block-and-children)
                                    (map #(vector :frontend.worker.react/block %)))]
           (react/refresh-affected-queries! graph affected-keys)
-          (state/update-state! :db/async-queries (fn [s] (disj s name')))
+          (state/update-state! :db/async-query-loading (fn [s] (disj s name')))
           (if children?
             block
             result'))))))
@@ -155,24 +158,24 @@
   (assert (integer? id))
   (when-let [^Object worker @db-browser/*worker]
     (when-let [block-id (:block/uuid (db/entity graph id))]
-      (state/update-state! :db/async-queries (fn [s] (conj s (str block-id "-parents"))))
+      (state/update-state! :db/async-query-loading (fn [s] (conj s (str block-id "-parents"))))
       (p/let [result-str (.get-block-parents worker graph id depth)
               result (ldb/read-transit-str result-str)
               conn (db/get-db graph false)
               _ (d/transact! conn result)]
-        (state/update-state! :db/async-queries (fn [s] (disj s (str block-id "-parents"))))
+        (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
         result))))
 
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))
   (when-let [^Object worker @db-browser/*worker]
-    (state/update-state! :db/async-queries (fn [s] (conj s (str eid "-refs"))))
+    (state/update-state! :db/async-query-loading (fn [s] (conj s (str eid "-refs"))))
     (p/let [result-str (.get-block-refs worker graph eid)
             result (ldb/read-transit-str result-str)
             conn (db/get-db graph false)
             _ (d/transact! conn result)]
-      (state/update-state! :db/async-queries (fn [s] (disj s (str eid "-refs"))))
+      (state/update-state! :db/async-query-loading (fn [s] (disj s (str eid "-refs"))))
       result)))
 
 (defn <get-block-refs-count

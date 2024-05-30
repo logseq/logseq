@@ -3460,8 +3460,6 @@
              (when linked-block
                (str "-" (:block/uuid original-block))))))))
 
-
-;; TODO: improve lazy experience and enable it for long list
 (defn- block-list
   [{:keys [long-page?] :as config} blocks]
   (let [edit-block-id (:db/id (state/get-edit-block))]

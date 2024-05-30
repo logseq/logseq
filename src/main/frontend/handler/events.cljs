@@ -196,7 +196,8 @@
      (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (state/set-state! :db/async-queries #{})
+  (state/set-state! :db/async-query-loading #{})
+  (state/set-state! :db/async-queries {})
   (st/refresh!)
   (reset! r/*key->atom {})
 
