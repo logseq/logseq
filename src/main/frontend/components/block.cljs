@@ -3473,8 +3473,9 @@
                                          {:top? top?
                                           :idx idx
                                           :bottom? bottom?})
-                             (str "blocks-" (:block/uuid item))))]
-        (if long-page?
+                             (str "blocks-" (:block/uuid item))))
+            fully-loaded? (:block.temp/fully-loaded? item)]
+        (if (and long-page? (not fully-loaded?))
           (rum/with-key
             (ui/lazy-visible
              block-render
