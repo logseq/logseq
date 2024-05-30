@@ -5,8 +5,7 @@
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
             [promesa.core :as p]
-            [logseq.db :as ldb]
-            [frontend.db.react :as react]))
+            [logseq.db :as ldb]))
 
 (defmulti handle identity)
 

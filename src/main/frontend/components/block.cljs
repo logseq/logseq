@@ -2362,17 +2362,15 @@
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
-         (let [db-based? (config/db-based-graph? (state/get-current-repo))]
+         [:div.block-head-wrap
+          (cond
+            (:block/name block)
+            [:div.flex.flex-row.items-center.gap-1
+             (icon/get-page-icon block {})
+             (page-cp config block)]
 
-           [:div.block-head-wrap
-            (cond
-              (:block/name block)
-              [:div.flex.flex-row.items-center.gap-1
-               (icon/get-page-icon block {})
-               (page-cp config block)]
-
-              :else
-              (build-block-title config block))]))
+            :else
+            (build-block-title config block))])
 
        (file-block/clock-summary-cp block body)]
 
