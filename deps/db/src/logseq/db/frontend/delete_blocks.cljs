@@ -3,10 +3,12 @@
   (:require [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
             [datascript.core :as d]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.db.frontend.entity-plus :as entity-plus]))
 
 (defn update-refs-and-macros
-  "When a block is deleted, refs are updated and macros associated with the block are deleted"
+  "When a block is deleted, refs are updated. For file graphs, macros associated
+  with the block are also deleted"
   [db txs]
   (let [retracted-block-ids (->> (keep (fn [tx]
                                          (when (and (vector? tx)
@@ -32,11 +34,12 @@
                                            {:tx tx})) refs)))
                               (apply concat))
             retracted-tx' (mapcat :tx retracted-tx)
-            macros-tx (mapcat (fn [b]
+            macros-tx (when-not (entity-plus/db-based-graph? db)
+                       (mapcat (fn [b]
                               ;; Only delete if last reference
-                                (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
-                                                 1)
-                                         (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
-                                      (:block/macros b)))
-                              retracted-blocks)]
+                                 (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
+                                                  1)
+                                          (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
+                                       (:block/macros b)))
+                               retracted-blocks))]
         (concat txs retracted-tx' macros-tx)))))
