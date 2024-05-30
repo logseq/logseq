@@ -606,7 +606,7 @@
                             (shui/button {:variant :ghost
                                           :size :sm
                                           :class "px-0 py-0 h-4"}
-                              (ui/icon "edit" {:size 14})))])]
+                                         (ui/icon "edit" {:size 14})))])]
     [:div.select-item
      (cond
        (= value :logseq.property/empty-placeholder)
@@ -622,7 +622,8 @@
            (:db/id value)))
 
        (= type :object)
-       (inline-text {} :markdown (:block/content value))
+       (when-let [reference (state/get-component :block/reference)]
+         (reference {} (:block/uuid value)))
 
        closed-values?
        (closed-value-item value opts)
