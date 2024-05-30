@@ -87,7 +87,6 @@
      (when edit-block?
        (editor-handler/edit-block! block :max {:container-id :unknown-container}))
      (shui/dialog-close!))))
-    
 
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.

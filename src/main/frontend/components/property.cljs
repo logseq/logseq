@@ -44,55 +44,65 @@
           (:block/uuid page))))))
 
 (rum/defc class-select
-  [property {:keys [multiple-choices? disabled?]
+  [property {:keys [multiple-choices? disabled? default-open? on-hide]
              :or {multiple-choices? true}}]
-  (let [schema-classes (:property/schema.classes property)]
-    [:div.flex.flex-1.col-span-3
-     (let [content-fn
-           (fn [{:keys [id]}]
-             (let [toggle-fn #(shui/popup-hide! id)
-                   classes (model/get-all-classes (state/get-current-repo))
-                   options (cond->> (map (fn [[name id]]
-                                           {:label name :value id})
-                                         classes)
-                             (= :template (get-in property [:block/schema :type]))
-                             (remove (fn [[name _id]] (= name "Root class"))))
-                   opts {:items options
-                         :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
-                         :dropdown? false
-                         :close-modal? false
-                         :multiple-choices? multiple-choices?
-                         :selected-choices (map :block/uuid schema-classes)
-                         :extract-fn :label
-                         :extract-chosen-fn :value
-                         :show-new-when-not-exact-match? true
-                         :input-opts {:on-blur toggle-fn
-                                      :on-key-down
-                                      (fn [e]
-                                        (case (util/ekey e)
-                                          "Escape"
-                                          (do
-                                            (util/stop e)
-                                            (toggle-fn))
-                                          nil))}
-                         :on-chosen (fn [value select?]
-                                      (p/let [result (<create-class-if-not-exists! value)
-                                              value' (or result value)
-                                              tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]]
-                                        (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})
-                                        (when-not multiple-choices? (toggle-fn))))}]
+  (let [*ref (rum/use-ref nil)]
+    (rum/use-effect!
+     (fn []
+       (when default-open?
+         (some-> (rum/deref *ref)
+                 (.click))))
+     [default-open?])
+    (let [schema-classes (:property/schema.classes property)]
+      [:div.flex.flex-1.col-span-3
+       (let [content-fn
+             (fn [{:keys [id]}]
+               (let [toggle-fn #(do
+                                  (when (fn? on-hide) (on-hide))
+                                  (shui/popup-hide! id))
+                     classes (model/get-all-classes (state/get-current-repo))
+                     options (cond->> (map (fn [[name id]]
+                                             {:label name :value id})
+                                           classes)
+                               (= :template (get-in property [:block/schema :type]))
+                               (remove (fn [[name _id]] (= name "Root class"))))
+                     opts {:items options
+                           :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
+                           :dropdown? false
+                           :close-modal? false
+                           :multiple-choices? multiple-choices?
+                           :selected-choices (map :block/uuid schema-classes)
+                           :extract-fn :label
+                           :extract-chosen-fn :value
+                           :show-new-when-not-exact-match? true
+                           :input-opts {:on-blur toggle-fn
+                                        :on-key-down
+                                        (fn [e]
+                                          (case (util/ekey e)
+                                            "Escape"
+                                            (do
+                                              (util/stop e)
+                                              (toggle-fn))
+                                            nil))}
+                           :on-chosen (fn [value select?]
+                                        (p/let [result (<create-class-if-not-exists! value)
+                                                value' (or result value)
+                                                tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]
+                                                _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
+                                          (when-not multiple-choices? (toggle-fn))))}]
 
-               (select/select opts)))]
+                 (select/select opts)))]
 
-       [:div.flex.flex-1.cursor-pointer
-        {:on-click (if disabled?
-                     (constantly nil)
-                     #(shui/popup-show! (.-target %) content-fn))}
-        (if (seq schema-classes)
-          [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
-           (for [class schema-classes]
-             [:a.text-sm (str "#" (:block/original-name class))])]
-          (pv/property-empty-btn-value))])]))
+         [:div.flex.flex-1.cursor-pointer
+          {:ref *ref
+           :on-click (if disabled?
+                       (constantly nil)
+                       #(shui/popup-show! (.-target %) content-fn))}
+          (if (seq schema-classes)
+            [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
+             (for [class schema-classes]
+               [:a.text-sm (str "#" (:block/original-name class))])]
+            (pv/property-empty-btn-value))])])))
 
 (defn- property-type-label
   [property-type]
@@ -142,12 +152,13 @@
             (db/entity (:db/id result))))
         (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
 
-(rum/defc schema-type <
+(rum/defcs schema-type <
   shortcut/disable-all-shortcuts
-  [property {:keys [*property-name *property-schema built-in? disabled?
-                    show-type-change-hints? block *show-new-property-config?
-                    default-open? page-configure? class-schema?]
-             :as opts}]
+  [state property {:keys [*property-name *property-schema built-in? disabled?
+                          show-type-change-hints? block *show-new-property-config?
+                          *show-class-select?
+                          default-open? page-configure? class-schema?]
+                   :as opts}]
   (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
         schema-types (->> (concat db-property-type/user-built-in-property-types
@@ -180,8 +191,11 @@
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
+                 (when (= (:type schema) :object) (reset! *show-class-select? true))
                  (components-pu/update-property! property property-name schema)
                  (cond
+                   @*show-class-select?
+                   nil
                    add-class-property?
                    (shui/dialog-close!)
                    (and block (= type :default)
@@ -436,6 +450,7 @@
 
 (rum/defcs property-input < rum/reactive
   (rum/local false ::show-new-property-config?)
+  (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
   {:will-unmount (fn [state]
                    (let [args (:rum/args state)
@@ -449,6 +464,7 @@
   [state block *property-key {:keys [class-schema? page? page-configure?]
                               :as opts}]
   (let [*show-new-property-config? (::show-new-property-config? state)
+        *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
         existing-tag-alias (->> db-property/db-attribute-properties
                                 (map db-property/built-in-properties)
@@ -468,13 +484,23 @@
            (property-icon property (:type @*property-schema))
            [:div @*property-key]]
           [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
-           (if @*show-new-property-config?
+           (cond
+             @*show-new-property-config?
              (schema-type property (merge opts
                                           {:*property-name *property-key
                                            :*property-schema *property-schema
                                            :default-open? true
                                            :block block
-                                           :*show-new-property-config? *show-new-property-config?}))
+                                           :*show-new-property-config? *show-new-property-config?
+                                           :*show-class-select? *show-class-select?}))
+
+             @*show-class-select?
+             (class-select property (assoc opts
+                                           :on-hide #(reset! *show-class-select? false)
+                                           :multiple-choices? false
+                                           :default-open? true))
+
+             :else
              (when (and property (not class-schema?))
                (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true))))]])
 
