@@ -41,7 +41,7 @@
   (->> (d/datoms db :avet :block/name)
        (keep (fn [e]
                (when-not (contains? exclude-page-ids (:e e))
-                 (d/pull db '[:db/id :db/ident :block/uuid :block/name :block/original-name :block/alias :block/type
+                 (d/pull db '[:db/id :db/ident :block/uuid :block/name :block/original-name :block/alias :block/type :block/journal-day
                               :block/created-at :block/updated-at]
                          (:e e)))))))
 
@@ -233,7 +233,7 @@
                            (d/datoms db :eavt (:db/id e))))
                        [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
-        latest-journals (get-latest-journals db 3)
+        latest-journals (get-latest-journals db 1)
         all-files (get-all-files db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))

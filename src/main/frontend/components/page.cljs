@@ -96,7 +96,11 @@
   {:did-mount open-root-block!}
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
-    (let [long-page? (> (count (:block/_page page-e)) 300)
+    (let [long-page? (or
+                      ;; page has not been loaded yet, so we pretend it's a long page to avoid rendering
+                      ;; too many blocks
+                      (not (:block.temp/fully-loaded? page-e))
+                      (> (count (:block/_page page-e)) 300))
           hiccup (component-block/->hiccup blocks (assoc config :long-page? long-page?) {})]
       [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)}}
        (rum/with-key
@@ -181,24 +185,24 @@
           block-id (parse-uuid page-name)
           block? (boolean block-id)
           block (get-block (or (:block/uuid page-e) (:block/name page-e)))
-          children (:block/_parent block)]
+          children (:block/_parent block)
+          *loading? (:*loading? config)
+          loading? (when *loading? (rum/react *loading?))]
       (cond
         (and
+         (not loading?)
          (not block?)
          (empty? children))
         (dummy-block page-name)
 
         :else
         (let [document-mode? (state/sub :document/mode?)
-              short-page? (when-not block?
-                            (<= (count (:block/_page block)) 200))
               hiccup-config (merge
                               {:id (if block? (str block-id) page-name)
                                :db/id (:db/id block)
                                :block? block?
                                :editor-box editor/box
-                               :document/mode? document-mode?
-                               :disable-lazy-load? short-page?}
+                               :document/mode? document-mode?}
                               config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
@@ -549,7 +553,7 @@
                   (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
              ;; blocks
-             (page-blocks-cp repo page {:sidebar? sidebar? :whiteboard? whiteboard?})]])
+             (page-blocks-cp repo page (merge option {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
 
          [:div {:style {:padding-left 9}}
           (when today?
@@ -581,39 +585,20 @@
             [:div {:key "page-unlinked-references"}
              (reference/unlinked-references page)])]]))))
 
-(rum/defc delay-skeleton
-  [children]
-  (let [[show? set-show!] (rum/use-state false)]
-    (rum/use-effect!
-      (fn []
-        (js/setTimeout #(set-show! true) 500))
-      [])
-    (when show?
-      [:div.space-y-2.min-h-48 children])))
-
 (rum/defcs page-aux < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)
-                 *loading? (atom (state/get-async-query-loading page-name'))]
+                 *loading? (atom true)]
              (p/do!
-              (when-not @*loading?
-                (db-async/<get-block (state/get-current-repo) page-name'))
-              (when-not @*loading?
-                (reset! *loading? false))
+              (db-async/<get-block (state/get-current-repo) page-name')
+              (reset! *loading? false)
               (route-handler/update-page-title-and-label! (state/get-route-match)))
              (assoc state
                     ::page-name page-name'
                     ::loading? *loading?)))}
   [state option]
-  (let [loading? (or (rum/react (::loading? state))
-                     (when (::page-name state) (state/sub-async-query-loading (::page-name state))))]
-    (if loading?
-      (delay-skeleton
-        [:<>
-         (shui/skeleton {:class "h-6 w-full"})
-         (shui/skeleton {:class "h-6 w-full"})])
-      (page-inner option))))
+  (page-inner (assoc option :*loading? (::loading? state))))
 
 (rum/defcs page
   [state option]

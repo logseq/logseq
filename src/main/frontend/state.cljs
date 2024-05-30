@@ -312,7 +312,9 @@
       ;; Whether block is selected
       :ui/select-query-cache                 (atom {})
       :favorites/updated?                    (atom 0)
-      :db/async-queries                      (atom #{})})))
+      :db/async-query-loading                (atom #{})
+      :db/async-queries                      (atom {})
+      })))
 
 ;; Block ast state
 ;; ===============
@@ -2342,13 +2344,13 @@ Similar to re-frame subscriptions"
   [k]
   (assert (some? k))
   (rum/react
-   (r/cached-derived-atom (:db/async-queries @state) [(get-current-repo) ::async-query (str k)]
+   (r/cached-derived-atom (:db/async-query-loading @state) [(get-current-repo) ::async-query (str k)]
                           (fn [s] (contains? s (str k))))))
 
 (defn get-async-query-loading
   [k]
   (assert (some? k))
-  (let [s @(:db/async-queries @state)]
+  (let [s @(:db/async-query-loading @state)]
     (contains? s (str k))))
 
 (defn set-color-accent! [color]

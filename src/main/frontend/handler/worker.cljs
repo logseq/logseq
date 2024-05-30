@@ -37,9 +37,6 @@
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
 
-(defmethod handle :refresh-ui [_ _worker {:keys [affected-keys]}]
-  (react/refresh! (state/get-current-repo) affected-keys))
-
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 
