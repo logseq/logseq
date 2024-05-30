@@ -147,23 +147,27 @@
   (let [block (d/entity db (if (uuid? id)
                              [:block/uuid id]
                              id))
-        get-children (fn [block children]
+        page? (sqlite-util/page? block)
+        get-children (fn [block children page?]
                        (let [long-page? (and (> (count children) 500) (not (contains? (:block/type block) "whiteboard")))]
                          (if long-page?
                            (->> (map (fn [e]
                                        (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))
                                      children)
                                 (map #(with-block-link db %)))
-                           (->> (d/pull-many db '[*] (map :db/id children))
-                                (map #(with-block-refs db %))
-                                (map #(with-block-link db %))
-                                (mapcat (fn [block]
-                                          (let [e (d/entity db (:db/id block))]
-                                            (conj
-                                             (if (seq (:block/properties e))
-                                               (vec (property-with-values db e))
-                                               [])
-                                             block))))))))]
+                           (cond->>
+                            (->> (d/pull-many db '[*] (map :db/id children))
+                                 (map #(with-block-refs db %))
+                                 (map #(with-block-link db %))
+                                 (mapcat (fn [block]
+                                           (let [e (d/entity db (:db/id block))]
+                                             (conj
+                                              (if (seq (:block/properties e))
+                                                (vec (property-with-values db e))
+                                                [])
+                                              block)))))
+                             page?
+                             (map mark-block-fully-loaded)))))]
     (when block
       (let [block' (->> (d/pull db '[*] (:db/id block))
                         (with-parent db)
@@ -175,9 +179,12 @@
           :properties (property-with-values db block)}
           children?
           (assoc :children (get-children block
-                                         (if nested-children?
+                                         (if (and nested-children? (not page?))
                                            (get-block-children db (:block/uuid block))
-                                           (:block/_parent block)))))))))
+                                           (if page?
+                                             (:block/_page block)
+                                             (:block/_parent block)))
+                                         page?)))))))
 
 (defn get-latest-journals
   [db n]
