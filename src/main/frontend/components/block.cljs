@@ -1806,7 +1806,8 @@
         own-number-list?   (:own-order-number-list? config)
         order-list?        (boolean own-number-list?)
         order-list-idx     (:own-order-list-index config)
-        collapsable?       (editor-handler/collapsable? uuid {:semantic? true})]
+        collapsable?       (editor-handler/collapsable? uuid {:semantic? true})
+        link?              (boolean (:original-block config))]
     [:div.block-control-wrap.flex.flex-row.items-center
      {:class (util/classnames [{:is-order-list order-list?
                                 :bullet-closed collapsed?
@@ -1847,12 +1848,15 @@
                                      " hide-inner-bullet")
                                    (when order-list? " as-order-list typed-list"))}
 
-                      [:span.bullet (cond->
-                                     {:blockid (str uuid)}
-                                      selected?
-                                      (assoc :class "selected"))
-                       (when order-list?
-                         [:label (str order-list-idx ".")])]]]]
+                      (if link?
+                        (ui/icon "circle-letter-e")
+                        [:span.bullet (cond->
+                                       {:blockid (str uuid)}
+                                        selected?
+                                        (assoc :class "selected"))
+                         (when
+                           order-list?
+                           [:label (str order-list-idx ".")])])]]]
          (cond
            (and (or (mobile-util/native-platform?)
                     (:ui/show-empty-bullets? (state/get-config))
