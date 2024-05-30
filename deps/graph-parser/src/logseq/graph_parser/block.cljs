@@ -665,7 +665,9 @@
 
                 (heading-block? block)
                 (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
-                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
+                      block'' (if db-graph-mode?
+                                block'
+                                (assoc block' :macros (extract-macros-from-ast (cons block body))))]
                   (recur (conj headings block'') (rest blocks) {} {} []))
 
                 :else
