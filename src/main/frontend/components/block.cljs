@@ -2272,7 +2272,7 @@
   [config block]
   (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/task)) (:block/tags block))]
     (when (seq block-tags)
-      [:div.flex.flex-row.flex-wrap.items-center.ml-4.gap-1
+      [:div.flex.flex-row.flex-wrap.items-center.gap-1
        (for [tag block-tags]
          (page-cp (assoc config
                          :tag? true
@@ -2358,8 +2358,7 @@
          "Large block will not be editable or searchable to not slow down the app, please use another editor to edit this block."])
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
-         (let [block-tags (:block/tags block)
-               db-based? (config/db-based-graph? (state/get-current-repo))]
+         (let [db-based? (config/db-based-graph? (state/get-current-repo))]
 
            [:div.block-head-wrap
             (cond
@@ -2369,17 +2368,7 @@
                (page-cp config block)]
 
               :else
-              (build-block-title config block))
-
-            (when-not (:block-ref? config)
-              [:div.flex.flex-row.items-center.gap-1
-               (when (and db-based? (seq block-tags))
-                 (tags config block))
-
-               (when (and (:original-block config) (not (:block/name block)))
-                 [:a.fade-link {:title "Embed block"
-                                :href (rfe/href :page {:name (str (:block/uuid block))})}
-                  (ui/icon "link")])])]))
+              (build-block-title config block))]))
 
        (file-block/clock-summary-cp block body)]
 
@@ -2414,18 +2403,18 @@
 (rum/defc block-refs-count < rum/static
   [block block-refs-count *hide-block-refs?]
   (when (> block-refs-count 0)
-    [:div
-     [:a.open-block-ref-link.bg-base-2.text-sm.ml-2.fade-link
-      {:title "Open block references"
-       :style {:margin-top -1}
-       :on-click (fn [e]
-                   (if (gobj/get e "shiftKey")
-                     (state/sidebar-add-block!
-                      (state/get-current-repo)
-                      (:db/id block)
-                      :block-ref)
-                     (swap! *hide-block-refs? not)))}
-      block-refs-count]]))
+    (shui/button {:variant :ghost
+                  :title "Open block references"
+                  :class "px-2 py-0 w-6 h-6 opacity-70 hover:opacity-100"
+                  :size  :sm
+                  :on-click (fn [e]
+                              (if (gobj/get e "shiftKey")
+                                (state/sidebar-add-block!
+                                 (state/get-current-repo)
+                                 (:db/id block)
+                                 :block-ref)
+                                (swap! *hide-block-refs? not)))}
+      [:span.text-sm block-refs-count])))
 
 (rum/defc block-left-menu < rum/reactive
   [_config {:block/keys [uuid] :as _block}]
@@ -2471,76 +2460,77 @@
                                block-ref/block-ref?)
         named? (some? (:block/name block))
         repo (state/get-current-repo)
-        db-based? (config/db-based-graph? repo)]
+        db-based? (config/db-based-graph? repo)
+        refs-count (if (seq (:block/_refs block))
+                     (count (:block/_refs block))
+                     (rum/react *refs-count))]
     [:div.block-content-or-editor-wrap
      (when db-based? (block-positioned-properties config block :block-left))
-     (if (and edit? editor-box)
-       [:div.editor-wrapper.flex.flex-1
-        {:id editor-id}
-        (let [editor-cp (ui/catch-error
-                         (ui/block-error "Something wrong in the editor" {})
-                         (editor-box {:block block
-                                      :block-id uuid
-                                      :block-parent-id block-id
-                                      :format format
-                                      :on-hide (fn [value event]
-                                                 (let [select? (and (= event :esc)
-                                                                    (not (string/includes? value "```")))]
-                                                   (p/do!
-                                                    (state/set-editor-op! :escape)
-                                                    (editor-handler/save-block! (editor-handler/get-state) value)
-                                                    (editor-handler/escape-editing select?)
-                                                    (some-> config :on-escape-editing
-                                                            (apply [(str uuid) (= event :esc)])))))}
-                                     edit-input-id
-                                     config))]
-          [:div.flex.flex-1.flex-row.gap-1.items-start
-           editor-cp
-           (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/task)) (:block/tags block))]
-             (when (and (seq block-tags) db-based?)
-             [:div {:style {:margin-top 2}} (tags config block)]))])]
-       (let [refs-count (if (seq (:block/_refs block))
-                          (count (:block/_refs block))
-                          (rum/react *refs-count))]
-         [:div.flex.flex-1.flex-col.block-content-wrapper
-          [:div.flex.flex-row
-           [:div.flex-1.w-full {:style {:display (if (:slide? config) "block" "flex")}}
-            (ui/catch-error
-              (ui/block-error "Block Render Error:"
-                {:content (:block/content block)
-                              :section-attrs
-                              {:on-click #(let [content (or (:block/original-name block)
-                                                            (:block/content block))]
-                                            (editor-handler/clear-selection!)
-                                            (editor-handler/unhighlight-blocks!)
-                                            (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
-              (block-content config block edit-input-id block-id slide?))]
+     [:div.flex.flex-1.flex-col
+      [:div.flex.flex-1.flex-row.gap-1.items-start
+       (if (and edit? editor-box)
+         [:div.editor-wrapper.flex.flex-1
+          {:id editor-id}
+          (ui/catch-error
+           (ui/block-error "Something wrong in the editor" {})
+           (editor-box {:block block
+                        :block-id uuid
+                        :block-parent-id block-id
+                        :format format
+                        :on-hide (fn [value event]
+                                   (let [select? (and (= event :esc)
+                                                      (not (string/includes? value "```")))]
+                                     (p/do!
+                                      (state/set-editor-op! :escape)
+                                      (editor-handler/save-block! (editor-handler/get-state) value)
+                                      (editor-handler/escape-editing select?)
+                                      (some-> config :on-escape-editing
+                                              (apply [(str uuid) (= event :esc)])))))}
+                       edit-input-id
+                       config))]
+         [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display (if (:slide? config) "block" "flex")}}
+          (ui/catch-error
+           (ui/block-error "Block Render Error:"
+                           {:content (:block/content block)
+                            :section-attrs
+                            {:on-click #(let [content (or (:block/original-name block)
+                                                          (:block/content block))]
+                                          (editor-handler/clear-selection!)
+                                          (editor-handler/unhighlight-blocks!)
+                                          (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
+           (block-content config block edit-input-id block-id slide?))
 
-           (when (and (not hide-block-refs-count?)
-                      (not named?))
-             [:div.flex.flex-row.items-center
-              (when (and (:embed? config)
-                         (:embed-parent config))
-                [:a.opacity-70.hover:opacity-100.svg-small.inline
-                 {:on-pointer-down (fn [e]
-                                     (util/stop e)
-                                     (when-let [block (:embed-parent config)]
-                                       (editor-handler/edit-block! block :max)))}
-                 svg/edit])
+          (when db-based? (block-positioned-properties config block :block-right))
 
-              (when block-reference-only?
-                [:a.opacity-70.hover:opacity-100.svg-small.inline
-                 {:on-pointer-down (fn [e]
-                                     (util/stop e)
-                                     (editor-handler/edit-block! block :max))}
-                 svg/edit])
+          (when (and (not hide-block-refs-count?)
+                     (not named?))
+            [:div.flex.flex-row.items-center
+             (when (and (:embed? config)
+                        (:embed-parent config))
+               [:a.opacity-70.hover:opacity-100.svg-small.inline
+                {:on-pointer-down (fn [e]
+                                    (util/stop e)
+                                    (when-let [block (:embed-parent config)]
+                                      (editor-handler/edit-block! block :max)))}
+                svg/edit])
 
-              (block-refs-count block refs-count *hide-block-refs?)])]
+             (when block-reference-only?
+               [:a.opacity-70.hover:opacity-100.svg-small.inline
+                {:on-pointer-down (fn [e]
+                                    (util/stop e)
+                                    (editor-handler/edit-block! block :max))}
+                svg/edit])])])
 
-          (when (and (not hide-block-refs?) (> refs-count 0))
-            (when-let [refs-cp (state/get-component :block/linked-references)]
-              (refs-cp uuid)))]))
-     (when db-based? (block-positioned-properties config block :block-right))]))
+       (when-not (:block-ref? config)
+         [:div.flex.flex-row.items-center.gap-1.h-6
+          (when (and db-based? (seq (:block/tags block)))
+            (tags config block))])
+
+       (block-refs-count block refs-count *hide-block-refs?)]
+
+      (when (and (not hide-block-refs?) (> refs-count 0))
+        (when-let [refs-cp (state/get-component :block/linked-references)]
+          (refs-cp uuid)))]]))
 
 (rum/defcs single-block-cp < mixins/container-id
   [state _config block-uuid]
