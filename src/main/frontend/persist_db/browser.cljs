@@ -93,10 +93,12 @@
                        "js/db-worker.js"
                        "static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
-          wrapped-worker (Comlink/wrap worker)]
+          wrapped-worker (Comlink/wrap worker)
+          t1 (util/time-ms)]
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! *worker wrapped-worker)
       (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
+                  _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
                   _ (.sync-app-state wrapped-worker
                                      (ldb/write-transit-str
                                       {:git/current-repo (state/get-current-repo)
