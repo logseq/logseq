@@ -8,6 +8,7 @@
             [frontend.util :as util]
             [frontend.handler.property.util :as pu]
             [frontend.config :as config]
+            [frontend.storage :as storage]
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.common.util :as common-util]
@@ -253,3 +254,14 @@
             (fn [full-nodes]
               (filter (fn [node] (contains? nodes (:id node)))
                       full-nodes)))))
+
+(defn settle-metadata-to-local!
+  [m]
+  (when-let [repo (state/get-current-repo)]
+    (try
+      (let [k :ls-graphs-metadata
+            ret (or (storage/get k) {})
+            ret (update ret repo merge m {:_v (js/Date.now)})]
+        (storage/set k ret))
+      (catch js/Error e
+        (js/console.warn e)))))

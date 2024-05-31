@@ -61,6 +61,7 @@
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.code :as code-handler]
             [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
@@ -181,7 +182,8 @@
            (rtc-handler/<rtc-start! graph)
            (file-sync-restart!))
          (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
-           (fs/watch-dir! dir-name)))))))
+           (fs/watch-dir! dir-name))
+         (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
