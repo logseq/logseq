@@ -100,8 +100,8 @@
          {:block/content "number property block" :properties {:number 5}}
          {:block/content "number-many property block" :properties {:number-many #{5 10}}}
          {:block/content "number-closed property block" :properties {:number-closed (random-closed-value :number-closed)}}
-         {:block/content "page property block" :properties {:page [:page "page 1"]}}
-         {:block/content "page-many property block" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}
+         {:block/content "page property block" :properties {:page [:page "Page 1"]}}
+         {:block/content "page-many property block" :properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}
         ;;  ;; :page-closed and :date-closed disabled for now since they're not supported
         ;;  #_{:block/content "page-closed property block" :properties {:page-closed (random-closed-value :page-closed)}}
          {:block/content "date property block" :properties {:date [:page (date-journal-title today)]}}
@@ -138,8 +138,8 @@
        {:page {:block/name "number page" :properties {:number 5}}}
        {:page {:block/name "number-many page" :properties {:number-many #{5 10}}}}
        {:page {:block/name "number-closed page" :properties {:number-closed (random-closed-value :number-closed)}}}
-       {:page {:block/name "page page" :properties {:page [:page "page 1"]}}}
-       {:page {:block/name "page-many page" :properties {:page-many #{[:page "page 1"] [:page "page 2"]}}}}
+       {:page {:block/name "page page" :properties {:page [:page "Page 1"]}}}
+       {:page {:block/name "page-many page" :properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}}
       ;;  #_{:page {:block/name "page-closed page" :properties {:page-closed (random-closed-value :page-closed)}}}
        {:page {:block/name "date page" :properties {:date [:page (date-journal-title today)]}}}
        {:page {:block/name "date-many page" :properties {:date-many #{[:page (date-journal-title today)]
