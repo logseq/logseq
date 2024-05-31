@@ -797,7 +797,8 @@
             db? (config/db-based-graph? repo)
             key (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
             key (if db? (db-property/create-user-property-ident-from-name key) key)
-            _ (when db? (db-property-handler/upsert-property! key {} {}))]
+            _ (when (and db? (not (db-utils/entity key)))
+                (db-property-handler/upsert-property! key {} {}))]
       (property-handler/set-block-property! repo block-uuid key value))))
 
 (def ^:export remove_block_property
@@ -821,7 +822,7 @@
               property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
               property-value (or (get properties key)
                                (get properties property-name)
-                               (get properties (keyword (str "user.property/" property-name))))
+                               (get properties (db-property/create-user-property-ident-from-name property-name)))
               property-value (if-let [property-id (:db/id property-value)] (db/pull property-id) property-value)]
           (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))
 
