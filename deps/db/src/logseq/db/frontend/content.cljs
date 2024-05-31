@@ -72,7 +72,8 @@
        (map uuid)))
 
 (defn page-ref->special-id-ref
-  "Convert page ref to special id refs e.g. `[[page name]] -> [[~^...]]"
+  "Convert page ref to special id refs e.g. `[[page name]] -> [[~^...]].
+   TODO: Merge with db-editor-handler/replace-page-refs-with-ids when possible"
   [content refs]
   (reduce
    (fn [content ref]
