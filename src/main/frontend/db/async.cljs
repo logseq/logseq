@@ -16,6 +16,7 @@
             [cljs-time.format :as tf]
             [logseq.db :as ldb]
             [frontend.util :as util]
+            [frontend.handler.file-based.property.util :as property-util]
             [logseq.db.frontend.property :as db-property]))
 
 (def <q db-async-util/<q)
@@ -63,21 +64,27 @@
                        (db-property/logseq-property? (:db/ident %))
                        (not (get-in % [:block/schema :public?])))))))
 
-(defn <get-all-property-names
-  "Returns a seq of property name strings"
+(defn <get-all-properties
+  "Returns all public properties as property maps including their
+  :block/original-name and :db/ident. For file graphs the map only contains
+  :block/original-name"
   []
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
-      (p/let [properties (<db-based-get-all-properties graph)]
-        (map :block/original-name properties))
-      (file-async/<file-based-get-all-properties graph))))
+      (<db-based-get-all-properties graph)
+      (p/let [properties (file-async/<file-based-get-all-properties graph)
+              hidden-properties (set (map name (property-util/hidden-properties)))]
+        (remove #(hidden-properties (:block/original-name %)) properties)))))
 
-(defn <get-property-values
+(defn <file-get-property-values
+  "For file graphs, returns property value names for given property name"
   [graph property]
   (when-not (config/db-based-graph? graph)
     (file-async/<get-file-based-property-values graph property)))
 
 (defn <get-block-property-values
+  "For db graphs, returns property value ids for given property db-ident.
+   Separate from file version because values are lazy loaded"
   [graph property-id]
   (let [empty-id (:db/id (db/entity :logseq.property/empty-placeholder))]
     (<q graph {:transact-db? false}

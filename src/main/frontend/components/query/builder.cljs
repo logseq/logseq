@@ -12,7 +12,6 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [frontend.search :as search]
             [frontend.mixins :as mixins]
             [logseq.graph-parser.db :as gp-db]
             [rum.core :as rum]
@@ -20,7 +19,9 @@
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (rum/defc page-block-selector
   [*find]
@@ -41,7 +42,10 @@
    (select items on-chosen {}))
   ([items on-chosen options]
    (component-select/select (merge
-                             {:items (map #(hash-map :value %) items)
+                             ;; Allow caller to build :items
+                             {:items (if (map? (first items))
+                                       items
+                                       (map #(hash-map :value %) items))
                               :on-chosen on-chosen}
                              options))))
 
@@ -134,24 +138,40 @@
   (let [[properties set-properties!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
-       (p/let [properties (search/get-all-properties)]
+       (p/let [properties (db-async/<get-all-properties)]
          (set-properties! properties)))
      [])
-    (select properties
-            (fn [{:keys [value]}]
+    (select (map #(hash-map :db/ident (:db/ident %)
+                            :value (:block/original-name %))
+                 properties)
+            (fn [{value :value db-ident :db/ident}]
               (reset! *mode "property-value")
-              (reset! *property (keyword value))))))
+              (reset! *property (if (config/db-based-graph? (state/get-current-repo))
+                                  db-ident
+                                  (keyword value)))))))
 
 (rum/defc property-value-select
   [repo *property *find *tree opts loc]
-  (let [[values set-values!] (rum/use-state nil)]
+  (let [db-graph? (sqlite-util/db-based-graph? repo)
+        [values set-values!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
-       (p/let [result (db-async/<get-property-values repo @*property)]
+       (p/let [result (if db-graph?
+                        (db-async/<get-block-property-values repo @*property)
+                        (db-async/<file-get-property-values repo @*property))]
+         (when db-graph?
+           (doseq [db-id result]
+            (db-async/<get-block repo db-id :children? false)))
          (set-values! result)))
      [@*property])
-    (let [values (cons "Select all" values)]
-      (select values
+    (let [;; FIXME: lazy load property values consistently on first call
+          _ (when db-graph?
+              (doseq [id values] (db/sub-block id)))
+          values' (if db-graph?
+                   (map #(db-property/get-property-value-name (db/entity repo %)) values)
+                   values)
+          values'' (cons "Select all" values')]
+      (select values''
               (fn [{:keys [value]}]
                 (let [x (if (= value "Select all")
                           [(if (= @*find :page) :page-property :property) @*property]
