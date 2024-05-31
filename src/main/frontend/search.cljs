@@ -11,8 +11,6 @@
             [frontend.search.fuzzy :as fuzzy]
             [logseq.common.config :as common-config]
             [frontend.db.async :as db-async]
-            [frontend.config :as config]
-            [frontend.handler.file-based.property.util :as property-util]
             [cljs-bean.core :as bean]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -69,23 +67,14 @@
            (let [result (fuzzy/fuzzy-search (keys templates) q {:limit limit})]
              (vec (select-keys templates result)))))))))
 
-(defn get-all-properties
-  []
-  (when-let [repo (state/get-current-repo)]
-    (let [hidden-props (if (config/db-based-graph? repo)
-                         ;; no-op since already removed
-                         (constantly false)
-                         (set (map name (property-util/hidden-properties))))]
-      (p/let [properties (db-async/<get-all-property-names)]
-        (remove hidden-props properties)))))
-
 (defn property-search
   ([q]
    (property-search q 100))
   ([q limit]
    (when q
      (p/let [q (fuzzy/clean-str q)
-             properties (get-all-properties)]
+             properties* (db-async/<get-all-properties)
+             properties (map :block/original-name properties*)]
        (when (seq properties)
          (if (string/blank? q)
            properties
@@ -100,7 +89,7 @@
    (when-let [repo (state/get-current-repo)]
      (when q
       (p/let [q (fuzzy/clean-str q)
-              result (db-async/<get-property-values repo (keyword property))]
+              result (db-async/<file-get-property-values repo (keyword property))]
         (when (seq result)
           (if (string/blank? q)
             result
