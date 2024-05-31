@@ -4,9 +4,24 @@
             [frontend.db.utils :as db-utils]
             [cljs-bean.core :as bean]
             [frontend.state :as state]
+            [frontend.config :as config]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.db :as db]
+            [logseq.db.frontend.property :as db-property]
+            [frontend.handler.db-based.property.util :as db-pu]
             [logseq.sdk.utils :as sdk-utils]))
+
+(defn- into-properties
+  [repo block]
+  (if (some-> repo (config/db-based-graph?))
+    (let [props (some->> block
+                  (filter (fn [[k _]] (db-property/property? k)))
+                  (into {})
+                  (db-pu/readable-properties))
+          block (update block :block/properties merge props)
+          block (apply dissoc (concat [block] (keys props)))]
+      block)
+    block))
 
 (defn get_block
   [id-or-uuid ^js opts]
@@ -24,5 +39,6 @@
                       ;; attached shallow children
                       (assoc block :block/children
                              (map #(list :uuid (:block/uuid %))
-                               (db/get-block-immediate-children repo uuid))))]
+                               (db/get-block-immediate-children repo uuid))))
+              block (into-properties repo block)]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
