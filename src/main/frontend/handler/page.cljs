@@ -17,6 +17,7 @@
             [frontend.handler.property :as property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -235,7 +236,8 @@
     (fn [e]
       (init-commands!)
       (when ok-handler
-        (ok-handler e)))
+        (ok-handler e))
+      (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)}))
     opts)))
 
 (defn get-all-pages
