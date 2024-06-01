@@ -2,6 +2,7 @@
   "Fns about applying remote updates"
   (:require [clojure.data :as data]
             [clojure.set :as set]
+            [clojure.string :as string]
             [datascript.core :as d]
             [frontend.schema-register :as sr]
             [frontend.worker.batch-tx :as batch-tx]
@@ -306,7 +307,7 @@
         (assert (some? shape) properties*)
         (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-name)])))))
 
-(def ^:private watched-attrs
+(def ^:private update-op-watched-attrs
   #{:block/content
     :block/updated-at
     :block/created-at
@@ -315,7 +316,17 @@
     :block/schema
     :block/tags
     :block/link
-    :block/journal-day})
+    :block/journal-day
+    :class/parent
+    :class/schema.properties
+    :property/schema.classes})
+
+(defn- update-op-watched-attr?
+  [attr]
+  (or (contains? update-op-watched-attrs attr)
+      (when-let [ns (namespace attr)]
+        (or (= "logseq.task" ns)
+            (string/ends-with? ns ".property")))))
 
 (defn- diff-block-kv->tx-data
   [db db-schema e k local-v remote-v]
@@ -374,7 +385,8 @@
   [db block-uuid op-value]
   (let [db-schema (d/schema db)
         ent (d/entity db [:block/uuid block-uuid])
-        local-block-map (->> (select-keys ent watched-attrs)
+        local-block-map (->> ent
+                             (filter (comp update-op-watched-attr? first))
                              (map (fn [[k v]]
                                     (let [k-schema (get db-schema k)
                                           ref? (= :db.type/ref (:db/valueType k-schema))
@@ -389,8 +401,20 @@
                                            v*)
                                          ;; else
                                          v)])))
-                             (into {}))]
-    (diff-block-map->tx-data db (:db/id ent) local-block-map (select-keys op-value watched-attrs))))
+                             (into {}))
+        remote-block-map (->> op-value
+                              (filter (comp update-op-watched-attr? first))
+                              (map (fn [[k v]]
+                                     ;; all non-built-in attrs is card-many in remote-op,
+                                     ;; convert them according to the client db-schema
+                                     (let [k-schema (get db-schema k)
+                                           card-many? (= :db.cardinality/many (:db/cardinality k-schema))]
+                                       [k
+                                        (if (and (coll? v) (not card-many?))
+                                          (first v)
+                                          v)])))
+                              (into {}))]
+    (diff-block-map->tx-data db (:db/id ent) local-block-map remote-block-map)))
 
 (defn- remote-op-value->schema-tx-data
   [block-uuid op-value]
