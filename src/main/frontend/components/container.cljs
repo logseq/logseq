@@ -905,6 +905,7 @@
                         (let [shift? (.-shiftKey e)
                               shortcut (if shift? (str "shift+" (.-key e)) (.-key e))]
                           (db-property-handler/set-property-by-shortcut! shortcut)))
+                      (state/set-ui-last-key-code! (.-key e))
                       (state/set-state! :editor/latest-shortcut nil)))))
   [state route-match main-content]
   (let [{:keys [open-fn]} state
