@@ -980,27 +980,30 @@
                  (assoc :original-block editing-block
                         :edit-original-block
                         (fn [{:keys [editing-default-property?]}]
-                          (when (and (not (state/editing?)) editing-block
-                                     (not editing-default-property?))
+                          (when editing-block
                             (let [content (:block/content (db/entity (:db/id editing-block)))
                                   esc? (= "Escape" (state/get-ui-last-key-code))
                                   [content' pos] (cond
                                                    esc?
                                                    [nil pos]
                                                    (and (>= (count content) pos)
-                                                          (>= pos 2)
-                                                          (= (util/nth-safe content (dec pos))
-                                                             (util/nth-safe content (- pos 2))
-                                                             ";"))
+                                                        (>= pos 2)
+                                                        (= (util/nth-safe content (dec pos))
+                                                           (util/nth-safe content (- pos 2))
+                                                           ";"))
                                                    [(str (common-util/safe-subs content 0 (- pos 2))
                                                          (common-util/safe-subs content pos))
                                                     (- pos 2)]
                                                    :else
                                                    [nil pos])]
-                              (editor-handler/edit-block! editing-block (or pos :max)
-                                                          (cond-> {}
-                                                            content'
-                                                            (assoc :custom-content content'))))))))]
+                              (if editing-default-property?
+                                (when (and editing-block content')
+                                  (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content'))
+                                (when-not (state/editing?)
+                                  (editor-handler/edit-block! editing-block (or pos :max)
+                                                              (cond-> {}
+                                                                content'
+                                                                (assoc :custom-content content'))))))))))]
      (when (seq blocks)
        (let [input (some-> (state/get-edit-input-id)
                            (gdom/getElement))]
