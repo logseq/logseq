@@ -4,6 +4,10 @@
   }
 }
 
+.ls-property-input {
+  min-width: 228px;
+}
+
 .ls-property-dialog {
   .ls-property-key {
     @apply overflow-y-hidden;
