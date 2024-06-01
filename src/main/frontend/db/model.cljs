@@ -640,7 +640,8 @@ independent of format as format specific heading characters are stripped"
           react
           :entities
           (remove (fn [block]
-                    (= page-id (:db/id (:block/page block)))))
+                    (or (= page-id (:db/id (:block/page block)))
+                        (ldb/hidden-page? (:block/page block)))))
           (util/distinct-by :db/id)))))))
 
 ;; TODO: no need to use datalog query, `:block/_refs`

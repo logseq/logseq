@@ -401,7 +401,7 @@
                  :default-value description})]]])]]))))
 
 (rum/defc property-select
-  [exclude-properties on-chosen input-opts]
+  [exclude-properties select-opts]
   (let [[properties set-properties!] (rum/use-state nil)
         [excluded-properties set-excluded-properties!] (rum/use-state nil)]
     (rum/use-effect!
@@ -415,18 +415,18 @@
      [])
     [:div.ls-property-add.flex.flex-row.items-center.property-key
      [:div.ls-property-key
-      (select/select {:items (map (fn [x]
-                                    {:label (:block/original-name x)
-                                     :value (:block/uuid x)}) properties)
-                      :extract-fn :label
-                      :dropdown? false
-                      :close-modal? false
-                      :new-case-sensitive? true
-                      :show-new-when-not-exact-match? true
-                      :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
-                      :input-default-placeholder "Add or change property"
-                      :on-chosen on-chosen
-                      :input-opts input-opts})]]))
+      (select/select (merge
+                      {:items (map (fn [x]
+                                     {:label (:block/original-name x)
+                                      :value (:block/uuid x)}) properties)
+                       :extract-fn :label
+                       :dropdown? false
+                       :close-modal? false
+                       :new-case-sensitive? true
+                       :show-new-when-not-exact-match? true
+                       :exact-match-exclude-items (fn [s] (contains? excluded-properties s))
+                       :input-default-placeholder "Add or change property"}
+                      select-opts))]]))
 
 (rum/defc property-icon
   [property property-type]
@@ -455,11 +455,12 @@
   {:will-unmount (fn [state]
                    (let [args (:rum/args state)
                          *property-key (second args)
-                         {:keys [original-block edit-original-block]} (last args)]
+                         {:keys [original-block edit-original-block]} (last args)
+                         editing-default-property? (and original-block (state/get-edit-block)
+                                                        (not= (:db/id original-block) (:db/id (state/get-edit-block))))]
                      (when *property-key (reset! *property-key nil))
-                     (when (and original-block edit-original-block
-                                (not= (:db/id original-block) (:db/id (state/get-edit-block)))) ; new block created
-                       (edit-original-block)))
+                     (when (and original-block edit-original-block)
+                       (edit-original-block {:editing-default-property? editing-default-property?})))
                    state)}
   [state block *property-key {:keys [class-schema? page? page-configure?]
                               :as opts}]
@@ -530,8 +531,14 @@
                                        (and (= :default type) (seq (:property/closed-values property))))
                                    (p/do!
                                     (reset! *show-new-property-config? false))))))))
-             input-opts {}]
-         (property-select exclude-properties on-chosen input-opts)))]))
+             input-opts {:on-key-down
+                         (fn [e]
+                           ;; `Backspace` to close property popup and back to editing the current block
+                           (when (and (= (util/ekey e) "Backspace")
+                                      (= "" (.-value (.-target e))))
+                             (shui/popup-hide!)))}]
+         (property-select exclude-properties {:on-chosen on-chosen
+                                              :input-opts input-opts})))]))
 
 (rum/defcs new-property < rum/reactive
   [state block opts]
