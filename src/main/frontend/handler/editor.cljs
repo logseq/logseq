@@ -2869,6 +2869,16 @@
         (on-tab direction)))
     nil))
 
+(defn- double-chars-typed?
+  [value pos key sym]
+  (and (= key sym)
+       (>= (count value) 1)
+       (> pos 0)
+       (= (nth value (dec pos)) sym)
+       (if (> (count value) pos)
+         (not= (nth value pos) sym)
+         true)))
+
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
   "NOTE: Keydown cannot be used on Android platform"
   [format]
@@ -2941,8 +2951,8 @@
           (do (util/stop e)
               (autopair input-id "(" format nil))
 
-        ;; If you type `xyz`, the last backtick should close the first and not add another autopair
-        ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
+          ;; If you type `xyz`, the last backtick should close the first and not add another autopair
+          ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
           (-> (keys autopair-map)
               set
               (disj "(")
@@ -2955,24 +2965,17 @@
               (cursor/move-cursor-forward input)
               (autopair input-id key format nil)))
 
+          ; `;;` to add or change property for db graphs
+          (let [sym ";"]
+            (and (config/db-based-graph? (state/get-current-repo)) (double-chars-typed? value pos key sym)))
+          (state/pub-event! [:editor/new-property])
+
           (let [sym "$"]
-            (and (= key sym)
-                 (>= (count value) 1)
-                 (> pos 0)
-                 (= (nth value (dec pos)) sym)
-                 (if (> (count value) pos)
-                   (not= (nth value pos) sym)
-                   true)))
+            (double-chars-typed? value pos key sym))
           (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
           (let [sym "^"]
-            (and (= key sym)
-                 (>= (count value) 1)
-                 (> pos 0)
-                 (= (nth value (dec pos)) sym)
-                 (if (> (count value) pos)
-                   (not= (nth value pos) sym)
-                   true)))
+            (double-chars-typed? value pos key sym))
           (commands/simple-insert! input-id "^^" {:backward-pos 2})
 
           :else

@@ -76,6 +76,7 @@
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
@@ -981,20 +982,35 @@
                         (fn [{:keys [editing-default-property?]}]
                           (when (and (not (state/editing?)) editing-block
                                      (not editing-default-property?))
-                            (editor-handler/edit-block! editing-block (or pos :max))))))]
+                            (let [content (:block/content (db/entity (:db/id editing-block)))
+                                  [content' pos] (if (and (>= (count content) pos)
+                                                          (>= pos 2)
+                                                          (= (util/nth-safe content (dec pos))
+                                                             (util/nth-safe content (- pos 2))
+                                                             ";"))
+                                                   [(str (common-util/safe-subs content 0 (- pos 2))
+                                                         (common-util/safe-subs content pos))
+                                                    (- pos 2)]
+                                                   [nil pos])]
+                              ;; FIXME: Still allow input `;;`
+                              ;; `ESC` shouldn't clear `;;`
+                              (editor-handler/edit-block! editing-block (or pos :max)
+                                                          (cond-> {}
+                                                            content'
+                                                            (assoc :custom-content content'))))))))]
      (when (seq blocks)
        (let [input (some-> (state/get-edit-input-id)
                            (gdom/getElement))]
          (if input
            (shui/popup-show! input
-                            #(property-dialog/dialog blocks opts')
-                            {:align "start"
-                             :as-dropdown? true
-                             :auto-focus? true})
+                             #(property-dialog/dialog blocks opts')
+                             {:align "start"
+                              :as-dropdown? true
+                              :auto-focus? true})
            (shui/dialog-open! #(property-dialog/dialog blocks opts')
-                          {:id :property-dialog
-                           :align "start"
-                           :content-props {:onOpenAutoFocus #(.preventDefault %)}})))))))
+                              {:id :property-dialog
+                               :align "start"
+                               :content-props {:onOpenAutoFocus #(.preventDefault %)}})))))))
 
 (rum/defc multi-tabs-dialog
   []
