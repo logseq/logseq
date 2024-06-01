@@ -314,11 +314,11 @@
   "Return a task: push local updates"
   [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
   (m/sp
-    (when-let [remote-ops (gen-block-uuid->remote-ops repo conn)]
+    (op-mem-layer/new-branch! repo)
+    (if-let [remote-ops (not-empty (gen-block-uuid->remote-ops repo conn))]
       (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
                                  (sort-remote-ops
                                   remote-ops))]
-        (op-mem-layer/new-branch! repo)
         (let [local-tx (op-mem-layer/get-local-tx repo)
               r (m/? (send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
                                                     :ops ops-for-remote :t-before (or local-tx 1)}))]
@@ -349,7 +349,8 @@
                 (op-mem-layer/commit! repo)
                 (r.remote-update/apply-remote-update
                  repo conn date-formatter {:type :remote-update :value r} add-log-fn)
-                (add-log-fn {:type ::push-client-updates :remote-t (:t r)}))))))))
+                (add-log-fn {:type ::push-client-updates :remote-t (:t r)})))))
+      (op-mem-layer/rollback! repo))))
 
 (defn new-task--pull-remote-data
   [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
