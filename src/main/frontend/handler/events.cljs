@@ -983,10 +983,18 @@
                                      (not editing-default-property?))
                             (editor-handler/edit-block! editing-block (or pos :max))))))]
      (when (seq blocks)
-       (shui/dialog-open! #(property-dialog/dialog blocks opts')
+       (let [input (some-> (state/get-edit-input-id)
+                           (gdom/getElement))]
+         (if input
+           (shui/popup-show! input
+                            #(property-dialog/dialog blocks opts')
+                            {:align "start"
+                             :as-dropdown? true
+                             :auto-focus? true})
+           (shui/dialog-open! #(property-dialog/dialog blocks opts')
                           {:id :property-dialog
                            :align "start"
-                           :content-props {:onOpenAutoFocus #(.preventDefault %)}})))))
+                           :content-props {:onOpenAutoFocus #(.preventDefault %)}})))))))
 
 (rum/defc multi-tabs-dialog
   []

@@ -86,6 +86,7 @@
     (p/do!
      (when edit-block?
        (editor-handler/edit-block! block :max {:container-id :unknown-container}))
+     (shui/popup-hide!)
      (shui/dialog-close!))))
 
 (defn <add-property!
@@ -106,7 +107,7 @@
             (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
             (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?
-        (shui/popup-hide!)
+        (shui/popup-hide-all!)
         (shui/dialog-close!))))))
 
 (defn- add-or-remove-property-value
@@ -125,12 +126,13 @@
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
   {:will-mount (fn [state]
                  (js/setTimeout
-                   #(some-> @(::identity state)
-                      (js/document.getElementById)
-                      (.querySelector "[aria-selected=true]")
-                      (.focus)) 0)
+                  #(some-> @(::identity state)
+                           (js/document.getElementById)
+                           (.querySelector "[aria-selected=true]")
+                           (.focus)) 0)
                  state)
    :will-unmount (fn [state]
+                   (shui/popup-hide!)
                    (shui/dialog-close!)
                    state)}
   [state id on-change value]
@@ -151,6 +153,7 @@
                                                    :create-first-block? false}))
                  (when (fn? on-change)
                    (on-change (db/get-case-page journal)))
+                 (shui/popup-hide!)
                  (shui/dialog-close!))))))]
     (shui/calendar
      (cond->
@@ -392,6 +395,7 @@
                         (case (util/ekey e)
                           "Escape"
                           (do
+                            (shui/popup-hide!)
                             (shui/dialog-close!)
                             (when-let [f (:on-chosen opts)] (f)))
                           nil))})
@@ -490,6 +494,7 @@
                                       (case (util/ekey e)
                                         "Escape"
                                         (do
+                                          (shui/popup-hide!)
                                           (shui/dialog-close!)
                                           (when-let [f (:on-chosen select-opts)] (f)))
                                         nil))})})))))
