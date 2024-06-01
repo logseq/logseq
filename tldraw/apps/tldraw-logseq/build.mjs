@@ -9,7 +9,7 @@ if (process.platform === 'win32') {
   defaults.prefix = "";
 }
 
-// Build with [tsup](https://tsup.egoist.dev)
+// Build with [tsup](https://tsup.egoist.sh)
 await $`npx tsup`
 
 
