@@ -414,6 +414,7 @@
                                           (first v)
                                           v)])))
                               (into {}))]
+    (assert (some? (:db/id ent)) block-uuid)
     (diff-block-map->tx-data db (:db/id ent) local-block-map remote-block-map)))
 
 (defn- remote-op-value->schema-tx-data
@@ -468,8 +469,13 @@
              original-name :block/original-name
              :as op-value} update-page-ops]
       (let [create-opts {:create-first-block? false
-                         :uuid self :persist-op? false}]
-        (worker-page/create! repo conn config (ldb/read-transit-str original-name) create-opts)
+                         :uuid self
+                         :persist-op? false
+                         :create-even-page-exists? true}
+            [_ x y] (worker-page/create! repo conn config (ldb/read-transit-str original-name) create-opts)]
+        ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
+        ;; if there's already existing same name page
+        (prn :debug-create-page x y self)
         (update-block-attrs repo conn self op-value)))))
 
 (defn apply-remote-update

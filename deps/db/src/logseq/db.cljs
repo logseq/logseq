@@ -76,7 +76,12 @@
       ;;  (cljs.pprint/pprint tx-data)
 
        (let [f (or @*transact-fn d/transact!)]
-         (f repo-or-conn tx-data tx-meta))))))
+         (try
+           (f repo-or-conn tx-data tx-meta)
+           (catch :default e
+             (js/console.trace)
+             (prn :debug-tx-data tx-data)
+             (throw e))))))))
 
 (defn sort-by-order
   [blocks]

@@ -80,21 +80,24 @@
 (defn create!
   "Create page. Has the following options:
 
-   * :create-first-block? - when true, create an empty block if the page is empty.
-   * :uuid                - when set, use this uuid instead of generating a new one.
-   * :class?              - when true, adds a :block/type 'class'
-   * :whiteboard?         - when true, adds a :block/type 'whiteboard'
-   * :tags                - tag uuids that are added to :block/tags
-   * :persist-op?         - when true, add an update-page op
-   * :properties          - properties to add to the page
+   * :create-first-block?      - when true, create an empty block if the page is empty.
+   * :uuid                     - when set, use this uuid instead of generating a new one.
+   * :class?                   - when true, adds a :block/type 'class'
+   * :whiteboard?              - when true, adds a :block/type 'whiteboard'
+   * :tags                     - tag uuids that are added to :block/tags
+   * :persist-op?              - when true, add an update-page op
+   * :properties               - properties to add to the page
+   * :create-even-page-exists? - create page even same-name page exists
    TODO: Add other options"
   [repo conn config title
-   & {:keys [create-first-block? format properties uuid persist-op? whiteboard? class? today-journal?]
-      :or   {create-first-block? true
-             format              nil
-             properties          nil
-             uuid                nil
-             persist-op?         true}
+   & {:keys [create-first-block? format properties uuid persist-op? whiteboard? class? today-journal?
+             create-even-page-exists?]
+      :or   {create-first-block?      true
+             format                   nil
+             properties               nil
+             uuid                     nil
+             persist-op?              true
+             create-even-page-exists? false}
       :as options}]
   (let [db-based? (ldb/db-based-graph? @conn)
         date-formatter (common-config/get-date-formatter config)
@@ -104,7 +107,7 @@
                                    (date/valid-journal-title? date-formatter title))))
         [title page-name] (get-title-and-pagename title)
         with-uuid? (if (uuid? uuid) uuid true)
-        [page-uuid result] (when (ldb/page-empty? @conn page-name)
+        [page-uuid result] (when (or create-even-page-exists? (ldb/page-empty? @conn page-name))
                              (let [pages    (if split-namespace?
                                               (common-util/split-namespace-pages title)
                                               [title])
