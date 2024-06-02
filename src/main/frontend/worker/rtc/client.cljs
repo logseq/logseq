@@ -125,6 +125,18 @@
                (apply conj {:block-uuid block-uuid :db/ident db-ident}))
           [:block-uuid :db/ident :db/cardinality :db/valueType :db/index])]))))
 
+(defn- av-coll->card-one-attrs
+  [db-schema av-coll]
+  (let [a-coll (distinct (map first av-coll))]
+    (filter
+     (fn [a]
+       (when-let [ns (namespace a)]
+         (and
+          (or (= "logseq.task" ns)
+              (string/starts-with? ns "logseq.property")
+              (string/ends-with? ns ".property"))
+          (= :db.cardinality/one (:db/cardinality (db-schema a)))))) a-coll)))
+
 (defmethod local-block-ops->remote-ops-aux :update-op
   [_ & {:keys [db block update-op left-uuid parent-uuid *remote-ops *depend-on-block-uuid-set]}]
   (let [block-uuid (:block/uuid block)
@@ -134,11 +146,13 @@
                      (remove-non-exist-ref-av db))
         [schema-av-coll other-av-coll] (group-by-schema-attrs av-coll)
         update-schema-op (schema-av-coll->update-schema-op block-uuid (:db/ident block) schema-av-coll)
-        depend-on-block-uuids (keep (fn [[_a v]] (when (uuid? v) v)) other-av-coll)]
+        depend-on-block-uuids (keep (fn [[_a v]] (when (uuid? v) v)) other-av-coll)
+        card-one-attrs (seq (av-coll->card-one-attrs (d/schema db) other-av-coll))]
     (swap! *remote-ops conj
-           [:update {:block-uuid block-uuid
-                     :pos pos
-                     :av-coll other-av-coll}])
+           [:update (cond-> {:block-uuid block-uuid
+                             :pos pos
+                             :av-coll other-av-coll}
+                      card-one-attrs (assoc :card-one-attrs card-one-attrs))])
     (when update-schema-op
       (swap! *remote-ops conj update-schema-op))
     (swap! *depend-on-block-uuid-set (partial apply conj) depend-on-block-uuids)))
