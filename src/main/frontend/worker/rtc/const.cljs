@@ -51,7 +51,8 @@
      [:map
       [:block-uuid :uuid]
       [:pos block-pos-schema]
-      [:av-coll [:sequential av-schema]]]]]
+      [:av-coll [:sequential av-schema]]
+      [:card-one-attrs {:optional true} [:sequential :keyword]]]]]
    [:update-schema
     [:cat :keyword
      [:map
