@@ -910,7 +910,6 @@
   [state route-match main-content]
   (let [{:keys [open-fn]} state
         current-repo (state/sub :git/current-repo)
-        selection-mode? (state/sub :selection/mode)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
@@ -972,8 +971,11 @@
                      (when (= "Enter" (.-key e))
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
-      [:div.#app-container (cond-> {} selection-mode?
-                                   (assoc :class "blocks-selection-mode"))
+      [:div.#app-container {:on-pointer-up (fn []
+                                             (when-let [container (gdom/getElement "app-container")]
+                                               (d/remove-class! container "blocks-selection-mode")
+                                               (when (> (count (state/get-selection-blocks)) 1)
+                                                 (util/clear-selection!))))}
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
         (header/header {:open-fn        open-fn
