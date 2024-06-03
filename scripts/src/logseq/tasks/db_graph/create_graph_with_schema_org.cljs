@@ -63,13 +63,13 @@
         class-name (strip-schema-prefix (class-m "@id"))
         url (str "https://schema.org/" (get inverted-renamed-classes class-name class-name))]
     (cond-> {:block/original-name class-name
-             :properties (cond-> {:url url}
-                           (class-m "rdfs:comment")
-                           (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
+             :build/properties (cond-> {:url url}
+                                 (class-m "rdfs:comment")
+                                 (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class'
-      (assoc :class-parent (strip-schema-prefix parent-class'))
+      (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
       (seq properties)
-      (assoc :schema-properties (mapv strip-schema-prefix properties)))))
+      (assoc :build/schema-properties (mapv (comp keyword strip-schema-prefix) properties)))))
 
 (def schema->logseq-data-types
   "Schema datatypes, https://schema.org/DataType, mapped to their Logseq equivalents"
@@ -122,9 +122,9 @@
                  (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-pages)))]
     {(keyword (strip-schema-prefix (property-m "@id")))
      (cond-> {:block/schema schema
-              :properties {:url url}}
+              :build/properties {:url url}}
        (= schema-type :page)
-       (assoc :schema-classes (map strip-schema-prefix range-includes)))}))
+       (assoc :build/schema-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
 
 (defn- get-class-to-properties
   "Given a vec of class ids and a vec of properties map to process, return a map of
@@ -239,7 +239,7 @@
                      (map #(vector (keyword (strip-schema-prefix (get % "@id")))
                                    (->class-page % class-to-properties options)))
                      (into {}))]
-    (assert (= ["Thing"] (keep #(when-not (:class-parent %)
+    (assert (= ["Thing"] (keep #(when-not (:build/class-parent %)
                                   (:block/original-name %))
                                (vals classes)))
             "Thing is the only class that doesn't have a schema.org parent class")
@@ -322,11 +322,12 @@
         properties'
         (if (:subset options)
           ;; only keep classes that are in subset to keep graph valid
-          (let [select-class-ids' (->> select-class-ids (map strip-schema-prefix) set)]
+          (let [select-class-ids' (->> select-class-ids (map (comp keyword strip-schema-prefix)) set)]
             (-> properties
                 (update-vals (fn [m]
-                               (if (:schema-classes m)
-                                 (update m :schema-classes (fn [cs] (set (filterv #(contains? select-class-ids' %) cs))))
+                               (if (:build/schema-classes m)
+                                 (update m :build/schema-classes
+                                         (fn [cs] (vec (set (filter #(contains? select-class-ids' %) cs)))))
                                  m)))))
           properties)
         classes (generate-classes
