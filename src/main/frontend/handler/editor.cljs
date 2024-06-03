@@ -1656,10 +1656,12 @@
                             (when-let [page-id (:db/id (:block/page block))]
                               (:block/name (db/entity page-id))))
           pages (search/page-search q {:built-in? false})]
-    (if editing-page
-      ;; To prevent self references
-      (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
-      pages)))
+    (->> (if editing-page
+           ;; To prevent self references
+           (remove (fn [p] (= (util/safe-page-name-sanity-lc (:title p))
+                              (util/safe-page-name-sanity-lc editing-page))) pages)
+           pages)
+         (map :title))))
 
 (defn get-matched-classes
   "Return matched class names"

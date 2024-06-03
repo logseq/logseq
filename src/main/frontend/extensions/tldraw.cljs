@@ -27,13 +27,13 @@
             [frontend.components.whiteboard :as whiteboard]
             [cljs-bean.core :as bean]
             [frontend.db.async :as db-async]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [frontend.util.text :as text-util]))
 
 (def tldraw (r/adapt-class (gobj/get TldrawLogseq "App")))
 
 (def generate-preview (gobj/get TldrawLogseq "generateJSXFromModel"))
 
-;; FIXME: use page uuid instead or creating a ref
 (rum/defc page-cp
   [props]
   (page/page {:page-name (gobj/get props "pageName") :whiteboard? true}))
@@ -63,18 +63,23 @@
 
 (rum/defc page-name-link
   [props]
-  (block/page-cp {:preview? true} {:block/name (gobj/get props "pageName")}))
+  (when-let [page-name (gobj/get props "pageName")]
+    (when-let [page (db/get-page page-name)]
+      (block/page-cp {:preview? true} page))))
 
 (defn search-handler
   [q filters]
-  (let [{:keys [pages? blocks? files?]} (js->clj filters {:keywordize-keys true})
+  (let [{:keys [pages? blocks?]} (js->clj filters {:keywordize-keys true})
         repo (state/get-current-repo)
         limit 100]
     (p/let [blocks (when blocks? (search/block-search repo q {:limit limit}))
-            blocks (map (fn [b] (update b :block/uuid str)) blocks)
-            pages (when pages? (search/page-search q))
-            files (when files? (search/file-search q limit))]
-      (clj->js {:pages pages :blocks blocks :files files}))))
+            blocks (map (fn [b]
+                          (-> b
+                              (update :block/uuid str)
+                              (update :block/content #(->> (text-util/cut-by % "$pfts_2lqh>$" "$<pfts_2lqh$")
+                                                           (apply str))))) blocks)
+            pages (when pages? (search/page-search q))]
+      (clj->js {:pages pages :blocks blocks}))))
 
 (defn save-asset-handler
   [file]
@@ -118,8 +123,8 @@
                         (model/query-block-by-uuid block-uuid)))
    :getBlockPageName #(let [block-id-str %]
                         (if (util/uuid-string? block-id-str)
-                          (:block/name (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str)))
-                          (:block/name (db/get-page block-id-str))))
+                          (str (:block/uuid (model/get-block-page (state/get-current-repo) (parse-uuid block-id-str))))
+                          (str (:block/uuid (db/get-page block-id-str)))))
    :exportToImage (fn [page-uuid-str options]
                     (assert (common-util/uuid-string? page-uuid-str))
                     (state/set-modal! #(export/export-blocks (uuid page-uuid-str) (merge (js->clj options :keywordize-keys true) {:whiteboard? true}))))
@@ -133,9 +138,14 @@
    :setCurrentPdf (fn [src] (state/set-current-pdf! (if src (pdf-assets/inflate-asset src) nil)))
    :copyToClipboard (fn [text, html] (util/copy-to-clipboard! text :html html))
    :getRedirectPageName (fn [page-name-or-uuid] (model/get-redirect-page-name page-name-or-uuid))
-   :insertFirstPageBlock (fn [page-name] (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
+   :insertFirstPageBlock (fn [page-name]
+                           (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false}))
+   :addNewPage (fn [page-name]
+                 (p/let [result (page-handler/<create! page-name {:redirect? false})]
+                   (str (:block/uuid result))))
    :addNewWhiteboard (fn [page-name]
-                       (whiteboard-handler/<create-new-whiteboard-page! page-name))
+                       (p/let [result (whiteboard-handler/<create-new-whiteboard-page! page-name)]
+                         (str result)))
    :addNewBlock (fn [content]
                   (p/let [new-block-id (whiteboard-handler/<add-new-block! current-whiteboard-uuid content)]
                     (str new-block-id)))
@@ -143,15 +153,16 @@
                       (state/sidebar-add-block! (state/get-current-repo)
                                                 (:db/id (model/get-page uuid))
                                                 (keyword type)))
-   :redirectToPage (fn [page-name-or-uuid] ; FIXME whiteboard link refs should store UUIDs instead of page names
-                     (when page-name-or-uuid
-                       (let [block-id (parse-uuid page-name-or-uuid)
-                             page (if block-id
-                                    (model/get-block-page (state/get-current-repo) block-id)
-                                    (db/get-page page-name-or-uuid))
-                             whiteboard? (model/whiteboard-page? page)]
+   :redirectToPage (fn [page-uuid-str]
+                     (when page-uuid-str
+                       (p/let [block-id (parse-uuid page-uuid-str)
+                               _ (when block-id (db-async/<get-block (state/get-current-repo) block-id))
+                               page (or
+                                     (when block-id (model/get-block-page (state/get-current-repo) block-id))
+                                     (db/get-page page-uuid-str))
+                               whiteboard? (model/whiteboard-page? page)]
                          (p/let [new-page (when (nil? page)
-                                            (page-handler/<create! page-name-or-uuid {:redirect? false}))
+                                            (page-handler/<create! page-uuid-str {:redirect? false}))
                                  page' (or new-page page)]
                            (route-handler/redirect-to-page! (if whiteboard?
                                                               (:block/uuid page')

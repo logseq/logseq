@@ -38,7 +38,13 @@
                 (assoc block :index (get shape-id->index (str (:block/uuid block)) 0))))
          (filter pu/shape-block?)
          (map pu/block->shape)
-         (sort-by :index))))
+         (sort-by :index)
+         (map (fn [shape]
+                (if-let [page-id (:pageId shape)]
+                  (let [page (db/get-page page-id)]
+                    ;; Used in page preview
+                    (assoc shape :pageName (:block/original-name page)))
+                  shape))))))
 
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
