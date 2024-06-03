@@ -352,11 +352,12 @@
     (swap! !results update group merge {:status :success :items matched-items})))
 
 (defmethod load-results :current-page [group state]
-  (if-let [current-page (page-util/get-current-page-id)]
+  (if-let [current-page (when-let [id (page-util/get-current-page-id)]
+                          (db/entity id))]
     (let [!results (::results state)
           !input (::input state)
           repo (state/get-current-repo)
-          opts {:limit 100 :page current-page}]
+          opts {:limit 100 :page (str (:block/uuid current-page))}]
       (swap! !results assoc-in [group :status] :loading)
       (swap! !results assoc-in [:current-page :status] :loading)
       (p/let [blocks (search/block-search repo @!input opts)
@@ -367,7 +368,7 @@
                                       (uuid (:block/uuid block)))]
                              {:icon "block"
                               :icon-theme :gray
-                              :text (:block/content block)
+                              :text (highlight-content-query (:block/content block) @!input)
                               :header (block/breadcrumb {:search? true} repo id {})
                               :current-page? true
                               :source-block block})) blocks)]
