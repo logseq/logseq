@@ -381,3 +381,11 @@
     (split-blocks-tx (concat properties-tx'
                              classes-tx
                              pages-and-blocks-tx))))
+
+(defn create-blocks
+  "Builds txs with build-blocks-tx and transacts them"
+  [conn options]
+  (let [{:keys [init-tx block-props-tx]} (build-blocks-tx options)]
+    (d/transact! conn init-tx)
+    (when (seq block-props-tx)
+      (d/transact! conn block-props-tx))))
