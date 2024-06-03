@@ -28,5 +28,17 @@
 .cp__repos-select {
   &-trigger {
     @apply flex items-center p-2 text-sm font-medium rounded-md;
+
+    .repo-switch {
+      @apply flex w-[90%] overflow-hidden items-center select-none;
+    }
+
+    .repo-text, .repo-name {
+      @apply block w-[95%];
+    }
+
+    .dropdown-caret {
+      @apply relative border-t-gray-09 left-1.5 top-[2px];
+    }
   }
 }
