@@ -215,19 +215,18 @@
     (swap! !results assoc-in [group :status] :loading)
     (p/let [pages (search/page-search @!input)
             items (->> pages
-                    (remove nil?)
-                    (map
-                      (fn [page]
-                        (let [entity (db/get-page page)
-                              whiteboard? (= (:block/type entity) "whiteboard")
-                              source-page (model/get-alias-source-page repo (:db/id entity))]
-                          (hash-map :icon (if whiteboard? "whiteboard" "page")
-                            :icon-theme :gray
-                            :text page
-                            :source-page (if source-page
-                                           (:block/original-name source-page)
-                                           page))))))]
-      (swap! !results update group        merge {:status :success :items items}))))
+                       (map
+                        (fn [page]
+                          (let [entity (db/entity [:block/uuid (uuid (:id page))])
+                                whiteboard? (= (:block/type entity) "whiteboard")
+                                source-page (model/get-alias-source-page repo (:db/id entity))]
+                            (hash-map :icon (if whiteboard? "whiteboard" "page")
+                                      :icon-theme :gray
+                                      :text (:title page)
+                                      :source-page (if source-page
+                                                     (:block/original-name source-page)
+                                                     (:title page)))))))]
+      (swap! !results update group merge {:status :success :items items}))))
 
 (defmethod load-results :whiteboards [group state]
   (let [!input (::input state)

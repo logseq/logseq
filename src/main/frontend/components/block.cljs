@@ -553,7 +553,7 @@
         page-name (:block/name page-entity)
         breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (when page-name (model/untitled-page? page-name))
+        untitled? (when page-name (model/untitled-page? (:block/original-name page-entity)))
         display-close-button? (and (not (:hide-close-button? config))
                                    (not config/publishing?))
         hide-icon? (:hide-icon? config)]
@@ -900,12 +900,11 @@
 (declare block-content)
 (declare breadcrumb)
 
-(rum/defc block-reference < rum/reactive
+(rum/defc block-reference < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [block-id (second (:rum/args state))]
              (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
-  db-mixins/query
   [config id label]
   (if-let [block-id (if (uuid? id) id (parse-uuid id))]
     (if (state/sub-async-query-loading (str block-id))

@@ -183,8 +183,8 @@
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
           block-id (parse-uuid page-name)
-          block? (boolean block-id)
           block (get-block (or (:block/uuid page-e) (:block/name page-e)))
+          block? (not (db/page? block))
           children (:block/_parent block)
           *loading? (:*loading? config)
           loading? (when *loading? (rum/react *loading?))]
@@ -198,12 +198,12 @@
         :else
         (let [document-mode? (state/sub :document/mode?)
               hiccup-config (merge
-                              {:id (if block? (str block-id) page-name)
-                               :db/id (:db/id block)
-                               :block? block?
-                               :editor-box editor/box
-                               :document/mode? document-mode?}
-                              config)
+                             {:id (if block? (str block-id) page-name)
+                              :db/id (:db/id block)
+                              :block? block?
+                              :editor-box editor/box
+                              :document/mode? document-mode?}
+                             config)
               config (common-handler/config-with-document-mode hiccup-config)
               blocks (if block? [block] (db/sort-by-order children block))]
           [:div

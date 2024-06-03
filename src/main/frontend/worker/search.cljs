@@ -316,7 +316,7 @@
                    (map original-page-name->index)
                    (bean/->js))
         indice (fuse. pages
-                      (clj->js {:keys ["name"]
+                      (clj->js {:keys ["original-name"]
                                 :shouldSort true
                                 :tokenize true
                                 :distance 1024
@@ -372,7 +372,7 @@
                (fn [indice]
                  (when indice
                    (doseq [page-entity pages-to-remove]
-                     (.remove indice (fn [page] (= (:block/name page-entity) (gobj/get page "name")))))
+                     (.remove indice (fn [page] (= (str (:block/uuid page-entity)) (gobj/get page "id")))))
                    (doseq [page pages-to-add]
                      (.remove indice (fn [p] (= (str (:block/uuid page)) (gobj/get p "id"))))
                      (.add indice (bean/->js (original-page-name->index page))))
@@ -416,19 +416,16 @@
                          (build-page-indice repo db))
               result (cond->>
                       (->> (.search indice q (clj->js {:limit limit}))
-                           (bean/->clj)
-                           (remove #(nil? (get-in % [:item :original-name]))))
+                           (bean/->clj))
 
                        (and (sqlite-util/db-based-graph? repo) (= false built-in?))
                        (remove #(get-in % [:item :built-in?])))]
           (->> result
-               (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :original-name]))))
-               (map
+               (keep
                 (fn [{:keys [item]}]
-                  (:original-name item)))
-               (remove nil?)
-               (map string/trim)
+                  {:id (:id item)
+                   :title (:original-name item)}))
                (distinct)
-               (filter (fn [original-name]
-                         (exact-matched? q original-name)))
+               (filter (fn [{:keys [title]}]
+                         (exact-matched? q title)))
                bean/->js))))))
