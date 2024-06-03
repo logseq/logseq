@@ -1848,7 +1848,7 @@
                                    (when order-list? " as-order-list typed-list"))}
 
                       (if link?
-                        (ui/icon "circle-letter-e")
+                        (ui/icon "link" {:size 14})
                         [:span.bullet (cond->
                                        {:blockid (str uuid)}
                                         selected?
