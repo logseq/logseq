@@ -265,3 +265,8 @@
         (storage/set k ret))
       (catch js/Error e
         (js/console.warn e)))))
+
+(defn get-metadata-local
+  []
+  (let [k :ls-graphs-metadata]
+    (storage/get k)))
