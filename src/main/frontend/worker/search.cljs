@@ -115,7 +115,7 @@
   (try
     (p/let [result (if page
                      (.exec db #js {:sql sql
-                                    :bind #js [input page limit]
+                                    :bind #js [page input limit]
                                     :rowMode "array"})
                      (.exec db #js {:sql sql
                                     :bind #js [input limit]
