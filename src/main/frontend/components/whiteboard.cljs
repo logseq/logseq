@@ -164,7 +164,10 @@
                                  (map (fn [id]
                                         (some (fn [w] (when (= (:db/id w) id) w)) whiteboards))
                                       checked-page-ids)
-                                 false route-handler/redirect-to-whiteboard-dashboard!)))}))]
+                                 false
+                                 (fn []
+                                   (set-checked-page-ids #{})
+                                   (route-handler/redirect-to-whiteboard-dashboard!)))))}))]
        [:div
         {:ref ref}
         [:div.gap-8.grid.grid-rows-auto
@@ -174,13 +177,13 @@
          (for [whiteboard whiteboards]
            (let [id (:db/id whiteboard)]
              [:<> {:key (str id)}
-             (dashboard-preview-card whiteboard
-                                     {:show-checked? has-checked?
-                                      :checked (boolean (checked-page-ids id))
-                                      :on-checked-change (fn [checked]
-                                                           (set-checked-page-ids (if checked
-                                                                                   (conj checked-page-ids id)
-                                                                                   (disj checked-page-ids id))))})]))
+              (dashboard-preview-card whiteboard
+                                      {:show-checked? has-checked?
+                                       :checked (boolean (checked-page-ids id))
+                                       :on-checked-change (fn [checked]
+                                                            (set-checked-page-ids (if checked
+                                                                                    (conj checked-page-ids id)
+                                                                                    (disj checked-page-ids id))))})]))
          (for [n (range empty-cards)]
            [:div.dashboard-card.dashboard-bg-card {:key n}])]]])
     [:div "This feature is not publicly available yet."]))
