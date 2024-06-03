@@ -2204,7 +2204,7 @@
               (editor-handler/unhighlight-blocks!)
               (let [f #(let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)
                              cursor-range (some-> (gdom/getElement block-id)
-                                                  (dom/by-class "block-content-wrapper")
+                                                  (dom/by-class "block-content-inner")
                                                   first
                                                   util/caret-range)
                              {:block/keys [content format]} block
@@ -2228,7 +2228,8 @@
                    (f)
                    (js/setTimeout f 5)))
 
-                (state/set-selection-start-block! block-id)))))))))
+                (state/set-selection-start-block! block-id)
+))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block children block-id slide? top? block-content?]
@@ -2351,8 +2352,9 @@
                                       (not (string/includes? content "```"))
                                       (not (gobj/get e "shiftKey"))
                                       (not (util/meta-key? e)))
-                               ;; clear highlighted text
+                                 ;; clear highlighted text
                                  (util/clear-selection!)))}
+
        (not slide?)
        (merge attrs))
 
@@ -2482,6 +2484,8 @@
                         :on-hide (fn [value event]
                                    (let [select? (and (= event :esc)
                                                       (not (string/includes? value "```")))]
+                                     (when-let [container (gdom/getElement "app-container")]
+                                       (dom/remove-class! container "blocks-selection-mode"))
                                      (p/do!
                                       (state/set-editor-op! :escape)
                                       (editor-handler/save-block! (editor-handler/get-state) value)
@@ -2773,6 +2777,8 @@
     (when (and
            (state/in-selection-mode?)
            (non-dragging? e))
+      (when-let [container (gdom/getElement "app-container")]
+        (dom/add-class! container "blocks-selection-mode"))
       (editor-handler/highlight-selection-area! block-id))))
 
 (defn- block-mouse-leave
