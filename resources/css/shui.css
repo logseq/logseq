@@ -303,3 +303,16 @@ html[data-theme=dark] {
     }
   }
 }
+
+.popper-arrow {
+    fill: white;
+    filter: drop-shadow(0 0 3px var(--lx-gray-12));
+    clip-path: inset(0 -10px -10px -10px);
+}
+
+.dark-theme {
+    .popper-arrow {
+        /* FIXME: set the best color for different themes */
+        fill: none;
+    }
+}
