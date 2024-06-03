@@ -409,7 +409,6 @@
  :whiteboard/new-whiteboard "新白板:"
  :whiteboard/search-only-blocks "仅搜索块"
  :whiteboard/search-only-pages "仅搜索页面"
- :whiteboard/cache-outdated "缓存已过期。 请点击图谱下拉菜单中的 '重新建立索引' 按钮重建索引。"
  :whiteboard/shape-quick-links "形状快速链接"
  :whiteboard/dashboard-card-new-whiteboard "新建白板"
  :whiteboard/dashboard-card-created "创建于 "

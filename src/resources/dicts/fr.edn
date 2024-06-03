@@ -491,7 +491,6 @@
     :whiteboard/color "Couleur"
     :whiteboard/collapse "Réduire"
     :whiteboard/circle "Cercle"
-    :whiteboard/cache-outdated "Le cache n'est plus à jour. Cliquez sur 'Ré-indexer' mais…"
     :whiteboard/bold "Gras"
     :whiteboard/auto-resize "Redimensionnement automatique"
     :whiteboard/arrow-head "Pointe de flèche"
@@ -502,7 +501,6 @@
     :whiteboard/align-center-horizontally "Aligner horizontalement au centre"
     :whiteboard/align-bottom "Aligner en bas"
     :whiteboard/add-block-or-page "Ajouter un bloc ou une page"
-    :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Référence" "Références"))
     :whiteboard/toggle-pen-mode "Activer/désactiver le mode stylet"
     :tips/all-done "Tout est complété !"
     :shortcut.category/whiteboard "Tableau blanc"

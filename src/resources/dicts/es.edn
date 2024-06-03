@@ -667,7 +667,6 @@
  :whiteboard/arrow-head                             "Cabeza de flecha"
  :whiteboard/auto-resize                            "Cambiar tamaño automáticamente"
  :whiteboard/bold                                   "Negrita"
- :whiteboard/cache-outdated                         "La caché está desactualizada. Por favor da clic en el botón 'Reindexar' en el menú desplegable del grafo."
  :whiteboard/circle                                 "Círculo"
  :whiteboard/collapse                               "Colapsar"
  :whiteboard/color                                  "Color"
@@ -719,7 +718,6 @@
  :whiteboard/paste-as-link                          "Pegar como enlace"
  :whiteboard/rectangle                              "Recargar"
  :whiteboard/redo                                   "Rehacer"
- :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Referencia" "Referencias"))
  :whiteboard/references                             "Referencias"
  :whiteboard/reload                                 "Recargar"
  :whiteboard/remove-link                            "Eliminar enlace"

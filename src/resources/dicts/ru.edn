@@ -305,7 +305,6 @@
  :whiteboard/new-whiteboard                            "Новая интерактивная доска"
  :whiteboard/search-only-blocks                        "Поиск только по блокам"
  :whiteboard/search-only-pages                         "Поиск только по страницам"
- :whiteboard/cache-outdated                            "Кэш устарел. Пожалуйста, нажмите кнопку 'Переиндексировать' в выпадающем меню графов."
  :whiteboard/shape-quick-links                         "Быстрые ссылки элемента"
  :home                                                 "Домой"
  :new-page                                             "Новая страница:"

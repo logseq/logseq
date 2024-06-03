@@ -10,7 +10,6 @@
             ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -1159,24 +1158,6 @@
                                                    (set-visible! in-view?)))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in?))))
-
-(rum/defc portal
-  ([children]
-   (portal children {:attach-to (fn [] js/document.body)
-                     :prepend? false}))
-  ([children {:keys [attach-to prepend?]}]
-   (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
-     (rum/use-effect!
-      (fn []
-        (let [div (js/document.createElement "div")
-              attached (or (if (fn? attach-to) (attach-to) attach-to) js/document.body)]
-          (.setAttribute div "data-logseq-portal" (str (d/squuid)))
-          (if prepend? (.prepend attached div) (.append attached div))
-          (set-portal-anchor div)
-          #(.remove div)))
-      [])
-     (when portal-anchor
-       (rum/portal (rum/fragment children) portal-anchor)))))
 
 (rum/defc menu-heading
   ([add-heading-fn auto-heading-fn rm-heading-fn]

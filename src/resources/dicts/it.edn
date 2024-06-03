@@ -656,7 +656,6 @@
  :whiteboard/arrow-head "Punta della freccia"
  :whiteboard/auto-resize "Ridimensiona automaticamente"
  :whiteboard/bold "Grassetto"
- :whiteboard/cache-outdated "La cache è obsoleta. Clicca 'Re-indicizza' nel menù a discesa del grafo."
  :whiteboard/circle "Cerchio"
  :whiteboard/collapse "Collassa"
  :whiteboard/color "Colore"
@@ -754,5 +753,4 @@
  :linked-references/filter-includes "Include: "
  :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " di ")) total (if (= total 1) " Riferimento Collegato" " Riferimenti Collegati")))
  :settings-page/git-commit-on-close "Esegui commit Git alla chiusura della finestra"
- :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Riferimento Scollegato" " Riferimenti Scollegati")))
- :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Riferimento" "Riferimenti"))}
+ :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Riferimento Scollegato" " Riferimenti Scollegati")))}

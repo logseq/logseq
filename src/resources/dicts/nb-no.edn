@@ -491,7 +491,6 @@
  :whiteboard/arrow-head "Pilhode"
  :whiteboard/auto-resize "Automatisk endre størrelse"
  :whiteboard/bold "Fet"
- :whiteboard/cache-outdated "Cache er utdatert. Vennligst klikk 'Re-indekser' knappen"
  :whiteboard/circle "Sirkel"
  :whiteboard/collapse "Trekk sammen"
  :whiteboard/color "Farge"
@@ -761,5 +760,4 @@
  :linked-references/filter-includes "Inkluderer: "
  :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " av ")) total (if (= total 1) " Lenket Referanse" " Lenkede Referanser")))
  :pdf/auto-open-context-menu "Auto-åpne kontekstmeny for valg"
- :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Ulenket Referanse" " Ulenkede Referanser")))
- :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Referanse" "Referanser"))}
+ :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Ulenket Referanse" " Ulenkede Referanser")))}

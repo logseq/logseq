@@ -409,7 +409,6 @@
  :whiteboard/arrow-head "Pfeilspitze"
  :whiteboard/auto-resize "Automatisch Grösse ändern"
  :whiteboard/bold "Fett"
- :whiteboard/cache-outdated "Der Cache ist veraltet. Klicken Sie auf 'Neu indizieren' im Dropdown-Menu des Graphen."
  :whiteboard/circle "Kreis"
  :whiteboard/collapse "Einklappen"
  :whiteboard/color "Farbe"

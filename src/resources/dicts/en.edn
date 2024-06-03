@@ -438,7 +438,6 @@
  :whiteboard/new-whiteboard "New whiteboard"
  :whiteboard/search-only-blocks "Search only blocks"
  :whiteboard/search-only-pages "Search only pages"
- :whiteboard/cache-outdated "Cache is outdated. Please click the 'Re-index' button in the graph's dropdown menu."
  :whiteboard/shape-quick-links "Shape Quick Links"
  :whiteboard/edit-pdf "Edit PDF"
  :whiteboard/dashboard-card-new-whiteboard "New whiteboard"
@@ -447,7 +446,6 @@
  :whiteboard/toggle-grid "Toggle grid"
  :whiteboard/snap-to-grid "Snap to grid"
  :whiteboard/toggle-pen-mode "Toggle pen mode"
- :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Reference" "References"))
  :flashcards/modal-welcome-title "Time to create a card!"
  :flashcards/modal-welcome-desc-1 "You can add \"#card\" to any block to turn it into a card or trigger \"/cloze\" to add some clozes."
  :flashcards/modal-welcome-desc-2 "You can "

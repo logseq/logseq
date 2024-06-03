@@ -407,7 +407,6 @@
  :whiteboard/new-whiteboard                        "Nová tabuľa"
  :whiteboard/search-only-blocks                    "Vyhľadávať iba bloky"
  :whiteboard/search-only-pages                     "Vyhľadávať iba stránky"
- :whiteboard/cache-outdated                        "Cache je zastaraná. Kliknite na tlačidlo 'Preindexovať' v rozbaľovacom menu grafu."
  :whiteboard/shape-quick-links                     "Rýchle odkazy na tvary"
  :whiteboard/edit-pdf                              "Upraviť PDF"
  :whiteboard/dashboard-card-new-whiteboard         "Nová tabuľa"
