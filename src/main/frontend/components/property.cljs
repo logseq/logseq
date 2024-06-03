@@ -612,7 +612,7 @@
        (shui/trigger-as :a
                         {:tabIndex 0
                          :title (str "Configure property: " (:block/original-name property))
-                         :class "property-k flex select-none jtrigger"
+                         :class "property-k flex select-none jtrigger w-full"
                          :on-pointer-down (fn [^js e]
                                             (when (util/meta-key? e)
                                               (route-handler/redirect-to-page! (:block/uuid property))
@@ -673,7 +673,7 @@
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}
-         [:div.property-key.col-span-2
+         [:div.property-key.col-span-1
           (property-key block property (assoc (select-keys opts [:class-schema?])
                                               :block? block?
                                               :collapsed? collapsed?
