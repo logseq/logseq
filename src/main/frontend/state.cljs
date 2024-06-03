@@ -126,7 +126,7 @@
       :editor/action                         (atom nil)
       :editor/action-data                    nil
       ;; With label or other data
-      :editor/last-saved-cursor              nil
+      :editor/last-saved-cursor              (atom {})
       :editor/editing?                       (atom {})
       :editor/in-composition?                false
       :editor/content                        (atom {})
@@ -1337,9 +1337,14 @@ Similar to re-frame subscriptions"
     (doseq [item items]
       (set-state! [:ui/sidebar-collapsed-blocks item] collapsed?))))
 
+(defn clear-editor-last-pos!
+  []
+  (set-state! :editor/last-saved-cursor {}))
+
 (defn clear-edit!
   []
   (set-state! :editor/editing? {})
+  (clear-editor-last-pos!)
   (set-state! :editor/cursor-range nil)
   (set-state! :editor/content {})
   (set-state! :editor/block nil)
@@ -1352,17 +1357,18 @@ Similar to re-frame subscriptions"
 
 (defn set-editor-last-pos!
   [new-pos]
-  (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos))
+  (update-state! :editor/last-saved-cursor
+                 (fn [m] (assoc m (:block/uuid (get-edit-block)) new-pos))))
 
 (defn get-editor-last-pos
   []
-  (get-in @state [:editor/last-saved-cursor (:block/uuid (get-edit-block))]))
+  (get @(:editor/last-saved-cursor @state) (:block/uuid (get-edit-block))))
 
 (defn set-block-content-and-last-pos!
   [edit-input-id content new-pos]
   (when edit-input-id
     (set-edit-content! edit-input-id content)
-    (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos)))
+    (set-editor-last-pos! new-pos)))
 
 (defn set-theme-mode!
   [mode]
