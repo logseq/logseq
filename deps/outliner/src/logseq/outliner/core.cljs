@@ -899,7 +899,8 @@
   {:pre [(fn? f)]}
   (let [result (apply f args)]
     (when result
-      (ldb/transact! (second args) (:tx-data result) (:tx-meta result)))
+      (let [tx-meta (assoc (:tx-meta result) :skip-store? true)]
+        (ldb/transact! (second args) (:tx-data result) tx-meta)))
     result))
 
 (defn save-block!

@@ -40,6 +40,7 @@
             blocks)))
 
 (defn validate-db!
+  "Validate db is slow, we probably don't want to enable it for production."
   [repo conn tx-report context]
   (when (and (:dev? context) (not (:importing? context)) (sqlite-util/db-based-graph? repo))
     (let [valid? (db-validate/validate-tx-report! tx-report (:validate-db-options context))]

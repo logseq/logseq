@@ -530,10 +530,12 @@
    [this repo ops-str opts-str]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (try
-       (let [ops (edn/read-string ops-str)
-             opts (edn/read-string opts-str)
-             result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
-         (ldb/write-transit-str result))
+       (worker-util/profile
+        "apply outliner ops"
+        (let [ops (edn/read-string ops-str)
+              opts (edn/read-string opts-str)
+              result (outliner-op/apply-ops! repo conn ops (worker-state/get-date-formatter repo) opts)]
+          (ldb/write-transit-str result)))
        (catch :default e
          (let [data (ex-data e)
                {:keys [type payload]} (when (map? data) data)]
@@ -617,8 +619,8 @@
      (with-write-transit-str
        (js/Promise.
         (rtc-core/new-task--grant-access-to-others token graph-uuid
-                                                    :target-user-uuids target-user-uuids
-                                                    :target-user-emails target-user-emails)))))
+                                                   :target-user-uuids target-user-uuids
+                                                   :target-user-emails target-user-emails)))))
 
   (rtc-get-graphs2
    [this token]
