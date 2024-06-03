@@ -336,15 +336,15 @@
                       :align "start"
                       :content-props {:class "repos-list"}})))
                :title repo-name}                            ;; show full path on hover
-              [:div.flex.flex-row.items-center
-               [:div.flex.relative.graph-icon.rounded
-                (shui/tabler-icon "database" {:size 15})]
+              [:div.flex.relative.graph-icon.rounded
+               (shui/tabler-icon "database" {:size 15})]
 
-               [:div.repo-switch.block.pr-2.whitespace-nowrap
-                [:span.repo-name.font-medium
-                 [:span.overflow-hidden.text-ellipsis (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
-                 (when remote? [:span.pl-1 (ui/icon "cloud")])]
-                [:span.dropdown-caret.ml-2 {:style {:border-top-color "#6b7280"}}]]])))))))
+              [:div.repo-switch.pr-2.whitespace-nowrap
+               [:span.repo-name.font-medium
+                [:span.repo-text.overflow-hidden.text-ellipsis
+                 (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
+                (when remote? [:span.pl-1 (ui/icon "cloud")])]
+               [:span.dropdown-caret]])))))))
 
 (defn invalid-graph-name-warning
   []
