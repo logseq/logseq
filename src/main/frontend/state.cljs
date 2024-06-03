@@ -1341,7 +1341,6 @@ Similar to re-frame subscriptions"
   []
   (set-state! :editor/editing? {})
   (set-state! :editor/cursor-range nil)
-  (swap! state merge {:editor/last-saved-cursor nil})
   (set-state! :editor/content {})
   (set-state! :editor/block nil)
   (set-state! :ui/select-query-cache {}))
@@ -1354,10 +1353,6 @@ Similar to re-frame subscriptions"
 (defn set-editor-last-pos!
   [new-pos]
   (set-state! [:editor/last-saved-cursor (:block/uuid (get-edit-block))] new-pos))
-
-(defn clear-editor-last-pos!
-  []
-  (set-state! :editor/last-saved-cursor nil))
 
 (defn get-editor-last-pos
   []

@@ -235,8 +235,7 @@
           pos (or (state/get-editor-last-pos)
                   (and cursor-range
                        (diff/find-position markup cursor-range)))]
-      (cursor/move-cursor-to node pos)
-      (state/clear-editor-last-pos!))))
+      (cursor/move-cursor-to node pos))))
 
 (defn highlight-block!
   [block-uuid]
