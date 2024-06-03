@@ -176,7 +176,8 @@
   (let [property (d/entity @conn property-id)
         block (when block-id (d/entity @conn block-id))]
     (when property
-      (let [new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value)
+      (let [value' (convert-property-input-string (get-in property [:block/schema :type]) value)
+            new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
                               new-block-id
                               (assoc :block/uuid new-block-id)
                               (int? template-id)
@@ -204,8 +205,8 @@
 (defn- find-or-create-property-value
   "Find or create a property value. Only to be used with properties that have ref types"
   [conn property-id v]
-  (or (get-property-value-eid @conn property-id (str v))
-      (let [v-uuid (create-property-text-block! conn nil property-id (str v) {})]
+  (or (get-property-value-eid @conn property-id v)
+      (let [v-uuid (create-property-text-block! conn nil property-id v {})]
         (:db/id (d/entity @conn [:block/uuid v-uuid])))))
 
 (defn- convert-ref-property-value
@@ -402,14 +403,13 @@
      (seq properties))))
 
 (defn- build-closed-value-tx
-  [db property property-type resolved-value {:keys [id icon description]
+  [db property resolved-value {:keys [id icon description]
                                              :or {description ""}}]
   (let [block (when id (d/entity db [:block/uuid id]))
         block-id (or id (ldb/new-block-id))
         icon (when-not (and (string? icon) (string/blank? icon)) icon)
         description (string/trim description)
         description (when-not (string/blank? description) description)
-        resolved-value (if (= property-type :number) (str resolved-value) resolved-value)
         tx-data (if block
                   [(let [schema (:block/schema block)]
                      (cond->
@@ -476,7 +476,7 @@
 
           :else
           (ldb/transact! conn
-                       (build-closed-value-tx @conn property property-type resolved-value opts)
+                       (build-closed-value-tx @conn property resolved-value opts)
                        {:outliner-op :save-block}))))))
 
 (defn add-existing-values-to-closed-values!

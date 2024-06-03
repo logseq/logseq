@@ -66,14 +66,6 @@
   "Provides the next temp :db/id to use in a create-graph transact!"
   #(swap! current-db-id dec))
 
-(defn- create-property-value
-  [block property-ident value]
-  (db-property-build/build-property-value-block
-   block
-   property-ident
-   ;; FIXME: Remove when fixed in UI
-   (str value)))
-
 ;; TODO: Use build-property-values-tx-m
 (defn- ->property-value-tx-m
   "Given a new block and its properties, creates a map of properties which have values of property value tx.
@@ -85,8 +77,10 @@
                          ;; TODO: Support translate-property-value without this hack
                          (not (vector? v)))
                 [k (if (set? v)
-                     (set (map #(create-property-value new-block (get-ident all-idents k) %) v))
-                     (create-property-value new-block (get-ident all-idents k) v))])))
+                     (->> v
+                          (map #(db-property-build/build-property-value-block new-block (get-ident all-idents k) %))
+                          set)
+                     (db-property-build/build-property-value-block new-block (get-ident all-idents k) v))])))
        (into {})))
 
 (defn- extract-content-refs

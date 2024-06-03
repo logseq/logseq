@@ -326,7 +326,7 @@
 
 (def block-attrs
   "Common attributes for normal blocks"
-  [[:block/content :string]
+  [[:block/content [:or :string :double]]
    [:block/parent :int]
    [:block/order :string]
    ;; refs
