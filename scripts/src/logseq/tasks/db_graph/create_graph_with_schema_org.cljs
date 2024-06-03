@@ -397,7 +397,7 @@
         conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
         init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
                                     options)
-        {:keys [init-tx block-props-tx]} (create-graph/create-blocks-tx init-data)]
+        {:keys [init-tx block-props-tx]} (create-graph/build-blocks-tx init-data)]
     (println "Generating" (str (count (filter :block/name init-tx)) " pages with "
                                (count (:classes init-data)) " classes and "
                                (count (:properties init-data)) " properties ..."))
