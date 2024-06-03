@@ -287,12 +287,11 @@
                      (page-handler/rename! (:block/uuid page) @*title-value)
                      (js/setTimeout #(reset! *edit? false) 100)))
                   (util/stop e))]
-    [:input.edit-input.p-0.focus:outline-none.ring-none
+    [:input.edit-input.p-0.outline-none.focus:outline-none.no-ring
      {:type          "text"
       :ref           input-ref
       :auto-focus    true
-      :style         {:outline "none"
-                      :width "100%"
+      :style         {:width "100%"
                       :font-weight "inherit"}
       :auto-complete (if (util/chrome?) "chrome-off" "off") ; off not working here
       :value         (rum/react *input-value)

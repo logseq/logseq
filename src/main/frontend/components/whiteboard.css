@@ -144,14 +144,12 @@ input.tl-text-input {
 }
 
 .whiteboard-page-title-root {
-  @apply shadow-md flex items-center;
+  @apply shadow-md flex items-center gap-1;
   position: absolute;
   left: 2.5rem;
   top: 0;
-  padding: 4px;
   border-radius: 0 0 12px 12px;
   z-index: 2000;
-  gap: 4px;
   line-height: 1.4;
   background: var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))));
 }
@@ -175,7 +173,7 @@ input.tl-text-input {
 
   .ls-page-title {
      @apply p-0 m-0;
-     
+
       .page-title {
         font-size: 16px;
       }
@@ -188,11 +186,6 @@ input.tl-text-input {
 
 .whiteboard-page-title:hover {
   background-color: var(--ls-tertiary-background-color);
-}
-
-.whiteboard-page-title:focus-within {
-  border: 1px solid var(--ls-border-color);
-  box-shadow: 0 0 0 4px var(--ls-focus-ring-color);
 }
 
 .whiteboard-page-refs-count-label {
