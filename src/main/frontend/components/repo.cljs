@@ -23,6 +23,7 @@
             [frontend.handler.user :as user-handler]
             [logseq.shui.ui :as shui]
             [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.graph :as graph]
             [frontend.worker.async-util :as async-util]))
 
 (rum/defc normalized-graph-label
@@ -43,25 +44,45 @@
         (db/get-repo-path (or url GraphName))
         (when remote? [:strong.pl-1.flex.items-center (ui/icon "cloud")])])]))
 
+(defn sort-repos-with-metadata-local
+  [repos]
+  (if-let [m (and (seq repos) (graph/get-metadata-local))]
+    (->> repos
+      (map (fn [r] (merge r (get m (:url r)))))
+      (sort (fn [r1 r2]
+              (compare (or (:last-seen-at r2) (:created-at r2))
+                (or (:last-seen-at r1) (:created-at r1))))))
+    repos))
+
+(defn- safe-locale-date
+  [dst]
+  (when (number? dst)
+    (try
+      (.toLocaleString (js/Date. dst))
+      (catch js/Error _e nil))))
+
 (rum/defc repos-inner
   "Graph list in `All graphs` page"
   [repos]
-  (for [{:keys [root url remote? GraphUUID GraphName] :as repo} repos
+  (for [{:keys [root url remote? GraphUUID GraphName created-at last-seen-at] :as repo}
+        (sort-repos-with-metadata-local repos)
         :let [only-cloud? (and remote? (nil? root))
               db-based? (config/db-based-graph? url)]]
     [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
-     (normalized-graph-label repo
-                             (fn []
-                               (when-not (state/sub :rtc/downloading-graph-uuid)
-                                 (cond
-                                   root ; exists locally
-                                   (state/pub-event! [:graph/switch url])
+     [:span
+      (normalized-graph-label repo
+        (fn []
+          (when-not (state/sub :rtc/downloading-graph-uuid)
+            (cond
+              root                                          ; exists locally
+              (state/pub-event! [:graph/switch url])
 
-                                   (and db-based? remote?)
-                                   (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+              (and db-based? remote?)
+              (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
 
-                                   :else
-                                   (state/pub-event! [:graph/pull-down-remote-graph repo])))))
+              :else
+              (state/pub-event! [:graph/pull-down-remote-graph repo])))))
+      [:small.text-gray-400 (some-> (or created-at last-seen-at) (safe-locale-date))]]
 
      [:div.controls
       [:div.flex.flex-row.items-center
@@ -253,6 +274,7 @@
             remotes (state/sub [:file-sync/remote-graphs :graphs])
             rtc-graphs (state/sub :rtc/graphs)
             downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
+            repos (sort-repos-with-metadata-local repos)
             repos (if (and (or (seq remotes) (seq rtc-graphs)) login?)
                     (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos)
             items-fn #(repos-dropdown-links repos current-repo downloading-graph-id multiple-windows? opts)
