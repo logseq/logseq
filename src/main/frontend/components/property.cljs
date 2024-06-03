@@ -635,6 +635,7 @@
                                                        :collisionPadding {:bottom 10 :top 10}
                                                        :avoidCollisions true
                                                        :align "start"}
+                                       :align "start"
                                        :auto-side? true
                                        :auto-focus? true}))}
                         (:block/original-name property)))]))
