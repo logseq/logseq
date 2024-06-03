@@ -612,7 +612,7 @@
                                           :size :sm
                                           :class "px-0 py-0 h-4"}
                                          (ui/icon "edit" {:size 14})))])]
-    [:div.select-item
+    [:div.select-item.cursor-pointer
      (cond
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value)
