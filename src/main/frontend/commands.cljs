@@ -363,8 +363,13 @@
        ["Add new property" [[:editor/clear-current-slash]
                             [:editor/new-property]]]]
 
-      @*extend-slash-commands
-        ;; Allow user to modify or extend, should specify how to extend.
+      (let [commands (cond->> @*extend-slash-commands
+                       db?
+                       (remove (fn [command] (when (map? (last command))
+                                               (false? (:db-graph? (last command)))))))]
+        commands)
+
+;; Allow user to modify or extend, should specify how to extend.
 
       (state/get-commands)
       (state/get-plugins-slash-commands))

@@ -285,6 +285,7 @@
         [el-rect set-el-rect!] (rum/use-state nil)
         ref-el              (rum/use-ref nil)
         ref-open?           (rum/use-ref left-sidebar-open?)
+        db-based?           (config/db-based-graph? (state/get-current-repo))
         default-home        (get-default-home-if-valid)
         route-name          (get-in route-match [:data :name])
         on-contents-scroll  #(when-let [^js el (.-target %)]
@@ -397,7 +398,7 @@
              :icon-extension? true
              :shortcut :go/whiteboards}))
 
-         (when (state/enable-flashcards? (state/get-current-repo))
+         (when (and (state/enable-flashcards? (state/get-current-repo)) (not db-based?))
            [:div.flashcards-nav
             (flashcards srs-open?)])
 
