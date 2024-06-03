@@ -314,8 +314,6 @@ html.is-mobile {
 
 .form-input {
   @apply block w-full mt-1 pl-2 sm:text-sm sm:leading-5 rounded bg-background border border-gray-07;
-  @apply focus:border-input focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-offset-2;
-  @apply focus-visible:ring-2 ring-offset-background;
 
   &.is-small {
     @apply py-1.5 sm:leading-4 sm:text-xs;
