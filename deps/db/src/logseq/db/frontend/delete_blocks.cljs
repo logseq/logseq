@@ -12,7 +12,7 @@
   [db txs]
   (let [retracted-block-ids (->> (keep (fn [tx]
                                          (when (and (vector? tx)
-                                                    (contains? [:db.fn/retractEntity :db/retractEntity] (first tx)))
+                                                    (contains? #{:db.fn/retractEntity :db/retractEntity} (first tx)))
                                            (second tx))) txs))]
     (when (seq retracted-block-ids)
       (let [retracted-blocks (map #(d/entity db %) retracted-block-ids)
@@ -20,7 +20,7 @@
                                 (let [refs (:block/_refs block)]
                                   (map (fn [ref]
                                          (let [id (:db/id ref)
-                                               block-content (:block/content ref)
+                                               block-content (:block/content block)
                                                new-content (some-> (:block/content ref)
                                                                    (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                                    block-content)
@@ -35,11 +35,11 @@
                               (apply concat))
             retracted-tx' (mapcat :tx retracted-tx)
             macros-tx (when-not (entity-plus/db-based-graph? db)
-                       (mapcat (fn [b]
-                              ;; Only delete if last reference
-                                 (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
-                                                  1)
-                                          (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
-                                       (:block/macros b)))
-                               retracted-blocks))]
+                        (mapcat (fn [b]
+                                  ;; Only delete if last reference
+                                  (keep #(when (<= (count (:block/_macros (d/entity db (:db/id %))))
+                                                   1)
+                                           (when (:db/id %) (vector :db.fn/retractEntity (:db/id %))))
+                                        (:block/macros b)))
+                                retracted-blocks))]
         (concat txs retracted-tx' macros-tx)))))
