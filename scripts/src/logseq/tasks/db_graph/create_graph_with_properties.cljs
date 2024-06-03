@@ -195,7 +195,7 @@
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
-        {:keys [init-tx block-props-tx]} (create-graph/create-blocks-tx (create-init-data))
+        {:keys [init-tx block-props-tx]} (create-graph/build-blocks-tx (create-init-data))
         existing-names (set (map :v (d/datoms @conn :avet :block/original-name)))
         conflicting-names (set/intersection existing-names (set (keep :block/original-name init-tx)))]
     (when (seq conflicting-names)

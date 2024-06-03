@@ -1,29 +1,60 @@
 (ns logseq.outliner.pipeline-test
-  (:require [cljs.test :refer [deftest is]]
+  (:require [cljs.test :refer [deftest is testing]]
             [logseq.db.frontend.schema :as db-schema]
             [datascript.core :as d]
-            [logseq.db :as ldb]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            [logseq.outliner.pipeline :as outliner-pipeline]
+            [clojure.string :as string]))
 
+(defn- get-blocks [db]
+  (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])
+              :in $
+              :where [?b :block/content] [(missing? $ ?b :logseq.property/built-in?)]]
+            db)
+       (map first)))
 
-;;; datoms
-;;; - 1 <----+
-;;;   - 2    |
-;;;     - 3 -+
-(def broken-outliner-data-with-cycle
-  [{:db/id 1
-    :block/uuid #uuid"e538d319-48d4-4a6d-ae70-c03bb55b6fe4"
-    :block/parent 3}
-   {:db/id 2
-    :block/uuid #uuid"c46664c0-ea45-4998-adf0-4c36486bb2e5"
-    :block/parent 1}
-   {:db/id 3
-    :block/uuid #uuid"2b736ac4-fd49-4e04-b00f-48997d2c61a2"
-    :block/parent 2}])
+(deftest compute-block-path-refs-tx
+  (testing "when a block's :refs change, descendants of block have correct :block/path-refs"
+    (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+          ;; needed in order for path-refs to be setup correctly with init data
+          _ (db-pipeline/add-listener conn)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          [parent-uuid child-uuid] (repeatedly 2 random-uuid)
+          {:keys [init-tx]}
+          (sqlite-build/build-blocks-tx
+           {:pages-and-blocks
+            [{:page {:block/original-name "bar"}}
+             {:page {:block/original-name "page1"}
+              :blocks [{:block/content "parent [[foo]]"
+                        :block/uuid parent-uuid}
+                       {:block/content "child [[baz]]"
+                        :block/uuid child-uuid
+                        :block/parent {:db/id [:block/uuid parent-uuid]}}
+                       {:block/content "grandchild [[bing]]"
+                        :block/parent {:db/id [:block/uuid child-uuid]}}]}]})
+          _ (d/transact! conn init-tx)
+          blocks (get-blocks @conn)
+          ;; Update parent block to replace 'foo' with 'bar' ref
+          new-tag-id (ffirst (d/q '[:find ?b :where [?b :block/original-name "bar"]] @conn))
+          modified-blocks (map #(if (string/starts-with? (:block/content %) "parent")
+                                  (assoc %
+                                         :block/refs [{:db/id new-tag-id}]
+                                         :block/path-refs [{:db/id new-tag-id}])
+                                  %)
+                               blocks)
+          refs-tx (outliner-pipeline/compute-block-path-refs-tx {:db-after @conn} modified-blocks)
+          _ (d/transact! conn refs-tx {:pipeline-replace? true})
+          updated-blocks (->> (get-blocks @conn)
+                              ;; Only keep enough of content to uniquely identify block
+                              (map #(hash-map :block/content (re-find #"\w+" (:block/content %))
+                                              :path-ref-names (set (map :block/name (:block/path-refs %))))))]
+      (is (= [{:block/content "parent"
+               :path-ref-names #{"page1" "bar"}}
+              {:block/content "child"
+               :path-ref-names #{"page1" "bar" "baz"}}
+              {:block/content "grandchild"
+               :path-ref-names #{"page1" "bar" "baz" "bing"}}]
+             updated-blocks)))))
 
-(deftest get-block-children-ids-on-bad-outliner-data
-  (let [db (d/db-with (d/empty-db db-schema/schema)
-                      broken-outliner-data-with-cycle)]
-    (is (= "bad outliner data, need to re-index to fix"
-           (try (ldb/get-block-children-ids db #uuid "e538d319-48d4-4a6d-ae70-c03bb55b6fe4")
-                (catch :default e
-                  (ex-message e)))))))
