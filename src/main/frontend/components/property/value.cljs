@@ -635,7 +635,8 @@
 
        (de/entity? value)
        (when-let [content (:block/content value)]
-         (inline-text-cp content))
+         ;; str for non-string values like :number
+         (inline-text-cp (str content)))
 
        :else
        (inline-text-cp (str value)))]))
@@ -744,8 +745,8 @@
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query rum/static
-  [state block property value {:keys [container-id editing? on-chosen]
-                               :as opts}]
+  [state block property value* {:keys [container-id editing? on-chosen]
+                                :as opts}]
   (let [property (model/sub-block (:db/id property))
         schema (:block/schema property)
         type (get schema :type :default)
@@ -754,9 +755,10 @@
         select-type? (select-type? property type)
         closed-values? (seq (:property/closed-values property))
         select-opts {:on-chosen on-chosen}
-        value (if (and (de/entity? value) (= (:db/ident value) :logseq.property/empty-placeholder))
+        value (if (and (de/entity? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
-                value)]
+                ;; str for non-string values like :number
+                (if (map? value*) (update value* :block/content str) value*))]
     (if (= :logseq.property/icon (:db/ident property))
       (icon-row block)
       (if (and select-type?

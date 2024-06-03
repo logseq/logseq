@@ -121,7 +121,8 @@
    :block-content
    '[(block-content ?b ?query)
      [?b :block/content ?content]
-     [(clojure.string/includes? ?content ?query)]]
+     [(str ?content) ?str-content]
+     [(clojure.string/includes? ?str-content ?query)]]
 
    :page
    '[(page ?b ?page-name)

@@ -74,21 +74,20 @@
                     set))
             "page-property can bind to property arg with bound property value"))
 
-    ;; FIXME: string uses of :number
     (testing "cardinality :many property"
       (is (= ["Page"]
-             (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/number-many "5")]
+             (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/number-many 5)]
                                 @conn)
                   (map (comp :block/original-name first))))
           "page-property returns result when page has property")
       (is (= []
-             (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/number-many "20")]
+             (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/number-many 20)]
                                 @conn)
                   (map (comp :block/original-name first))))
           "page-property returns no result when page doesn't have property value")
       (is (= #{:user.property/number-many}
              (->> (q-with-rules '[:find [?p ...]
-                                  :where (page-property ?b ?p "5") [?b :block/original-name "Page"]]
+                                  :where (page-property ?b ?p 5) [?b :block/original-name "Page"]]
                                 @conn)
                   set))
           "page-property can bind to property arg with bound property value"))
@@ -115,8 +114,8 @@
                                   @conn)
                     set))
             "page-property can bind to property arg with unbound property value")
-        (is (= #{[:user.property/number-many "10"]
-                 [:user.property/number-many "5"]
+        (is (= #{[:user.property/number-many 10]
+                 [:user.property/number-many 5]
                  [:user.property/foo "bar"]
                  [:user.property/page-many "Page A"]}
                (->> (q-with-rules '[:find ?p ?v
