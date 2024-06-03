@@ -36,6 +36,7 @@
 (def popover popup-core/popover)
 (def popover-trigger popup-core/popover-trigger)
 (def popover-content popup-core/popover-content)
+(def popover-arrow popup-core/popover-arrow)
 
 (def tooltip (util/lsui-wrap "Tooltip"))
 (def tooltip-trigger (util/lsui-wrap "TooltipTrigger"))

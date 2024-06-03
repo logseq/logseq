@@ -74,9 +74,10 @@
            {}
            (shui/button {:variant :ghost :size :sm
                          :class "opacity-75 hover:opacity-100"}
-             refs-count))
+                        refs-count))
           (shui/popover-content
            {:on-open-auto-focus #(.preventDefault %)}
+           (shui/popover-arrow {:class-name "popper-arrow"})
            [:div {:class classname}
             (reference/block-linked-references block-uuid)])))))))
 
