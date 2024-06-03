@@ -434,7 +434,6 @@
  :whiteboard/new-whiteboard "Yeni beyaz tahta"
  :whiteboard/search-only-blocks "Yalnızca blokları ara"
  :whiteboard/search-only-pages "Yalnızca sayfaları ara"
- :whiteboard/cache-outdated "Önbellek eski. Lütfen grafın açılır menüsündeki 'Yeniden dizin oluştur' düğmesini tıklayın."
  :whiteboard/shape-quick-links "Hızlı Bağlantıları Şekillendir"
  :whiteboard/edit-pdf "PDF'yi düzenle"
  :whiteboard/dashboard-card-new-whiteboard "Yeni beyaz tahta"
@@ -443,7 +442,6 @@
  :whiteboard/toggle-grid "Kılavuzu aç/kapat"
  :whiteboard/snap-to-grid "Kılavuzlara daya"
  :whiteboard/toggle-pen-mode "Kalem modunu aç/kapat"
- :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Referans" "Referans"))
  :flashcards/modal-welcome-title "Bir kart oluşturma zamanı!"
  :flashcards/modal-welcome-desc-1 "Herhangi bir bloğu karta dönüştürmek için \"#card\" etiketini ekleyebilir veya cümle tamamlama eklemek için \"/cloze\" komutunu kullanabilirsiniz."
  :flashcards/modal-welcome-desc-2 "Belgeleri kontrol etmek için "

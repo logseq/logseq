@@ -409,7 +409,6 @@
  :whiteboard/new-whiteboard "Novo whiteboard"
  :whiteboard/search-only-blocks "Pesquisar apenas blocos"
  :whiteboard/search-only-pages "Pesquisar apenas páginas"
- :whiteboard/cache-outdated "O cache está desatualizado. Clique no botão 'Re-indexar' no menu suspenso do grafo."
  :whiteboard/shape-quick-links "Links Rápidos de Forma"
  :whiteboard/edit-pdf "Editar PDF"
  :whiteboard/dashboard-card-new-whiteboard "Novo whiteboard"
@@ -762,7 +761,6 @@
  :linked-references/reference-count (fn [filtered-count total] (str (when filtered-count (str filtered-count " de ")) total (if (= total 1) " Referência Vinculada" " Referências Vinculadas")))
  :settings-page/git-commit-on-close "Commitar mudanças no Git ao fechar a janela"
  :unlinked-references/reference-count (fn [total] (str total (if (= total 1) " Referência Não-Vinculada" " Referências Não-Vinculadas")))
- :whiteboard/reference-count (fn [refs-count] (if (= refs-count 1) "Referência" "Referências"))
 
  ;; Allowed duplicates - start
  :settings-of-plugins "Plugins"

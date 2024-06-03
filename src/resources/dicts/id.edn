@@ -405,7 +405,6 @@
  :whiteboard/new-whiteboard "Papan tulis baru"
  :whiteboard/search-only-blocks "Cari hanya blok"
  :whiteboard/search-only-pages "Cari hanya halaman"
- :whiteboard/cache-outdated "Cache sudah ketinggalan zaman. Klik tombol 'Re-indeks' dalam menu tarik-turun grafik."
  :whiteboard/shape-quick-links "Tautan Cepat Bentuk"
  :whiteboard/edit-pdf "Sunting PDF"
  :whiteboard/dashboard-card-new-whiteboard "Papan tulis baru"

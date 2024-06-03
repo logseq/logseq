@@ -361,6 +361,36 @@
     {:init-tx init-tx
      :block-props-tx block-props-tx}))
 
+(defn- build-blocks-tx*
+  [{:keys [pages-and-blocks properties classes graph-namespace]
+    :as options}]
+  (let [;; add uuids before tx for refs in :properties
+        pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
+                                  (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
+                                    (seq blocks)
+                                    (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
+                                pages-and-blocks)
+        page-uuids (create-page-uuids pages-and-blocks')
+        all-idents (create-all-idents properties classes graph-namespace)
+        properties-tx (build-properties-tx properties page-uuids all-idents)
+        classes-tx (build-classes-tx classes properties page-uuids all-idents)
+        class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
+        ;; Replace idents with db-ids to avoid any upsert issues
+        properties-tx' (mapv (fn [m]
+                               (if (:property/schema.classes m)
+                                 (update m :property/schema.classes
+                                         (fn [cs]
+                                           (mapv #(or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
+                                                      (throw (ex-info (str "No :db/id found for :db/ident " (pr-str (:db/ident %))) {})))
+                                                 cs)))
+                                 m))
+                             properties-tx)
+        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids options)]
+    ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
+    (split-blocks-tx (concat properties-tx'
+                             classes-tx
+                             pages-and-blocks-tx))))
+
 (defn build-blocks-tx
   "Given an EDN map for defining pages, blocks and properties, this creates a map
  with two keys of transactable data for use with d/transact!. The :init-tx key
@@ -368,8 +398,7 @@
  The blocks that can be created have the following limitations:
 
  * Only top level blocks can be easily defined. Other level blocks can be
-   defined but they require explicit setting of attributes like :block/order and :block/parent
- * Block content containing page refs or tags is not supported yet
+   defined but they require explicit setting of :block/parent
 
    The EDN map has the following keys:
 
@@ -401,35 +430,9 @@
    supported: :default, :url, :checkbox, :number, :page and :date. :checkbox and
    :number values are written as booleans and integers/floats. :page references
    are written as vectors e.g. `[:page \"PAGE NAME\"]`"
-  [{:keys [pages-and-blocks properties classes graph-namespace]
-    :as options}]
-  (let [_ (validate-options options)
-        ;; add uuids before tx for refs in :properties
-        pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
-                                  (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
-                                    (seq blocks)
-                                    (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
-                                pages-and-blocks)
-        page-uuids (create-page-uuids pages-and-blocks')
-        all-idents (create-all-idents properties classes graph-namespace)
-        properties-tx (build-properties-tx properties page-uuids all-idents)
-        classes-tx (build-classes-tx classes properties page-uuids all-idents)
-        class-ident->id (->> classes-tx (map (juxt :db/ident :db/id)) (into {}))
-        ;; Replace idents with db-ids to avoid any upsert issues
-        properties-tx' (mapv (fn [m]
-                               (if (:property/schema.classes m)
-                                 (update m :property/schema.classes
-                                         (fn [cs]
-                                           (mapv #(or (some->> (:db/ident %) class-ident->id (hash-map :db/id))
-                                                      (throw (ex-info (str "No :db/id found for :db/ident " (pr-str (:db/ident %))) {})))
-                                                 cs)))
-                                 m))
-                             properties-tx)
-        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids options)]
-    ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
-    (split-blocks-tx (concat properties-tx'
-                             classes-tx
-                             pages-and-blocks-tx))))
+  [options]
+  (validate-options options)
+  (build-blocks-tx* options))
 
 (defn create-blocks
   "Builds txs with build-blocks-tx and transacts them. Usually used for testing"

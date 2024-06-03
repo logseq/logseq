@@ -415,7 +415,6 @@
  :whiteboard/new-whiteboard "新しいホワイトボード"
  :whiteboard/search-only-blocks "ブロックだけを検索"
  :whiteboard/search-only-pages "ページだけを検索"
- :whiteboard/cache-outdated "キャッシュが古くなっています。グラフのドロップダウンメニューにある「インデックス再構築」ボタンをクリックしてください。"
  :whiteboard/shape-quick-links "図形のクイックリンク"
  :whiteboard/edit-pdf "PDFを編集"
  :whiteboard/dashboard-card-new-whiteboard "新しいホワイトボード"
