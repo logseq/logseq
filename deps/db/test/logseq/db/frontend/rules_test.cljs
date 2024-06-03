@@ -25,7 +25,7 @@
                          :foo2 {:block/schema {:type :default}}}
             :pages-and-blocks
             [{:page {:block/original-name "Page"
-                     :properties {:foo "bar"}}}]})]
+                     :build/properties {:foo "bar"}}}]})]
         
     (is (= ["Page"]
            (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (has-page-property ?b :user.property/foo)]
@@ -53,9 +53,9 @@
                          :page-many {:block/schema {:type :page :cardinality :many}}}
             :pages-and-blocks
             [{:page {:block/original-name "Page"
-                     :properties {:foo "bar" :number-many #{5 10} :page-many #{[:page "Page A"]}}}}
+                     :build/properties {:foo "bar" :number-many #{5 10} :page-many #{[:page "Page A"]}}}}
              {:page {:block/original-name "Page A"
-                     :properties {:foo "bar A"}}}]})]
+                     :build/properties {:foo "bar A"}}}]})]
     (testing "cardinality :one property"
         (is (= ["Page"]
                (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/foo "bar")]
