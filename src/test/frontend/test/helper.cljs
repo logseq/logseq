@@ -15,7 +15,10 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [frontend.config :as config]
             [frontend.worker.pipeline :as worker-pipeline]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.sqlite.build :as sqlite-build]
+            [frontend.handler.file-based.status :as status]
+            [logseq.db.frontend.property :as db-property]))
 
 (def node? (exists? js/process))
 
@@ -71,11 +74,11 @@
      (->> (string/split file-content #"\n-\s*")
           (mapv (fn [s]
                   (let [[content & props] (string/split-lines s)]
-                    {:name-or-content content
-                     ;; If no property chars may accidentally parse child blocks
-                     ;; so don't do property parsing
-                     :properties (when (and (string/includes? s ":: ") props)
-                                   (property-lines->properties props))}))))}
+                    (cond-> {:block/content content}
+                      ;; If no property chars may accidentally parse child blocks
+                      ;; so don't do property parsing
+                      (and (string/includes? s ":: ") props)
+                      (assoc :build/properties (property-lines->properties props)))))))}
     {:page-properties
      (->> file-content
           string/split-lines
@@ -119,7 +122,8 @@
                {:file/content (string/join "\n"
                                            (map (fn [x] (str "- " (:name-or-content x))) block-properties))})))))
 
-(defn- load-test-files-for-db-graph
+#_:clj-kondo/ignore
+(defn- load-test-files-for-db-graph-old
   [files*]
   (let [files (mapv update-file-for-db-graph files*)]
     ;; TODO: Use sqlite instead of file graph to create client db
@@ -198,6 +202,80 @@
               (:file/block-properties file)))
            files)]
       (db/transact! test-db (vec (concat page-tx new-properties-tx block-properties-tx))))))
+
+(def file-to-db-statuses
+  {"TODO" :logseq.task/status.todo
+   "LATER" :logseq.task/status.todo
+   "IN-PROGRESS" :logseq.task/status.doing
+   "NOW" :logseq.task/status.doing
+   "DOING" :logseq.task/status.doing
+   "DONE" :logseq.task/status.done
+   "WAIT" :logseq.task/status.backlog
+   "WAITING" :logseq.task/status.backlog
+   "CANCELED" :logseq.task/status.canceled
+   "CANCELLED" :logseq.task/status.canceled})
+
+(defn- parse-content*
+  [content*]
+  (let [blocks** (->> (string/split content* #"\n-\s*")
+                      (mapv (fn [s]
+                              (let [[content & props] (string/split-lines s)]
+                                (cond-> {:block/content content}
+                      ;; If no property chars may accidentally parse child blocks
+                      ;; so don't do property parsing
+                                  (and (string/includes? s ":: ") props)
+                                  (assoc :build/properties (property-lines->properties props)))))))
+        [page-props blocks*]
+        (if (string/includes? (:block/content (first blocks**)) "::")
+          [(property-lines->properties (string/split-lines (:block/content (first blocks**))))
+           (rest blocks**)]
+          [nil blocks**])
+        blocks
+        (mapv #(if-let [status (some-> (second (re-find status/bare-marker-pattern (:block/content %)))
+                                       file-to-db-statuses)]
+                 (update % :build/properties merge {:logseq.task/status status})
+                 %)
+              blocks*)]
+    {:blocks (mapv (fn [b] (update b :block/content #(string/replace-first % #"^-\s*" "")))
+                   blocks)
+     :page-properties page-props}))
+
+(defn- parse-content
+  [content]
+  (if (string/includes? content "\n-")
+    (parse-content* content)
+    ;; TODO: handle different page properties
+    (parse-content* content)))
+
+(defn load-test-files-for-db-graph
+  [options*]
+  (let [pages-and-blocks
+        (mapv (fn [{:file/keys [path content]}]
+                (let [{:keys [blocks page-properties]} (parse-content content)
+                      _ (prn :blocks content blocks)
+                      page-name (or (second (re-find #"/([^/]+)\." path))
+                                    (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))]
+                  {:page (cond-> {:block/original-name page-name}
+                           (seq page-properties)
+                           (assoc :build/properties page-properties))
+                   :blocks blocks}))
+              options*)
+        page-block-properties (->> pages-and-blocks
+                                   (map #(-> (:blocks %) vec (conj (:page %))))
+                                   (mapcat #(->> % (map :build/properties) (mapcat keys)))
+                                   (remove db-property/logseq-property?)
+                                   set)
+        properties (->> page-block-properties
+                        (map #(vector % {:block/schema {:type :default}}))
+                        (into {}))
+        options (cond-> {:pages-and-blocks pages-and-blocks}
+                  (seq properties)
+                  (assoc :properties properties))
+        _ (prn :opt options)
+        {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
+    (db/transact! test-db init-tx)
+    (when (seq block-props-tx)
+      (db/transact! test-db block-props-tx))))
 
 (defn load-test-files
   "Given a collection of file maps, loads them into the current test-db.

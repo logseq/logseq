@@ -153,7 +153,7 @@
 (def ^:large-vars/data-var db-query-dsl-rules
   "Rules used by frontend.query.dsl for db graphs"
   (merge
-   query-dsl-rules
+   (dissoc query-dsl-rules :namespace)
    {:page-tags
     '[(page-tags ?p ?tags)
       [?p :block/tags ?t]
@@ -238,8 +238,7 @@
 
     :task
     '[(task ?b ?statuses)
-      (property ?b :logseq.task/status ?v)
-      [?v :block/content ?status]
+      (property ?b :logseq.task/status ?status)
       [(contains? ?statuses ?status)]]}))
 
 (def rules-dependencies
