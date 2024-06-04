@@ -686,7 +686,7 @@ Similar to re-frame subscriptions"
   ([] (sub-config (get-current-repo)))
   ([repo]
    (let [config (sub :config)]
-     (merge-configs (if (sqlite-util/db-based-graph? repo) db-default-config file-default-config)
+     (merge-configs (if (and (string? repo) (sqlite-util/db-based-graph? repo)) db-default-config file-default-config)
                     (get config ::global-config)
                     (get config repo)))))
 
