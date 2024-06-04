@@ -180,14 +180,17 @@ export interface AppGraphInfo {
 export interface BlockEntity {
   id: EntityID // db id
   uuid: BlockUUID
-  left: IEntityID
+  order: string
   format: 'markdown' | 'org'
   parent: IEntityID
   content: string
   page: IEntityID
+  createdAt: number
+  updatedAt: number
   properties?: Record<string, any>
 
   // optional fields in dummy page
+  left?: IEntityID
   anchor?: string
   body?: any
   children?: Array<BlockEntity | BlockUUIDTuple>
@@ -770,7 +773,9 @@ export interface IEditorProxy extends Record<string, any> {
     srcBlock: BlockIdentity
   ) => Promise<BlockEntity | null>
 
-  getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
+  getNextSiblingBlock: (
+    srcBlock: BlockIdentity
+  ) => Promise<BlockEntity | null>
 
   moveBlock: (
     srcBlock: BlockIdentity,
@@ -791,9 +796,9 @@ export interface IEditorProxy extends Record<string, any> {
 
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
 
-  getBlockProperty: (block: BlockIdentity, key: string) => Promise<any>
+  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | string| null>
 
-  getBlockProperties: (block: BlockIdentity) => Promise<any>
+  getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
 
   scrollToBlockInPage: (
     pageName: BlockPageName,
