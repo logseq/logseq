@@ -18,14 +18,12 @@
 (defn- date-journal-title [date]
   (date-time-util/int->journal-title (date-time-util/date->int date) "MMM do, yyyy"))
 
-(def date-journal-day date-time-util/date->int)
-
 (defn- subtract-days
   [date days]
   (new js/Date (- (.getTime date) (* days 24 60 60 1000))))
 
 (defn- build-closed-values-config
-  [{:keys [dates]}]
+  [_opts]
   {:default-closed
    (mapv #(hash-map :value %
                     :uuid (random-uuid)
@@ -43,19 +41,9 @@
    (mapv #(hash-map :value %
                     :uuid (random-uuid))
          ["Page 1" "Page 2" "Page 3"])
+   ;; If this is enabled again, :uuid translation support would need to be added for :build/closed-values
    :date-closed
-   ;; TODO: Consider capitalized journal name when confirming queries work
-   (mapv #(hash-map :value (date-journal-title %)
-                    :uuid (random-uuid))
-         dates)})
-
-(defn- create-journal-page
-  [date journal-name-uuid-map]
-  (let [journal-name (date-journal-title date)]
-    {:block/original-name journal-name
-     :block/uuid (or (journal-name-uuid-map journal-name) (throw (ex-info "No uuid for journal name" {})))
-     :block/type "journal"
-     :block/journal-day (date-journal-day date)}))
+   {}})
 
 (defn- create-init-data
   []
@@ -66,7 +54,6 @@
         page-values-tx (mapv #(hash-map :page
                                         {:block/uuid (:uuid %) :block/original-name (:value %)})
                              (:page-closed closed-values-config))
-        journal-name->uuid (into {} (map (juxt :value :uuid) (:date-closed closed-values-config)))
         ;; Stores random closed values for use with queries
         closed-values (atom {})
         random-closed-value #(let [val (-> closed-values-config % rand-nth)]
@@ -79,13 +66,13 @@
       page-values-tx
       ;; Journals
       [{:page
-        (create-journal-page today journal-name->uuid)
+        {:build/journal (date-time-util/date->int today)}
         :blocks
         [{:block/content "[[Block Properties]]"}
          {:block/content "[[Block Property Queries]]"}
          {:block/content "[[Page Property Queries]]"}]}
-       {:page (create-journal-page yesterday journal-name->uuid)}
-       {:page (create-journal-page two-days-ago journal-name->uuid)}
+       {:page {:build/journal (date-time-util/date->int yesterday)}}
+       {:page {:build/journal (date-time-util/date->int two-days-ago)}}
 
        ;; Block property blocks and queries
        {:page {:block/original-name "Block Properties"}
@@ -106,7 +93,7 @@
         ;;  #_{:block/content "page-closed property block" :build/properties {:page-closed (random-closed-value :page-closed)}}
          {:block/content "date property block" :build/properties {:date [:page (date-journal-title today)]}}
          {:block/content "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
-                                                                              [:page (date-journal-title yesterday)]}}}
+                                                                                    [:page (date-journal-title yesterday)]}}}
          #_{:block/content "date-closed property block" :build/properties {:date-closed (random-closed-value :date-closed)}}]}
        {:page {:block/original-name "Block Property Queries"}
         :blocks
@@ -143,7 +130,7 @@
       ;;  #_{:page {:block/original-name "page-closed page" :build/properties {:page-closed (random-closed-value :page-closed)}}}
        {:page {:block/original-name "date page" :build/properties {:date [:page (date-journal-title today)]}}}
        {:page {:block/original-name "date-many page" :build/properties {:date-many #{[:page (date-journal-title today)]
-                                                                      [:page (date-journal-title yesterday)]}}}}
+                                                                                     [:page (date-journal-title yesterday)]}}}}
        #_{:page {:block/original-name "date-closed page" :build/properties {:date-closed (random-closed-value :date-closed)}}}
        {:page {:block/original-name "Page Property Queries"}
         :blocks
