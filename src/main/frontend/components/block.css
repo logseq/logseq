@@ -413,17 +413,35 @@
     .block-control-wrap {
       @apply relative top-4;
     }
+
+    .block-content-or-editor-wrap {
+      .positioned-properties {
+        @apply relative top-4;
+      }
+    }
   }
 
   &:has(h2.as-heading) {
     .block-control-wrap {
       @apply relative top-3;
     }
+
+    .block-content-or-editor-wrap {
+      .positioned-properties {
+        @apply relative top-3;
+      }
+    }
   }
 
   &:has(h3.as-heading) {
     .block-control-wrap {
       @apply relative top-[3px];
+    }
+
+    .block-content-or-editor-wrap {
+      .positioned-properties {
+        @apply relative top-1;
+      }
     }
   }
 
