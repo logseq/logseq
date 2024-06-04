@@ -61,7 +61,7 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
         this.update({
           size: [this.props.size[0], newHeight],
         })
-        app.persist(true)
+        app.persist({replace: true})
       }
     }, [innerHeight])
 
@@ -69,7 +69,7 @@ export class TweetShape extends TLBoxShape<TweetShapeProps> {
       if (!this.initialHeightCalculated) {
         setTimeout(() => {
           this.onResetBounds()
-          app.persist(true)
+          app.persist({replace: true})
         })
       }
     }, [this.initialHeightCalculated])

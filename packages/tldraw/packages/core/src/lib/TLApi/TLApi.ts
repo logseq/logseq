@@ -450,7 +450,7 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
     this.app.currentPage.removeShapes(...selectedGroups)
 
     // group all shapes
-    const selectedShapes = shapes.filter(s => s.type !== 'group')
+    let selectedShapes = shapes.filter(s => s.type !== 'group')
     if (selectedShapes.length > 1) {
       const ShapeGroup = this.app.getShapeClass('group')
       const group = new ShapeGroup({
@@ -461,11 +461,12 @@ export class TLApi<S extends TLShape = TLShape, K extends TLEventMap = TLEventMa
       })
       this.app.currentPage.addShapes(group)
       this.app.setSelectedShapes([group])
+      selectedShapes.push(group)
       // the shapes in the group should also be moved to the bottom of the array (to be on top on the canvas)
       this.app.bringForward(selectedShapes)
     }
     this.app.history.resume()
-    this.app.persist()
+    this.app.persist(this.app.currentPage.persistInfo)
   }
 
   unGroup = (shapes: S[] = this.app.allSelectedShapesArray) => {

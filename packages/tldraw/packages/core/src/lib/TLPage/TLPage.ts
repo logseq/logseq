@@ -33,6 +33,7 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
     this.bindings = Object.assign({}, bindings) // make sure it is type of object
     this.app = app
     this.nonce = nonce || 0
+    this.persistInfo = null
     this.addShapes(...shapes)
     makeObservable(this)
 
@@ -137,50 +138,30 @@ export class TLPage<S extends TLShape = TLShape, E extends TLEventMap = TLEventM
   }
 
   @action bringForward = (shapes: S[] | string[]): this => {
-    const shapesToMove = this.parseShapesArg(shapes)
-    shapesToMove
-      .sort((a, b) => this.shapes.indexOf(b) - this.shapes.indexOf(a))
-      .map(shape => this.shapes.indexOf(shape))
-      .forEach(index => {
-        if (index === this.shapes.length - 1) return
-        const next = this.shapes[index + 1]
-        if (shapesToMove.includes(next)) return
-        const t = this.shapes[index]
-        this.shapes[index] = this.shapes[index + 1]
-        this.shapes[index + 1] = t
-      })
-    this.app.persist()
+    this.bringToFront(shapes)
     return this
   }
 
   @action sendBackward = (shapes: S[] | string[]): this => {
-    const shapesToMove = this.parseShapesArg(shapes)
-    shapesToMove
-      .sort((a, b) => this.shapes.indexOf(a) - this.shapes.indexOf(b))
-      .map(shape => this.shapes.indexOf(shape))
-      .forEach(index => {
-        if (index === 0) return
-        const next = this.shapes[index - 1]
-        if (shapesToMove.includes(next)) return
-        const t = this.shapes[index]
-        this.shapes[index] = this.shapes[index - 1]
-        this.shapes[index - 1] = t
-      })
-    this.app.persist()
+    this.sendToBack(shapes)
     return this
   }
 
   @action bringToFront = (shapes: S[] | string[]): this => {
     const shapesToMove = this.parseShapesArg(shapes)
-    this.shapes = this.shapes.filter(shape => !shapesToMove.includes(shape)).concat(shapesToMove)
-    this.app.persist()
+    let others = this.shapes.filter(shape => !shapesToMove.includes(shape))
+    this.shapes = others.concat(shapesToMove)
+    const info = {op: "bringToFront", shapes: shapesToMove, before: others[others.length - 1]}
+    this.app.persist(info)
+    this.persistInfo = info
     return this
   }
 
   @action sendToBack = (shapes: S[] | string[]): this => {
     const shapesToMove = this.parseShapesArg(shapes)
-    this.shapes = shapesToMove.concat(this.shapes.filter(shape => !shapesToMove.includes(shape)))
-    this.app.persist()
+    let others = this.shapes.filter(shape => !shapesToMove.includes(shape))
+    this.shapes = shapesToMove.concat(others)
+    this.app.persist({op: "sendToBack", shapes: shapesToMove, next: others[0]})
     return this
   }
 
