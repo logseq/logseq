@@ -296,7 +296,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             size: [this.props.size[0], newHeight],
           })
 
-          if (loaded) app.persist(true)
+          if (loaded) app.persist({replace: true})
         }
       }
     }, [innerHeight, this.props.isAutoResizing])
@@ -305,7 +305,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       if (!this.initialHeightCalculated) {
         setTimeout(() => {
           this.onResetBounds()
-          app.persist(true)
+          app.persist({replace: true})
         })
       }
     }, [this.initialHeightCalculated])

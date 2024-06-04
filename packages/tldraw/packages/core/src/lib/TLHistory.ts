@@ -28,9 +28,9 @@ export class TLHistory<S extends TLShape = TLShape, K extends TLEventMap = TLEve
     this.isPaused = false
   }
 
-  @action persist = (replace = false) => {
+  @action persist = (info) => {
     if (this.isPaused || this.creating) return
-    this.app.notify('persist', { replace })
+    this.app.notify('persist', info)
   }
 
   @action undo = () => {

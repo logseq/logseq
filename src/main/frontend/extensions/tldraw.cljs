@@ -178,7 +178,7 @@
    (p/let [_ @*transact-result
            result (p/do!
                    (state/set-state! [:whiteboard/last-persisted-at (state/get-current-repo)] (util/time-ms))
-                   (whiteboard-handler/<transact-tldr-delta! page-name app (.-replace info)))]
+                   (whiteboard-handler/<transact-tldr-delta! page-name app info))]
      (reset! *transact-result result))
    (p/catch (fn [^js error]
               (js/console.error error)
