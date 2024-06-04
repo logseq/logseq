@@ -717,9 +717,16 @@
 (def ^:export update_block
   (fn [block-uuid content ^js opts]
     (p/let [repo (state/get-current-repo)
-            _ (<pull-block block-uuid)]
-      (editor-handler/save-block! repo
-                                  (sdk-utils/uuid-or-throw-error block-uuid) content (bean/->clj opts)))))
+            db-base? (config/db-based-graph? repo)
+            block (<pull-block block-uuid)
+            opts (bean/->clj opts)]
+      (when block
+        (p/do!
+          (when db-base?
+            (api-block/save-db-based-block-properties! block (:properties opts)))
+          (editor-handler/save-block! repo
+            (sdk-utils/uuid-or-throw-error block-uuid) content
+            (if db-base? (dissoc opts :properties) opts)))))))
 
 (def ^:export move_block
   (fn [src-block-uuid target-block-uuid ^js opts]
