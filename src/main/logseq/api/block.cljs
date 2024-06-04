@@ -8,7 +8,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.db :as db]
             [logseq.db.frontend.property :as db-property]
-            [frontend.handler.db-based.property :as db-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
             [logseq.sdk.utils :as sdk-utils]))
 
@@ -32,7 +32,7 @@
         (fn [k]
           (if (qualified-keyword? k) k
             (db-property/create-user-property-ident-from-name (name k)))))
-      (db-handler/set-block-properties! block-id))))
+      (db-property-handler/set-block-properties! block-id))))
 
 (defn get_block
   [id-or-uuid ^js opts]

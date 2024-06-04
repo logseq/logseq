@@ -150,16 +150,6 @@
             block
             result'))))))
 
-(defn <get-right-sibling
-  [graph db-id]
-  (assert (integer? db-id))
-  (when-let [^Object worker @db-browser/*worker]
-    (p/let [result-str (.get-right-sibling worker graph db-id)
-            result (ldb/read-transit-str result-str)
-            conn (db/get-db graph false)
-            _ (when result (d/transact! conn [result]))]
-      result)))
-
 (defn <get-block-parents
   [graph id depth]
   (assert (integer? id))
