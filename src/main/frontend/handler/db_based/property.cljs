@@ -23,6 +23,13 @@
    {:outliner-op :set-block-property}
    (outliner-op/set-block-property! block-id property-id value)))
 
+(defn set-block-properties!
+  [block-id properties]
+  (ui-outliner-tx/transact!
+   {:outliner-op :set-block-properties}
+   (doseq [[property-id value] properties]
+     (outliner-op/set-block-property! block-id property-id value))))
+
 (defn remove-block-property!
   [block-id property-id]
   (ui-outliner-tx/transact!
