@@ -8,6 +8,7 @@
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [clojure.string :as string]
             [clojure.set :as set]
             [datascript.core :as d]
@@ -54,7 +55,8 @@
    (into {})))
 
 (defn- create-page-uuids
-  "Creates maps of unique page names, block contents and property names to their uuids"
+  "Creates maps of unique page names, block contents and property names to their uuids. Used to
+   provide user references for translate-property-value"
   [pages-and-blocks]
   (->> pages-and-blocks
        (map :page)
@@ -126,7 +128,7 @@
         new-properties-tx (vec
                            (mapcat
                             (fn [[prop-name {:build/keys [schema-classes] :as prop-m}]]
-                              (if-let [closed-values (:build/closed-values prop-m)]
+                              (if-let [closed-values (seq (map #(merge {:uuid (random-uuid)} %) (:build/closed-values prop-m)))]
                                 (let [db-ident (get-ident all-idents prop-name)]
                                   (db-property-build/build-closed-values
                                    db-ident
@@ -202,9 +204,15 @@
 (def Page-blocks
   [:map
    {:closed true}
-   [:page [:map
-           [:block/original-name :string]
-           [:build/properties {:optional true} User-properties]]]
+   [:page [:and
+           [:map
+            [:block/original-name {:optional true} :string]
+            [:build/journal {:optional true} :int]
+            [:build/properties {:optional true} User-properties]]
+           [:fn {:error/message ":block/original-name or :build/journal required"
+                 :error/path [:block/original-name]}
+            (fn [m]
+              (or (:block/original-name m) (:build/journal m)))]]]
    [:blocks {:optional true}
     [:vector [:map
               [:block/content :string]
@@ -221,7 +229,7 @@
      {:optional true}
      [:vector [:map
                [:value [:or :string :double]]
-               [:uuid :uuid]
+               [:uuid {:optional true} :uuid]
                [:icon {:optional true} :map]]]]
     [:build/schema-classes {:optional true} [:vector Class]]]])
 
@@ -289,50 +297,37 @@
 (defn- build-pages-and-blocks-tx
   [pages-and-blocks all-idents page-uuids {:keys [page-id-fn properties]
                                            :or {page-id-fn :db/id}}]
-  (let [new-pages-from-refs
-        (->> pages-and-blocks
-             (mapcat
-              (fn [{:keys [blocks]}]
-                (->> blocks
-                     (mapcat #(extract-content-refs (:block/content %)))
-                     (remove page-uuids))))
-             (map #(hash-map :page {:block/original-name % :block/uuid (random-uuid)})))
-        pages-and-blocks' (concat pages-and-blocks new-pages-from-refs)
-        ;; TODO: Make page-uuids' available to all fns once pages only take :block/original-name
-        page-uuids' (into page-uuids (map #(vector (get-in % [:page :block/original-name])
-                                                   (get-in % [:page :block/uuid]))
-                                          new-pages-from-refs))]
-    (vec
-     (mapcat
-      (fn [{:keys [page blocks]}]
-        (let [new-page (merge
-                        {:db/id (or (:db/id page) (new-db-id))
-                         :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
-                         :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
-                         :block/format :markdown}
-                        (dissoc page :build/properties :db/id :block/name :block/original-name))
-              pvalue-tx-m (->property-value-tx-m new-page (:build/properties page) properties all-idents)]
-          (into
+  (vec
+   (mapcat
+    (fn [{:keys [page blocks]}]
+      (let [new-page (merge
+                      {:db/id (or (:db/id page) (new-db-id))
+                       :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
+                       :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
+                       :block/format :markdown}
+                      (dissoc page :build/properties :db/id :block/name :block/original-name))
+            pvalue-tx-m (->property-value-tx-m new-page (:build/properties page) properties all-idents)]
+        (into
          ;; page tx
-           (cond-> []
-             (seq pvalue-tx-m)
-             (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
-             true
-             (conj
-              (sqlite-util/block-with-timestamps
-               (merge
-                new-page
-                (when (seq (:build/properties page))
-                  (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
-                                      page-uuids'
-                                      all-idents))))))
+         (cond-> []
+           (seq pvalue-tx-m)
+           (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
+           true
+           (conj
+            (sqlite-util/block-with-timestamps
+             (merge
+              new-page
+              (when (seq (:build/properties page))
+                (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                                    page-uuids
+                                    all-idents))))))
          ;; blocks tx
-           (reduce (fn [acc m]
-                     (into acc
-                           (->block-tx m properties page-uuids' all-idents (page-id-fn new-page))))
-                   []
-                   blocks))))
-      pages-and-blocks'))))
+         (reduce (fn [acc m]
+                   (into acc
+                         (->block-tx m properties page-uuids all-idents (page-id-fn new-page))))
+                 []
+                 blocks))))
+    pages-and-blocks)))
 
 (defn- split-blocks-tx
   "Splits a vec of maps tx into maps that can immediately be transacted,
@@ -355,15 +350,49 @@
     {:init-tx init-tx
      :block-props-tx block-props-tx}))
 
+(defn- add-new-pages-from-refs
+  [pages-and-blocks]
+  (let [existing-pages (->> pages-and-blocks (keep #(get-in % [:page :block/original-name])) set)
+        new-pages-from-refs
+        (->> pages-and-blocks
+             (mapcat
+              (fn [{:keys [blocks]}]
+                (->> blocks
+                     (mapcat #(extract-content-refs (:block/content %)))
+                     (remove existing-pages))))
+             (map #(hash-map :page {:block/original-name %})))]
+    (when (seq new-pages-from-refs)
+      (println "Building additional pages from content refs:" (pr-str (mapv #(get-in % [:page :block/original-name]) new-pages-from-refs))))
+    (concat pages-and-blocks new-pages-from-refs)))
+
+(defn- pre-build-pages-and-blocks
+  "Pre builds :pages-and-blocks before any indexes like page-uuids are made"
+  [pages-and-blocks]
+  (let [;; add uuids for page-uuids
+        ensure-uuids (fn [{:keys [page blocks]}]
+                       (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
+                         (seq blocks)
+                         (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
+        expand-journal (fn [m]
+                         (if-let [date-int (get-in m [:page :build/journal])]
+                           (update m :page
+                                   (fn [page]
+                                     (let [page-name (date-time-util/int->journal-title date-int "MMM do, yyyy")]
+                                       (-> (dissoc page :build/journal)
+                                           (merge {:block/journal-day date-int
+                                                   :block/original-name page-name
+                                                   :block/type "journal"})))))
+                           m))]
+    (->> pages-and-blocks
+         (map expand-journal)
+         add-new-pages-from-refs
+         (map ensure-uuids)
+         vec)))
+
 (defn- build-blocks-tx*
   [{:keys [pages-and-blocks properties classes graph-namespace]
     :as options}]
-  (let [;; add uuids before tx for refs in :properties
-        pages-and-blocks' (mapv (fn [{:keys [page blocks]}]
-                                  (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
-                                    (seq blocks)
-                                    (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
-                                pages-and-blocks)
+  (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks)
         page-uuids (create-page-uuids pages-and-blocks')
         all-idents (create-all-idents properties classes graph-namespace)
         properties-tx (build-properties-tx properties page-uuids all-idents)
@@ -429,9 +458,11 @@
   (build-blocks-tx* options))
 
 (defn create-blocks
-  "Builds txs with build-blocks-tx and transacts them. Usually used for testing"
+  "Builds txs with build-blocks-tx and transacts them. Also provides a shorthand
+  version of options that are useful for testing"
   [conn options]
-  (let [{:keys [init-tx block-props-tx]} (build-blocks-tx options)]
+  (let [options' (if (vector? options) {:pages-and-blocks options} options)
+        {:keys [init-tx block-props-tx]} (build-blocks-tx options')]
     (d/transact! conn init-tx)
     (when (seq block-props-tx)
       (d/transact! conn block-props-tx))))
