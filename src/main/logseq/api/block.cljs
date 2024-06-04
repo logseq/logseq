@@ -8,6 +8,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.db :as db]
             [logseq.db.frontend.property :as db-property]
+            [frontend.handler.db-based.property :as db-handler]
             [frontend.handler.db-based.property.util :as db-pu]
             [logseq.sdk.utils :as sdk-utils]))
 
@@ -22,6 +23,16 @@
           block (apply dissoc (concat [block] (keys props)))]
       block)
     block))
+
+(defn save-db-based-block-properties!
+  [block properties]
+  (when-let [block-id (and (seq properties) (:db/id block))]
+    (some->>
+      (update-keys properties
+        (fn [k]
+          (if (qualified-keyword? k) k
+            (db-property/create-user-property-ident-from-name (name k)))))
+      (db-handler/set-block-properties! block-id))))
 
 (defn get_block
   [id-or-uuid ^js opts]
