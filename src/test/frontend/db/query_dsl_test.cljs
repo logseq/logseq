@@ -622,17 +622,18 @@ created-at:: 1608968448116
               [(contains? #{"A"} ?priority)]))]
    (frontend.db/get-db test-db))))
 
-(deftest namespace-queries
-  (load-test-files [{:file/path "pages/ns1.page1.md"
-                     :file/content "foo"}
-                    {:file/path "pages/ns1.page2.md"
-                     :file/content "bar"}
-                    {:file/path "pages/ns2.page1.md"
-                     :file/content "baz"}])
+(when-not js/process.env.DB_GRAPH
+ (deftest namespace-queries
+   (load-test-files [{:file/path "pages/ns1.page1.md"
+                      :file/content "foo"}
+                     {:file/path "pages/ns1.page2.md"
+                      :file/content "bar"}
+                     {:file/path "pages/ns2.page1.md"
+                      :file/content "baz"}])
 
-  (is (= #{"ns1/page1" "ns1/page2"}
-         (set (map :block/name (dsl-query "(namespace ns1)")))))
+   (is (= #{"ns1/page1" "ns1/page2"}
+          (set (map :block/name (dsl-query "(namespace ns1)")))))
 
-  (is (= #{}
-         (set (map :block/name (dsl-query "(namespace blarg)"))))
-      "Correctly returns no results"))
+   (is (= #{}
+          (set (map :block/name (dsl-query "(namespace blarg)"))))
+       "Correctly returns no results")))

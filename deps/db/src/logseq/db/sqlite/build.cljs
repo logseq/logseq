@@ -39,8 +39,10 @@
     val))
 
 (defn- get-ident [all-idents kw]
-  (or (get all-idents kw)
-      (throw (ex-info (str "No ident found for " (pr-str kw)) {}))))
+  (if (and (qualified-keyword? kw) (db-property/logseq-property? kw))
+    kw
+    (or (get all-idents kw)
+        (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
 
 (defn- ->block-properties [properties page-uuids all-idents]
   (->>
@@ -266,7 +268,8 @@
                                        set)
         undeclared-properties (-> page-block-properties
                                   (into property-class-properties)
-                                  (set/difference (set (keys properties))))]
+                                  (set/difference (set (keys properties)))
+                                  ((fn [x] (remove db-property/logseq-property? x))))]
     (assert (empty? undeclared-properties)
             (str "The following properties used in EDN were not declared in :properties: " undeclared-properties))))
 
