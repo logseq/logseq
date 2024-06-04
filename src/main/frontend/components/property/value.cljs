@@ -501,16 +501,17 @@
 
 (rum/defc property-normal-block-value
   [block property value-block block-cp editor-box opts]
-  (let [multiple-values? (db-property/many? property)]
+  (let [multiple-values? (db-property/many? property)
+        block-container (state/get-component :block/container)]
     (if value-block
-      [:div.property-block-container.content
+      [:div.property-block-container.content.w-full
        (let [config {:id (str (if multiple-values?
                                 (:block/uuid block)
                                 (:block/uuid value-block)))
                      :container-id (:container-id opts)
                      :editor-box editor-box
                      :property-block? true}]
-         (block-cp config [value-block]))]
+         (block-container config value-block))]
       (property-empty-btn-value))))
 
 (rum/defc property-template-value < rum/reactive
