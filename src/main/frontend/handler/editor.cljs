@@ -2622,7 +2622,8 @@
           f (case direction
               :up util/get-prev-block-non-collapsed
               :down util/get-next-block-non-collapsed)
-          sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
+          current-block (util/rec-get-node input "ls-block")
+          sibling-block (f current-block)
           {:block/keys [uuid content format]} (state/get-edit-block)]
       (if sibling-block
         (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
