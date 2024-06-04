@@ -755,24 +755,24 @@
       (get_block (:block/uuid block) opts))))
 
 (def ^:export get_previous_sibling_block
-  (fn [block-uuid]
+  (fn [block-uuid ^js opts]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
             block (<pull-block id)
             ;; Load all children blocks
             _ (db-async/<get-block (state/get-current-repo) (:block/uuid (:block/parent block)) {:children? true})]
       (when block
-        (when-let [left-sibling (ldb/get-left-sibling (db/entity (:db/id block)))]
-          (let [block (db/pull (:db/id left-sibling))]
-            (bean/->js (sdk-utils/normalize-keyword-for-json block))))))))
+        (when-let [sibling (ldb/get-left-sibling (db/entity (:db/id block)))]
+          (get_block (:block/uuid sibling) opts))))))
 
 (def ^:export get_next_sibling_block
-  (fn [block-uuid]
+  (fn [block-uuid ^js opts]
     (p/let [id (sdk-utils/uuid-or-throw-error block-uuid)
-            block (<pull-block id)]
+            block (<pull-block id)
+            ;; Load all children blocks
+            _ (db-async/<get-block (state/get-current-repo) (:block/uuid (:block/parent block)) {:children? true})]
       (when block
-        (p/let [sibling (db-async/<get-right-sibling (state/get-current-repo) (:db/id block))]
-          (when sibling
-            (bean/->js (sdk-utils/normalize-keyword-for-json sibling))))))))
+        (p/let [sibling (ldb/get-right-sibling (db/entity (:db/id block)))]
+          (get_block (:block/uuid sibling) opts))))))
 
 (def ^:export set_block_collapsed
   (fn [block-uuid ^js opts]
