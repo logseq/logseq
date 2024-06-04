@@ -664,7 +664,10 @@
             closed-values? (seq (:property/closed-values property))
             block? (and v
                         (not closed-values?)
-                        (:block/page v)
+                        (or (and (map? v) (:block/page v))
+                            (and (coll? v)
+                                 (map? (first v))
+                                 (:block/page (first v))))
                         (contains? #{:default :template} type))
             collapsed? (when block? (property-collapsed? block property))
             date? (= type :date)

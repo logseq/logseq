@@ -500,18 +500,21 @@
                                         nil))})})))))
 
 (rum/defc property-normal-block-value
-  [block property value-block block-cp editor-box opts]
+  [block property value-block opts]
   (let [multiple-values? (db-property/many? property)
-        block-container (state/get-component :block/container)]
+        block-container (state/get-component :block/container)
+        blocks-container (state/get-component :block/blocks-container)]
     (if value-block
       [:div.property-block-container.content.w-full
        (let [config {:id (str (if multiple-values?
                                 (:block/uuid block)
                                 (:block/uuid value-block)))
                      :container-id (:container-id opts)
-                     :editor-box editor-box
+                     :editor-box (state/get-component :editor/box)
                      :property-block? true}]
-         (block-container config value-block))]
+         (if (set? value-block)
+           (blocks-container config (ldb/sort-by-order value-block))
+           (block-container config value-block)))]
       (property-empty-btn-value))))
 
 (rum/defc property-template-value < rum/reactive
@@ -542,7 +545,7 @@
              (when-let [block-id (or (:db/id block) (:block/uuid block))]
                (db-async/<get-block (state/get-current-repo) block-id :children? true)))
            state)}
-  [state value block property block-cp editor-box opts page-cp editor-id]
+  [state value block property opts page-cp editor-id]
   (let [*template-instance (::template-instance state)
         template-instance @*template-instance]
     (when value
@@ -555,7 +558,7 @@
             (when v-block
               (cond
                 (:block/page v-block)
-                (property-normal-block-value block property v-block block-cp editor-box opts)
+                (property-normal-block-value block property v-block opts)
 
                 (and class? (seq (:class/schema.properties v-block)))
                 (if template-instance
@@ -698,9 +701,8 @@
      nil)])
 
 (defn- property-value-inner
-  [block property value {:keys [inline-text block-cp page-cp
-                                editor-id dom-id row?
-                                editor-box]
+  [block property value {:keys [inline-text page-cp
+                                editor-id dom-id row?]
                          :as opts}]
   (let [schema (:block/schema property)
         multiple-values? (db-property/many? property)
@@ -740,7 +742,7 @@
          [:div.jtrigger (property-empty-btn-value)]
 
          (= type :default)
-         (property-block-value value block property block-cp editor-box opts page-cp editor-id)
+         (property-block-value value block property opts page-cp editor-id)
 
          :else
          (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
@@ -848,11 +850,12 @@
   [state block property v opts]
   (ui/catch-error
    (ui/block-error "Something wrong" {})
-   (let [opts (merge opts
+   (let [block-cp (state/get-component :block/blocks-container)
+         opts (merge opts
                      {:page-cp (state/get-component :block/page-cp)
                       :inline-text (state/get-component :block/inline-text)
                       :editor-box (state/get-component :editor/box)
-                      :block-cp (state/get-component :block/blocks-container)
+                      :block-cp block-cp
                       :properties-cp (state/get-component :block/properties-cp)})
          dom-id (str "ls-property-" (:db/id block) "-" (:db/id property))
          editor-id (str dom-id "-editor")
@@ -868,12 +871,17 @@
              (set? v)
              (first v)
              :else
-             v)]
+             v)
+         closed-values? (seq (:property/closed-values property))]
      [:div.property-value-inner
       {:data-type type
        :class (str (when empty-value? "empty-value")
                    (when-not (:other-position? opts) " w-full"))}
       (cond
+        (and multiple-values? (= type :default) (not closed-values?))
+        (property-normal-block-value block property v
+                                     (assoc opts :id (str (:db/id block) "-" (:db/id property))))
+
         multiple-values?
         (multiple-values block property v opts schema)
 
