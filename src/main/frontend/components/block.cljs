@@ -1097,22 +1097,20 @@
       (audio-link config url s label metadata full_text)
 
       (= ext :pdf)
-      (cond
-        (util/electron?)
-        [:a.asset-ref.is-pdf
-         {:data-href s
-          :on-click (fn [^js e]
-                      (when-let [s (some-> (.-target e) (.-dataset) (.-href))]
-                        (when-let [current (pdf-assets/inflate-asset s)]
-                          (state/set-current-pdf! current)
-                          (util/stop e))))
-          :draggable true
-          :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
-         (or label-text
-             (->elem :span (map-inline config label)))]
-
-        (mobile-util/native-platform?)
-        (asset-link config label-text s metadata full_text))
+      [:a.asset-ref.is-pdf
+       {:data-href s
+        :on-click (fn [^js e]
+                    (when-let [s (some-> (.-target e) (.-dataset) (.-href))]
+                      (p/let [href (if (or (mobile-util/native-platform?) (util/electron?))
+                                     s
+                                     (assets-handler/make-asset-url s))]
+                        (when-let [current (pdf-assets/inflate-asset s {:href href})]
+                         (state/set-current-pdf! current)
+                         (util/stop e)))))
+        :draggable true
+        :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
+       (or label-text
+           (->elem :span (map-inline config label)))]
 
       (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)

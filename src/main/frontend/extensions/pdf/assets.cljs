@@ -29,11 +29,13 @@
             [fipp.edn :refer [pprint]]))
 
 (defn inflate-asset
-  [original-path]
+  [original-path & {:keys [href]}]
   (let [filename  (util/node-path.basename original-path)
         web-link? (string/starts-with? original-path "http")
         ext-name  (util/get-file-ext filename)
-        url       (assets-handler/normalize-asset-resource-url original-path)
+        url       (if (and href (string/starts-with? href "blob"))
+                    href
+                    (assets-handler/normalize-asset-resource-url original-path))
         filekey   (util/safe-sanitize-file-name (subs filename 0 (- (count filename) (inc (count ext-name)))))]
     (when-let [key (and (not (string/blank? filekey))
                         (if web-link?
