@@ -17,16 +17,13 @@
 
 (deftest resolve-input-for-page-and-block-inputs
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
-        parent-uuid (random-uuid)
         _ (sqlite-build/create-blocks
            conn
            [{:page {:block/original-name "page1"}
              :blocks [{:block/content "parent"
-                       :block/uuid parent-uuid}
-                      {:block/content "child 1"
-                       :block/parent {:db/id [:block/uuid parent-uuid]}}
-                      {:block/content "child 2"
-                       :block/parent {:db/id [:block/uuid parent-uuid]}}]}])]
+                       :build/children
+                       [{:block/content "child 1"}
+                        {:block/content "child 2"}]}]}])]
     (is (= ["child 2" "child 1" "parent"]
            (map :block/content
                 (custom-query @conn

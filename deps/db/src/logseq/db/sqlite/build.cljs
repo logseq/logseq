@@ -205,7 +205,12 @@
 
 (def Page-blocks
   [:map
-   {:closed true}
+   {:closed true
+    ;; Define recursive :block schema
+    :registry {::block [:map
+                        [:block/content :string]
+                        [:build/children {:optional true} [:vector [:ref ::block]]]
+                        [:build/properties {:optional true} User-properties]]}}
    [:page [:and
            [:map
             [:block/original-name {:optional true} :string]
@@ -215,10 +220,7 @@
                  :error/path [:block/original-name]}
             (fn [m]
               (or (:block/original-name m) (:build/journal m)))]]]
-   [:blocks {:optional true}
-    [:vector [:map
-              [:block/content :string]
-              [:build/properties {:optional true} User-properties]]]]])
+   [:blocks {:optional true} [:vector ::block]]])
 
 (def Properties
   [:map-of
@@ -368,14 +370,37 @@
       (println "Building additional pages from content refs:" (pr-str (mapv #(get-in % [:page :block/original-name]) new-pages-from-refs))))
     (concat pages-and-blocks new-pages-from-refs)))
 
+(defn- expand-build-children
+  "Expands any blocks with :build/children to return a flattened vec with
+  children having correct :block/parent. Also ensures all blocks have a :block/uuid"
+  ([data] (expand-build-children data nil))
+  ([data parent-id]
+   (vec
+    (mapcat
+     (fn [block]
+       (let [block' (cond-> block
+                      (not (:block/uuid block))
+                      (assoc :block/uuid (random-uuid))
+                      true
+                      (dissoc :build/children)
+                      parent-id
+                      (assoc :block/parent {:db/id [:block/uuid parent-id]}))
+             children (:build/children block)
+             child-maps (when children (expand-build-children children (:block/uuid block')))]
+         (cons block' child-maps)))
+     data))))
+
 (defn- pre-build-pages-and-blocks
   "Pre builds :pages-and-blocks before any indexes like page-uuids are made"
   [pages-and-blocks]
-  (let [;; add uuids for page-uuids
-        ensure-uuids (fn [{:keys [page blocks]}]
-                       (cond-> {:page (merge {:block/uuid (random-uuid)} page)}
-                         (seq blocks)
-                         (assoc :blocks (mapv #(merge {:block/uuid (random-uuid)} %) blocks))))
+  (let [ensure-page-uuids (fn [m]
+                            (if (get-in m [:page :block/uuid])
+                              m
+                              (assoc-in m [:page :block/uuid] (random-uuid))))
+        expand-block-children (fn [m]
+                                (if (:blocks m)
+                                  (update m :blocks expand-build-children)
+                                  m))
         expand-journal (fn [m]
                          (if-let [date-int (get-in m [:page :build/journal])]
                            (update m :page
@@ -386,10 +411,12 @@
                                                    :block/original-name page-name
                                                    :block/type "journal"})))))
                            m))]
+    ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks
          (map expand-journal)
+         (map expand-block-children)
          add-new-pages-from-refs
-         (map ensure-uuids)
+         (map ensure-page-uuids)
          vec)))
 
 (defn- build-blocks-tx*
@@ -430,10 +457,16 @@
 
    * :pages-and-blocks - This is a vector of maps containing a :page key and optionally a :blocks
      key when defining a page's blocks. More about each key:
-     * :page - This is a datascript attribute map e.g. `{:block/name \"foo\"}` .
-       :block/original-name is required and :build/properties can be passed to define page properties
-     * :blocks - This is a vec of datascript attribute maps e.g. `{:block/content \"bar\"}`.
-       :block/content is required and :build/properties can be passed to define block properties
+     * :page - This is a datascript attribute map for pages with
+       :block/original-name required e.g. `{:block/original/name \"foo\"}`. Additional keys available:
+       * :build/journal - Define a journal pages as an integer e.g. 20240101 is Jan 1, 2024. :block/original-name
+         is not required if using this since it generates one
+       * :build/properties - Defines properties on a page
+     * :blocks - This is a vec of datascript attribute maps for blocks with
+       :block/content required. e.g. `{:block/content \"bar\"}`. Additional keys available:
+       * :build/children - A vec of blocks that are nested (indented) under the current block.
+          Allows for outlines to be expressed to whatever depth
+       * :build/properties - Defines properties on a block
    * :properties - This is a map to configure properties where the keys are property name keywords
      and the values are maps of datascript attributes e.g. `{:block/schema {:type :checkbox}}`.
      Additional keys available:
