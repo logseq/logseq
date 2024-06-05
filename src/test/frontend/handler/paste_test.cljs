@@ -191,7 +191,9 @@
       reset
       [;; paste-copied-blocks-or-text mocks below
        util/stop (constantly nil)
-       paste-handler/get-copied-blocks (constantly (p/resolved expected-blocks))
+       state/get-current-repo (constantly "test")
+       paste-handler/get-copied-blocks (constantly (p/resolved {:graph "test"
+                                                                :blocks expected-blocks}))
        editor-handler/paste-blocks (fn [blocks _] (reset! actual-blocks blocks))]
       (p/let [_ ((paste-handler/editor-on-paste! nil)
                  #js {:clipboardData #js {:getData (constantly clipboard)}})]
