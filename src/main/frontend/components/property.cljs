@@ -441,7 +441,7 @@
                  :date "calendar"
                  :checkbox "checkbox"
                  :url "link"
-                 :page "file"
+                 :page "page"
                  :object "topology-star"
                  :template "template"
                  "letter-t"))]
