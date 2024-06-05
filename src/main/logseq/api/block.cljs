@@ -3,6 +3,7 @@
   (:require [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [cljs-bean.core :as bean]
+            [promesa.core :as p]
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.modules.outliner.tree :as outliner-tree]
@@ -24,15 +25,29 @@
       block)
     block))
 
+(defn infer-property-value-type-to-save!
+  [ident value]
+  (when (not (db-utils/entity ident))
+    (let [type (cond
+                 (boolean? value) :checkbox
+                 (number? value) :number
+                 (coll? value) :page
+                 :else :default)
+          multi? (coll? value)
+          schema {:type type :cardinality (if multi? :many :one)}]
+      (db-property-handler/upsert-property! ident schema {}))))
+
 (defn save-db-based-block-properties!
   [block properties]
   (when-let [block-id (and (seq properties) (:db/id block))]
-    (some->>
-      (update-keys properties
-        (fn [k]
-          (if (qualified-keyword? k) k
-            (db-property/create-user-property-ident-from-name (name k)))))
-      (db-property-handler/set-block-properties! block-id))))
+    (let [properties (update-keys properties
+                       (fn [k]
+                         (if (qualified-keyword? k) k
+                           (db-property/create-user-property-ident-from-name (name k)))))]
+      (-> (for [ident (keys properties)]
+            (infer-property-value-type-to-save! ident (get properties ident)))
+        (p/all)
+        (p/then #(db-property-handler/set-block-properties! block-id properties))))))
 
 (defn get_block
   [id-or-uuid ^js opts]
@@ -42,14 +57,14 @@
     (when-not (contains? block :block/name)
       (when-let [uuid (:block/uuid block)]
         (let [{:keys [includeChildren]} (bean/->clj opts)
-              repo  (state/get-current-repo)
+              repo (state/get-current-repo)
               block (if includeChildren
                       ;; nested children results
                       (first (outliner-tree/blocks->vec-tree
-                              (db-model/get-block-and-children repo uuid) uuid))
+                               (db-model/get-block-and-children repo uuid) uuid))
                       ;; attached shallow children
                       (assoc block :block/children
-                             (map #(list :uuid (:block/uuid %))
-                               (db/get-block-immediate-children repo uuid))))
+                        (map #(list :uuid (:block/uuid %))
+                          (db/get-block-immediate-children repo uuid))))
               block (into-properties repo block)]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
