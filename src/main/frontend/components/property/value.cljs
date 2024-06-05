@@ -307,15 +307,10 @@
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
         selected-choices (when block
-                           (if tags-or-alias?
-                             (->> (if tags?
-                                    (:block/tags block)
-                                    (:block/alias block))
-                                  (map (fn [e] (:db/id e))))
-                             (when-let [v (get block (:db/ident property))]
-                               (if (every? de/entity? v)
-                                 (map :db/id v)
-                                 [(:db/id v)]))))
+                           (when-let [v (get block (:db/ident property))]
+                             (if (every? de/entity? v)
+                               (map :db/id v)
+                               [(:db/id v)])))
         objects-or-pages
         (->>
          (cond
@@ -333,7 +328,13 @@
             classes)
 
            :else
-           (remove ldb/built-in? (model/get-all-pages repo))))
+           (->> (model/get-all-pages repo)
+                (remove (fn [page]
+                          (or (ldb/built-in? page)
+                              ;; A page's alias can't be itself
+                              (and alias? (= (or (:db/id (:block/page block))
+                                                 (:db/id block))
+                                             (:db/id page)))))))))
         options (map (fn [object] {:label (get-title object)
                                    :value (:db/id object)}) objects-or-pages)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
