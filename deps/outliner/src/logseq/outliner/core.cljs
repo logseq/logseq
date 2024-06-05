@@ -736,7 +736,7 @@
         block-from-property (:logseq.property/created-from-property block)
         move-single-property-value? (or (= :db.cardinality/one (:db/cardinality block-from-property))
                                         (= :db.cardinality/one (:db/cardinality target-from-property)))]
-    (when-not move-single-property-value?
+    (when-not (and move-single-property-value? sibling?)
       (let [property-tx (let [retract-property-tx (when (or (and (not sibling?) target-from-property block-from-property)
                                                             (and sibling? (nil? target-from-property) block-from-property))
                                                     [[:db/retract (:db/id (:block/parent block)) (:db/ident block-from-property) (:db/id block)]
