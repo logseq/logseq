@@ -28,7 +28,7 @@
           _ (swap! db-conn/conns assoc db-name conn)
           end-time (t/now)]
 
-    (println ::restore-graph! "loads" (count initial-data) "txs in" (t/in-millis (t/interval start-time end-time)) "ms")
+    (println ::restore-graph! "loads" (count initial-data) "datoms in" (t/in-millis (t/interval start-time end-time)) "ms")
 
     (state/set-state! :graph/loading? false)
     (react/clear-query-state!)
