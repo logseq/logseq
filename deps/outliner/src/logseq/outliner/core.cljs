@@ -208,12 +208,14 @@
 (defn- add-tag-types
   [repo db txs-state new-tags]
   (when (sqlite-util/db-based-graph? repo)
-    (let [add-tag-type (map
+    (let [add-tag-type (keep
                         (fn [t]
-                          (db-class/build-new-class
-                           db
-                           {:db/id (outliner-pipeline/ref->eid t)
-                            :block/original-name (:block/original-name t)}))
+                          (let [eid (outliner-pipeline/ref->eid t)]
+                            (when (and (:block/original-name t) eid)
+                              (db-class/build-new-class
+                               db
+                               {:db/id eid
+                                :block/original-name (:block/original-name t)}))))
                         new-tags)]
       (swap! txs-state (fn [txs] (concat txs add-tag-type))))))
 
