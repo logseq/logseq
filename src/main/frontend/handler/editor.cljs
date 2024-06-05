@@ -449,7 +449,7 @@
             linked? (some? (dom/attr node "originalblockid"))]
         (case op
           :insert
-          (when (and linked? (:sibling? data))
+          (when (and linked? (not (false? (:sibling? data))))
             (some-> (util/rec-get-node node "blocks-container")
                     get-node-container-id))
 
