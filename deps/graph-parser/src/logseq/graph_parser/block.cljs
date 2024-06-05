@@ -74,11 +74,12 @@
                     (= "Macro" (first block)))
                (let [{:keys [name arguments]} (second block)
                      argument (string/join ", " arguments)]
-                   (if (= name "embed")
-                     (text/page-ref-un-brackets! argument)
-                     {:type "macro"
-                      :name name
-                      :arguments arguments}))
+                 (if (= name "embed")
+                   (when (page-ref/page-ref? argument)
+                     (text/page-ref-un-brackets! argument))
+                   {:type "macro"
+                    :name name
+                    :arguments arguments}))
 
                (and (vector? block)
                     (= "Tag" (first block)))
