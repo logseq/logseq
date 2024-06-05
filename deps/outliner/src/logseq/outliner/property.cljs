@@ -235,16 +235,17 @@
         property-type (get-in property [:block/schema :type] :default)
         db-attribute? (contains? db-property/db-attribute-properties property-id)]
     (if db-attribute?
-      (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
-                   {:outliner-op :save-block})
+      (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
+        (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
+                       {:outliner-op :save-block}))
       (let [new-value (cond
-                         (= v :logseq.property/empty-placeholder)
-                         (if (= property-type :checkbox) false v)
+                        (= v :logseq.property/empty-placeholder)
+                        (if (= property-type :checkbox) false v)
 
-                         (db-property-type/ref-property-types property-type)
-                         (convert-ref-property-value conn property-id v property-type)
-                         :else
-                         v)
+                        (db-property-type/ref-property-types property-type)
+                        (convert-ref-property-value conn property-id v property-type)
+                        :else
+                        v)
             existing-value (get block property-id)]
         (when-not (= existing-value new-value)
           (raw-set-block-property! conn block property property-type new-value))))))
