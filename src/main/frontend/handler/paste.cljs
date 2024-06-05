@@ -179,13 +179,13 @@
   [input text e html]
   (util/stop e)
   (->
-   (p/let [copied-blocks (get-copied-blocks)]
-     (if (seq copied-blocks)
+   (p/let [{:keys [graph blocks]} (get-copied-blocks)]
+     (if (and (seq blocks) (= graph (state/get-current-repo)))
        ;; Handle internal paste
-       (let [revert-cut-txs (get-revert-cut-txs copied-blocks)
+       (let [revert-cut-txs (get-revert-cut-txs blocks)
              keep-uuid? (= (state/get-block-op-type) :cut)]
-         (editor-handler/paste-blocks copied-blocks {:revert-cut-txs revert-cut-txs
-                                                     :keep-uuid? keep-uuid?}))
+         (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                              :keep-uuid? keep-uuid?}))
        (paste-copied-text input text html)))
    (p/catch (fn [error]
               (log/error :msg "Paste failed" :exception error)

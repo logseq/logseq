@@ -15,6 +15,7 @@
   [repo format raw-text html blocks]
   (util/copy-to-clipboard! (property-handler/remove-id-property repo format raw-text)
                            :html html
+                           :graph repo
                            :blocks blocks))
 
 (defn config-with-document-mode
