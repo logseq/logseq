@@ -23,8 +23,8 @@ export const QuickLinks: TLQuickLinksComponent<Shape> = observer(({ shape }) => 
     // do not show links for the current page
     return links.filter(
       link =>
-        link[0].toLowerCase() !== app.currentPage.name &&
-        handlers.getBlockPageName(link[0]) !== app.currentPage.name
+        link[0].toLowerCase() !== app.currentPage.id &&
+        link[0] !== shape.props.pageId
     )
   }, [shape.props.id, shape.props.type, shape.props.parentId, shape.props.refs])
 

@@ -2166,7 +2166,6 @@
           meta? (util/meta-key? e)
           forbidden-edit? (target-forbidden-edit? target)]
       (when (and (not forbidden-edit?) (contains? #{1 0} button))
-        (util/stop-propagation e)
         (let [selection-blocks (state/get-selection-blocks)
               starting-block (state/get-selection-start-block-or-first)]
           (cond
