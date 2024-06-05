@@ -826,12 +826,15 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     [text & {:keys [html blocks owner-window]}]
+     [text & {:keys [graph html blocks owner-window]}]
      (let [data (clj->js
                  (common-util/remove-nils-non-nested
                   {:text text
                    :html html
-                   :blocks (when (seq blocks) (pr-str (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)))}))]
+                   :blocks (when (and graph (seq blocks))
+                             (pr-str
+                              {:graph graph
+                               :blocks (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)}))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))
