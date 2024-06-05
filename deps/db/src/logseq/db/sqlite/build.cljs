@@ -109,8 +109,8 @@
       (seq pvalue-tx-m)
       (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
-      (conj (merge (dissoc m :build/properties)
-                   (sqlite-util/block-with-timestamps new-block)
+      (conj (merge (sqlite-util/block-with-timestamps new-block)
+                   (dissoc m :build/properties)
                    (when (seq properties)
                      (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                          page-uuids all-idents))
