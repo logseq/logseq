@@ -465,17 +465,24 @@ tags: [[other]]
                 (set)))
         "NOT query")))
 
-(deftest nested-page-ref-queries
-  (load-test-files [{:file/path "pages/page1.md"
-                     :file/content "foo:: bar
+(deftest ^:done nested-page-ref-queries
+  (load-test-files (if js/process.env.DB_GRAPH
+                     [{:page {:block/original-name "page1"}
+                       :blocks [{:block/content "p1 [[Parent page]]"
+                                 :build/children [{:block/content "[[Child page]]"}]}
+                                {:block/content "p2 [[Parent page]]"
+                                 :build/children [{:block/content "Non linked content"}]}]}]
+                     [{:file/path "pages/page1.md"
+                       :file/content "foo:: bar
 - p1 [[Parent page]]
   - [[Child page]]
 - p2 [[Parent page]]
-  - Non linked content"}])
-  (is (= ["Non linked content"
-          "p2 [[Parent page]]"
-          "p1 [[Parent page]]"]
-         (map :block/content
+  - Non linked content"}]))
+  (is (= ["Non"
+          "p2"
+          "p1"]
+         ;; Just test for start of blocks as content varies for db graphs
+         (map #(re-find #"\w+" (:block/content %))
               (dsl-query "(and [[Parent page]] (not [[Child page]]))")))))
 
 (deftest between-queries
@@ -491,20 +498,21 @@ created-at:: 1608968448115
 created-at:: 1608968448116
 "}])
 
-  (are [x y] (= (count (dsl-query x)) y)
-       "(and (task now later done) (between [[Dec 26th, 2020]] tomorrow))"
-       3
+  (let [task-filter (if js/process.env.DB_GRAPH "(task todo done)" "(task later done)")]
+    (are [x y] (= (count (dsl-query x)) y)
+      (str "(and " task-filter " (between [[Dec 26th, 2020]] tomorrow))")
+      3
 
        ;; between with journal pages
-       "(and (task now later done) (between [[Dec 26th, 2020]] [[Dec 27th, 2020]]))"
-       3
+      (str "(and " task-filter " (between [[Dec 26th, 2020]] [[Dec 27th, 2020]]))")
+      3
 
        ;; ;; between with created-at
        ;; "(and (task now later done) (between created-at [[Dec 26th, 2020]] tomorrow))"
        ;; 3
-       ))
+      )))
 
-(deftest custom-query-test
+(deftest ^:done custom-query-test
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "foo:: bar
 - NOW b1
@@ -512,12 +520,15 @@ created-at:: 1608968448116
 - LATER b3
 - b3"}])
 
-  (is (= ["LATER b3"]
-         (map :block/content (custom-query {:query '(task later)}))))
+  (let [task-query (if js/process.env.DB_GRAPH
+                     '(task doing)
+                     '(task now))]
+    (is (= ["NOW b1"]
+           (map :block/content (custom-query {:query task-query}))))
 
-  (is (= ["LATER b3"]
-         (map :block/content (custom-query {:query (list 'and '(task later) "b")})))
-      "Query with rule that can't be derived from the form itself"))
+    (is (= ["NOW b1"]
+           (map :block/content (custom-query {:query (list 'and task-query "b")})))
+        "Query with rule that can't be derived from the form itself")))
 
 (if js/process.env.DB_GRAPH
   (def get-property-value query-dsl/get-db-property-value)

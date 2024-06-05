@@ -365,6 +365,7 @@
                 (->> blocks
                      (mapcat #(extract-content-refs (:block/content %)))
                      (remove existing-pages))))
+             distinct
              (map #(hash-map :page {:block/original-name %})))]
     (when (seq new-pages-from-refs)
       (println "Building additional pages from content refs:" (pr-str (mapv #(get-in % [:page :block/original-name]) new-pages-from-refs))))

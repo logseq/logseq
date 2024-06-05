@@ -4,10 +4,8 @@
             [frontend.state :as state]
             [frontend.db.conn :as conn]
             [clojure.string :as string]
-            [clojure.set :as set]
             [logseq.db.sqlite.util :as sqlite-util]
             [frontend.db :as db]
-            [frontend.date :as date]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
             [datascript.core :as d]
@@ -18,7 +16,8 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
             [frontend.handler.file-based.status :as status]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.outliner.db-pipeline :as db-pipeline]))
 
 (def node? (exists? js/process))
 
@@ -35,6 +34,7 @@
     (conn/start! test-db opts)
     (let [conn (conn/get-db test-db false)]
       (when db-graph?
+        (db-pipeline/add-listener conn)
         (d/transact! conn (sqlite-create-graph/build-db-initial-data "")))
       (d/listen! conn ::listen-db-changes!
                  (fn [tx-report]
@@ -65,7 +65,7 @@
                   [(keyword k) (parse-property-value v)])))
        (into {})))
 
-(defn- build-block-properties
+#_(defn- build-block-properties
   "Parses out properties from a file's content and associates it with the page name
    or block content"
   [file-content]
@@ -84,17 +84,7 @@
           string/split-lines
           property-lines->properties)}))
 
-(defn- file-path->page-name
-  [file-path]
-  (or (if (string/starts-with? file-path "journals")
-        (some-> (second (re-find #"([^/]+).md" file-path))
-                date/normalize-date
-                date/journal-name
-                string/lower-case)
-        (second (re-find #"([^/]+).md" file-path)))
-      (throw (ex-info "No page found" {}))))
-
-(defn- update-file-for-db-graph
+#_(defn- update-file-for-db-graph
   "Adds properties by block/page for a file and updates block content"
   [file]
   (let [{:keys [block-properties page-properties]}
@@ -122,8 +112,7 @@
                {:file/content (string/join "\n"
                                            (map (fn [x] (str "- " (:name-or-content x))) block-properties))})))))
 
-#_:clj-kondo/ignore
-(defn- load-test-files-for-db-graph-old
+#_(defn- load-test-files-for-db-graph-old
   [files*]
   (let [files (mapv update-file-for-db-graph files*)]
     ;; TODO: Use sqlite instead of file graph to create client db
@@ -221,10 +210,14 @@
                       (mapv (fn [s]
                               (let [[content & props] (string/split-lines s)]
                                 (cond-> {:block/content content}
-                      ;; If no property chars may accidentally parse child blocks
-                      ;; so don't do property parsing
+                                  ;; If no property chars may accidentally parse child blocks
+                                  ;; so don't do property parsing
                                   (and (string/includes? s ":: ") props)
-                                  (assoc :build/properties (property-lines->properties props)))))))
+                                  ((fn [x]
+                                     (let [props' (property-lines->properties props)]
+                                       (merge x (cond-> {:build/properties (dissoc props' :created-at)}
+                                                  (:created-at props')
+                                                  (assoc :block/created-at (:created-at props'))))))))))))
         [page-props blocks*]
         (if (string/includes? (:block/content (first blocks**)) "::")
           [(property-lines->properties (string/split-lines (:block/content (first blocks**))))
@@ -247,15 +240,22 @@
     ;; TODO: handle different page properties
     (parse-content* content)))
 
-(defn load-test-files-for-db-graph
-  [options*]
+(defn- build-blocks-tx-options [options*]
   (let [pages-and-blocks
         (mapv (fn [{:file/keys [path content]}]
                 (let [{:keys [blocks page-properties]} (parse-content content)
-                      _ (prn :blocks content blocks)
-                      page-name (or (second (re-find #"/([^/]+)\." path))
-                                    (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))]
-                  {:page (cond-> {:block/original-name page-name}
+                      ;; _ (prn :parse-content content blocks)
+                      unique-page-attrs
+                      (if (string/starts-with? path "journals")
+                        {:build/journal
+                         (or (some-> (second (re-find #"/([^/]+)\." path))
+                                     (string/replace "_" "")
+                                     parse-double)
+                             (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))}
+                        {:block/original-name
+                         (or (second (re-find #"/([^/]+)\." path))
+                             (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))})]
+                  {:page (cond-> unique-page-attrs
                            (seq page-properties)
                            (assoc :build/properties page-properties))
                    :blocks blocks}))
@@ -270,7 +270,13 @@
                         (into {}))
         options (cond-> {:pages-and-blocks pages-and-blocks}
                   (seq properties)
-                  (assoc :properties properties))
+                  (assoc :properties properties))]
+    options))
+
+(defn load-test-files-for-db-graph
+  [options*]
+  (let [;; Builds options from markdown :file/content unless given explicit build-blocks config
+        options (if (:page (first options*)) {:pages-and-blocks options*} (build-blocks-tx-options options*))
         _ (prn :opt options)
         {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
     (db/transact! test-db init-tx)
