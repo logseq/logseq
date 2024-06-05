@@ -17,7 +17,7 @@ export class TLSettings implements TLSettingsProps {
 
   @observable mode: 'dark' | 'light' = 'light'
   @observable showGrid = true
-  @observable snapToGrid = true
+  @observable snapToGrid = false
   @observable penMode = false
   @observable scaleLevel = 'md'
   @observable color = ''

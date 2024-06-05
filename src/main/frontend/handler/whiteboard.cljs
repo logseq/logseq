@@ -284,6 +284,7 @@
   {:blockType (if (parse-uuid (str block-id)) "B" "P")
    :id (str (d/squuid))
    :compact false
+   ;; Why calling it pageId when it's actually a block id?
    :pageId (str block-id)
    :point point
    :size [400, 0]
