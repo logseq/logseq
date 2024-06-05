@@ -192,7 +192,7 @@
   "Similar to db-pu/readable-properties but with a focus on making property values searchable"
   [db properties]
   (->> properties
-       (map
+       (keep
         (fn [[k v]]
           (let [property (d/entity db k)
                 values
@@ -214,13 +214,13 @@
                                              (:block/content (ldb/get-first-child db parent-id))))]
                                 value)
                               val)))
-                     (remove string/blank?))]
-            (when (seq values)
+                     (remove string/blank?))
+                hide? (get-in property [:block/schema :hide?])]
+            (when (and (not hide?) (seq values))
               (str (:block/original-name property)
                    ": "
                    (string/join "; " values))))))
-       (remove nil?)
-       (string/join ";; ")))
+       (string/join ", ")))
 
 (defn whiteboard-page?
   "Given a page name or a page object, check if it is a whiteboard page"
@@ -234,8 +234,7 @@
   (let [page? (some? name)
         block? (nil? name)
         db-based? (sqlite-util/db-based-graph? repo)
-        ;; TODO: probably need to handle other properties
-        properties (dissoc properties :logseq.property/created-from-property)]
+        properties (dissoc properties :logseq.property/icon)]
     (when-not (or
                (and page? name (whiteboard-page? db uuid))
                (and block? (string? content) (> (count content) 10000))
@@ -281,8 +280,7 @@
 (defn build-blocks-indice
   [repo db]
   (->> (get-all-block-contents db)
-       (map #(block->index repo db %))
-       (remove nil?)
+       (keep #(block->index repo db %))
        (bean/->js)))
 
 (defn original-page-name->index

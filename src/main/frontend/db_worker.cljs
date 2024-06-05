@@ -492,8 +492,7 @@
   (search-build-blocks-indice
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (search/build-blocks-indice repo @conn)
-     nil))
+     (search/build-blocks-indice repo @conn)))
 
   (search-build-pages-indice
    [this repo]
