@@ -4,12 +4,21 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [frontend.db :as db]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [dommy.core :as dom]))
 
 (defn did-mount!
   [state]
   (let [[{:keys [block-parent-id]} id] (:rum/args state)
-        content (state/get-edit-content)]
+        content (state/get-edit-content)
+        input (state/get-input)
+        node (util/rec-get-node input "ls-block")
+        container-id (when node
+                       (when-let [container-id-str (dom/attr node "containerid")]
+                         (util/safe-parse-int container-id-str)))]
+    (when container-id
+      (state/set-state! :editor/container-id container-id))
+
     (when block-parent-id
       (state/set-editing-block-dom-id! block-parent-id))
 
