@@ -46,7 +46,7 @@
 
 (defn- whiteboard-clj->tldr [page-block blocks]
   (let [id (str (:block/uuid page-block))
-        shapes (build-shapes blocks)
+        shapes (remove #(nil? (:type %)) (build-shapes blocks))
         tldr-page (pu/page-block->tldr-page page-block)
         assets (:assets tldr-page)
         tldr-page (dissoc tldr-page :assets)]
