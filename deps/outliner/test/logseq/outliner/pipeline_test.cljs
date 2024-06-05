@@ -21,18 +21,15 @@
           ;; needed in order for path-refs to be setup correctly with init data
           _ (db-pipeline/add-listener conn)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-          [parent-uuid child-uuid] (repeatedly 2 random-uuid)
           _ (sqlite-build/create-blocks
              conn
              [{:page {:block/original-name "bar"}}
               {:page {:block/original-name "page1"}
                :blocks [{:block/content "parent [[foo]]"
-                         :block/uuid parent-uuid}
-                        {:block/content "child [[baz]]"
-                         :block/uuid child-uuid
-                         :block/parent {:db/id [:block/uuid parent-uuid]}}
-                        {:block/content "grandchild [[bing]]"
-                         :block/parent {:db/id [:block/uuid child-uuid]}}]}])
+                         :build/children
+                         [{:block/content "child [[baz]]"
+                           :build/children
+                           [{:block/content "grandchild [[bing]]"}]}]}]}])
           blocks (get-blocks @conn)
           ;; Update parent block to replace 'foo' with 'bar' ref
           new-tag-id (ffirst (d/q '[:find ?b :where [?b :block/original-name "bar"]] @conn))
