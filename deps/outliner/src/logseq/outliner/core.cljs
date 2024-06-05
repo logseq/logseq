@@ -267,8 +267,8 @@
               (dissoc :block/priority :block/marker :block/properties-order)
               db-based?
               (update :block/tags (fn [tags]
-                                      (concat (keep :db/id (:block/tags block-entity))
-                                              (keep outliner-pipeline/ref->eid tags)))))]
+                                    (concat (keep :db/id (:block/tags block-entity))
+                                            (keep outliner-pipeline/ref->eid tags)))))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
@@ -308,6 +308,11 @@
                (dissoc m :db/other-tx)))
 
       (add-tag-types repo db txs-state new-tags)
+
+      ;; delete heading property for db-based-graphs
+      (when (and db-based? (integer? (:logseq.property/heading block-entity))
+                 (not (string/starts-with? (:block/content m) "#")))
+        (swap! txs-state (fn [txs] (conj (vec txs) [:db/retract (:db/id block-entity) :logseq.property/heading]))))
 
       this))
 
