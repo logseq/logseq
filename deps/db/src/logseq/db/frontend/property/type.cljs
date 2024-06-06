@@ -88,8 +88,8 @@
   (if new-closed-value?
     (number? id-or-value)
     (when-let [entity (d/entity db id-or-value)]
-      (number? (:block/content entity)))))
-
+      (when-let [content (:block/content entity)]
+        (number? (parse-double content))))))
 
 (defn- text-entity?
   [db s {:keys [new-closed-value?]}]
