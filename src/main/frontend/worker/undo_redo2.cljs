@@ -213,7 +213,7 @@
                           (nil? (d/entity @conn before-parent)))))))))))
 
 (defn get-reversed-datoms
-  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op}]
+  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} tx-meta]
   (try
     (when (and (seq added-ids) (seq retracted-ids))
       (throw (ex-info "entities are created and deleted in the same tx"
@@ -236,12 +236,6 @@
                               (merge op {:error :entity-deleted
                                          :undo? undo?})))
 
-              ;; block has been moved or target got deleted by another client
-              (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?)
-              (throw (ex-info "This block has been moved or its target has been deleted"
-                              (merge op {:error :block-moved-or-target-deleted
-                                         :undo? undo?})))
-
               ;; new children blocks have been added
               (or (and (contains? retracted-ids e) redo?
                        (other-children-exist? entity retracted-ids)) ; redo delete-blocks
@@ -249,6 +243,13 @@
                        (other-children-exist? entity added-ids)))
               (throw (ex-info "Children still exists"
                               (merge op {:error :block-children-exists
+                                         :undo? undo?})))
+
+              ;; block has been moved or target got deleted by another client
+              (and (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?)
+                   (not (:ref-replace-prev-block-id tx-meta)))
+              (throw (ex-info "This block has been moved or its target has been deleted"
+                              (merge op {:error :block-moved-or-target-deleted
                                          :undo? undo?})))
 
               ;; The entity should be deleted instead of retracting its attributes
@@ -285,7 +286,7 @@
       (let [{:keys [tx-data tx-meta] :as data} (some #(when (= ::db-transact (first %))
                                                         (second %)) op)]
         (when (seq tx-data)
-          (let [reversed-tx-data (get-reversed-datoms conn undo? data)
+          (let [reversed-tx-data (get-reversed-datoms conn undo? data tx-meta)
                 tx-meta' (-> tx-meta
                              (dissoc :pipeline-replace?
                                      :batch-tx/batch-tx-mode?)
