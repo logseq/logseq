@@ -40,9 +40,7 @@
       (let [result (lookup-entity e k default-value)]
         (or
          (if (string? result)
-           (let [refs (:block/refs e)
-                 tags (:block/tags e)]
-             (db-content/special-id-ref->page-ref result (distinct (concat refs tags))))
+           (db-content/special-id-ref->page-ref result (:block/refs e))
            result)
          default-value)))
 
