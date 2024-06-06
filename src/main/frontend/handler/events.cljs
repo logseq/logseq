@@ -954,6 +954,9 @@
   (when (some-> block (editor-handler/own-order-number-list?))
     (editor-handler/remove-block-own-order-list-type! block)))
 
+(defmethod handle :editor/save-current-block [_]
+  (editor-handler/save-current-block!))
+
 (defmethod handle :editor/save-code-editor [_]
   (code-handler/save-code-editor!))
 
