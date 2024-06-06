@@ -5,10 +5,12 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.property.util :as pu]
             [goog.string :as gstring]
-            [goog.string.format]))
+            [goog.string.format]
+            [frontend.state :as state]
+            [frontend.config :as config]))
 
 (defn- normalize-query-function
-  [ast result]
+  [ast repo result]
   (let [ast (walk/prewalk
              (fn [f]
                (if (and (list? f)
@@ -42,9 +44,9 @@
            :updated-at
            :block/updated-at
 
-           (let [vals (map #(pu/lookup-by-name (:block/properties %) f) result)
-                 int? (some integer? vals)
-                 prop-key f]
+           (let [prop-key (if (config/db-based-graph? repo) (name f) f)
+                 vals (map #(get-in % [:block/properties prop-key]) result)
+                 int? (some integer? vals)]
              `(~'fn [~'b]
                     (~'let [~'result-str (~'get-in ~'b [:block/properties ~prop-key])
                             ~'result-num (~'parseFloat ~'result-str)
@@ -62,12 +64,16 @@
                        ;; Ungroup results grouped by page in page view
                        (mapcat val query-result*)
                        query-result*)
+        repo (state/get-current-repo)
+        query-result' (if (config/db-based-graph? repo)
+                       (map #(assoc % :block/properties (pu/properties-by-name repo %)) query-result)
+                       query-result)
         fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
-                      (normalize-query-function query-result)
+                      (normalize-query-function repo query-result')
                       (str))
         f (sci/eval-string fn-string)]
     (when (fn? f)
-      (try (f query-result)
+      (try (f query-result')
            (catch :default e
              (js/console.error e))))))
