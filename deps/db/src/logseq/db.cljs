@@ -65,15 +65,15 @@
          tx-data (->> (common-util/fast-remove-nils tx-data)
                       (remove empty?))
          delete-blocks-tx (when-not (string? repo-or-conn)
-                            (delete-blocks/update-refs-and-macros @repo-or-conn tx-data))
+                            (delete-blocks/update-refs-and-macros @repo-or-conn tx-data tx-meta))
          tx-data (concat tx-data delete-blocks-tx)]
 
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
      (when (seq tx-data)
 
-      ;;  (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
-      ;;  (cljs.pprint/pprint tx-data)
+       ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
+       ;;  (cljs.pprint/pprint tx-data)
 
        (let [f (or @*transact-fn d/transact!)]
          (try
