@@ -204,6 +204,15 @@
    "CANCELED" :logseq.task/status.canceled
    "CANCELLED" :logseq.task/status.canceled})
 
+(defn- property-lines->attributes
+  [lines]
+  (let [props (property-lines->properties lines)]
+    (cond-> {:build/properties (dissoc props :created-at :tags)}
+      (:tags props)
+      (assoc :build/tags (mapv keyword (:tags props)))
+      (:created-at props)
+      (assoc :block/created-at (:created-at props)))))
+
 (defn- parse-content*
   [content*]
   (let [blocks** (->> (string/split content* #"\n-\s*")
@@ -213,14 +222,10 @@
                                   ;; If no property chars may accidentally parse child blocks
                                   ;; so don't do property parsing
                                   (and (string/includes? s ":: ") props)
-                                  ((fn [x]
-                                     (let [props' (property-lines->properties props)]
-                                       (merge x (cond-> {:build/properties (dissoc props' :created-at)}
-                                                  (:created-at props')
-                                                  (assoc :block/created-at (:created-at props'))))))))))))
-        [page-props blocks*]
+                                  (merge (property-lines->attributes props)))))))
+        [page-attrs blocks*]
         (if (string/includes? (:block/content (first blocks**)) "::")
-          [(property-lines->properties (string/split-lines (:block/content (first blocks**))))
+          [(property-lines->attributes (string/split-lines (:block/content (first blocks**))))
            (rest blocks**)]
           [nil blocks**])
         blocks
@@ -231,7 +236,7 @@
               blocks*)]
     {:blocks (mapv (fn [b] (update b :block/content #(string/replace-first % #"^-\s*" "")))
                    blocks)
-     :page-properties page-props}))
+     :page-attributes page-attrs}))
 
 (defn- parse-content
   [content]
@@ -243,7 +248,7 @@
 (defn- build-blocks-tx-options [options*]
   (let [pages-and-blocks
         (mapv (fn [{:file/keys [path content]}]
-                (let [{:keys [blocks page-properties]} (parse-content content)
+                (let [{:keys [blocks page-attributes]} (parse-content content)
                       ;; _ (prn :parse-content content blocks)
                       unique-page-attrs
                       (if (string/starts-with? path "journals")
@@ -256,8 +261,8 @@
                          (or (second (re-find #"/([^/]+)\." path))
                              (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))})]
                   {:page (cond-> unique-page-attrs
-                           (seq page-properties)
-                           (assoc :build/properties page-properties))
+                           (seq page-attributes)
+                           (merge page-attributes))
                    :blocks blocks}))
               options*)
         options {:pages-and-blocks pages-and-blocks
