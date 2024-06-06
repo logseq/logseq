@@ -2483,9 +2483,8 @@
                                      (when-let [container (gdom/getElement "app-container")]
                                        (dom/remove-class! container "blocks-selection-mode"))
                                      (p/do!
-                                      (state/set-editor-op! :escape)
                                       (editor-handler/save-block! (editor-handler/get-state) value)
-                                      (editor-handler/escape-editing select?)
+                                      (when select? (editor-handler/escape-editing select?))
                                       (some-> config :on-escape-editing
                                               (apply [(str uuid) (= event :esc)])))))}
                        edit-input-id

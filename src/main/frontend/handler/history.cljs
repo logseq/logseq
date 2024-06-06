@@ -49,7 +49,6 @@
                                             :block/uuid
                                             str)]
          (when (db-transact/request-finished?)
-           (state/set-editor-op! :undo)
            (util/stop e)
            (p/do!
             (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
@@ -71,7 +70,6 @@
                                             :block/uuid
                                             str)]
          (when (db-transact/request-finished?)
-           (state/set-editor-op! :redo)
            (util/stop e)
            (state/clear-editor-action!)
            (let [^js worker @state/*db-worker]

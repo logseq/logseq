@@ -51,19 +51,8 @@
 ;;                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block))))))
 ;;   state)
 
-(defn will-unmount
-  [state]
-  (let [{:keys [value block] :as state} (editor-handler/get-state)
-        editor-op (state/get-editor-op)]
-    (editor-handler/clear-when-saved!)
-    (state/set-editor-op! nil)
-    (when (db/entity [:block/uuid (:block/uuid block)]) ; block still exists
-      (when-not (or (contains? #{:undo :redo :escape :paste-blocks} editor-op)
-                    (state/editor-in-composition?))
-        (editor-handler/save-block! state value))))
-  state)
 
 (def lifecycle
   {:did-mount did-mount!
    ;; :will-remount will-remount!
-   :will-unmount will-unmount})
+   })
