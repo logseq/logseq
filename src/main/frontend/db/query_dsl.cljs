@@ -9,7 +9,6 @@
             [frontend.date :as date]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
-            [frontend.db.utils :as db-utils]
             [logseq.db.frontend.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
@@ -20,7 +19,8 @@
             [frontend.util :as util]
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
-            [frontend.state :as state]))
+            [frontend.state :as state]
+            [frontend.handler.property.util :as pu]))
 
 
 ;; Query fields:
@@ -621,20 +621,12 @@ Some bindings in this fn:
   [col]
   ;; Only modify result shapes that we know of
   (if (map? (ffirst col))
-    (map (fn [blocks]
-           (mapv (fn [block]
-                   (assoc block
-                          :block/properties-by-name
-                          (->> (db-property/properties block)
-                               (map (fn [[k v]]
-                                      [(:block/original-name (db-utils/entity k))
-                                       (or (some->> (:db/id v)
-                                                    db-utils/entity
-                                                    db-property/get-property-value-name)
-                                           v)]))
-                               (into {}))))
-                 blocks))
-         col)
+    (let [repo (state/get-current-repo)]
+      (map (fn [blocks]
+             (mapv (fn [block]
+                     (assoc block :block/properties-by-name (pu/properties-by-name repo block)))
+                   blocks))
+           col))
     col))
 
 (defn get-db-property-value
