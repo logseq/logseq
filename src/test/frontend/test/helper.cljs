@@ -16,7 +16,6 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
             [frontend.handler.file-based.status :as status]
-            [logseq.db.frontend.property :as db-property]
             [logseq.outliner.db-pipeline :as db-pipeline]))
 
 (def node? (exists? js/process))
