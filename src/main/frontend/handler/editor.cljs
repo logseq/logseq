@@ -758,7 +758,7 @@
          (outliner-op/delete-blocks! blocks {}))))))
 
 (defn- move-to-prev-block
-  [repo edit-block sibling-block format value]
+  [repo sibling-block format value]
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
       (when-let [sibling-entity (db/entity [:block/uuid (uuid sibling-block-id)])]
@@ -829,7 +829,7 @@
                                        block-parent
                                        {:container (util/rec-get-blocks-container block-parent)})
                                       (util/get-prev-block-non-collapsed-non-embed block-parent))
-                      {:keys [prev-block new-content]} (move-to-prev-block repo block-e sibling-block format value)
+                      {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format value)
                       concat-prev-block? (boolean (and prev-block new-content))
                       transact-opts (cond-> {:outliner-op :delete-blocks}
                                       (and concat-prev-block? (seq (:block/_refs block-e)))
@@ -870,7 +870,7 @@
         {:outliner-op :delete-blocks}
         (outliner-op/delete-blocks! blocks' nil))
        (when sibling-block
-         (move-to-prev-block repo (state/get-edit-block) sibling-block
+         (move-to-prev-block repo sibling-block
                              (:block/format block)
                              ""))))))
 
