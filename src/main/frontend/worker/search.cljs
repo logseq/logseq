@@ -250,8 +250,7 @@
             content' (if (and db-based? (seq properties))
                        (str content (when (not= content "") "\n") (get-db-properties-str db properties))
                        content)]
-        (when-not (string/blank? content')
-          (assert (or (:block/uuid page) uuid))
+        (when uuid
           {:id (str uuid)
            :page (str (or (:block/uuid page) uuid))
            :content (sanitize content')
