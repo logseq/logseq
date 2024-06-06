@@ -36,33 +36,20 @@
 
 (defn special-id-ref->page-ref
   "Convert special id ref backs to page name refs using refs."
-  [content refs]
-  (reduce
-   (fn [content ref]
-     (if (:block/name ref)
-       (string/replace content
-                       (str page-ref/left-brackets
-                            page-ref-special-chars
-                            (:block/uuid ref)
-                            page-ref/right-brackets)
-                       (page-ref/->page-ref (:block/original-name ref)))
-       content))
-   content
-   refs))
-
-(defn db-special-id-ref->page
-  "Convert special id ref backs to page name using `db`."
-  [db content]
-  (let [matches (distinct (re-seq special-id-ref-pattern content))]
-    (if (seq matches)
-      (reduce (fn [content [full-text id]]
-                (if-let [page (d/entity db [:block/uuid (uuid id)])]
-                  (string/replace content full-text
-                                  (str page-ref/left-brackets
-                                       (:block/original-name page)
-                                       page-ref/right-brackets))
-                  content)) content matches)
-      content)))
+  [content* refs]
+  (let [content (str content*)]
+    (reduce
+    (fn [content ref]
+      (if (:block/name ref)
+        (string/replace content
+                        (str page-ref/left-brackets
+                             page-ref-special-chars
+                             (:block/uuid ref)
+                             page-ref/right-brackets)
+                        (page-ref/->page-ref (:block/original-name ref)))
+        content))
+    content
+    refs)))
 
 (defn get-matched-special-ids
   [content]

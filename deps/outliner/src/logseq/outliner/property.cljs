@@ -404,9 +404,10 @@
      (seq properties))))
 
 (defn- build-closed-value-tx
-  [db property resolved-value {:keys [id icon description]
-                                             :or {description ""}}]
-  (let [block (when id (d/entity db [:block/uuid id]))
+  [db property resolved-value* {:keys [id icon description]
+                                :or {description ""}}]
+  (let [resolved-value (str resolved-value*)
+        block (when id (d/entity db [:block/uuid id]))
         block-id (or id (ldb/new-block-id))
         icon (when-not (and (string? icon) (string/blank? icon)) icon)
         description (string/trim description)
