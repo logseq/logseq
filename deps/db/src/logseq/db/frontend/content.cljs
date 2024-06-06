@@ -38,18 +38,20 @@
   "Convert special id ref backs to page name refs using refs."
   [content* refs]
   (let [content (str content*)]
-    (reduce
-    (fn [content ref]
-      (if (:block/name ref)
-        (string/replace content
-                        (str page-ref/left-brackets
-                             page-ref-special-chars
-                             (:block/uuid ref)
-                             page-ref/right-brackets)
-                        (page-ref/->page-ref (:block/original-name ref)))
-        content))
-    content
-    refs)))
+    (if (string/includes? content (str page-ref/left-brackets page-ref-special-chars))
+      (reduce
+       (fn [content ref]
+         (if (:block/name ref)
+           (string/replace content
+                           (str page-ref/left-brackets
+                                page-ref-special-chars
+                                (:block/uuid ref)
+                                page-ref/right-brackets)
+                           (page-ref/->page-ref (:block/original-name ref)))
+           content))
+       content
+       refs)
+      content)))
 
 (defn get-matched-special-ids
   [content]
