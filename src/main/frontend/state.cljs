@@ -2413,6 +2413,10 @@ Similar to re-frame subscriptions"
           id))
     (get-next-container-id)))
 
+(defn get-current-editor-container-id
+  []
+  @(:editor/container-id @state))
+
 (comment
   (defn remove-container-key!
     [key]

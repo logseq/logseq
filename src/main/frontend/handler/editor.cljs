@@ -759,19 +759,18 @@
          (outliner-op/delete-blocks! blocks {}))))))
 
 (defn- move-to-prev-block
-  [repo sibling-block format _id value]
+  [repo edit-block sibling-block format value]
   (when (and repo sibling-block)
     (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
-      (when-let [block (db/entity [:block/uuid (uuid sibling-block-id)])]
-        (if (:block/name block)
+      (when-let [sibling-entity (db/entity [:block/uuid (uuid sibling-block-id)])]
+        (if (:block/name sibling-entity)
           (do
-            (edit-block! block :max)
-            {:prev-block block
-             :new-value (:block/original-name block)})
-          (let [edit-block (some-> (:db/id (state/get-edit-block)) db/entity)
-                edit-block-has-refs? (some? (:block/_refs edit-block))
+            (edit-block! sibling-entity :max)
+            {:prev-block sibling-entity
+             :new-value (:block/original-name sibling-entity)})
+          (let [edit-block-has-refs? (some? (:block/_refs edit-block))
                 db? (config/db-based-graph? repo)
-                original-content (util/trim-safe (:block/content block))
+                original-content (util/trim-safe (:block/content sibling-entity))
                 value' (if db?
                          original-content
                          (-> (property-file/remove-built-in-properties-when-file-based repo format original-content)
@@ -789,16 +788,16 @@
                        0)
                      0)
                 [edit-target container-id] (if edit-block-has-refs?
-                                             [(db/entity (:db/id edit-block)) (:editor/container-id @state/state)]
-                                             [(db/entity (:db/id block)) (some-> (dom/attr sibling-block "containerid")
-                                                                               util/safe-parse-int)])]
+                                             [(db/entity (:db/id edit-block)) (state/get-current-editor-container-id)]
+                                             [(db/entity (:db/id sibling-entity)) (some-> (dom/attr sibling-block "containerid")
+                                                                                          util/safe-parse-int)])]
             (edit-block! edit-target
                          pos
                          {:custom-content new-value
                           :tail-len tail-len
                           :container-id container-id})
 
-            {:prev-block block
+            {:prev-block sibling-entity
              :new-content new-value
              :pos pos}))))))
 
@@ -810,9 +809,8 @@
 
 (declare expand-block!)
 
-
 (defn delete-block-inner!
-  [repo {:keys [id block-id value format config]}]
+  [repo {:keys [block-id value format config]}]
   (when block-id
     (when-let [block-e (db/entity [:block/uuid block-id])]
       (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))
@@ -837,10 +835,9 @@
                                        block-parent
                                        {:container (util/rec-get-blocks-container block-parent)})
                                       (util/get-prev-block-non-collapsed-non-embed block-parent))
-                      {:keys [prev-block new-content]} (move-to-prev-block repo sibling-block format id value)
+                      {:keys [prev-block new-content]} (move-to-prev-block repo block-e sibling-block format value)
                       concat-prev-block? (boolean (and prev-block new-content))
-                      transact-opts {:outliner-op :delete-blocks}
-                      db-based? (config/db-based-graph? repo)]
+                      transact-opts {:outliner-op :delete-blocks}]
                   (ui-outliner-tx/transact!
                    transact-opts
                    (cond
@@ -850,44 +847,31 @@
                      nil
 
                      concat-prev-block?
-                     (let [prev-e (db/entity (:db/id prev-block))
-                           current-e (db/entity (:db/id block))
-                           new-properties (merge (:block/properties prev-e)
-                                                 (:block/properties current-e))
-                           new-tags (->> (concat (:block/tags prev-e) (:block/tags current-e)))]
-                       (if (seq (:block/_refs (db/entity (:db/id block))))
-                         (do
-                           (delete-block-aux! prev-block)
-                           (save-block! repo block new-content {})
-                           (outliner-save-block! {:db/id (:db/id block)
-                                                  :block/parent (:db/id (:block/parent prev-block))})
+                     (if (seq (:block/_refs (db/entity (:db/id block))))
+                       (do
+                         (delete-block-aux! prev-block)
+                         (save-block! repo block new-content {})
+                         (outliner-save-block! {:db/id (:db/id block)
+                                                :block/parent (:db/id (:block/parent prev-block))})
 
-                           ;; update prev-block's children to point to the refed block
-                           (when (or (:block/collapsed? prev-block)
-                                     (= (:db/id prev-block) (:db/id (:block/parent block))))
-                             (let [children (:block/_parent prev-block)]
-                               (doseq [child children]
-                                 (when-not (= (:db/id child) (:db/id block))
-                                   (outliner-save-block! {:db/id (:db/id child)
-                                                          :block/parent (:db/id block)})))))
-
-                           (when db-based?
-                             (outliner-save-block! {:db/id (:db/id block)
-                                                    :block/properties new-properties
-                                                    :block/tags new-tags})))
-
-                         (let [children (:block/_parent (db/entity (:db/id block)))]
-                           (when (seq children)
-                             (outliner-op/move-blocks! children prev-block false))
-                           (delete-block-aux! block)
-                           (save-block! repo prev-block new-content {})
-                           (when db-based?
-                             (outliner-save-block! {:db/id (:db/id prev-block)
-                                                    :block/properties new-properties
-                                                    :block/tags new-tags})))))
+                         ;; update prev-block's children to point to the refed block
+                         (when (or (:block/collapsed? prev-block)
+                                   (= (:db/id prev-block) (:db/id (:block/parent block))))
+                           (let [children (:block/_parent prev-block)]
+                             (doseq [child children]
+                               (when-not (= (:db/id child) (:db/id block))
+                                 (outliner-save-block! {:db/id (:db/id child)
+                                                        :block/parent (:db/id block)}))))))
+                       (let [children (:block/_parent (db/entity (:db/id block)))]
+                         (when (seq children)
+                           (outliner-op/move-blocks! children prev-block false))
+                         (delete-block-aux! block)
+                         (save-block! repo prev-block new-content {})))
 
                      :else
-                     (delete-block-aux! block))))))))))))
+                     (delete-block-aux! block))))
+                ))
+            ))))))
 
 (defn delete-block!
   [repo]
@@ -904,11 +888,10 @@
       (p/do!
        (ui-outliner-tx/transact!
         {:outliner-op :delete-blocks}
-         (outliner-op/delete-blocks! blocks' nil))
+        (outliner-op/delete-blocks! blocks' nil))
        (when sibling-block
-         (move-to-prev-block repo sibling-block
+         (move-to-prev-block repo (state/get-edit-block) sibling-block
                              (:block/format block)
-                             (dom/attr sibling-block "id")
                              ""))))))
 
 (defn set-block-query-properties!
@@ -2721,7 +2704,7 @@
                                        ;; first child or next sibling
                                        (ldb/get-first-child db (:db/id current-block))
                                        (db-model/get-next db (:db/id current-block)))]
-                         (db/entity (:db/id e)))))]
+                           (db/entity (:db/id e)))))]
     (cond
       collapsed?
       nil
