@@ -767,8 +767,7 @@
             (edit-block! sibling-entity :max)
             {:prev-block sibling-entity
              :new-value (:block/original-name sibling-entity)})
-          (let [edit-block-has-refs? (some? (:block/_refs edit-block))
-                db? (config/db-based-graph? repo)
+          (let [db? (config/db-based-graph? repo)
                 original-content (if (= (:db/id sibling-entity) (:db/id (state/get-edit-block)))
                                    (state/get-edit-content)
                                    (:block/content sibling-entity))
@@ -788,10 +787,8 @@
                        (gobj/get (utf8/encode original-content) "length")
                        0)
                      0)
-                [edit-target container-id] (if edit-block-has-refs?
-                                             [(db/entity (:db/id edit-block)) (state/get-current-editor-container-id)]
-                                             [(db/entity (:db/id sibling-entity)) (some-> (dom/attr sibling-block "containerid")
-                                                                                          util/safe-parse-int)])]
+                [edit-target container-id] [(db/entity (:db/id sibling-entity)) (some-> (dom/attr sibling-block "containerid")
+                                                                                        util/safe-parse-int)]]
             (edit-block! edit-target
                          pos
                          {:custom-content new-value
@@ -803,10 +800,6 @@
              :pos pos}))))))
 
 (declare save-block!)
-
-(defn- block-has-no-ref?
-  [eid]
-  (empty? (:block/_refs (db/entity eid))))
 
 (declare expand-block!)
 
@@ -827,20 +820,23 @@
                 left-has-children? (and left
                                         (when-let [block-id (:block/uuid left)]
                                           (let [block (db/entity [:block/uuid block-id])]
-                                            (seq (:block/_parent block)))))
-                transact-opts {:outliner-op :delete-blocks}]
+                                            (seq (:block/_parent block)))))]
             (when-not (and has-children? left-has-children?)
               (when block-parent-id
-                (ui-outliner-tx/transact!
-                 transact-opts
-                 (let [block-parent (gdom/getElement block-parent-id)
-                       sibling-block (if (:embed? config)
-                                       (util/get-prev-block-non-collapsed
-                                        block-parent
-                                        {:container (util/rec-get-blocks-container block-parent)})
-                                       (util/get-prev-block-non-collapsed-non-embed block-parent))
-                       {:keys [prev-block new-content]} (move-to-prev-block repo block-e sibling-block format value)
-                       concat-prev-block? (boolean (and prev-block new-content))]
+                (let [block-parent (gdom/getElement block-parent-id)
+                      sibling-block (if (:embed? config)
+                                      (util/get-prev-block-non-collapsed
+                                       block-parent
+                                       {:container (util/rec-get-blocks-container block-parent)})
+                                      (util/get-prev-block-non-collapsed-non-embed block-parent))
+                      {:keys [prev-block new-content]} (move-to-prev-block repo block-e sibling-block format value)
+                      concat-prev-block? (boolean (and prev-block new-content))
+                      transact-opts (cond-> {:outliner-op :delete-blocks}
+                                      (and concat-prev-block? (seq (:block/_refs block-e)))
+                                      ;; Replace existing block refs with prev-block
+                                      (assoc :ref-replace-prev-block-id (:db/id prev-block)))]
+                  (ui-outliner-tx/transact!
+                   transact-opts
                    (cond
                      (and prev-block (:block/name prev-block)
                           (not= (:db/id prev-block) (:db/id (:block/parent block)))
@@ -848,26 +844,11 @@
                      nil
 
                      concat-prev-block?
-                     (if (seq (:block/_refs (db/entity (:db/id block))))
-                       (do
-                         (delete-block-aux! prev-block)
-                         (save-block! repo block new-content {})
-                         (outliner-save-block! {:db/id (:db/id block)
-                                                :block/parent (:db/id (:block/parent prev-block))})
-
-                         ;; update prev-block's children to point to the refed block
-                         (when (or (:block/collapsed? prev-block)
-                                   (= (:db/id prev-block) (:db/id (:block/parent block))))
-                           (let [children (:block/_parent prev-block)]
-                             (doseq [child children]
-                               (when-not (= (:db/id child) (:db/id block))
-                                 (outliner-save-block! {:db/id (:db/id child)
-                                                        :block/parent (:db/id block)}))))))
-                       (let [children (:block/_parent (db/entity (:db/id block)))]
-                         (when (seq children)
-                           (outliner-op/move-blocks! children prev-block false))
-                         (delete-block-aux! block)
-                         (save-block! repo prev-block new-content {})))
+                     (let [children (:block/_parent (db/entity (:db/id block)))]
+                       (when (seq children)
+                         (outliner-op/move-blocks! children prev-block false))
+                       (delete-block-aux! block)
+                       (save-block! repo prev-block new-content {}))
 
                      :else
                      (delete-block-aux! block))))))))))))
@@ -2057,8 +2038,7 @@
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         replace-empty-target? (and empty-target?
                                    (or (not target-block-has-children?)
-                                       (and target-block-has-children? (= (count blocks) 1)))
-                                   (block-has-no-ref? (:db/id target-block)))
+                                       (and target-block-has-children? (= (count blocks) 1))))
         target-block' (if (and empty-target? target-block-has-children? paste-nested-blocks?)
                         (or (ldb/get-left-sibling target-block)
                             (:block/parent (db/entity (:db/id target-block))))

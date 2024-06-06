@@ -139,7 +139,7 @@
          :delete-blocks
          (let [[block-ids opts] args
                blocks (keep #(d/entity @conn %) block-ids)]
-           (outliner-core/delete-blocks! repo conn date-formatter blocks opts))
+           (outliner-core/delete-blocks! repo conn date-formatter blocks (merge opts opts')))
 
          :move-blocks
          (let [[block-ids target-block-id sibling?] args

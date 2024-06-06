@@ -919,8 +919,11 @@
   (op-transact! insert-blocks repo conn blocks target-block (assoc opts :outliner-op :insert-blocks)))
 
 (defn delete-blocks!
-  [repo conn _date-formatter blocks _opts]
-  (op-transact! (fn [_repo conn blocks] (#'delete-blocks conn blocks)) repo conn blocks))
+  [repo conn _date-formatter blocks opts]
+  (op-transact! (fn [_repo conn blocks]
+                  (let [{:keys [tx-data]} (#'delete-blocks conn blocks)]
+                    {:tx-data tx-data
+                     :tx-meta (select-keys opts [:outliner-op :ref-replace-prev-block-id])})) repo conn blocks opts))
 
 (defn move-blocks!
   [repo conn blocks target-block sibling?]

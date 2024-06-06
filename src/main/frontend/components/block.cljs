@@ -98,6 +98,7 @@
 (defonce *drag-to-block
   (atom nil))
 (def *move-to (atom nil))
+(defonce *next-editing-block (atom nil))
 
 ;; TODO: dynamic
 (defonce max-depth-of-links 5)
@@ -2195,11 +2196,11 @@
               (state/set-selection-start-block! block-id))
 
             :else
-            (do
+            (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
+              (when (:block/uuid block) (reset! *next-editing-block (:block/uuid block)))
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
-              (let [f #(let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)
-                             cursor-range (some-> (gdom/getElement block-id)
+              (let [f #(let [cursor-range (some-> (gdom/getElement block-id)
                                                   (dom/by-class "block-content-inner")
                                                   first
                                                   util/caret-range)
@@ -2220,12 +2221,9 @@
                 ;; wait a while for the value of the caret range
                 (p/do!
                  (state/pub-event! [:editor/save-code-editor])
-                 (if (util/ios?)
-                   (f)
-                   (js/setTimeout f 5)))
+                 (f))
 
-                (state/set-selection-start-block! block-id)
-))))))))
+                (state/set-selection-start-block! block-id)))))))))
 
 (rum/defc dnd-separator-wrapper < rum/reactive
   [block children block-id slide? top? block-content?]
@@ -2479,14 +2477,17 @@
                         :format format
                         :on-hide (fn [value event]
                                    (let [select? (and (= event :esc)
-                                                      (not (string/includes? value "```")))]
+                                                      (not (string/includes? value "```")))
+                                         edit-next-block? (and @*next-editing-block (not= @*next-editing-block (:block/uuid block)))]
                                      (when-let [container (gdom/getElement "app-container")]
                                        (dom/remove-class! container "blocks-selection-mode"))
                                      (p/do!
                                       (editor-handler/save-block! (editor-handler/get-state) value)
-                                      (when select? (editor-handler/escape-editing select?))
+                                      (when-not (and edit-next-block? (not select?))
+                                        (editor-handler/escape-editing select?))
                                       (some-> config :on-escape-editing
-                                              (apply [(str uuid) (= event :esc)])))))}
+                                              (apply [(str uuid) (= event :esc)]))
+                                      (reset! *next-editing-block nil))))}
                        edit-input-id
                        config))]
          [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display (if (:slide? config) "block" "flex")}}
