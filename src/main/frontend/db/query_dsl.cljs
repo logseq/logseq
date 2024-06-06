@@ -510,7 +510,7 @@ Some bindings in this fn:
               (string/replace tag-placeholder "#")))))
 
 (defn- add-bindings!
-  [q]
+  [q {:keys [db-graph?]}]
   (let [forms (set (flatten q))
         syms ['?b '?p 'not]
         [b? p? not?] (-> (set/intersection (set syms) forms)
@@ -522,7 +522,11 @@ Some bindings in this fn:
         (concat [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]] q)
 
         b?
-        (concat [['?b :block/uuid]] q)
+        (if db-graph?
+          ;; This keeps built-in properties from showing up in not results.
+          ;; May need to be revisited as more class and property filters are explored
+          (concat [['?b :block/uuid] '[(missing? $ ?b :logseq.property/built-in?)]] q)
+          (concat [['?b :block/uuid]] q))
 
         p?
         (concat [['?p :block/name]] q)
@@ -552,7 +556,7 @@ Some bindings in this fn:
 
 (def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
-  [s {:keys [db-graph?]}]
+  [s {:keys [db-graph?] :as opts}]
   (when (and (string? s)
              (not (string/blank? s)))
     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
@@ -574,7 +578,7 @@ Some bindings in this fn:
                                 ;; [(not (page-ref ?b "page 2"))]
                                 (keyword (ffirst result))
                                 (keyword (first result)))]
-                      (add-bindings! (if (= key :and) (rest result) result))))]
+                      (add-bindings! (if (= key :and) (rest result) result) opts)))]
       {:query result'
        :rules (if db-graph?
                 (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies})
