@@ -1948,9 +1948,6 @@
         (state/set-editor-last-pos! pos)
         (state/set-editor-action! :page-search-hashtag))
 
-      (= last-input-char commands/command-ask)
-      (state/set-editor-action! :editor.action/ask-ai)
-
       :else
       nil)))
 
