@@ -770,7 +770,9 @@
              :new-value (:block/original-name sibling-entity)})
           (let [edit-block-has-refs? (some? (:block/_refs edit-block))
                 db? (config/db-based-graph? repo)
-                original-content (util/trim-safe (:block/content sibling-entity))
+                original-content (if (= (:db/id sibling-entity) (:db/id (state/get-edit-block)))
+                                   (state/get-edit-content)
+                                   (:block/content sibling-entity))
                 value' (if db?
                          original-content
                          (-> (property-file/remove-built-in-properties-when-file-based repo format original-content)
