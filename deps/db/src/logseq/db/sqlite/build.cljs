@@ -110,10 +110,13 @@
       (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))
       true
       (conj (merge (sqlite-util/block-with-timestamps new-block)
-                   (dissoc m :build/properties)
+                   (dissoc m :build/properties :build/tags)
                    (when (seq properties)
                      (->block-properties (merge properties (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                          page-uuids all-idents))
+                   (when-let [tags (:build/tags m)]
+                     {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                        tags)})
                    (when (seq ref-names)
                      (let [block-refs (mapv #(hash-map :block/uuid
                                                        (or (page-uuids %)
@@ -173,7 +176,7 @@
                              (sqlite-util/build-new-class
                               {:block/name (common-util/page-name-sanity-lc (name class-name))
                                :block/original-name (name class-name)
-                               :block/uuid (d/squuid)
+                               :block/uuid (or (:block/uuid class-m) (d/squuid))
                                :db/ident (get-ident all-idents class-name)
                                :db/id (or (class-db-ids class-name)
                                           (throw (ex-info "No :db/id for class" {:class class-name})))})
@@ -210,12 +213,14 @@
     :registry {::block [:map
                         [:block/content :string]
                         [:build/children {:optional true} [:vector [:ref ::block]]]
-                        [:build/properties {:optional true} User-properties]]}}
+                        [:build/properties {:optional true} User-properties]
+                        [:build/tags {:optional true} [:vector Class]]]}}
    [:page [:and
            [:map
             [:block/original-name {:optional true} :string]
             [:build/journal {:optional true} :int]
-            [:build/properties {:optional true} User-properties]]
+            [:build/properties {:optional true} User-properties]
+            [:build/tags {:optional true} [:vector Class]]]
            [:fn {:error/message ":block/original-name or :build/journal required"
                  :error/path [:block/original-name]}
             (fn [m]
@@ -252,28 +257,35 @@
    [:properties {:optional true} Properties]
    [:classes {:optional true} Classes]
    [:graph-namespace {:optional true} :keyword]
-   [:page-id-fn {:optional true} :any]])
+   [:page-id-fn {:optional true} :any]
+   [:auto-create-ontology? {:optional true} :boolean]])
 
-(defn- validate-options
-  [{:keys [pages-and-blocks properties classes] :as options}]
-  (when-let [errors (->> options (m/explain Options) me/humanize)]
-    (println "The build-blocks-tx has the following options errors:")
-    (pprint/pprint errors)
-    (throw (ex-info "Options validation failed" {:errors errors})))
+(defn- get-used-properties-from-options
+  "Extracts all property names from uses of :build/properties and :build/schema-properties"
+  [{:keys [pages-and-blocks properties classes]}]
   (let [page-block-properties (->> pages-and-blocks
                                    (map #(-> (:blocks %) vec (conj (:page %))))
                                    (mapcat #(->> % (map :build/properties) (mapcat keys)))
                                    set)
         property-class-properties (->> (vals properties)
                                        (concat (vals classes))
-                                       (mapcat #(keys (:build/properties %)))
-                                       set)
-        undeclared-properties (-> page-block-properties
-                                  (into property-class-properties)
-                                  (set/difference (set (keys properties)))
-                                  ((fn [x] (remove db-property/logseq-property? x))))]
-    (assert (empty? undeclared-properties)
-            (str "The following properties used in EDN were not declared in :properties: " undeclared-properties))))
+                                       (mapcat #(concat (:build/schema-properties %) (keys (:build/properties %))))
+                                       set)]
+    (into property-class-properties page-block-properties)))
+
+(defn- validate-options
+  [{:keys [properties] :as options}]
+  (when-let [errors (->> options (m/explain Options) me/humanize)]
+    (println "The build-blocks-tx has the following options errors:")
+    (pprint/pprint errors)
+    (throw (ex-info "Options validation failed" {:errors errors})))
+  (when-not (:auto-create-ontology? options)
+   (let [used-properties (get-used-properties-from-options options)
+         undeclared-properties (-> used-properties
+                                   (set/difference (set (keys properties)))
+                                   ((fn [x] (remove db-property/logseq-property? x))))]
+     (assert (empty? undeclared-properties)
+             (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)))))
 
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
@@ -310,7 +322,7 @@
                        :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
                        :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
                        :block/format :markdown}
-                      (dissoc page :build/properties :db/id :block/name :block/original-name))
+                      (dissoc page :build/properties :db/id :block/name :block/original-name :build/tags))
             pvalue-tx-m (->property-value-tx-m new-page (:build/properties page) properties all-idents)]
         (into
          ;; page tx
@@ -325,7 +337,10 @@
               (when (seq (:build/properties page))
                 (->block-properties (merge (:build/properties page) (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                     page-uuids
-                                    all-idents))))))
+                                    all-idents))
+              (when-let [tags (:build/tags page)]
+                {:block/tags (mapv #(hash-map :db/ident (get-ident all-idents %))
+                                   tags)})))))
          ;; blocks tx
          (reduce (fn [acc m]
                    (into acc
@@ -420,11 +435,35 @@
          (map ensure-page-uuids)
          vec)))
 
+(defn- auto-create-ontology
+  "Auto creates properties and classes from uses of options.  Creates properties
+  from any uses of :build/properties and :build/schema.properties. Creates classes from any uses of
+  :build/tags"
+  [{:keys [pages-and-blocks properties classes] :as options}]
+  (let [new-classes (-> (concat
+                         (mapcat #(mapcat :build/tags (:blocks %)) pages-and-blocks)
+                         (mapcat #(get-in % [:page :build/tags]) pages-and-blocks))
+                        set
+                        (set/difference (set (keys classes)))
+                        (zipmap (repeat {})))
+        classes' (merge new-classes classes)
+        used-properties (get-used-properties-from-options options)
+        new-properties (-> used-properties
+                           (set/difference (set (keys properties)))
+                           ((fn [x] (remove db-property/logseq-property? x)))
+                           ;; TODO: Infer :type from property values
+                           (zipmap (repeat {:block/schema {:type :default}})))
+        properties' (merge new-properties properties)]
+    (when (seq new-properties) (prn :new-properties new-properties))
+    (when (seq new-classes) (prn :new-classes new-classes))
+    {:classes classes' :properties properties'}))
+
 (defn- build-blocks-tx*
-  [{:keys [pages-and-blocks properties classes graph-namespace]
+  [{:keys [pages-and-blocks graph-namespace auto-create-ontology?]
     :as options}]
   (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks)
         page-uuids (create-page-uuids pages-and-blocks')
+        {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes graph-namespace)
         properties-tx (build-properties-tx properties page-uuids all-idents)
         classes-tx (build-classes-tx classes properties page-uuids all-idents)
@@ -439,7 +478,8 @@
                                                  cs)))
                                  m))
                              properties-tx)
-        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids options)]
+        pages-and-blocks-tx (build-pages-and-blocks-tx pages-and-blocks' all-idents page-uuids
+                                                       (assoc options :properties properties))]
     ;; Properties first b/c they have schema and are referenced by all. Then classes b/c they can be referenced by pages. Then pages
     (split-blocks-tx (concat properties-tx'
                              classes-tx
@@ -481,6 +521,8 @@
      * :build/class-parent - Add a class parent by its keyword name
      * :build/schema-properties - Vec of property name keywords. Defines properties that a class gives to its objects
   * :graph-namespace - namespace to use for db-ident creation. Useful when importing an ontology
+  * :auto-create-ontology? - When set to true, creates properties and classes from their use.
+    See auto-create-ontology for more details
   * :page-id-fn - custom fn that returns ent lookup id for page refs e.g. `[:block/uuid X]`
     Default is :db/id
 
@@ -498,7 +540,8 @@
   "Builds txs with build-blocks-tx and transacts them. Also provides a shorthand
   version of options that are useful for testing"
   [conn options]
-  (let [options' (if (vector? options) {:pages-and-blocks options} options)
+  (let [options' (merge {:auto-create-ontology? true}
+                        (if (vector? options) {:pages-and-blocks options} options))
         {:keys [init-tx block-props-tx]} (build-blocks-tx options')]
     (d/transact! conn init-tx)
     (when (seq block-props-tx)

@@ -11,7 +11,7 @@
      :block/format :markdown
      :block/uuid block-id
      :block/page property-id
-     :block/content value
+     :block/content (str value)
      :block/closed-value-property property-id
      :logseq.property/created-from-property property-id
      :block/parent property-id}))

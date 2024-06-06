@@ -260,17 +260,8 @@
                            (assoc :build/properties page-properties))
                    :blocks blocks}))
               options*)
-        page-block-properties (->> pages-and-blocks
-                                   (map #(-> (:blocks %) vec (conj (:page %))))
-                                   (mapcat #(->> % (map :build/properties) (mapcat keys)))
-                                   (remove db-property/logseq-property?)
-                                   set)
-        properties (->> page-block-properties
-                        (map #(vector % {:block/schema {:type :default}}))
-                        (into {}))
-        options (cond-> {:pages-and-blocks pages-and-blocks}
-                  (seq properties)
-                  (assoc :properties properties))]
+        options {:pages-and-blocks pages-and-blocks
+                 :auto-create-ontology? true}]
     options))
 
 (defn load-test-files-for-db-graph
