@@ -2431,7 +2431,7 @@
     (when-not edit?
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
-(rum/defcs block-content-or-editor < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
   {:init (fn [state]
            (let [block (second (:rum/args state))
                  config (first (:rum/args state))
