@@ -844,11 +844,17 @@
                      nil
 
                      concat-prev-block?
-                     (let [children (:block/_parent (db/entity (:db/id block)))]
+                     (let [children (:block/_parent (db/entity (:db/id block)))
+                           db-based? (config/db-based-graph? repo)]
                        (when (seq children)
                          (outliner-op/move-blocks! children prev-block false))
                        (delete-block-aux! block)
-                       (save-block! repo prev-block new-content {}))
+                       (save-block! repo prev-block new-content {})
+                       (when (and db-based? (seq (:block/properties block)) (empty? (:block/properties prev-block)))
+                         ;; move deleting block's properties to `prev-block`
+                         (let [prev-block-with-properties (reduce (fn [b [k v]]
+                                                                    (assoc b k v)) prev-block (:block/properties block))]
+                           (outliner-save-block! prev-block-with-properties))))
 
                      :else
                      (delete-block-aux! block))))))))))))
