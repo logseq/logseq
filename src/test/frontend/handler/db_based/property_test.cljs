@@ -78,7 +78,7 @@
         (every? keyword? (map first properties))
         true
         (:block/content (second (second properties)))
-        1)))
+        "1")))
 
   (testing "Update property value"
     (let [conn (db/get-db false)]
@@ -90,7 +90,7 @@
         (count properties)
         2
         (:block/content (second (second properties)))
-        2)))
+        "2")))
 
   (testing "Wrong type property value shouldn't transacted"
     (let [conn (db/get-db false)]
@@ -106,7 +106,7 @@
         (count properties)
         2
         (:block/content (second (second properties)))
-        2)))
+        "2")))
 
   (testing "Add a multi-values property"
     (let [conn (db/get-db false)]
@@ -128,7 +128,7 @@
         (are [x y] (= x y)
           3
           (count properties)
-          #{1 2 3}
+          #{"1" "2" "3"}
           (set (map :block/content (get properties :user.property/property-3)))))))
 
   (testing "Remove a property"
@@ -293,7 +293,7 @@
       (testing "Add existing values to closed values"
         (let [values (get-value-ids k)]
           (is (every? uuid? values))
-          (is (= #{1 2} (get-closed-values values)))
+          (is (= #{"1" "2"} (get-closed-values values)))
           (is (every? #(contains? (:block/type (db/entity [:block/uuid %])) "closed value")
                       values))))
       (testing "Add non-numbers shouldn't work"
@@ -303,7 +303,7 @@
           #"Can't convert"
           (outliner-property/upsert-closed-value! conn (:db/id property) {:value "not a number"})))
         (let [values (get-value-ids k)]
-          (is (= #{1 2} (get-closed-values values)))))
+          (is (= #{"1" "2"} (get-closed-values values)))))
 
       (testing "Add existing value"
         (is
@@ -314,10 +314,10 @@
 
       (testing "Add new value"
         (let [_ (outliner-property/upsert-closed-value! conn (:db/id property) {:value 3})
-              b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :block/content 3]] @conn))]
+              b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :block/content "3"]] @conn))]
           (is (contains? (set (:block/type b)) "closed value"))
           (let [values (get-value-ids k)]
-            (is (= #{1 2 3}
+            (is (= #{"1" "2" "3"}
                    (get-closed-values values))))
 
           (testing "Update closed value"
@@ -326,7 +326,7 @@
                                                                                     :value 4
                                                                                     :description "choice 4"})
                   b (db/entity [:block/uuid block-id])]
-              (is (= 4 (:block/content b)))
+              (is (= "4" (:block/content b)))
               (is (= "choice 4" (:description (:block/schema b))))
               (is (contains? (:block/type b) "closed value"))
               (outliner-property/delete-closed-value! conn (:db/id property) (:db/id (db/entity [:block/uuid block-id])))
