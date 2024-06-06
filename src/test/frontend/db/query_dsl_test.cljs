@@ -302,48 +302,56 @@ prop-d:: nada"}])
          (map :block/content (dsl-query "(priority a b c)")))
       "Three arg queries and args that have no match"))
 
-(deftest nested-boolean-queries
+(defn- testable-content
+  "Only test :block/content up to page-ref as page-ref content varies between db and file graphs"
+  [{:block/keys [content]}]
+  (some->> content
+           (re-find #"[^\[]+")
+           str/trim))
+
+(deftest ^:done nested-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "foo:: bar
 - DONE b1 [[page 1]] [[page 3]]
-- DONE b2 [[page 1]]"}
+- DONE b2Z [[page 1]]"}
                     {:file/path "pages/page2.md"
                      :file/content "foo:: bar
 - NOW b3 [[page 1]]
-- LATER b4 [[page 2]]
+- LATER b4Z [[page 2]]
 "}])
 
-  (is (= []
-         (dsl-query "(and (todo done) (not [[page 1]]))")))
+  (let [task-filter (if js/process.env.DB_GRAPH "(todo doing todo)" "(todo now later)")]
+    (is (= []
+           (dsl-query "(and (todo done) (not [[page 1]]))")))
 
-  (is (= ["DONE b1 [[page 1]] [[page 3]]"]
-         (map :block/content
-              (dsl-query "(and [[page 1]] (and [[page 3]] (not (task todo))))")))
-      "Nested not")
+    (is (= ["DONE b1"]
+           (map testable-content
+                (dsl-query "(and [[page 1]] (and [[page 3]] (not (task todo))))")))
+        "Nested not")
 
-  (is (= ["NOW b3 [[page 1]]" "LATER b4 [[page 2]]"]
-         (map :block/content
-              (dsl-query "(and (todo now later) (or [[page 1]] [[page 2]]))"))))
+    (is (= ["NOW b3" "LATER b4Z"]
+           (map testable-content
+                (dsl-query (str "(and " task-filter " (or [[page 1]] [[page 2]]))")))))
 
-  (is (= #{"NOW b3 [[page 1]]"
-           "LATER b4 [[page 2]]"
-           "DONE b1 [[page 1]] [[page 3]]"
-           "DONE b2 [[page 1]]"}
-         (set (map :block/content
-                   (dsl-query "(and (todo now later done) (or [[page 1]] (not [[page 1]])))")))))
+    (is (= #{"NOW b3"
+             "LATER b4Z"
+             "DONE b1"
+             "DONE b2Z"}
+           (set (map testable-content
+                     (dsl-query (str "(and "
+                                     (if js/process.env.DB_GRAPH "(todo doing todo done)" "(todo now later done)")
+                                     " (or [[page 1]] (not [[page 1]])))"))))))
 
-  (is (= #{"foo:: bar" "DONE b1 [[page 1]] [[page 3]]"
-           "DONE b2 [[page 1]]"}
-         (->> (dsl-query "(not (and (todo now later) (or [[page 1]] [[page 2]])))")
-              (keep :block/content)
-              (map str/trimr)
-              set)))
+    (is (= (if js/process.env.DB_GRAPH #{"bar" "DONE b1" "DONE b2Z"} #{"foo:: bar" "DONE b1" "DONE b2Z"})
+           (->> (dsl-query (str "(not (and " task-filter " (or [[page 1]] [[page 2]])))"))
+                (keep testable-content)
+                set)))
 
-  (is (= #{"DONE b2 [[page 1]]" "LATER b4 [[page 2]]"}
-         (->> (dsl-query "(and \"b\" (or \"2\" \"4\"))")
-              (keep :block/content)
-              set))
-      "AND-OR with full text search")
+    (is (= #{"DONE b2Z" "LATER b4Z"}
+           (->> (dsl-query "(and \"Z\" (or \"b2\" \"b4\"))")
+                (keep testable-content)
+                set))
+        "AND-OR with full text search"))
 
   ;; FIXME: not working
   ;; Requires or-join and not-join which aren't supported yet
@@ -412,29 +420,29 @@ tags: [[other]]
               (dsl-query "(page nope)")))
       "Correctly returns no results"))
 
-(deftest empty-queries
+(deftest ^:done empty-queries
   (testing "nil or blank strings should be ignored"
     (are [x] (nil? (dsl-query x))
-         nil
-         ""
-         " "
-         "\"\"")))
+      nil
+      ""
+      " "
+      "\"\"")))
 
-(deftest page-ref-and-boolean-queries
+(deftest ^:done page-ref-and-boolean-queries
   (load-test-files [{:file/path "pages/page1.md"
                      :file/content "foo:: bar
-- b1 [[page 1]] #tag2
-- b2 [[page 2]] #tag1
+- b1 [[page 1]] [[tag2]]
+- b2 [[page 2]] [[tag1]]
 - b3"}])
 
   (testing "page-ref queries"
 
-    (is (= ["b2 [[page 2]] #tag1"]
-           (map :block/content (dsl-query "[[page 2]]")))
+    (is (= ["b2"]
+           (map testable-content (dsl-query "[[page 2]]")))
         "Page ref arg")
 
-    (is (= ["b2 [[page 2]] #tag1"]
-           (map :block/content (dsl-query "#tag1")))
+    (is (= ["b2"]
+           (map testable-content (dsl-query "#tag1")))
         "Tag arg")
 
     (is (= []
@@ -442,26 +450,26 @@ tags: [[other]]
         "Nonexistent page returns no results"))
 
   (testing "basic boolean queries"
-    (is (= ["b2 [[page 2]] #tag1"]
-           (map :block/content
+    (is (= ["b2"]
+           (map testable-content
                 (dsl-query "(and [[tag1]] [[page 2]])")))
         "AND query")
 
-    (is (= ["b1 [[page 1]] #tag2" "b2 [[page 2]] #tag1"]
-           (map :block/content
+    (is (= ["b1" "b2"]
+           (map testable-content
                 (dsl-query "(or [[tag2]] [[page 2]])")))
         "OR query")
 
-    (is (= ["b1 [[page 1]] #tag2"]
-           (map :block/content
+    (is (= ["b1"]
+           (map testable-content
                 (dsl-query "(or [[tag2]] [[page 3]])")))
         "OR query with nonexistent page should return meaningful results")
 
-    (is (= (set ["b1 [[page 1]] #tag2" "foo:: bar" "b3"])
+    (is (= (if js/process.env.DB_GRAPH #{"b1" "bar" "b3"} #{"b1" "foo:: bar" "b3"})
            (->> (dsl-query "(not [[page 2]])")
                 ;; Only filter to page1 to get meaningful results
                 (filter #(= "page1" (get-in % [:block/page :block/name])))
-                (map (comp str/trimr :block/content))
+                (map testable-content)
                 (set)))
         "NOT query")))
 
@@ -478,14 +486,13 @@ tags: [[other]]
   - [[Child page]]
 - p2 [[Parent page]]
   - Non linked content"}]))
-  (is (= ["Non"
+  (is (= ["Non linked content"
           "p2"
           "p1"]
-         ;; Just test for start of blocks as content varies for db graphs
-         (map #(re-find #"\w+" (:block/content %))
+         (map testable-content
               (dsl-query "(and [[Parent page]] (not [[Child page]]))")))))
 
-(deftest between-queries
+(deftest ^:done between-queries
   (load-test-files [{:file/path "journals/2020_12_26.md"
                      :file/content "foo::bar
 - DONE 26-b1
