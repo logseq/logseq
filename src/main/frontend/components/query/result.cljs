@@ -13,9 +13,8 @@
             [frontend.modules.outliner.tree :as tree]))
 
 (defn trigger-custom-query!
-  [config query *query-error]
+  [config query *query-error *fulltext-query-result]
   (let [repo (state/get-current-repo)
-        result-atom (atom nil)
         current-block-uuid (or (:block/uuid (:block config))
                                (:block/uuid config))
         _ (reset! *query-error nil)
@@ -25,16 +24,22 @@
                        (let [q (:query query)
                              form (common-util/safe-read-string q)]
                          (cond
-                           ;; Searches like 'foo' or 'foo bar' come back as symbols
-                           ;; and are meant to go directly to full text search
-                           (and (util/electron?) (symbol? form)) ; full-text search
-                           (p/let [blocks (search/block-search repo (string/trim (str form)) {:limit 30})]
-                             (when (seq blocks)
-                               (let [result (db/pull-many (state/get-current-repo) '[*] (map (fn [b] [:block/uuid (uuid (:block/uuid b))]) blocks))]
-                                 (reset! result-atom result))))
-
                            (symbol? form)
                            (atom nil)
+
+                           (re-matches #"\".*\"" q) ; full-text search
+                           (do
+                             (p/let [blocks (search/block-search repo (string/trim form) {:limit 30})]
+                               (when (seq blocks)
+                                 (let [result (->> blocks
+                                                   (keep (fn [b]
+                                                           (when-not (= (:block/uuid b) current-block-uuid)
+                                                             [:block/uuid (:block/uuid b)])))
+                                                  ;; Why pull-many here instead of `d/entity`?
+                                                   (db/pull-many (state/get-current-repo) '[*])
+                                                   (remove nil?))]
+                                   (reset! *fulltext-query-result result))))
+                             *fulltext-query-result)
 
                            :else
                            (query-dsl/query (state/get-current-repo) q)))
@@ -44,9 +49,8 @@
                      (catch :default e
                        (reset! *query-error e)
                        (atom nil)))]
-    (if (instance? Atom query-atom)
-      query-atom
-      result-atom)))
+    (or query-atom
+        (atom nil))))
 
 (defn get-group-by-page [{:keys [result-transform query] :as query-m}
                          {:keys [table?]}]
@@ -59,8 +63,8 @@
 (defn get-query-result
   "Fetches a query's result, transforms it as needed and saves the result into
   an atom that is passed in as an argument"
-  [config query-m *query-error current-block-uuid options]
-  (let [query-atom (trigger-custom-query! config query-m *query-error)
+  [config query-m *query-error *fulltext-query-result current-block-uuid options]
+  (let [query-atom (trigger-custom-query! config query-m *query-error *fulltext-query-result)
         query-result (and query-atom (rum/react query-atom))
         ;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)

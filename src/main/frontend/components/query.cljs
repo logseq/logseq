@@ -87,6 +87,7 @@
          (->hiccup result
                    (cond-> (assoc config
                                   :custom-query? true
+                                  :current-block (:db/id current-block)
                                   :dsl-query? dsl-query?
                                   :query query
                                   :breadcrumb-show? (if (some? breadcrumb-show?)
@@ -142,9 +143,11 @@
              (when-not (or built-in? dsl-query?)
                (when collapsed?
                  (editor-handler/collapse-block! current-block-uuid))))
-           (assoc state :query-error (atom nil)))}
+           (assoc state :query-error (atom nil)
+                  :fulltext-query-result (atom nil)))}
   [state config {:keys [title builder query view collapsed? table-view?] :as q}]
   (let [*query-error (:query-error state)
+        *fulltext-query-result (:fulltext-query-result state)
         built-in? (built-in-custom-query? title)
         dsl-query? (:dsl-query? config)
         current-block-uuid (or (:block/uuid (:block config))
@@ -166,11 +169,10 @@
         dsl-page-query? (and dsl-query?
                              (false? (:blocks? (query-dsl/parse-query query))))
         full-text-search? (and dsl-query?
-                               (util/electron?)
                                (string? query)
                                (re-matches #"\".*\"" query))
         result (when (or built-in-collapsed? (not collapsed?'))
-                 (query-result/get-query-result config q *query-error current-block-uuid {:table? table?}))
+                 (query-result/get-query-result config q *query-error *fulltext-query-result current-block-uuid {:table? table?}))
         query-time (:query-time (meta result))
         page-list? (and (seq result)
                         (some? (:block/name (first result))))
@@ -232,7 +234,7 @@
                   (query-refresh-button query-time {:full-text-search? full-text-search?
                                                     :on-pointer-down (fn [e]
                                                                        (util/stop e)
-                                                                       (query-result/trigger-custom-query! config q *query-error))}))]])])
+                                                                       (query-result/trigger-custom-query! config q *query-error *fulltext-query-result))}))]])])
 
          (when dsl-query? builder)
 

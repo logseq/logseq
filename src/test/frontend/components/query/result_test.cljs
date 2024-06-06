@@ -12,7 +12,7 @@
   (with-redefs [db/custom-query (constantly (atom result))
                 model/with-pages identity]
     (binding [rum/*reactions* (volatile! #{})]
-      (#'query-result/get-query-result config query-m (atom nil) current-block-uuid {:table? table?}))))
+      (#'query-result/get-query-result config query-m (atom nil) (atom nil) current-block-uuid {:table? table?}))))
 
 (deftest get-query-result-with-transforms-and-grouping
   (let [result (mapv
