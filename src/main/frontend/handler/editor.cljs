@@ -486,7 +486,6 @@
   ([_state block-value]
    (when (not config/publishing?)
      (when-let [state (get-state)]
-       (state/set-editor-op! :insert-blocks)
        (let [{:keys [block value config]} state
              value (if (string? block-value) block-value value)
              block-id (:block/uuid block)
@@ -828,20 +827,20 @@
                 left-has-children? (and left
                                         (when-let [block-id (:block/uuid left)]
                                           (let [block (db/entity [:block/uuid block-id])]
-                                            (seq (:block/_parent block)))))]
+                                            (seq (:block/_parent block)))))
+                transact-opts {:outliner-op :delete-blocks}]
             (when-not (and has-children? left-has-children?)
               (when block-parent-id
-                (let [block-parent (gdom/getElement block-parent-id)
-                      sibling-block (if (:embed? config)
-                                      (util/get-prev-block-non-collapsed
-                                       block-parent
-                                       {:container (util/rec-get-blocks-container block-parent)})
-                                      (util/get-prev-block-non-collapsed-non-embed block-parent))
-                      {:keys [prev-block new-content]} (move-to-prev-block repo block-e sibling-block format value)
-                      concat-prev-block? (boolean (and prev-block new-content))
-                      transact-opts {:outliner-op :delete-blocks}]
-                  (ui-outliner-tx/transact!
-                   transact-opts
+                (ui-outliner-tx/transact!
+                 transact-opts
+                 (let [block-parent (gdom/getElement block-parent-id)
+                       sibling-block (if (:embed? config)
+                                       (util/get-prev-block-non-collapsed
+                                        block-parent
+                                        {:container (util/rec-get-blocks-container block-parent)})
+                                       (util/get-prev-block-non-collapsed-non-embed block-parent))
+                       {:keys [prev-block new-content]} (move-to-prev-block repo block-e sibling-block format value)
+                       concat-prev-block? (boolean (and prev-block new-content))]
                    (cond
                      (and prev-block (:block/name prev-block)
                           (not= (:db/id prev-block) (:db/id (:block/parent block)))
@@ -871,9 +870,7 @@
                          (save-block! repo prev-block new-content {})))
 
                      :else
-                     (delete-block-aux! block))))
-                ))
-            ))))))
+                     (delete-block-aux! block))))))))))))
 
 (defn delete-block!
   [repo]
@@ -1255,8 +1252,10 @@
     (state/editing?)
     (let [element (gdom/getElement (state/get-editing-block-dom-id))]
       (when element
-        (util/scroll-to-block element)
-        (state/exit-editing-and-set-selected-blocks! [element])))
+        (p/do!
+         (save-current-block!)
+         (util/scroll-to-block element)
+         (state/exit-editing-and-set-selected-blocks! [element]))))
 
     ;; when selection and one block selected, select next block
     (and (state/selection?) (== 1 (count (state/get-selection-blocks))))
@@ -2042,7 +2041,6 @@
                   revert-cut-txs
                   skip-empty-target?]
            :or {exclude-properties []}}]
-  (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/entity [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
@@ -2611,16 +2609,18 @@
         (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
           (let [container-id (some-> (dom/attr sibling-block "containerid") js/parseInt)
                 value (state/get-edit-content)]
-            (when (not= (clean-content! repo format content)
-                        (string/trim value))
-              (save-block! repo uuid value))
-            (let [new-uuid (cljs.core/uuid sibling-block-id)
-                  block (db/entity [:block/uuid new-uuid])]
-              (edit-block! block
-                           (or (:pos move-opts)
-                               [direction line-pos])
-                           {:container-id container-id
-                            :direction direction}))))
+            (p/do!
+             (when (not= (clean-content! repo format content)
+                         (string/trim value))
+               (save-block! repo uuid value))
+
+             (let [new-uuid (cljs.core/uuid sibling-block-id)
+                   block (db/entity [:block/uuid new-uuid])]
+               (edit-block! block
+                            (or (:pos move-opts)
+                                [direction line-pos])
+                            {:container-id container-id
+                             :direction direction})))))
         (case direction
           :up (cursor/move-cursor-to input 0)
           :down (cursor/move-cursor-to-end input))))))
@@ -2867,103 +2867,101 @@
   "NOTE: Keydown cannot be used on Android platform"
   [format]
   (fn [e _key-code]
-    (if (= :insert-blocks (state/get-editor-op))
-      (util/stop e)
-      (let [input-id (state/get-edit-input-id)
-            input (state/get-input)
-            key (gobj/get e "key")
-            value (gobj/get input "value")
-            ctrlKey (gobj/get e "ctrlKey")
-            metaKey (gobj/get e "metaKey")
-            pos (cursor/pos input)
-            hashtag? (or (surround-by? input "#" " ")
-                         (surround-by? input "#" :end)
-                         (= key "#"))]
-        (when (and (not @(:editor/start-pos @state/state))
-                   (not (and key (string/starts-with? key "Arrow"))))
-          (state/set-state! :editor/start-pos pos))
+    (let [input-id (state/get-edit-input-id)
+          input (state/get-input)
+          key (gobj/get e "key")
+          value (gobj/get input "value")
+          ctrlKey (gobj/get e "ctrlKey")
+          metaKey (gobj/get e "metaKey")
+          pos (cursor/pos input)
+          hashtag? (or (surround-by? input "#" " ")
+                       (surround-by? input "#" :end)
+                       (= key "#"))]
+      (when (and (not @(:editor/start-pos @state/state))
+                 (not (and key (string/starts-with? key "Arrow"))))
+        (state/set-state! :editor/start-pos pos))
 
-        (cond
-          (and (contains? #{"ArrowLeft" "ArrowRight"} key)
-               (contains? #{:property-search :property-value-search} (state/get-editor-action)))
-          (state/clear-editor-action!)
+      (cond
+        (and (contains? #{"ArrowLeft" "ArrowRight"} key)
+             (contains? #{:property-search :property-value-search} (state/get-editor-action)))
+        (state/clear-editor-action!)
 
-          (and (util/goog-event-is-composing? e true) ;; #3218
-               (not hashtag?) ;; #3283 @Rime
-               (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
-          nil
+        (and (util/goog-event-is-composing? e true) ;; #3218
+             (not hashtag?) ;; #3283 @Rime
+             (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
+        nil
 
-          (or ctrlKey metaKey)
-          nil
+        (or ctrlKey metaKey)
+        nil
 
         ;; FIXME: On mobile, a backspace click to call keydown-backspace-handler
         ;; does not work if cursor is at the beginning of a block, hence the block
         ;; can't be deleted. Need to figure out why and find a better solution.
-          (and (mobile-util/native-platform?)
-               (= key "Backspace")
-               (zero? pos)
-               (string/blank? (.toString (js/window.getSelection))))
-          (keydown-backspace-handler false e)
+        (and (mobile-util/native-platform?)
+             (= key "Backspace")
+             (zero? pos)
+             (string/blank? (.toString (js/window.getSelection))))
+        (keydown-backspace-handler false e)
 
-          (and (= key "#")
-               (and (> pos 0)
-                    (= "#" (util/nth-safe value (dec pos)))))
-          (state/clear-editor-action!)
+        (and (= key "#")
+             (and (> pos 0)
+                  (= "#" (util/nth-safe value (dec pos)))))
+        (state/clear-editor-action!)
 
-          (and (contains? (set/difference (set (keys reversed-autopair-map))
-                                          #{"`"})
-                          key)
-               (= (get-current-input-char input) key))
-          (do
-            (util/stop e)
-            (cursor/move-cursor-forward input))
+        (and (contains? (set/difference (set (keys reversed-autopair-map))
+                                        #{"`"})
+                        key)
+             (= (get-current-input-char input) key))
+        (do
+          (util/stop e)
+          (cursor/move-cursor-forward input))
 
-          (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
-          nil
+        (and (autopair-when-selected key) (string/blank? (util/get-selected-text)))
+        nil
 
-          (some? @(:editor/action @state/state))
-          nil
+        (some? @(:editor/action @state/state))
+        nil
 
-          (and (not (string/blank? (util/get-selected-text)))
-               (contains? keycode/left-square-brackets-keys key))
-          (do
-            (autopair input-id "[" format nil)
-            (util/stop e))
+        (and (not (string/blank? (util/get-selected-text)))
+             (contains? keycode/left-square-brackets-keys key))
+        (do
+          (autopair input-id "[" format nil)
+          (util/stop e))
 
-          (and (not (string/blank? (util/get-selected-text)))
-               (contains? keycode/left-paren-keys key))
-          (do (util/stop e)
-              (autopair input-id "(" format nil))
+        (and (not (string/blank? (util/get-selected-text)))
+             (contains? keycode/left-paren-keys key))
+        (do (util/stop e)
+            (autopair input-id "(" format nil))
 
           ;; If you type `xyz`, the last backtick should close the first and not add another autopair
           ;; If you type several backticks in a row, each one should autopair to accommodate multiline code (```)
-          (-> (keys autopair-map)
-              set
-              (disj "(")
-              (contains? key)
-              (or (autopair-left-paren? input key)))
-          (let [curr (get-current-input-char input)
-                prev (util/nth-safe value (dec pos))]
-            (util/stop e)
-            (if (and (= key "`") (= "`" curr) (not= "`" prev))
-              (cursor/move-cursor-forward input)
-              (autopair input-id key format nil)))
+        (-> (keys autopair-map)
+            set
+            (disj "(")
+            (contains? key)
+            (or (autopair-left-paren? input key)))
+        (let [curr (get-current-input-char input)
+              prev (util/nth-safe value (dec pos))]
+          (util/stop e)
+          (if (and (= key "`") (= "`" curr) (not= "`" prev))
+            (cursor/move-cursor-forward input)
+            (autopair input-id key format nil)))
 
           ; `;;` to add or change property for db graphs
-          (let [sym ";"]
-            (and (config/db-based-graph? (state/get-current-repo)) (double-chars-typed? value pos key sym)))
-          (state/pub-event! [:editor/new-property])
+        (let [sym ";"]
+          (and (config/db-based-graph? (state/get-current-repo)) (double-chars-typed? value pos key sym)))
+        (state/pub-event! [:editor/new-property])
 
-          (let [sym "$"]
-            (double-chars-typed? value pos key sym))
-          (commands/simple-insert! input-id "$$" {:backward-pos 2})
+        (let [sym "$"]
+          (double-chars-typed? value pos key sym))
+        (commands/simple-insert! input-id "$$" {:backward-pos 2})
 
-          (let [sym "^"]
-            (double-chars-typed? value pos key sym))
-          (commands/simple-insert! input-id "^^" {:backward-pos 2})
+        (let [sym "^"]
+          (double-chars-typed? value pos key sym))
+        (commands/simple-insert! input-id "^^" {:backward-pos 2})
 
-          :else
-          nil)))))
+        :else
+        nil))))
 
 (defn- input-page-ref?
   [k current-pos blank-selected? last-key-code]

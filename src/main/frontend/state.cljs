@@ -120,9 +120,9 @@
       :config                                {}
       :block/component-editing-mode?         false
       :editor/start-pos                      (atom nil)
-      :editor/op                             (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
+
       :editor/action                         (atom nil)
       :editor/action-data                    nil
       ;; With label or other data
@@ -1909,14 +1909,6 @@ Similar to re-frame subscriptions"
 (defn open-settings!
   ([] (open-settings! true))
   ([active-tab] (set-state! :ui/settings-open? active-tab)))
-
-(defn set-editor-op!
-  [value]
-  (set-state! :editor/op value))
-
-(defn get-editor-op
-  []
-  @(:editor/op @state))
 
 (defn get-events-chan
   []

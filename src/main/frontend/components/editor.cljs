@@ -691,42 +691,6 @@
         set-default-width?
         pos)))))
 
-(rum/defc editor-action-query-wrap
-  [trigger children & {:keys [on-input-keydown sub-input-keydown?]}]
-  (let [[q set-q!] (rum/use-state "")
-        [keydown-e set-keydown-e!] (rum/use-state nil)]
-
-    (rum/use-effect!
-      (fn []
-        (when-let [^js input (state/get-input)]
-          (let [keyup-handle (fn []
-                               (let [content (.-value input)
-                                     pos (some-> (cursor/get-caret-pos input) :pos)
-                                     content (subs content 0 pos)
-                                     pos (string/last-index-of content trigger)
-                                     content (subs content (inc pos))]
-                                 (-> (p/delay 300)
-                                   (p/then #(set-q! content)))))
-                keydown-handle (fn [^js e]
-                                 (when-not (false? (when (fn? on-input-keydown)
-                                                     (on-input-keydown e)))
-                                   (case (.-key e)
-                                     ("ArrowUp" "ArrowDown")
-                                     (.preventDefault e)
-                                     :dune))
-                                 (when sub-input-keydown?
-                                   (set-keydown-e! e)))]
-            (doto input
-              (.addEventListener "keyup" keyup-handle false)
-              (.addEventListener "keydown" keydown-handle false))
-            #(doto input
-               (.removeEventListener "keyup" keyup-handle)
-               (.removeEventListener "keydown" keydown-handle)))))
-      [])
-
-    (children q keydown-e)))
-
-
 (defn- exist-editor-commands-popup?
   []
   (some->> (shui-popup/get-popups)
