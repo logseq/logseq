@@ -59,15 +59,13 @@
                     :conn (second args)}}
    (apply outliner-core/insert-blocks! args)))
 
-(defmethod transact-db! :insert-no-order-blocks [_ conn block-uuids]
+(defmethod transact-db! :insert-no-order-blocks [_ conn block-uuid+parent-coll]
   (ldb/transact! conn
-                 (mapv (fn [block-uuid]
+                 (mapv (fn [[block-uuid block-parent]]
                          ;; add block/content block/format to satisfy the normal-block schema
-                         {:block/uuid block-uuid
-                          ;; NOTE: block without :block/order
-                          ;; must be `logseq.db.frontend.malli-schema.closed-value-block`
-                          :block/type #{"closed value"}})
-                       block-uuids)
+                         (cond-> {:block/uuid block-uuid}
+                           block-parent (assoc :block/parent [:block/uuid block-parent])))
+                       block-uuid+parent-coll)
                  {:persist-op? false
                   :gen-undo-ops? false}))
 
@@ -184,7 +182,7 @@
         [false true false false]
         (if move?
           (transact-db! :move-blocks repo conn [b] local-parent false)
-          (transact-db! :insert-no-order-blocks conn [block-uuid]))
+          (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
 
         ;; Don't need to insert-whiteboard-block here,
         ;; will do :upsert-whiteboard-block in `update-block-attrs`
@@ -317,6 +315,7 @@
     :block/tags
     :block/link
     :block/journal-day
+    :block/order
     :class/parent
     :class/schema.properties
     :property/schema.classes})
@@ -382,9 +381,9 @@
     (concat tx-data1 tx-data2)))
 
 (defn- remote-op-value->tx-data
-  [db block-uuid op-value]
+  [db ent op-value]
+  (assert (some? (:db/id ent)) ent)
   (let [db-schema (d/schema db)
-        ent (d/entity db [:block/uuid block-uuid])
         local-block-map (->> ent
                              (filter (comp update-op-watched-attr? first))
                              (map (fn [[k v]]
@@ -414,7 +413,6 @@
                                           (first v)
                                           v)])))
                               (into {}))]
-    (assert (some? (:db/id ent)) block-uuid)
     (diff-block-map->tx-data db (:db/id ent) local-block-map remote-block-map)))
 
 (defn- remote-op-value->schema-tx-data
@@ -423,18 +421,28 @@
     (when-let [db-ident (:db/ident op-value)]
       [(merge {:block/uuid block-uuid :db/ident db-ident} schema-map)])))
 
+(defn- update-block-order
+  [e op-value]
+  (if-let [order (:block/order op-value)]
+    {:op-value (dissoc op-value :block/order)
+     :tx-data [[:db/add e :block/order order]]}
+    {:op-value op-value}))
+
 (defn- update-block-attrs
   [repo conn block-uuid {:keys [parents] :as op-value}]
-  (when (some (fn [k] (= "block" (namespace k))) (keys op-value)) ; there exists some :block/xxx attrs
-    (let [first-remote-parent (first parents)
-          local-parent (d/entity @conn [:block/uuid first-remote-parent])
-          whiteboard-page-block? (whiteboard-page-block? local-parent)]
-      (if whiteboard-page-block?
-        (upsert-whiteboard-block repo conn op-value)
-        (do (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]
-              (ldb/transact! conn schema-tx-data {:persist-op? false :gen-undo-ops? false}))
-            (when-let [tx-data (seq (remote-op-value->tx-data @conn block-uuid (dissoc op-value :client/schema)))]
-              (ldb/transact! conn tx-data {:persist-op? false :gen-undo-ops? false})))))))
+  (when-let [ent (d/entity @conn [:block/uuid block-uuid])]
+    (when (some (fn [k] (= "block" (namespace k))) (keys op-value)) ; there exists some :block/xxx attrs
+      (let [{update-block-order-tx-data :tx-data op-value :op-value} (update-block-order (:db/id ent) op-value)
+            first-remote-parent (first parents)
+            local-parent (d/entity @conn [:block/uuid first-remote-parent])
+            whiteboard-page-block? (whiteboard-page-block? local-parent)]
+        (if whiteboard-page-block?
+          (upsert-whiteboard-block repo conn op-value)
+          (do (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]
+                (ldb/transact! conn schema-tx-data {:persist-op? false :gen-undo-ops? false}))
+              (when-let [tx-data (seq (remote-op-value->tx-data @conn ent (dissoc op-value :client/schema)))]
+                (ldb/transact! conn (concat tx-data update-block-order-tx-data)
+                               {:persist-op? false :gen-undo-ops? false}))))))))
 
 (defn- apply-remote-update-ops
   [repo conn update-ops]

@@ -60,23 +60,18 @@
 (def ensure-register-graph-updates (memoize ensure-register-graph-updates*))
 
 (defn- ->pos
-  [left-uuid parent-uuid]
-  (case [(some? left-uuid) (some? parent-uuid)]
-    [true true]   [left-uuid (if (not= left-uuid parent-uuid) :sibling :child)]
-    [true false]  [left-uuid :no-parent-sibling]
-    [false true]  [parent-uuid :no-order]
-    [false false] [nil :no-parent-sibling]))
+  [parent-uuid order]
+  [parent-uuid order])
 
 (defmulti ^:private local-block-ops->remote-ops-aux (fn [tp & _] tp))
 
 (defmethod local-block-ops->remote-ops-aux :move-op
-  [_ & {:keys [parent-uuid left-uuid block-uuid *remote-ops *depend-on-block-uuid-set]}]
+  [_ & {:keys [parent-uuid block-order block-uuid *remote-ops *depend-on-block-uuid-set]}]
   (when parent-uuid
-    (let [target-uuid (or left-uuid parent-uuid)
-          pos         (->pos left-uuid parent-uuid)]
+    (let [pos (->pos parent-uuid block-order)]
       (swap! *remote-ops conj [:move {:block-uuid block-uuid :pos pos}])
-      (when target-uuid
-        (swap! *depend-on-block-uuid-set conj target-uuid)))))
+      (when parent-uuid
+        (swap! *depend-on-block-uuid-set conj parent-uuid)))))
 
 (defn- card-many-attr?
   [db attr]
@@ -138,9 +133,9 @@
           (= :db.cardinality/one (:db/cardinality (db-schema a)))))) a-coll)))
 
 (defmethod local-block-ops->remote-ops-aux :update-op
-  [_ & {:keys [db block update-op left-uuid parent-uuid *remote-ops *depend-on-block-uuid-set]}]
+  [_ & {:keys [db block update-op block-order parent-uuid *remote-ops *depend-on-block-uuid-set]}]
   (let [block-uuid (:block/uuid block)
-        pos (->pos left-uuid parent-uuid)
+        pos (->pos parent-uuid block-order)
         av-coll (->> (:av-coll (last update-op))
                      (remove-redundant-av db)
                      (remove-non-exist-ref-av db))
@@ -184,17 +179,15 @@
         *remote-ops (atom [])
         {move-op :move remove-op :remove update-op :update update-page-op :update-page remove-page-op :remove-page}
         block-ops]
-    (when-let [block-uuid
-               (some (comp :block-uuid last) [move-op update-op update-page-op])]
+    (when-let [block-uuid (some (comp :block-uuid last) [move-op update-op update-page-op])]
       (when-let [block (d/entity db [:block/uuid block-uuid])]
-        (let [left-uuid (:block/uuid (ldb/get-left-sibling block))
-              parent-uuid (some-> block :block/parent :block/uuid)]
+        (let [parent-uuid (some-> block :block/parent :block/uuid)]
           (when parent-uuid
             ;; remote-move-op
             (when move-op
               (local-block-ops->remote-ops-aux :move-op
                                                :parent-uuid parent-uuid
-                                               :left-uuid left-uuid
+                                               :block-order (:block/order block)
                                                :block-uuid block-uuid
                                                :*remote-ops *remote-ops
                                                :*depend-on-block-uuid-set *depend-on-block-uuid-set)))
@@ -205,7 +198,7 @@
                                              :block block
                                              :update-op update-op
                                              :parent-uuid parent-uuid
-                                             :left-uuid left-uuid
+                                             :block-order (:block/order block)
                                              :*remote-ops *remote-ops
                                              :*depend-on-block-uuid-set *depend-on-block-uuid-set)))
         ;; remote-update-page-op

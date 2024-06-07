@@ -11,6 +11,7 @@
 (deftest local-block-ops->remote-ops-test
   (testing "user.property/xxx creation"
     (let [block-uuid (random-uuid)
+          block-order "b0P"
           db (d/db-with empty-db [{:db/index true
                                    :block/uuid block-uuid
                                    :db/valueType :db.type/ref
@@ -21,13 +22,13 @@
                                    :db/cardinality :db.cardinality/one
                                    :db/ident :user.property/xxx,
                                    :block/type #{"property"},
-                                   :block/order "b0P",
+                                   :block/order block-order,
                                    :block/name "xxx",
                                    :block/original-name "xxx"}])]
       (is (=
            [[:update
              {:block-uuid block-uuid,
-              :pos [nil :no-parent-sibling],
+              :pos [nil block-order],
               :av-coll
               [[:db/ident "[\"~#'\",\"~:user.property/xxx\"]" 1 true]
                [:block/name "[\"~#'\",\"xxx\"]" 1 true]

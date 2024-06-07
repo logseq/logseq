@@ -5,14 +5,11 @@
             [malli.transform :as mt]))
 
 (def block-pos-schema
-  ":sibling:  sibling of target-block(:target-uuid)
-  :child: child of target-block(:target-uuid)
-  :no-order: this block doesn't have :block/order attr
-  :no-parent-sibling: this block doesn't have :block/parent,
-                      and it's sibling of target-uuid(if nil, it's the first one)"
   [:catn
-   [:target-uuid [:maybe :uuid]]
-   [:pos [:enum :sibling :child :no-order :no-parent-sibling]]])
+   [:parent-uuid [:maybe :uuid]]
+   ;; TODO: use custom-string for :block/order, instead of :string
+   ;;       to ensure it's valid
+   [:order [:maybe :string]]])
 
 (def av-schema
   [:cat
@@ -111,6 +108,7 @@
         [:page-name :string]
         [:block/original-name :string]
         [:db/ident {:optional true} :keyword]
+        [:block/order {:optional true} :string]
         [::m/default extra-attr-map-schema]]]
       [:remove-page
        [:map
