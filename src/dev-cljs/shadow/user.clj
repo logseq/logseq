@@ -23,3 +23,9 @@
   ([runtime-id]
    (assert runtime-id "runtime-id shouldn't be empty")
    (api/repl :app {:runtime-id runtime-id})))
+
+(defn runtime-id-list
+  []
+  (->> (api/repl-runtimes :app)
+       (filter (fn [runtime] (= :browser-worker (:host runtime))))
+       (map :client-id)))
