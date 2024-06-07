@@ -86,12 +86,14 @@
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default
                                               :hide? true}}
-   :logseq.property.linked-references/included-pages {:schema {:type :page
-                                                               :cardinality :many
-                                                               :hide? true}}
-   :logseq.property.linked-references/excluded-pages {:schema {:type :page
-                                                               :cardinality :many
-                                                               :hide? true}}
+   :logseq.property.linked-references/includes {:schema {
+                                                         ; could be :entity to support blocks(objects) in the future
+                                                         :type :page
+                                                         :cardinality :many
+                                                         :hide? true}}
+   :logseq.property.linked-references/excludes {:schema {:type :page
+                                                         :cardinality :many
+                                                         :hide? true}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page
                                  :schema {:type :map
                                           :hide? true}}
