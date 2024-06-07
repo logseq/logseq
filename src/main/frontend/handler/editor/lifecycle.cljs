@@ -5,7 +5,10 @@
             [goog.dom :as gdom]
             [frontend.db :as db]
             [logseq.db :as ldb]
-            [dommy.core :as dom]))
+            [dommy.core :as dom]
+            ;; [clojure.string :as string]
+            ;; [frontend.handler.block :as block-handler]
+            ))
 
 (defn did-mount!
   [state]
@@ -29,11 +32,15 @@
       ;; TODO: check whether editor is visible, do less work
       (js/setTimeout #(util/scroll-editor-cursor element) 50))
 
-    (let [^js worker @state/*db-worker
-          page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
-          repo (state/get-current-repo)]
-      (when page-id
-        (.record-editor-info worker repo (str page-id) (ldb/write-transit-str (state/get-editor-info))))))
+    ;; skip recording editor info when undo or redo is still running
+    (when-not (contains? #{:undo :redo} @(:editor/op @state/state))
+      (let [^js worker @state/*db-worker
+            page-id (:block/uuid (:block/page (db/entity (:db/id (state/get-edit-block)))))
+            repo (state/get-current-repo)]
+        (when page-id
+          (.record-editor-info worker repo (str page-id) (ldb/write-transit-str (state/get-editor-info))))))
+
+    (state/set-state! :editor/op nil))
   state)
 
 ;; (defn will-remount!
