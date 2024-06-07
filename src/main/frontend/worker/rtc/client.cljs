@@ -95,8 +95,10 @@
   [db av-coll]
   (remove
    (fn [av]
-     (let [[_a v] av]
-       (and (uuid? v)
+     (let [[_a v _t add?] av]
+       ;; when add?=false, no need to care this ref exists or not
+       (and add?
+            (uuid? v)
             (nil? (d/entity db [:block/uuid v])))))
    av-coll))
 
@@ -143,11 +145,12 @@
         update-schema-op (schema-av-coll->update-schema-op block-uuid (:db/ident block) schema-av-coll)
         depend-on-block-uuids (keep (fn [[_a v]] (when (uuid? v) v)) other-av-coll)
         card-one-attrs (seq (av-coll->card-one-attrs (d/schema db) other-av-coll))]
-    (swap! *remote-ops conj
-           [:update (cond-> {:block-uuid block-uuid
-                             :pos pos
-                             :av-coll other-av-coll}
-                      card-one-attrs (assoc :card-one-attrs card-one-attrs))])
+    (when (seq other-av-coll)
+      (swap! *remote-ops conj
+             [:update (cond-> {:block-uuid block-uuid
+                               :pos pos
+                               :av-coll other-av-coll}
+                        card-one-attrs (assoc :card-one-attrs card-one-attrs))]))
     (when update-schema-op
       (swap! *remote-ops conj update-schema-op))
     (swap! *depend-on-block-uuid-set (partial apply conj) depend-on-block-uuids)))

@@ -136,9 +136,9 @@
 
 (defn recv-flow
   [m-ws]
+  (assert (some? (:recv-flow m-ws)) m-ws)
   (m/eduction
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
-   ;; (map (fn [x] (prn :recv (:req-id x) (tc/to-string (t/now))) x))
    (map rtc-const/data-from-ws-coercer)
    (:recv-flow m-ws)))
 
