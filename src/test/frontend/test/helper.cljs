@@ -51,7 +51,7 @@
 (defn- parse-property-value [value]
   (if-let [refs (seq (map #(or (second %) (get % 2))
                           (re-seq #"#(\S+)|\[\[(.*?)\]\]" value)))]
-    (set refs)
+    refs
     (if-some [new-val (text/parse-non-string-property-value value)]
       new-val
       value)))
@@ -59,9 +59,16 @@
 (defn- property-lines->properties
   [property-lines]
   (->> property-lines
-       (keep #(let [[k v] (string/split % #"::\s*" 2)]
-                (when (string/includes? % "::")
-                  [(keyword k) (parse-property-value v)])))
+       (keep (fn [line]
+               (let [[k v] (string/split line #"::\s*" 2)]
+                 (when (string/includes? line "::")
+                   [(keyword k)
+                    (if (= "tags" k)
+                      (parse-property-value v)
+                      (let [val (parse-property-value v)]
+                        (if (coll? val)
+                          (set (map #(vector :page %) val))
+                          val)))]))))
        (into {})))
 
 #_(defn- build-block-properties

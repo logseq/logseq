@@ -23,6 +23,11 @@
             [malli.error :as me]
             [cljs.pprint :as pprint]))
 
+;; should match definition in translate-property-value
+(defn page-prop-value?
+  [prop-value]
+  (and (vector? prop-value) (= :page (first prop-value))))
+
 (defn- translate-property-value
   "Translates a property value for create-graph edn. A value wrapped in vector
   may indicate a reference type e.g. [:page \"some page\"]"
@@ -261,17 +266,24 @@
    [:auto-create-ontology? {:optional true} :boolean]])
 
 (defn- get-used-properties-from-options
-  "Extracts all property names from uses of :build/properties and :build/schema-properties"
+  "Extracts all used properties as a map of properties to their property values. Looks at properties
+   from :build/properties and :build/schema-properties. Properties from :block/schema-properties have
+   a ::no-value value"
   [{:keys [pages-and-blocks properties classes]}]
   (let [page-block-properties (->> pages-and-blocks
                                    (map #(-> (:blocks %) vec (conj (:page %))))
-                                   (mapcat #(->> % (map :build/properties) (mapcat keys)))
+                                   (mapcat (fn [m] (mapcat #(into (:build/properties %)) m)))
                                    set)
-        property-class-properties (->> (vals properties)
-                                       (concat (vals classes))
-                                       (mapcat #(concat (:build/schema-properties %) (keys (:build/properties %))))
-                                       set)]
-    (into property-class-properties page-block-properties)))
+        property-properties (->> (vals properties)
+                                 (mapcat #(into [] (:build/properties %))))
+        class-properties (->> (vals classes)
+                              (mapcat #(concat (map (fn [p] [p ::no-value]) (:build/schema-properties %))
+                                               (into [] (:build/properties %))))
+                              set)
+        props-to-values (->> (set/union class-properties page-block-properties property-properties)
+                             (group-by first)
+                             ((fn [x] (update-vals x #(mapv second %)))))]
+    props-to-values))
 
 (defn- validate-options
   [{:keys [properties] :as options}]
@@ -280,12 +292,12 @@
     (pprint/pprint errors)
     (throw (ex-info "Options validation failed" {:errors errors})))
   (when-not (:auto-create-ontology? options)
-   (let [used-properties (get-used-properties-from-options options)
-         undeclared-properties (-> used-properties
-                                   (set/difference (set (keys properties)))
-                                   ((fn [x] (remove db-property/logseq-property? x))))]
-     (assert (empty? undeclared-properties)
-             (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)))))
+    (let [used-properties (get-used-properties-from-options options)
+          undeclared-properties (-> (set (keys used-properties))
+                                    (set/difference (set (keys properties)))
+                                    ((fn [x] (remove db-property/logseq-property? x))))]
+      (assert (empty? undeclared-properties)
+              (str "The following properties used in EDN were not declared in :properties: " undeclared-properties)))))
 
 ;; TODO: How to detect these idents don't conflict with existing? :db/add?
 (defn- create-all-idents
@@ -386,6 +398,22 @@
       (println "Building additional pages from content refs:" (pr-str (mapv #(get-in % [:page :block/original-name]) new-pages-from-refs))))
     (concat pages-and-blocks new-pages-from-refs)))
 
+(defn- add-new-pages-from-properties
+  [properties pages-and-blocks]
+  (let [used-properties (get-used-properties-from-options {:pages-and-blocks pages-and-blocks :properties properties})
+        existing-pages (->> pages-and-blocks (keep #(get-in % [:page :block/original-name])) set)
+        new-pages (->> (mapcat val used-properties)
+                       (mapcat (fn [val-or-vals]
+                                 (if (coll? val-or-vals)
+                                   (keep #(when (page-prop-value? %) (second %)) val-or-vals)
+                                   (when (page-prop-value? val-or-vals) (second val-or-vals)))))
+                       distinct
+                       (remove existing-pages)
+                       (map #(hash-map :page {:block/original-name %})))]
+    (when (seq new-pages)
+      (println "Building additional pages from property values:" (pr-str (mapv #(get-in % [:page :block/original-name]) new-pages))))
+    (concat pages-and-blocks new-pages)))
+
 (defn- expand-build-children
   "Expands any blocks with :build/children to return a flattened vec with
   children having correct :block/parent. Also ensures all blocks have a :block/uuid"
@@ -408,7 +436,7 @@
 
 (defn- pre-build-pages-and-blocks
   "Pre builds :pages-and-blocks before any indexes like page-uuids are made"
-  [pages-and-blocks]
+  [pages-and-blocks properties]
   (let [ensure-page-uuids (fn [m]
                             (if (get-in m [:page :block/uuid])
                               m
@@ -432,8 +460,24 @@
          (map expand-journal)
          (map expand-block-children)
          add-new-pages-from-refs
+         (add-new-pages-from-properties properties)
          (map ensure-page-uuids)
          vec)))
+
+(defn- infer-property-schema
+  "Infers a property schema given a collection of its a property pair values"
+  [property-pair-values]
+  ;; Infer from first property pair is good enough for now
+  (let [prop-value (some #(when (not= ::no-value %) %) property-pair-values)
+        prop-value' (if (coll? prop-value) (first prop-value) prop-value)
+        prop-type (if prop-value'
+                    (if (page-prop-value? prop-value')
+                      :page
+                      (db-property-type/infer-property-type-from-value prop-value'))
+                    :default)]
+    (cond-> {:block/schema {:type prop-type}}
+      (coll? prop-value)
+      (assoc-in [:block/schema :cardinality] :many))))
 
 (defn- auto-create-ontology
   "Auto creates properties and classes from uses of options.  Creates properties
@@ -448,20 +492,20 @@
                         (zipmap (repeat {})))
         classes' (merge new-classes classes)
         used-properties (get-used-properties-from-options options)
-        new-properties (-> used-properties
-                           (set/difference (set (keys properties)))
-                           ((fn [x] (remove db-property/logseq-property? x)))
-                           ;; TODO: Infer :type from property values
-                           (zipmap (repeat {:block/schema {:type :default}})))
+        new-properties (->> (set/difference (set (keys used-properties)) (set (keys properties)))
+                            (remove db-property/logseq-property?)
+                            (map (fn [prop]
+                                   [prop (infer-property-schema (get used-properties prop))]))
+                            (into {}))
         properties' (merge new-properties properties)]
     (when (seq new-properties) (prn :new-properties new-properties))
     (when (seq new-classes) (prn :new-classes new-classes))
     {:classes classes' :properties properties'}))
 
 (defn- build-blocks-tx*
-  [{:keys [pages-and-blocks graph-namespace auto-create-ontology?]
+  [{:keys [pages-and-blocks properties graph-namespace auto-create-ontology?]
     :as options}]
-  (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks)
+  (let [pages-and-blocks' (pre-build-pages-and-blocks pages-and-blocks properties)
         page-uuids (create-page-uuids pages-and-blocks')
         {:keys [classes properties]} (if auto-create-ontology? (auto-create-ontology options) options)
         all-idents (create-all-idents properties classes graph-namespace)

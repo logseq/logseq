@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [frontend.date :as date]
+            [frontend.db.utils :as db-utils]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
             [logseq.db.frontend.rules :as rules]
@@ -260,12 +261,17 @@
 
 (defn ->db-property-value
   "Parses property values for DB graphs"
-  [v]
-  (if (string? v)
-    (if (string/starts-with? v "#")
-      (subs v 1)
-      (or (page-ref/get-page-name v) v))
-    v))
+  [k v]
+  (let [v' (if (symbol? v) (str v) v)]
+    (cond (string? v')
+          (if (string/starts-with? v' "#")
+            (subs v' 1)
+            (or (page-ref/get-page-name v') v'))
+          ;; Convert number pages to string
+          (and (double? v) (= :page (get-in (db-utils/entity k) [:block/schema :type])))
+          (str v)
+          :else
+          v')))
 
 (defn- ->file-keyword-property
   "Case-insensitive property names for file graphs. Users manually type queries to enter them as they appear"
@@ -275,7 +281,7 @@
       keyword))
 
 (defn- ->db-keyword-property
-  "Case sensitive property names for db graphs"
+  "Returns property db-ident given case sensitive property names for db graphs"
   [property-name]
   (if (qualified-keyword? property-name)
     property-name
@@ -285,7 +291,7 @@
   [e {:keys [db-graph?]}]
   (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
-        v' (if db-graph? (->db-property-value v) (->file-property-value v))]
+        v' (if db-graph? (->db-property-value k v) (->file-property-value v))]
     {:query (list 'property '?b k v')
      :rules [:property]}))
 
@@ -332,7 +338,7 @@
   (let [[k v] (rest e)
         k' (if db-graph? (->db-keyword-property k) (->file-keyword-property k))]
     (if (some? v)
-      (let [v' (if db-graph? (->db-property-value v) (->file-property-value v))]
+      (let [v' (if db-graph? (->db-property-value k' v) (->file-property-value v))]
         {:query (list 'page-property '?p k' v')
          :rules [:page-property]})
       {:query (list 'has-page-property '?p k')
