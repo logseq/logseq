@@ -15,6 +15,7 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.graph :as graph-handler]
@@ -258,18 +259,40 @@
 
 (defn get-filters
   [page]
-  (let [k (pu/get-pid :logseq.property/filters)]
-    (if (config/db-based-graph? (state/get-current-repo))
-      (get page k)
-      (let [properties (:block/properties page)
-            properties-str (or (get properties k) "{}")]
-        (try (reader/read-string properties-str)
-             (catch :default e
-               (log/error :syntax/filters e)))))))
+  (if (config/db-based-graph? (state/get-current-repo))
+    (let [included-pages (:logseq.property.linked-references/included-pages page)
+          excluded-pages (:logseq.property.linked-references/excluded-pages page)]
+      {:included included-pages
+       :excluded excluded-pages})
+    (let [k :filters
+          properties (:block/properties page)
+          properties-str (or (get properties k) "{}")]
+      (try (let [result (reader/read-string properties-str)]
+             (when (seq result)
+               (let [excluded-pages (->> (filter #(false? (second %)) result)
+                                         (keep first)
+                                         (keep db/get-page))
+                     included-pages (->> (filter #(true? (second %)) result)
+                                         (keep first)
+                                         (keep db/get-page))]
+                 {:included included-pages
+                  :excluded excluded-pages})))
+           (catch :default e
+             (log/error :syntax/filters e))))))
 
-(defn save-filter!
+(defn file-based-save-filter!
   [page filter-state]
-  (property-handler/add-page-property! page (pu/get-pid :logseq.property/filters) filter-state))
+  (property-handler/add-page-property! page :filters filter-state))
+
+(defn db-based-save-filter!
+  [page filter-page-id {:keys [include? add?]}]
+  (let [repo (state/get-current-repo)
+        property-id (if include?
+                      :logseq.property.linked-references/included-pages
+                      :logseq.property.linked-references/excluded-pages)]
+    (if add?
+      (property-handler/set-block-property! repo (:db/id page) property-id filter-page-id)
+      (db-property-handler/delete-property-value! (:db/id page) property-id filter-page-id))))
 
 ;; Editor
 (defn page-not-exists-handler

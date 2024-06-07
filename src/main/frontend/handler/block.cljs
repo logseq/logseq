@@ -87,10 +87,8 @@
   [ref-blocks filters]
   (if (empty? filters)
     ref-blocks
-    (let [exclude-ids (->> (keep (fn [page] (:db/id (db/get-page page))) (get filters false))
-                           (set))
-          include-ids (->> (keep (fn [page] (:db/id (db/get-page page))) (get filters true))
-                           (set))]
+    (let [exclude-ids (set (map :db/id (:excluded filters)))
+          include-ids (set (map :db/id (:included filters)))]
       (cond->> ref-blocks
         (seq exclude-ids)
         (remove (fn [block]

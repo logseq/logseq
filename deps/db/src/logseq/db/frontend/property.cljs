@@ -86,6 +86,12 @@
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default
                                               :hide? true}}
+   :logseq.property.linked-references/included-pages {:schema {:type :page
+                                                               :cardinality :many
+                                                               :hide? true}}
+   :logseq.property.linked-references/excluded-pages {:schema {:type :page
+                                                               :cardinality :many
+                                                               :hide? true}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page
                                  :schema {:type :map
                                           :hide? true}}
@@ -146,8 +152,6 @@
                              :hide? true
                              :view-context :page
                              :public? true}}
-   :logseq.property/filters {:schema {:type :map
-                                      :hide? true}}
    :logseq.property/exclude-from-graph-view {:schema
                                              {:type :checkbox
                                               :hide? true
