@@ -169,54 +169,15 @@
       [?prop-e :block/type "property"]
       ;; Some deleted properties leave #{} which this rule shouldn't match on
       [(not= #{} ?v)]]
-    ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
-    #_'[(has-page-property ?p ?prop)
-        [?p :block/name]
-        [?p :block/properties ?bp]
-        [(name ?prop) ?prop-name-str]
-        [?prop-b :block/name ?prop-name-str]
-        [?prop-b :block/type "property"]
-        [?prop-b :block/uuid ?prop-uuid]
-        [(get ?bp ?prop-uuid) ?v]
-      ;; Some deleted properties leave #{} which this rule shouldn't match on
-        [(not= #{} ?v)]]
 
     :page-property
-    '[[(page-property ?p ?prop ?val)
-       [?p :block/name]
-       [?p ?prop ?pv]
-       (or [?pv :block/content ?val]
-           [?pv :block/original-name ?val])
-       [?prop-e :db/ident ?prop]
-       [?prop-e :block/type "property"]]
-      ;; TODO: Delete when DB_GRAPH query-dsl tests are passing
-      ;; Clause 1: Match non-ref values
-      #_[(page-property ?p ?key ?val)
-         [?p :block/name]
-         [?p :block/properties ?prop]
-         [(name ?key) ?key-str]
-         [?prop-b :block/name ?key-str]
-         [?prop-b :block/type "property"]
-         [?prop-b :block/uuid ?prop-uuid]
-         [(get ?prop ?prop-uuid) ?v]
-         (or ([= ?v ?val])
-             [(contains? ?v ?val)])]
-
-      ;; Clause 2: Match values joined by refs
-      #_[(page-property ?p ?key ?val)
-         [?p :block/name]
-         [?p :block/properties ?prop]
-         [(name ?key) ?key-str]
-         [?prop-b :block/name ?key-str]
-         [?prop-b :block/type "property"]
-         [?prop-b :block/uuid ?prop-uuid]
-         [(get ?prop ?prop-uuid) ?v]
-         [(str ?val) ?str-val]
-      ;; str-val is for integer pages that aren't strings
-         [?prop-val-b :block/original-name ?str-val]
-         [?prop-val-b :block/uuid ?val-uuid]
-         (or ([= ?v ?val-uuid])
-             [(contains? ?v ?val-uuid)])]]
+    '[(page-property ?p ?prop ?val)
+      [?p :block/name]
+      [?p ?prop ?pv]
+      (or [?pv :block/content ?val]
+          [?pv :block/original-name ?val])
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]]
 
     :has-property
     '[(has-property ?b ?prop)

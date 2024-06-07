@@ -71,132 +71,17 @@
                           val)))]))))
        (into {})))
 
-#_(defn- build-block-properties
-  "Parses out properties from a file's content and associates it with the page name
-   or block content"
-  [file-content]
-  (if (string/includes? file-content "\n-")
-    {:block-properties
-     (->> (string/split file-content #"\n-\s*")
-          (mapv (fn [s]
-                  (let [[content & props] (string/split-lines s)]
-                    (cond-> {:block/content content}
-                      ;; If no property chars may accidentally parse child blocks
-                      ;; so don't do property parsing
-                      (and (string/includes? s ":: ") props)
-                      (assoc :build/properties (property-lines->properties props)))))))}
-    {:page-properties
-     (->> file-content
-          string/split-lines
-          property-lines->properties)}))
-
-#_(defn- update-file-for-db-graph
-  "Adds properties by block/page for a file and updates block content"
-  [file]
-  (let [{:keys [block-properties page-properties]}
-        (build-block-properties (:file/content file))]
-    (if page-properties
-      (merge file
-             {:file/block-properties (vec (keep #(when (seq (:properties %)) %)
-                                                [{:name-or-content (file-path->page-name (:file/path file))
-                                                  :properties page-properties
-                                                  :page-properties? true}]))})
-      (merge file
-             {:file/block-properties
-              ;; Filter out empty empty properties to avoid needless downstream processing
-              (cond-> (vec (keep #(when (seq (:properties %)) %) block-properties))
-                                       ;; Optionally add page properties as a page block
-                (re-find #"^\s*[^-]+" (:name-or-content (first block-properties)))
-                (conj {:name-or-content (file-path->page-name (:file/path file))
-                       :properties (->> (:name-or-content (first block-properties))
-                                        string/split-lines
-                                        property-lines->properties)
-                       :page-properties? true}))}
-             ;; Rewrite content to strip it of properties which shouldn't be in content
-             ;; but only if properties are detected
-             (when (some #(seq (:properties %)) block-properties)
-               {:file/content (string/join "\n"
-                                           (map (fn [x] (str "- " (:name-or-content x))) block-properties))})))))
-
-#_(defn- load-test-files-for-db-graph-old
-  [files*]
-  (let [files (mapv update-file-for-db-graph files*)]
-    ;; TODO: Use sqlite instead of file graph to create client db
-    (file-repo-handler/parse-files-and-load-to-db!
-     test-db
-     files
-     {:re-render? false :verbose false :refresh? true})
-    (let [content-uuid-map (into {} (d/q
-                                     '[:find ?content ?uuid
-                                       :where
-                                       [?b :block/content ?content]
-                                       [?b :block/uuid ?uuid]]
-                                     (db/get-db test-db)))
-          page-name-map (into {} (d/q
-                                  '[:find ?name ?uuid
-                                    :where
-                                    [?b :block/name ?name]
-                                    [?b :block/uuid ?uuid]]
-                                  (db/get-db test-db)))
-          property-uuids (->> files
-                              (mapcat #(->> % :file/block-properties (map :properties) (mapcat keys)))
-                              set
-                              ;; Property pages may be created by file graphs automatically,
-                              ;; usually by page properties. Delete this if file graphs are long
-                              ;; used to create datascript db
-                              (map #(vector % (or (page-name-map (name %)) (random-uuid))))
-                              (into {}))
-          ;; from upsert-property!
-          new-properties-tx (mapv (fn [[prop-name uuid]]
-                                    (sqlite-util/block-with-timestamps
-                                     {:block/uuid uuid
-                                      :block/schema {:type :default}
-                                      :block/original-name (name prop-name)
-                                      :block/name (string/lower-case (name prop-name))
-                                      :block/type "property"}))
-                                  property-uuids)
-          page-uuids (->> files
-                          (mapcat #(->> %
-                                        :file/block-properties
-                                        (map :properties)
-                                        (mapcat (fn [m]
-                                                  (->> m vals (filter set?) (apply set/union))))))
-                          set
-                          (map #(vector % (random-uuid)))
-                          (into {}))
-          page-tx (mapv (fn [[page-name uuid]]
-                          (sqlite-util/block-with-timestamps
-                           {:block/name (string/lower-case page-name)
-                            :block/original-name page-name
-                            :block/uuid uuid}))
-                        page-uuids)
-          ;; from add-property!
-          block-properties-tx
-          (mapcat
-           (fn [file]
-             (map
-              (fn [{:keys [name-or-content properties page-properties?]}]
-                (cond-> {:block/uuid (if page-properties?
-                                       (or (page-name-map name-or-content)
-                                           (throw (ex-info "No uuid for page" {:page-name name-or-content})))
-                                       (or (content-uuid-map name-or-content)
-                                           (throw (ex-info "No uuid for content" {:content name-or-content}))))
-                         :block/properties
-                         (->> (dissoc properties :created-at)
-                              (map
-                               (fn [[prop-name val]]
-                                 [(or (property-uuids prop-name)
-                                      (throw (ex-info "No uuid for property" {:name prop-name})))
-                                  (if (set? val)
-                                    (set (map (fn [p] (or (page-uuids p) (throw (ex-info "No uuid for page" {:name p}))))
-                                              val))
-                                    val)]))
-                              (into {}))}
-                  (:created-at properties)
-                  (assoc :block/created-at (:created-at properties))))
-              (:file/block-properties file)))
-           files)]
-      (db/transact! test-db (vec (concat page-tx new-properties-tx block-properties-tx))))))
+(defn- property-lines->attributes
+  "Converts markdown property lines e.g. `foo:: bar\nfoo:: baz` to properties
+  and attributes. All are treated as properties except for tags -> :block/tags
+  and created-at -> :block/created-at"
+  [lines]
+  (let [props (property-lines->properties lines)]
+    (cond-> {:build/properties (dissoc props :created-at :tags)}
+      (:tags props)
+      (assoc :build/tags (mapv keyword (:tags props)))
+      (:created-at props)
+      (assoc :block/created-at (:created-at props)))))
 
 (def file-to-db-statuses
   {"TODO" :logseq.task/status.todo
@@ -210,24 +95,17 @@
    "CANCELED" :logseq.task/status.canceled
    "CANCELLED" :logseq.task/status.canceled})
 
-(defn- property-lines->attributes
-  [lines]
-  (let [props (property-lines->properties lines)]
-    (cond-> {:build/properties (dissoc props :created-at :tags)}
-      (:tags props)
-      (assoc :build/tags (mapv keyword (:tags props)))
-      (:created-at props)
-      (assoc :block/created-at (:created-at props)))))
-
 (defn- parse-content
+  "Given a file's content as markdown, returns blocks and page attributes for the file
+   to be used with sqlite-build/build-blocks-tx"
   [content*]
   (let [blocks** (if (string/includes? content* "\n-")
                    (->> (string/split content* #"\n-\s*")
                         (mapv (fn [s]
                                 (let [[content & props] (string/split-lines s)]
                                   (cond-> {:block/content content}
-                                  ;; If no property chars may accidentally parse child blocks
-                                  ;; so don't do property parsing
+                                    ;; If no property chars may accidentally parse child blocks
+                                    ;; so don't do property parsing
                                     (and (string/includes? s ":: ") props)
                                     (merge (property-lines->attributes props)))))))
                    ;; only has a page pre-block
@@ -247,11 +125,14 @@
                    blocks)
      :page-attributes page-attrs}))
 
-(defn- build-blocks-tx-options [options*]
+(defn- build-blocks-tx-options
+  "Given arguments to load-test-files, parses and converts them to options for
+  sqlite-build/build-blocks-tx. Supports a limited set of markdown including
+  task keywords, page properties and block properties. See query-dsl-test for examples"
+  [options*]
   (let [pages-and-blocks
         (mapv (fn [{:file/keys [path content]}]
                 (let [{:keys [blocks page-attributes]} (parse-content content)
-                      ;; _ (prn :parse-content content blocks)
                       unique-page-attrs
                       (if (string/starts-with? path "journals")
                         {:build/journal
@@ -275,7 +156,6 @@
   [options*]
   (let [;; Builds options from markdown :file/content unless given explicit build-blocks config
         options (if (:page (first options*)) {:pages-and-blocks options*} (build-blocks-tx-options options*))
-        _ (prn :opt options)
         {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
     (db/transact! test-db init-tx)
     (when (seq block-props-tx)
