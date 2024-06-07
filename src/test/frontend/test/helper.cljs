@@ -51,7 +51,7 @@
 (defn- parse-property-value [value]
   (if-let [refs (seq (map #(or (second %) (get % 2))
                           (re-seq #"#(\S+)|\[\[(.*?)\]\]" value)))]
-    refs
+    (set refs)
     (if-some [new-val (text/parse-non-string-property-value value)]
       new-val
       value)))
@@ -219,16 +219,19 @@
       (:created-at props)
       (assoc :block/created-at (:created-at props)))))
 
-(defn- parse-content*
+(defn- parse-content
   [content*]
-  (let [blocks** (->> (string/split content* #"\n-\s*")
-                      (mapv (fn [s]
-                              (let [[content & props] (string/split-lines s)]
-                                (cond-> {:block/content content}
+  (let [blocks** (if (string/includes? content* "\n-")
+                   (->> (string/split content* #"\n-\s*")
+                        (mapv (fn [s]
+                                (let [[content & props] (string/split-lines s)]
+                                  (cond-> {:block/content content}
                                   ;; If no property chars may accidentally parse child blocks
                                   ;; so don't do property parsing
-                                  (and (string/includes? s ":: ") props)
-                                  (merge (property-lines->attributes props)))))))
+                                    (and (string/includes? s ":: ") props)
+                                    (merge (property-lines->attributes props)))))))
+                   ;; only has a page pre-block
+                   [{:block/content content*}])
         [page-attrs blocks*]
         (if (string/includes? (:block/content (first blocks**)) "::")
           [(property-lines->attributes (string/split-lines (:block/content (first blocks**))))
@@ -243,13 +246,6 @@
     {:blocks (mapv (fn [b] (update b :block/content #(string/replace-first % #"^-\s*" "")))
                    blocks)
      :page-attributes page-attrs}))
-
-(defn- parse-content
-  [content]
-  (if (string/includes? content "\n-")
-    (parse-content* content)
-    ;; TODO: handle different page properties
-    (parse-content* content)))
 
 (defn- build-blocks-tx-options [options*]
   (let [pages-and-blocks
