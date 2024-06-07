@@ -268,17 +268,10 @@
                       ;; :block/uuid might be changed when backspace/delete
                       ;; a block that has been refed
                       (assoc :block/uuid (:block/uuid block)))
-           opts' (assoc opts :outliner-op :save-block)
-           original-block (db/entity (:db/id block))
-           original-props (:block/properties original-block)]
+           opts' (assoc opts :outliner-op :save-block)]
        (ui-outliner-tx/transact!
                    opts'
-                   (outliner-save-block! block')
-                   ;; page properties changed
-                   (when-let [page-name (and (:block/pre-block? block')
-                                             (not= original-props (:block/properties block'))
-                                             (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
-                     (state/set-page-properties-changed! page-name)))))))
+                   (outliner-save-block! block'))))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn- another-block-with-same-id-exists?

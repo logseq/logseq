@@ -151,7 +151,6 @@
       :editor/code-block-context             {}
       :editor/latest-shortcut                (atom nil)
 
-      :db/properties-changed-pages           {}
       :history/paused?                       (atom false)
       :editor/cursor-range                   (atom nil)
       :editor/container-id                   (atom nil)
@@ -2375,16 +2374,6 @@ Similar to re-frame subscriptions"
     (set-state! :ui/handbooks-open? true))
   (js/setTimeout #(async/go
                     (>! (get-handbook-route-chan) k))))
-
-(defn set-page-properties-changed!
-  [page-name]
-  (when-not (string/blank? page-name)
-    (update-state! [:db/properties-changed-pages page-name] #(inc %))))
-
-(defn sub-page-properties-changed
-  [page-name]
-  (when-not (string/blank? page-name)
-    (sub [:db/properties-changed-pages page-name])))
 
 (defn update-favorites-updated!
   []

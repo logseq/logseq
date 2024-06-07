@@ -235,16 +235,16 @@ independent of format as format specific heading characters are stripped"
 (def sort-by-order ldb/sort-by-order)
 
 (defn sub-block
-  [id]
+  [id & {:keys [ref?]}]
   (when-let [repo (state/get-current-repo)]
-    (->
-     (react/q repo [:frontend.worker.react/block id]
-              {:query-fn (fn [_]
-                           (let [e (db-utils/entity id)]
-                             [e (:block/tx-id e)]))}
-              nil)
-     react
-     first)))
+    (let [ref (react/q repo [:frontend.worker.react/block id]
+                       {:query-fn (fn [_]
+                                    (let [e (db-utils/entity id)]
+                                      [e (:block/tx-id e)]))}
+                       nil)]
+      (if ref?
+        ref
+        (-> ref react first)))))
 
 (defn sort-by-order-recursive
   [form]
@@ -504,12 +504,6 @@ independent of format as format specific heading characters are stripped"
            (or (:block/name source-page)
                (:block/name page-entity)
                page-name)))))))
-
-(defn get-page-original-name
-  [page-name]
-  (when (string? page-name)
-    (let [page (ldb/get-page (conn/get-db) page-name)]
-      (:block/original-name page))))
 
 (defn get-journals-length
   []

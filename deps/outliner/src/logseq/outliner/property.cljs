@@ -326,9 +326,12 @@
               fv (first current-val)]
           (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))
             (remove-block-property! conn (:db/id block) property-id)
-            (ldb/transact! conn
-                           [[:db/retract (:db/id block) property-id property-value]]
-                           {:outliner-op :save-block})))))))
+            (do
+              (prn :debug :tx-data
+                   [[:db/retract (:db/id block) property-id property-value]])
+              (ldb/transact! conn
+                            [[:db/retract (:db/id block) property-id property-value]]
+                            {:outliner-op :save-block}))))))))
 
 (defn collapse-expand-block-property!
   "Notice this works only if the value itself if a block (property type should be either :default or :template)"
