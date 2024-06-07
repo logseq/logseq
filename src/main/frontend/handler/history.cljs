@@ -8,7 +8,8 @@
             [frontend.util :as util]
             [frontend.util.page :as page-util]
             [logseq.db :as ldb]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [goog.functions :refer [debounce]]))
 
 (defn- restore-cursor!
   [{:keys [editor-cursors block-content undo?]}]
@@ -39,8 +40,9 @@
   (state/set-state! :history/paused? false))
 
 (let [*last-request (atom nil)]
-  (defn undo!
+  (defn- undo-aux!
     [e]
+    (state/set-state! :editor/op :undo)
     (p/do!
      @*last-request
      (when-let [repo (state/get-current-repo)]
@@ -58,10 +60,12 @@
               (reset! *last-request (.undo worker repo current-page-uuid-str))
               (p/let [result @*last-request]
                 (restore-cursor-and-state! result))))))))))
+(defonce undo! (debounce undo-aux! 20))
 
 (let [*last-request (atom nil)]
-  (defn redo!
+  (defn- redo-aux!
     [e]
+    (state/set-state! :editor/op :redo)
     (p/do!
      @*last-request
      (when-let [repo (state/get-current-repo)]
@@ -76,3 +80,4 @@
              (reset! *last-request (.redo worker repo current-page-uuid-str))
              (p/let [result @*last-request]
                (restore-cursor-and-state! result)))))))))
+(defonce redo! (debounce redo-aux! 20))

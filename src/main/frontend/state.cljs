@@ -119,6 +119,7 @@
 
       :config                                {}
       :block/component-editing-mode?         false
+      :editor/op                             (atom nil)
       :editor/start-pos                      (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
