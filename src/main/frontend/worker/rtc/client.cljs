@@ -109,18 +109,18 @@
     [schema-av-coll other-av-coll]))
 
 (defn- schema-av-coll->update-schema-op
-  [block-uuid db-ident schema-av-coll]
+  [db block-uuid db-ident schema-av-coll]
   (when (and (seq schema-av-coll) db-ident)
     (let [db-ident-ns (namespace db-ident)]
       (when (and (string/ends-with? db-ident-ns ".property")
                  (not= db-ident-ns "logseq.property"))
-        [:update-schema
-         (select-keys
-          (->> schema-av-coll
-               (sort-by (fn [[_a _v t _add?]] t))
-               (keep (fn [[a v _t add?]] (when add? [a (ldb/read-transit-str v)])))
-               (apply conj {:block-uuid block-uuid :db/ident db-ident}))
-          [:block-uuid :db/ident :db/cardinality :db/valueType :db/index])]))))
+        (when-let [ent (d/entity db db-ident)]
+          [:update-schema
+           (cond-> {:block-uuid block-uuid
+                    :db/ident db-ident
+                    :db/valueType (or (:db/valueType ent) :db.type/string)}
+             (:db/cardinality ent) (assoc :db/cardinality (:db/cardinality ent))
+             (:db/index ent) (assoc :db/index (:db/index ent)))])))))
 
 (defn- av-coll->card-one-attrs
   [db-schema av-coll]
@@ -142,7 +142,7 @@
                      (remove-redundant-av db)
                      (remove-non-exist-ref-av db))
         [schema-av-coll other-av-coll] (group-by-schema-attrs av-coll)
-        update-schema-op (schema-av-coll->update-schema-op block-uuid (:db/ident block) schema-av-coll)
+        update-schema-op (schema-av-coll->update-schema-op db block-uuid (:db/ident block) schema-av-coll)
         depend-on-block-uuids (keep (fn [[_a v]] (when (uuid? v) v)) other-av-coll)
         card-one-attrs (seq (av-coll->card-one-attrs (d/schema db) other-av-coll))]
     (when (seq other-av-coll)
