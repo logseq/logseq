@@ -19,7 +19,8 @@
   []
   (->> (:batch/txs @worker-state/*state)
        (sort-by :tx)
-       (common-util/distinct-by-last-wins (fn [[e a _v _tx added]] [e a added]))))
+       ;; We need all the values for :many properties
+       (common-util/distinct-by-last-wins (fn [[e a v _tx added]] [e a v added]))))
 
 (defn set-batch-db-before!
   [db]
