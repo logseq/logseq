@@ -106,7 +106,7 @@
     (let [_ (op-mem-layer/new-branch! repo)
           r1 (#'r.client/gen-block-uuid->remote-ops repo conn :n 1)
           _ (op-mem-layer/rollback! repo)
-          r2 (#'r.client/gen-block-uuid->remote-ops repo conn :n 2)]
+          r2 (#'r.client/gen-block-uuid->remote-ops repo conn :n 3)]
       (is (= {uuid2 [:move]}
              (update-vals r1 keys)))
       (is (= {uuid2 [:move]

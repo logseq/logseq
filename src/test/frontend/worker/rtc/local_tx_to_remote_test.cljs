@@ -48,7 +48,7 @@
                                :page-name page1-name
                                :original-name page1-name}]
                 [:update {:block-uuid page1-uuid
-                          :pos [nil :no-parent-sibling]
+                          :pos [nil nil]
                           :av-coll-keys [:block/created-at :block/updated-at]}]] ops*))))
 
     (testing "insert some blocks"
@@ -66,9 +66,9 @@
         {:sibling? true :keep-uuid? true}))
       (let [ops (gen-ops-fn)]
         (is (= #{[:move uuid1 page1-uuid]
-                 [:move uuid2 uuid1]
+                 [:move uuid2 page1-uuid]
                  [:update uuid1 page1-uuid]
-                 [:update uuid2 uuid1]}
+                 [:update uuid2 page1-uuid]}
                (set (map (juxt first (comp :block-uuid second) (comp first :pos second)) ops))))))
 
     (testing "remove some blocks"

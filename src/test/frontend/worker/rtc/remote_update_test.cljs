@@ -13,7 +13,7 @@
                                :block/content "local-content"}])
             op-value {:block/content (ldb/write-transit-str "remote-content")}]
         (is (= [[:db/add (:db/id (d/entity db [:block/uuid block-uuid])) :block/content "remote-content"]]
-               (#'subject/remote-op-value->tx-data db block-uuid op-value)))))
+               (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value)))))
 
     (testing ":block/tags (1)"
       (let [db (d/db-with db [{:block/uuid block-uuid}
@@ -24,7 +24,7 @@
                                                                     [:block/uuid ref-uuid1]
                                                                     [:block/uuid ref-uuid2]]))]
         (is (= #{[:db/add db-id :block/tags ref1] [:db/add db-id :block/tags ref2]}
-               (set (#'subject/remote-op-value->tx-data db block-uuid op-value))))))
+               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value))))))
 
     (testing ":block/tags (2)"
       (let [db (d/db-with db [{:db/id "ref1"
@@ -37,7 +37,7 @@
                                                                [:block/uuid ref-uuid2]]))]
         (is (= #{[:db/retract db-id :block/tags [:block/uuid ref-uuid1]]
                  [:db/add db-id :block/tags ref2]}
-               (set (#'subject/remote-op-value->tx-data db block-uuid op-value))))))
+               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value))))))
 
     (testing ":block/tags (3): ref2 not exist"
       (let [db (d/db-with db [{:db/id "ref1"
@@ -46,9 +46,9 @@
                                :block/tags ["ref1"]}])
             op-value {:block/tags [ref-uuid2]}]
         (is (= #{[:db/retract (:db/id (d/entity db [:block/uuid block-uuid])) :block/tags [:block/uuid ref-uuid1]]}
-               (set (#'subject/remote-op-value->tx-data db block-uuid op-value))))))
+               (set (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value))))))
     (testing ":block/updated-at"
       (let [db (d/db-with db [{:block/uuid block-uuid
                                :block/updated-at 1}])]
         (is (= [[:db/retract 1 :block/updated-at 1]]
-               (#'subject/remote-op-value->tx-data db block-uuid {})))))))
+               (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) {})))))))
