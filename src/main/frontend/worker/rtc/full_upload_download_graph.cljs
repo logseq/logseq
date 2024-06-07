@@ -10,6 +10,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
+            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [malli.core :as ma]
@@ -128,7 +129,6 @@
             (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
             (op-mem-layer/init-empty-ops-store! repo)
             (op-mem-layer/update-graph-uuid! repo graph-uuid)
-            (op-mem-layer/update-local-tx! repo 8)
             (m/? (op-mem-layer/new-task--sync-to-idb repo))
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
@@ -212,7 +212,9 @@
                                     (map (partial convert-card-one-value-from-value-coll card-one-attrs) blocks))
         blocks (worker-util/profile :normalize-remote-blocks
                                     (normalized-remote-blocks-coercer blocks))
-        blocks (map #(dissoc % :client/schema) blocks) ;TODO: remove this
+        ;;TODO: remove this, client/schema already converted to :db/cardinality, :db/valueType by remote,
+        ;; and :client/schema should be removed by remote too
+        blocks (map #(dissoc % :client/schema) blocks)
         tempid-source-blocks (filter-tempid-source-blocks blocks)
         blocks (fill-block-fields blocks)
         {db-schema-def-blocks true other-blocks false}
@@ -226,8 +228,10 @@
                  other-blocks
                  [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                   {:db/ident :logseq.kv/db-type :kv/value "db"}])
-        init-tx-data (cons {:db/ident :logseq.kv/db-type :kv/value "db"}
-                           db-schema-def-blocks)
+        init-tx-data (concat [{:db/ident :logseq.kv/db-type :kv/value "db"}
+                              ;; TODO: remove this, should download from remote
+                              {:db/ident :logseq.kv/schema-version :kv/value db-schema/version}]
+                             db-schema-def-blocks)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
@@ -236,8 +240,12 @@
         (p/do!
          (.createOrOpenDB worker-obj repo {:close-other-db? false})
          (.exportDB worker-obj repo)
-         (.transact worker-obj repo init-tx-data {:rtc-download-graph? true} (worker-state/get-context))
-         (.transact worker-obj repo tx-data {:rtc-download-graph? true} (worker-state/get-context))
+         (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
+                                                  :gen-undo-ops? false
+                                                  :persist-op? false} (worker-state/get-context))
+         (.transact worker-obj repo tx-data {:rtc-download-graph? true
+                                             :gen-undo-ops? false
+                                             :persist-op? false} (worker-state/get-context))
          (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 

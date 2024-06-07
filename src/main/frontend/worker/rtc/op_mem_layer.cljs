@@ -62,7 +62,7 @@
 
 (def ops-schema [:sequential op-schema])
 
-(def ops-coercer (ma/coercer ops-schema mt/json-transformer))
+(def ops-coercer (ma/coercer ops-schema mt/json-transformer nil #(ma/-fail! ::ops-schema %)))
 
 (def ops-store-value-schema
   [:map
@@ -80,7 +80,7 @@
     [:current-branch ops-store-value-schema]
     [:old-branch {:optional true} [:maybe ops-store-value-schema]]]])
 
-(def ops-store-schema-coercer (ma/coercer ops-store-schema))
+(def ops-store-schema-coercer (ma/coercer ops-store-schema nil nil #(ma/-fail! ::ops-store-schema %)))
 
 (defonce *ops-store (atom {} :validator ops-store-schema-coercer))
 
