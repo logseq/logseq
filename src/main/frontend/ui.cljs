@@ -95,19 +95,23 @@
                   (.setAttribute el "aria-label" "editing block")
                   (doto el
                     (.addEventListener "select"
-                       #(let [start (util/get-selection-start el)
-                              end (util/get-selection-end el)]
-                          (when (and start end)
-                            (when-let [e (and (not= start end)
-                                              (let [caret-pos (cursor/get-caret-pos el)]
-                                                {:caret caret-pos
-                                                 :start start :end end
-                                                 :text  (. (.-value el) substring start end)
-                                                 :point (select-keys (or @*mouse-point caret-pos) [:x :y])}))]
-                              (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))
-                              (vreset! *mouse-point nil)))))
+                                       #(let [start (util/get-selection-start el)
+                                              end (util/get-selection-end el)]
+                                          (when (and start end)
+                                            (when-let [e (and (not= start end)
+                                                              (let [caret-pos (cursor/get-caret-pos el)]
+                                                                {:caret caret-pos
+                                                                 :start start :end end
+                                                                 :text  (. (.-value el) substring start end)
+                                                                 :point (select-keys (or @*mouse-point caret-pos) [:x :y])}))]
+                                              (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))
+                                              (vreset! *mouse-point nil)))))
                     (.addEventListener "mouseup" #(vreset! *mouse-point {:x (.-x %) :y (.-y %)}))))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (when-let [on-unmount (:on-unmount (first (:rum/args state)))]
+                     (on-unmount))
+                   state)}
   [{:keys [on-change] :as props}]
   (let [skip-composition? (state/sub :editor/action)
         on-composition (fn [e]
@@ -119,11 +123,11 @@
                                                 (on-change e))
                              (state/set-editor-in-composition! true))))
         props (assoc props
-                :on-change (fn [e] (when-not (state/editor-in-composition?)
-                                     (on-change e)))
-                :on-composition-start on-composition
-                :on-composition-update on-composition
-                :on-composition-end on-composition)]
+                     :on-change (fn [e] (when-not (state/editor-in-composition?)
+                                          (on-change e)))
+                     :on-composition-start on-composition
+                     :on-composition-update on-composition
+                     :on-composition-end on-composition)]
     (textarea props)))
 
 (rum/defc dropdown-content-wrapper

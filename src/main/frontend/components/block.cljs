@@ -2482,7 +2482,7 @@
                                      (when-let [container (gdom/getElement "app-container")]
                                        (dom/remove-class! container "blocks-selection-mode"))
                                      (p/do!
-                                      (editor-handler/save-block! (editor-handler/get-state) value)
+                                       (editor-handler/save-block! repo (:block/uuid block) value)
                                       (when-not (and edit-next-block? (not select?))
                                         (editor-handler/escape-editing select?))
                                       (some-> config :on-escape-editing
