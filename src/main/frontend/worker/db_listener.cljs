@@ -86,6 +86,7 @@ generate undo ops.")
                    (select-keys (methods listen-db-changes) handler-keys)
                    (methods listen-db-changes))]
     (d/unlisten! conn ::listen-db-changes!)
+    (prn :listen-db-changes! (keys handlers))
     (d/listen! conn ::listen-db-changes!
                (fn [{:keys [tx-data _db-before _db-after tx-meta] :as tx-report}]
                  (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)

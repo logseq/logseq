@@ -140,7 +140,7 @@
         add-log-fn          #(reset! *log [(js/Date.) %])
         {:keys [*current-ws get-ws-create-task]}
         (new-task--get-ws-create--memoized ws-url)
-        get-ws-create-task  (r.client/ensure-register-graph-updates get-ws-create-task graph-uuid)
+        get-ws-create-task  (r.client/ensure-register-graph-updates get-ws-create-task graph-uuid repo)
         mixed-flow          (create-mixed-flow repo get-ws-create-task *auto-push?)]
     (assert (some? *current-ws))
     {:rtc-log-flow    (m/buffer 100 (m/watch *log))

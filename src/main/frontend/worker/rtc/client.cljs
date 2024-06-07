@@ -27,11 +27,14 @@
       (handle-remote-ex (m/? (ws/send&recv ws message))))))
 
 (defn- register-graph-updates
-  [get-ws-create-task graph-uuid]
+  [get-ws-create-task graph-uuid repo]
   (m/sp
     (try
-      (m/? (send&recv get-ws-create-task {:action "register-graph-updates"
-                                          :graph-uuid graph-uuid}))
+      (let [{:keys [t]}
+            (m/? (send&recv get-ws-create-task {:action "register-graph-updates"
+                                                :graph-uuid graph-uuid}))]
+        (when-not (op-mem-layer/get-local-tx repo)
+          (op-mem-layer/update-local-tx! repo t)))
       (catch :default e
         (if (= :rtc.exception/remote-graph-not-ready (:type (ex-data e)))
           (throw (ex-info "remote graph is still creating" {:missionary/retry true} e))
@@ -41,7 +44,7 @@
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` has been sent"
-  [get-ws-create-task graph-uuid]
+  [get-ws-create-task graph-uuid repo]
   (assert (some? graph-uuid))
   (let [*sent (atom {}) ;; ws->bool
         ]
@@ -52,7 +55,7 @@
         (when (not (@*sent ws))
           (m/? (c.m/backoff
                 (take 5 (drop 2 c.m/delays))     ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
-                (register-graph-updates get-ws-create-task graph-uuid)))
+                (register-graph-updates get-ws-create-task graph-uuid repo)))
           (swap! *sent assoc ws true))
         ws))))
 
