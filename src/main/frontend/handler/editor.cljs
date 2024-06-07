@@ -2868,6 +2868,10 @@
         (state/set-state! :editor/start-pos pos))
 
       (cond
+        ;; stop accepting edits if the new block is not created yet
+        @(:editor/next-edit-block @state/state)
+        (util/stop e)
+
         (and (contains? #{"ArrowLeft" "ArrowRight"} key)
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
         (state/clear-editor-action!)
