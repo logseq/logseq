@@ -324,14 +324,18 @@
            :rules [:task]})))))
 
 (defn- build-priority
-  [e]
+  [e {:keys [db-graph?]}]
   (let [priorities (if (coll? (first (rest e)))
                      (first (rest e))
                      (rest e))]
     (when (seq priorities)
-      (let [priorities (set (map (comp string/upper-case name) priorities))]
-        {:query (list 'priority '?b priorities)
-         :rules [:priority]}))))
+      (if db-graph?
+        (let [priorities (set (map (comp string/capitalize name) priorities))]
+          {:query (list 'priority '?b priorities)
+           :rules [:priority]})
+        (let [priorities (set (map (comp string/upper-case name) priorities))]
+          {:query (list 'priority '?b priorities)
+           :rules [:priority]})))))
 
 (defn- build-page-property
   [e {:keys [db-graph?]}]
@@ -459,7 +463,7 @@ Some bindings in this fn:
        (build-task e env)
 
        (= 'priority fe)
-       (build-priority e)
+       (build-priority e env)
 
        (= 'sort-by fe)
        (build-sort-by e sort-by)
