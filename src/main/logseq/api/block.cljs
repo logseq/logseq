@@ -8,9 +8,13 @@
             [frontend.config :as config]
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.db :as db]
+            [frontend.db.conn :as conn]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.handler.page :as page-handler]
+            [frontend.handler.property :as property-handler]
+            [logseq.db :as ldb]
             [logseq.sdk.utils :as sdk-utils]))
 
 (defn- into-properties
@@ -27,15 +31,31 @@
 
 (defn infer-property-value-type-to-save!
   [ident value]
-  (when (not (db-utils/entity ident))
-    (let [type (cond
-                 (boolean? value) :checkbox
-                 (number? value) :number
-                 (coll? value) :page
-                 :else :default)
-          multi? (coll? value)
-          schema {:type type :cardinality (if multi? :many :one)}]
-      (db-property-handler/upsert-property! ident schema {}))))
+  (let [multi? (coll? value)
+        value-handle
+        (fn []
+          (if multi?
+            (-> (for [v value]
+                  (when-let [page (and v (str v))]
+                    (let [id (:db/id (ldb/get-case-page (conn/get-db) page))]
+                      (if (nil? id)
+                        (-> (page-handler/<create! page {:redirect? false :create-first-block? false})
+                          (p/then #(:db/id %)))
+                        id))))
+              (p/all)
+              (p/then (fn [vs] [ident :logseq.property/empty-placeholder vs])))
+            [ident value]))]
+    (if (not (db-utils/entity ident))
+      (let [type (cond
+                   (boolean? value) :checkbox
+                   (number? value) :number
+                   (coll? value) :page
+                   :else :default)
+            schema {:type type :cardinality (if multi? :many :one)}]
+        (p/chain
+          (db-property-handler/upsert-property! ident schema {})
+          value-handle))
+      (value-handle))))
 
 (defn save-db-based-block-properties!
   [block properties]
@@ -43,11 +63,32 @@
     (let [properties (update-keys properties
                        (fn [k]
                          (if (qualified-keyword? k) k
-                           (db-property/create-user-property-ident-from-name (name k)))))]
+                           (db-property/create-user-property-ident-from-name (name k)))))
+          *properties-page-refs (volatile! {})]
       (-> (for [ident (keys properties)]
-            (infer-property-value-type-to-save! ident (get properties ident)))
+            (p/let [ret (infer-property-value-type-to-save! ident (get properties ident))] ret))
         (p/all)
-        (p/then #(db-property-handler/set-block-properties! block-id properties))))))
+        (p/chain
+          (fn [props]
+            (->> props
+              (reduce (fn [a [k v vs]]
+                        (when (seq vs) (vswap! *properties-page-refs assoc k vs))
+                        (assoc a k v)) {})
+              (db-property-handler/set-block-properties! block-id)))
+          ;; handle page refs
+          (fn []
+            (when (seq @*properties-page-refs)
+              (doseq [[ident refs] @*properties-page-refs]
+                (when (seq refs)
+                  (-> (property-handler/remove-block-property! (state/get-current-repo) block-id ident)
+                    (p/then
+                      (fn []
+                        (let [ps (for [eid refs]
+                                   #(when (number? eid)
+                                      (property-handler/set-block-property!
+                                        (state/get-current-repo) block-id ident eid)))]
+                          (apply p/chain (cons true ps))))))))))
+          )))))
 
 (defn get_block
   [id-or-uuid ^js opts]
