@@ -329,18 +329,20 @@
          [:editor/exit]]
         query-doc
         "ADVANCED"]
-       ["Zotero" (zotero-steps) "Import Zotero journal article"]
+       (when-not db?
+         ["Zotero" (zotero-steps) "Import Zotero journal article"])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function"]
        ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
                                                        :backward-pos 4}]
                       [:codemirror/focus]] "Insert a calculator"]
-       ["Draw" (fn []
-                 (let [file (draw/file-name)
-                       path (str common-config/default-draw-directory "/" file)
-                       text (page-ref/->page-ref path)]
-                   (p/let [_ (draw/create-draw-with-default-content path)]
-                     (println "draw file created, " path))
-                   text)) "Draw a graph with Excalidraw"]
+       (when-not db?
+         ["Draw" (fn []
+                   (let [file (draw/file-name)
+                         path (str common-config/default-draw-directory "/" file)
+                         text (page-ref/->page-ref path)]
+                     (p/let [_ (draw/create-draw-with-default-content path)]
+                       (println "draw file created, " path))
+                     text)) "Draw a graph with Excalidraw"])
 
        (cond
          (and (util/electron?) (config/local-file-based-graph? (state/get-current-repo)))
@@ -360,8 +362,9 @@
 
        ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
                                                             :backward-pos 2}]]]
-       ["Add new property" [[:editor/clear-current-slash]
-                            [:editor/new-property]]]]
+       (when db?
+         ["Add new property" [[:editor/clear-current-slash]
+                              [:editor/new-property]]])]
 
       (let [commands (cond->> @*extend-slash-commands
                        db?
@@ -814,9 +817,7 @@
     (.click input-file)))
 
 (defmethod handle-step :editor/exit [[_]]
-  (p/do!
-    (state/pub-event! [:editor/save-current-block])
-    (state/clear-edit!)))
+  (state/clear-edit!))
 
 (defmethod handle-step :editor/new-property [[_]]
   (state/pub-event! [:editor/new-property]))

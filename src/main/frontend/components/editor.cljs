@@ -808,8 +808,10 @@
        nil)]))
 
 (defn- editor-on-blur
-  [^js e *ref]
-  (when-not (= @*ref js/document.activeElement)
+  [^js e *ref & {:keys [unmount? block *blur?]}]
+  (when (or (not= @*ref js/document.activeElement) ; same activeElement when switching apps
+            ;; handle unmount if only on-blur and ESC not handled
+            (and unmount? (and (:db/id block) (nil? (:db/id (state/get-edit-block))))))
     (cond
       (let [action (state/get-editor-action)]
         (or (contains?
@@ -829,12 +831,14 @@
       :else
       (let [{:keys [on-hide value]} (editor-handler/get-state)]
         (when on-hide
+          (when *blur? (reset! *blur? true))
           (on-hide value :blur))))))
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
            (assoc state ::id (str (random-uuid))
-                  ::ref (atom nil)))
+                  ::ref (atom nil)
+                  ::blur? (atom false)))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
                 state)}
@@ -842,8 +846,10 @@
   lifecycle/lifecycle
   [state {:keys [format block parent-block on-hide]} id config]
   (let [*ref (::ref state)
+        *blur? (::blur? state)
         content (state/sub-edit-content (:block/uuid block))
         heading-class (get-editor-style-class block content format)
+        on-blur (get config :on-blur editor-on-blur)
         opts (cond->
               {:id                id
                :ref               #(reset! *ref %)
@@ -854,14 +860,18 @@
                :on-change         (editor-handler/editor-on-change! block id search-timeout)
                :on-paste          (paste-handler/editor-on-paste! id)
                :on-blur           (fn [e]
-                                    (if-let [on-blur (:on-blur config)]
-                                      (on-blur e)
-                                      (editor-on-blur e *ref)))
+                                    (on-blur e *ref {:*blur? *blur?}))
+               :on-unmount        (fn []
+                                    (when-not @*blur?
+                                      (on-blur nil *ref {:unmount? true
+                                                         :block block
+                                                         :*blur? *blur?})))
                :on-key-down       (fn [e]
                                     (if-let [on-key-down (:on-key-down config)]
                                       (on-key-down e)
                                       (when (and (= (util/ekey e) "Escape") on-hide)
                                         (when-not (exist-editor-commands-popup?)
+                                          (reset! *blur? true)
                                           (on-hide content :esc)))))
                :auto-focus true
                :class heading-class}
