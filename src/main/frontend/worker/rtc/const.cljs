@@ -55,8 +55,8 @@
      [:map
       [:block-uuid :uuid]
       [:db/ident :keyword]
+      [:db/valueType :keyword]
       [:db/cardinality {:optional true} :keyword]
-      [:db/valueType {:optional true} :keyword]
       [:db/index {:optional true} :boolean]]]]])
 
 (def to-ws-ops-validator (m/validator [:sequential to-ws-op-schema]))
