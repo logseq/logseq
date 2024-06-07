@@ -80,9 +80,8 @@ jobs:
       - name: Build test asset
         run: clojure -M:test compile test
 
-      # FIXME: Re-enable once db queries are fixed
-      # - name: Run some ClojureScript tests against DB version
-      #   run: DB_GRAPH=1 node static/tests.js -r frontend.db.query-dsl-test
+      - name: Run some ClojureScript tests against DB version
+        run: DB_GRAPH=1 node static/tests.js -r frontend.db.query-dsl-test
 
       - name: Run ClojureScript tests
         run: node static/tests.js -e fix-me
