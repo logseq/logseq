@@ -1,6 +1,7 @@
 (ns logseq.api.block
   "Block related apis"
-  (:require [frontend.db.model :as db-model]
+  (:require [clojure.string :as string]
+            [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
@@ -36,15 +37,15 @@
         (fn []
           (if multi?
             (-> (for [v value]
-                  (when-let [page (and v (str v))]
+                  (when-let [page (some-> v (str) (string/trim))]
                     (let [id (:db/id (ldb/get-case-page (conn/get-db) page))]
                       (if (nil? id)
                         (-> (page-handler/<create! page {:redirect? false :create-first-block? false})
                           (p/then #(:db/id %)))
                         id))))
               (p/all)
-              (p/then (fn [vs] [ident :logseq.property/empty-placeholder vs])))
-            [ident value]))]
+              (p/then (fn [vs] [ident :logseq.property/empty-placeholder vs true])))
+            [ident value nil false]))]
     (if (not (db-utils/entity ident))
       (let [type (cond
                    (boolean? value) :checkbox
@@ -71,23 +72,25 @@
         (p/chain
           (fn [props]
             (->> props
-              (reduce (fn [a [k v vs]]
-                        (when (seq vs) (vswap! *properties-page-refs assoc k vs))
-                        (assoc a k v)) {})
+              (reduce (fn [a [k v vs multi?]]
+                        (if multi?
+                          (do (vswap! *properties-page-refs assoc k vs) a)
+                          (assoc a k v))) {})
               (db-property-handler/set-block-properties! block-id)))
           ;; handle page refs
           (fn []
             (when (seq @*properties-page-refs)
               (doseq [[ident refs] @*properties-page-refs]
-                (when (seq refs)
-                  (-> (property-handler/remove-block-property! (state/get-current-repo) block-id ident)
-                    (p/then
-                      (fn []
+                (-> (property-handler/remove-block-property! (state/get-current-repo) block-id ident)
+                  (p/then
+                    (fn []
+                      (if (seq refs)
                         (let [ps (for [eid refs]
                                    #(when (number? eid)
                                       (property-handler/set-block-property!
                                         (state/get-current-repo) block-id ident eid)))]
-                          (apply p/chain (cons true ps))))))))))
+                          (apply p/chain (cons true ps)))
+                        (db-property-handler/set-block-property! block-id ident :logseq.property/empty-placeholder))))))))
           )))))
 
 (defn get_block

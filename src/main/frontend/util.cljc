@@ -623,8 +623,8 @@
 
 (defn trim-safe
   [s]
-  (when s
-    (string/trim s)))
+  (if (string? s)
+    (string/trim s) s))
 
 (defn trimr-without-newlines
   [s]
