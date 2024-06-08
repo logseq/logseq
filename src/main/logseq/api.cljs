@@ -796,6 +796,29 @@
               (editor-handler/expand-block! block-uuid))
           nil)))))
 
+;; properties (db only)
+(defn ^:export get_property
+  [k]
+  (when-let [k' (and (string? k) (keyword k))]
+    (p/let [k (if (qualified-keyword? k') k' (db-property/create-user-property-ident-from-name k))
+            p (db-utils/pull k)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
+
+(defn ^:export upsert_property
+  [k ^js schema ^js opts]
+  (when-let [k' (and (string? k) (keyword k))]
+    (p/let [k (if (qualified-keyword? k') k' (db-property/create-user-property-ident-from-name k))
+            schema (or (and schema (bean/->clj schema)) {})
+            schema (cond-> schema
+                     (string? (:cardinality schema))
+                     (update :cardinality keyword)
+                     (string? (:type schema))
+                     (update :type keyword))
+            opts (or (and opts (bean/->clj opts)) {})
+            p (db-property-handler/upsert-property! k schema opts)]
+      (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
+
+;; block properties
 (def ^:export upsert_block_property
   (fn [block-uuid key value]
     (p/let [block-uuid (sdk-utils/uuid-or-throw-error block-uuid)
