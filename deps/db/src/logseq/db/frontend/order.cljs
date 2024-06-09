@@ -35,6 +35,11 @@
     (reset-max-key! max-key-atom (last ks))
     ks))
 
+(defn validate-order-key?
+  [key]
+  (index/validate-order-key key index/base-62-digits)
+  true)
+
 (defn get-prev-order
   [db property value-id]
   (let [value (d/entity db value-id)]
