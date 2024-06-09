@@ -50,14 +50,15 @@
                     :conn (second args)}}
    (apply outliner-core/move-blocks! args)))
 
-(defmethod transact-db! :insert-blocks [_ & args]
+(defmethod transact-db! :insert-blocks [_ repo conn blocks target opts]
   (outliner-tx/transact!
    {:persist-op? false
     :gen-undo-ops? false
     :outliner-op :insert-blocks
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
-   (apply outliner-core/insert-blocks! args)))
+    :transact-opts {:repo repo
+                    :conn conn}}
+   (let [opts' (assoc opts :keep-block-order? true)]
+     (outliner-core/insert-blocks! repo conn blocks target opts'))))
 
 (defmethod transact-db! :insert-no-order-blocks [_ conn block-uuid+parent-coll]
   (ldb/transact! conn

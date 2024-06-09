@@ -468,8 +468,21 @@
 
 ;;; ### insert-blocks, delete-blocks, move-blocks
 
+(defn- get-block-orders
+  [blocks target-block sibling? keep-block-order?]
+  (if (and keep-block-order? (every? :block/order blocks))
+    (map :block/order blocks)
+    (let [target-order (:block/order target-block)
+          next-sibling-order (:block/order (ldb/get-right-sibling target-block))
+          first-child (ldb/get-down target-block)
+          first-child-order (:block/order first-child)
+          start-order (when sibling? target-order)
+          end-order (if sibling? next-sibling-order first-child-order)
+          orders (db-order/gen-n-keys (count blocks) start-order end-order)]
+      orders)))
+
 (defn- insert-blocks-aux
-  [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? outliner-op]}]
+  [blocks target-block {:keys [sibling? replace-empty-target? keep-uuid? keep-block-order? outliner-op]}]
   (let [block-uuids (map :block/uuid blocks)
         uuids (zipmap block-uuids
                       (if keep-uuid?
@@ -497,13 +510,7 @@
 
                        :else
                        (throw (js/Error. (str "[insert-blocks] illegal lookup: " lookup ", block: " block)))))
-        target-order (:block/order target-block)
-        next-sibling-order (:block/order (ldb/get-right-sibling target-block))
-        first-child (ldb/get-down target-block)
-        first-child-order (:block/order first-child)
-        start-order (when sibling? target-order)
-        end-order (if sibling? next-sibling-order first-child-order)
-        orders (db-order/gen-n-keys (count blocks) start-order end-order)]
+        orders (get-block-orders blocks target-block sibling? keep-block-order?)]
     (map-indexed (fn [idx {:block/keys [parent] :as block}]
                    (when-let [uuid (get uuids (:block/uuid block))]
                      (let [top-level? (= (:block/level block) 1)
@@ -603,12 +610,13 @@
       `keep-uuid?`: whether to replace `:block/uuid` from the parameter `blocks`.
                     For example, if `blocks` are from internal copy, the uuids
                     need to be changed, but there's no need for internal cut or drag & drop.
+      `keep-block-order?`: whether to replace `:block/order` from the parameter `blocks`.
       `outliner-op`: what's the current outliner operation.
       `replace-empty-target?`: If the `target-block` is an empty block, whether
                                to replace it, it defaults to be `false`.
       `update-timestamps?`: whether to update `blocks` timestamps.
     ``"
-  [repo conn blocks target-block {:keys [_sibling? keep-uuid? outliner-op replace-empty-target? update-timestamps?] :as opts
+  [repo conn blocks target-block {:keys [_sibling? keep-uuid? keep-block-order? outliner-op replace-empty-target? update-timestamps?] :as opts
                                   :or {update-timestamps? true}}]
   {:pre [(seq blocks)
          (m/validate block-map-or-entity target-block)]}
@@ -632,6 +640,7 @@
         insert-opts {:sibling? sibling?
                      :replace-empty-target? replace-empty-target?
                      :keep-uuid? keep-uuid?
+                     :keep-block-order? keep-block-order?
                      :outliner-op outliner-op}
         tx' (insert-blocks-aux blocks' target-block insert-opts)]
     (if (some (fn [b] (or (nil? (:block/parent b)) (nil? (:block/order b)))) tx')
