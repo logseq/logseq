@@ -7,7 +7,8 @@
             [datascript.core :as d]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.order :as db-order]))
 
 ;; :db/ident malli schemas
 ;; =======================
@@ -19,6 +20,11 @@
   [:and :keyword [:fn
                   {:error/message "should be a valid logseq property namespace"}
                   db-property/logseq-property?]])
+
+(def block-order
+  [:and :string [:fn
+                 {:error/message "should be a valid fractional index"}
+                 db-order/validate-order-key?]])
 
 (def internal-property-ident
   [:or logseq-property-ident db-attribute-ident])
@@ -221,7 +227,7 @@
   [[:db/index {:optional true} :boolean]
    [:db/valueType {:optional true} [:enum :db.type/ref]]
    [:db/cardinality {:optional true} [:enum :db.cardinality/many :db.cardinality/one]]
-   [:block/order {:optional true} :string]
+   [:block/order {:optional true} block-order]
    [:property/schema.classes {:optional true} [:set :int]]])
 
 (def normal-page
@@ -320,7 +326,7 @@
    (concat
     [:map
      ;; pages from :default property uses this but closed-value pages don't
-     [:block/order {:optional true} :string]]
+     [:block/order {:optional true} block-order]]
     page-attrs
     page-or-block-attrs)))
 
@@ -328,7 +334,7 @@
   "Common attributes for normal blocks"
   [[:block/content :string]
    [:block/parent :int]
-   [:block/order :string]
+   [:block/order block-order]
    ;; refs
    [:block/page :int]
    [:block/path-refs {:optional true} [:set :int]]
