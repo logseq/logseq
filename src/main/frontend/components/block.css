@@ -409,7 +409,7 @@
 .block-main-container {
   @apply min-h-[24px];
 
-  &:has(h1.as-heading) {
+  &:has(h1.as-heading), &:has(textarea.h1) {
     .block-control-wrap {
       @apply relative top-4;
     }
@@ -421,7 +421,7 @@
     }
   }
 
-  &:has(h2.as-heading) {
+  &:has(h2.as-heading), &:has(textarea.h2) {
     .block-control-wrap {
       @apply relative top-3;
     }
@@ -433,14 +433,14 @@
     }
   }
 
-  &:has(h3.as-heading) {
+  &:has(h3.as-heading), &:has(textarea.h3) {
     .block-control-wrap {
-      @apply relative top-[3px];
+      @apply relative top-[2px];
     }
 
     .block-content-or-editor-wrap {
       .positioned-properties {
-        @apply relative top-1;
+        @apply relative top-[3px];
       }
     }
   }
@@ -451,9 +451,9 @@
     }
   }
 
-  &:has(h6.as-heading) {
-    .block-control-wrap {
-      @apply relative -top-0.5;
+  &:has(h6.as-heading), &:has(textarea.h6) {
+    h6.as-heading, textarea.h6 {
+      @apply pt-1;
     }
   }
 }
