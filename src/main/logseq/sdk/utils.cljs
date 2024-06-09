@@ -2,23 +2,31 @@
   (:require [clojure.walk :as walk]
             [camel-snake-kebab.core :as csk]
             [frontend.util :as util]
+            [datascript.impl.entity :as de]
             [goog.object :as gobj]
             [cljs-bean.core :as bean]))
+
+(defn- entity? [e]
+  (when e (instance? de/Entity e)))
 
 (defn normalize-keyword-for-json
   ([input] (normalize-keyword-for-json input true))
   ([input camel-case?]
    (when input
-     (walk/postwalk
-       (fn [a]
-         (cond
-           (keyword? a)
-           (cond-> (name a)
-                   camel-case?
-                   (csk/->camelCase))
+     (let [input (cond
+                   (entity? input) (into {} input)
+                   (sequential? input) (map #(if (entity? %) (into {} %) %) input)
+                   :else input)]
+       (walk/postwalk
+         (fn [a]
+           (cond
+             (keyword? a)
+             (cond-> (name a)
+               camel-case?
+               (csk/->camelCase))
 
-           (uuid? a) (str a)
-           :else a)) input))))
+             (uuid? a) (str a)
+             :else a)) input)))))
 
 (defn uuid-or-throw-error
   [s]
