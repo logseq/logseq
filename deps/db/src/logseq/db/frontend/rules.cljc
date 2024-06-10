@@ -164,7 +164,7 @@
     :has-page-property
     '[(has-page-property ?p ?prop)
       [?p :block/name]
-      [?p ?prop ?v]
+      [?p ?prop _]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -179,7 +179,7 @@
 
     :has-property
     '[(has-property ?b ?prop)
-      [?b ?prop ?v]
+      [?b ?prop _]
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]

@@ -64,8 +64,7 @@
    ;; query-properties is a coll of property uuids and keywords where keywords are special frontend keywords
    :logseq.property/query-properties {:schema {:type :coll
                                                :hide? true}}
-   ;; query-sort-by is either a property uuid or a keyword where keyword is a special frontend keyword
-   :logseq.property/query-sort-by {:schema {:type :any
+   :logseq.property/query-sort-by {:schema {:type :keyword
                                             :hide? true}}
    :logseq.property/query-sort-desc {:schema {:type :checkbox
                                               :hide? true}}
