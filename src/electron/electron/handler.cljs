@@ -311,7 +311,7 @@
   nil)
 
 (defmethod handle :db-get [_window [_ repo]]
-  (db/get-db repo))
+  (db/get-db-files repo))
 
 (defmethod handle :db-transact [_window [_ repo tx-data-str tx-meta-str]]
   (when-let [conn (sqlite-db/get-conn repo)]
