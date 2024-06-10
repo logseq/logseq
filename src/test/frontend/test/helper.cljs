@@ -155,7 +155,9 @@
 (defn load-test-files-for-db-graph
   [options*]
   (let [;; Builds options from markdown :file/content unless given explicit build-blocks config
-        options (if (:page (first options*)) {:pages-and-blocks options*} (build-blocks-tx-options options*))
+        options (if (:page (first options*))
+                  {:pages-and-blocks options* :auto-create-ontology? true}
+                  (build-blocks-tx-options options*))
         {:keys [init-tx block-props-tx]} (sqlite-build/build-blocks-tx options)]
     (db/transact! test-db init-tx)
     (when (seq block-props-tx)

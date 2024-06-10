@@ -4,8 +4,6 @@
   compatible with file graphs"
   (:require [frontend.state :as state]
             [frontend.db.conn :as conn]
-            [frontend.db.utils :as db-utils]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.util :as db-property-util]))
 
 (defn lookup
@@ -13,18 +11,6 @@
   [coll key]
   (let [repo (state/get-current-repo)]
     (db-property-util/lookup repo coll key)))
-
-(defn properties-by-name
-  "Given a block from a query result, returns a map of its properties indexed by property names"
-  [repo block]
-  (->> (db-property/properties block)
-       (map (fn [[k v]]
-              [(:block/original-name (db-utils/entity k))
-               (or (some->> (:db/id v)
-                            (db-utils/entity repo)
-                            db-property/get-property-value-name)
-                   v)]))
-       (into {})))
 
 (defn get-block-property-value
   "Get the value of a built-in block's property by its db-ident"
@@ -50,9 +36,3 @@
   (let [repo (state/get-current-repo)
         db (conn/get-db repo)]
     (db-property-util/shape-block? repo db block)))
-
-(defn get-closed-property-values
-  [property-id]
-  (let [repo (state/get-current-repo)
-        db (conn/get-db repo)]
-    (db-property/get-closed-property-values db property-id)))

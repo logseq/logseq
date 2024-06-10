@@ -1,7 +1,8 @@
 (ns frontend.handler.db-based.property.util
   "DB-graph only utility fns for properties"
   (:require [frontend.db.utils :as db-utils]
-            [frontend.db :as db]
+            [frontend.db.conn :as conn]
+            [frontend.state :as state]
             [logseq.db.frontend.property :as db-property]))
 
 (defn get-property-name
@@ -14,14 +15,20 @@
   [e]
   (if-let [e (if (number? e) (db-utils/pull e) e)]
     (or (:block/content e)
-      (:block/original-name e))
+        (:block/original-name e))
     e))
+
+(defn properties-by-name
+  "Given a block from a query result, returns a map of its properties indexed by property names"
+  [repo block]
+  (let [db (conn/get-db repo)]
+    (db-property/properties-by-name db block)))
 
 (defn all-hidden-properties?
   "Checks if the given properties are all hidden properties"
   [properties]
   (every? (fn [id]
-            (:hide? (:block/schema (db/entity id)))) properties))
+            (:hide? (:block/schema (db-utils/entity id)))) properties))
 
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
@@ -46,3 +53,9 @@
                  :else
                  v)])))
      (into {}))))
+
+(defn get-closed-property-values
+  [property-id]
+  (let [repo (state/get-current-repo)
+        db (conn/get-db repo)]
+    (db-property/get-closed-property-values db property-id)))
