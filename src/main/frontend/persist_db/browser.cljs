@@ -120,17 +120,9 @@
                      (js/console.error error)
                      (notification/show! "It seems that OPFS is not supported on this browser, please upgrade this browser to the latest version or use another browser." :error)))))))
 
-(defn <export-db!
+(defn <export-db-to-electron!
   [repo data]
-  (cond
-    (util/electron?)
-    (ipc/ipc :db-export repo data)
-
-    ;; TODO: browser nfs-supported? auto backup
-
-    ;;
-    :else
-    nil))
+  (ipc/ipc :db-export repo data))
 
 (defn- sqlite-error-handler
   [error]
@@ -163,23 +155,25 @@
     (when-let [^js sqlite @*worker]
       (-> (p/let [db-exists? (.dbExists sqlite repo)
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
+                  _ (.createOrOpenDB sqlite repo)
                   _ (when disk-db-data
-                      (.importDb sqlite repo disk-db-data))
-                  _ (.createOrOpenDB sqlite repo)]
+                      (.storeDBKVs sqlite repo (bean/->clj disk-db-data)))]
             (.getInitialData sqlite repo))
           (p/catch sqlite-error-handler))))
 
   (<export-db [_this repo opts]
     (when-let [^js sqlite @*worker]
-      (-> (p/let [data (.exportDB sqlite repo)]
-            (when data
-              (if (:return-data? opts)
-                data
-                (<export-db! repo data))))
-          (p/catch (fn [error]
-                     (prn :debug :save-db-error repo)
-                     (js/console.error error)
-                     (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {})))))
+      (when (or (:return-data? opts) (util/electron?))
+        (-> (if (:return-data? opts)
+              (.exportDB sqlite repo)
+              (when (util/electron?)
+                (p/let [data (.getDBKVs sqlite repo)]
+                  (when data
+                    (<export-db-to-electron! repo data)))))
+            (p/catch (fn [error]
+                       (prn :debug :save-db-error repo)
+                       (js/console.error error)
+                       (notification/show! [:div (str "SQLiteDB save error: " error)] :error) {}))))))
 
   (<import-db [_this repo data]
     (when-let [^js sqlite @*worker]
@@ -192,6 +186,6 @@
 (comment
   (defn clean-all-dbs!
     []
-    (when-let [sqlite @*sqlite]
-      (.dangerousRemoveAllDbs sqlite)
-      (state/set-current-repo! nil))))
+    (when-let [worker @frontend.state/*db-worker]
+      (.dangerousRemoveAllDbs worker)
+      (frontend.state/set-current-repo! nil))))
