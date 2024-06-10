@@ -199,9 +199,10 @@
 
  ;; Advanced queries `:result-transform` function.
  ;; Transform the query result before displaying it.
- :query/result-transforms
- {:sort-by-priority
-  (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
+ ;; Example usage for DB graphs:
+;;  :query/result-transforms
+;;  {:sort-by-priority
+;;   (fn [result] (sort-by (fn [h] (get h :logseq.task/priority "Z")) result))}
 
 ;; Queries will be displayed at the bottom of today's journal page.
 ;; Example usage:
