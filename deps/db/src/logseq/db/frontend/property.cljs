@@ -86,8 +86,7 @@
    :logseq.property/order-list-type {:name :logseq.order-list-type
                                      :schema {:type :default
                                               :hide? true}}
-   :logseq.property.linked-references/includes {:schema {
-                                                         ; could be :entity to support blocks(objects) in the future
+   :logseq.property.linked-references/includes {:schema {; could be :entity to support blocks(objects) in the future
                                                          :type :page
                                                          :cardinality :many
                                                          :hide? true}}
@@ -246,6 +245,14 @@
            (d/entity db)
            get-property-value-name))
 
+(defn get-property-value-names-from-ref
+  "Given a ref or refs from a pulled query e.g. `{:db/id X}`, gets a readable
+  name for the property values of a ref type property"
+  [db ref]
+  (if (or (set? ref) (sequential? ref))
+    (set (map #(get-property-value-name-from-ref db %) ref))
+    (get-property-value-name-from-ref db ref)))
+
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"
@@ -287,10 +294,11 @@
     (:block/content ent)))
 
 (defn properties-by-name
-  "Given a block from a query result, returns a map of its properties indexed by property names"
+  "Given a block from a query result, returns a map of its properties indexed by
+  property names"
   [db block]
   (->> (properties block)
        (map (fn [[k v]]
               [(:block/original-name (d/entity db k))
-               (get-property-value-name-from-ref db v)]))
+               (get-property-value-names-from-ref db v)]))
        (into {})))

@@ -115,7 +115,8 @@
                             ;; or gp-property/built-in-extended properties
                             (set (keys db-property/built-in-properties))
                             (conj (file-property-handler/built-in-properties) :template))
-        prop-keys* (->> (distinct (mapcat keys (map :block/properties result)))
+        properties-fn (if db-graph? db-property/properties :block/properties)
+        prop-keys* (->> (distinct (mapcat keys (map properties-fn result)))
                         (remove hidden-properties))
         prop-keys (cond-> (if page? (cons :page prop-keys*) (concat '(:block :page) prop-keys*))
                     (or db-graph? page?)
@@ -138,7 +139,7 @@
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
   options"
-  [row column {:keys [page? ->elem map-inline comma-separated-property?]}]
+  [db row column {:keys [db-graph? page? ->elem map-inline comma-separated-property?]}]
   (case column
     :page
     [:string (if page?
@@ -167,26 +168,27 @@
     [:string (when-let [updated-at (:block/updated-at row)]
                (date/int->local-time-2 updated-at))]
 
-    [:string (if comma-separated-property?
-               ;; Return original properties since comma properties need to
-               ;; return collections for display purposes
-               (get-in row [:block/properties column])
-               (or (get-in row [:block/properties-text-values column])
-                   ;; Fallback to original properties for page blocks
-                   (get-in row [:block/properties column])))]))
+    [:string
+     (if db-graph?
+       (db-property/get-property-value-names-from-ref db (get row column))
+       (if comma-separated-property?
+         ;; Return original properties since comma properties need to
+         ;; return collections for display purposes
+         (get-in row [:block/properties column])
+         (or (get-in row [:block/properties-text-values column])
+             ;; Fallback to original properties for page blocks
+             (get-in row [:block/properties column]))))]))
 
 (defn- render-column-value
-  [{:keys [row-block row-format cell-format value]} page-cp inline-text {:keys [uuid-names db-graph?]}]
+  [{:keys [row-block row-format cell-format value]} page-cp inline-text {:keys [db-graph?]}]
   (cond
     ;; elements should be rendered as they are provided
     (= :element cell-format) value
-    ;; collections are treated as a comma separated list of page-cps if they
-    ;; have uuids or else as normal values
     (coll? value) (if db-graph?
-                    (->> (map #(if (uuid? %)
-                                 (page-cp {} {:block/name (get uuid-names %)})
-                                 (str %))
-                              value)
+                    (->> value
+                         (map #(if-let [page (db/get-page %)]
+                                 (page-cp {} page)
+                                 (inline-text row-block row-format %)))
                          (interpose [:span ", "]))
                     (->> (map #(page-cp {} {:block/name %}) value)
                          (interpose [:span ", "])))
@@ -197,9 +199,6 @@
     (string? value) (if-let [page (db/get-page value)]
                       (page-cp {} page)
                       (inline-text row-block row-format value))
-    ;; render uuids as page refs
-    (uuid? value)
-    (page-cp {} {:block/name (get uuid-names value)})
     ;; anything else should just be rendered as provided
     :else value))
 
@@ -214,20 +213,15 @@
                                 (apply +)))
         property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
         db-graph? (config/db-based-graph? (state/get-current-repo))
+        db (db/get-db (state/get-current-repo))
         ;; Fetch all uuid's names once so we aren't doing it N times for N appearances in a table
         uuid-names
         (when db-graph?
-          (let [property-ref-vals (->> sort-result
-                                       (map :block/properties)
-                                       (mapcat (fn [m]
-                                                 (concat (->> m vals (filter #(and (set? %) (every? uuid? %))) (mapcat identity))
-                                                         (->> m vals (filter uuid?)))))
-                                       set)]
-            (some->> (seq (concat property-ref-vals (filter uuid? columns)))
-                     (map #(vector :block/uuid %))
-                     (db-utils/pull-many '[:block/uuid :block/original-name])
-                     (map (juxt :block/uuid :block/original-name))
-                     (into {}))))]
+          (some->> (seq (filter uuid? columns))
+                   (map #(vector :block/uuid %))
+                   (db-utils/pull-many '[:block/uuid :block/original-name])
+                   (map (juxt :block/uuid :block/original-name))
+                   (into {})))]
     [:div.overflow-x-auto {:on-pointer-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}
                            :class (when-not page? "query-table")}
@@ -246,24 +240,26 @@
          (let [format (:block/format row)]
            [:tr.cursor
             (for [column columns]
-              (let [[cell-format value] (build-column-value row
+              (let [[cell-format value] (build-column-value db
+                                                            row
                                                             column
                                                             {:page? page?
                                                              :->elem ->elem
                                                              :map-inline map-inline
                                                              :config config
+                                                             :db-graph? db-graph?
                                                              :comma-separated-property? (property-separated-by-commas? column)})]
                 [:td.whitespace-nowrap {:on-pointer-down (fn []
-                                                         (reset! *mouse-down? true)
-                                                         (reset! select? false))
+                                                           (reset! *mouse-down? true)
+                                                           (reset! select? false))
                                         :on-mouse-move (fn [] (reset! select? true))
                                         :on-pointer-up (fn []
-                                                       (when (and @*mouse-down? (not @select?))
-                                                         (state/sidebar-add-block!
-                                                          (state/get-current-repo)
-                                                          (:db/id row)
-                                                          :block-ref)
-                                                         (reset! *mouse-down? false)))}
+                                                         (when (and @*mouse-down? (not @select?))
+                                                           (state/sidebar-add-block!
+                                                            (state/get-current-repo)
+                                                            (:db/id row)
+                                                            :block-ref)
+                                                           (reset! *mouse-down? false)))}
                  (when value
                    (render-column-value {:row-block row
                                          :row-format format
@@ -271,8 +267,7 @@
                                          :value value}
                                         page-cp
                                         inline-text
-                                        {:uuid-names uuid-names
-                                         :db-graph? db-graph?}))]))]))]]]))
+                                        {:db-graph? db-graph?}))]))]))]]]))
 
 (rum/defc result-table < rum/reactive
   [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text]

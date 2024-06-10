@@ -32,8 +32,8 @@
 
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
-  property names and property values dereferenced where possible. A property's
-  value will only be a uuid if it's a page or a block"
+  property names and property values dereferenced where possible. Has some
+  overlap with db-property/properties-by-name"
   ([properties] (readable-properties properties true))
   ([properties original-key?]
    (->> properties
