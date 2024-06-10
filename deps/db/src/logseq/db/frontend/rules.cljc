@@ -166,9 +166,7 @@
       [?p :block/name]
       [?p ?prop ?v]
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
-      ;; Some deleted properties leave #{} which this rule shouldn't match on
-      [(not= #{} ?v)]]
+      [?prop-e :block/type "property"]]
 
     :page-property
     '[(page-property ?p ?prop ?val)
@@ -184,9 +182,7 @@
       [?b ?prop ?v]
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
-      [?prop-e :block/type "property"]
-      ;; Some deleted properties leave #{} which this rule shouldn't match on
-      [(not= #{} ?v)]]
+      [?prop-e :block/type "property"]]
 
     :property
     '[(property ?b ?prop ?val)
