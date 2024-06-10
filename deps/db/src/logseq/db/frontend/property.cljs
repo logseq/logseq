@@ -231,11 +231,20 @@
       (:block/content ent)))
 
 (defn get-property-value-name
-  "Gets a readable name for the property value of a ref type property. Different
-   than closed-value-name as there implementation will likely differ"
+  "Given an entity, gets a readable name for the property value of a ref type
+  property. Different than closed-value-name as there implementation will likely
+  differ"
   [ent]
   (or (:block/original-name ent)
       (:block/content ent)))
+
+(defn get-property-value-name-from-ref
+  "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
+  the property value of a ref type property"
+  [db ref]
+  (some->> (:db/id ref)
+           (d/entity db)
+           get-property-value-name))
 
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
@@ -276,3 +285,12 @@
   [ent]
   (when (contains? (:block/type ent) "closed value")
     (:block/content ent)))
+
+(defn properties-by-name
+  "Given a block from a query result, returns a map of its properties indexed by property names"
+  [db block]
+  (->> (properties block)
+       (map (fn [[k v]]
+              [(:block/original-name (d/entity db k))
+               (get-property-value-name-from-ref db v)]))
+       (into {})))

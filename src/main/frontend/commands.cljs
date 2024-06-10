@@ -15,7 +15,7 @@
             [frontend.util.cursor :as cursor]
             [frontend.util.priority :as priority]
             [frontend.handler.file-based.property :as file-property-handler]
-            [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.handler.property.file :as property-file]
             [goog.dom :as gdom]
             [goog.object :as gobj]
@@ -126,7 +126,7 @@
 (defn db-based-statuses
   []
   (map (fn [e] (:block/content e))
-       (pu/get-closed-property-values :logseq.task/status)))
+       (db-pu/get-closed-property-values :logseq.task/status)))
 
 (defn db-based-embed-page
   []
@@ -162,7 +162,7 @@
 (defn db-based-priorities
   []
   (map (fn [e] (:block/content e))
-    (pu/get-closed-property-values :logseq.task/priority)))
+    (db-pu/get-closed-property-values :logseq.task/priority)))
 
 (defn get-priorities
   []

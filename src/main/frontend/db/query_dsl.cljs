@@ -21,7 +21,7 @@
             [frontend.config :as config]
             [logseq.db.frontend.property :as db-property]
             [frontend.state :as state]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 
 ;; Query fields:
@@ -634,7 +634,7 @@ Some bindings in this fn:
     (let [repo (state/get-current-repo)]
       (map (fn [blocks]
              (mapv (fn [block]
-                     (assoc block :block/properties-by-name (pu/properties-by-name repo block)))
+                     (assoc block :block/properties-by-name (db-pu/properties-by-name repo block)))
                    blocks))
            col))
     col))

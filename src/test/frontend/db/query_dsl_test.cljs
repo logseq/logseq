@@ -5,7 +5,7 @@
             [frontend.db :as db]
             [frontend.util :as util]
             [frontend.db.query-dsl :as query-dsl]
-            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files]]))
+            [frontend.test.helper :as test-helper :include-macros true :refer [load-test-files load-test-files-for-db-graph]]))
 
 ;; TODO: quickcheck
 ;; 1. generate query filters
@@ -142,14 +142,31 @@ prop-d:: [[nada]]"}])
       "Blocks have property value with no space")
 
   (is (= ["b3" "b4"]
-           (map (comp first str/split-lines :block/content)
-                (dsl-query "(property prop-d)")))
-        "Blocks that have a property"))
+         (map (comp first str/split-lines :block/content)
+              (dsl-query "(property prop-d)")))
+      "Blocks that have a property"))
 
 (deftest block-property-queries
   (testing "block property tests with default config"
     (test-helper/with-config {}
       (block-property-queries-test))))
+
+       
+(when js/process.env.DB_GRAPH
+ (deftest db-only-block-property-queries
+   (load-test-files-for-db-graph
+    [{:page {:block/original-name "page1"}
+      :blocks [{:block/content "b1"
+                :build/properties {:Foo "bar"}}
+               {:block/content "b2"
+                :build/properties {:foo "bar"}}]}])
+   
+   (is (= ["b1"]
+          (map :block/content (dsl-query "(property Foo)")))
+       "filter is case sensitive")
+   (is (= ["b2"]
+          (map :block/content (dsl-query "(property :user.property/foo)")))
+       "filter can handle qualified keyword properties")))
 
 (deftest block-property-query-performance
   (let [pages (->> (repeat 10 {:tags ["tag1" "tag2"]})

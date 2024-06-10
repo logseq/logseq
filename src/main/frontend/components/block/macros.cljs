@@ -3,7 +3,7 @@
   (:require [clojure.walk :as walk]
             [frontend.extensions.sci :as sci]
             [frontend.handler.common :as common-handler]
-            [frontend.handler.property.util :as pu]
+            [frontend.handler.db-based.property.util :as db-pu]
             [goog.string :as gstring]
             [goog.string.format]
             [frontend.state :as state]
@@ -66,7 +66,7 @@
                        query-result*)
         repo (state/get-current-repo)
         query-result' (if (config/db-based-graph? repo)
-                       (map #(assoc % :block/properties (pu/properties-by-name repo %)) query-result)
+                       (map #(assoc % :block/properties (db-pu/properties-by-name repo %)) query-result)
                        query-result)
         fn-string (-> (gstring/format "(fn [result] %s)" (first arguments))
                       (common-handler/safe-read-string "failed to parse function")
