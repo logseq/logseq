@@ -50,21 +50,21 @@
         block-order*
         (if-let [[start-order end-order]
                  (reduce
-                  (fn [conflict-order [current-order current-block-uuid]]
-                    (when conflict-order
+                  (fn [[start-order] [current-order current-block-uuid]]
+                    (when start-order
                       (if (= current-block-uuid block-uuid)
                         (reduced nil)
-                        (reduced [conflict-order current-order])))
+                        (reduced [start-order current-order])))
                     (let [compare-order (compare current-order block-order)]
                       (cond
                         (and (zero? compare-order)
                              (not= current-block-uuid block-uuid))
-                      ;; found conflict order
-                        current-order
+                        ;; found conflict order
+                        [current-order nil]
 
                         (and (zero? compare-order)
                              (= current-block-uuid block-uuid))
-                      ;; this block already has expected :block/order
+                        ;; this block already has expected :block/order
                         (reduced nil)
 
                         (pos? compare-order) ;not found conflict order
