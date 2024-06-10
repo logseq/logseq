@@ -18,7 +18,8 @@
             [logseq.graph-parser.text :as text]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.property.util :as pu]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 ;; Util fns
 ;; ========
@@ -34,7 +35,7 @@
       (map #(medley/dissoc-in % ks) result)
       result)))
 
-(defn- sort-by-fn [sort-by-column item {:keys [page?]}]
+(defn- sort-by-fn [sort-by-column item {:keys [page? db-graph?]}]
   (case sort-by-column
     :created-at
     (:block/created-at item)
@@ -44,7 +45,9 @@
     (:block/content item)
     :page
     (if page? (:block/name item) (get-in item [:block/page :block/name]))
-    (get-in item [:block/properties sort-by-column])))
+    (if db-graph?
+      (get-in item [:block/properties-by-name sort-by-column])
+      (get-in item [:block/properties sort-by-column]))))
 
 (defn- locale-compare
   "Use locale specific comparison for strings and general comparison for others."
@@ -53,14 +56,23 @@
     (< x y)
     (.localeCompare (str x) (str y) (state/sub :preferred-language) #js {:numeric true})))
 
-(defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date? page?]}]
+(defn- sort-result [result {:keys [sort-by-column sort-desc? sort-nlp-date? page? db-graph?]}]
   (if (some? sort-by-column)
-    (let [comp-fn (if sort-desc? #(locale-compare %2 %1) locale-compare)]
+    (let [comp-fn (if sort-desc? #(locale-compare %2 %1) locale-compare)
+          repo (state/get-current-repo)
+          result' (if db-graph?
+                    (mapv (fn [block]
+                            (assoc block :block/properties-by-name (db-pu/properties-by-name repo block)))
+                          result)
+                    result)
+          sort-by-column' (if (and db-graph? (qualified-keyword? sort-by-column))
+                            (:block/original-name (db-utils/entity repo sort-by-column))
+                            sort-by-column)]
       (sort-by (fn [item]
-                 (block/normalize-block (sort-by-fn sort-by-column item {:page? page?})
+                 (block/normalize-block (sort-by-fn sort-by-column' item {:page? page? :db-graph? db-graph?})
                                         sort-nlp-date?))
                comp-fn
-               result))
+               result'))
     result))
 
 (defn- get-sort-state
@@ -75,7 +87,7 @@
         query-sort-by (pu/lookup properties :logseq.property/query-sort-by)
         ;; Starting with #6105, we started putting properties under namespaces.
         nlp-date? (and (not db-graph?) (:logseq.query/nlp-date properties))
-        sort-by-column (or (if (uuid? query-sort-by) query-sort-by (keyword query-sort-by))
+        sort-by-column (or (keyword query-sort-by)
                            (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
                              nil
                              :updated-at))]
@@ -86,14 +98,14 @@
 ;; Components
 ;; ==========
 (rum/defc sortable-title
-  [title column {:keys [sort-by-column sort-desc?]} block-id]
+  [title column {:keys [sort-by-column sort-desc?]} block-id {:keys [db-graph?]}]
   (let [repo (state/get-current-repo)]
     [:th.whitespace-nowrap
      [:a {:on-click (fn []
                       (p/do!
                        (property-handler/set-block-property! repo block-id
                                                              (pu/get-pid :logseq.property/query-sort-by)
-                                                             (if (uuid? column) column (name column)))
+                                                             (if db-graph? column (name column)))
                        (property-handler/set-block-property! repo block-id
                                                              (pu/get-pid :logseq.property/query-sort-desc)
                                                              (not sort-desc?))))}
@@ -105,7 +117,7 @@
 
 (defn get-all-columns-for-result
   "Gets all possible columns for a given result. For a db graph, this is a mix
-  of property uuids and special keywords like :page. For a file graph, these are
+  of property db-idents and special keywords like :page. For a file graph, these are
   all property names as keywords"
   [result page?]
   (let [repo (state/get-current-repo)
@@ -213,15 +225,7 @@
                                 (apply +)))
         property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
         db-graph? (config/db-based-graph? (state/get-current-repo))
-        db (db/get-db (state/get-current-repo))
-        ;; Fetch all uuid's names once so we aren't doing it N times for N appearances in a table
-        uuid-names
-        (when db-graph?
-          (some->> (seq (filter uuid? columns))
-                   (map #(vector :block/uuid %))
-                   (db-utils/pull-many '[:block/uuid :block/original-name])
-                   (map (juxt :block/uuid :block/original-name))
-                   (into {})))]
+        db (db/get-db (state/get-current-repo))]
     [:div.overflow-x-auto {:on-pointer-down (fn [e] (.stopPropagation e))
                            :style {:width "100%"}
                            :class (when-not page? "query-table")}
@@ -229,12 +233,11 @@
       [:thead
        [:tr.cursor
         (for [column columns]
-          (let [column-name (if (uuid? column) (get uuid-names column) column)
-                title (if (and (= column :clock-time) (integer? clock-time-total))
+          (let [title (if (and (= column :clock-time) (integer? clock-time-total))
                         (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
                                                               clock-time-total))
-                        (name column-name))]
-            (sortable-title title column sort-state (:block/uuid current-block))))]]
+                        (name column))]
+            (sortable-title title column sort-state (:block/uuid current-block) {:db-graph? db-graph?})))]]
       [:tbody
        (for [row sort-result]
          (let [format (:block/format row)]
@@ -288,5 +291,5 @@
           ;; Sort state needs to be in sync between final result and sortable title
           ;; as user needs to know if there result is sorted
           sort-state (get-sort-state current-block {:db-graph? db-graph?})
-          sort-result (sort-result result' (assoc sort-state :page? page?))]
+          sort-result (sort-result result' (assoc sort-state :page? page? :db-graph? db-graph?))]
       (result-table-v1 config current-block sort-result sort-state columns options map-inline page-cp ->elem inline-text))))
