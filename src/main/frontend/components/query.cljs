@@ -160,7 +160,7 @@
                        collapsed?
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
-        query-table? (get current-block (pu/get-pid :logseq.property/query-table))
+        query-table? (pu/get-block-property-value current-block :logseq.property/query-table)
         table? (or table-view?
                    query-table?
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
