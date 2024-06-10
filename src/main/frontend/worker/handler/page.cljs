@@ -222,7 +222,7 @@
             (seq (ldb/get-block-property-values @conn (:block/uuid page)))
             {:msg "Page content deleted but unable to delete this page because blocks use this property"})
 
-      (or (seq (:block/_refs page)) (contains? (:block/type page) "hidden"))
+      (contains? (:block/type page) "hidden")
       {:msg "Page content deleted but unable to delete this page because there are still references to it"})
 
     (catch :default e
@@ -273,7 +273,7 @@
 
             (ldb/transact! conn tx-data
                            (cond-> {:outliner-op :delete-page
-                                    :deleted-page page-name
+                                    :deleted-page (str (:block/uuid page))
                                     :persist-op? persist-op?}
                              rename?
                              (assoc :real-outliner-op :rename-page)
