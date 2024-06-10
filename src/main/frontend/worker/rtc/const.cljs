@@ -84,7 +84,7 @@
         [:op :keyword]
         [:self :uuid]
         [:parents [:sequential :uuid]]
-        [:left [:maybe :uuid]]   ;nil when it's :no-order block
+        [:block/order {:optional true} :string]
         [:hash {:optional true} :int]
         [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]
@@ -97,7 +97,7 @@
         [:op :keyword]
         [:self :uuid]
         [:parents {:optional true} [:sequential :uuid]]
-        [:left {:optional true} [:maybe :uuid]] ;nil when it's :no-order block
+        [:block/order {:optional true} :string]
         [:hash {:optional true} :int]
         [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]

@@ -11,6 +11,7 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
+            [logseq.clj-fractional-indexing :as index]
             [logseq.db :as ldb]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
@@ -40,6 +41,43 @@
     :transact-opts {:repo (first args)
                     :conn (second args)}}
    (apply outliner-core/move-blocks! args)))
+
+(defmethod transact-db! :update-block-order-directly [_ _repo conn block-uuid block-parent-uuid block-order]
+  ;; transact :block/parent and :block/order directly,
+  ;; check :block/order has any conflicts with other blocks
+  (let [parent-ent (when block-parent-uuid (d/entity @conn [:block/uuid block-parent-uuid]))
+        sorted-order+block-uuid-coll (sort-by first (map (juxt :block/order :block/uuid) (:block/_parent parent-ent)))
+        block-order*
+        (if-let [[start-order end-order]
+                 (reduce
+                  (fn [conflict-order [current-order current-block-uuid]]
+                    (when conflict-order
+                      (if (= current-block-uuid block-uuid)
+                        (reduced nil)
+                        (reduced [conflict-order current-order])))
+                    (let [compare-order (compare current-order block-order)]
+                      (cond
+                        (and (zero? compare-order)
+                             (not= current-block-uuid block-uuid))
+                      ;; found conflict order
+                        current-order
+
+                        (and (zero? compare-order)
+                             (= current-block-uuid block-uuid))
+                      ;; this block already has expected :block/order
+                        (reduced nil)
+
+                        (pos? compare-order) ;not found conflict order
+                        (reduced nil)
+
+                        (neg? compare-order)
+                        nil)))
+                  nil sorted-order+block-uuid-coll)]
+          (index/generate-key-between start-order end-order)
+          block-order)]
+    (ldb/transact! conn [{:block/uuid block-uuid :block/order block-order*}])
+    ;; TODO: add ops when block-order* != block-order
+    ))
 
 (defmethod transact-db! :move-blocks&persist-op [_ & args]
   (outliner-tx/transact!
@@ -142,72 +180,36 @@
                       {})))))
 
 (defn- insert-or-move-block
-  [repo conn block-uuid remote-parents remote-left-uuid move? op-value]
+  [repo conn block-uuid remote-parents remote-block-order move? op-value]
   (when (seq remote-parents)
     (let [first-remote-parent (first remote-parents)
           local-parent (d/entity @conn [:block/uuid first-remote-parent])
           whiteboard-page-block? (whiteboard-page-block? local-parent)
-          ;; when insert blocks in whiteboard, local-left is ignored
-          ;; remote-left-uuid is nil when it's :no-order block
-          local-left (when-not whiteboard-page-block?
-                       (when remote-left-uuid
-                         (d/entity @conn [:block/uuid remote-left-uuid])))
           b (d/entity @conn [:block/uuid block-uuid])]
-      (case [whiteboard-page-block? (some? local-parent) (some? local-left) (some? remote-left-uuid)]
-        [false false true true]
-        (if move?
-          (transact-db! :move-blocks repo conn [b] local-left true)
-          (transact-db! :insert-blocks repo conn
-                        [{:block/uuid block-uuid
-                          :block/content ""
-                          :block/format :markdown}]
-                        local-left {:sibling? true :keep-uuid? true}))
+      (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
+        [false true true]
+        (do (if move?
+              (transact-db! :move-blocks repo conn [b] local-parent false)
+              (transact-db! :insert-blocks repo conn
+                            [{:block/uuid block-uuid
+                              :block/content ""
+                              :block/format :markdown}]
+                            local-parent {:sibling? false :keep-uuid? true}))
+            (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
 
-        [false true true true]
-        (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
-          (if move?
-            (transact-db! :move-blocks repo conn [b] local-left sibling?)
-            (transact-db! :insert-blocks repo conn
-                          [{:block/uuid block-uuid :block/content ""
-                            :block/format :markdown}]
-                          local-left {:sibling? sibling? :keep-uuid? true})))
-
-        [false true false true]
-        (if move?
-          (transact-db! :move-blocks repo conn [b] local-parent false)
-          (transact-db! :insert-blocks repo conn
-                        [{:block/uuid block-uuid :block/content ""
-                          :block/format :markdown}]
-                        local-parent {:sibling? false :keep-uuid? true}))
-
-        [false true false false]
+        [false true false]
         (if move?
           (transact-db! :move-blocks repo conn [b] local-parent false)
           (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
 
-        ;; Don't need to insert-whiteboard-block here,
-        ;; will do :upsert-whiteboard-block in `update-block-attrs`
-        ([true true false true] [true true false false])
-        (when (nil? (:properties op-value))
-          ;; when :properties is nil, this block should be treat as normal block
-          (if move?
-            (transact-db! :move-blocks repo conn [b] local-parent false)
-            (transact-db! :insert-blocks repo conn [{:block/uuid block-uuid :block/content "" :block/format :markdown}]
-                          local-parent {:sibling? false :keep-uuid? true})))
-        ([true true true true] [true true true false])
-        (when (nil? (:properties op-value))
-          (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
-            (if move?
-              (transact-db! :move-blocks repo conn [b] local-left sibling?)
-              (transact-db! :insert-blocks repo conn [{:block/uuid block-uuid :block/content "" :block/format :markdown}]
-                            local-left {:sibling? sibling? :keep-uuid? true}))))
-
-        (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid :remote-parents remote-parents
-                                                      :remote-left remote-left-uuid}))))))
+        (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid
+                                                      :remote-parents remote-parents
+                                                      :remote-block-order remote-block-order
+                                                      :op-value op-value}))))))
 
 (defn- move-ops-map->sorted-move-ops
   [move-ops-map]
-  (let [uuid->dep-uuids (into {} (map (fn [[uuid env]] [uuid (set (conj (:parents env) (:left env)))]) move-ops-map))
+  (let [uuid->dep-uuids (into {} (map (fn [[uuid env]] [uuid (set (conj (:parents env)))]) move-ops-map))
         all-uuids (set (keys move-ops-map))
         sorted-uuids
         (loop [r []
@@ -279,15 +281,15 @@
 
 (defn- check-block-pos
   "NOTE: some blocks don't have :block/order (e.g. whiteboard blocks)"
-  [db block-uuid remote-parents remote-left-uuid]
+  [db block-uuid remote-parents remote-block-order]
   (let [local-b (d/entity db [:block/uuid block-uuid])
         remote-parent-uuid (first remote-parents)]
     (cond
       (nil? local-b)
       :not-exist
 
-      (not= [remote-left-uuid remote-parent-uuid]
-            [(:block/uuid (ldb/get-left-sibling local-b)) (:block/uuid (:block/parent local-b))])
+      (not= [remote-block-order remote-parent-uuid]
+            [(:block/order local-b) (:block/uuid (:block/parent local-b))])
       :wrong-pos
 
       :else nil)))
@@ -460,13 +462,13 @@
 
 (defn- apply-remote-move-ops
   [repo conn sorted-move-ops]
-  (doseq [{:keys [parents left self] :as op-value} sorted-move-ops]
-    (let [r (check-block-pos @conn self parents left)]
+  (doseq [{:keys [parents self] block-order :block/order :as op-value} sorted-move-ops]
+    (let [r (check-block-pos @conn self parents block-order)]
       (case r
         :not-exist
-        (insert-or-move-block repo conn self parents left false op-value)
+        (insert-or-move-block repo conn self parents block-order false op-value)
         :wrong-pos
-        (insert-or-move-block repo conn self parents left true op-value)
+        (insert-or-move-block repo conn self parents block-order true op-value)
         nil                             ; do nothing
         nil)
       (update-block-attrs repo conn self op-value))))
