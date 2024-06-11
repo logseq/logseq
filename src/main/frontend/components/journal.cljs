@@ -9,12 +9,14 @@
 
 (rum/defc journal-cp < rum/reactive
   [page]
-  (let [;; Don't edit the journal title
-        repo (state/sub :git/current-repo)]
+  (let [repo (state/sub :git/current-repo)]
     (page/page {:repo repo
                 :page-name (str (:block/uuid page))})))
 
 (rum/defc journals < rum/reactive
+  {:will-unmount (fn [state]
+                   (state/set-journals-length! 1)
+                   state)}
   [latest-journals]
   [:div#journals
    (ui/infinite-list
