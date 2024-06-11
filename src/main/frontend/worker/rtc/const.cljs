@@ -1,15 +1,14 @@
 (ns frontend.worker.rtc.const
   "RTC constants/schema"
-  (:require [malli.util :as mu]
+  (:require [logseq.db.frontend.malli-schema :as db-malli-schema]
             [malli.core :as m]
-            [malli.transform :as mt]))
+            [malli.transform :as mt]
+            [malli.util :as mu]))
 
 (def block-pos-schema
   [:catn
    [:parent-uuid [:maybe :uuid]]
-   ;; TODO: use custom-string for :block/order, instead of :string
-   ;;       to ensure it's valid
-   [:order [:maybe :string]]])
+   [:order [:maybe db-malli-schema/block-order]]])
 
 (def av-schema
   [:cat
@@ -84,7 +83,7 @@
         [:op :keyword]
         [:self :uuid]
         [:parents [:sequential :uuid]]
-        [:block/order {:optional true} :string]
+        [:block/order {:optional true} db-malli-schema/block-order]
         [:hash {:optional true} :int]
         [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]
@@ -97,7 +96,7 @@
         [:op :keyword]
         [:self :uuid]
         [:parents {:optional true} [:sequential :uuid]]
-        [:block/order {:optional true} :string]
+        [:block/order {:optional true} db-malli-schema/block-order]
         [:hash {:optional true} :int]
         [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]
@@ -108,7 +107,7 @@
         [:page-name :string]
         [:block/original-name :string]
         [:db/ident {:optional true} :keyword]
-        [:block/order {:optional true} :string]
+        [:block/order {:optional true} db-malli-schema/block-order]
         [::m/default extra-attr-map-schema]]]
       [:remove-page
        [:map
