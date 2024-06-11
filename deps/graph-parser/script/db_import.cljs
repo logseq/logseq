@@ -12,7 +12,7 @@
             [babashka.cli :as cli]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.common.graph :as common-graph]
-            [logseq.tasks.db-graph.create-graph :as create-graph]
+            [logseq.outliner.db-pipeline :as db-pipeline]
             [promesa.core :as p]))
 
 (defn- build-graph-files
@@ -107,7 +107,7 @@
                           ((juxt node-path/dirname node-path/basename) graph-dir'))
                         [(node-path/join (os/homedir) "logseq" "graphs") db-graph-dir])
         file-graph' (resolve-path file-graph)
-        conn (create-graph/init-conn dir db-name)
+        conn (db-pipeline/init-conn dir db-name)
         directory? (.isDirectory (fs/statSync file-graph'))]
     (p/do!
      (if directory?

@@ -387,6 +387,20 @@ These tasks are specific to database graphs. For these tasks there is a one time
   Updated 16 block(s) for graph test-db!
   ```
 
+* `dev:db-create` - Create a DB graph given a `sqlite.build` EDN file
+
+First in Electron, create the name of the graph you want create e.g. `inferred`.
+Then:
+
+```sh
+bb dev:db-create inferred deps/db/script/create_graph/inferred.edn
+Generating 11 pages and 0 blocks ...
+Created graph inferred!
+```
+
+Finally, upload this created graph with the dev command: `Replace graph with`
+... Switch to the graph and you can use the created graph!
+
 * `dev:db-datoms` and `dev:diff-datoms` - Save a db's datoms to file and diff two datom files
 
   ```sh

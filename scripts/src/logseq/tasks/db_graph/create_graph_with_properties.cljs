@@ -2,7 +2,7 @@
   "Script that generates all the permutations of property types and cardinality.
    Also creates a page of queries that exercises most properties
    NOTE: This script is also used in CI to confirm graph creation works"
-  (:require [logseq.tasks.db-graph.create-graph :as create-graph]
+  (:require [logseq.outliner.db-pipeline :as db-pipeline]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -13,6 +13,7 @@
             ["path" :as node-path]
             ["os" :as os]
             [babashka.cli :as cli]
+            [nbb.classpath :as cp]
             [nbb.core :as nbb]))
 
 (defn- date-journal-title [date]
@@ -181,8 +182,9 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (create-graph/init-conn dir db-name {:additional-config (:config options)})
-        {:keys [init-tx block-props-tx]} (create-graph/build-blocks-tx (create-init-data))
+        conn (db-pipeline/init-conn dir db-name {:additional-config (:config options)
+                                                 :classpath (cp/get-classpath)})
+        {:keys [init-tx block-props-tx]} (db-pipeline/build-blocks-tx (create-init-data))
         existing-names (set (map :v (d/datoms @conn :avet :block/original-name)))
         conflicting-names (set/intersection existing-names (set (keep :block/original-name init-tx)))]
     (when (seq conflicting-names)
