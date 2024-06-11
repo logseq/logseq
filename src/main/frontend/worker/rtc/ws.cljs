@@ -91,7 +91,9 @@
    (take retry-count c.m/delays)
    (m/sp
      (try
-       (m/? (m/timeout (create-mws* url) open-ws-timeout))
+       (if-let [ws (m/? (m/timeout (create-mws* url) open-ws-timeout))]
+         ws
+         (throw (ex-info "open websocket timeout" {:missionary/retry true})))
        (catch js/CloseEvent e
          (throw (ex-info "failed to open websocket conn"
                          {:missionary/retry true}
