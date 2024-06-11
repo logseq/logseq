@@ -13,11 +13,11 @@ Before running [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be su
 #### Create graph scripts
 
 For database graphs, it is possible to create graphs with the
-[logseq.tasks.db-graph.create-graph](src/logseq/tasks/db_graph/create_graph.cljs)
-ns. This ns makes it easy to write scripts that create graphs by supporting a
-concise EDN map for graph generation. For example, the
-`create_graph_with_properties.cljs` script uses this ns to create a graph with
-a variety of properties:
+[logseq.outliner.db-pipeline](deps/outliner/src/logseq/outliner/db_pipeline.cljs)
+and [logseq.db.sqlite.build](deps/db/src/logseq/db/sqlite/build.cljs). These
+namespaces makes it easy to write scripts to create graphs with a concise EDN
+map. For example, the `create_graph_with_properties.cljs` script uses this ns to
+create a graph with a variety of properties:
 
 ```
 $ yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs woot
@@ -28,7 +28,7 @@ Created graph woot!
 This script creates a DB graph with blocks containing several property types for
 both single and many cardinality. It also includes queries for most of these
 properties. Read the docs in
-[logseq.tasks.db-graph.create-graph](src/logseq/tasks/db_graph/create_graph.cljs)
+[logseq.db.sqlite.build](deps/db/src/logseq/db/sqlite/build.cljs)
 for specifics on the EDN map.
 
 To create large graphs with varying size:
