@@ -2,6 +2,7 @@
  :api-namespaces [logseq.outliner.datascript-report
                   logseq.outliner.pipeline
                   logseq.outliner.core
+                  logseq.outliner.db-pipeline
                   logseq.outliner.property
                   logseq.outliner.tree]
  :report {:format :ignore}}
