@@ -49,7 +49,7 @@
 
 (def ^:private undo-op-validator (m/validator [:sequential undo-op-item-schema]))
 
-(defonce max-stack-length 500)
+(defonce max-stack-length 100)
 (defonce *undo-ops (:undo/repo->ops @worker-state/*state))
 (defonce *redo-ops (:redo/repo->ops @worker-state/*state))
 
