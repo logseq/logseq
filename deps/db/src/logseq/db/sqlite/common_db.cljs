@@ -279,9 +279,3 @@
        (string/replace "/" "_")
        (string/replace "\\" "_")
        (string/replace ":" "_"))));; windows
-
-(defn get-db-full-path
-  [graphs-dir db-name]
-  (let [db-name' (sanitize-db-name db-name)
-        graph-dir (node-path/join graphs-dir db-name')]
-    [db-name' (node-path/join graph-dir "db.sqlite")]))
