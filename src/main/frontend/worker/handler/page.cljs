@@ -236,47 +236,47 @@
                           :or {persist-op? true
                                error-handler (fn [{:keys [msg]}] (js/console.error msg))}}]
   (when (and repo page-uuid)
-    (let [page (d/entity @conn [:block/uuid page-uuid])
-          property? (contains? (:block/type page) "property")
-          page-name (:block/name page)
-          blocks (:block/_page page)
-          truncate-blocks-tx-data (mapv
-                                   (fn [block]
-                                     [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
-                                   blocks)
-          db-based? (sqlite-util/db-based-graph? repo)]
-      (if (ldb/built-in? page)
-        (do
-          (error-handler {:msg "Built-in page cannot be deleted"})
-          false)
-        (if-let [msg (and db-based? (page-unable-to-delete conn page))]
+    (when-let [page (d/entity @conn [:block/uuid page-uuid])]
+      (let [property? (contains? (:block/type page) "property")
+            page-name (:block/name page)
+            blocks (:block/_page page)
+            truncate-blocks-tx-data (mapv
+                                     (fn [block]
+                                       [:db.fn/retractEntity [:block/uuid (:block/uuid block)]])
+                                     blocks)
+            db-based? (sqlite-util/db-based-graph? repo)]
+        (if (ldb/built-in? page)
           (do
-            (ldb/transact! conn truncate-blocks-tx-data
-                           {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
-            (error-handler msg)
+            (error-handler {:msg "Built-in page cannot be deleted"})
             false)
-          (let [db @conn
-                file (gp-db/get-page-file db page-name)
-                file-path (:file/path file)
-                delete-file-tx (when file
-                                 [[:db.fn/retractEntity [:file/path file-path]]])
-                delete-page-tx (concat (db-refs->page repo page)
-                                       [[:db.fn/retractEntity (:db/id page)]])
+          (if-let [msg (and db-based? (page-unable-to-delete conn page))]
+            (do
+              (ldb/transact! conn truncate-blocks-tx-data
+                             {:outliner-op :truncate-page-blocks :persist-op? persist-op?})
+              (error-handler msg)
+              false)
+            (let [db @conn
+                  file (when-not db-based? (gp-db/get-page-file db page-name))
+                  file-path (:file/path file)
+                  delete-file-tx (when file
+                                   [[:db.fn/retractEntity [:file/path file-path]]])
+                  delete-page-tx (concat (db-refs->page repo page)
+                                         [[:db.fn/retractEntity (:db/id page)]])
 
                 ;; TODO: is this still needed?
-                delete-property-pairs-tx (when property?
-                                           (map (fn [d] [:db.fn/retractEntity (:e d)]) (d/datoms db :avet (:db/ident page))))
-                tx-data (concat truncate-blocks-tx-data
-                                delete-page-tx
-                                delete-file-tx
-                                delete-property-pairs-tx)]
+                  delete-property-pairs-tx (when property?
+                                             (map (fn [d] [:db.fn/retractEntity (:e d)]) (d/datoms db :avet (:db/ident page))))
+                  tx-data (concat truncate-blocks-tx-data
+                                  delete-page-tx
+                                  delete-file-tx
+                                  delete-property-pairs-tx)]
 
-            (ldb/transact! conn tx-data
-                           (cond-> {:outliner-op :delete-page
-                                    :deleted-page (str (:block/uuid page))
-                                    :persist-op? persist-op?}
-                             rename?
-                             (assoc :real-outliner-op :rename-page)
-                             file-path
-                             (assoc :file-path file-path)))
-            true))))))
+              (ldb/transact! conn tx-data
+                             (cond-> {:outliner-op :delete-page
+                                      :deleted-page (str (:block/uuid page))
+                                      :persist-op? persist-op?}
+                               rename?
+                               (assoc :real-outliner-op :rename-page)
+                               file-path
+                               (assoc :file-path file-path)))
+              true)))))))
