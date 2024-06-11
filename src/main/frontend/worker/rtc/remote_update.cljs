@@ -478,11 +478,8 @@
     (doseq [{:keys [self _page-name]
              original-name :block/original-name
              :as op-value} update-page-ops]
-      (let [create-opts {:create-first-block? false
-                         :uuid self
-                         :persist-op? false
-                         :create-even-page-exists? true}
-            [_ x y] (worker-page/create! repo conn config (ldb/read-transit-str original-name) create-opts)]
+      (let [create-opts {:uuid self}
+            [_ x y] (worker-page/rtc-create-page! conn config (ldb/read-transit-str original-name) create-opts)]
         ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
         ;; if there's already existing same name page
         (prn :debug-create-page x y self)

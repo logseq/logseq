@@ -17,7 +17,7 @@
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.class :as db-class]))
 
-(defn properties-block
+(defn file-based-properties-block
   [repo conn config date-formatter properties format page]
   (let [content (gp-property/insert-properties repo format "" properties)
         refs (gp-block/get-page-refs-from-properties properties @conn date-formatter config)]
@@ -55,7 +55,6 @@
             (into (vals property-vals-tx-m))
             true
             (conj (merge {:block/uuid (:block/uuid page)}
-                       ;; FIXME: Add refs for properties?
                          properties
                          (db-property-build/build-properties-with-ref-values property-vals-tx-m)))))
         (let [file-page (merge page'
@@ -63,7 +62,7 @@
           (if (and (seq properties)
                    (not whiteboard?)
                    (ldb/page-empty? @conn (:block/name page)))
-            [file-page (properties-block repo conn config date-formatter properties format page-entity)]
+            [file-page (file-based-properties-block repo conn config date-formatter properties format page-entity)]
             [file-page]))))))
 
 (defn get-title-and-pagename
@@ -76,6 +75,120 @@
         page-name  (common-util/page-name-sanity-lc title)]
     [title page-name]))
 
+(defn- build-first-block-tx
+  [page-uuid format]
+  (let [page-id [:block/uuid page-uuid]]
+    [(sqlite-util/block-with-timestamps
+      {:block/uuid (ldb/new-block-id)
+       :block/page page-id
+       :block/parent page-id
+       :block/order (db-order/gen-key nil nil)
+       :block/content ""
+       :block/format format})]))
+
+(defn- file-based-create!
+  [repo conn config title {:keys [create-first-block? format properties uuid persist-op? whiteboard? class? today-journal?]
+                           :or   {create-first-block?      true
+                                  format                   nil
+                                  properties               nil
+                                  uuid                     nil
+                                  persist-op?              true}
+                           :as options}]
+  (let [date-formatter (common-config/get-date-formatter config)
+        split-namespace? (not (or (string/starts-with? title "hls__")
+                                  (date/valid-journal-title? date-formatter title)))
+        [title page-name] (get-title-and-pagename title)
+        with-uuid? (if (uuid? uuid) uuid true)]
+    (when-not (ldb/get-page @conn page-name)
+      (let [pages    (if split-namespace?
+                       (common-util/split-namespace-pages title)
+                       [title])
+            format   (or format (common-config/get-preferred-format config))
+            pages    (map (fn [page]
+                            ;; only apply uuid to the deepest hierarchy of page to create if provided.
+                            (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter :class? class?)
+                                (assoc :block/format format)))
+                          pages)
+            txs      (->> pages
+                            ;; for namespace pages, only last page need properties
+                          drop-last
+                          (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
+                          (remove nil?))
+            txs      (map-indexed (fn [i page]
+                                    (if (zero? i)
+                                      page
+                                      (assoc page :block/namespace
+                                             [:block/uuid (:block/uuid (nth txs (dec i)))])))
+                                  txs)
+            page-uuid (:block/uuid (last pages))
+            page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
+            page-txs (if (seq txs)
+                       (update page-txs 0
+                               (fn [p]
+                                 (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
+                       page-txs)
+            first-block-tx (when (and
+                                  create-first-block?
+                                  (not (or whiteboard? class?))
+                                  page-txs)
+                             (build-first-block-tx (:block/uuid (first page-txs)) format))
+            txs      (concat
+                      txs
+                      page-txs
+                      first-block-tx)
+            [page-uuid result] (when (seq txs)
+                                 [page-uuid (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
+                                                                             :outliner-op :create-page}
+                                                                      today-journal?
+                                                                      (assoc :create-today-journal? true
+                                                                             :today-journal-name page-name)))])]
+        [result page-name page-uuid]))))
+
+(defn db-based-create!
+  [repo conn config title
+   {:keys [create-first-block? properties uuid persist-op? whiteboard? class? today-journal?]
+    :or   {create-first-block?      true
+           properties               nil
+           uuid                     nil
+           persist-op?              true}
+    :as options}]
+  (let [date-formatter (common-config/get-date-formatter config)
+        [title page-name] (get-title-and-pagename title)
+        with-uuid? (if (uuid? uuid) uuid true)]
+    (when-not (ldb/get-page @conn page-name)
+      (let [format    :markdown
+            page      (-> (gp-block/page-name->map title with-uuid? @conn true date-formatter :class? class?)
+                          (assoc :block/format format))
+            page-uuid (:block/uuid page)
+            page-txs  (build-page-tx repo conn config date-formatter format properties page (select-keys options [:whiteboard? :class? :tags]))
+            first-block-tx (when (and
+                                  create-first-block?
+                                  (not (or whiteboard? class?))
+                                  page-txs)
+                             (build-first-block-tx (:block/uuid (first page-txs)) format))
+            txs      (concat
+                      page-txs
+                      first-block-tx)
+            [page-uuid result] (when (seq txs)
+                                 [page-uuid (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
+                                                                             :outliner-op :create-page}
+                                                                      today-journal?
+                                                                      (assoc :create-today-journal? true
+                                                                             :today-journal-name page-name)))])]
+        [result page-name page-uuid]))))
+
+(defn rtc-create-page!
+  [conn config title {:keys [uuid]}]
+  (assert (uuid? uuid) (str "rtc-create-page! `uuid` is not a uuid " uuid))
+  (let [date-formatter (common-config/get-date-formatter config)
+        [title page-name] (get-title-and-pagename title)
+        page      (-> (gp-block/page-name->map title uuid @conn true date-formatter
+                                               {:skip-existing-page-check? true})
+                      (assoc :block/format :markdown))
+        result (ldb/transact! conn [page] {:persist-op? false
+                                           :outliner-op :create-page})]
+    [result page-name (:block/uuid page)]))
+
 (defn create!
   "Create page. Has the following options:
 
@@ -86,86 +199,11 @@
    * :tags                     - tag uuids that are added to :block/tags
    * :persist-op?              - when true, add an update-page op
    * :properties               - properties to add to the page
-   * :create-even-page-exists? - create page even same-name page exists
-   TODO: Add other options"
-  [repo conn config title
-   & {:keys [create-first-block? format properties uuid persist-op? whiteboard? class? today-journal?
-             create-even-page-exists?]
-      :or   {create-first-block?      true
-             format                   nil
-             properties               nil
-             uuid                     nil
-             persist-op?              true
-             create-even-page-exists? false}
-      :as options}]
-  (let [db-based? (ldb/db-based-graph? @conn)
-        date-formatter (common-config/get-date-formatter config)
-        split-namespace? (and
-                          (not db-based?)
-                          (not (or (string/starts-with? title "hls__")
-                                   (date/valid-journal-title? date-formatter title))))
-        [title page-name] (get-title-and-pagename title)
-        with-uuid? (if (uuid? uuid) uuid true)
-        [page-uuid result] (when (or create-even-page-exists? (ldb/page-empty? @conn page-name))
-                             (let [pages    (if split-namespace?
-                                              (common-util/split-namespace-pages title)
-                                              [title])
-                                   format   (or format (common-config/get-preferred-format config))
-                                   pages    (map (fn [page]
-                                                   ;; only apply uuid to the deepest hierarchy of page to create if provided.
-                                                   (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter :class? class?)
-                                                       (assoc :block/format format)))
-                                                 pages)
-                                   txs      (when-not db-based?
-                                              (->> pages
-                                                   ;; for namespace pages, only last page need properties
-                                                   drop-last
-                                                   (mapcat #(build-page-tx repo conn config date-formatter format nil % {}))
-                                                   (remove nil?)))
-                                   txs      (when-not db-based?
-                                              (map-indexed (fn [i page]
-                                                             (if (zero? i)
-                                                               page
-                                                               (assoc page :block/namespace
-                                                                      [:block/uuid (:block/uuid (nth txs (dec i)))])))
-                                                           txs))
-                                   txs      (when-not db-based?
-                                              (map-indexed (fn [i page]
-                                                             (if (zero? i)
-                                                               page
-                                                               (assoc page :block/namespace
-                                                                      [:block/uuid (:block/uuid (nth txs (dec i)))])))
-                                                           txs))
-                                   page-uuid (:block/uuid (last pages))
-                                   page-txs (build-page-tx repo conn config date-formatter format properties (last pages) (select-keys options [:whiteboard? :class? :tags]))
-                                   page-txs (if (and (seq txs) (not db-based?))
-                                              (update page-txs 0
-                                                      (fn [p]
-                                                        (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
-                                              page-txs)
-                                   first-block-tx (when (and
-                                                         create-first-block?
-                                                         (not (or whiteboard? class?))
-                                                         page-txs)
-                                                    (let [page-id [:block/uuid (:block/uuid (first page-txs))]]
-                                                      [(sqlite-util/block-with-timestamps
-                                                        {:block/uuid (ldb/new-block-id)
-                                                         :block/page page-id
-                                                         :block/parent page-id
-                                                         :block/order (db-order/gen-key nil nil)
-                                                         :block/content ""
-                                                         :block/format format})]))
-                                   txs      (concat
-                                             txs
-                                             page-txs
-                                             first-block-tx)]
-                               (when (seq txs)
-                                 [page-uuid (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
-                                                                             :outliner-op :create-page}
-                                                                      today-journal?
-                                                                      (assoc :create-today-journal? true
-                                                                             :today-journal-name page-name)))])))] ;; FIXME: prettier validation
-    [result page-name page-uuid]))
+  TODO: Add other options"
+  [repo conn config title & options]
+  (if (ldb/db-based-graph? @conn)
+    (db-based-create! repo conn config title options)
+    (file-based-create! repo conn config title options)))
 
 (defn db-refs->page
   "Replace [[page name]] with page name"
