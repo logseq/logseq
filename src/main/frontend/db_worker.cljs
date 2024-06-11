@@ -735,7 +735,7 @@
   (let [^js obj (DBWorker.)]
     (worker-state/set-worker-object! obj)
     (file/<ratelimit-file-writes!)
-    (js/setInterval #(.postMessage js/self "keepAlive") (* 1000 25))
+    (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))
     (Comlink/expose obj)))
 
 (comment
