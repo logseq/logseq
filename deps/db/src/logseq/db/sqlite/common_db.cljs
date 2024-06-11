@@ -1,7 +1,6 @@
 (ns logseq.db.sqlite.common-db
   "Common sqlite db fns for browser and node"
   (:require [datascript.core :as d]
-            ["path" :as node-path]
             [clojure.string :as string]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util.date-time :as date-time-util]
