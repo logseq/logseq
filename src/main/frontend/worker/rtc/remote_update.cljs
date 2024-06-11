@@ -227,8 +227,7 @@
 (defn- apply-remote-remove-page-ops
   [repo conn remove-page-ops]
   (doseq [op remove-page-ops]
-    (when-let [page-name (:block/name (d/entity @conn [:block/uuid (:block-uuid op)]))]
-      (worker-page/delete! repo conn page-name {:persist-op? false}))))
+    (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
 
 (defn- filter-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,
@@ -299,14 +298,14 @@
   (let [db @conn
         first-remote-parent (first parents)]
     (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
-      (let [page-name (:block/name local-parent)
+      (let [page-id (:db/id local-parent)
             properties* (ldb/read-transit-str properties)
             shape-property-id (db-property-util/get-pid repo :logseq.property.tldraw/shape)
             shape (and (map? properties*)
                        (get properties* shape-property-id))]
-        (assert (some? page-name) local-parent)
+        (assert (some? page-id) local-parent)
         (assert (some? shape) properties*)
-        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-name)])))))
+        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-id)])))))
 
 (def ^:private update-op-watched-attrs
   #{:block/content
