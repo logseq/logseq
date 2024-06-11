@@ -394,18 +394,6 @@
   [db property-id]
   (:class/_schema.properties (d/entity db property-id)))
 
-(defn get-block-property-values
-  "Get blocks which have this property."
-  [db property-uuid]
-  (d/q
-   '[:find ?b ?v
-     :in $ ?property-uuid
-     :where
-     [?b :block/properties ?p]
-     [(get ?p ?property-uuid) ?v]
-     [(some? ?v)]]
-   db
-   property-uuid))
 
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
