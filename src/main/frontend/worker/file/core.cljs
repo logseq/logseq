@@ -1,5 +1,5 @@
 (ns frontend.worker.file.core
-  "Save file to disk"
+  "Save file to disk. Used by both file and DB graphs"
   (:require [clojure.string :as string]
             [frontend.worker.file.util :as wfu]
             [logseq.graph-parser.property :as gp-property]
@@ -122,6 +122,7 @@
           (recur r level))))))
 
 (defn tree->file-content
+  "Used by both file and DB graphs for export and for file-graph specific features"
   [repo db tree opts context]
   (->> (tree->file-content-aux repo db tree opts context) (string/join "\n")))
 
