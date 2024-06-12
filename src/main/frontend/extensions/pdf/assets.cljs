@@ -271,8 +271,8 @@
 (defn goto-annotations-page!
   ([current] (goto-annotations-page! current nil))
   ([current id]
-   (when-let [name (:key current)]
-     (rfe/push-state :page {:name (str "hls__" name)} (if id {:anchor (str "block-content-" + id)} nil)))))
+   (when-let [e (some->> (:key current) (str "hls__") (db-model/get-page))]
+     (rfe/push-state :page {:name (str (:block/uuid e))} (if id {:anchor (str "block-content-" + id)} nil)))))
 
 (defn open-lightbox
   [e]
