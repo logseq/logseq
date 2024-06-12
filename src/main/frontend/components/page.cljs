@@ -50,7 +50,7 @@
             [frontend.extensions.graph.pixi :as pixi]
             [logseq.db :as ldb]
             [frontend.handler.property.util :as pu]
-            [frontend.components.hierarchy :as hierarchy]))
+            [frontend.components.file-based.hierarchy :as hierarchy]))
 
 (defn- get-page-name
   [state]

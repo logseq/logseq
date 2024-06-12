@@ -6,7 +6,6 @@
             [logseq.common.util.page-ref :as page-ref]
             [frontend.worker.file.util :as wfu]
             [frontend.worker.file.page-rename :as page-rename]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]
             [logseq.graph-parser.text :as text]
@@ -139,7 +138,7 @@
 (defn- rename-namespace-pages!
   "Original names (unsanitized only)"
   [repo conn config old-name new-name]
-  (let [pages (ldb/get-namespace-pages @conn old-name {:db-graph? (sqlite-util/db-based-graph? repo)})
+  (let [pages (ldb/get-namespace-pages @conn old-name {})
         page (d/pull @conn '[*] [:block/name (common-util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
     (doseq [{:block/keys [name original-name]} pages]

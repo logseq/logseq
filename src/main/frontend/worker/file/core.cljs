@@ -47,7 +47,7 @@
     :else
     content))
 
-(defn transform-content
+(defn- transform-content
   [repo db {:block/keys [collapsed? format pre-block? content page properties] :as b} level {:keys [heading-to-list?]} context]
   (let [block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
                                   (not (string/includes? content (str (:block/uuid b))))
@@ -157,7 +157,7 @@
 
 (defn- remove-transit-ids [block] (dissoc block :db/id :block/file))
 
-(defn save-tree-aux!
+(defn- save-tree-aux!
   [repo db page-block tree blocks-just-deleted? context request-id]
   (let [page-block (d/pull db '[*] (:db/id page-block))
         file-db-id (-> page-block :block/file :db/id)

@@ -15,6 +15,7 @@
         ["logseq.db.sqlite." "logseq.db.frontend.property" "logseq.db.frontend.malli-schema"
          "electron.db"
          "frontend.handler.db-based."
+         "frontend.worker.handler.page.db-based"
          "frontend.components.property" "frontend.components.class" "frontend.components.db-based"]))
 
 (def file-graph-ns
@@ -22,13 +23,16 @@
   (mapv escape-shell-regex
         ["frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
+         "frontend.worker.handler.page.file-based" "frontend.worker.file"
          "frontend.fs"
          "frontend.components.file-sync"
+         "frontend.components.file-based"
          "frontend.util.fs"]))
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
   ["src/main/frontend/handler/db_based"
+   "src/main/frontend/worker/handler/page/db_based"
    "src/main/frontend/components/class.cljs"
    "src/main/frontend/components/property.cljs"
    "src/main/frontend/components/property"
@@ -38,8 +42,13 @@
 (def file-graph-paths
   "Paths _only_ for file graphs"
   ["src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
+   "src/main/frontend/worker/handler/page/file_based"
+   ;; TODO: Enable when fixed
+   #_"src/main/frontend/worker/file"
+   "src/main/frontend/worker/file.cljs"
    "src/main/frontend/fs"
    "src/main/frontend/components/file_sync.cljs"
+   "src/main/frontend/components/file_based"
    "src/main/frontend/util/fs.cljs"])
 
 (defn- validate-db-ns-not-in-file
@@ -84,12 +93,27 @@
                               "block/properties :"
                               ;; anything org mode
                               "org"
+                              "pre-block"
+                              "namespace"
                               "db/get-page"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
-      (println "The following files should not have contained file specific attributes:")
+      (println "The following files should not have contained file specific concepts:")
+      (println (:out res))
+      (System/exit 1))))
+
+(defn- validate-db-concepts-not-in-file
+  []
+  (let [db-concepts
+        ;; from logseq.db.frontend.schema
+        ["closed-value" "schema.properties" "schema.classes" "class/parent"]
+        res (apply shell {:out :string :continue true}
+                   "git grep -E" (str "(" (string/join "|" db-concepts) ")")
+                   file-graph-paths)]
+    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+      (println "The following files should not have contained db specific concepts:")
       (println (:out res))
       (System/exit 1))))
 
@@ -99,5 +123,6 @@
   (validate-db-ns-not-in-file)
   (validate-file-ns-not-in-db)
   (validate-file-concepts-not-in-db)
+  (validate-db-concepts-not-in-file)
   (validate-multi-graph-fns-not-in-file-or-db)
   (println "✅ All checks passed!"))
