@@ -862,6 +862,10 @@ input::-webkit-inner-spin-button {
         cursor: alias;
       }
     }
+
+    .block-title-wrap {
+      @apply block;
+    }
   }
 }
 
