@@ -23,7 +23,9 @@
   (mapv escape-shell-regex
         ["frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
-         "frontend.worker.handler.page.file-based" "frontend.worker.file"
+         "frontend.worker.handler.page.file-based"
+         ;; Want to only specify this ns and not the ones under it but don't have a way yet
+         "frontend.worker.file"
          "frontend.fs"
          "frontend.components.file-sync"
          "frontend.components.file-based"
@@ -42,10 +44,7 @@
 (def file-graph-paths
   "Paths _only_ for file graphs"
   ["src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
-   "src/main/frontend/worker/handler/page/file_based"
-   ;; TODO: Enable when fixed
-   #_"src/main/frontend/worker/file"
-   "src/main/frontend/worker/file.cljs"
+   "src/main/frontend/worker/handler/page/file_based" "src/main/frontend/worker/file.cljs"
    "src/main/frontend/fs"
    "src/main/frontend/components/file_sync.cljs"
    "src/main/frontend/components/file_based"
