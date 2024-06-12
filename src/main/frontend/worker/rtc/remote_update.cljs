@@ -202,6 +202,9 @@
           (transact-db! :move-blocks repo conn [b] local-parent false)
           (transact-db! :insert-no-order-blocks conn [[block-uuid first-remote-parent]]))
 
+        ([true false false] [true false true] [true true false] [true true true])
+        (throw (ex-info "Not implemented yet for whiteboard" {:op-value op-value}))
+
         (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid
                                                       :remote-parents remote-parents
                                                       :remote-block-order remote-block-order
@@ -229,35 +232,49 @@
   (doseq [op remove-page-ops]
     (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
 
+
+(defn- diff-remote-attr-map-by-local-av-coll
+  [attr-map av-coll]
+  (let [a->add->v+t (reduce
+                     (fn [m [a v t add?]]
+                       (assoc-in m [a add?] [v t]))
+                     {} av-coll)]
+    (into {}
+          (filter
+           (fn [[remote-a _remote-v]]
+             (let [v+t (get-in a->add->v+t [remote-a true])]
+               (nil? v+t))))
+          attr-map)))
+
 (defn- filter-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,
   these updates maybe not needed, because this client just updated some of these blocks,
   so we need to filter these just-updated blocks out, according to the unpushed-local-ops"
   [affected-blocks-map local-unpushed-ops]
-  ;; (assert (op-mem-layer/ops-coercer local-unpushed-ops) local-unpushed-ops)
+  (assert (op-mem-layer/ops-coercer local-unpushed-ops) local-unpushed-ops)
   (reduce
    (fn [affected-blocks-map local-op]
-     (case (first local-op)
-       "move"
-       (let [block-uuid (:block-uuid (second local-op))
-             remote-op (get affected-blocks-map block-uuid)]
-         (case (:op remote-op)
-           :remove (dissoc affected-blocks-map (:block-uuid remote-op))
-           :move (dissoc affected-blocks-map (:self remote-op))
-           ;; default
-           affected-blocks-map))
+     (let [local-op-value (last local-op)]
+       (case (first local-op)
+         :move
+         (let [block-uuid (:block-uuid local-op-value)
+               remote-op (get affected-blocks-map block-uuid)]
+           (case (:op remote-op)
+             :remove (dissoc affected-blocks-map (:block-uuid remote-op))
+             :move (dissoc affected-blocks-map (:self remote-op))
+             ;; default
+             affected-blocks-map))
 
-       "update"
-       (let [block-uuid (:block-uuid (second local-op))
-             local-updated-attr-set (set (keys (:updated-attrs (second local-op))))]
-         (if-let [remote-op (get affected-blocks-map block-uuid)]
-           (assoc affected-blocks-map block-uuid
-                  (if (#{:update-attrs :move} (:op remote-op))
-                    (apply dissoc remote-op local-updated-attr-set)
-                    remote-op))
-           affected-blocks-map))
-       ;;else
-       affected-blocks-map))
+         :update
+         (let [block-uuid (:block-uuid local-op-value)]
+           (if-let [remote-op (get affected-blocks-map block-uuid)]
+             (assoc affected-blocks-map block-uuid
+                    (if (#{:update-attrs :move} (:op remote-op))
+                      (diff-remote-attr-map-by-local-av-coll remote-op (:av-coll local-op-value))
+                      remote-op))
+             affected-blocks-map))
+         ;;else
+         affected-blocks-map)))
    affected-blocks-map local-unpushed-ops))
 
 (defn- affected-blocks->diff-type-ops
