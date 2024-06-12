@@ -332,7 +332,7 @@
 
 (def block-attrs
   "Common attributes for normal blocks"
-  [[:block/content :string]
+  [[:block/content [:or :string :double]]
    [:block/parent :int]
    [:block/order block-order]
    ;; refs
@@ -362,7 +362,7 @@
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
-     [:block/content :string]
+     [:block/content [:or :string :double]]
      [:block/closed-value-property {:optional true} [:set :int]]
      [:block/schema {:optional true}
       [:map

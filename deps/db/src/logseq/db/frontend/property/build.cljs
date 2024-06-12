@@ -64,7 +64,7 @@
   [block property value]
   (-> {:block/uuid (d/squuid)
        :block/format :markdown
-       :block/content (str value)
+       :block/content value
        :block/page (if (:block/page block)
                      (:db/id (:block/page block))
                      ;; page block
