@@ -1,4 +1,4 @@
-(ns frontend.components.hierarchy
+(ns frontend.components.file-based.hierarchy
   (:require [clojure.string :as string]
             [frontend.components.block :as block]
             [frontend.db :as db]

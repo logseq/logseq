@@ -2,9 +2,6 @@
   "DB based page rename"
   (:require [datascript.core :as d]
             [clojure.string :as string]
-            [frontend.worker.file.util :as wfu]
-            [frontend.worker.file.page-rename :as page-rename]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]))
 
@@ -21,7 +18,6 @@
        (let [db @conn
              to-id (:db/id to-page)
              from-id (:db/id from-page)
-             db-based? (sqlite-util/db-based-graph? repo)
              datoms (d/datoms @conn :avet :block/page from-id)
              block-eids (mapv :e datoms)
              blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/parent] block-eids)
@@ -35,9 +31,7 @@
 
                                        (= (:block/parent block) {:db/id from-id})
                                        (assoc :block/parent {:db/id to-id})))) blocks)
-             replace-ref-tx-data (if db-based?
-                                   (replace-page-ref from-page to-page)
-                                   (page-rename/replace-page-ref db config from-page to-page-name))
+             replace-ref-tx-data (replace-page-ref from-page to-page)
              tx-data (concat blocks-tx-data replace-ref-tx-data)]
 
          (rename-page-aux repo conn config from-page-name to-page-name
@@ -46,69 +40,31 @@
 
          (worker-page/delete! repo conn (:block/uuid from-page) {:rename? true}))))))
 
-(defn- compute-new-file-path
-  "Construct the full path given old full path and the file sanitized body.
-   Ext. included in the `old-path`."
-  [old-path new-file-name-body]
-  (let [result (string/split old-path "/")
-        ext (last (string/split (last result) "."))
-        new-file (str new-file-name-body "." ext)
-        parts (concat (butlast result) [new-file])]
-    (common-util/string-join-path parts)))
-
-(defn- update-file-tx
-  [page new-page-name]
-  (let [file (:block/file page)]
-    (when (and file (not (ldb/journal-page? page)))
-      (let [old-path (:file/path file)
-            new-file-name (wfu/file-name-sanity new-page-name) ;; w/o file extension
-            new-path (compute-new-file-path old-path new-file-name)]
-        {:old-path old-path
-         :new-path new-path
-         :tx-data [{:db/id (:db/id file)
-                    :file/path new-path}]}))))
-
 (defn- rename-page-aux
   "Only accepts unsanitized page names"
-  [repo conn config page new-name & {:keys [merge? other-tx]}]
-  (let [db                  @conn
-        old-page-name       (:block/original-name page)
-        new-page-name       (common-util/page-name-sanity-lc new-name)
-        db-based?           (sqlite-util/db-based-graph? repo)]
+  [repo conn page new-name & {:keys [merge? other-tx]}]
+  (let [old-page-name       (:block/original-name page)
+        new-page-name       (common-util/page-name-sanity-lc new-name)]
     (when (and repo page)
       (let [page-txs            (when-not merge?
                                   [{:db/id               (:db/id page)
                                     :block/name          new-page-name
                                     :block/original-name new-name}])
-            {:keys [old-path new-path tx-data]} (update-file-tx page new-name)
-            txs (concat page-txs
-                        other-tx
-                        (when-not db-based?
-                          (->>
-                           (concat
-                            ;;  update page refes in block content when ref name changes
-                            (page-rename/replace-page-ref db config page new-name)
-                            ;; update file path
-                            tx-data)
-
-                           (remove nil?))))]
+            txs (concat page-txs other-tx)]
         (ldb/transact! conn txs {:outliner-op :rename-page
                                  :data (cond->
                                         {:page-id (:db/id page)
                                          :old-name old-page-name
-                                         :new-name new-name}
-                                         (and old-path new-path)
-                                         (merge {:old-path old-path
-                                                 :new-path new-path}))})))))
+                                         :new-name new-name})})))))
 
 (defn- rename-page!
   "Original names (unsanitized only)"
-  [repo conn config page new-name]
-  (rename-page-aux repo conn config page new-name)
+  [repo conn page new-name]
+  (rename-page-aux repo conn page new-name)
   (println "Renamed " (:block/original-name page) " to " new-name))
 
 (defn rename!
-  [repo conn config page-uuid new-name & {:keys [persist-op?]
+  [repo conn _config page-uuid new-name & {:keys [persist-op?]
                                           :or {persist-op? true}}]
   (let [db @conn]
     (when-let [page-e (d/entity db [:block/uuid page-uuid])]
@@ -116,7 +72,7 @@
             new-name      (string/trim new-name)
             old-page-name (common-util/page-name-sanity-lc old-name)
             new-page-name (common-util/page-name-sanity-lc new-name)
-            new-page-exists? (when-let [p (ldb/get-page db new-name)]
+            new-page-exists? (when-let [p (ldb/get-case-page db new-name)]
                                (not= (:db/id p) (:db/id page-e)))
             name-changed? (not= old-name new-name)]
         (cond
@@ -136,4 +92,4 @@
                              :block/original-name new-name}]
                            {:persist-op? persist-op?
                             :outliner-op :rename-page})
-            (rename-page! repo conn config page-e new-name)))))))
+            (rename-page! repo conn page-e new-name)))))))
