@@ -1102,16 +1102,32 @@
        {:data-href s
         :on-click (fn [^js e]
                     (when-let [s (some-> (.-target e) (.-dataset) (.-href))]
-                      (p/let [href (if (or (mobile-util/native-platform?) (util/electron?))
-                                     s
-                                     (assets-handler/make-asset-url s))]
-                        (when-let [current (pdf-assets/inflate-asset s {:href href})]
-                         (state/set-current-pdf! current)
-                         (util/stop e)))))
+                      (let [load$ (fn []
+                                    (p/let [href (if (or (mobile-util/native-platform?) (util/electron?))
+                                                   s
+                                                   (assets-handler/make-asset-url s))]
+                                      (when-let [current (pdf-assets/inflate-asset s {:href href})]
+                                        (state/set-current-pdf! current)
+                                        (util/stop e))))]
+                        (-> (load$)
+                          (p/catch
+                            (fn [^js _e]
+                              ;; load pdf asset to indexed db
+                              (p/let [[handle] (js/window.showOpenFilePicker
+                                                 (bean/->js {:multiple false :startIn "documents" :types [{:accept {"application/pdf" [".pdf"]}}]}))
+                                      file (.getFile handle)
+                                      buffer (.arrayBuffer file)]
+                                (when-let [content (some-> buffer (js/Uint8Array.))]
+                                  (let [repo (state/get-current-repo)
+                                        file-rpath (string/replace s #"^[.\/\\]*assets[\/\\]+" "assets/")
+                                        dir (config/get-repo-dir repo)]
+                                    (-> (fs/write-file! repo dir file-rpath content nil)
+                                      (p/then load$)))))
+                              (js/console.error _e)))))))
         :draggable true
         :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" s)}
        (or label-text
-           (->elem :span (map-inline config label)))]
+         (->elem :span (map-inline config label)))]
 
       (contains? config/doc-formats ext)
       (asset-link config label-text s metadata full_text)
@@ -1133,7 +1149,7 @@
 
     ;; FIXME: same headline, see more https://orgmode.org/manual/Internal-Links.html
     (and (= \* (first s))
-         (not= \* (last s)))
+      (not= \* (last s)))
     (->elem :a {:on-click #(route-handler/jump-to-anchor! (mldoc/anchorLink (subs s 1)))} (subs s 1))
 
     (block-ref/block-ref? s)
@@ -1147,7 +1163,7 @@
     (->elem :a {:href s
                 :data-href s
                 :target "_blank"}
-            (map-inline config label))
+      (map-inline config label))
 
     (show-link? config metadata s full_text)
     (media-link config url s label metadata full_text)
@@ -1163,9 +1179,9 @@
                  :else
                  (relative-assets-path->absolute-path s))]
       (->elem
-       :a
-       (cond->
-        {:href      (path/path-join "file://" path)
+        :a
+        (cond->
+          {:href (path/path-join "file://" path)
          :data-href path
          :target    "_blank"}
          title
