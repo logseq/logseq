@@ -22,7 +22,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.db-based.property :as db-p]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.file-based.editor :as file-editor-handler]
@@ -69,7 +69,6 @@
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.property :as outliner-property]))
 
 ;; FIXME: should support multiple images concurrently uploading
@@ -584,7 +583,7 @@
                                                               :keep-uuid? true
                                                               :ordered-list? ordered-list?
                                                               :replace-empty-target? replace-empty-target?})
-                (db-p/set-block-properties! (:block/uuid new-block) properties))
+                (db-property-handler/set-block-properties! (:block/uuid new-block) properties))
               (when edit-block?
                 (if (and replace-empty-target?
                       (string/blank? (:block/content last-block)))
