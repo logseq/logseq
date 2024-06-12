@@ -41,7 +41,7 @@
       (when (seq block-path-refs-tx)
         (d/transact! conn block-path-refs-tx {:pipeline-replace? true})))))
 
-(defn add-listener
+(defn ^:api add-listener
   "Adds a listener to the datascript connection to add additional changes from outliner.pipeline"
   [conn]
   (d/listen! conn :pipeline-updates (fn pipeline-updates [tx-report]
