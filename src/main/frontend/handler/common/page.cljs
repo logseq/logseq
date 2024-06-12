@@ -61,10 +61,18 @@
            _result p]
      (when redirect?
        (route-handler/redirect-to-page! page-uuid))
-     (let [page (db/get-page page-uuid)]
-       (when-let [first-block (ldb/get-first-child @conn (:db/id page))]
-         (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
-       page))))
+     (let [page (db/get-page (or page-uuid title))]
+       (if-let [first-block (ldb/get-first-child @conn (:db/id page))]
+         (do
+           (block-handler/edit-block! first-block :max {:container-id :unknown-container})
+           page)
+         ;; create first block and then focus it
+         (p/let [blocks-tx (worker-page/build-first-block-tx (:block/uuid page)
+                                                             (or (:format options) (common-config/get-preferred-format config)))
+                 _ (ldb/transact! conn blocks-tx {:outliner-op :insert-blocks})
+                 first-block (ldb/get-first-child @conn (:db/id page))]
+           (block-handler/edit-block! first-block :max {:container-id :unknown-container})
+           page))))))
 
 ;; favorite fns
 ;; ============

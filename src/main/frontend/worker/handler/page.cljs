@@ -75,7 +75,7 @@
         page-name  (common-util/page-name-sanity-lc title)]
     [title page-name]))
 
-(defn- build-first-block-tx
+(defn build-first-block-tx
   [page-uuid format]
   (let [page-id [:block/uuid page-uuid]]
     [(sqlite-util/block-with-timestamps
