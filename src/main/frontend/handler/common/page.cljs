@@ -8,6 +8,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.handler.page.db-based.page :as db-worker-page]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [frontend.handler.ui :as ui-handler]
@@ -67,8 +68,8 @@
            (block-handler/edit-block! first-block :max {:container-id :unknown-container})
            page)
          ;; create first block and then focus it
-         (p/let [blocks-tx (worker-page/build-first-block-tx (:block/uuid page)
-                                                             (or (:format options) (common-config/get-preferred-format config)))
+         (p/let [blocks-tx (db-worker-page/build-first-block-tx (:block/uuid page)
+                                                                (or (:format options) (common-config/get-preferred-format config)))
                  _ (ldb/transact! conn blocks-tx {:outliner-op :insert-blocks})
                  first-block (ldb/get-first-child @conn (:db/id page))]
            (block-handler/edit-block! first-block :max {:container-id :unknown-container})
