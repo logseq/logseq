@@ -183,9 +183,13 @@
                                                                 url}})
            (db-model/get-page page-name)))
 
-        ;; try to update file path
         (do
-          (property-handler/add-page-property! page-name (pu/get-pid :logseq.property.pdf/file-path) url)
+          ;; try to update file path
+          (when (nil? (some-> page
+                        (:block/properties)
+                        (:logseq.property.pdf/file-path)))
+            (property-handler/add-page-property!
+              page-name (pu/get-pid :logseq.property.pdf/file-path) url))
           page)))))
 
 (defn ensure-ref-block!
@@ -210,7 +214,7 @@
                          (pu/get-pid :logseq.property/hl-color) (:color properties)}
                          (not (config/db-based-graph? (state/get-current-repo)))
                           ;; force custom uuid
-                         (assoc :id (str id)))
+                         (assoc :id (if (string? id) (uuid id) id)))
                  properties (wrap-props props)]
              (when (string? text)
                ;; FIXME: Handle properties for db graphs
@@ -237,22 +241,24 @@
 
 (defn open-block-ref!
   [block]
-  (let [id        (:block/uuid block)
-        page      (db-utils/pull (:db/id (:block/page block)))
+  (let [id (:block/uuid block)
+        page (db-utils/pull (:db/id (:block/page block)))
         page-name (:block/original-name page)
         file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
-        hl-page   (pu/get-block-property-value block :logseq.property.pdf/hl-page)]
+        hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
+        db-base? (config/db-based-graph? (state/get-current-repo))]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
-              hls (and hls (:highlights hls))]
-        (let [file-path (or file-path (str "../assets/" target-key ".pdf"))]
-          (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
-                               (and hl-page {:page hl-page}))]
-            (do
-              (state/set-state! :pdf/ref-highlight matched)
-              ;; open pdf viewer
-              (state/set-current-pdf! (inflate-asset file-path)))
-            (js/console.debug "[Unmatched highlight ref]" block)))))))
+              hls (and hls (:highlights hls))
+              file-path (or file-path (str "../assets/" target-key ".pdf"))
+              href (and db-base? (assets-handler/make-asset-url file-path))]
+        (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
+                           (and hl-page {:page hl-page}))]
+          (do
+            (state/set-state! :pdf/ref-highlight matched)
+            ;; open pdf viewer
+            (state/set-current-pdf! (inflate-asset file-path {:href href})))
+          (js/console.debug "[Unmatched highlight ref]" block))))))
 
 (defn goto-block-ref!
   [{:keys [id] :as hl}]

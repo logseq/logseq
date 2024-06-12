@@ -1908,9 +1908,7 @@
         level (:level config)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
-        block-type (or (keyword
-                        (pu/lookup properties :logseq.property/ls-type))
-                       :default)
+        block-type (or (keyword (pu/lookup properties :logseq.property/ls-type)) :default)
         html-export? (:html-export? config)
         bg-color (pu/lookup properties :logseq.property/background-color)
         ;; `heading-level` is for backward compatibility, will remove it in later releases
@@ -1943,8 +1941,7 @@
 
      ;; children
      (let [area?  (= :area (keyword (pu/lookup properties :logseq.property/hl-type)))
-           hl-ref #(when (and (or config/publishing? (util/electron?))
-                              (not (#{:default :whiteboard-shape} block-type)))
+           hl-ref #(when (not (#{:default :whiteboard-shape} block-type))
                      [:div.prefix-link
                       {:on-pointer-down
                        (fn [^js e]

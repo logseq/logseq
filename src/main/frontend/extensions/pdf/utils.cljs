@@ -2,6 +2,8 @@
   (:require [promesa.core :as p]
             [cljs-bean.core :as bean]
             [frontend.util :as util]
+            [frontend.config :as config]
+            [frontend.state :as state]
             ["/frontend/extensions/pdf/utils" :as js-utils]
             [datascript.core :as d]
             [clojure.string :as string]))
@@ -13,6 +15,11 @@
 (defn hls-file?
   [filename]
   (and filename (string? filename) (string/starts-with? filename "hls__")))
+
+(defn support-area?
+  []
+  (and (util/electron?)
+    (not (config/db-based-graph? (state/get-current-repo)))))
 
 (defn get-bounding-rect
   [rects]

@@ -22,6 +22,7 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.db-based.property.util :as db-pu]
+            [frontend.handler.db-based.property :as db-p]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.file-based.editor :as file-editor-handler]
@@ -68,6 +69,7 @@
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]
             [rum.core :as rum]
+            [logseq.db.frontend.property.type :as db-property-type]
             [logseq.outliner.property :as outliner-property]))
 
 ;; FIXME: should support multiple images concurrently uploading
@@ -528,8 +530,7 @@
           sibling? (if before? true (if page false sibling?))
           block (if page
                   (db/get-page page)
-                  (db/entity [:block/uuid block-uuid]))
-          db-based? (config/db-based-graph? repo)]
+                  (db/entity [:block/uuid block-uuid]))]
       (when block
         (let [last-block (when (not sibling?)
                            (let [children (:block/_parent block)
@@ -574,22 +575,22 @@
 
                                    ;; FIXME: assert
                                    :else
-                                   nil)
-              new-block' (if db-based?
-                           (merge new-block properties)
-                           new-block)]
+                                   nil)]
           (when block-m
             (p/do!
-             (outliner-insert-block! {} block-m new-block' {:sibling? sibling?
-                                                            :keep-uuid? true
-                                                            :ordered-list? ordered-list?
-                                                            :replace-empty-target? replace-empty-target?})
-             (when edit-block?
-               (if (and replace-empty-target?
-                        (string/blank? (:block/content last-block)))
-                 (edit-block! last-block :max)
-                 (edit-block! new-block :max)))
-             new-block)))))))
+              (ui-outliner-tx/transact!
+                {:outliner-op :insert-blocks}
+                (outliner-insert-block! {} block-m new-block {:sibling? sibling?
+                                                              :keep-uuid? true
+                                                              :ordered-list? ordered-list?
+                                                              :replace-empty-target? replace-empty-target?})
+                (db-p/set-block-properties! (:block/uuid new-block) properties))
+              (when edit-block?
+                (if (and replace-empty-target?
+                      (string/blank? (:block/content last-block)))
+                  (edit-block! last-block :max)
+                  (edit-block! new-block :max)))
+              new-block)))))))
 
 (defn insert-first-page-block-if-not-exists!
   ([page-title]

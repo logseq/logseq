@@ -510,11 +510,12 @@
          (svg/adjustments 18)]
 
         ;; selection
-        [:a.button
-         {:title    (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
-          :class    (when area-mode? "is-active")
-          :on-click #(set-area-mode! (not area-mode?))}
-         (svg/icon-area 18)]
+        (when (pdf-utils/support-area?)
+          [:a.button
+           {:title (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
+            :class (when area-mode? "is-active")
+            :on-click #(set-area-mode! (not area-mode?))}
+           (svg/icon-area 18)])
 
         [:a.button
          {:title    "Highlight mode"
