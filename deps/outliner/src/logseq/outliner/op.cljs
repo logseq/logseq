@@ -5,7 +5,8 @@
             [logseq.outliner.property :as outliner-property]
             [datascript.core :as d]
             [malli.core :as m]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [clojure.string :as string]))
 
 (def ^:private ^:large-vars/data-var op-schema
   [:multi {:dispatch first}
@@ -121,10 +122,14 @@
   (let [opts' (assoc opts
                      :transact-opts {:conn conn}
                      :local-tx? true)
-        *result (atom nil)]
+        *result (atom nil)
+        db-based? (ldb/db-based-graph? @conn)]
     (outliner-tx/transact!
      opts'
      (doseq [[op args] ops]
+       (when-not db-based?
+         (assert (not (or (string/includes? (name op) "property") (string/includes? (name op) "closed-value")))
+                 (str "Property related ops are only for db based graphs, ops: " ops)))
        (case op
          ;; blocks
          :save-block
