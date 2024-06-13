@@ -80,6 +80,8 @@
      [:sequential
       [:map
        [:block/uuid :uuid]
+       [:db/ident {:optional true} :keyword]
+       [:block/order {:optional true} db-malli-schema/block-order]
        [::m/default extra-attr-map-schema]]]]]
    [:affected-blocks {:optional true}
     [:map-of :uuid
