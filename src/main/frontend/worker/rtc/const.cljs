@@ -75,6 +75,11 @@
    [:t-before {:optional true} :int]
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
+   [:refed-blocks {:optional true}
+    [:sequential
+     [:map
+      [:block/uuid :uuid]
+      ::m/default extra-attr-map-schema]]]
    [:affected-blocks {:optional true}
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
