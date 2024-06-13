@@ -23,7 +23,6 @@
             [frontend.handler.common :as common-handler]
             [frontend.handler.db-based.editor :as db-editor-handler]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.file-based.editor :as file-editor-handler]
@@ -586,7 +585,7 @@
                                                               :ordered-list? ordered-list?
                                                               :replace-empty-target? replace-empty-target?})
                 (when (and db-base? (seq properties))
-                  (db-property-handler/set-block-properties! (:block/uuid new-block) properties)))
+                  (property-handler/set-block-properties! repo (:block/uuid new-block) properties)))
               (when edit-block?
                 (if (and replace-empty-target?
                       (string/blank? (:block/content last-block)))
