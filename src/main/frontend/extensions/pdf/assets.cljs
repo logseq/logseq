@@ -5,6 +5,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
+            [frontend.db.async :as db-async]
             [frontend.fs :as fs]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
@@ -155,15 +156,16 @@
 (defn ensure-ref-page!
   [pdf-current]
   (when-let [page-name (util/trim-safe (:key pdf-current))]
-    (let [page-name (str "hls__" page-name)
-          page (db-model/get-page page-name)
-          file-path (:original-path pdf-current)
-          format (state/get-preferred-format)
-          repo-dir (config/get-repo-dir (state/get-current-repo))
-          asset-dir (util/node-path.join repo-dir common-config/local-assets-dir)
-          url (if (string/includes? file-path asset-dir)
-                (str ".." (last (string/split file-path repo-dir)))
-                file-path)]
+    (p/let [page-name (str "hls__" page-name)
+            repo (state/get-current-repo)
+            page (db-async/<get-block repo page-name)
+            file-path (:original-path pdf-current)
+            format (state/get-preferred-format)
+            repo-dir (config/get-repo-dir repo)
+            asset-dir (util/node-path.join repo-dir common-config/local-assets-dir)
+            url (if (string/includes? file-path asset-dir)
+                  (str ".." (last (string/split file-path repo-dir)))
+                  file-path)]
       (if-not page
         (let [label (:filename pdf-current)]
           (p/do!
@@ -186,10 +188,10 @@
         (do
           ;; try to update file path
           (when (nil? (some-> page
-                        (:block/properties)
-                        (get (pu/get-pid :logseq.property.pdf/file-path))))
+                              (:block/properties)
+                              (get (pu/get-pid :logseq.property.pdf/file-path))))
             (property-handler/add-page-property!
-              page-name (pu/get-pid :logseq.property.pdf/file-path) url))
+             page-name (pu/get-pid :logseq.property.pdf/file-path) url))
           page)))))
 
 (defn ensure-ref-block!
