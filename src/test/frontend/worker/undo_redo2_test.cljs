@@ -57,6 +57,7 @@
 
 (deftest ^:long undo-redo-test
   (testing "Random mixed operations"
+    (set! undo-redo2/max-stack-length 500)
     (let [*random-blocks (atom (outliner-test/get-blocks-ids))]
       (outliner-test/transact-random-tree!)
       (let [conn (db/get-db false)
