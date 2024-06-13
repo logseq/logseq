@@ -542,7 +542,6 @@
 
    :git/commit                              {:binding  "mod+g c"
                                              :inactive (not (util/electron?))
-                                             :file-graph? true
                                              :fn       commit/show-commit-modal!}
 
    :dev/replace-graph-with-db-file           {:binding  []
