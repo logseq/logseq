@@ -306,10 +306,12 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (let [selector (ldb/read-transit-str selector-str)
            id (ldb/read-transit-str id-str)
-           eid (when (and (vector? id) (= :block/name (first id)))
-                 (:db/id (ldb/get-page @conn (second id))))
-           result (->> (d/pull @conn selector (or eid id))
-                       (sqlite-common-db/with-parent @conn))]
+           eid (if (and (vector? id) (= :block/name (first id)))
+                 (:db/id (ldb/get-page @conn (second id)))
+                 id)
+           result (some->> eid
+                           (d/pull @conn selector)
+                           (sqlite-common-db/with-parent @conn))]
        (ldb/write-transit-str result))))
 
   (pull-many
