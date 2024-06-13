@@ -24,7 +24,7 @@
   [repo coll db-ident]
   (if (sqlite-util/db-based-graph? repo)
     (let [val (get coll db-ident)]
-      (if (built-in-has-ref-value? db-ident) (:block/content val) val))
+      (if (built-in-has-ref-value? db-ident) (db-property/get-property-value-name val) val))
     (get coll (get-pid repo db-ident))))
 
 (defn get-block-property-value

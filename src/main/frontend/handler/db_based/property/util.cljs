@@ -14,8 +14,7 @@
   "Get a property's name given its id"
   [e]
   (if-let [e (if (number? e) (db-utils/pull e) e)]
-    (or (:block/content e)
-        (:block/original-name e))
+    (db-property/get-property-value-name e)
     e))
 
 (defn properties-by-name

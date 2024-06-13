@@ -2,19 +2,22 @@
   "Builds core property concepts"
   (:require [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.frontend.order :as db-order]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn- closed-value-new-block
   [block-id value property]
   (let [property-id (:db/ident property)]
-    {:block/type #{"closed value"}
-     :block/format :markdown
-     :block/uuid block-id
-     :block/page property-id
-     :block/content (str value)
-     :block/closed-value-property property-id
-     :logseq.property/created-from-property property-id
-     :block/parent property-id}))
+    (merge {:block/type #{"closed value"}
+            :block/format :markdown
+            :block/uuid block-id
+            :block/page property-id
+            :block/closed-value-property property-id
+            :logseq.property/created-from-property property-id
+            :block/parent property-id}
+           (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
+             {:property/value value}
+             {:block/content value}))))
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
@@ -62,19 +65,23 @@
   "Builds a property value entity given a block map/entity, a property entity or
   ident and its property value"
   [block property value]
-  (-> {:block/uuid (d/squuid)
-       :block/format :markdown
-       :block/content value
-       :block/page (if (:block/page block)
-                     (:db/id (:block/page block))
+  (-> (merge
+       {:block/uuid (d/squuid)
+        :block/format :markdown
+        :block/page (if (:block/page block)
+                      (:db/id (:block/page block))
                      ;; page block
-                     (:db/id block))
-       :block/parent (:db/id block)
-       :logseq.property/created-from-property (or (:db/id property)
-                                                  (when (keyword? property) {:db/ident property}))
-       :block/order (db-order/gen-key)}
+                      (:db/id block))
+        :block/parent (:db/id block)
+        :logseq.property/created-from-property (or (:db/id property) (:db/ident property))
+        :block/order (db-order/gen-key)}
+       (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
+         {:property/value value}
+         {:block/content value}))
       sqlite-util/block-with-timestamps))
 
+;; TODO: Add support for types besides :default when needed by getting property types
+;; and passing them to build-property-value-block
 (defn build-property-values-tx-m
   "Builds a map of property names to their property value blocks to be transacted, given a block
    and a properties map with raw property values"
@@ -85,8 +92,8 @@
          (map (fn [[k v]]
                 [k
                  (if (set? v)
-                   (set (map #(build-property-value-block block' k %) v))
-                   (build-property-value-block block' k v))]))
+                   (set (map #(build-property-value-block block' {:db/ident k} %) v))
+                   (build-property-value-block block' {:db/ident k} v))]))
          (into {}))))
 
 (defn build-properties-with-ref-values

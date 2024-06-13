@@ -116,12 +116,13 @@
                (if-let [property (and (db-property/property? k)
                                       (d/entity db k))]
                  (update m :block/properties (fnil conj [])
-                         [(assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
-                                 :block/schema
-                                 (select-keys (:block/schema property) [:type])
-                                 :property/closed-values
-                                 ;; use explicit call to be nbb compatible
-                                 (entity-plus/lookup-kv-then-entity property :property/closed-values))
+                         ;; use explicit call to be nbb compatible
+                         [(let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
+                            (cond-> (assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
+                                    :block/schema
+                                    (select-keys (:block/schema property) [:type]))
+                              (seq closed-values)
+                              (assoc :property/closed-values closed-values)))
                           v])
                  (assoc m k v)))
              {}
@@ -332,7 +333,7 @@
 
 (def block-attrs
   "Common attributes for normal blocks"
-  [[:block/content [:or :string :double]]
+  [[:block/content :string]
    [:block/parent :int]
    [:block/order block-order]
    ;; refs
@@ -354,21 +355,38 @@
      [:block/path-refs {:optional true} [:set :int]]]
     page-or-block-attrs)))
 
-(def closed-value-block
+(def property-value-block
   "A closed value for a property with closed/allowed values"
+  (vec
+   (concat
+    [:map]
+    [[:property/value [:or :string :double]]]
+    (remove #(#{:block/content} (first %)) block-attrs)
+    page-or-block-attrs)))
+
+(def closed-value-block*
   (vec
    (concat
     [:map]
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
-     [:block/content [:or :string :double]]
+     [:block/content {:optional true} :string]
+     [:property/value {:optional true} [:or :string :double]]
      [:block/closed-value-property {:optional true} [:set :int]]
      [:block/schema {:optional true}
       [:map
        [:description {:optional true} :string]]]]
     (remove #(#{:block/content} (first %)) block-attrs)
     page-or-block-attrs)))
+
+(def closed-value-block
+  "A closed value for a property with closed/allowed values"
+  [:and closed-value-block*
+   [:fn {:error/message ":block/content or :property/value required"
+         :error/path [:property/value]}
+    (fn [m]
+      (or (:block/content m) (:property/value m)))]])
 
 (def normal-block
   "A block with content and no special type or tag behavior"
@@ -383,7 +401,8 @@
   [:or
    normal-block
    closed-value-block
-   whiteboard-block])
+   whiteboard-block
+   property-value-block])
 
 (def file-block
   [:map
@@ -460,7 +479,7 @@
 
 ;; Keep malli schema in sync with db schema
 ;; ========================================
-(let [malli-many-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block))
+(let [malli-many-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest closed-value-block*))
                                 (filter #(= (last %) [:set :int]))
                                 (map first)
                                 set)]
@@ -480,8 +499,8 @@
                     {}))))
 
 (let [malli-non-ref-attrs (->> (concat class-attrs property-attrs page-attrs block-attrs page-or-block-attrs (rest normal-page))
-                               (concat (rest file-block) (rest asset-block)
-                                        (rest db-ident-key-val) (rest class-page))
+                               (concat (rest file-block) (rest asset-block) (rest property-value-block)
+                                       (rest db-ident-key-val) (rest class-page))
                                (remove #(= (last %) [:set :int]))
                                (map first)
                                set)]
