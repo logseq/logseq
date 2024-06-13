@@ -541,7 +541,7 @@
                                (db/entity last-block-id))))
               format (or
                       (:block/format block)
-                      (db/get-page-format (:db/id block))
+                      (db/get-page-format (:block/name block))
                       (state/get-preferred-format))
               content (if (and (not db-base?) (seq properties))
                         (property-file/insert-properties-when-file-based repo format content properties)
