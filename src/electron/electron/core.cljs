@@ -304,7 +304,9 @@
 
 (defn main []
   (if-not (.requestSingleInstanceLock app)
-    (.quit app)
+    (do
+      (db/close!)
+      (.quit app))
     (let [privileges {:standard        true
                       :secure          true
                       :bypassCSP       true
@@ -332,6 +334,7 @@
                                      (logger/debug "window-all-closed" "Quitting...")
                                      (try
                                        (fs-watcher/close-watcher!)
+                                       (db/close!)
                                        (catch :default e
                                          (logger/error "window-all-closed" e)))
                                      (.quit app)))

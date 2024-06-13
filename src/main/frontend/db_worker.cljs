@@ -108,30 +108,18 @@
         (catch :default _e              ; TODO: remove this once db goes to test
           (edn/read-string content))))))
 
-(defn get-db-kvs
-  [repo]
-  (let [^Object db (worker-state/get-sqlite-conn repo)]
-    (assert (some? db) "sqlite db not exists")
-    (.exec db #js {:sql "select * from kvs"
-                   :rowMode "array"})))
-
-(defn store-kvs!
-  [repo addr+data-seq delete-addrs {:keys [sync-write?]
-                                    :or {sync-write? true}}]
-  (let [data (map
-              (fn [[addr data]]
-                #js {:$addr addr
-                     :$content (sqlite-util/transit-write data)})
-              addr+data-seq)]
-    (if sync-write?
-      (upsert-addr-content! repo data delete-addrs)
-      (async/go (upsert-addr-content! repo data delete-addrs)))))
-
 (defn new-sqlite-storage
   [repo _opts]
   (reify IStorage
     (-store [_ addr+data-seq delete-addrs]
-      (store-kvs! repo addr+data-seq delete-addrs {:sync-write? (worker-state/rtc-downloading-graph?)}))
+      (let [data (map
+                  (fn [[addr data]]
+                    #js {:$addr addr
+                         :$content (sqlite-util/transit-write data)})
+                  addr+data-seq)]
+        (if (worker-state/rtc-downloading-graph?)
+          (upsert-addr-content! repo data delete-addrs) ; sync writes when downloading whole graph
+          (async/go (upsert-addr-content! repo data delete-addrs)))))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
@@ -469,14 +457,6 @@
   (exportDB
    [_this repo]
    (<export-db-file repo))
-
-  (getDBKVs
-   [_this repo]
-   (get-db-kvs repo))
-
-  (storeDBKVs
-   [_this repo addr+data-seq]
-   (store-kvs! repo addr+data-seq [] {}))
 
   (importDb
    [this repo data]
