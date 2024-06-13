@@ -1,6 +1,9 @@
 (ns ^:no-doc logseq.api
   (:require [cljs-bean.core :as bean]
             [cljs.reader]
+            [datascript.core :as d]
+            [frontend.db.conn :as conn]
+            [logseq.common.util :as common-util]
             [logseq.sdk.core]
             [logseq.sdk.git]
             [logseq.sdk.experiments]
@@ -558,7 +561,9 @@
   (fn []
     (when-let [page (state/get-current-page)]
       (p/let [page (<pull-block page)]
-        (bean/->js (sdk-utils/normalize-keyword-for-json (db-utils/pull (:db/id page))))))))
+        (when-let [page (and (:block/name page)
+                          (some->> page (api-block/into-properties (state/get-current-repo))))]
+          (bean/->js (sdk-utils/normalize-keyword-for-json page)))))))
 
 (def ^:export get_page
   (fn [id-or-page-name]
@@ -570,30 +575,45 @@
                                    [:block/uuid (uuid id-or-page-name)]
                                    :else
                                    [:block/name (util/page-name-sanity-lc id-or-page-name)]))]
-      (when (:block/name page)
+      (when-let [page (and (:block/name page)
+                        (some->> page (api-block/into-properties (state/get-current-repo))))]
         (bean/->js (sdk-utils/normalize-keyword-for-json page))))))
 
 (def ^:export get_all_pages
-  (fn [repo]
-    (let [pages (page-handler/get-all-pages repo)]
-      (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
+  (fn []
+    (let [db (conn/get-db (state/get-current-repo))]
+      (some->
+        (->>
+          (d/datoms db :avet :block/name)
+          (map #(db-utils/pull (:e %)))
+          (remove ldb/hidden-page?)
+          (remove (fn [page]
+                    (common-util/uuid-string? (:block/name page)))))
+        (sdk-utils/normalize-keyword-for-json)
+        (bean/->js)))))
 
 (def ^:export create_page
   (fn [name ^js properties ^js opts]
     (let [properties (bean/->clj properties)
+          db-base? (config/db-based-graph? (state/get-current-repo))
           {:keys [redirect createFirstBlock format journal]} (bean/->clj opts)]
       (p/let [page (<pull-block name)
               new-page (when-not page
                          (page-handler/<create!
-                          name
-                          {:redirect?           (if (boolean? redirect) redirect true)
-                           :journal?            journal
-                           :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
-                           :format              format
-                           :properties          properties}))]
+                           name
+                           (cond->
+                             {:redirect? (if (boolean? redirect) redirect true)
+                              :journal? journal
+                              :create-first-block? (if (boolean? createFirstBlock) createFirstBlock true)
+                              :format format}
+
+                             (not db-base?)
+                             (assoc :properties properties))))
+              _ (when (and db-base? (seq properties))
+                  (api-block/save-db-based-block-properties! new-page properties))]
         (some-> (or page new-page)
                 :db/id
-                (db-utils/pull)
+                (db-utils/entity)
                 (sdk-utils/normalize-keyword-for-json)
                 (bean/->js))))))
 
@@ -807,7 +827,8 @@
 (defn ^:export upsert_property
   [k ^js schema ^js opts]
   (when-let [k' (and (string? k) (keyword k))]
-    (p/let [k (if (qualified-keyword? k') k' (db-property/create-user-property-ident-from-name k))
+    (p/let [k (if (qualified-keyword? k') k'
+                (db-property/create-user-property-ident-from-name k))
             schema (or (and schema (bean/->clj schema)) {})
             schema (cond-> schema
                      (string? (:cardinality schema))
