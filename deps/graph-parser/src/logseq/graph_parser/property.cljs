@@ -342,6 +342,6 @@
                 (distinct)
                 (map (fn [item] (page-ref/->page-ref (page-ref/page-ref-un-brackets! item))))
                 (string/join ", "))
-               v)]
+               (if (keyword? v) (name v) v))]
        (insert-property repo format content k v)))
    content kvs))
