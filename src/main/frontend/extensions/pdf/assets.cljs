@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.config :as config]
             [frontend.db.conn :as conn]
+            [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
             [frontend.db.async :as db-async]
@@ -243,7 +244,7 @@
 (defn open-block-ref!
   [block]
   (let [id (:block/uuid block)
-        page (db-utils/pull (:db/id (:block/page block)))
+        page (db/entity (:db/id (:block/page block)))
         page-name (:block/original-name page)
         file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
