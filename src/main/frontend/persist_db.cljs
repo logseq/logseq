@@ -34,6 +34,8 @@
     (ipc/ipc :db-open repo)
     (protocol/<fetch-initial-data (get-impl) repo opts))))
 
+;; FIXME: limit repo name's length and sanity
+;; @shuyu Do we still need this?
 (defn <new [repo]
   {:pre [(<= (count repo) 128)]}
   (p/let [_ (protocol/<new (get-impl) repo)

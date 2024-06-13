@@ -6,7 +6,10 @@
             ;; [electron.logger :as logger]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [electron.logger :as logger]
-            [logseq.db.sqlite.db :as sqlite-db]))
+            [logseq.db.sqlite.db :as sqlite-db]
+            [electron.backup-file :as backup-file]))
+
+(def close! sqlite-db/close!)
 
 (defn get-graphs-dir
   []
@@ -34,27 +37,23 @@
 
 (defn save-db!
   [db-name data]
-  (let [_graph-dir (ensure-graph-dir! db-name)
-        [_db-name db-path] (sqlite-db/get-db-full-path (get-graphs-dir) db-name)]
-    (doseq [[addr content] data]
-      (let [path (node-path/join db-path (str addr))]
-        (fs/writeFileSync path content)))))
+  (let [graph-dir (ensure-graph-dir! db-name)
+        [_db-name db-path] (sqlite-common-db/get-db-full-path (get-graphs-dir) db-name)]
+    (fs/writeFileSync db-path data)
+    (backup-file/backup-file graph-dir :backup-dir
+                             ""
+                             ".sqlite"
+                             data
+                             {:add-desktop? false
+                              :skip-backup-fn (fn [latest-backup-size]
+                                                (= latest-backup-size (.-length data)))})))
 
-(defn- get-files [path]
-  (->> (fs/readdirSync path)
-       (map #(node-path/join path %))
-       (filter #(.isFile (fs/statSync %)))))
-
-(defn get-db-files
+(defn get-db
   [db-name]
   (let [_ (ensure-graph-dir! db-name)
         [_db-name db-path] (sqlite-db/get-db-full-path (get-graphs-dir) db-name)]
     (when (fs/existsSync db-path)
-      (let [files (get-files db-path)]
-        (map (fn [path]
-               (let [addr (node-path/basename path)]
-                 [addr (.toString (fs/readFileSync path))]))
-             files)))))
+      (fs/readFileSync db-path))))
 
 (def unlinked-graphs-dir "Unlinked graphs")
 
