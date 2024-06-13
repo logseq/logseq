@@ -76,10 +76,11 @@
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
    [:refed-blocks {:optional true}
-    [:sequential
-     [:map
-      [:block/uuid :uuid]
-      ::m/default extra-attr-map-schema]]]
+    [:maybe
+     [:sequential
+      [:map
+       [:block/uuid :uuid]
+       [::m/default extra-attr-map-schema]]]]]
    [:affected-blocks {:optional true}
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
@@ -196,12 +197,6 @@
       [:action :string]
       [:graph-uuid :string]
       [:block-uuids [:sequential :uuid]]]]
-    ["query-block-tree"
-     [:map
-      [:req-id :string]
-      [:action :string]
-      [:graph-uuid :string]
-      [:root-block-uuid :uuid]]]
     ["update-assets"
      [:map
       [:req-id :string]
