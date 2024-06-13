@@ -15,7 +15,6 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
-            [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.assets :as assets-handler]

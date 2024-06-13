@@ -4,7 +4,6 @@
             [frontend.config :as config]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.utils :as db-utils]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.draw :as draw]
             [frontend.handler.notification :as notification]
