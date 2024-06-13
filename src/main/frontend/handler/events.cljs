@@ -1056,7 +1056,6 @@
         retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
         tx-data (concat (:tx-data data) retracted-tx-data)]
     (pipeline/invoke-hooks (assoc data :tx-data tx-data))
-    (js/console.log "==>> db/sync-changes(worker->UI):" tx-data)
     (when (util/electron?)
       (ipc/ipc :db-transact repo
                (ldb/write-transit-str tx-data)
