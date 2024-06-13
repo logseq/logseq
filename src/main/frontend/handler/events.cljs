@@ -856,14 +856,13 @@
     (search/transact-blocks! repo data')))
 
 (defmethod handle :class/configure [[_ page]]
-  (state/set-modal!
+  (shui/dialog-open!
     #(vector :<>
        (class-component/configure page {})
        (db-page/page-properties page {:configure? true
                                       :mode :class}))
-    {:id :page-configure
-     :label "page-configure"
-     :container-overflow-visible? true}))
+    {:label "page-configure"
+     :align :top}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
@@ -1057,6 +1056,7 @@
         retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
         tx-data (concat (:tx-data data) retracted-tx-data)]
     (pipeline/invoke-hooks (assoc data :tx-data tx-data))
+    (js/console.log "==>> db/sync-changes(worker->UI):" tx-data)
     (when (util/electron?)
       (ipc/ipc :db-transact repo
                (ldb/write-transit-str tx-data)
