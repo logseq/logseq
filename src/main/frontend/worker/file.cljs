@@ -124,5 +124,6 @@
                               (let [repo (ffirst col)
                                     conn (worker-state/get-datascript-conn repo)]
                                 (if conn
-                                  (write-files! conn col (worker-state/get-context))
+                                  (when-not (ldb/db-based-graph? @conn)
+                                    (write-files! conn col (worker-state/get-context)))
                                   (js/console.error (str "DB is not found for ") repo)))))))
