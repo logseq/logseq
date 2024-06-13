@@ -126,7 +126,7 @@
                        "border rounded"
                        "border rounded border-transparent")}
         (when-not collapsed?
-          [:div.info-title.cursor.py-1
+          [:div.info-title.cursor.p-1
            {:on-mouse-over #(reset! *hover? true)
             :on-mouse-leave #(when-not (state/dropdown-opened?)
                                (reset! *hover? false))
