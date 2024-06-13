@@ -55,3 +55,9 @@
       (db-property-handler/batch-remove-property! block-ids key)
       (db-property-handler/batch-set-property! block-ids key value))
     (file-property-handler/batch-set-block-property! block-ids key value)))
+
+(defn set-block-properties!
+  [repo block-id properties]
+  (assert (uuid? block-id))
+  (when (config/db-based-graph? repo)
+    (db-property-handler/set-block-properties! block-id properties)))
