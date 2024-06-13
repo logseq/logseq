@@ -187,7 +187,7 @@
           ;; try to update file path
           (when (nil? (some-> page
                         (:block/properties)
-                        (:logseq.property.pdf/file-path)))
+                        (get (pu/get-pid :logseq.property.pdf/file-path))))
             (property-handler/add-page-property!
               page-name (pu/get-pid :logseq.property.pdf/file-path) url))
           page)))))
@@ -217,7 +217,6 @@
                          (assoc :id (if (string? id) (uuid id) id)))
                  properties (wrap-props props)]
              (when (string? text)
-               ;; FIXME: Handle properties for db graphs
                (editor-handler/api-insert-new-block!
                 text (merge {:page        (:block/name ref-page)
                              :custom-uuid id
