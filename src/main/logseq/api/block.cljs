@@ -18,7 +18,7 @@
             [logseq.db :as ldb]
             [logseq.sdk.utils :as sdk-utils]))
 
-(defn- into-properties
+(defn into-properties
   [repo block]
   (if (some-> repo (config/db-based-graph?))
     (let [props (some->> block
