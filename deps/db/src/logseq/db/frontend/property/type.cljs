@@ -28,9 +28,17 @@
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
 
+(def original-value-ref-property-types
+  "Property value ref types where the refed entity stores its value in
+  :property/value e.g. :number is stored as a number. new value-ref-property-types
+  should default to this as it allows for more querying power"
+  #{:number :url})
+
 (def value-ref-property-types
-  "Property value ref types"
-  #{:default :url :number :template})
+  "Property value ref types where the refed entities either store their value in
+  :property/value or block/content"
+  (into #{:default :template}
+        original-value-ref-property-types))
 
 (def ref-property-types
   "User facing ref types"
@@ -81,15 +89,14 @@
   (if new-closed-value?
     (url? val)
     (when-let [ent (d/entity db val)]
-      (url? (:block/content ent)))))
+      (url? (:property/value ent)))))
 
 (defn- number-entity?
   [db id-or-value {:keys [new-closed-value?]}]
   (if new-closed-value?
     (number? id-or-value)
     (when-let [entity (d/entity db id-or-value)]
-      (number? (:block/content entity)))))
-
+      (number? (:property/value entity)))))
 
 (defn- text-entity?
   [db s {:keys [new-closed-value?]}]

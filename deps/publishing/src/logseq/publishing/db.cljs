@@ -4,7 +4,8 @@
             [logseq.db.frontend.rules :as rules]
             [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.frontend.entity-plus :as entity-plus]))
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
@@ -13,7 +14,7 @@
   (when-some [props (and block page (:block/properties block))]
     ;; Can't use db-property-util/lookup b/c repo isn't available
     (let [prop-lookup-fn (if (entity-plus/db-based-graph? db)
-                           #(:block/content (get %1 %2))
+                           #(db-property/get-property-value-name (get %1 %2))
                            #(get %1 (keyword (name %2))))]
       (when-some [uuid (:block/uuid block)]
         (when-some [stamp (prop-lookup-fn props :logseq.property.pdf/hl-stamp)]

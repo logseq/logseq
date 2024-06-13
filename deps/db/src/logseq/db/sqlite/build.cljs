@@ -85,11 +85,13 @@
               (when (and (db-property-type/value-ref-property-types (get-in properties-config [k :block/schema :type]))
                          ;; TODO: Support translate-property-value without this hack
                          (not (vector? v)))
-                [k (if (set? v)
-                     (->> v
-                          (map #(db-property-build/build-property-value-block new-block (get-ident all-idents k) %))
-                          set)
-                     (db-property-build/build-property-value-block new-block (get-ident all-idents k) v))])))
+                (let [property-map {:db/ident (get-ident all-idents k)
+                                    :block/schema {:type (get-in properties-config [k :block/schema :type])}}]
+                  [k (if (set? v)
+                      (->> v
+                           (map #(db-property-build/build-property-value-block new-block property-map %))
+                           set)
+                      (db-property-build/build-property-value-block new-block property-map v))]))))
        (into {})))
 
 (defn- extract-content-refs

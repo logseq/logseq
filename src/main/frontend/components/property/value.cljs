@@ -454,8 +454,7 @@
                          (map (fn [{:keys [value]}]
                                 (if (and ref-type? (number? value))
                                   (when-let [e (db/entity value)]
-                                    {:label (or (:block/content e)
-                                                (:block/original-name e))
+                                    {:label (db-property/get-property-value-name e)
                                      :value value})
                                   {:label value
                                    :value value})))
@@ -639,9 +638,11 @@
        (closed-value-item value opts)
 
        (de/entity? value)
-       (when-let [content (:block/content value)]
-         ;; str for non-string values like :number
-         (inline-text-cp (str content)))
+       (when-some [content (if (some? (:property/value value))
+                             ;; content needs to be a string for display purposes
+                             (str (:property/value value))
+                             (:block/content value))]
+         (inline-text-cp content))
 
        :else
        (inline-text-cp (str value)))]))
@@ -761,8 +762,7 @@
         select-opts {:on-chosen on-chosen}
         value (if (and (de/entity? value*) (= (:db/ident value*) :logseq.property/empty-placeholder))
                 nil
-                ;; str for non-string values like :number
-                (if (map? value*) (update value* :block/content str) value*))]
+                value*)]
     (if (= :logseq.property/icon (:db/ident property))
       (icon-row block)
       (if (and select-type?

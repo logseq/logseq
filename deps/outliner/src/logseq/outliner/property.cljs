@@ -203,7 +203,8 @@
         raw-value)))
 
 (defn- find-or-create-property-value
-  "Find or create a property value. Only to be used with properties that have ref types"
+  "Find or create a property value. Only to be used with properties that have ref types.
+   Mainly used by :default property type"
   [conn property-id v]
   (or (get-property-value-eid @conn property-id v)
       (let [v-uuid (create-property-text-block! conn nil property-id v {})]
@@ -408,7 +409,7 @@
 
 (defn- build-closed-value-tx
   [db property resolved-value {:keys [id icon description]
-                                             :or {description ""}}]
+                               :or {description ""}}]
   (let [block (when id (d/entity db [:block/uuid id]))
         block-id (or id (ldb/new-block-id))
         icon (when-not (and (string? icon) (string/blank? icon)) icon)
@@ -418,12 +419,15 @@
                   [(let [schema (:block/schema block)]
                      (cond->
                       (outliner-core/block-with-updated-at
-                       {:block/uuid id
-                        :block/content resolved-value
-                        :block/closed-value-property (:db/id property)
-                        :block/schema (if description
-                                        (assoc schema :description description)
-                                        (dissoc schema :description))})
+                       (merge
+                        {:block/uuid id
+                         :block/closed-value-property (:db/id property)
+                         :block/schema (if description
+                                         (assoc schema :description description)
+                                         (dissoc schema :description))}
+                        (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
+                          {:property/value resolved-value}
+                          {:block/content resolved-value})))
                        icon
                        (assoc :logseq.property/icon icon)))]
                   (let [max-order (:block/order (last (:property/closed-values property)))
@@ -455,7 +459,7 @@
                               resolved-value)]
         (cond
           (some (fn [b]
-                  (and (= (str resolved-value) (str (or (db-property/property-value-when-closed b)
+                  (and (= (str resolved-value) (str (or (db-property/closed-value-name b)
                                                         (:block/uuid b))))
                        (not= id (:block/uuid b))))
                 (:property/closed-values property))

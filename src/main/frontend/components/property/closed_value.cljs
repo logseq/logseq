@@ -186,8 +186,7 @@
     (for [value values]
       [:li (if (uuid? value)
              (let [result (db/entity [:block/uuid value])]
-               (or (:block/original-name result)
-                   (:block/content result)))
+               (db-property/closed-value-name result))
              (str value))])]
    (ui/button
     "Add choices"

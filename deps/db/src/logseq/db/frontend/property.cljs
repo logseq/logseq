@@ -223,18 +223,19 @@
     (:property/closed-values property)))
 
 (defn closed-value-name
-  "Gets name of closed value given closed value ent/map. Works for all closed value types including pages, blocks"
+  "Gets name of closed value given closed value ent/map. Works for all closed value types"
   [ent]
-  (or (:block/original-name ent)
-      (:block/content ent)))
+  (or (:block/content ent)
+      (:property/value ent)))
 
 (defn get-property-value-name
   "Given an entity, gets a readable name for the property value of a ref type
   property. Different than closed-value-name as there implementation will likely
   differ"
   [ent]
-  (or (:block/original-name ent)
-      (:block/content ent)))
+  (or (:block/content ent)
+      (:property/value ent)
+      (:block/original-name ent)))
 
 (defn get-property-value-name-from-ref
   "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
@@ -279,18 +280,11 @@
   (and (map? block)
        (:logseq.property/created-from-property block)
        (:block/page block)
-       ;; not closed value
-       (not (some? (:block/content block)))))
+       (not (some? (closed-value-name block)))))
 
 (defn many?
   [property]
   (= (:db/cardinality property) :db.cardinality/many))
-
-(defn property-value-when-closed
-  "Returns property value if the given entity is type 'closed value' or nil"
-  [ent]
-  (when (contains? (:block/type ent) "closed value")
-    (:block/content ent)))
 
 (defn properties-by-name
   "Given a block from a query result, returns a map of its properties indexed by
