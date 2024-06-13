@@ -518,9 +518,9 @@
                                       :create-first-block? false})
         create-whiteboard? (whiteboard-handler/<create-new-whiteboard-and-redirect! @!input)
         create-page? (page-handler/<create! @!input {:redirect? true}))
-      (if create-class?
-        (state/pub-event! [:class/configure (db/get-case-page class)])
-        (state/close-modal!)))))
+      (state/close-modal!)
+      (when create-class?
+        (state/pub-event! [:class/configure (db/get-case-page class)])))))
 
 (defn- get-filter-user-input
   [input]

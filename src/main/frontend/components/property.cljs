@@ -683,7 +683,7 @@
                                               :collapsed? collapsed?
                                               :inline-text inline-text
                                               :page-cp page-cp))]
-         [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
+         [:div.property-value-container.col-span-4.flex.flex-row.gap-1.items-center
           (when-not block? [:div.opacity-30 {:style {:margin-left 5}}
                             [:span.bullet-container.cursor [:span.bullet]]])
           [:div.flex.flex-1
