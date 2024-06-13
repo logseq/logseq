@@ -15,6 +15,7 @@
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.block :as block]
             [frontend.format.mldoc :as mldoc]
+            [frontend.config :as config]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
             [frontend.handler.assets :as assets-handler]
@@ -524,6 +525,7 @@
                  edit-block? true}}]
   (when (or page block-uuid)
     (let [repo (state/get-current-repo)
+          db-base? (config/db-based-graph? repo)
           before? (if page false before?)
           sibling? (boolean sibling?)
           sibling? (if before? true (if page false sibling?))
@@ -541,7 +543,7 @@
                       (:block/format block)
                       (db/get-page-format (:db/id block))
                       (state/get-preferred-format))
-              content (if (seq properties)
+              content (if (and (not db-base?) (seq properties))
                         (property-file/insert-properties-when-file-based repo format content properties)
                         content)
               new-block (-> (select-keys block [:block/page])
@@ -583,7 +585,8 @@
                                                               :keep-uuid? true
                                                               :ordered-list? ordered-list?
                                                               :replace-empty-target? replace-empty-target?})
-                (db-property-handler/set-block-properties! (:block/uuid new-block) properties))
+                (when (and db-base? (seq properties))
+                  (db-property-handler/set-block-properties! (:block/uuid new-block) properties)))
               (when edit-block?
                 (if (and replace-empty-target?
                       (string/blank? (:block/content last-block)))
