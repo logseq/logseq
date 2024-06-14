@@ -25,7 +25,8 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        sqlite-build-edn (-> (resolve-path edn-path) fs/readFileSync str edn/read-string)
+        sqlite-build-edn (merge {:auto-create-ontology? true}
+                                (-> (resolve-path edn-path) fs/readFileSync str edn/read-string))
         conn (db-pipeline/init-conn dir db-name {:classpath (cp/get-classpath)})
         {:keys [init-tx block-props-tx]} (db-pipeline/build-blocks-tx sqlite-build-edn)]
     (println "Generating" (count (filter :block/name init-tx)) "pages and"

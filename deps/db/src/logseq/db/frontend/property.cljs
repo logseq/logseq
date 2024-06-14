@@ -179,7 +179,8 @@
         "All db attribute properties are configured in built-in-properties")
 
 (def logseq-property-namespaces
-  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"})
+  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
+    "logseq.property.linked-references"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
