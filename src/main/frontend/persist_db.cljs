@@ -42,7 +42,7 @@
     (<export-db repo {})))
 
 (defn export-current-graph!
-  []
+  [& {:keys [succ-notification?]}]
   (when (util/electron?)
     (when-let [repo (state/get-current-repo)]
       (when (config/db-based-graph? repo)
@@ -50,9 +50,10 @@
         (->
          (p/do!
           (<export-db repo {})
-          (state/pub-event!
-           [:notification/show {:content "The current db has been saved successfully to the disk."
-                                :status :success}]))
+          (when succ-notification?
+            (state/pub-event!
+             [:notification/show {:content "The current db has been saved successfully to the disk."
+                                  :status :success}])))
          (p/catch (fn [^js error]
                     (js/console.error error)
                     (state/pub-event!
