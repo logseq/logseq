@@ -3,8 +3,7 @@
   (:require ["path" :as node-path]
             ["fs-extra" :as fs]
             ["electron" :refer [app]]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.db :as sqlite-db]))
+            [logseq.db.sqlite.common-db :as sqlite-common-db]))
 
 (defn get-graphs-dir
   []
@@ -30,7 +29,7 @@
 (defn get-db
   [db-name]
   (let [_ (ensure-graph-dir! db-name)
-        [_db-name db-path] (sqlite-db/get-db-full-path (get-graphs-dir) db-name)]
+        [_db-name db-path] (sqlite-common-db/get-db-full-path (get-graphs-dir) db-name)]
     (when (fs/existsSync db-path)
       (fs/readFileSync db-path))))
 
