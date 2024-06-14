@@ -9,7 +9,8 @@
             [goog.object :as gobj]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.ui :as shui]))
+            [logseq.shui.ui :as shui]
+            [frontend.persist-db :as persist-db]))
 
 (defn- commit-all!
   []
@@ -89,5 +90,7 @@
           "Commit")]])]))
 
 (defn show-commit-modal! [e]
-  (state/set-modal! add-commit-message)
-  (when e (util/stop e)))
+  (p/do!
+   (persist-db/export-current-graph!)
+   (state/set-modal! add-commit-message)
+   (when e (util/stop e))))
