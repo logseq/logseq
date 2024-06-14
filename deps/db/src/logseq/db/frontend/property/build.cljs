@@ -73,7 +73,7 @@
                      ;; page block
                       (:db/id block))
         :block/parent (:db/id block)
-        :logseq.property/created-from-property (or (:db/id property) (:db/ident property))
+        :logseq.property/created-from-property (or (:db/id property) {:db/ident (:db/ident property)})
         :block/order (db-order/gen-key)}
        (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
          {:property/value value}

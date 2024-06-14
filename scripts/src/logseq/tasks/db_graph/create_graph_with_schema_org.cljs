@@ -374,7 +374,7 @@
                                        (assoc :block/properties (-> (update-keys props name)
                                                                     (update-vals (fn [v]
                                                                                    (if (:db/id v)
-                                                                                     (:block/content (d/entity db (:db/id v)))
+                                                                                     (db-property/get-property-value-name (d/entity db (:db/id v)))
                                                                                      v)))))
                                        (seq (:class/schema.properties m))
                                        (update :class/schema.properties #(set (map :block/original-name %)))
