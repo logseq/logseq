@@ -4,8 +4,7 @@
             ["fs-extra" :as fs]
             ["electron" :refer [app]]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.db :as sqlite-db]
-            [electron.backup-file :as backup-file]))
+            [logseq.db.sqlite.db :as sqlite-db]))
 
 (defn get-graphs-dir
   []
@@ -25,16 +24,8 @@
 
 (defn save-db!
   [db-name data]
-  (let [graph-dir (ensure-graph-dir! db-name)
-        [_db-name db-path] (sqlite-common-db/get-db-full-path (get-graphs-dir) db-name)]
-    (fs/writeFileSync db-path data)
-    (backup-file/backup-file graph-dir :backup-dir
-                             ""
-                             ".sqlite"
-                             data
-                             {:add-desktop? false
-                              :skip-backup-fn (fn [latest-backup-size]
-                                                (= latest-backup-size (.-length data)))})))
+  (let [[_db-name db-path] (sqlite-common-db/get-db-full-path (get-graphs-dir) db-name)]
+    (fs/writeFileSync db-path data)))
 
 (defn get-db
   [db-name]
