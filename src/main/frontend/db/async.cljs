@@ -107,7 +107,7 @@
                          [(not= ?vid :logseq.property/empty-placeholder)]
                          (or
                           [?vid :block/content ?value]
-                          [?vid :property/value ?value]
+                          [?vid :property.value/content ?value]
                           [?vid :block/original-name ?value])]
                        property-id
                        value)]

@@ -16,7 +16,7 @@
             :logseq.property/created-from-property property-id
             :block/parent property-id}
            (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
-             {:property/value value}
+             {:property.value/content value}
              {:block/content value}))))
 
 (defn build-closed-value-block
@@ -76,7 +76,7 @@
         :logseq.property/created-from-property (or (:db/id property) {:db/ident (:db/ident property)})
         :block/order (db-order/gen-key)}
        (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
-         {:property/value value}
+         {:property.value/content value}
          {:block/content value}))
       sqlite-util/block-with-timestamps))
 

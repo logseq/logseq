@@ -14,7 +14,7 @@
   "Get a property's name given its id"
   [e]
   (if-let [e (if (number? e) (db-utils/pull e) e)]
-    (db-property/get-property-value-name e)
+    (db-property/property-value-content e)
     e))
 
 (defn properties-by-name
@@ -41,7 +41,7 @@
               [(if original-key? k (-> prop-ent :block/original-name keyword))
                (cond
                  (set? v)
-                 (set (map db-property/get-property-value-name v))
+                 (set (map db-property/property-value-content v))
 
                  (sequential? v)
                  (map #(get-property-value (or (:db/id %) %)) v)

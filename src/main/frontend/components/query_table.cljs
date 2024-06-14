@@ -182,7 +182,7 @@
 
     [:string
      (if db-graph?
-       (db-property/get-property-value-names-from-ref db (get row column))
+       (db-property/ref->property-value-contents db (get row column))
        (if comma-separated-property?
          ;; Return original properties since comma properties need to
          ;; return collections for display purposes

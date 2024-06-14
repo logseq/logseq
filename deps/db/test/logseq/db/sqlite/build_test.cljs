@@ -40,7 +40,7 @@
                           :where [?b :block/content "Jrue Holiday"]])
                 first
                 :user.property/description
-                (db-property/get-property-value-name-from-ref @conn)))
+                (db-property/ref->property-value-contents @conn)))
         "description property is created and correctly associated to a block")
 
     (is (= "Awesome selfless basketball"
@@ -49,5 +49,5 @@
                            :where [?b :block/original-name "Jayson Tatum"]])
                 first
                 :user.property/description
-                (db-property/get-property-value-name-from-ref @conn)))
+                (db-property/ref->property-value-contents @conn)))
         "description property is created and correctly associated to a page")))
