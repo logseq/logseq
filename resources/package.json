@@ -25,7 +25,6 @@
     "@logseq/rsapi": "0.0.84",
     "@sentry/electron": "2.5.1",
     "abort-controller": "3.0.0",
-    "better-sqlite3": "9.3.0",
     "chokidar": "^3.5.1",
     "command-exists": "1.2.9",
     "diff-match-patch": "1.0.5",
