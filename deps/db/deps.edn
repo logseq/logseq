@@ -6,7 +6,6 @@
                                          :exclusions [datascript/datascript]}
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}
   com.cognitect/transit-cljs   {:mvn/version "0.8.280"}
-  funcool/promesa              {:mvn/version "4.0.2"}
   org.flatland/ordered         {:mvn/version "1.15.11"}
 
   ;; New deps should be added here and to nbb.edn
