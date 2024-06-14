@@ -82,19 +82,19 @@
        [:block/uuid :uuid]
        [:db/ident {:optional true} :keyword]
        [:block/order {:optional true} db-malli-schema/block-order]
+       [:block/parent {:optional true} :uuid]
        [::m/default extra-attr-map-schema]]]]]
    [:affected-blocks {:optional true}
     [:map-of :uuid
      [:multi {:dispatch :op :decode/string #(update % :op keyword)}
       [:move
-       [:map
+       [:map {:closed true}
         [:op :keyword]
         [:self :uuid]
         [:parents [:sequential :uuid]]
         [:block/order {:optional true} db-malli-schema/block-order]
         [:hash {:optional true} :int]
-        [:db/ident {:optional true} :keyword]
-        [::m/default extra-attr-map-schema]]]
+        [:db/ident {:optional true} :keyword]]]
       [:remove
        [:map
         [:op :keyword]

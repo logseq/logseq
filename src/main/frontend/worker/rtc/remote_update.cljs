@@ -12,6 +12,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.clj-fractional-indexing :as index]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
@@ -231,7 +232,6 @@
   [repo conn remove-page-ops]
   (doseq [op remove-page-ops]
     (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
-
 
 (defn- diff-remote-attr-map-by-local-av-coll
   [attr-map av-coll]
@@ -485,9 +485,8 @@
         (insert-or-move-block repo conn self parents block-order false op-value)
         :wrong-pos
         (insert-or-move-block repo conn self parents block-order true op-value)
-        nil                             ; do nothing
-        nil)
-      (update-block-attrs repo conn self op-value))))
+        ;; else
+        nil))))
 
 (defn- apply-remote-update-page-ops
   [repo conn update-page-ops]
@@ -501,6 +500,23 @@
         ;; if there's already existing same name page
         (prn :debug-create-page x y self)
         (update-block-attrs repo conn self op-value)))))
+
+(defn- ensure-refed-blocks-exist
+  "Ensure refed-blocks from remote existing in client"
+  [repo conn refed-blocks]
+  (let [sorted-refed-blocks (common-util/sort-coll-by-dependency :block/uuid :block/parent refed-blocks)]
+    (doseq [refed-block sorted-refed-blocks]
+      (let [ent (d/entity @conn [:block/uuid (:block/uuid refed-block)])]
+        (when-not ent
+          (prn :ensure-refed-blocks-exist refed-block)
+          (if (:block/name refed-block)
+            (apply-remote-update-page-ops repo conn [(-> refed-block
+                                                         (assoc :self (:block/uuid refed-block))
+                                                         (dissoc :block/uuid))])
+            (apply-remote-move-ops repo conn [(-> refed-block
+                                                  (assoc :self (:block/uuid refed-block)
+                                                         :parents [(:block/parent refed-block)])
+                                                  (dissoc :block/uuid))])))))))
 
 (defn apply-remote-update
   "Apply remote-update(`remote-update-event`)"
@@ -525,7 +541,7 @@
                              :local-tx local-tx})))
 
         (<= remote-t-before local-tx remote-t)
-        (let [affected-blocks-map (:affected-blocks remote-update-data)
+        (let [{affected-blocks-map :affected-blocks refed-blocks :refed-blocks} remote-update-data
               {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
               (affected-blocks->diff-type-ops repo affected-blocks-map)
               remove-ops (vals remove-ops-map)
@@ -536,6 +552,7 @@
 
           (js/console.groupCollapsed "rtc/apply-remote-ops-log")
           (batch-tx/with-batch-tx-mode conn {:rtc-tx? true :persist-op? false :gen-undo-ops? false}
+            (worker-util/profile :ensure-refed-blocks-exist (ensure-refed-blocks-exist repo conn refed-blocks))
             (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn update-page-ops))
             (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn sorted-move-ops))
             (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn update-ops))
