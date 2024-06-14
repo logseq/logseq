@@ -1,7 +1,7 @@
 (ns transact
   "This script generically runs transactions against the queried blocks"
   (:require [logseq.outliner.db-pipeline :as db-pipeline]
-            [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.frontend.rules :as rules]
             [datascript.core :as d]
             [clojure.edn :as edn]
@@ -19,7 +19,7 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (sqlite-db/open-db! dir db-name)
+        conn (sqlite-cli/open-db! dir db-name)
         ;; find blocks to update
         query (into (edn/read-string query*) [:in '$ '%]) ;; assumes no :in are in queries
         transact-fn (edn/read-string transact-fn*)

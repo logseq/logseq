@@ -23,7 +23,8 @@
                                 object]}
 
   :discouraged-namespace
-  {logseq.db.sqlite.db {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}
+  {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
+   logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}
 
   :unused-namespace {:level :warning
                      :exclude [logseq.db.frontend.entity-plus]}
@@ -154,7 +155,7 @@
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
-             logseq.db.sqlite.db sqlite-db
+             logseq.db.sqlite.cli sqlite-cli
              logseq.db.sqlite.util sqlite-util
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text

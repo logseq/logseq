@@ -19,7 +19,7 @@
              logseq.db.frontend.rules rules
              logseq.db.frontend.schema db-schema
              logseq.db.frontend.validate db-validate
-             logseq.db.sqlite.db sqlite-db
+             logseq.db.sqlite.cli sqlite-cli
              logseq.db.sqlite.util sqlite-util}}}
  :skip-comments true
  :output {:progress true}}

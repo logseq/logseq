@@ -4,7 +4,7 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [clojure.string :as string]
             [datascript.core :as d]
-            [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.graph-parser.db :as gp-db]
             [clojure.set :as set]
             ["fs" :as fs]
@@ -129,7 +129,7 @@
   "Creates a sqlite-based db graph given a map of pages to blocks and returns a datascript db.
    Blocks in a map can only be top-level blocks with no referenced content"
   [dir db-name pages-to-blocks]
-  (let [conn (sqlite-db/open-db! dir db-name)
+  (let [conn (sqlite-cli/open-db! dir db-name)
         frontend-blocks (create-frontend-blocks pages-to-blocks)
         _ (d/transact! conn frontend-blocks)]
     (gp-db/create-default-pages! conn)
