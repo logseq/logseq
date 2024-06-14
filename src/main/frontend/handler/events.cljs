@@ -844,7 +844,7 @@
      :label "graph-setup"}))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
-  (persist-db/export-current-graph!))
+  (persist-db/export-current-graph! {:succ-notification? true}))
 
 (defmethod handle :search/transact-data [[_ repo data]]
   (let [file-based? (config/local-file-based-graph? repo)
