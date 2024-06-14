@@ -1345,6 +1345,7 @@ Similar to re-frame subscriptions"
 
 (defn clear-edit!
   []
+  (clear-editor-action!)
   (set-state! :editor/editing? {})
   (set-state! :editor/start-pos nil)
   (clear-editor-last-pos!)
