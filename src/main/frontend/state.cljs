@@ -1028,7 +1028,9 @@ Similar to re-frame subscriptions"
   (when-not (exists? js/process)
     (when (editing?)
       (try
-        (when-let [elem js/document.activeElement]
+        (when-let [elem (or (when-let [id (:block/uuid (get-edit-block))]
+                              (gdom/getElement (str "edit-block-" id)))
+                            js/document.activeElement)]
           (when (util/input? elem)
             (let [id (gobj/get elem "id")]
               (when (string/starts-with? id "edit-block-")
