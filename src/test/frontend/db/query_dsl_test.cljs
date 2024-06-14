@@ -125,8 +125,7 @@ prop-d:: [[nada]]"}])
                (dsl-query "(or (property prop-c \"page c\") (property prop-b val-b))"))))
       "Blocks have ORed property values")
 
-    ;; FIXME: Once :number property approach resolved
-  #_(is (= ["b1"]
+  (is (= ["b1"]
            (map (comp first str/split-lines :block/content)
                 (dsl-query "(property prop-num 2000)")))
         "Blocks have integer property value")
@@ -616,8 +615,7 @@ created-at:: 1608968448116
                result)
             "sorted-by asc")))
 
-    ;; FIXME: Once :number property approach resolved
-    #_(testing "user page property rating"
+    (testing "user page property rating"
         (is (= [10 8]
                (->> (dsl-query "(and (page-property rating) (sort-by rating))")
                     (map #(get-property-value % :rating))))))))
