@@ -398,8 +398,8 @@ These tasks are specific to database graphs. For these tasks there is a one time
   Created graph inferred!
   ```
 
-  Finally, upload this created graph with the dev command: `Replace graph with`
-  ... Switch to the graph and you can use the created graph!
+  Finally, upload this created graph with the dev command: `Replace graph with
+  its db.sqlite file`. You'll be switched to the graph and you can use it!
 
 * `dev:db-datoms` and `dev:diff-datoms` - Save a db's datoms to file and diff two datom files
 
