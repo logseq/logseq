@@ -8,6 +8,7 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.modules.outliner.ui :as ui-outliner]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [logseq.db.frontend.property :as db-property]
@@ -85,11 +86,12 @@
                   (p/then
                     (fn []
                       (if (seq refs)
-                        (let [ps (for [eid refs]
-                                   #(when (number? eid)
-                                      (property-handler/set-block-property!
-                                        (state/get-current-repo) block-id ident eid)))]
-                          (apply p/chain (cons true ps)))
+                        (ui-outliner/transact!
+                          {:outliner-op :set-block-properties}
+                          (doseq [eid refs]
+                            (when (number? eid)
+                              (property-handler/set-block-property!
+                                (state/get-current-repo) block-id ident eid))))
                         (db-property-handler/set-block-property! block-id ident :logseq.property/empty-placeholder))))))))
           )))))
 
