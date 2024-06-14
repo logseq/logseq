@@ -91,8 +91,7 @@
     (close-watcher-f win dir))
   (state/close-window! win)
   (let [web-contents (. win -webContents)]
-    (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
-    (.send web-contents "persistent-dbs"))
+    (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents)))
   (destroy-window! win))
 
 (defn on-close-actions!

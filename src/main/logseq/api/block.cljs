@@ -8,7 +8,7 @@
             [frontend.state :as state]
             [frontend.config :as config]
             [frontend.modules.outliner.tree :as outliner-tree]
-            [frontend.modules.outliner.ui :as ui-outliner]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [logseq.db.frontend.property :as db-property]
@@ -86,7 +86,7 @@
                   (p/then
                     (fn []
                       (if (seq refs)
-                        (ui-outliner/transact!
+                        (ui-outliner-tx/transact!
                           {:outliner-op :set-block-properties}
                           (doseq [eid refs]
                             (when (number? eid)

@@ -423,6 +423,11 @@
                                              :inactive (not config/db-graph-enabled?)
                                              :binding false}
 
+   :graph/db-save                           {:fn #(state/pub-event! [:graph/save-db-to-disk])
+                                             ;; TODO: Remove `(not config/db-graph-enabled?)` check once feature is released
+                                             :inactive (or (not config/db-graph-enabled?) (not (util/electron?)))
+                                             :binding "mod+s"}
+
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
                                                           (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
@@ -671,6 +676,7 @@
             :graph/remove
             :graph/add
             :graph/db-add
+            :graph/db-save
             :graph/re-index
             :editor/cycle-todo
             :editor/up

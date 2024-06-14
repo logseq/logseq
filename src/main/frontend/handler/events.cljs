@@ -83,9 +83,9 @@
             [frontend.rum :as r]
             [frontend.persist-db.browser :as db-browser]
             [frontend.modules.outliner.pipeline :as pipeline]
-            [electron.ipc :as ipc]
             [frontend.date :as date]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.persist-db :as persist-db]))
 
 ;; TODO: should we move all events here?
 
@@ -199,6 +199,7 @@
      (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
+  (persist-db/export-current-graph!)
   (state/set-state! :db/async-query-loading #{})
   (state/set-state! :db/async-queries {})
   (st/refresh!)
@@ -842,6 +843,9 @@
      :title [:h2 "Create a new graph"]
      :label "graph-setup"}))
 
+(defmethod handle :graph/save-db-to-disk [[_ _opts]]
+  (persist-db/export-current-graph!))
+
 (defmethod handle :search/transact-data [[_ repo data]]
   (let [file-based? (config/local-file-based-graph? repo)
         data' (cond-> data
@@ -1051,15 +1055,10 @@
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
-  (let [repo (state/get-current-repo)
-        retract-datoms (filter (fn [d] (and (= :block/uuid (:a d)) (false? (:added d)))) (:tx-data data))
+  (let [retract-datoms (filter (fn [d] (and (= :block/uuid (:a d)) (false? (:added d)))) (:tx-data data))
         retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
         tx-data (concat (:tx-data data) retracted-tx-data)]
     (pipeline/invoke-hooks (assoc data :tx-data tx-data))
-    (when (util/electron?)
-      (ipc/ipc :db-transact repo
-               (ldb/write-transit-str tx-data)
-               (ldb/write-transit-str (:tx-meta data))))
 
     nil))
 

@@ -765,6 +765,7 @@
   :graph/remove                   "Remove a graph"
   :graph/add                      "Add a graph"
   :graph/db-add                   "Add a DB graph"
+  :graph/db-save                  "Save the current db to the disk (~/logseq/graphs/your-current-graph)"
   :graph/re-index                 "Re-index current graph"
   :command/run                    "Run git command"
   :go/home                        "Go to home"
