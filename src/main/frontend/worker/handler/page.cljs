@@ -13,13 +13,13 @@
 (defn rtc-create-page!
   [conn config title {:keys [uuid]}]
   (assert (uuid? uuid) (str "rtc-create-page! `uuid` is not a uuid " uuid))
-  (let [date-formatter (common-config/get-date-formatter config)
+  (let [date-formatter    (common-config/get-date-formatter config)
         [title page-name] (db-worker-page/get-title-and-pagename title)
-        page      (-> (gp-block/page-name->map title uuid @conn true date-formatter
-                                               {:skip-existing-page-check? true})
-                      (assoc :block/format :markdown))
-        result (ldb/transact! conn [page] {:persist-op? false
-                                           :outliner-op :create-page})]
+        page              (-> (gp-block/page-name->map title uuid @conn true date-formatter
+                                                       {:skip-existing-page-check? true})
+                              (assoc :block/format :markdown))
+        result            (ldb/transact! conn [page] {:persist-op? false
+                                                      :outliner-op :create-page})]
     [result page-name (:block/uuid page)]))
 
 (defn create!
