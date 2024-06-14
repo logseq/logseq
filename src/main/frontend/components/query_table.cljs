@@ -198,9 +198,9 @@
     (= :element cell-format) value
     (coll? value) (if db-graph?
                     (->> value
-                         (map #(if-let [page (db/get-page %)]
+                         (map #(if-let [page (and (string? %) (db/get-page %))]
                                  (page-cp {} page)
-                                 (inline-text row-block row-format %)))
+                                 (inline-text row-block row-format (str %))))
                          (interpose [:span ", "]))
                     (->> (map #(page-cp {} {:block/name %}) value)
                          (interpose [:span ", "])))
@@ -208,7 +208,7 @@
     (boolean? value) (str value)
     ;; string values will attempt to be rendered as pages, falling back to
     ;; inline-text when no page entity is found
-    (string? value) (if-let [page (db/get-page value)]
+    (string? value) (if-let [page (and (string? value) (db/get-page value))]
                       (page-cp {} page)
                       (inline-text row-block row-format value))
     ;; anything else should just be rendered as provided
