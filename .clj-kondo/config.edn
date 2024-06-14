@@ -22,6 +22,9 @@
                                 ;; TODO:lint: Fix when fixing all type hints
                                 object]}
 
+  :discouraged-namespace
+  {logseq.db.sqlite.db {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}
+
   :unused-namespace {:level :warning
                      :exclude [logseq.db.frontend.entity-plus]}
 
