@@ -2,7 +2,7 @@
   "Script that generates all the permutations of property types and cardinality.
    Also creates a page of queries that exercises most properties
    NOTE: This script is also used in CI to confirm graph creation works"
-  (:require [logseq.outliner.db-pipeline :as db-pipeline]
+  (:require [logseq.outliner.cli :as outliner-cli]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -182,9 +182,9 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (db-pipeline/init-conn dir db-name {:additional-config (:config options)
-                                                 :classpath (cp/get-classpath)})
-        {:keys [init-tx block-props-tx]} (db-pipeline/build-blocks-tx (create-init-data))
+        conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
+                                                  :classpath (cp/get-classpath)})
+        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx (create-init-data))
         existing-names (set (map :v (d/datoms @conn :avet :block/original-name)))
         conflicting-names (set/intersection existing-names (set (keep :block/original-name init-tx)))]
     (when (seq conflicting-names)

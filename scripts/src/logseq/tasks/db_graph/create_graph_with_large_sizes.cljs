@@ -1,6 +1,6 @@
 (ns logseq.tasks.db-graph.create-graph-with-large-sizes
   "Script that generates graphs at large sizes"
-  (:require [logseq.outliner.db-pipeline :as db-pipeline]
+  (:require [logseq.outliner.cli :as outliner-cli]
             [clojure.string :as string]
             [datascript.core :as d]
             [babashka.cli :as cli]
@@ -66,9 +66,9 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (db-pipeline/init-conn dir db-name {:classpath (cp/get-classpath)})
+        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         _ (println "Building tx ...")
-        {:keys [init-tx]} (db-pipeline/build-blocks-tx (create-init-data options))]
+        {:keys [init-tx]} (outliner-cli/build-blocks-tx (create-init-data options))]
     (println "Built" (count init-tx) "tx," (count (filter :block/original-name init-tx)) "pages and"
              (count (filter :block/content init-tx)) "blocks ...")
     ;; Vary the chunking with page size up to a max to avoid OOM

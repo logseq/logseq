@@ -1,6 +1,6 @@
 (ns create-graph
   "An example script that creates a DB graph given a sqlite.build EDN file"
-  (:require [logseq.outliner.db-pipeline :as db-pipeline]
+  (:require [logseq.outliner.cli :as outliner-cli]
             [clojure.string :as string]
             [clojure.edn :as edn]
             [datascript.core :as d]
@@ -27,8 +27,8 @@
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
         sqlite-build-edn (merge {:auto-create-ontology? true}
                                 (-> (resolve-path edn-path) fs/readFileSync str edn/read-string))
-        conn (db-pipeline/init-conn dir db-name {:classpath (cp/get-classpath)})
-        {:keys [init-tx block-props-tx]} (db-pipeline/build-blocks-tx sqlite-build-edn)]
+        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
+        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx sqlite-build-edn)]
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
              (count (filter :block/content init-tx)) "blocks ...")
     (d/transact! conn init-tx)
