@@ -525,7 +525,7 @@
                                 :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
-                         (with-page-block-refs {:body body :refs property-refs} false db date-formatter)]
+                         (with-page-block-refs {:body body :refs property-refs} true db date-formatter)]
                      (cond-> block
                        tags
                        (assoc :block/tags tags)
