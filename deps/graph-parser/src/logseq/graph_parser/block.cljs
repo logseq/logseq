@@ -152,7 +152,9 @@
            (remove (into #{}
                          (map name)
                          (apply conj
-                                (gp-property/editable-built-in-properties)
+                                (apply disj
+                                       (gp-property/editable-built-in-properties)
+                                       gp-property/editable-linkable-built-in-properties)
                                 (gp-property/hidden-built-in-properties))))
            (distinct))
      properties)

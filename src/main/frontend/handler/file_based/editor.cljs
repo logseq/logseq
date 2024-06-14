@@ -71,10 +71,11 @@
     value))
 
 (defn wrap-parse-block
-  [{:block/keys [content format page uuid level pre-block?] :as block
+  [{:block/keys [content format uuid level pre-block?] :as block
     :or {format :markdown}}]
   (let [repo (state/get-current-repo)
         block (or (and (:db/id block) (db/pull (:db/id block))) block)
+        page (:block/page block)
         block (merge block
                      (block/parse-title-and-body uuid format pre-block? (:block/content block)))
         properties (:block/properties block)
@@ -88,7 +89,7 @@
                   content)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
-        first-block? (= (:block/uuid (ldb/get-first-child (db/get-db) page))
+        first-block? (= (:block/uuid (ldb/get-first-child (db/get-db) (:db/id page)))
                         (:block/uuid block))
         ast (mldoc/->edn (string/trim content) format)
         first-elem-type (first (ffirst ast))
