@@ -30,13 +30,13 @@
 
 (def original-value-ref-property-types
   "Property value ref types where the refed entity stores its value in
-  :property/value e.g. :number is stored as a number. new value-ref-property-types
+  :property.value/content e.g. :number is stored as a number. new value-ref-property-types
   should default to this as it allows for more querying power"
   #{:number :url})
 
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
-  :property/value or block/content"
+  :property.value/content or block/content"
   (into #{:default :template}
         original-value-ref-property-types))
 
@@ -89,14 +89,14 @@
   (if new-closed-value?
     (url? val)
     (when-let [ent (d/entity db val)]
-      (url? (:property/value ent)))))
+      (url? (:property.value/content ent)))))
 
 (defn- number-entity?
   [db id-or-value {:keys [new-closed-value?]}]
   (if new-closed-value?
     (number? id-or-value)
     (when-let [entity (d/entity db id-or-value)]
-      (number? (:property/value entity)))))
+      (number? (:property.value/content entity)))))
 
 (defn- text-entity?
   [db s {:keys [new-closed-value?]}]

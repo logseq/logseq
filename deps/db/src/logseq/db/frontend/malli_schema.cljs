@@ -360,7 +360,7 @@
   (vec
    (concat
     [:map]
-    [[:property/value [:or :string :double]]]
+    [[:property.value/content [:or :string :double]]]
     (remove #(#{:block/content} (first %)) block-attrs)
     page-or-block-attrs)))
 
@@ -372,7 +372,7 @@
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/content {:optional true} :string]
-     [:property/value {:optional true} [:or :string :double]]
+     [:property.value/content {:optional true} [:or :string :double]]
      [:block/closed-value-property {:optional true} [:set :int]]
      [:block/schema {:optional true}
       [:map
@@ -383,10 +383,10 @@
 (def closed-value-block
   "A closed value for a property with closed/allowed values"
   [:and closed-value-block*
-   [:fn {:error/message ":block/content or :property/value required"
-         :error/path [:property/value]}
+   [:fn {:error/message ":block/content or :property.value/content required"
+         :error/path [:property.value/content]}
     (fn [m]
-      (or (:block/content m) (:property/value m)))]])
+      (or (:block/content m) (:property.value/content m)))]])
 
 (def normal-block
   "A block with content and no special type or tag behavior"

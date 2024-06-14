@@ -426,7 +426,7 @@
                                          (assoc schema :description description)
                                          (dissoc schema :description))}
                         (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
-                          {:property/value resolved-value}
+                          {:property.value/content resolved-value}
                           {:block/content resolved-value})))
                        icon
                        (assoc :logseq.property/icon icon)))]
@@ -459,7 +459,7 @@
                               resolved-value)]
         (cond
           (some (fn [b]
-                  (and (= (str resolved-value) (str (or (db-property/closed-value-name b)
+                  (and (= (str resolved-value) (str (or (db-property/closed-value-content b)
                                                         (:block/uuid b))))
                        (not= id (:block/uuid b))))
                 (:property/closed-values property))

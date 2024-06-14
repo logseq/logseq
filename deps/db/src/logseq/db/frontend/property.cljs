@@ -223,44 +223,43 @@
   (when-let [property (d/entity db property-id)]
     (:property/closed-values property)))
 
-(defn closed-value-name
-  "Gets name of closed value given closed value ent/map. Works for all closed value types"
+(defn closed-value-content
+  "Gets content/value of a given closed value ent/map. Works for all closed value types"
   [ent]
   (or (:block/content ent)
-      (:property/value ent)))
+      (:property.value/content ent)))
 
-(defn get-property-value-name
-  "Given an entity, gets a readable name for the property value of a ref type
-  property. Different than closed-value-name as there implementation will likely
-  differ"
+(defn property-value-content
+  "Given an entity, gets the content for the property value of a ref type
+  property i.e. what the user sees. For page types the content is the page name"
   [ent]
   (or (:block/content ent)
-      (:property/value ent)
+      (:property.value/content ent)
       (:block/original-name ent)))
 
-(defn get-property-value-name-from-ref
+(defn ref->property-value-content
   "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
   the property value of a ref type property"
   [db ref]
   (some->> (:db/id ref)
            (d/entity db)
-           get-property-value-name))
+           property-value-content))
 
-(defn get-property-value-names-from-ref
+(defn ref->property-value-contents
   "Given a ref or refs from a pulled query e.g. `{:db/id X}`, gets a readable
   name for the property values of a ref type property"
   [db ref]
   (if (or (set? ref) (sequential? ref))
-    (set (map #(get-property-value-name-from-ref db %) ref))
-    (get-property-value-name-from-ref db ref)))
+    (set (map #(ref->property-value-content db %) ref))
+    (ref->property-value-content db ref)))
 
 (defn get-closed-value-entity-by-name
   "Given a property, finds one of its closed values by name or nil if none
   found. Works for all closed value types"
-  [db db-ident value-name]
+  [db db-ident value-content]
   (let [values (get-closed-property-values db db-ident)]
     (some (fn [e]
-            (when (= (closed-value-name e) value-name)
+            (when (= (closed-value-content e) value-content)
               e)) values)))
 
 (def default-user-namespace "user.property")
@@ -281,7 +280,7 @@
   (and (map? block)
        (:logseq.property/created-from-property block)
        (:block/page block)
-       (not (some? (closed-value-name block)))))
+       (not (some? (closed-value-content block)))))
 
 (defn many?
   [property]
@@ -294,5 +293,5 @@
   (->> (properties block)
        (map (fn [[k v]]
               [(:block/original-name (d/entity db k))
-               (get-property-value-names-from-ref db v)]))
+               (ref->property-value-contents db v)]))
        (into {})))

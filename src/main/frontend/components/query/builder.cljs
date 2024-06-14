@@ -168,7 +168,7 @@
           _ (when db-graph?
               (doseq [id values] (db/sub-block id)))
           values' (if db-graph?
-                   (map #(db-property/get-property-value-name (db/entity repo %)) values)
+                   (map #(db-property/property-value-content (db/entity repo %)) values)
                    values)
           values'' (cons "Select all" values')]
       (select values''

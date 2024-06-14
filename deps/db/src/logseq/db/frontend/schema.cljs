@@ -135,7 +135,7 @@
                                   :db/cardinality :db.cardinality/many}
     :property/schema.classes {:db/valueType :db.type/ref
                               :db/cardinality :db.cardinality/many}
-    :property/value {}
+    :property.value/content {}
     :file/last-modified-at {}
     :asset/uuid {:db/unique :db.unique/identity}
     :asset/meta {}}))

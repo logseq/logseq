@@ -439,7 +439,7 @@
             items (if closed-values?
                     (keep (fn [block]
                             (let [icon (pu/get-block-property-value block :logseq.property/icon)
-                                  value (db-property/closed-value-name block)]
+                                  value (db-property/closed-value-content block)]
                               {:label (if icon
                                         [:div.flex.flex-row.gap-2
                                          (icon-component/icon icon)
@@ -454,7 +454,7 @@
                          (map (fn [{:keys [value]}]
                                 (if (and ref-type? (number? value))
                                   (when-let [e (db/entity value)]
-                                    {:label (db-property/get-property-value-name e)
+                                    {:label (db-property/property-value-content e)
                                      :value value})
                                   {:label value
                                    :value value})))
@@ -584,7 +584,7 @@
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
       (when-let [block (db/sub-block (:db/id (db/entity eid)))]
         (let [property-block? (db-property/property-created-block? block)
-              value' (db-property/closed-value-name block)
+              value' (db-property/closed-value-content block)
               icon (pu/get-block-property-value block :logseq.property/icon)]
           (cond
             icon
@@ -638,9 +638,9 @@
        (closed-value-item value opts)
 
        (de/entity? value)
-       (when-some [content (if (some? (:property/value value))
+       (when-some [content (if (some? (:property.value/content value))
                              ;; content needs to be a string for display purposes
-                             (str (:property/value value))
+                             (str (:property.value/content value))
                              (:block/content value))]
          (inline-text-cp content))
 

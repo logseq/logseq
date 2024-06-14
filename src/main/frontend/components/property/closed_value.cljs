@@ -61,7 +61,7 @@
   shortcut/disable-all-shortcuts
   {:init (fn [state]
            (let [block (second (:rum/args state))
-                 value (or (str (db-property/closed-value-name block)) "")
+                 value (or (str (db-property/closed-value-content block)) "")
                  icon (:logseq.property/icon block)
                  description (or (get-in block [:block/schema :description]) "")]
              (assoc state
@@ -116,7 +116,7 @@
   (rum/local false ::hover?)
   [state item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
   (let [*hover? (::hover? state)
-        value (db-property/closed-value-name item)
+        value (db-property/closed-value-content item)
         page? (:block/original-name item)
         property-block? (db-property/property-created-block? item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
@@ -186,7 +186,7 @@
     (for [value values]
       [:li (if (uuid? value)
              (let [result (db/entity [:block/uuid value])]
-               (db-property/closed-value-name result))
+               (db-property/closed-value-content result))
              (str value))])]
    (ui/button
     "Add choices"

@@ -26,9 +26,9 @@
                                     [k
                                      (cond
                                        (de/entity? v)
-                                       (db-property/get-property-value-name v)
+                                       (db-property/property-value-content v)
                                        (and (set? v) (every? de/entity? v))
-                                       (set (map db-property/get-property-value-name v))
+                                       (set (map db-property/property-value-content v))
                                        :else
                                        v)]))
                              (into {})))
