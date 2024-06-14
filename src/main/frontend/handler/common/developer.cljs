@@ -90,9 +90,9 @@
 
 (defn import-chosen-graph
   [repo]
-  (p/let [_ (persist-db/<unsafe-delete repo)
-          _ (persist-db/<fetch-init-data repo)]
-    (notification/show! "Graph updated!" :success)))
+  (p/let [_ (persist-db/<unsafe-delete repo)]
+    (notification/show! "Graph updated!" :success)
+    (state/pub-event! [:graph/switch repo])))
 
 (defn ^:export replace-graph-with-db-file []
   (state/set-state! :ui/open-select :db-graph-replace))
