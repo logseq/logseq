@@ -10,7 +10,7 @@
      * Some properties are skipped because they are superseded/deprecated or because they have a property
        type logseq doesnt' support yet
      * schema.org assumes no cardinality. For now, only :page properties are given a :cardinality :many"
-  (:require [logseq.outliner.db-pipeline :as db-pipeline]
+  (:require [logseq.outliner.cli :as outliner-cli]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [clojure.string :as string]
@@ -396,11 +396,11 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (db-pipeline/init-conn dir db-name {:additional-config (:config options)
-                                                 :classpath (cp/get-classpath)})
+        conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
+                                                  :classpath (cp/get-classpath)})
         init-data (create-init-data (d/q '[:find [?name ...] :where [?b :block/name ?name]] @conn)
                                     options)
-        {:keys [init-tx block-props-tx]} (db-pipeline/build-blocks-tx init-data)]
+        {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx init-data)]
     (println "Generating" (str (count (filter :block/name init-tx)) " pages with "
                                (count (:classes init-data)) " classes and "
                                (count (:properties init-data)) " properties ..."))

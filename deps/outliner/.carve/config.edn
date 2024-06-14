@@ -1,6 +1,7 @@
 {:paths ["src"]
  :api-namespaces [logseq.outliner.datascript-report
                   logseq.outliner.pipeline
+                  logseq.outliner.cli
                   logseq.outliner.core
                   logseq.outliner.db-pipeline
                   logseq.outliner.property
