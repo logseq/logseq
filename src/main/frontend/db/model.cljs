@@ -237,14 +237,15 @@ independent of format as format specific heading characters are stripped"
 (defn sub-block
   [id & {:keys [ref?]}]
   (when-let [repo (state/get-current-repo)]
-    (let [ref (react/q repo [:frontend.worker.react/block id]
-                       {:query-fn (fn [_]
-                                    (let [e (db-utils/entity id)]
-                                      [e (:block/tx-id e)]))}
-                       nil)]
-      (if ref?
-        ref
-        (-> ref react first)))))
+    (when id
+      (let [ref (react/q repo [:frontend.worker.react/block id]
+                         {:query-fn (fn [_]
+                                      (let [e (db-utils/entity id)]
+                                        [e (:block/tx-id e)]))}
+                         nil)]
+        (if ref?
+          ref
+          (-> ref react first))))))
 
 (defn sort-by-order-recursive
   [form]
