@@ -955,7 +955,7 @@ Similar to re-frame subscriptions"
 
 (defn set-repos!
   [repos]
-  (set-state! [:me :repos] repos))
+  (set-state! [:me :repos] (distinct repos)))
 
 (defn add-repo!
   [repo]

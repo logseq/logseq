@@ -124,7 +124,7 @@
             first-block-name)))))
 
 (defn- extract-page-alias-and-tags
-  [page-m page page-name properties]
+  [page-m page-name properties]
   (let [alias (:alias properties)
         alias' (if (coll? alias) alias [(str alias)])
         aliases (and alias'
@@ -132,24 +132,11 @@
                                        (string/blank? %)) ;; disable blank alias
                                   alias')))
         aliases' (keep
-                   (fn [alias]
-                     (let [page-name (common-util/page-name-sanity-lc alias)
-                           aliases (distinct
-                                    (conj
-                                     (remove #{alias} aliases)
-                                     page))
-                           aliases (when (seq aliases)
-                                     (map
-                                       (fn [alias]
-                                         {:block/name (common-util/page-name-sanity-lc alias)})
-                                       aliases))]
-                       (if (seq aliases)
-                         {:block/name page-name
-                          :block/original-name alias
-                          :block/alias aliases}
-                         {:block/name page-name
-                          :block/original-name alias})))
-                   aliases)
+                  (fn [alias]
+                    (let [page-name (common-util/page-name-sanity-lc alias)]
+                      {:block/name page-name
+                       :block/original-name alias}))
+                  aliases)
         result (cond-> page-m
                  (seq aliases')
                  (assoc :block/alias aliases')
@@ -160,7 +147,7 @@
                                           tags (remove string/blank? tags)]
                                       (map (fn [tag] {:block/name (common-util/page-name-sanity-lc tag)
                                                       :block/original-name tag})
-                                        tags))))]
+                                           tags))))]
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
 (defn- build-page-map
@@ -177,7 +164,7 @@
                   (gp-block/page-name->map page false db true date-formatter
                                            :from-page from-page)
                   :block/file {:file/path (common-util/path-normalize file)}))
-                (extract-page-alias-and-tags page page-name properties))]
+                (extract-page-alias-and-tags page-name properties))]
     (cond->
       page-m
 
