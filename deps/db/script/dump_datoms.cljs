@@ -4,7 +4,7 @@
      $ yarn -s nbb-logseq script/dump_datoms.cljs db-name datoms.edn"
     (:require [datascript.core :as d]
               [clojure.pprint :as pprint]
-              [logseq.db.sqlite.db :as sqlite-db]
+              [logseq.db.sqlite.cli :as sqlite-cli]
               [nbb.core :as nbb]
               ["path" :as path]
               ["os" :as os]
@@ -14,7 +14,7 @@
   "The db graph bare version of gp-cli/parse-graph"
   [graph-name]
   (let [graphs-dir (path/join (os/homedir) "logseq/graphs")]
-    (sqlite-db/open-db! graphs-dir graph-name)))
+    (sqlite-cli/open-db! graphs-dir graph-name)))
 
 (defn -main [args]
   (when (< (count args) 2)

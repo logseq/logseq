@@ -1,16 +1,19 @@
 ## Description
 
-This library provides a minimal API to access the
+This library provides an API to the
 frontend([datascript](https://github.com/tonsky/datascript)) and
 backend([SQLite](https://www.sqlite.org/index.html)) databases from the Logseq
-app and the CLI. This library is compatible with ClojureScript and with
+app and the CLI. The majority of this library is focused on supporting DB graphs
+but there are a few older namespaces that support file graphs. This library is
+compatible with ClojureScript and with
 [nbb-logseq](https://github.com/logseq/nbb-logseq) to respectively provide
 frontend and commandline functionality.
 
 ## API
 
-This library is under the parent namespace `logseq.db`. This library provides
-three main namespaces, `logseq.db`, `logseq.db.frontend.rules` and `logseq.db.sqlite.db`.
+This library is under the parent namespace `logseq.db`. While `logseq.db` is the
+main entry point, this library also provides frontend namespaces under
+`logseq.db.frontend` and backend/sqlite namespaces under `logseq.db.sqlite`.
 
 ## Usage
 

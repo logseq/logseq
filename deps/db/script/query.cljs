@@ -4,7 +4,7 @@
   $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/content]) :where [?b :block/created-at]]'"
   (:require [datascript.core :as d]
             [clojure.edn :as edn]
-            [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [logseq.db.frontend.rules :as rules]
             [nbb.core :as nbb]
             [clojure.string :as string]
@@ -51,7 +51,7 @@
                           (cli/format-opts {:spec spec})))
             (js/process.exit 1))
         [dir db-name] (get-dir-and-db-name graph-dir)
-        conn (sqlite-db/open-db! dir db-name)
+        conn (sqlite-cli/open-db! dir db-name)
         results (if (:entity options)
                   (map #(when-let [ent (d/entity @conn
                                                  (if (string? %) (edn/read-string %) %))]

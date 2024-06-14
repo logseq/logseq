@@ -2,7 +2,6 @@
   "Basic script for publishing from CLI"
   (:require [logseq.graph-parser.cli :as gp-cli]
             [logseq.publishing :as publishing]
-            [logseq.db.sqlite.db :as sqlite-db]
             [logseq.db.sqlite.cli :as sqlite-cli]
             ["fs" :as fs]
             ["path" :as node-path]
@@ -23,7 +22,7 @@
 
 (defn- publish-db-graph [static-dir graph-dir output-path opts]
   (let [db-name (node-path/basename graph-dir)
-        conn (sqlite-db/open-db! (node-path/dirname graph-dir) db-name)
+        conn (sqlite-cli/open-db! (node-path/dirname graph-dir) db-name)
         repo-config (-> (d/q '[:find ?content
                                :where [?b :file/path "logseq/config.edn"] [?b :file/content ?content]]
                              @conn)

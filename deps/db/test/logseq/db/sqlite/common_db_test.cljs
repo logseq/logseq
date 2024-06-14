@@ -5,7 +5,7 @@
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [clojure.string :as string]))
 
 (use-fixtures
@@ -27,7 +27,7 @@
   (testing "Fetches a defined block"
     (create-graph-dir "tmp/graphs" "test-db")
 
-    (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
+    (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
           blocks [{:file/path "logseq/config.edn"
                    :file/content "{:foo :bar}"}]
           _ (d/transact! conn* blocks)
@@ -43,7 +43,7 @@
 (deftest restore-initial-data
   (testing "Restore a journal page"
     (create-graph-dir "tmp/graphs" "test-db")
-    (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
+    (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
           page-uuid (random-uuid)
           block-uuid (random-uuid)
           created-at (js/Date.now)

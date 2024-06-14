@@ -4,7 +4,7 @@
               [datascript.core :as d]
               [logseq.db.sqlite.create-graph :as sqlite-create-graph]
               [logseq.db.sqlite.build :as sqlite-build]
-              [logseq.db.sqlite.db :as sqlite-db]
+              [logseq.db.sqlite.cli :as sqlite-cli]
               [logseq.outliner.db-pipeline :as db-pipeline]
               ["fs" :as fs]
               ["path" :as node-path]))
@@ -38,7 +38,7 @@
   [dir db-name & [opts]]
   (fs/mkdirSync (node-path/join dir db-name) #js {:recursive true})
   ;; Same order as frontend.db.conn/start!
-  (let [conn (sqlite-db/open-db! dir db-name)]
+  (let [conn (sqlite-cli/open-db! dir db-name)]
     (db-pipeline/add-listener conn)
     (setup-init-data conn opts)
     conn))
