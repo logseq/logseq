@@ -30,9 +30,9 @@
 (defn get-block-property-value
   "Get the value of built-in block's property by its db-ident"
   [repo db block db-ident]
-  (assert db "DB required")
-  (let [block (or (d/entity db (:db/id block)) block)]
-    (lookup repo (:block/properties block) db-ident)))
+  (when db
+    (let [block (or (d/entity db (:db/id block)) block)]
+     (lookup repo (:block/properties block) db-ident))))
 
 (defn shape-block?
   [repo db block]
