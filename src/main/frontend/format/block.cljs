@@ -16,11 +16,10 @@
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content format {:keys [with-id? page-name]
-                          :or {with-id? true}}]
+  [blocks content format {:keys [page-name]}]
   (let [repo (state/get-current-repo)]
     (try
-     (gp-block/extract-blocks blocks content with-id? format
+     (gp-block/extract-blocks blocks content format
                               {:user-config (state/get-config)
                                :block-pattern (config/get-block-pattern format)
                                :db (db/get-db repo)
@@ -36,10 +35,10 @@ and handles unexpected failure."
 
 (defn page-name->map
   "Wrapper around logseq.graph-parser.block/page-name->map that adds in db"
-  ([original-page-name with-id?]
-   (page-name->map original-page-name with-id? true))
-  ([original-page-name with-id? with-timestamp?]
-   (gp-block/page-name->map original-page-name with-id? (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
+  ([original-page-name]
+   (page-name->map original-page-name true))
+  ([original-page-name with-timestamp?]
+   (gp-block/page-name->map original-page-name (db/get-db (state/get-current-repo)) with-timestamp? (state/get-date-formatter))))
 
 (defn- normalize-as-percentage
   [block]
@@ -69,23 +68,20 @@ and handles unexpected failure."
        (first)))
 
 (defn parse-block
-  ([block]
-   (parse-block block nil))
-  ([{:block/keys [uuid content format] :as block} {:keys [with-id?]
-                                                   :or {with-id? true}}]
-   (when-not (string/blank? content)
-     (let [block (dissoc block :block/pre-block?)
-           format (or format :markdown)
-           parse-config (mldoc/get-default-config format)
-           ast (format/to-edn content format parse-config)
-           blocks (extract-blocks ast content format {:with-id? with-id?})
-           new-block (first blocks)
-           block (cond->
-                  (merge block new-block)
-                   (> (count blocks) 1)
-                   (assoc :block/warning :multiple-blocks))
-           block (dissoc block :block/title :block/body :block/level)]
-       (if uuid (assoc block :block/uuid uuid) block)))))
+  [{:block/keys [uuid content format] :as block}]
+  (when-not (string/blank? content)
+    (let [block (dissoc block :block/pre-block?)
+          format (or format :markdown)
+          parse-config (mldoc/get-default-config format)
+          ast (format/to-edn content format parse-config)
+          blocks (extract-blocks ast content format {})
+          new-block (first blocks)
+          block (cond->
+                 (merge block new-block)
+                  (> (count blocks) 1)
+                  (assoc :block/warning :multiple-blocks))
+          block (dissoc block :block/title :block/body :block/level)]
+      (if uuid (assoc block :block/uuid uuid) block))))
 
 (defn parse-title-and-body
   ([block]

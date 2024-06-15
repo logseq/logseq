@@ -73,7 +73,7 @@
      (when (seq tx-data)
 
        ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
-       ;;  (cljs.pprint/pprint tx-data)
+       ;; (cljs.pprint/pprint tx-data)
 
        (let [f (or @*transact-fn d/transact!)]
          (try

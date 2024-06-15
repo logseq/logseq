@@ -394,6 +394,7 @@
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))
 
+;; FIXME: this still happens when writing fast
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (when-let [repo (state/get-current-repo)]
     (let [^js sqlite @db-browser/*worker]
