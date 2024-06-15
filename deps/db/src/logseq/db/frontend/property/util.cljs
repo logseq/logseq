@@ -11,7 +11,7 @@
   [repo db-ident]
   (if (sqlite-util/db-based-graph? repo)
     db-ident
-    (get-in db-property/built-in-properties [db-ident :name])))
+    (get-in db-property/built-in-properties [db-ident :name] (name db-ident))))
 
 (defn built-in-has-ref-value?
   "Given a built-in's db-ident, determine if its property value is a ref"

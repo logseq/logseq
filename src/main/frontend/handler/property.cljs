@@ -8,6 +8,7 @@
 
 (defn remove-block-property!
   [repo block-id property-id-or-key]
+  (assert (some? property-id-or-key) "remove-block-property! remove-block-property! is nil")
   (if (config/db-based-graph? repo)
     (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
       (db-property-handler/remove-block-property! eid property-id-or-key))
@@ -15,6 +16,7 @@
 
 (defn set-block-property!
   [repo block-id key v]
+  (assert (some? key) "set-block-property! key is nil")
   (if (config/db-based-graph? repo)
     (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
       (if (or (nil? v) (and (coll? v) (empty? v)))
@@ -25,6 +27,7 @@
 (defn add-page-property!
   "Sanitized page-name, unsanitized key / value"
   [page-entity key value]
+  (assert (some? key) "key is nil")
   (when page-entity
     (let [repo (state/get-current-repo)]
       (if (config/db-based-graph? repo)
@@ -44,12 +47,14 @@
 
 (defn batch-remove-block-property!
   [repo block-ids key]
+  (assert (some? key) "key is nil")
   (if (config/db-based-graph? repo)
     (db-property-handler/batch-remove-property! block-ids key)
     (file-property-handler/batch-remove-block-property! block-ids key)))
 
 (defn batch-set-block-property!
   [repo block-ids key value]
+  (assert (some? key) "key is nil")
   (if (config/db-based-graph? repo)
     (if (nil? value)
       (db-property-handler/batch-remove-property! block-ids key)
