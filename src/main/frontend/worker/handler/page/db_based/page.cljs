@@ -68,11 +68,12 @@
            persist-op?              true}
     :as options}]
   (let [date-formatter (common-config/get-date-formatter config)
-        [title page-name] (get-title-and-pagename title)
-        with-uuid? (if (uuid? uuid) uuid true)]
+        [title page-name] (get-title-and-pagename title)]
     (when-not (ldb/get-case-page @conn page-name)
       (let [format    :markdown
-            page      (-> (gp-block/page-name->map title with-uuid? @conn true date-formatter :class? class?)
+            page      (-> (gp-block/page-name->map title @conn true date-formatter
+                                                   {:class? class?
+                                                    :page-uuid (when (uuid? uuid) uuid)})
                           (assoc :block/format format))
             page-uuid (:block/uuid page)
             page-txs  (build-page-tx conn properties page (select-keys options [:whiteboard? :class? :tags]))

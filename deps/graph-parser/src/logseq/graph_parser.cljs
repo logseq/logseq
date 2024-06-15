@@ -113,7 +113,9 @@ Options available:
                           (assoc :file/created-at (common-util/time-ms)))])
          result (if skip-db-transact?
                   tx
-                  (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?])))]
+                  (do
+                    (ldb/transact! conn tx (select-keys options [:new-graph? :from-disk?]))
+                    nil))]
      {:tx result
       :ast ast})))
 

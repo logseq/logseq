@@ -299,16 +299,12 @@
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
-   `with-id?`: if true, assign uuid to the map structure.
-    if the page entity already exists, no-op.
-    else, if with-id? is a uuid, the uuid is used.
-    otherwise, generate a uuid.
    `with-timestamp?`: assign timestampes to the map structure.
     Useful when creating new pages from references or namespaces,
     as there's no chance to introduce timestamps via editing in page
    `skip-existing-page-check?`: if true, allows pages to have the same name"
-  [original-page-name with-id? db with-timestamp? date-formatter
-   & {:keys [from-page class? skip-existing-page-check?]}]
+  [original-page-name db with-timestamp? date-formatter
+   & {:keys [page-uuid from-page class? skip-existing-page-check?]}]
   (let [db-based? (ldb/db-based-graph? db)]
     (cond
       (and original-page-name (string? original-page-name))
@@ -317,7 +313,7 @@
             namespace? (and (not db-based?)
                             (not (boolean (text/get-nested-page-name original-page-name)))
                             (text/namespace-page? original-page-name))
-            page-entity (when (and db (not skip-existing-page-check?))
+            page-entity (when db
                           (if class?
                             (ldb/get-case-page db original-page-name)
                             (ldb/get-page db original-page-name)))
@@ -325,17 +321,18 @@
         (merge
          {:block/name page-name
           :block/original-name original-page-name}
-         (when with-id?
-           (let [new-uuid (or
-                           (cond page-entity      (:block/uuid page-entity)
-                                 (uuid? with-id?) with-id?)
-                           (d/squuid))]
-             {:block/uuid new-uuid}))
+         (let [new-uuid (if skip-existing-page-check?
+                          (d/squuid)
+                          (or
+                           (cond page-entity       (:block/uuid page-entity)
+                                 (uuid? page-uuid) page-uuid)
+                           (d/squuid)))]
+           {:block/uuid new-uuid})
          (when namespace?
            (let [namespace (first (common-util/split-last "/" original-page-name))]
              (when-not (string/blank? namespace)
                {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
-         (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
+         (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
            (let [current-ms (common-util/time-ms)]
              {:block/created-at current-ms
               :block/updated-at current-ms}))
@@ -347,14 +344,14 @@
       (and (map? original-page-name) (:block/uuid original-page-name))
       original-page-name
 
-      (and (map? original-page-name) with-id?)
-      (assoc original-page-name :block/uuid (d/squuid))
+      (map? original-page-name)
+      (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
 
       :else
       nil)))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} with-id? db date-formatter]
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter]
   (let [db-based? (ldb/db-based-graph? db)
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
@@ -399,10 +396,10 @@
                              (let [macro? (and (map? item)
                                                (= "macro" (:type item)))]
                                (when-not macro?
-                                 (let [result (page-name->map item with-id? db true date-formatter)
+                                 (let [result (page-name->map item db true date-formatter)
                                        page-name (:block/name result)
                                        id (get @*name->id page-name)]
-                                   (when (and with-id? (nil? id))
+                                   (when (nil? id)
                                      (swap! *name->id assoc page-name (:block/uuid result)))
                                    (if id
                                      (assoc result :block/uuid id)
@@ -466,12 +463,12 @@
 (defn get-page-refs-from-properties
   [properties db date-formatter user-config]
   (let [page-refs (get-page-ref-names-from-properties properties user-config)]
-    (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
+    (map (fn [page] (page-name->map page db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
-  [block with-id? db date-formatter]
+  [block db date-formatter]
   (some-> block
-          (with-page-refs-and-tags with-id? db date-formatter)
+          (with-page-refs-and-tags db date-formatter)
           with-block-refs
           (update :refs (fn [col] (remove nil? col)))))
 
@@ -525,7 +522,7 @@
                                 :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
-                         (with-page-block-refs {:body body :refs property-refs} true db date-formatter)]
+                         (with-page-block-refs {:body body :refs property-refs} db date-formatter)]
                      (cond-> block
                        tags
                        (assoc :block/tags tags)
@@ -543,7 +540,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern db date-formatter]}]
+  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -581,7 +578,7 @@
                 block)
         block (-> block
                   (assoc :body body)
-                  (with-page-block-refs with-id? db date-formatter)
+                  (with-page-block-refs db date-formatter)
                   (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
                   (update :refs (fn [refs] (map #(if (map? %) (assoc % :block/format format) %) refs))))
         block (update block :refs concat (:block-refs properties))
@@ -635,12 +632,11 @@
   Args:
     `blocks`: mldoc ast.
     `content`: markdown or org-mode text.
-    `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
     `format`: content's format, it could be either :markdown or :org-mode.
     `options`: Options supported are :user-config, :block-pattern,
                :extract-macros, :date-formatter, :page-name, :db-graph-mode? and :db"
-  [blocks content with-id? format {:keys [user-config db-graph-mode?] :as options}]
-  {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
+  [blocks content format {:keys [user-config db-graph-mode?] :as options}]
+  {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
         [blocks body pre-block-properties]
         (loop [headings []
@@ -668,7 +664,7 @@
                   (recur headings (rest blocks) timestamps properties body))
 
                 (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
+                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta options)
                       block'' (if db-graph-mode?
                                 block'
                                 (assoc block' :macros (extract-macros-from-ast (cons block body))))]
@@ -806,6 +802,6 @@
                   (common-util/uuid-string? %)
                   {:block/uuid (uuid %)}
                   :else
-                  (page-name->map % true db true date-formatter))
+                  (page-name->map % db true date-formatter))
                refs')
           set))))

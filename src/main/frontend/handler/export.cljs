@@ -121,7 +121,6 @@
 
 (defn- <export-repo-as-edn-str [repo]
   (p/let [result (<build-blocks repo)]
-    (prn :debug :result result)
     (let [sb (StringBuffer.)]
       (pprint/pprint result (StringBufferWriter. sb))
       (str sb))))

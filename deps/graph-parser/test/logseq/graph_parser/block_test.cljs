@@ -102,7 +102,7 @@
                                          {})))
         "Default to enabled when :property-pages/enabled? is not in config")
 
-    (is (= ["tags" "foo" "bar"]
+    (is (= ["foo" "bar" "tags"]
            (:page-refs
             (extract-properties
              ;; tags is linkable and background-color is not

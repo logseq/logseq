@@ -36,7 +36,7 @@
   [:div.cp__diff-file
    [:div.cp__diff-file-header
     [:span.cp__diff-file-header-content.pl-1.font-medium
-     (str "File " path " has been modified on the disk.")]]
+     (str "File " path "has been modified on the disk.")]]
    [:div.p-4
     (when (not= (string/trim disk-content) (string/trim db-content))
       (ui/foldable

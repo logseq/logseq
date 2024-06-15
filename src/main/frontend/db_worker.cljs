@@ -552,7 +552,6 @@
    [this repo]
    (let [conn (worker-state/get-datascript-conn repo)
          writes @file/*writes]
-
      ;; Clean pages that have been deleted
      (when conn
        (swap! file/*writes (fn [writes]

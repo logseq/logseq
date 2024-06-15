@@ -79,7 +79,7 @@
 - link to ns [[one]]
 - link to page one [[page ONE]]"}])
 
-  (is (= '("one/two/tree" "page one")
+  (is (= '("one/two/tree" "tags" "page one")
          (map second (model/get-pages-relation test-helper/test-db true)))
       "(get-pages-relation) Must be only ns one/two/tree")
 

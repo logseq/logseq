@@ -161,7 +161,7 @@
         page-m (->
                 (common-util/remove-nils-non-nested
                  (assoc
-                  (gp-block/page-name->map page false db true date-formatter
+                  (gp-block/page-name->map page db true date-formatter
                                            :from-page from-page)
                   :block/file {:file/path (common-util/path-normalize file)}))
                 (extract-page-alias-and-tags page-name properties))]
@@ -212,7 +212,7 @@
           options' (assoc options :page-name page-name)
           ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
           override-uuids (resolve-uuid-fn format ast content options')
-          blocks (->> (gp-block/extract-blocks ast content false format options')
+          blocks (->> (gp-block/extract-blocks ast content format options')
                       (attach-block-ids-if-match override-uuids)
                       (mapv #(gp-block/fix-block-id-if-duplicated! db page-name extracted-block-ids %))
                       ;; FIXME: use page uuid
@@ -243,7 +243,7 @@
                               (when (text/namespace-page? page)
                                 (->> (common-util/split-namespace-pages page)
                                      (map (fn [page]
-                                            (-> (gp-block/page-name->map page true db true date-formatter)
+                                            (-> (gp-block/page-name->map page db true date-formatter)
                                                 (assoc :block/format format))))))))
           pages (->> (concat
                       [page-map]
@@ -254,7 +254,12 @@
                      (remove nil?))
           pages (common-util/distinct-by :block/name pages)
           pages (remove nil? pages)
-          pages (map (fn [page] (assoc page :block/uuid (d/squuid))) pages)
+          pages (map (fn [page]
+                       (let [page-id (or (when db
+                                           (:block/uuid (ldb/get-page db (:block/name page))))
+                                         (d/squuid))]
+                         (assoc page :block/uuid page-id)))
+                     pages)
           blocks (->> (remove nil? blocks)
                       (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta))))]
       [pages blocks])

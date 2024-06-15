@@ -75,8 +75,7 @@
   (let [date-formatter (common-config/get-date-formatter config)
         split-namespace? (not (or (string/starts-with? title "hls__")
                                   (date/valid-journal-title? date-formatter title)))
-        [title page-name] (get-title-and-pagename title)
-        with-uuid? (if (uuid? uuid) uuid true)]
+        [title page-name] (get-title-and-pagename title)]
     (when-not (ldb/get-page @conn page-name)
       (let [pages    (if split-namespace?
                        (common-util/split-namespace-pages title)
@@ -84,7 +83,8 @@
             format   (or format (common-config/get-preferred-format config))
             pages    (map (fn [page]
                             ;; only apply uuid to the deepest hierarchy of page to create if provided.
-                            (-> (gp-block/page-name->map page (if (= page title) with-uuid? true) @conn true date-formatter)
+                            (-> (gp-block/page-name->map page @conn true date-formatter
+                                                         {:page-uuid (when (uuid? uuid) uuid)})
                                 (assoc :block/format format)))
                           pages)
             txs      (->> pages
