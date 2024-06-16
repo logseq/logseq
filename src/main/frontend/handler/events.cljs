@@ -394,18 +394,10 @@
   (p/let [_ (page-handler/create-today-journal!)]
     (ui-handler/re-render-root!)))
 
-;; FIXME: this still happens when writing fast
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (when-let [repo (state/get-current-repo)]
-    (let [^js sqlite @db-browser/*worker]
-      (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
-              request-finished? (db-transact/request-finished?)]
-        (prn :debug :writes-finished? writes-finished?
-          :request-finished? request-finished?)
-        (when (and request-finished? writes-finished? disk-content db-content
-                (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
-          (state/set-modal! #(diff/local-file repo path disk-content db-content)
-            {:label "diff__cp"}))))))
+    (state/set-modal! #(diff/local-file repo path disk-content db-content)
+                      {:label "diff__cp"})))
 
 
 (defmethod handle :modal/display-file-version-selector  [[_ versions path  get-content]]
