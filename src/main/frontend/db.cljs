@@ -86,8 +86,7 @@
   (when (and repo path last-modified-at)
     (transact! repo
                [{:file/path path
-                 :file/last-modified-at last-modified-at}]
-               {:skip-refresh? true})))
+                 :file/last-modified-at last-modified-at}] {})))
 
 (defn set-file-content!
   ([repo path content]
@@ -96,4 +95,4 @@
    (when (and repo path)
      (let [tx-data {:file/path path
                     :file/content content}]
-       (transact! repo [tx-data] (merge opts {:skip-refresh? true}))))))
+       (transact! repo [tx-data] opts)))))

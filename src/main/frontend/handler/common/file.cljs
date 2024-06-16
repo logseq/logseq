@@ -82,13 +82,6 @@
       :fs/local-file-change
       (graph-parser/parse-file db-conn file-path content (assoc-in options [:extract-options :resolve-uuid-fn] diff-merge-uuids-2ways))
 
-      ;; TODO Junyi: 3 ways to handle remote file change
-      ;; The file is on remote, so we should have
-      ;;   1. a "common ancestor" file locally
-      ;;     the worst case is that the file is not in db, so we should use the
-      ;;     empty file as the common ancestor
-      ;;   2. a "remote version" just fetched from remote
-
       ;; default to parse the file
       (graph-parser/parse-file db-conn file-path content options))))
 

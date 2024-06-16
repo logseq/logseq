@@ -107,13 +107,13 @@
 
    ;; file
    :file/path {:db/unique :db.unique/identity}
+   :file/last-modified-at {}
    ;; only store the content of logseq's files
    :file/content {}
 
    ;; TODO: do we really use this?
    :file/handle {}
    ;; :file/created-at {}
-   ;; :file/last-modified-at {}
    ;; :file/size {}
    })
 
@@ -136,7 +136,6 @@
     :property/schema.classes {:db/valueType :db.type/ref
                               :db/cardinality :db.cardinality/many}
     :property.value/content {}
-    :file/last-modified-at {}
     :asset/uuid {:db/unique :db.unique/identity}
     :asset/meta {}}))
 
