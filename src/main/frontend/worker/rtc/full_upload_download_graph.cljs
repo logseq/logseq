@@ -5,8 +5,8 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
-            [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
@@ -113,15 +113,15 @@
           (m/?
            (m/join
             vector
-            (r.client/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
+            (ws-util/send&recv get-ws-create-task {:action "presign-put-temp-s3-obj"})
             (m/sp
               (let [all-blocks (export-as-blocks @conn)]
                 (ldb/write-transit-str all-blocks)))))]
       (m/? (c.m/<! (http/put url {:body all-blocks-str :with-credentials? false})))
       (let [upload-resp
-            (m/? (r.client/send&recv get-ws-create-task {:action "upload-graph"
-                                                         :s3-key key
-                                                         :graph-name remote-graph-name}))]
+            (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
+                                                        :s3-key key
+                                                        :graph-name remote-graph-name}))]
         (if-let [graph-uuid (:graph-uuid upload-resp)]
           (let [^js worker-obj (:worker/object @worker-state/*state)]
             (ldb/transact! conn
@@ -257,14 +257,14 @@
 (defn new-task--request-download-graph
   [get-ws-create-task graph-uuid]
   (m/join :download-info-uuid
-          (r.client/send&recv get-ws-create-task {:action "download-graph"
-                                                  :graph-uuid graph-uuid})))
+          (ws-util/send&recv get-ws-create-task {:action "download-graph"
+                                                 :graph-uuid graph-uuid})))
 
 (defn new-task--download-info-list
   [get-ws-create-task graph-uuid]
   (m/join :download-info-list
-          (r.client/send&recv get-ws-create-task {:action "download-info-list"
-                                                  :graph-uuid graph-uuid})))
+          (ws-util/send&recv get-ws-create-task {:action "download-info-list"
+                                                 :graph-uuid graph-uuid})))
 
 (defn new-task--wait-download-info-ready
   [get-ws-create-task download-info-uuid graph-uuid timeout-ms]
@@ -273,8 +273,8 @@
      (loop []
        (m/? (m/sleep 3000))
        (let [{:keys [download-info-list]}
-             (m/? (r.client/send&recv get-ws-create-task {:action "download-info-list"
-                                                          :graph-uuid graph-uuid}))]
+             (m/? (ws-util/send&recv get-ws-create-task {:action "download-info-list"
+                                                         :graph-uuid graph-uuid}))]
          (if-let [found-download-info
                   (some
                    (fn [download-info]

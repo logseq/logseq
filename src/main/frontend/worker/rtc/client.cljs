@@ -8,31 +8,17 @@
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
-            [frontend.worker.rtc.ws :as ws]
+            [frontend.worker.rtc.skeleton :as r.skeleton]
+            [frontend.worker.rtc.ws-util :as ws-util]
             [missionary.core :as m]))
-
-(defn- handle-remote-ex
-  [resp]
-  (if-let [e ({:graph-not-exist r.ex/ex-remote-graph-not-exist
-               :graph-not-ready r.ex/ex-remote-graph-not-ready}
-              (:type (:ex-data resp)))]
-    (throw e)
-    resp))
-
-(defn send&recv
-  "Return a task: throw exception if recv ex-data response"
-  [get-ws-create-task message]
-  (m/sp
-    (let [ws (m/? get-ws-create-task)]
-      (handle-remote-ex (m/? (ws/send&recv ws message))))))
 
 (defn- register-graph-updates
   [get-ws-create-task graph-uuid repo]
   (m/sp
     (try
       (let [{:keys [t]}
-            (m/? (send&recv get-ws-create-task {:action "register-graph-updates"
-                                                :graph-uuid graph-uuid}))]
+            (m/? (ws-util/send&recv get-ws-create-task {:action "register-graph-updates"
+                                                        :graph-uuid graph-uuid}))]
         (when-not (op-mem-layer/get-local-tx repo)
           (op-mem-layer/update-local-tx! repo t)))
       (catch :default e
@@ -43,8 +29,8 @@
 (defn- ensure-register-graph-updates*
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
-  But ensure `register-graph-updates` has been sent"
-  [get-ws-create-task graph-uuid repo]
+  But ensure `register-graph-updates` and `calibrate-graph-skeleton` has been sent"
+  [get-ws-create-task graph-uuid repo conn *last-calibrate-t]
   (assert (some? graph-uuid))
   (let [*sent (atom {}) ;; ws->bool
         ]
@@ -56,6 +42,11 @@
           (m/? (c.m/backoff
                 (take 5 (drop 2 c.m/delays))     ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
                 (register-graph-updates get-ws-create-task graph-uuid repo)))
+          (let [t (op-mem-layer/get-local-tx repo)]
+            (when (or (nil? @*last-calibrate-t)
+                      (< 500 (- t @*last-calibrate-t)))
+              (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
+              (reset! *last-calibrate-t t)))
           (swap! *sent assoc ws true))
         ws))))
 
@@ -332,8 +323,8 @@
                                  (sort-remote-ops
                                   remote-ops))]
         (let [local-tx (op-mem-layer/get-local-tx repo)
-              r (m/? (send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
-                                                    :ops ops-for-remote :t-before (or local-tx 1)}))]
+              r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+                                                            :ops ops-for-remote :t-before (or local-tx 1)}))]
           (if-let [remote-ex (:ex-data r)]
             (do (add-log-fn remote-ex)
                 (case (:type remote-ex)
@@ -368,8 +359,8 @@
   [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
   (m/sp
     (let [local-tx (op-mem-layer/get-local-tx repo)
-          r (m/? (send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
-                                                :ops [] :t-before (or local-tx 1)}))]
+          r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+                                                        :ops [] :t-before (or local-tx 1)}))]
       (if-let [remote-ex (:ex-data r)]
         (do (add-log-fn remote-ex)
             (case (:type remote-ex)
