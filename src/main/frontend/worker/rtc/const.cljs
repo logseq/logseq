@@ -75,6 +75,7 @@
    [:t-before {:optional true} :int]
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
+   [:diff-data {:optional true} [:map-of :keyword :any]]
    [:refed-blocks {:optional true}
     [:maybe
      [:sequential
@@ -208,7 +209,21 @@
                                  [:map
                                   [:asset-uuid :uuid]
                                   [:asset-name :string]]]]
-      [:delete {:optional true} [:sequential :uuid]]]]]))
+      [:delete {:optional true} [:sequential :uuid]]]]
+    ["calibrate-graph-skeleton"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]
+      [:t :int]
+      [:db-ident-blocks [:sequential
+                         [:map
+                          [:block/uuid :uuid]
+                          [:db/ident :keyword]
+                          [:block/parent {:optional true} :uuid]
+                          [:block/type {:optional true} [:set :string]]
+                          [:block/order {:optional true} :string]
+                          [:block/content {:optional true} :string]]]]]]]))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
                                                       (mt/key-transformer {:encode m/-keyword->string}))))

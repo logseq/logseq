@@ -27,6 +27,8 @@ Trying to start rtc loop but there's already one running, need to cancel that on
 When response from remote is too huge(> 32KB),
 the server will put it to s3 and return its presigned-url to clients.")
 
+(sr/defkeyword :rtc.exception/different-graph-skeleton
+  "remote graph skeleton data is different from local's.")
 
 (def ex-remote-graph-not-exist
   (ex-info "remote graph not exist" {:type :rtc.exception/remote-graph-not-exist}))
