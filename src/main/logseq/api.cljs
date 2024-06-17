@@ -742,7 +742,7 @@
             opts (bean/->clj opts)]
       (when block
         (p/do!
-          (when (and db-base? (not (nil? (:properties opts))))
+          (when (and db-base? (some? (:properties opts)))
             (api-block/save-db-based-block-properties! block (:properties opts)))
           (editor-handler/save-block! repo
             (sdk-utils/uuid-or-throw-error block-uuid) content
