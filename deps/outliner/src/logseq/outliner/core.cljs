@@ -313,7 +313,7 @@
 
       ;; delete heading property for db-based-graphs
       (when (and db-based? (integer? (:logseq.property/heading block-entity))
-                 (not (string/starts-with? (:block/content m) "#")))
+                 (not (some-> (:block/content data) (string/starts-with? "#"))))
         (swap! txs-state (fn [txs] (conj (vec txs) [:db/retract (:db/id block-entity) :logseq.property/heading]))))
 
       this))
