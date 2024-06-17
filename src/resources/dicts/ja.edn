@@ -176,7 +176,6 @@
  :page/unfavorite "お気に入りを解除"
  :page/show-journals "日誌を表示"
  :block/name "ページ名"
- :page/earlier "もっと前へ"
  :page/copy-page-url "ページの URL をコピー"
  :page/illegal-page-name "ページの名前が不正です"
  :page/page-already-exists "「{1}」というページは既に存在します！"

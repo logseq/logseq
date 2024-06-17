@@ -6,7 +6,6 @@
             [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs.protocol :as protocol]
-            [frontend.state :as state]
             [frontend.util :as util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]

@@ -135,7 +135,6 @@
  :page/unfavorite "取消收藏"
  :page/show-journals "显示日志"
  :block/name "页面名称"
- :page/earlier "之前"
  :file/name "文件名"
  :file/last-modified-at "最后更改于"
  :file/no-data "没有数据"

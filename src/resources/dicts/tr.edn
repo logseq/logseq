@@ -176,7 +176,6 @@
  :page/unfavorite "Sayfayı sık kullanılanlardan kaldır"
  :page/show-journals "Günlükleri göster"
  :block/name "Sayfa adı"
- :page/earlier "Daha önce"
  :page/copy-page-url "Sayfa URL adresini kopyala"
  :page/illegal-page-name "Geçersiz sayfa adı!"
  :page/page-already-exists "“{1}” sayfası zaten var!"

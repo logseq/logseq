@@ -172,7 +172,6 @@
  :page/unfavorite "Remover dos favoritos"
  :page/show-journals "Mostrar diários"
  :block/name "Nome da página"
- :page/earlier "Anterior"
  :page/copy-page-url "Copiar URL da página"
  :page/illegal-page-name "Nome de página inválido!"
  :page/page-already-exists "Página “{1}” já existe!"

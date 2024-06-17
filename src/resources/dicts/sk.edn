@@ -172,7 +172,6 @@
  :page/unfavorite                                  "Odstrániť z obľúbených"
  :page/show-journals                               "Zobraziť denníky"
  :block/name                                       "Názav stránky"
- :page/earlier                                     "Skôr"
  :page/copy-page-url                               "Kopírovať adresu stránky"
  :page/illegal-page-name                           "Neplatný názov stránky!"
  :page/page-already-exists                         "Stránka “{1}” už existuje!"

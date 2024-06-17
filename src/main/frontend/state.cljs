@@ -55,7 +55,7 @@
       :draw?                   false
       :db/restoring?           nil
 
-      :journals-length                       1
+      :journals-length                       3
 
       :search/q                              ""
       :search/mode                           nil ; nil -> global mode, :graph -> add graph filter, etc.

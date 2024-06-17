@@ -167,7 +167,6 @@
  :page/unfavorite "Hapus dari Favorit"
  :page/show-journals "Tampilkan jurnal"
  :block/name "Nama Halaman"
- :page/earlier "Lebih awal"
  :page/copy-page-url "Salin URL halaman"
  :page/illegal-page-name "Nama halaman tidak sah!"
  :page/page-already-exists "Halaman “{1}” sudah ada!"

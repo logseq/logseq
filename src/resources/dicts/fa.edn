@@ -148,7 +148,6 @@
  :page/unfavorite "برداشتن از برگزیده‌ها"
  :page/show-journals "نمایش روزنگارها"
  :block/name "نام برگه"
- :page/earlier "پیش‌تر"
  :page/copy-page-url "رونوشت از نشانی برگه"
  :page/illegal-page-name "نام برگه غیرمجاز!"
  :page/page-already-exists "برگه «{1}» از پیش موجود است!"

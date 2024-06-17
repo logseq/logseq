@@ -62,7 +62,6 @@
  :page/unfavorite "Usuń z ulubionych"
  :page/show-journals "Pokaż dzienniki"
  :block/name "Nazwa strony"
- :page/earlier "Wcześniej"
  :page/copy-page-url "Kopiuj adres URL strony"
  :file/name "Nazwa pliku"
  :file/last-modified-at "Ostatnio zmodyfikowany"

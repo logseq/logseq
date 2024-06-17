@@ -82,7 +82,6 @@
  :page/unfavorite "Вилучити сторінку з обраного"
  :page/show-journals "Показати журнали"
  :block/name "Назва сторінки"
- :page/earlier "Раніше"
  :page/copy-page-url "Скопіювати URL сторінки"
  :file/name "Назва файлу"
  :file/last-modified-at "Останнє модифіковано у "

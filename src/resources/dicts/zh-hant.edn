@@ -80,7 +80,6 @@
  :page/unfavorite "從我的最愛移除"
  :page/show-journals "顯示日記頁面"
  :block/name "頁面名稱"
- :page/earlier "最近"
  :page/copy-page-url "複製頁面連結"
  :file/name "檔案名稱"
  :file/last-modified-at "最後更新於"

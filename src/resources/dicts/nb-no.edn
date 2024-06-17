@@ -61,7 +61,6 @@
  :page/unfavorite "Fjern side fra Faoritter"
  :page/show-journals "Vis Dagbøker"
  :block/name "Navn på siden"
- :page/earlier "Tidligere"
  :file/name "Filnavn"
  :file/last-modified-at "Sist endret"
  :file/no-data "Ingen data"
