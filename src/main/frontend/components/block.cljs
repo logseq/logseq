@@ -3489,7 +3489,7 @@
                                                          :bottom? bottom?})
                                             (str (:container-id config) "-" (:db/id block)))))})]
     (cond
-      virtualized?
+      (and virtualized? (seq blocks))
       (ui/virtualized-list virtual-opts)
       :else
       (map-indexed (fn [idx block]
@@ -3606,7 +3606,8 @@
                               (when-let [*ref (:scroll-container config)]
                                 (rum/deref *ref))
                               (gdom/getElement "main-content-container"))]
-        (if (:sidebar? config)
+        (when (seq blocks)
+          (if (:sidebar? config)
           (for [block blocks]
             (rum/with-key
               (ref-block-container config block)
@@ -3617,7 +3618,7 @@
             :item-content (fn [idx]
                             (rum/with-key
                               (ref-block-container config (nth blocks idx))
-                              (str "ref-" (:container-id config) "-" idx)))})))]
+                              (str "ref-" (:container-id config) "-" idx)))}))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))
