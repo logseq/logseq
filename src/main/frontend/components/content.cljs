@@ -76,7 +76,8 @@
        :on-pointer-down (fn [e]
                    (util/stop-propagation e)
                    (let [block-uuids (state/get-selection-block-ids)]
-                     (state/set-modal!
+                     (shui/popup-hide!)
+                     (shui/dialog-open!
                       #(export/export-blocks block-uuids {:whiteboard? false}))))}
       (t :content/copy-export-as))
 
@@ -248,7 +249,8 @@
          (shui/dropdown-menu-item
           {:key      "Copy as"
            :on-click (fn [_]
-                       (state/set-modal! #(export/export-blocks [block-id] {:whiteboard? false})))}
+                       (shui/dialog-open!
+                         #(export/export-blocks [block-id] {:whiteboard? false})))}
           (t :content/copy-export-as))
 
          (shui/dropdown-menu-item
