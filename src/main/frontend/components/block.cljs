@@ -3017,7 +3017,7 @@
 
        (when-not (or (:hide-children? config) in-whiteboard?)
          (let [config' (-> (update config :level inc)
-                           (dissoc :original-block))]
+                           (dissoc :original-block :data :first-page?))]
            (block-children config' block children collapsed?)))
 
        (when-not in-whiteboard? (dnd-separator-wrapper block children block-id slide? false false))])))
