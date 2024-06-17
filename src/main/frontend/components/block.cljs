@@ -3471,30 +3471,33 @@
                (str "-" (:block/uuid original-block))))))))
 
 (defn- block-list
-  [{:keys [long-page?] :as config} blocks]
-  (let [edit-block-id (:db/id (state/get-edit-block))]
-    (for [[idx item] (medley/indexed blocks)]
-      (let [top? (zero? idx)
-            bottom? (= (count blocks) (inc idx))
-            block-render (fn []
-                           (rum/with-key
-                             (block-item (assoc config :top? top?)
-                                         item
-                                         {:top? top?
-                                          :idx idx
-                                          :bottom? bottom?})
-                             (str "blocks-" (:block/uuid item))))
-            fully-loaded? (:block.temp/fully-loaded? item)]
-        (if (and long-page? (not fully-loaded?))
-          (rum/with-key
-            (ui/lazy-visible
-             block-render
-             {:trigger-once? false
-              :fade-in? false
-              :initial-state (= edit-block-id (:db/id item))
-              :debug-id (str (:db/id item) "-" (:block/content item))})
-            (str (:container-id config) "-" (:db/id item)))
-          (block-render))))))
+  [config blocks]
+  (let [virtualized? (or
+                      (:first-page? config)
+                      (= :page (get-in config [:data :name])))
+        render-item (fn [idx]
+                      (let [top? (zero? idx)
+                            bottom? (= (dec (count blocks)) idx)]
+                        (block-item (assoc config :top? top?)
+                                    (nth blocks idx)
+                                    {:top? top?
+                                     :idx idx
+                                     :bottom? bottom?})))]
+    (if (and virtualized? (or (nil? (:level config)) (= 1 (:level config))))
+      (ui/virtuoso
+       {:custom-scroll-parent (gdom/getElement "main-content-container")
+        :total-count (count blocks)
+        :item-content (fn [idx]
+                        (let [top? (zero? idx)
+                              bottom? (= (dec (count blocks)) idx)]
+                          (block-item (assoc config :top? top?)
+                                      (nth blocks idx)
+                                      {:top? top?
+                                       :idx idx
+                                       :bottom? bottom?})))})
+      (map-indexed (fn [idx _block]
+                     (render-item idx))
+                   blocks))))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
   [state config blocks]
