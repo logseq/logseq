@@ -3476,12 +3476,15 @@
         :total-count (count blocks)
         :item-content (fn [idx]
                         (let [top? (zero? idx)
-                              bottom? (= (dec (count blocks)) idx)]
-                          (block-item (assoc config :top? top?)
-                                      (nth blocks idx)
-                                      {:top? top?
-                                       :idx idx
-                                       :bottom? bottom?})))})
+                              bottom? (= (dec (count blocks)) idx)
+                              block (nth blocks idx)]
+                          (rum/with-key
+                            (block-item (assoc config :top? top?)
+                                        block
+                                        {:top? top?
+                                         :idx idx
+                                         :bottom? bottom?})
+                            (str (:container-id config) "-" (:db/id block)))))})
       (map-indexed (fn [idx _block]
                      (render-item idx))
                    blocks))))
