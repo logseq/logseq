@@ -2970,7 +2970,8 @@
          (dnd-separator-wrapper block children block-id slide? true false))
 
        [:div.block-main-container.flex.flex-row.pr-2.gap-1
-        {:on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+        {:data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
+         :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
          :on-touch-move (fn [event]
                           (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
          :on-touch-end (fn [event]
