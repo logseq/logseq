@@ -396,8 +396,9 @@
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (when-let [repo (state/get-current-repo)]
-    (state/set-modal! #(diff/local-file repo path disk-content db-content)
-                      {:label "diff__cp"})))
+    (shui/dialog-open!
+      #(diff/local-file repo path disk-content db-content)
+      {:label "diff__cp"})))
 
 
 (defmethod handle :modal/display-file-version-selector  [[_ versions path  get-content]]

@@ -1,25 +1,21 @@
 .cp__diff-file {
-    @apply mb-3;
+  @apply mb-3;
 
-    textarea {
-        min-height: 20vh;
+  textarea {
+    @apply min-h-[20vh];
 
-        @screen sm {
-            min-height: 50vh;
-        }
+    @screen sm {
+      @apply min-h-[40vh];
     }
- }
+  }
+}
 
 .cp__diff-file-header {
-  background-color: var(--ls-secondary-background-color);
-  padding: 5px 10px;
-  display: flex;
-  align-items: center;
+  @apply px-1 py-2 bg-yellow-rx-04 rounded mt-4 font-medium;
 }
 
 .cp__diff-file-header-content {
-    @apply truncate;
-    overflow-wrap: break-word;
+  @apply truncate break-all flex items-center space-x-1 opacity-70;
 }
 
 .cp__diff-file-header-type {
