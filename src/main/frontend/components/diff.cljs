@@ -2,7 +2,6 @@
   (:require [clojure.string :as string]
             [frontend.diff :as diff]
             [frontend.handler.file :as file]
-            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]

@@ -15,7 +15,7 @@
    (let [repo (state/sub :git/current-repo)]
      (page/page {:repo repo
                  :page-name (str (:block/uuid page))
-                 :first-page? (zero? idx)}))])
+                 :first-journal? (zero? idx)}))])
 
 (rum/defc journals < rum/reactive
   {:will-unmount (fn [state]

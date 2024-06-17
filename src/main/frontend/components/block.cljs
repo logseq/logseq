@@ -98,7 +98,6 @@
 (defonce *drag-to-block
   (atom nil))
 (def *move-to (atom nil))
-(defonce *next-editing-block (atom nil))
 
 ;; TODO: dynamic
 (defonce max-depth-of-links 5)
@@ -2213,7 +2212,6 @@
 
             :else
             (let [block (or (db/entity [:block/uuid (:block/uuid block)]) block)]
-              (when (:block/uuid block) (reset! *next-editing-block (:block/uuid block)))
               (editor-handler/clear-selection!)
               (editor-handler/unhighlight-blocks!)
               (let [f #(let [cursor-range (some-> (gdom/getElement block-id)
@@ -2490,21 +2488,7 @@
            (editor-box {:block block
                         :block-id uuid
                         :block-parent-id block-id
-                        :format format
-                        :on-hide (fn [value event ^js e]
-                                   (let [select? (and (= event :esc)
-                                                      (not (string/includes? value "```")))
-                                         edit-next-block? (and @*next-editing-block (not= @*next-editing-block (:block/uuid block)))
-                                         blur-editing? (and (= event :blur) (when e (util/input? (.-relatedTarget e))))]
-                                     (when-let [container (gdom/getElement "app-container")]
-                                       (dom/remove-class! container "blocks-selection-mode"))
-                                     (p/do!
-                                      (editor-handler/save-block! repo (:block/uuid block) value)
-                                      (when-not (and (or edit-next-block? blur-editing?) (not select?))
-                                        (editor-handler/escape-editing select?))
-                                      (some-> config :on-escape-editing
-                                              (apply [(str uuid) (= event :esc)]))
-                                      (reset! *next-editing-block nil))))}
+                        :format format}
                        edit-input-id
                        config))]
          [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display (if (:slide? config) "block" "flex")}}
@@ -3019,7 +3003,7 @@
 
        (when-not (or (:hide-children? config) in-whiteboard?)
          (let [config' (-> (update config :level inc)
-                           (dissoc :original-block :data :first-page?))]
+                           (dissoc :original-block :data :first-journal?))]
            (block-children config' block children collapsed?)))
 
        (when-not in-whiteboard? (dnd-separator-wrapper block children block-id slide? false false))])))
@@ -3474,8 +3458,9 @@
 
 (defn- block-list
   [config blocks]
-  (let [virtualized? (or
-                      (:first-page? config)
+  (let [first-journal? (:first-journal? config)
+        virtualized? (or
+                      first-journal?
                       (= :page (get-in config [:data :name])))
         render-item (fn [idx]
                       (let [top? (zero? idx)
