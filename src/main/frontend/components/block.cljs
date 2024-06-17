@@ -2025,7 +2025,10 @@
         property-pages-enabled? (contains? #{true nil} (:property-pages/enabled? user-config))]
     [:div
      (if property-pages-enabled?
-       (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)})
+       (if (and (not (config/db-based-graph? (state/get-current-repo)))
+                (nil? (db/get-page (name k))))
+         [:span.page-property-key.font-medium (name k)]
+         (page-cp (assoc config :property? true) {:block/name (subs (str k) 1)}))
        [:span.page-property-key.font-medium (name k)])
      [:span.mr-1 ":"]
      [:div.page-property-value.inline
