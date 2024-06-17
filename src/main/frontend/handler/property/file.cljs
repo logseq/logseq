@@ -50,8 +50,7 @@
 (defn properties-hidden?
   [properties]
   (and (seq properties)
-       (let [ks (if (config/db-based-graph? (state/get-current-repo))
-                  (map #(:block/name (db/entity [:block/uuid %])) (keys properties))
-                  (map (comp keyword string/lower-case name) (remove nil? (keys properties))))
+       (let [ks (map (comp keyword string/lower-case name)
+                     (keys properties))
              hidden-properties-set (file-property-handler/hidden-properties)]
          (every? hidden-properties-set ks))))
