@@ -62,7 +62,9 @@
 
 (def ops-schema [:sequential op-schema])
 
-(def ops-coercer (ma/coercer ops-schema mt/json-transformer nil #(ma/-fail! ::ops-schema %)))
+(def ops-coercer (ma/coercer ops-schema mt/json-transformer nil
+                             #(do (prn ::bad-ops (:value %))
+                                  (ma/-fail! ::ops-schema %))))
 
 (def ops-store-value-schema
   [:map
