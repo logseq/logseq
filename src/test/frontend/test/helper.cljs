@@ -118,7 +118,9 @@
         blocks
         (mapv #(if-let [status (some-> (second (re-find status/bare-marker-pattern (:block/content %)))
                                        file-to-db-statuses)]
-                 (update % :build/properties merge {:logseq.task/status status})
+                 (-> %
+                     (assoc :block/tags [{:db/ident :logseq.class/task}])
+                     (update :build/properties merge {:logseq.task/status status}))
                  %)
               blocks*)]
     {:blocks (mapv (fn [b] (update b :block/content #(string/replace-first % #"^-\s*" "")))
