@@ -71,18 +71,19 @@
     [:div.flex.justify-between.mb-4.items-center {:key (or url GraphUUID)}
      [:span
       (normalized-graph-label repo
-        (fn []
-          (when-not (state/sub :rtc/downloading-graph-uuid)
-            (cond
-              root                                          ; exists locally
-              (state/pub-event! [:graph/switch url])
+                              (fn []
+                                (when-not (state/sub :rtc/downloading-graph-uuid)
+                                  (cond
+                                    root                                          ; exists locally
+                                    (state/pub-event! [:graph/switch url])
 
-              (and db-based? remote?)
-              (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
+                                    (and db-based? remote?)
+                                    (state/pub-event! [:rtc/download-remote-graph GraphName GraphUUID])
 
-              :else
-              (state/pub-event! [:graph/pull-down-remote-graph repo])))))
-      [:small.text-gray-400 (some-> (or created-at last-seen-at) (safe-locale-date))]]
+                                    :else
+                                    (state/pub-event! [:graph/pull-down-remote-graph repo])))))
+      (when-let [time (some-> (or last-seen-at created-at) (safe-locale-date))]
+        [:small.text-gray-400.opacity-50 (str "Last opened at: " time)])]
 
      [:div.controls
       [:div.flex.flex-row.items-center
@@ -111,27 +112,27 @@
                                                           :else
                                                           "")
                                          unlink-or-remote-fn! (fn []
-                                                               (repo-handler/remove-repo! repo)
-                                                               (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
+                                                                (repo-handler/remove-repo! repo)
+                                                                (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
                                          action-confirm-fn! (if only-cloud?
-                                                             (fn []
-                                                               (when (or manager? (not db-graph?))
-                                                                 (let [delete-graph (if db-graph?
-                                                                                      rtc-handler/<rtc-delete-graph!
-                                                                                      file-sync/<delete-graph)]
-                                                                   (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                                   (go (<! (delete-graph GraphUUID))
-                                                                       (state/delete-repo! repo)
-                                                                       (state/delete-remote-graph! repo)
-                                                                       (state/set-state! [:file-sync/remote-graphs :loading] false)))))
-                                                             unlink-or-remote-fn!)
+                                                              (fn []
+                                                                (when (or manager? (not db-graph?))
+                                                                  (let [delete-graph (if db-graph?
+                                                                                       rtc-handler/<rtc-delete-graph!
+                                                                                       file-sync/<delete-graph)]
+                                                                    (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                                                    (go (<! (delete-graph GraphUUID))
+                                                                        (state/delete-repo! repo)
+                                                                        (state/delete-remote-graph! repo)
+                                                                        (state/set-state! [:file-sync/remote-graphs :loading] false)))))
+                                                              unlink-or-remote-fn!)
                                          confirm-fn!
                                          (fn []
                                            (-> (shui/dialog-confirm!
-                                                 [:p.font-medium.-my-4 prompt-str
-                                                  [:span.mt-1.flex.font-normal.opacity-40
-                                                   [:small "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
-                                             (p/then #(action-confirm-fn!))))]
+                                                [:p.font-medium.-my-4 prompt-str
+                                                 [:span.mt-1.flex.font-normal.opacity-40
+                                                  [:small "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
+                                               (p/then #(action-confirm-fn!))))]
 
                                      (if has-prompt?
                                        (confirm-fn!)
