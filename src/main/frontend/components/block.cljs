@@ -2491,15 +2491,16 @@
                         :block-id uuid
                         :block-parent-id block-id
                         :format format
-                        :on-hide (fn [value event]
+                        :on-hide (fn [value event ^js e]
                                    (let [select? (and (= event :esc)
                                                       (not (string/includes? value "```")))
-                                         edit-next-block? (and @*next-editing-block (not= @*next-editing-block (:block/uuid block)))]
+                                         edit-next-block? (and @*next-editing-block (not= @*next-editing-block (:block/uuid block)))
+                                         blur-editing? (and (= event :blur) (when e (util/input? (.-relatedTarget e))))]
                                      (when-let [container (gdom/getElement "app-container")]
                                        (dom/remove-class! container "blocks-selection-mode"))
                                      (p/do!
-                                       (editor-handler/save-block! repo (:block/uuid block) value)
-                                      (when-not (and edit-next-block? (not select?))
+                                      (editor-handler/save-block! repo (:block/uuid block) value)
+                                      (when-not (and (or edit-next-block? blur-editing?) (not select?))
                                         (editor-handler/escape-editing select?))
                                       (some-> config :on-escape-editing
                                               (apply [(str uuid) (= event :esc)]))
