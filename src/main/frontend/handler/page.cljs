@@ -180,7 +180,7 @@
 (defn load-more-journals!
   []
   (when (has-more-journals?)
-    (state/set-journals-length! (+ (:journals-length @state/state) 7))))
+    (state/set-journals-length! (+ (:journals-length @state/state) 1))))
 
 (defn update-public-attribute!
   [page value]

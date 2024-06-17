@@ -33,8 +33,9 @@
                          (journal-cp page)))
        :start-reached (fn [_idx]
                         (page-handler/create-today-journal!))
-       :end-reached (fn [_idx]
-                      (page-handler/load-more-journals!))})]))
+       :end-reached (fn [idx]
+                      (when (= (dec (count latest-journals)) idx)
+                        (page-handler/load-more-journals!)))})]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []
