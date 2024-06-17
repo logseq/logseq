@@ -3474,6 +3474,8 @@
                                      :bottom? bottom?})))
         virtual-opts (when virtualized?
                        {:custom-scroll-parent (gdom/getElement "main-content-container")
+                        ;; Leave some space for the new inserted block
+                        :increase-viewport-by {:bottom 80}
                         :total-count (count blocks)
                         :item-content (fn [idx]
                                         (let [top? (zero? idx)
