@@ -34,7 +34,11 @@
     }
 
     .repo-text, .repo-name {
-      @apply block w-[95%];
+      @apply flex w-[95%] items-center;
+
+      .ui__icon {
+        @apply !mr-0;
+      }
     }
 
     .dropdown-caret {
