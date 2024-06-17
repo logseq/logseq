@@ -8,7 +8,6 @@
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.db-based.page :as db-worker-page]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [frontend.handler.ui :as ui-handler]
