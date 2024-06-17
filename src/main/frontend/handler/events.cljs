@@ -446,7 +446,7 @@
 
 (defmethod handle :command/run [_]
   (when (util/electron?)
-    (state/set-modal! shell/shell)))
+    (shui/dialog-open! shell/shell)))
 
 (defmethod handle :go/search [_]
   (state/set-modal! cmdk/cmdk-modal

@@ -131,15 +131,23 @@
                              (if (fn? on-open-change)
                                (on-open-change {:value v :set-open! set-open!})
                                (set-open! v))))})
-      (dialog-content (merge props content-props)
-        (when title
-          (dialog-header
-            (when title (dialog-title title))
-            (when description (dialog-description description))))
-        (when content
-          [:div.ui__dialog-main-content content])
-        (when footer
-          (dialog-footer footer))))))
+      (let [onPointerDownOutside (:onPointerDownOutside content-props)
+            content-props (assoc content-props
+                            :onPointerDownOutside
+                            (fn [^js e]
+                              (when (fn? onPointerDownOutside)
+                                (onPointerDownOutside e))
+                              (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
+                                (.preventDefault e))))]
+        (dialog-content (merge props content-props)
+          (when title
+            (dialog-header
+              (when title (dialog-title title))
+              (when description (dialog-description description))))
+          (when content
+            [:div.ui__dialog-main-content content])
+          (when footer
+            (dialog-footer footer)))))))
 
 (rum/defc alert-inner
   [config]
