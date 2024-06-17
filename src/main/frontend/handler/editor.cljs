@@ -593,12 +593,17 @@
               new-block)))))))
 
 (defn insert-first-page-block-if-not-exists!
-  ([page-title]
-   (insert-first-page-block-if-not-exists! page-title {}))
-  ([page-title opts]
-   (when (and (string? page-title)
-              (not (string/blank? page-title)))
-     (state/pub-event! [:page/create page-title opts]))))
+  [page-uuid-or-title]
+  (let [page-title (str page-uuid-or-title)]
+    (when-not (string/blank? page-title)
+      (when-let [page (db/get-page page-title)]
+        (when (db/page-empty? (state/get-current-repo) (:db/id page))
+          (let [format (or (:block/format page) (state/get-preferred-format))
+                new-block {:block/content ""
+                           :block/format format}]
+            (ui-outliner-tx/transact!
+             {:outliner-op :insert-blocks}
+             (outliner-op/insert-blocks! [new-block] page {:sibling? false}))))))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker format] :as block} content]

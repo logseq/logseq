@@ -108,44 +108,47 @@
 
 (if config/publishing?
   (rum/defc dummy-block
-    [_page-name]
+    [_page]
     [:div])
 
   (rum/defc dummy-block
-    [page-name]
-    (let [[hover set-hover!] (rum/use-state false)
-          click-handler-fn (fn []
-                             (let [block (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
-                               (js/setTimeout #(editor-handler/edit-block! block :max) 0)))
-          drop-handler-fn (fn [^js event]
-                            (util/stop event)
-                            (p/let [block-uuids (state/get-selection-block-ids)
-                                    lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
-                                    selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
-                                    blocks (if (seq selected) selected [@component-block/*dragging-block])
-                                    _ (editor-handler/insert-first-page-block-if-not-exists! page-name {:redirect? false})]
-                              (js/setTimeout #(let [target-block (db/entity (:db/id (db/get-page page-name)))]
-                                                (dnd/move-blocks event blocks target-block nil :sibling))
-                                0)))]
-      [:div.ls-block.flex-1.flex-col.rounded-sm
-       {:style {:width "100%"
+    [page]
+    (when page
+      (let [[hover set-hover!] (rum/use-state false)
+            click-handler-fn (fn []
+                               (p/do!
+                                (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
+                                (when-let [first-child (first (:block/_page (db/entity (:db/id page))))]
+                                  (editor-handler/edit-block! first-child :max))))
+            drop-handler-fn (fn [^js event]
+                              (util/stop event)
+                              (p/let [block-uuids (state/get-selection-block-ids)
+                                      lookup-refs (map (fn [id] [:block/uuid id]) block-uuids)
+                                      selected (db/pull-many (state/get-current-repo) '[*] lookup-refs)
+                                      blocks (if (seq selected) selected [@component-block/*dragging-block])
+                                      _ (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))]
+                                (js/setTimeout #(let [target-block page]
+                                                  (dnd/move-blocks event blocks target-block nil :sibling))
+                                               0)))]
+        [:div.ls-block.flex-1.flex-col.rounded-sm
+         {:style {:width "100%"
                 ;; The same as .dnd-separator
-                :border-top (if hover
-                              "3px solid #ccc"
-                              nil)}}
-       [:div.flex.flex-row
-        [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
-         [:span.bullet-container.cursor
-          [:span.bullet]]]
-        (shui/trigger-as :div.flex.flex-1
-          {:tabIndex 0
-           :on-click click-handler-fn
-           :on-drag-enter #(set-hover! true)
-           :on-drag-over #(util/stop %)
-           :on-drop drop-handler-fn
-           :on-drag-leave #(set-hover! false)}
-          [:span.opacity-70
-           "Click here to edit..."])]])))
+                  :border-top (if hover
+                                "3px solid #ccc"
+                                nil)}}
+         [:div.flex.flex-row
+          [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+           [:span.bullet-container.cursor
+            [:span.bullet]]]
+          (shui/trigger-as :div.flex.flex-1
+                           {:tabIndex 0
+                            :on-click click-handler-fn
+                            :on-drag-enter #(set-hover! true)
+                            :on-drag-over #(util/stop %)
+                            :on-drop drop-handler-fn
+                            :on-drag-leave #(set-hover! false)}
+                           [:span.opacity-70
+                            "Click here to edit..."])]]))))
 
 (rum/defc add-button
   [args]
@@ -188,7 +191,7 @@
          (not loading?)
          (not block?)
          (empty? children))
-        (dummy-block page-name)
+        (dummy-block page-e)
 
         :else
         (let [document-mode? (state/sub :document/mode?)
