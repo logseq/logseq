@@ -832,7 +832,7 @@
       (let [{:keys [on-hide value]} (editor-handler/get-state)]
         (when on-hide
           (when *blur? (reset! *blur? true))
-          (on-hide value :blur))))))
+          (on-hide value :blur e))))))
 
 (rum/defcs box < rum/reactive
   {:init (fn [state]
@@ -872,7 +872,7 @@
                                       (when (and (= (util/ekey e) "Escape") on-hide)
                                         (when-not (exist-editor-commands-popup?)
                                           (reset! *blur? true)
-                                          (on-hide content :esc)))))
+                                          (on-hide content :esc e)))))
                :auto-focus true
                :class heading-class}
                (some? parent-block)
