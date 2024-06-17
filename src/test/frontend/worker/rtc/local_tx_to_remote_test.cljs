@@ -2,7 +2,6 @@
   (:require [clojure.test :as t :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.worker.rtc.client :as r.client]
@@ -36,7 +35,7 @@
                        (is (rtc-const/to-ws-ops-validator r) r)
                        r))]
     (testing "create a new page"
-      (page-handler/create! page1-name {:redirect? false :create-first-block? false :uuid page1-uuid})
+      (test-helper/create-page! page1-name {:redirect? false :create-first-block? false :uuid page1-uuid})
       (let [ops (gen-ops-fn)
             ops* (map
                   (fn [[op-type op-value]]

@@ -502,32 +502,10 @@
      (search/build-page-indice repo @conn)
      nil))
 
-  ;; page ops
   (page-search
    [this repo q options]
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (search/page-search repo @conn q (bean/->clj options))))
-
-  (page-rename
-   [this repo page-uuid-str new-name]
-   (assert (common-util/uuid-string? page-uuid-str))
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [config (worker-state/get-config repo)
-           f (if (sqlite-util/db-based-graph? repo)
-               db-worker-page-rename/rename!
-               file-worker-page-rename/rename!)
-           result (f repo conn config (uuid page-uuid-str) new-name)]
-       (bean/->js {:result result}))))
-
-  (page-delete
-   [this repo page-uuid-str]
-   (assert (common-util/uuid-string? page-uuid-str))
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (let [error-handler (fn [{:keys [msg]}]
-                           (worker-util/post-message :notification
-                                                     [[:div [:p msg]] :error]))
-           result (worker-page/delete! repo conn (uuid page-uuid-str) {:error-handler error-handler})]
-       (bean/->js {:result result}))))
 
   (apply-outliner-ops
    [this repo ops-str opts-str]
@@ -710,10 +688,40 @@
    (p/let [dbs (.listDB this)]
      (p/all (map #(.unsafeUnlinkDB this (:name %)) dbs)))))
 
+(defn- rename-page!
+  [repo conn page-uuid new-name]
+  (let [config (worker-state/get-config repo)
+        f (if (sqlite-util/db-based-graph? repo)
+            db-worker-page-rename/rename!
+            file-worker-page-rename/rename!)]
+    (f repo conn config page-uuid new-name)))
+
+(defn- delete-page!
+  [repo conn page-uuid]
+  (let [error-handler (fn [{:keys [msg]}]
+                        (worker-util/post-message :notification
+                                                  [[:div [:p msg]] :error]))]
+    (worker-page/delete! repo conn page-uuid {:error-handler error-handler})))
+
+(defn- create-page!
+  [repo conn title options]
+  (let [config (worker-state/get-config repo)]
+    (worker-page/create! repo conn config title options)))
+
+(defn- outliner-register-op-handlers!
+  []
+  (outliner-op/register-op-handlers!
+   {:create-page (fn [repo conn [title options]]
+                   (create-page! repo conn title options))
+    :rename-page (fn [repo conn [page-uuid new-name]]
+                   (rename-page! repo conn page-uuid new-name))
+    :delete-page (fn [repo conn [page-uuid]]
+                   (delete-page! repo conn page-uuid))}))
 (defn init
   "web worker entry"
   []
   (let [^js obj (DBWorker.)]
+    (outliner-register-op-handlers!)
     (worker-state/set-worker-object! obj)
     (file/<ratelimit-file-writes!)
     (js/setInterval #(.postMessage js/self "keepAliveResponse") (* 1000 25))

@@ -34,7 +34,7 @@
    * :persist-op?              - when true, add an update-page op
    * :properties               - properties to add to the page
   TODO: Add other options"
-  [repo conn config title & options]
+  [repo conn config title & {:as options}]
   (if (ldb/db-based-graph? @conn)
     (db-worker-page/create! conn config title options)
     (file-worker-page/create! repo conn config title options)))

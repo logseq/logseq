@@ -7,13 +7,11 @@
             [frontend.handler.config :as config-handler]
             [frontend.handler.route :as route-handler]
             [frontend.state :as state]
-            [frontend.worker.handler.page :as worker-page]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
             [frontend.handler.ui :as ui-handler]
             [frontend.config :as config]
             [frontend.fs :as fs]
-            [goog.object :as gobj]
             [promesa.core :as p]
             [frontend.handler.block :as block-handler]
             [logseq.db :as ldb]
@@ -21,32 +19,6 @@
             [datascript.core :as d]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]))
-
-(defn create!
-  "Create page. Has the following options:
-
-   * :redirect?           - when true, redirect to the created page, otherwise return sanitized page name.
-   * :create-first-block? - when true, create an empty block if the page is empty.
-   * :uuid                - when set, use this uuid instead of generating a new one.
-   * :class?              - when true, adds a :block/type 'class'
-   * :whiteboard?         - when true, adds a :block/type 'whiteboard'
-   * :tags                - tag uuids that are added to :block/tags
-   * :persist-op?         - when true, add an update-page op
-   "
-  ([title]
-   (create! title {}))
-  ([title {:keys [redirect?]
-           :or   {redirect? true}
-           :as options}]
-   (let [repo (state/get-current-repo)
-         conn (db/get-db repo false)
-         config (state/get-config repo)
-         [_ page-name page-uuid] (worker-page/create! repo conn config title options)]
-     (when redirect?
-       (route-handler/redirect-to-page! page-uuid))
-     (when-let [first-block (ldb/get-first-child (db/get-db) (:db/id (db/get-page page-uuid)))]
-       (block-handler/edit-block! first-block :max {:container-id :unknown-container}))
-     page-name)))
 
 (defn <create!
   ([title]
@@ -56,9 +28,10 @@
            :as options}]
    (p/let [repo (state/get-current-repo)
            conn (db/get-db repo false)
-           config (state/get-config repo)
-           [p _page-name page-uuid] (worker-page/create! repo conn config title options)
-           _result p]
+           result (ui-outliner-tx/transact!
+                   {:outliner-op :create-page}
+                   (outliner-op/create-page! title options))
+           [_page-name page-uuid] (ldb/read-transit-str result)]
      (when redirect?
        (route-handler/redirect-to-page! page-uuid))
      (let [page (db/get-page (or page-uuid title))]
@@ -147,10 +120,11 @@
     (assert (or (uuid? page-uuid-or-name) (string? page-uuid-or-name)))
     (when-let [page-uuid (or (and (uuid? page-uuid-or-name) page-uuid-or-name)
                              (:block/uuid (db/get-page page-uuid-or-name)))]
-      (when-let [^Object worker @state/*db-worker]
-        (-> (p/let [repo (state/get-current-repo)
-                    res (.page-delete worker repo (str page-uuid))
-                    res' (gobj/get res "result")]
+      (when @state/*db-worker
+        (-> (p/let [res (ui-outliner-tx/transact!
+                         {:outliner-op :delete-page}
+                         (outliner-op/delete-page! page-uuid))
+                    res' (ldb/read-transit-str res)]
               (if res'
                 (when ok-handler (ok-handler))
                 (when error-handler (error-handler))))

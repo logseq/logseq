@@ -5,7 +5,6 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
             [frontend.state :as state]
-            [frontend.handler.page :as page-handler]
             [logseq.db.frontend.property :as db-property]))
 
 (def repo test-helper/test-db-name-db-version)
@@ -173,9 +172,9 @@
 ;; get-block-classes-properties
 (deftest property-class-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
-        _ (page-handler/create! "class1" opts)
-        _ (page-handler/create! "class2" opts)
-        _ (page-handler/create! "class3" opts)
+        _ (test-helper/create-page! "class1" opts)
+        _ (test-helper/create-page! "class2" opts)
+        _ (test-helper/create-page! "class3" opts)
         c1 (db/get-case-page "class1")
         c2 (db/get-case-page "class2")
         c1id (:db/id c1)

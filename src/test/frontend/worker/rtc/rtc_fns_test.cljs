@@ -2,7 +2,6 @@
   (:require [clojure.test :as t :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [frontend.test.helper :as test-helper]
             [frontend.worker.rtc.const :as rtc-const]
@@ -71,7 +70,7 @@
         opts {:persist-op? false
               :transact-opts {:repo repo
                               :conn conn}}]
-    (page-handler/create! "gen-remote-ops-test" {:redirect? false :create-first-block? false :uuid uuid1})
+    (test-helper/create-page! "gen-remote-ops-test" {:redirect? false :create-first-block? false :uuid uuid1})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
@@ -114,7 +113,7 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-    (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+    (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
@@ -186,7 +185,7 @@
 ;;          uuid1-remote
 ;;          uuid1-not-exist
 ;;          tag1-uuid] (repeatedly random-uuid)]
-;;     (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+;;     (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
 ;;     (outliner-tx/transact!
 ;;      opts
 ;;      (outliner-core/insert-blocks!
@@ -292,7 +291,7 @@
         [page-uuid
          uuid1-client uuid2-client
          uuid1-not-exist] (repeatedly random-uuid)]
-    (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+    (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
     (outliner-tx/transact!
      opts
      (outliner-core/insert-blocks!
@@ -357,7 +356,7 @@ result:
           page-name "apply-remote-remove-ops-test2"
           [page-uuid
            uuid1 uuid2 uuid3] (repeatedly random-uuid)]
-      (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
+      (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page-uuid})
       (outliner-tx/transact!
        opts
        (outliner-core/insert-blocks!
@@ -448,7 +447,7 @@ result:
           [page1-uuid page2-uuid
            uuid1-client uuid2-client
            uuid1-remote uuid2-remote] (repeatedly random-uuid)]
-      (page-handler/create! page-name {:redirect? false :create-first-block? false :uuid page1-uuid})
+      (test-helper/create-page! page-name {:redirect? false :create-first-block? false :uuid page1-uuid})
       (outliner-tx/transact!
        opts
        (outliner-core/insert-blocks!

@@ -2,7 +2,6 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures are]]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [frontend.handler.page :as page-handler]
             [frontend.db :as db]
             [clojure.string :as string]
             [frontend.util :as util]
@@ -40,7 +39,7 @@
       (is (= "New name" (:block/original-name (db/entity (:db/id page)))))))
 
   (testing "Merge existing page"
-    (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
+    (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? true})
     (let [page (db/get-page "new name")]
       (page-rename (:block/uuid page) "Existing page"))
     (let [e1 (db/get-page "new name")
@@ -51,7 +50,7 @@
       (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data))))))))
 
 (deftest merge-with-empty-page
-  (page-handler/create! "Existing page" {:redirect? false :create-first-block? false})
+  (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? false})
   (let [page (db/get-page "test")]
     (page-rename (:block/uuid page) "Existing page"))
   (let [e1 (db/get-page "test")
@@ -64,7 +63,7 @@
 (deftest merge-existing-pages-should-update-ref-ids
   (testing "Merge existing page"
     (editor-handler/save-block! repo fbid "Block 1 [[Test]]")
-    (page-handler/create! "Existing page" {:redirect? false :create-first-block? true})
+    (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? true})
     (let [page (db/get-page "test")]
       (page-rename (:block/uuid page) "Existing page"))
     (let [e1 (db/get-page "test")
