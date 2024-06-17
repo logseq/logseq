@@ -24,7 +24,7 @@
   [latest-journals]
   (when (seq latest-journals)
     [:div#journals
-     (ui/virtuoso
+     (ui/virtualized-list
       {:custom-scroll-parent (gdom/getElement "main-content-container")
        :initial-item-count 1
        :total-count (count latest-journals)
