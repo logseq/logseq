@@ -88,7 +88,6 @@
  :page/unfavorite                                      "Удалить из Избранного"
  :page/show-journals                                   "Показать журналы"
  :block/name                                           "Имя страницы"
- :page/earlier                                         "Ранее"
  :page/copy-page-url                                   "Копировать URL страницы"
  :page/illegal-page-name                               "Недопустимое название страницы!"
  :page/page-already-exists                             "Страница “{1}” уже существует!"

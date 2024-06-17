@@ -178,7 +178,6 @@
  :page/unfavorite "Unfavorite page"
  :page/show-journals "Show journals"
  :block/name "Page name"
- :page/earlier "Earlier"
  :page/copy-page-url "Copy page URL"
  :page/illegal-page-name "Illegal page name!"
  :page/page-already-exists "Page “{1}” already exists!"

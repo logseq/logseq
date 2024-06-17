@@ -79,7 +79,6 @@
  :page/unfavorite "Remover dos Favoritos"
  :page/show-journals "Mostrar Págs. Diárias"
  :block/name "Nome da página"
- :page/earlier "Antes"
  :page/copy-page-url "Copiar URL da página"
  :file/name "Nome do ficheiro"
  :file/last-modified-at "Última modificação em"

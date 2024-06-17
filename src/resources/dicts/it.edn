@@ -58,7 +58,6 @@
  :page/unfavorite "Rimuovi la pagina dai Preferiti"
  :page/show-journals "Mostra diario"
  :block/name "Nome pagina"
- :page/earlier "Prima"
  :page/copy-page-url "Copia URL pagina"
  :file/name "Nome File"
  :file/last-modified-at "Ultima modifica alle"

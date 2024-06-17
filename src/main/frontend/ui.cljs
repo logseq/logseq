@@ -6,6 +6,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            ["react-virtuoso" :refer [Virtuoso]]
             ["@emoji-mart/data" :as emoji-data]
             ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
@@ -28,7 +29,6 @@
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.shui.icon.v2 :as shui.icon.v2]
@@ -42,6 +42,8 @@
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
+(defonce virtuoso (r/adapt-class Virtuoso))
+
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
@@ -389,9 +391,6 @@
   (when-let [element ^js (gdom/getElement element)]
     (.focus element)))
 
-(defn get-scroll-top []
-  (.-scrollTop (main-node)))
-
 (defn get-dynamic-style-node
   []
   (js/document.getElementById "dynamic-style-scope"))
@@ -489,52 +488,6 @@
       (.addEventListener js/window.visualViewport "resize" handler)
       (handler)
       #(.removeEventListener js/window.visualViewport "resize" handler))))
-
-(defonce last-scroll-top (atom 0))
-
-(defn scroll-down?
-  []
-  (let [scroll-top (get-scroll-top)
-        down? (> scroll-top @last-scroll-top)]
-    (reset! last-scroll-top scroll-top)
-    down?))
-
-(defn on-scroll
-  [node {:keys [on-load on-top-reached threshold bottom-reached]
-         :or {threshold 500}}]
-  (let [scroll-top (gobj/get node "scrollTop")
-        bottom-reached? (if (fn? bottom-reached)
-                          (bottom-reached)
-                          (util/bottom-reached? node threshold))
-        top-reached? (= scroll-top 0)
-        down? (scroll-down?)]
-    (when (and bottom-reached? down? on-load)
-      (on-load))
-    (when (and (not down?) top-reached? on-top-reached)
-      (on-top-reached))))
-
-(defn attach-listeners
-  "Attach scroll and resize listeners."
-  [state]
-  (let [list-element-id (first (:rum/args state))
-        opts (-> state :rum/args (nth 2))
-        node (js/document.getElementById list-element-id)
-        debounced-on-scroll (debounce #(on-scroll node opts) 100)]
-    (mixins/listen state node :scroll debounced-on-scroll)))
-
-(rum/defcs infinite-list <
-  (mixins/event-mixin attach-listeners)
-  "Render an infinite list."
-  [state _list-element-id body {:keys [on-load has-more more more-class]
-                                :or {more-class "text-sm"}}]
-  [:div
-   body
-   (when has-more
-     [:div.w-full.p-4
-      [:a.fade-link.text-link.font-bold
-       {:on-click on-load
-        :class more-class}
-       (or more (t :page/earlier))]])])
 
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)

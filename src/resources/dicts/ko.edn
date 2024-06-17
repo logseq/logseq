@@ -59,7 +59,6 @@
  :page/unfavorite "즐겨찾기에서 삭제"
  :page/show-journals "일지 보기"
  :block/name "페이지 이름"
- :page/earlier "이전"
  :page/copy-page-url "페이지 URL 복사"
  :file/name "파일 이름"
  :file/last-modified-at "마지막 편집 시간:"
