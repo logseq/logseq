@@ -1803,7 +1803,8 @@
   (and
    (or
     (empty? properties)
-    (property-file/properties-hidden? properties))
+    (and (not (config/db-based-graph? (state/get-current-repo)))
+         (property-file/properties-hidden? properties)))
 
    (empty? title)
 
