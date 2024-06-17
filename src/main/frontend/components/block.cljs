@@ -3458,35 +3458,40 @@
 
 (defn- block-list
   [config blocks]
-  (let [first-journal? (:first-journal? config)
-        virtualized? (or
-                      first-journal?
-                      (= :page (get-in config [:data :name])))
+  (let [first-journal-or-route-page-container? (or
+                                                (:first-journal? config)
+                                                (= :page (get-in config [:data :name])))
+        virtualized? (and (not (:block-children? config))
+                          first-journal-or-route-page-container?)
         render-item (fn [idx]
                       (let [top? (zero? idx)
-                            bottom? (= (dec (count blocks)) idx)]
+                            bottom? (= (dec (count blocks)) idx)
+                            block (nth blocks idx)]
                         (block-item (assoc config :top? top?)
-                                    (nth blocks idx)
+                                    block
                                     {:top? top?
                                      :idx idx
-                                     :bottom? bottom?})))]
-    (if (and virtualized? (or (nil? (:level config)) (= 1 (:level config))))
-      (ui/virtuoso
-       {:custom-scroll-parent (gdom/getElement "main-content-container")
-        :total-count (count blocks)
-        :item-content (fn [idx]
-                        (let [top? (zero? idx)
-                              bottom? (= (dec (count blocks)) idx)
-                              block (nth blocks idx)]
-                          (rum/with-key
-                            (block-item (assoc config :top? top?)
-                                        block
-                                        {:top? top?
-                                         :idx idx
-                                         :bottom? bottom?})
-                            (str (:container-id config) "-" (:db/id block)))))})
-      (map-indexed (fn [idx _block]
-                     (render-item idx))
+                                     :bottom? bottom?})))
+        virtual-opts (when virtualized?
+                       {:custom-scroll-parent (gdom/getElement "main-content-container")
+                        :total-count (count blocks)
+                        :item-content (fn [idx]
+                                        (let [top? (zero? idx)
+                                              bottom? (= (dec (count blocks)) idx)
+                                              block (nth blocks idx)]
+                                          (rum/with-key
+                                            (block-item (assoc config :top? top?)
+                                                        block
+                                                        {:top? top?
+                                                         :idx idx
+                                                         :bottom? bottom?})
+                                            (str (:container-id config) "-" (:db/id block)))))})]
+    (cond
+      virtualized?
+      (ui/virtualized-list virtual-opts)
+      :else
+      (map-indexed (fn [idx block]
+                     (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
                    blocks))))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
@@ -3535,6 +3540,31 @@
    ;; FIXME: what if the source page has been deleted?
    page))
 
+(rum/defc ref-block-container
+  [config [page page-blocks]]
+  (let [page (hidden-page->source-page page)
+        alias? (:block/alias? page)
+        page (db/entity (:db/id page))
+        ;; FIXME: parents need to be sorted
+        parent-blocks (group-by :block/parent page-blocks)]
+    [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
+      (ui/foldable
+       [:div
+        (page-cp config page)
+        (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
+       (for [[parent blocks] parent-blocks]
+         (let [blocks' (map (fn [b]
+                              ;; Block might be a datascript entity
+                              (if (e/entity? b)
+                                (db/pull (:db/id b))
+                                (update b :block/children
+                                        (fn [col]
+                                          (tree/non-consecutive-blocks->vec-tree col))))) blocks)]
+           (rum/with-key
+             (breadcrumb-with-container blocks' config)
+             (:db/id parent))))
+       {:debug-id page})]))
+
 ;; headers to hiccup
 (defn ->hiccup
   [blocks config option]
@@ -3569,30 +3599,23 @@
 
      (and (:ref? config) (:group-by-page? config) (vector? (first blocks)))
      [:div.flex.flex-col.references-blocks-wrap
-      (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
-        (for [[page page-blocks] blocks]
-          (let [page (hidden-page->source-page page)
-                alias? (:block/alias? page)
-                page (db/entity (:db/id page))
-                   ;; FIXME: parents need to be sorted
-                parent-blocks (group-by :block/parent page-blocks)]
-            [:div.my-2.references-blocks-item {:key (str "page-" (:db/id page))}
-             (ui/foldable
-              [:div
-               (page-cp config page)
-               (when alias? [:span.text-sm.font-medium.opacity-50 " Alias"])]
-              (for [[parent blocks] parent-blocks]
-                (let [blocks' (map (fn [b]
-                                        ;; Block might be a datascript entity
-                                     (if (e/entity? b)
-                                       (db/pull (:db/id b))
-                                       (update b :block/children
-                                               (fn [col]
-                                                 (tree/non-consecutive-blocks->vec-tree col))))) blocks)]
-                  (rum/with-key
-                    (breadcrumb-with-container blocks' config)
-                    (:db/id parent))))
-              {:debug-id page})])))]
+      (let [blocks (sort-by (comp :block/journal-day first) > blocks)
+            scroll-container (or
+                              (when-let [*ref (:scroll-container config)]
+                                (rum/deref *ref))
+                              (gdom/getElement "main-content-container"))]
+        (if (:sidebar? config)
+          (for [block blocks]
+            (rum/with-key
+              (ref-block-container config block)
+              (str "ref-" (:container-id config) "-" (:db/id (first block)))))
+          (ui/virtualized-list
+           {:custom-scroll-parent scroll-container
+            :total-count (count blocks)
+            :item-content (fn [idx]
+                            (rum/with-key
+                              (ref-block-container config (nth blocks idx))
+                              (str "ref-" (:container-id config) "-" idx)))})))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))
