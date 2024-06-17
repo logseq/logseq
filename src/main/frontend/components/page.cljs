@@ -96,12 +96,7 @@
   {:did-mount open-root-block!}
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
-    (let [long-page? (or
-                      ;; page has not been loaded yet, so we pretend it's a long page to avoid rendering
-                      ;; too many blocks
-                      (not (:block.temp/fully-loaded? page-e))
-                      (> (count (:block/_page page-e)) 300))
-          hiccup (component-block/->hiccup blocks (assoc config :long-page? long-page?) {})]
+    (let [hiccup (component-block/->hiccup blocks config {})]
       [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
@@ -552,7 +547,8 @@
                   (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
              ;; blocks
-             (page-blocks-cp repo page (merge option {:sidebar? sidebar? :whiteboard? whiteboard?}))]])
+             (page-blocks-cp repo page (merge option {:sidebar? sidebar?
+                                                      :whiteboard? whiteboard?}))]])
 
          [:div {:style {:padding-left 9}}
           (when today?
