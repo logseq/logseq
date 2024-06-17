@@ -36,7 +36,6 @@
             [electron.ipc :as ipc]
             [frontend.context.i18n :refer [t]]
             [frontend.persist-db.browser :as db-browser]
-            [cljs-bean.core :as bean]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [logseq.db :as ldb]
@@ -45,7 +44,6 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.property.util :as pu]))
 
-(def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
 
@@ -135,17 +133,18 @@
 
 (defn rename!
   [page-uuid-or-old-name new-name & {:as _opts}]
-  (when-let [^js worker @db-browser/*worker]
-    (p/let [repo (state/get-current-repo)
-            page-uuid (cond
+  (when @db-browser/*worker
+    (p/let [page-uuid (cond
                         (uuid? page-uuid-or-old-name)
                         page-uuid-or-old-name
                         (common-util/uuid-string? page-uuid-or-old-name)
                         page-uuid-or-old-name
                         :else
                         (:block/uuid (db/get-page page-uuid-or-old-name)))
-            result (.page-rename worker repo (str page-uuid) new-name)
-            result' (:result (bean/->clj result))]
+            result (ui-outliner-tx/transact!
+                       {:outliner-op :rename-page}
+                    (outliner-op/rename-page! page-uuid new-name))
+            result' (ldb/read-transit-str result)]
       (case (if (string? result') (keyword result') result')
         :built-in-page
         (notification/show! "Built-in page's name cannot be modified" :warning)
@@ -166,7 +165,7 @@
             current-blocks (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page) {}))]
         (p/do!
          (ui-outliner-tx/transact!
-          {}
+          {:outliner-op :reorder-favorites}
           (doseq [[page-block-db-id block] (zipmap favorite-page-block-db-id-coll current-blocks)]
             (when (not= page-block-db-id (:db/id (:block/link block)))
               (outliner-op/save-block! (assoc block :block/link page-block-db-id)))))

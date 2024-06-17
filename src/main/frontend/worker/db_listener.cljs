@@ -92,6 +92,7 @@ generate undo ops.")
                  (let [tx-meta (merge (batch-tx/get-batch-opts) tx-meta)
                        pipeline-replace? (:pipeline-replace? tx-meta)
                        in-batch-tx-mode? (:batch-tx/batch-tx-mode? tx-meta)]
+                   (batch-tx/set-batch-opts tx-meta)
                    (when-not pipeline-replace?
                      (if (and in-batch-tx-mode?
                               (not (:batch-tx/exit? tx-meta)))

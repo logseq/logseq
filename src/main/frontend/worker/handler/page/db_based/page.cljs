@@ -84,11 +84,11 @@
                              (build-first-block-tx (:block/uuid (first page-txs)) format))
             txs      (concat
                       page-txs
-                      first-block-tx)
-            [page-uuid result] (when (seq txs)
-                                 [page-uuid (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
-                                                                             :outliner-op :create-page}
-                                                                      today-journal?
-                                                                      (assoc :create-today-journal? true
-                                                                             :today-journal-name page-name)))])]
-        [result page-name page-uuid]))))
+                      first-block-tx)]
+        (when (seq txs)
+          (ldb/transact! conn txs (cond-> {:persist-op? persist-op?
+                                           :outliner-op :create-page}
+                                    today-journal?
+                                    (assoc :create-today-journal? true
+                                           :today-journal-name page-name))))
+        [page-name page-uuid]))))

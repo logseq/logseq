@@ -94,7 +94,23 @@
    [:transact
     [:catn
      [:op :keyword]
-     [:args [:tuple ::tx-data ::tx-meta]]]]])
+     [:args [:tuple ::tx-data ::tx-meta]]]]
+
+   ;; page ops
+   [:create-page
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::title ::option]]]]
+
+   [:rename-page
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::uuid ::title]]]]
+
+   [:delete-page
+    [:catn
+     [:op :keyword]
+     [:args [:tuple ::uuid]]]]])
 
 (def ^:private ops-schema
   [:schema {:registry {::id int?
@@ -110,11 +126,19 @@
                        ::option [:maybe map?]
                        ::blocks [:sequential ::block]
                        ::ids [:sequential ::id]
+                       ::uuid uuid?
+                       ::title string?
                        ::tx-data [:sequential :any]
                        ::tx-meta [:maybe map?]}}
    [:sequential op-schema]])
 
 (def ^:private ops-validator (m/validator ops-schema))
+
+(defonce *op-handlers (atom {}))
+
+(defn register-op-handlers!
+  [handlers]
+  (reset! *op-handlers handlers))
 
 (defn ^:large-vars/cleanup-todo apply-ops!
   [repo conn ops date-formatter opts]
@@ -206,6 +230,9 @@
          (apply outliner-property/add-existing-values-to-closed-values! conn args)
 
          :transact
-         (apply ldb/transact! conn args))))
+         (apply ldb/transact! conn args)
+
+         (when-let [handler (get @*op-handlers op)]
+           (reset! *result (handler repo conn args))))))
 
     @*result))

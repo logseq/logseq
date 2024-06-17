@@ -16,7 +16,8 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.db.sqlite.build :as sqlite-build]
             [frontend.handler.file-based.status :as status]
-            [logseq.outliner.db-pipeline :as db-pipeline]))
+            [logseq.outliner.db-pipeline :as db-pipeline]
+            [frontend.worker.handler.page :as worker-page]))
 
 (def node? (exists? js/process))
 
@@ -241,3 +242,11 @@ This can be called in synchronous contexts as no async fns should be invoked"
   (editor-handler/save-block! repo block-uuid content)
   (doseq [tag tags]
     (page-handler/add-tag repo block-uuid (db/get-page tag))))
+
+(defn create-page!
+  [title & {:as opts}]
+  (let [repo (state/get-current-repo)
+        conn (db/get-db repo false)
+        config (state/get-config repo)
+        [page-name _page-uuid] (worker-page/create! repo conn config title opts)]
+    page-name))

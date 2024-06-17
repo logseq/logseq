@@ -122,3 +122,18 @@
   [tx-data tx-meta]
   (op-transact!
    [:transact [tx-data tx-meta]]))
+
+(defn create-page!
+  [title options]
+  (op-transact!
+   [:create-page [title options]]))
+
+(defn rename-page!
+  [page-uuid new-name]
+  (op-transact!
+   [:rename-page [page-uuid new-name]]))
+
+(defn delete-page!
+  [page-uuid]
+  (op-transact!
+   [:delete-page [page-uuid]]))
