@@ -26,6 +26,8 @@
            page'
            (->> properties
                 (keep (fn [[k v]]
+                        ;; TODO: Pass in property type in order to support property
+                        ;; types other than :default
                         (when (db-property-util/built-in-has-ref-value? k)
                           [k v])))
                 (into {})))]

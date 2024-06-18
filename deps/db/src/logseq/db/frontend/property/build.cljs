@@ -80,20 +80,23 @@
          {:block/content value}))
       sqlite-util/block-with-timestamps))
 
-;; TODO: Add support for types besides :default when needed by getting property types
-;; and passing them to build-property-value-block
 (defn build-property-values-tx-m
-  "Builds a map of property names to their property value blocks to be transacted, given a block
-   and a properties map with raw property values"
+  "Builds a map of property names to their property value blocks to be
+  transacted, given a block and a properties map with raw property values. The
+  properties map can have keys that are db-idents or they can be maps. If a map,
+  it should have :original-property-id and :db/ident keys.  See
+  ->property-value-tx-m for such an example"
   [block properties]
   ;; Build :db/id out of uuid if block doesn't have one for tx purposes
   (let [block' (if (:db/id block) block (assoc block :db/id [:block/uuid (:block/uuid block)]))]
     (->> properties
          (map (fn [[k v]]
-                [k
-                 (if (set? v)
-                   (set (map #(build-property-value-block block' {:db/ident k} %) v))
-                   (build-property-value-block block' {:db/ident k} v))]))
+                (let [property-map (if (map? k) k {:db/ident k})]
+                  (assert (:db/ident property-map) "Key in map must have a :db/ident")
+                  [(or (:original-property-id property-map) (:db/ident property-map))
+                   (if (set? v)
+                     (set (map #(build-property-value-block block' property-map %) v))
+                     (build-property-value-block block' property-map v))])))
          (into {}))))
 
 (defn build-properties-with-ref-values
