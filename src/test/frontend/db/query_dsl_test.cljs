@@ -238,8 +238,7 @@ prop-d:: [[nada]]"}])
           (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
       "Page property queries nested NOT in first clause")
   
-  ;; TODO: Enable when boolean queries work
-  #_(testing "boolean values"
+  (testing "boolean values"
       (is (= ["page1"]
              (map :block/name (dsl-query "(page-property interesting true)")))
           "Boolean true")

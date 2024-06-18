@@ -51,7 +51,7 @@
           whiteboard? (contains? (set (:block/type page)) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
-          public? (get page (pu/get-pid :logseq.property/public))
+          public? (pu/get-block-property-value page :logseq.property/public)
           _favorites-updated? (state/sub :favorites/updated?)
           favorited? (page-handler/favorited? page-name)
           developer-mode? (state/sub [:ui/developer-mode?])

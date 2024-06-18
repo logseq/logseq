@@ -239,13 +239,8 @@
       (when-not (and (= property-id :block/alias) (= v (:db/id block))) ; alias can't be itself
         (ldb/transact! conn [{:db/id (:db/id block) property-id v}]
                        {:outliner-op :save-block}))
-      (let [new-value (cond
-                        (= v :logseq.property/empty-placeholder)
-                        (if (= property-type :checkbox) false v)
-
-                        (db-property-type/ref-property-types property-type)
+      (let [new-value (if (db-property-type/ref-property-types property-type)
                         (convert-ref-property-value conn property-id v property-type)
-                        :else
                         v)
             existing-value (get block property-id)]
         (when-not (= existing-value new-value)

@@ -777,12 +777,13 @@
 
           :checkbox
           (let [add-property! (fn []
-                                (<add-property! block (:db/ident property) (boolean (not value))))]
+                                (<add-property! block (:db/ident property)
+                                                (boolean (not (db-property/property-value-content value)))))]
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
              (shui/checkbox {:class "jtrigger flex flex-row items-center"
                              :disabled config/publishing?
                              :auto-focus editing?
-                             :checked value
+                             :checked (db-property/property-value-content value)
                              :on-checked-change add-property!
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
