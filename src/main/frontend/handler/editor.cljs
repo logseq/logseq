@@ -2450,10 +2450,10 @@
 
 (defn- keydown-new-block
   [state]
-  (state/set-state! :editor/async-unsaved-chars "")
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when block
+        (state/set-state! :editor/async-unsaved-chars "")
         (let [block (db/entity (:db/id block))
               input (state/get-input)
               config (assoc config :keydown-new-block true)
