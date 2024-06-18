@@ -679,10 +679,6 @@
    (undo-redo/record-editor-info! repo (ldb/read-transit-str editor-info-str))
    nil)
 
-  (keep-alive
-   [_this]
-   "alive")
-
   (dangerousRemoveAllDbs
    [this repo]
    (p/let [dbs (.listDB this)]
@@ -717,6 +713,7 @@
                    (rename-page! repo conn page-uuid new-name))
     :delete-page (fn [repo conn [page-uuid]]
                    (delete-page! repo conn page-uuid))}))
+
 (defn init
   "web worker entry"
   []
