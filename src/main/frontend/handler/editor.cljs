@@ -875,7 +875,7 @@
         (outliner-op/delete-blocks! blocks' nil))
        (when sibling-block
          (let [{:keys [edit-block-f]} (move-to-prev-block repo sibling-block (:block/format block) "")]
-           (edit-block-f)))))))
+           (when edit-block-f (edit-block-f))))))))
 
 (defn set-block-query-properties!
   [block-id all-properties key add?]
