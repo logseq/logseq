@@ -7,8 +7,8 @@
 
 (defn get-property-name
   "Get a property's name given its id"
-  [e]
-  (:block/original-name (if (number? e) (db-utils/pull e) e)))
+  [id]
+  (:block/original-name (db-utils/entity id)))
 
 (defn get-property-value
   "Get a property's name given its id"
