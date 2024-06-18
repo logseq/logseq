@@ -4,7 +4,6 @@
             [frontend.state :as state]
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
-            [frontend.handler.editor :as editor-handler]
             [frontend.util :as util]))
 
 (defn invoke-hooks
