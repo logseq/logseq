@@ -263,7 +263,7 @@
                                                             (:db/id row)
                                                             :block-ref)
                                                            (reset! *mouse-down? false)))}
-                 (when value
+                 (when (some? value)
                    (render-column-value {:row-block row
                                          :row-format format
                                          :cell-format cell-format

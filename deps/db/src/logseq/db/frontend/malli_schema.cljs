@@ -360,7 +360,7 @@
   (vec
    (concat
     [:map]
-    [[:property.value/content [:or :string :double]]]
+    [[:property.value/content [:or :string :double :boolean]]]
     (remove #(#{:block/content} (first %)) block-attrs)
     page-or-block-attrs)))
 

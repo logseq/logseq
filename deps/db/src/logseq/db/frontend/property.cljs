@@ -55,7 +55,7 @@
                                                     :hide? true}}
    :logseq.property/source-page           {:schema {:type :entity
                                                     :hide? true}}
-   :logseq.property/built-in?             {:schema {:type :checkbox
+   :logseq.property/built-in?             {:schema {:type :boolean
                                                     :hide? true}}
    :logseq.property/hide-properties?      {:schema {:type :checkbox
                                                     :hide? true}}
@@ -234,8 +234,9 @@
   property i.e. what the user sees. For page types the content is the page name"
   [ent]
   (or (:block/content ent)
-      (:property.value/content ent)
-      (:block/original-name ent)))
+      (if-some [content (:property.value/content ent)]
+        content
+        (:block/original-name ent))))
 
 (defn ref->property-value-content
   "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for

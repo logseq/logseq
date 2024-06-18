@@ -11,7 +11,8 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  #{:keyword :map :coll :any :entity})
+  ;; TODO: Remove :boolean when logseq.property/built-in? references reusable property value entity on startup
+  #{:keyword :map :coll :any :entity :boolean})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -32,7 +33,7 @@
   "Property value ref types where the refed entity stores its value in
   :property.value/content e.g. :number is stored as a number. new value-ref-property-types
   should default to this as it allows for more querying power"
-  #{:number :url})
+  #{:number :url :checkbox})
 
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
@@ -98,6 +99,10 @@
     (when-let [entity (d/entity db id-or-value)]
       (number? (:property.value/content entity)))))
 
+(defn- checkbox-entity?
+  [db id]
+  (boolean? (:property.value/content (d/entity db id))))
+
 (defn- text-entity?
   [db s {:keys [new-closed-value?]}]
   (if new-closed-value?
@@ -133,7 +138,8 @@
    :date     [:fn
               {:error/message "should be a journal date"}
               date?]
-   :checkbox boolean?
+   :checkbox checkbox-entity?
+   :boolean  boolean?
    :url      [:fn
               {:error/message "should be a URL"}
               url-entity?]
@@ -165,7 +171,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :url :number :date :page :object :template :entity})
+  #{:default :checkbox :url :number :date :page :object :template :entity})
 
 ;; Helper fns
 ;; ==========
