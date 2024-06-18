@@ -134,7 +134,7 @@
 
 (def ^:private ops-validator (m/validator ops-schema))
 
-(defonce *op-handlers (atom {}))
+(defonce ^:private *op-handlers (atom {}))
 
 (defn register-op-handlers!
   [handlers]
