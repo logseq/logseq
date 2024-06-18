@@ -3474,24 +3474,23 @@
                         (block-item (assoc config :top? top?)
                                     block
                                     {:top? top?
-                                     :idx idx
                                      :bottom? bottom?})))
         virtual-opts (when virtualized?
                        {:custom-scroll-parent (gdom/getElement "main-content-container")
+                        :compute-item-key (fn [idx]
+                                            (let [block (nth blocks idx)]
+                                              (str (:container-id config) "-" (:db/id block))))
                         ;; Leave some space for the new inserted block
-                        :increase-viewport-by {:bottom 80}
+                        :increase-viewport-by {:top 64 :bottom 64}
                         :total-count (count blocks)
                         :item-content (fn [idx]
                                         (let [top? (zero? idx)
                                               bottom? (= (dec (count blocks)) idx)
                                               block (nth blocks idx)]
-                                          (rum/with-key
-                                            (block-item (assoc config :top? top?)
+                                          (block-item (assoc config :top? top?)
                                                         block
                                                         {:top? top?
-                                                         :idx idx
-                                                         :bottom? bottom?})
-                                            (str (:container-id config) "-" (:db/id block)))))})]
+                                                         :bottom? bottom?})))})]
     (cond
       (and virtualized? (seq blocks))
       (ui/virtualized-list virtual-opts)
@@ -3612,17 +3611,19 @@
                               (gdom/getElement "main-content-container"))]
         (when (seq blocks)
           (if (:sidebar? config)
-          (for [block blocks]
-            (rum/with-key
-              (ref-block-container config block)
-              (str "ref-" (:container-id config) "-" (:db/id (first block)))))
-          (ui/virtualized-list
-           {:custom-scroll-parent scroll-container
-            :total-count (count blocks)
-            :item-content (fn [idx]
-                            (rum/with-key
-                              (ref-block-container config (nth blocks idx))
-                              (str "ref-" (:container-id config) "-" idx)))}))))]
+            (for [block blocks]
+              (rum/with-key
+                (ref-block-container config block)
+                (str "ref-" (:container-id config) "-" (:db/id (first block)))))
+            (ui/virtualized-list
+             {:custom-scroll-parent scroll-container
+              :compute-item-key (fn [idx]
+                                  (let [block (nth blocks idx)]
+                                    (str "ref-" (:container-id config) "-" (:db/id (first block)))))
+              :total-count (count blocks)
+              :item-content (fn [idx]
+                              (let [block (nth blocks idx)]
+                                (ref-block-container config block)))}))))]
 
      (and (:group-by-page? config)
           (vector? (first blocks)))

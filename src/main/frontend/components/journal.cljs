@@ -26,6 +26,9 @@
     [:div#journals
      (ui/virtualized-list
       {:custom-scroll-parent (gdom/getElement "main-content-container")
+       :compute-item-key (fn [idx]
+                           (let [block (nth latest-journals idx)]
+                             (str "journal-" (:db/id block))))
        :initial-item-count 1
        :total-count (count latest-journals)
        :item-content (fn [idx]
