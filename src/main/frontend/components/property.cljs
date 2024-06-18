@@ -194,7 +194,7 @@
                  (when (= (:type schema) :object) (reset! *show-class-select? true))
                  (components-pu/update-property! property property-name schema)
                  (cond
-                   @*show-class-select?
+                   (and *show-class-select? @*show-class-select?)
                    nil
                    add-class-property?
                    (shui/dialog-close!)
