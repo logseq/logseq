@@ -48,8 +48,7 @@
   (let [debug-state* (rum/react debug-state)
         rtc-logs @(get state ::logs)
         rtc-state (:rtc-state debug-state*)
-        rtc-lock (:rtc-lock debug-state*)
-        online-users (:online-users debug-state*)]
+        rtc-lock (:rtc-lock debug-state*)]
     [:div
      {:on-click (fn [^js e]
                   (when-let [^js btn (.closest (.-target e) ".ui__button")]
