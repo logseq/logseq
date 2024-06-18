@@ -48,7 +48,8 @@
   (let [debug-state* (rum/react debug-state)
         rtc-logs @(get state ::logs)
         rtc-state (:rtc-state debug-state*)
-        rtc-lock (:rtc-lock debug-state*)]
+        rtc-lock (:rtc-lock debug-state*)
+        online-users (:online-users debug-state*)]
     [:div
      {:on-click (fn [^js e]
                   (when-let [^js btn (.closest (.-target e) ".ui__button")]
@@ -82,17 +83,7 @@
                                                      :graph<->user-user-type
                                                      :graph<->user-grant-by-user])))
                       graph-list)))))}
-       (shui/tabler-icon "download") "graph-list")
-
-      (shui/button
-       {:size :sm
-        :on-click #(let [token (state/get-auth-id-token)
-                         ^object worker @db-browser/*worker]
-                     (when-let [graph-uuid (:graph-uuid debug-state*)]
-                       (p/let [result (.rtc-get-users-info2 worker token graph-uuid)
-                               result* (ldb/read-transit-str result)]
-                         (swap! debug-state assoc :online-info result*))))}
-       (shui/tabler-icon "users") "online-info")]
+       (shui/tabler-icon "download") "graph-list")]
 
      [:div.pb-4
       [:pre.select-text
@@ -103,7 +94,7 @@
             :local-tx (:local-tx debug-state*)
             :pending-block-update-count (:unpushed-block-update-count debug-state*)
             :remote-graphs (:remote-graphs debug-state*)
-            :online-info (:online-info debug-state*)
+            :online-users (:online-users debug-state*)
             :auto-push? (:auto-push? debug-state*)
             :current-page (state/get-current-page)
             :blocks-count (when-let [page (state/get-current-page)]
