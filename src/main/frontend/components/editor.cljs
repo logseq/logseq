@@ -386,7 +386,7 @@
 (rum/defc code-block-mode-picker < rum/reactive
   [id format]
   (when-let [modes (some->> js/window.CodeMirror (.-modes) (js/Object.keys) (js->clj) (remove #(= "null" %)))]
-    (when-let [input (gdom/getElement id)]
+    (when-let [^js input (gdom/getElement id)]
       (let [pos          (state/get-editor-last-pos)
             current-pos  (cursor/pos input)
             edit-content (or (state/sub-edit-content) "")
@@ -404,13 +404,18 @@
                                                  last-pattern (str "```" q)]
                                              (editor-handler/insert-command! id
                                                                              prefix format {:last-pattern last-pattern})
-                                             (commands/handle-step [:codemirror/focus])))
-                            :on-enter    (fn []
-                                           (state/clear-editor-action!)
-                                           (commands/handle-step [:codemirror/focus]))
+                                             (-> (editor-handler/save-block!
+                                                   (state/get-current-repo)
+                                                   (:block/uuid (state/get-edit-block))
+                                                   (.-value input))
+                                               (p/then #(commands/handle-step [:codemirror/focus])))
+                                             ))
+                            :on-enter (fn []
+                                        (state/clear-editor-action!)
+                                        (commands/handle-step [:codemirror/focus]))
                             :item-render (fn [mode _chosen?]
                                            [:strong mode])
-                            :class       "code-block-mode-picker"})]))))
+                            :class "code-block-mode-picker"})]))))
 
 (rum/defcs input < rum/reactive
                    (rum/local {} ::input-value)
@@ -418,14 +423,14 @@
                      (fn [state]
                        (mixins/on-key-down
                          state
-      {;; enter
-       13 (fn [state e]
-            (let [input-value (get state ::input-value)
-                  input-option (:options (state/get-editor-show-input))]
-              (when (seq @input-value)
-                ;; no new line input
-                (util/stop e)
-                (let [[_id on-submit] (:rum/args state)
+                         {;; enter
+                          13 (fn [state e]
+                               (let [input-value (get state ::input-value)
+                                     input-option (:options (state/get-editor-show-input))]
+                                 (when (seq @input-value)
+                                   ;; no new line input
+                                   (util/stop e)
+                                   (let [[_id on-submit] (:rum/args state)
                       command (:command (first input-option))]
                   (on-submit command @input-value))
                 (reset! input-value nil))))
