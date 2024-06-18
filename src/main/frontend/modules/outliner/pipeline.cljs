@@ -4,7 +4,8 @@
             [frontend.state :as state]
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [frontend.handler.editor :as editor-handler]))
 
 (defn invoke-hooks
   [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
