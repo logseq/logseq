@@ -1039,10 +1039,13 @@
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
 
+(defmethod handle :rtc/log [[_ data]]
+  (state/set-state! :rtc/log data))
+
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid]]
   (->
    (p/do!
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid 60000))
+     (rtc-handler/<rtc-download-graph! graph-name graph-uuid 60000))
    (p/catch (fn [e]
               (println "RTC download graph failed, error:")
               (js/console.error e)))))

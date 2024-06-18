@@ -36,6 +36,9 @@
 (defmethod handle :sync-db-changes [_ _worker data]
   (state/pub-event! [:db/sync-changes data]))
 
+(defmethod handle :rtc-log [_ _worker log]
+  (state/pub-event! [:rtc/log log]))
+
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 

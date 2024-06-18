@@ -29,15 +29,14 @@
 
 (def ^:private sentinel (js-obj))
 (defn- get-remote-updates
-  "Return a flow: receive messages from ws, and filter messages with :req-id=`push-updates`."
+  "Return a flow: receive messages from ws, and filter messages with :req-id=`push-updates` or `online-users-updated`."
   [get-ws-create-task]
   (m/ap
     (loop []
       (let [ws (m/? get-ws-create-task)
             x (try
                 (m/?> (m/eduction
-                       (filter (fn [data] (= "push-updates" (:req-id data))))
-                       (map (fn [data] (prn :get-remote-updates (:t data)) data))
+                       (filter (fn [data] (contains? #{"online-users-updated" "push-updates"} (:req-id data))))
                        (ws/recv-flow ws)))
                 (catch js/CloseEvent _
                   sentinel))]
@@ -59,10 +58,14 @@
 (defn- create-mixed-flow
   "Return a flow that emits all kinds of events:
   `:remote-update`: remote-updates data from server
-  `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote."
+  `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
+  `:online-users-updated`: online users info updated"
   [repo get-ws-create-task *auto-push?]
   (let [remote-updates-flow (m/eduction
-                             (map (fn [data] {:type :remote-update :value data}))
+                             (map (fn [data]
+                                    (case (:req-id data)
+                                      "push-updates" {:type :remote-update :value data}
+                                      "online-users-updated" {:type :online-users-updated :value data})))
                              (get-remote-updates get-ws-create-task))
         local-updates-check-flow (m/eduction
                                   (map (fn [data] {:type :local-update-check :value data}))
@@ -139,17 +142,23 @@
         *auto-push?         (atom auto-push?)
         *log                (atom nil)
         *last-calibrate-t   (atom nil)
+        *online-users       (atom nil)
         started-dfv         (m/dfv)
-        add-log-fn          #(reset! *log [(js/Date.) %])
+        add-log-fn          (fn [message]
+                              (assert (map? message) message)
+                              (reset! *log (assoc message
+                                                  :graph-uuid graph-uuid
+                                                  :created-at (js/Date.))))
         {:keys [*current-ws get-ws-create-task]}
         (new-task--get-ws-create--memoized ws-url)
         get-ws-create-task  (r.client/ensure-register-graph-updates
                              get-ws-create-task graph-uuid repo conn *last-calibrate-t)
         mixed-flow          (create-mixed-flow repo get-ws-create-task *auto-push?)]
     (assert (some? *current-ws))
-    {:rtc-log-flow    (m/buffer 100 (m/watch *log))
+    {:rtc-log-flow    (m/watch *log)
      :rtc-state-flow  (create-rtc-state-flow (create-ws-state-flow *current-ws))
      :*rtc-auto-push? *auto-push?
+     :*online-users   *online-users
      :onstarted-task  started-dfv
      :rtc-loop-task
      (holding-rtc-lock
@@ -172,7 +181,10 @@
                :local-update-check
                (m/? (r.client/new-task--push-local-ops
                      repo conn graph-uuid date-formatter
-                     get-ws-create-task add-log-fn))))
+                     get-ws-create-task add-log-fn))
+
+               :online-users-updated
+               (reset! *online-users (:value event))))
            (m/ap)
            (m/reduce {} nil)
            (m/?))
@@ -186,6 +198,7 @@
    :rtc-log-flow nil
    :rtc-state-flow nil
    :*rtc-auto-push? nil
+   :*online-users nil
    :*rtc-lock nil
    :canceler nil})
 
@@ -200,7 +213,7 @@
         (let [user-uuid (:sub (worker-util/parse-jwt token))
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
-              {:keys [onstarted-task rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task]}
+              {:keys [onstarted-task rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
               start-ex (m/? onstarted-task)]
@@ -212,6 +225,7 @@
                                             :rtc-log-flow rtc-log-flow
                                             :rtc-state-flow rtc-state-flow
                                             :*rtc-auto-push? *rtc-auto-push?
+                                            :*online-users *online-users
                                             :*rtc-lock *rtc-lock
                                             :canceler canceler})
                 nil)))
@@ -273,7 +287,7 @@
                                           :block-uuids [block-uuid]
                                           :graph-uuid graph-uuid}))))
 
-(defn- create-get-debug-state-flow
+(defn- create-get-state-flow
   []
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
@@ -283,22 +297,20 @@
           (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock rtc-log-flow)
             (m/?<
              (m/latest
-              (fn [rtc-state rtc-auto-push? rtc-lock rtc-logs]
+              (fn [rtc-state rtc-auto-push? rtc-lock]
                 {:graph-uuid graph-uuid
                  :user-uuid user-uuid
                  :unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
                  :local-tx (op-mem-layer/get-local-tx repo)
                  :rtc-state rtc-state
                  :rtc-lock rtc-lock
-                 :rtc-logs rtc-logs
                  :auto-push? rtc-auto-push?})
-              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock)
-              (m/reductions (fn [r log] (if log (take 10 (conj r log)) r)) nil rtc-log-flow))))
+              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock))))
           (catch Cancelled _))))))
 
 (defn new-task--get-debug-state
   []
-  (m/reduce {} nil (m/eduction (take 1) (create-get-debug-state-flow))))
+  (m/reduce {} nil (m/eduction (take 1) (create-get-state-flow))))
 
 (defn new-task--snapshot-graph
   [token graph-uuid]
@@ -342,10 +354,10 @@
 
 ;;; ================ API (ends) ================
 
-;;; subscribe debug state ;;;
+;;; subscribe state ;;;
 
 (defonce ^:private *last-subscribe-canceler (atom nil))
-(defn- subscribe-debug-state
+(defn- subscribe-state
   []
   (when-let [canceler @*last-subscribe-canceler]
     (canceler)
@@ -353,12 +365,38 @@
   (let [cancel (c.m/run-task
                 (m/reduce
                  (fn [_ v] (worker-util/post-message :rtc-sync-state v))
-                 (create-get-debug-state-flow))
-                :subscribe-debug-state)]
+                 (create-get-state-flow))
+                :subscribe-state)]
     (reset! *last-subscribe-canceler cancel)
     nil))
 
-(subscribe-debug-state)
+(subscribe-state)
+
+;;; subscribe rtc logs
+
+(def global-rtc-log-flow
+  (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
+    (m/ap
+      (let [{:keys [rtc-log-flow]} (m/?< rtc-loop-metadata-flow)]
+        (try
+          (when rtc-log-flow
+            (m/?< rtc-log-flow))
+          (catch Cancelled _))))))
+
+(defonce ^:private *last-subscribe-logs-canceler (atom nil))
+(defn- subscribe-logs
+  []
+  (when-let [canceler @*last-subscribe-logs-canceler]
+    (canceler)
+    (reset! *last-subscribe-logs-canceler nil))
+  (let [cancel (c.m/run-task
+                (m/reduce
+                 (fn [_ v] (when v (worker-util/post-message :rtc-log v)))
+                 global-rtc-log-flow)
+                :subscribe-logs)]
+    (reset! *last-subscribe-logs-canceler cancel)
+    nil))
+(subscribe-logs)
 
 (comment
   (do
@@ -375,4 +413,6 @@
       (def rtc-log-flow rtc-log-flow)
       (def rtc-state-flow rtc-state-flow)
       (def *rtc-auto-push? *rtc-auto-push?)))
-  (cancel))
+  (cancel)
+
+  )

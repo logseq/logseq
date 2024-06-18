@@ -76,6 +76,10 @@
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
    [:diff-data {:optional true} [:map-of :keyword :any]]
+   [:online-users {:optional true} [:sequential [:map
+                                                 [:user/uuid :uuid]
+                                                 [:user/name :string]
+                                                 [:user/email :string]]]]
    [:refed-blocks {:optional true}
     [:maybe
      [:sequential
