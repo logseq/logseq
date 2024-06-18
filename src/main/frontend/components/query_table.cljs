@@ -123,9 +123,11 @@
   (let [repo (state/get-current-repo)
         db-graph? (config/db-based-graph? repo)
         hidden-properties (if db-graph?
-                            ;; TODO: Support additional hidden properties e.g. from user config
-                            ;; or gp-property/built-in-extended properties
-                            (set (keys db-property/built-in-properties))
+                            (->> db-property/built-in-properties
+                                 (keep (fn [[k v]]
+                                         (when-not (get-in v [:schema :public?])
+                                           k)))
+                                 set)
                             (conj (file-property-handler/built-in-properties) :template))
         properties-fn (if db-graph? db-property/properties :block/properties)
         prop-keys* (->> (distinct (mapcat keys (map properties-fn result)))
