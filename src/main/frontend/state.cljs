@@ -121,6 +121,7 @@
       :block/component-editing-mode?         false
       :editor/op                             (atom nil)
       :editor/start-pos                      (atom nil)
+      :editor/async-unsaved-chars            (atom nil)
       :editor/hidden-editors                 #{} ;; page names
       :editor/draw-mode?                     false
 
@@ -314,8 +315,7 @@
       :ui/select-query-cache                 (atom {})
       :favorites/updated?                    (atom 0)
       :db/async-query-loading                (atom #{})
-      :db/async-queries                      (atom {})
-      })))
+      :db/async-queries                      (atom {})})))
 
 ;; Block ast state
 ;; ===============

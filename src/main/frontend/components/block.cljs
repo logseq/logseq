@@ -1875,7 +1875,8 @@
            (and (or (mobile-util/native-platform?)
                     (:ui/show-empty-bullets? (state/get-config))
                     collapsed?
-                    collapsable?)
+                    collapsable?
+                    (< (- (util/time-ms) (:block/created-at block)) 500))
                 (not doc-mode?))
            bullet
 
