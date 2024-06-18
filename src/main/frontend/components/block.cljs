@@ -2912,102 +2912,103 @@
         children (ldb/get-children block)
         selected? (contains? (set (state/get-selection-block-ids)) (:block/uuid block))
         db-based? (config/db-based-graph? repo)]
-    [:div.ls-block
-     (cond->
-      {:id (str "ls-block-" uuid)
-       :blockid (str uuid)
-       :containerid container-id
-       :ref #(when (nil? @*ref) (reset! *ref %))
-       :data-collapsed (and collapsed? has-child?)
-       :class (str "id" uuid " "
-                   (when selected? " selected")
-                   (when pre-block? " pre-block")
-                   (when order-list? " is-order-list")
-                   (when (string/blank? content) " is-blank")
-                   (when original-block " embed-block"))
-       :haschild (str (boolean has-child?))}
+    (when-not (= (:editor/deleting-block @state/state) (:block/uuid block))
+      [:div.ls-block
+       (cond->
+        {:id (str "ls-block-" uuid)
+         :blockid (str uuid)
+         :containerid container-id
+         :ref #(when (nil? @*ref) (reset! *ref %))
+         :data-collapsed (and collapsed? has-child?)
+         :class (str "id" uuid " "
+                     (when selected? " selected")
+                     (when pre-block? " pre-block")
+                     (when order-list? " is-order-list")
+                     (when (string/blank? content) " is-blank")
+                     (when original-block " embed-block"))
+         :haschild (str (boolean has-child?))}
 
-       original-block
-       (assoc :originalblockid (str (:block/uuid original-block)))
+         original-block
+         (assoc :originalblockid (str (:block/uuid original-block)))
 
-       level
-       (assoc :level level)
+         level
+         (assoc :level level)
 
-       (not slide?)
-       (merge attrs)
+         (not slide?)
+         (merge attrs)
 
-       (or reference? embed?)
-       (assoc :data-transclude true)
+         (or reference? embed?)
+         (assoc :data-transclude true)
 
-       embed?
-       (assoc :data-embed true)
+         embed?
+         (assoc :data-embed true)
 
-       custom-query?
-       (assoc :data-query true))
+         custom-query?
+         (assoc :data-query true))
 
-     (when (and ref? breadcrumb-show?)
-       (breadcrumb config repo uuid {:show-page? false
-                                     :indent? true
-                                     :navigating-block *navigating-block}))
+       (when (and ref? breadcrumb-show?)
+         (breadcrumb config repo uuid {:show-page? false
+                                       :indent? true
+                                       :navigating-block *navigating-block}))
 
      ;; only render this for the first block in each container
-     (when top?
-       (dnd-separator-wrapper block children block-id slide? true false))
+       (when top?
+         (dnd-separator-wrapper block children block-id slide? true false))
 
-     [:div.block-main-container.flex.flex-row.pr-2.gap-1
-      {:data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
-       :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
-       :on-touch-move (fn [event]
-                        (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
-       :on-touch-end (fn [event]
-                       (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
-       :on-touch-cancel (fn [_e]
-                          (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
-       :on-mouse-over (fn [e]
-                        (block-mouse-over e *control-show? block-id doc-mode?))
-       :on-mouse-leave (fn [e]
-                         (block-mouse-leave e *control-show? block-id doc-mode?))}
-      (when (and (not slide?) (not in-whiteboard?))
-        (let [edit? (or edit?
-                        (= uuid (:block/uuid (state/get-edit-block))))]
-          (block-control config block
-                         {:uuid uuid
-                          :block-id block-id
-                          :collapsed? collapsed?
-                          :*control-show? *control-show?
-                          :edit? edit?})))
+       [:div.block-main-container.flex.flex-row.pr-2.gap-1
+        {:data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
+         :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
+         :on-touch-move (fn [event]
+                          (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
+         :on-touch-end (fn [event]
+                         (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
+         :on-touch-cancel (fn [_e]
+                            (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
+         :on-mouse-over (fn [e]
+                          (block-mouse-over e *control-show? block-id doc-mode?))
+         :on-mouse-leave (fn [e]
+                           (block-mouse-leave e *control-show? block-id doc-mode?))}
+        (when (and (not slide?) (not in-whiteboard?))
+          (let [edit? (or edit?
+                          (= uuid (:block/uuid (state/get-edit-block))))]
+            (block-control config block
+                           {:uuid uuid
+                            :block-id block-id
+                            :collapsed? collapsed?
+                            :*control-show? *control-show?
+                            :edit? edit?})))
 
-      (when (and @*show-left-menu? (not in-whiteboard?))
-        (block-left-menu config block))
+        (when (and @*show-left-menu? (not in-whiteboard?))
+          (block-left-menu config block))
 
-      (if whiteboard-block?
-        (block-reference {} (str uuid) nil)
+        (if whiteboard-block?
+          (block-reference {} (str uuid) nil)
             ;; Not embed self
-        [:div.flex.flex-col.w-full
-         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? (or raw-content content)))
-               hide-block-refs-count? (and (:embed? config)
-                                           (= (:block/uuid block) (:embed-id config)))]
-           (block-content-or-editor config block
-                                    {:edit-input-id edit-input-id
-                                     :block-id block-id
-                                     :edit? edit?
-                                     :hide-block-refs-count? hide-block-refs-count?}))])
+          [:div.flex.flex-col.w-full
+           (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? (or raw-content content)))
+                 hide-block-refs-count? (and (:embed? config)
+                                             (= (:block/uuid block) (:embed-id config)))]
+             (block-content-or-editor config block
+                                      {:edit-input-id edit-input-id
+                                       :block-id block-id
+                                       :edit? edit?
+                                       :hide-block-refs-count? hide-block-refs-count?}))])
 
-      (when (and @*show-right-menu? (not in-whiteboard?))
-        (block-right-menu config block edit?))]
+        (when (and @*show-right-menu? (not in-whiteboard?))
+          (block-right-menu config block edit?))]
 
-     (when db-based? (block-positioned-properties config block :block-below))
+       (when db-based? (block-positioned-properties config block :block-below))
 
-     (when (and db-based? (not collapsed?))
-       [:div {:style {:padding-left 29}}
-        (db-properties-cp config block edit-input-id {:in-block-container? true})])
+       (when (and db-based? (not collapsed?))
+         [:div {:style {:padding-left 29}}
+          (db-properties-cp config block edit-input-id {:in-block-container? true})])
 
-     (when-not (or (:hide-children? config) in-whiteboard?)
-       (let [config' (-> (update config :level inc)
-                         (dissoc :original-block :data :first-journal?))]
-         (block-children config' block children collapsed?)))
+       (when-not (or (:hide-children? config) in-whiteboard?)
+         (let [config' (-> (update config :level inc)
+                           (dissoc :original-block :data :first-journal?))]
+           (block-children config' block children collapsed?)))
 
-     (when-not in-whiteboard? (dnd-separator-wrapper block children block-id slide? false false))]))
+       (when-not in-whiteboard? (dnd-separator-wrapper block children block-id slide? false false))])))
 
 (defn- block-changed?
   [old-block new-block]
