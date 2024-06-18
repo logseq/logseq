@@ -161,21 +161,24 @@
                         (db-async/<file-get-property-values repo @*property))]
          (when db-graph?
            (doseq [db-id result]
-            (db-async/<get-block repo db-id :children? false)))
+             (db-async/<get-block repo db-id :children? false)))
          (set-values! result)))
      [@*property])
     (let [;; FIXME: lazy load property values consistently on first call
           _ (when db-graph?
               (doseq [id values] (db/sub-block id)))
           values' (if db-graph?
-                   (map #(db-property/property-value-content (db/entity repo %)) values)
-                   values)
-          values'' (cons "Select all" values')]
+                    (map #(db-property/property-value-content (db/entity repo %)) values)
+                    values)
+          values'' (map #(hash-map :value (str %)
+                                   ;; Preserve original-value as some values like boolean do not display in select
+                                   :original-value %)
+                        (cons "Select all" values'))]
       (select values''
-              (fn [{:keys [value]}]
-                (let [x (if (= value "Select all")
+              (fn [{:keys [original-value]}]
+                (let [x (if (= original-value "Select all")
                           [(if (= @*find :page) :page-property :property) @*property]
-                          [(if (= @*find :page) :page-property :property) @*property value])]
+                          [(if (= @*find :page) :page-property :property) @*property original-value])]
                   (reset! *property nil)
                   (append-tree! *tree opts loc x)))))))
 
