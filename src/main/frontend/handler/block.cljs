@@ -173,8 +173,6 @@
 (defn- edit-block-aux
   [repo block content text-range {:keys [container-id]}]
   (when block
-    (when (not= (:db/id block) (:db/id (state/get-edit-block)))
-      (state/clear-edit!))
     (let [container-id (or container-id
                            (state/get-current-editor-container-id)
                            :unknown-container)]

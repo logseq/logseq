@@ -67,8 +67,9 @@
   ([input n] (move-cursor-to input n false))
   ([input n delay?]
    (.setSelectionRange input n n)
-   (let [focus #(.focus input)]
-     (if delay? (js/setTimeout focus 16) (focus)))))
+   (when-not (= js/document.activeElement input)
+     (let [focus #(.focus input)]
+       (if delay? (js/setTimeout focus 16) (focus))))))
 
 (defn move-cursor-forward
   ([input]
