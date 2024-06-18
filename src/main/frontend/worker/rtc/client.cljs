@@ -9,6 +9,7 @@
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton :as r.skeleton]
+            [frontend.worker.rtc.ws :as ws]
             [frontend.worker.rtc.ws-util :as ws-util]
             [missionary.core :as m]))
 
@@ -30,7 +31,7 @@
   "Return a task: get or create a mws(missionary wrapped websocket).
   see also `ws/get-mws-create`.
   But ensure `register-graph-updates` and `calibrate-graph-skeleton` has been sent"
-  [get-ws-create-task graph-uuid repo conn *last-calibrate-t]
+  [get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users]
   (assert (some? graph-uuid))
   (let [*sent (atom {}) ;; ws->bool
         ]
@@ -39,8 +40,23 @@
         (when-not (contains? @*sent ws)
           (swap! *sent assoc ws false))
         (when (not (@*sent ws))
+          (let [recv-flow (ws/recv-flow (m/? get-ws-create-task))]
+            (c.m/run-task
+             (m/sp
+               (when-let [online-users (:online-users
+                                        (m/?
+                                         (m/timeout
+                                          (m/reduce
+                                           (fn [_ v]
+                                             (when (= "online-users-updated" (:req-id v))
+                                               (reduced v)))
+                                           recv-flow)
+                                          10000)))]
+                 (reset! *online-users online-users)))
+             :update-online-user-when-register-graph-updates
+             :succ (constantly nil)))
           (m/? (c.m/backoff
-                (take 5 (drop 2 c.m/delays))     ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
+                (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
                 (register-graph-updates get-ws-create-task graph-uuid repo)))
           (let [t (op-mem-layer/get-local-tx repo)]
             (when (or (nil? @*last-calibrate-t)

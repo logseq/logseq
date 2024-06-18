@@ -27,7 +27,6 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [clojure.string :as string]
-            [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.db :as db]
             [logseq.db :as ldb]))
 
@@ -61,20 +60,6 @@
           [:span.ml-2 (ui/loading "")])]])))
 
 (rum/defc rtc-collaborators < rum/reactive
-  {:will-mount (fn [state]
-                 (let [*interval (atom nil)]
-                   (reset! *interval
-                           (js/setInterval
-                            (fn []
-                              (if (= :open (:ws-state (:rtc-state @(:rtc/state @state/state))))
-                                (rtc-handler/<rtc-get-users-info)
-                                (when @*interval (js/clearInterval @*interval))))
-                            5000))
-                   (assoc state ::interval *interval)))
-   :will-unmount (fn [state]
-                   (when-let [interval @(::interval state)]
-                     (js/clearInterval interval))
-                   state)}
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
         online-users (->> (get (state/sub :rtc/users-info) (state/get-current-repo))
