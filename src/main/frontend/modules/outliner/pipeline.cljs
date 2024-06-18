@@ -49,12 +49,15 @@
               (d/transact! conn tx-data' tx-meta))
 
             (when-not (:graph/importing @state/state)
-          ;; safe to edit the next block now since other blocks (e.g. prev editing block)
-          ;; has been saved to the db now
+              ;; safe to edit the next block now since other blocks (e.g. prev editing block)
+              ;; has been saved to the db now
               (when-let [next-edit-block @(:editor/next-edit-block @state/state)]
-                (let [{:keys [block pos container-id]} next-edit-block]
-                  (editor-handler/edit-block! block pos {:container-id container-id})
-                  (state/set-state! :editor/next-edit-block nil)))
+                (let [{:keys [block pos container-id]} next-edit-block
+                      unsaved-chars @(:editor/async-unsaved-chars @state/state)]
+                  (editor-handler/edit-block! block (+ pos (count unsaved-chars)) {:container-id container-id
+                                                           :custom-content (str unsaved-chars (:block/content block))})
+                  (state/set-state! :editor/next-edit-block nil)
+                  (state/set-state! :editor/async-unsaved-chars nil)))
 
               (react/refresh! repo affected-keys)
 

@@ -479,6 +479,7 @@
   ([_state block-value]
    (when (not config/publishing?)
      (when-let [state (get-state)]
+       (state/set-state! :editor/async-unsaved-chars "")
        (let [{:keys [block value config]} state
              value (if (string? block-value) block-value value)
              block-id (:block/uuid block)
@@ -2447,6 +2448,7 @@
 
 (defn- keydown-new-block
   [state]
+  (state/set-state! :editor/async-unsaved-chars "")
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when block
@@ -2470,65 +2472,52 @@
                     (thingatpt/properties-at-point input))
                   (when (thingatpt/get-setting :list?)
                     (and (not (cursor/beginning-of-line? input))
-                         (thingatpt/list-item-at-point input))))]
-          (cond
-            thing-at-point
-            (case (:type thing-at-point)
-              "markup" (let [right-bound (:bounds thing-at-point)]
-                         (cursor/move-cursor-to
-                          input
-                          (+ (string/index-of content right-bound pos)
-                             (count right-bound))))
-              "admonition-block" (keydown-new-line)
-              "source-block" (do
-                               (keydown-new-line)
-                               (case (:action thing-at-point)
-                                 :into-code-editor
-                                 (state/into-code-editor-mode!)
-                                 nil))
-              "block-ref" (open-block-in-sidebar! (:link thing-at-point))
-              "page-ref" (when-not (string/blank? (:link thing-at-point))
-                           (let [page (:link thing-at-point)
-                                 page-name (db-model/get-redirect-page-name page)]
-                             (insert-first-page-block-if-not-exists! page-name)))
-              "list-item" (dwim-in-list)
-              "properties-drawer" (dwim-in-properties state))
+                         (thingatpt/list-item-at-point input))))
+              op (cond
+                   thing-at-point
+                   (case (:type thing-at-point)
+                     "markup" (let [right-bound (:bounds thing-at-point)]
+                                (cursor/move-cursor-to
+                                 input
+                                 (+ (string/index-of content right-bound pos)
+                                    (count right-bound))))
+                     "admonition-block" (keydown-new-line)
+                     "source-block" (do
+                                      (keydown-new-line)
+                                      (case (:action thing-at-point)
+                                        :into-code-editor
+                                        (state/into-code-editor-mode!)
+                                        nil))
+                     "block-ref" (open-block-in-sidebar! (:link thing-at-point))
+                     "page-ref" (when-not (string/blank? (:link thing-at-point))
+                                  (let [page (:link thing-at-point)
+                                        page-name (db-model/get-redirect-page-name page)]
+                                    (insert-first-page-block-if-not-exists! page-name)))
+                     "list-item" (dwim-in-list)
+                     "properties-drawer" (dwim-in-properties state))
 
-            (and (string/blank? content)
-                 (own-order-number-list? block)
-                 (not (some-> (db-model/get-block-parent (:block/uuid block))
-                              (own-order-number-list?))))
-            (remove-block-own-order-list-type! block)
+                   (and (string/blank? content)
+                        (own-order-number-list? block)
+                        (not (some-> (db-model/get-block-parent (:block/uuid block))
+                                     (own-order-number-list?))))
+                   (remove-block-own-order-list-type! block)
 
-            (and
-             (string/blank? content)
-             (not has-right?)
-             (not (last-top-level-child? config block)))
-            (indent-outdent false)
+                   (and
+                    (string/blank? content)
+                    (not has-right?)
+                    (not (last-top-level-child? config block)))
+                   (indent-outdent false)
 
-            :else
-            (profile
-             "Insert block"
-             (ui-outliner-tx/transact!
-              {:outliner-op :insert-blocks}
-              (insert-new-block! state)))
-            ;; (let [main-container (gdom/getElement "main-content-container")
-            ;;       ;; Lazy blocks will not be rendered by default if it's below the screen
-            ;;       input-top (some-> (state/get-input)
-            ;;                         (.getBoundingClientRect)
-            ;;                         (gobj/get "top"))
-            ;;       bottom-reached? (when input-top
-            ;;                         (< (- js/window.innerHeight input-top) 200))]
-            ;;   (when (and bottom-reached? main-container)
-            ;;     (util/scroll-to main-container (+ (.-scrollTop main-container)
-            ;;                                       200)
-            ;;                     false))
-            ;;   (profile
-            ;;    "Insert block"
-            ;;    (ui-outliner-tx/transact!
-            ;;     {:outliner-op :insert-blocks}
-            ;;     (insert-new-block! state))))
-            ))))))
+                   :else
+                   (do
+                     (profile
+                      "Insert block"
+                      (ui-outliner-tx/transact!
+                       {:outliner-op :insert-blocks}
+                       (insert-new-block! state)))
+                     :insert-new-block))]
+          (when-not (= op :insert-new-block)
+            (state/set-state! :editor/async-unsaved-chars nil)))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
@@ -2866,8 +2855,12 @@
 
       (cond
         ;; stop accepting edits if the new block is not created yet
-        @(:editor/next-edit-block @state/state)
-        (util/stop e)
+        (some? @(:editor/async-unsaved-chars @state/state))
+        (do
+          (when (not= key "Enter")
+            (state/update-state! :editor/async-unsaved-chars
+                                 (fn [s] (str s key))))
+          (util/stop e))
 
         (and (contains? #{"ArrowLeft" "ArrowRight"} key)
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
