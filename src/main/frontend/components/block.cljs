@@ -2912,7 +2912,9 @@
         children (ldb/get-children block)
         selected? (contains? (set (state/get-selection-block-ids)) (:block/uuid block))
         db-based? (config/db-based-graph? repo)]
-    (when-not (= (:editor/deleting-block @state/state) (:block/uuid block))
+    (if (= (:editor/deleting-block @state/state) (:block/uuid block))
+      ;; to fix "react Virtuoso Zero-sized element, this should not happen"
+      [:div {:style {:height 1}}]
       [:div.ls-block
        (cond->
         {:id (str "ls-block-" uuid)
@@ -3465,6 +3467,8 @@
                                                 (= :page (get-in config [:data :name])))
         virtualized? (and (not (:block-children? config))
                           first-journal-or-route-page-container?)
+        _ (prn :debug :blocks-count (count blocks)
+               )
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
