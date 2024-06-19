@@ -32,7 +32,8 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.core :as outliner-core]
-            [dommy.core :as d]))
+            [dommy.core :as d]
+            [frontend.mixins :as mixins]))
 
 (defn- <create-class-if-not-exists!
   [value]
@@ -450,9 +451,18 @@
                    :size 15})))
 
 (rum/defcs property-input < rum/reactive
+  (rum/local nil ::ref)
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
+  (mixins/event-mixin
+   (fn [state]
+     (mixins/hide-when-esc-or-outside
+      state
+      :on-hide (fn [_state _e type]
+                 (when (= type :esc)
+                   (shui/popup-hide-all!)
+                   (shui/dialog-close!))))))
   {:init (fn [state]
            (state/set-editor-action! :property-input)
            state)
@@ -469,7 +479,8 @@
                    state)}
   [state block *property-key {:keys [class-schema? page? page-configure?]
                               :as opts}]
-  (let [*show-new-property-config? (::show-new-property-config? state)
+  (let [*ref (::ref state)
+        *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
         existing-tag-alias (->> db-property/db-attribute-properties
@@ -483,6 +494,7 @@
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
+     {:ref #(reset! *ref %)}
      (if property-key
        (let [property (db/get-case-page @*property-key)]
          [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
