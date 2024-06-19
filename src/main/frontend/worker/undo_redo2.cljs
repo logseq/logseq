@@ -215,9 +215,6 @@
 (defn get-reversed-datoms
   [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} tx-meta]
   (try
-    (when (and (seq added-ids) (seq retracted-ids))
-      (throw (ex-info "entities are created and deleted in the same tx"
-                      {:error :entities-created-and-deleted-same-tx})))
     (let [redo? (not undo?)
           e->datoms (->> (if redo? tx-data (reverse tx-data))
                          (group-by :e))
@@ -264,8 +261,8 @@
         e->datoms)
        (remove nil?)))
     (catch :default e
-      (when-not (contains? #{:entities-created-and-deleted-same-tx
-                             :entity-deleted
+      (prn :debug :undo-redo :error (:error (ex-data e)))
+      (when-not (contains? #{:entity-deleted
                              :block-moved-or-target-deleted
                              :block-children-exists}
                            (:error (ex-data e)))
