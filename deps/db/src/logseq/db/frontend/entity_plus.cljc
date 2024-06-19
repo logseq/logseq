@@ -76,7 +76,7 @@
 
      IMap
      (-dissoc [this k]
-       (assert (keyword? k) "attribute must be keyword")
+       (assert (keyword? k) (str "attribute must be keyword: " k))
        (set! (.-kv this) (dissoc (.-kv this) k))
        this)
 

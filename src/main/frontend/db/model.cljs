@@ -417,7 +417,7 @@ independent of format as format specific heading characters are stripped"
 (defn get-block-and-children
   [repo block-uuid]
   (let [db (conn/get-db repo)]
-    (ldb/get-block-and-children repo db block-uuid)))
+    (ldb/get-block-and-children db block-uuid)))
 
 (defn get-file-page
   ([file-path]

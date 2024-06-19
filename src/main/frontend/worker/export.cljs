@@ -14,7 +14,7 @@
                        (if (ldb/page? (d/entity db [:block/uuid root-block-uuid]))
                          0
                          1))
-        blocks (ldb/get-block-and-children repo db root-block-uuid)
+        blocks (ldb/get-block-and-children db root-block-uuid)
         tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
     (worker-file/tree->file-content repo db tree
                                     (assoc tree->file-opts :init-level init-level)

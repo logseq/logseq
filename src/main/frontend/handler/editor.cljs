@@ -2072,6 +2072,7 @@
                 (ui-outliner-tx/transact!
                  {:outliner-op :save-block}
                  (outliner-save-block! editing-block)))
+            _ (state/clear-edit!)
             result (ui-outliner-tx/transact!
                     {:outliner-op :insert-blocks
                      :additional-tx revert-cut-txs}
