@@ -19,10 +19,6 @@
                        :config {}
                        :git/current-repo nil
 
-                       :batch/txs []
-                       :batch/db-before nil
-                       :batch/opts nil
-
                        :rtc/downloading-graph? false
 
                        :undo/repo->page-block-uuid->undo-ops (atom {})

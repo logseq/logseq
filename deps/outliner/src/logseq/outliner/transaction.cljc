@@ -22,7 +22,7 @@
     (delete-blocks! ...))"
   [opts & body]
   `(let [opts# (dissoc ~opts :transact-opts :current-block)]
-     (frontend.worker.batch-tx/with-batch-tx-mode
+     (logseq.outliner.batch-tx/with-batch-tx-mode
       (:conn (:transact-opts ~opts))
       opts#
       ~@body)))

@@ -2,6 +2,7 @@
  :api-namespaces [logseq.outliner.datascript-report
                   logseq.outliner.pipeline
                   logseq.outliner.cli
+                  logseq.outliner.batch-tx
                   logseq.outliner.core
                   logseq.outliner.db-pipeline
                   logseq.outliner.property

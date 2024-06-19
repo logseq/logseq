@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.schema-register :as sr]
-            [frontend.worker.batch-tx :as batch-tx]
+            [logseq.outliner.batch-tx :as batch-tx]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
