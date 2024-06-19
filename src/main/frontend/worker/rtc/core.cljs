@@ -375,13 +375,17 @@
 ;;; subscribe rtc logs
 
 (def ^:private global-rtc-log-flow
-  (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
-    (m/ap
-      (let [{:keys [rtc-log-flow]} (m/?< rtc-loop-metadata-flow)]
-        (try
-          (when rtc-log-flow
-            (m/?< rtc-log-flow))
-          (catch Cancelled _))))))
+  (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)
+        rtc-download-log-flow (m/watch r.upload-download/*rtc-download-log)
+        rtc-upload-log-flow (m/watch r.upload-download/*rtc-upload-log)]
+    (c.m/mix
+     rtc-download-log-flow
+     rtc-upload-log-flow
+     (m/ap
+       (let [{:keys [rtc-log-flow]} (m/?< rtc-loop-metadata-flow)]
+         (try
+           (when rtc-log-flow (m/?< rtc-log-flow))
+           (catch Cancelled _)))))))
 
 (defonce ^:private *last-subscribe-logs-canceler (atom nil))
 (defn- subscribe-logs
