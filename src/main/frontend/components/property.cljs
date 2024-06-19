@@ -261,8 +261,8 @@
             enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
         [:div.property-configure.flex.flex-1.flex-col
          [:div.grid.gap-2.p-1
-          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-           [:label.col-span-1 "Name:"]
+          [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+           [:label.col-span-2 "Name:"]
            (shui/input
             {:class         "col-span-2 !px-2 !py-0 !h-8"
              :auto-focus    (not add-new-property?)
@@ -274,8 +274,8 @@
              :disabled      disabled?
              :default-value @*property-name})]
 
-          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-           [:label.col-span-1 "Icon:"]
+          [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+           [:label.col-span-2 "Icon:"]
            (let [icon-value (:logseq.property/icon property)]
              [:div.col-span-3.flex.flex-row.items-center.gap-2
               (icon-component/icon-picker icon-value
@@ -293,8 +293,8 @@
                                     :title "Delete this icon"}
                  (ui/icon "X")])])]
 
-          [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-           [:label.col-span-1 "Schema type:"]
+          [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+           [:label.col-span-2 "Schema type:"]
            (if (or (ldb/built-in? property)
                    (and property-type (seq values)))
              [:div.flex.items-center.col-span-2
@@ -316,13 +316,13 @@
               ;;           2. flexible query instead of classes? e.g. find all papers are related to either Clojure or OCaml `(and (tag :paper) (or (tag :clojure) (tag :ocaml)))`
               :object
               (when (empty? (:property/closed-values property))
-                [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-                 [:label "Specify classes:"]
+                [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+                 [:label.col-span-2 "Specify classes:"]
                  (class-select property (assoc opts :disabled? disabled?))])
 
               :template
-              [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-               [:label "Specify template:"]
+              [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+               [:label.col-span-2 "Specify template:"]
                (class-select property (assoc opts
                                              :multiple-choices? false
                                              :disabled? disabled?))]
@@ -330,8 +330,8 @@
               nil))
 
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :cardinality)
-            [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-             [:label "Multiple values:"]
+            [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+             [:label.col-span-2 "Multiple values:"]
              (let [many? (db-property/many? property)]
                (shui/checkbox
                 {:checked           many?
@@ -341,8 +341,8 @@
                                       (save-property-fn))}))])
 
           (when (and enable-closed-values? (empty? (:property/schema.classes property)))
-            [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-             [:label.col-span-1 "Available choices:"]
+            [:div.grid.grid-cols-5.gap-1.items-start.leading-8
+             [:label.col-span-2 "Available choices:"]
              [:div.col-span-3
               (closed-value/choices property opts)]])
 
@@ -361,9 +361,9 @@
                              :value :block-right}
                             {:label "Below the block"
                              :value :block-below}])]
-              [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-               [:label.col-span-1 "UI position:"]
-               [:div.col-span-2
+              [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+               [:label.col-span-2 "UI position:"]
+               [:div.col-span-3
                 (shui/select
                  (cond-> {:disabled config/publishing?
                           :on-value-change (fn [v]
@@ -381,8 +381,8 @@
                      (shui/select-item {:value value} label)))))]]))
 
           (let [hide? (:hide? @*property-schema)]
-            [:div.grid.grid-cols-4.gap-1.items-center.leading-8
-             [:label "Hide by default:"]
+            [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+             [:label.col-span-2 "Hide by default:"]
              (shui/checkbox
               {:checked           hide?
                :disabled          config/publishing?
@@ -391,8 +391,8 @@
                                     (save-property-fn))})])
 
           (let [description (or (:description @*property-schema) "")]
-            [:div.grid.grid-cols-4.gap-1.items-start.leading-8
-             [:label "Description:"]
+            [:div.grid.grid-cols-5.gap-1.items-start.leading-8
+             [:label.col-span-2 "Description:"]
              [:div.col-span-3
               [:div.mt-1
                (shui/textarea
@@ -462,7 +462,9 @@
       :on-hide (fn [_state _e type]
                  (when (= type :esc)
                    (shui/popup-hide-all!)
-                   (shui/dialog-close!))))))
+                   (shui/dialog-close!)
+                   (when-let [^js input (state/get-input)]
+                     (.focus input)))))))
   {:init (fn [state]
            (state/set-editor-action! :property-input)
            state)
@@ -697,13 +699,13 @@
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}
-         [:div.property-key.col-span-1
+         [:div.property-key.col-span-2
           (property-key block property (assoc (select-keys opts [:class-schema?])
                                               :block? block?
                                               :collapsed? collapsed?
                                               :inline-text inline-text
                                               :page-cp page-cp))]
-         [:div.property-value-container.col-span-4.flex.flex-row.gap-1.items-center
+         [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
           (when-not block? [:div.opacity-30 {:style {:margin-left 5}}
                             [:span.bullet-container.cursor [:span.bullet]]])
           [:div.flex.flex-1

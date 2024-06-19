@@ -124,7 +124,10 @@
 
 (rum/defcs calendar-inner <
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
-  {:will-mount (fn [state]
+  {:init (fn [state]
+           (state/set-editor-action! :property-set-date)
+           state)
+   :will-mount (fn [state]
                  (js/setTimeout
                   #(some-> @(::identity state)
                            (js/document.getElementById)
@@ -134,6 +137,7 @@
    :will-unmount (fn [state]
                    (shui/popup-hide!)
                    (shui/dialog-close!)
+                   (state/set-editor-action! nil)
                    state)}
   [state id on-change value]
   (let [*ident (::identity state)
