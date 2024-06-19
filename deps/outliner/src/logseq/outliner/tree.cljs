@@ -114,19 +114,20 @@
                 children (ldb/sort-by-order (get @parent-groups parent-id))
                 _ (swap! parent-groups #(dissoc % parent-id))
                 sorted-nested-children (when (not-empty children) (sort-blocks-aux children parent-groups))]
-                    (if sorted-nested-children [parent sorted-nested-children] [parent])))
+            (if sorted-nested-children [parent sorted-nested-children] [parent])))
         parents))
 
+;; Do we still need this?
 (defn ^:api sort-blocks
-  "sort blocks by parent & left"
+  "sort blocks by parent & order"
   [blocks-exclude-root root]
   (let [parent-groups (atom (group-by :block/parent blocks-exclude-root))]
     (flatten (concat (sort-blocks-aux [root] parent-groups) (vals @parent-groups)))))
 
 (defn get-sorted-block-and-children
-  [repo db db-id]
+  [db db-id]
   (when db-id
-    (when-let [root-block (d/pull db '[*]  db-id)]
-      (let [blocks (ldb/get-block-and-children repo db (:block/uuid root-block))
+    (when-let [root-block (d/entity db db-id)]
+      (let [blocks (ldb/get-block-and-children db (:block/uuid root-block))
             blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)]
         (sort-blocks blocks-exclude-root root-block)))))

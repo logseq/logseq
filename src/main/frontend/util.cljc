@@ -27,7 +27,8 @@
             [rum.core :as rum]
             [clojure.core.async :as async]
             [frontend.pubsub :as pubsub]
-            [frontend.worker.util :as worker-util]))
+            [frontend.worker.util :as worker-util]
+            [datascript.impl.entity :as de]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
@@ -819,7 +820,8 @@
 #?(:cljs
    (defn copy-to-clipboard!
      [text & {:keys [graph html blocks owner-window]}]
-     (let [data (clj->js
+     (let [blocks (map (fn [block] (if (de/entity? block) (into {} block) block)) blocks)
+           data (clj->js
                  (common-util/remove-nils-non-nested
                   {:text text
                    :html html

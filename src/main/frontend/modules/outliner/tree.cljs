@@ -21,4 +21,4 @@
 (defn get-sorted-block-and-children
   [repo db-id]
   (let [db (db/get-db repo)]
-    (otree/get-sorted-block-and-children repo db db-id)))
+    (otree/get-sorted-block-and-children db db-id)))

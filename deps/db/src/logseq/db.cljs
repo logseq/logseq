@@ -87,27 +87,16 @@
   [blocks]
   (sort-by :block/order blocks))
 
-;; TODO: use the tree directly
-(defn flatten-tree
-  [blocks-tree]
-  (if-let [children (:block/_parent blocks-tree)]
-    (cons (dissoc blocks-tree :block/_parent) (mapcat flatten-tree children))
-    [blocks-tree]))
+(defn- get-block-and-children-aux
+  [entity]
+  (if-let [children (:block/_parent entity)]
+    (cons (dissoc entity :block/_parent) (mapcat get-block-and-children-aux children))
+    [entity]))
 
-;; TODO: performance enhance
 (defn get-block-and-children
-  [repo db block-uuid]
-  (some-> (d/q
-           '[:find [(pull ?block ?block-attrs) ...]
-             :in $ ?id ?block-attrs
-             :where
-             [?block :block/uuid ?id]]
-           db
-           block-uuid
-           block-attrs)
-          first
-          flatten-tree
-          (->> (map #(db-content/update-block-content repo db % (:db/id %))))))
+  [db block-uuid]
+  (when-let [e (d/entity db [:block/uuid block-uuid])]
+    (get-block-and-children-aux e)))
 
 (defn whiteboard-page?
   "Given a page entity or map, check if it is a whiteboard page"
