@@ -119,7 +119,7 @@
                                (p/do!
                                 (editor-handler/insert-first-page-block-if-not-exists! (:block/uuid page))
                                 (when-let [first-child (first (:block/_page (db/entity (:db/id page))))]
-                                  (editor-handler/edit-block! first-child :max))))
+                                  (editor-handler/edit-block! first-child :max {:container-id :unknown-container}))))
             drop-handler-fn (fn [^js event]
                               (util/stop event)
                               (p/let [block-uuids (state/get-selection-block-ids)
