@@ -7,15 +7,15 @@
 
 (def rtc-download-log-flow
   (m/eduction
-   (filter #(= :rtc/download (:type %)))
+   (filter #(= :rtc.log/download (:type %)))
    rtc-log-flow))
 
 (def rtc-upload-log-flow
   (m/eduction
-   (filter #(= :rtc/upload (:type %)))
+   (filter #(= :rtc.log/upload (:type %)))
    rtc-log-flow))
 
 (def rtc-misc-log-flow
   (m/eduction
-   (remove #(contains? #{:rtc/download :rtc/upload} (:type %)))
+   (remove #(contains? #{:rtc.log/download :rtc.log/upload} (:type %)))
    rtc-log-flow))

@@ -532,10 +532,11 @@
         (throw (ex-info "invalid remote-data" {:data remote-update-data}))
 
         (<= remote-t local-tx)
-        (add-log-fn {:type ::skip :remote-t remote-t :local-t local-tx})
+        (add-log-fn :rtc.log/apply-remote-update {:sub-type :skip :remote-t remote-t :local-t local-tx})
 
         (< local-tx remote-t-before)
-        (do (add-log-fn {:type ::need-pull-remote-data :remote-t remote-t :local-t local-tx})
+        (do (add-log-fn :rtc.log/apply-remote-update {:sub-type :need-pull-remote-data
+                                                      :remote-t remote-t :local-t local-tx})
             (throw (ex-info "need pull earlier remote-data"
                             {:type ::need-pull-remote-data
                              :local-tx local-tx})))
