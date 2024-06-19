@@ -147,12 +147,12 @@
             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
               (let [journal (date/js-date->journal-title gd)]
                 (p/do!
-                 (shui/popup-hide! id)
                  (when-not (db/get-case-page journal)
                    (page-handler/<create! journal {:redirect? false
                                                    :create-first-block? false}))
                  (when (fn? on-change)
                    (on-change (db/get-case-page journal)))
+                 (shui/popup-hide! id)
                  (shui/popup-hide!)
                  (shui/dialog-close!))))))]
     (shui/calendar
