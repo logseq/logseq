@@ -451,7 +451,10 @@
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
-  {:will-unmount (fn [state]
+  {:init (fn [state]
+           (state/set-editor-action! :property-input)
+           state)
+   :will-unmount (fn [state]
                    (let [args (:rum/args state)
                          *property-key (second args)
                          {:keys [original-block edit-original-block]} (last args)
@@ -460,6 +463,7 @@
                      (when *property-key (reset! *property-key nil))
                      (when (and original-block edit-original-block)
                        (edit-original-block {:editing-default-property? editing-default-property?})))
+                   (state/set-editor-action! nil)
                    state)}
   [state block *property-key {:keys [class-schema? page? page-configure?]
                               :as opts}]
