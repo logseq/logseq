@@ -178,10 +178,13 @@
      :properties
      (->> [:default :url :checkbox :number :page :date :object]
           (mapcat #(cond-> [[% (cond-> {:block/schema {:type %}}
-                                 (= % :object)
+                                 (= :object %)
                                  (assoc :build/schema-classes [:TestClass]))]]
                      (db-property-type/property-type-allows-schema-attribute? % :cardinality)
-                     (conj [(keyword (str (name %) "-many")) {:block/schema {:type % :cardinality :many}}])))
+                     (conj [(keyword (str (name %) "-many"))
+                            (cond-> {:block/schema {:type % :cardinality :many}}
+                                 (= :object %)
+                                 (assoc :build/schema-classes [:TestClass]))])))
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:block/schema {:type %}
                                 :build/closed-values (closed-values-config (keyword (str (name %) "-closed")))})
