@@ -225,29 +225,35 @@
                  (append-tree! *tree opts loc [:sample (util/safe-parse-int value)])))
 
        "task"
-       (select gp-db/built-in-markers
-               (fn [value]
-                 (when (seq value)
-                   (append-tree! *tree opts loc (vec (cons :task value)))))
+       (select (if (config/db-based-graph? repo)
+                 (let [values (:property/closed-values (db/entity :logseq.task/status))]
+                   (mapv db-property/property-value-content values))
+                 gp-db/built-in-markers)
+               (constantly nil)
                {:multiple-choices? true
                 ;; Need the existing choices later to improve the UX
                 :selected-choices #{}
                 :extract-chosen-fn :value
                 :prompt-key :select/default-select-multiple
                 :close-modal? false
-                :on-apply (:toggle-fn opts)})
+                :on-apply (fn [choices]
+                            (when (seq choices)
+                              (append-tree! *tree opts loc (vec (cons :task choices)))))})
 
        "priority"
-       (select gp-db/built-in-priorities
-               (fn [value]
-                 (when (seq value)
-                   (append-tree! *tree opts loc (vec (cons :priority value)))))
+       (select (if (config/db-based-graph? repo)
+                 (let [values (:property/closed-values (db/entity :logseq.task/priority))]
+                   (mapv db-property/property-value-content values))
+                 gp-db/built-in-priorities)
+               (constantly nil)
                {:multiple-choices? true
                 :selected-choices #{}
                 :extract-chosen-fn :value
                 :prompt-key :select/default-select-multiple
                 :close-modal? false
-                :on-apply (:toggle-fn opts)})
+                :on-apply (fn [choices]
+                            (when (seq choices)
+                              (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
        (let [pages (sort (db-model/get-all-page-original-names repo))]
