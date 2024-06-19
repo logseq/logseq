@@ -46,6 +46,7 @@
     :else
     [false root-id]))
 
+;; TODO: entity can already be used as a tree
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."
   [repo db blocks root-id]
@@ -107,27 +108,8 @@
          parent->children (group-by :block/parent blocks)]
      (map #(tree parent->children % (or default-level 1)) top-level-blocks'))))
 
-(defn- sort-blocks-aux
-  [parents parent-groups]
-  (mapv (fn [parent]
-          (let [parent-id {:db/id (:db/id parent)}
-                children (ldb/sort-by-order (get @parent-groups parent-id))
-                _ (swap! parent-groups #(dissoc % parent-id))
-                sorted-nested-children (when (not-empty children) (sort-blocks-aux children parent-groups))]
-            (if sorted-nested-children [parent sorted-nested-children] [parent])))
-        parents))
-
-;; Do we still need this?
-(defn ^:api sort-blocks
-  "sort blocks by parent & order"
-  [blocks-exclude-root root]
-  (let [parent-groups (atom (group-by :block/parent blocks-exclude-root))]
-    (flatten (concat (sort-blocks-aux [root] parent-groups) (vals @parent-groups)))))
-
 (defn get-sorted-block-and-children
   [db db-id]
   (when db-id
     (when-let [root-block (d/entity db db-id)]
-      (let [blocks (ldb/get-block-and-children db (:block/uuid root-block))
-            blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)]
-        (sort-blocks blocks-exclude-root root-block)))))
+      (ldb/get-block-and-children db (:block/uuid root-block)))))
