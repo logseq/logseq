@@ -88,8 +88,8 @@
 
 (defn- get-block-and-children-aux
   [entity]
-  (if-let [children (:block/_parent entity)]
-    (cons (dissoc entity :block/_parent) (mapcat get-block-and-children-aux children))
+  (if-let [children (sort-by-order (:block/_parent entity))]
+    (cons entity (mapcat get-block-and-children-aux children))
     [entity]))
 
 (defn get-block-and-children

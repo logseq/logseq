@@ -16,7 +16,6 @@
 (def filter-top-level-blocks otree/filter-top-level-blocks)
 
 (def non-consecutive-blocks->vec-tree otree/non-consecutive-blocks->vec-tree)
-(def sort-blocks otree/sort-blocks)
 
 (defn get-sorted-block-and-children
   [repo db-id]

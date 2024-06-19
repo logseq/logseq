@@ -2149,22 +2149,19 @@
                        (db-async/<get-block repo (:block/uuid block)
                                             {:children? true
                                              :nested-children? true}))]
-         (when-let [db-id (:db/id block)]
+         (when (:db/id block)
            (let [journal? (ldb/journal-page? target)
                  target (or target (state/get-edit-block))
                  format (:block/format block)
                  block-uuid (:block/uuid block)
                  template-including-parent? (not (false? (:template-including-parent (:block/properties block))))
                  blocks (db/get-block-and-children repo block-uuid)
-                 root-block (db/entity db-id)
-                 blocks-exclude-root (remove (fn [b] (= (:db/id b) db-id)) blocks)
-                 sorted-blocks (tree/sort-blocks blocks-exclude-root root-block)
                  sorted-blocks (cons
-                                (-> (first sorted-blocks)
+                                (-> (first blocks)
                                     (update :block/properties-text-values dissoc :template)
                                     (update :block/properties-order (fn [keys]
                                                                       (vec (remove #{:template} keys)))))
-                                (rest sorted-blocks))
+                                (rest blocks))
                  blocks (if template-including-parent?
                           sorted-blocks
                           (drop 1 sorted-blocks))]
