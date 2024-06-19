@@ -830,7 +830,7 @@
              :datepicker} action)
           (and (keyword? action)
                (= (namespace action) "editor.action")))
-      (util/stop e)
+      (when e (util/stop e))
 
       ;; editor/input component handles Escape directly, so just prevent handling it here
       (= :input action)
@@ -854,14 +854,19 @@
                   ::ref (atom nil)))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (let [{:keys [block value]} (editor-handler/get-state)]
+                     (when-not (= (:block/uuid block) (:editor/deleting-block @state/state)) ; don't save deleting block
+                       (editor-handler/save-block! (state/get-current-repo) (:block/uuid block) value)))
+                   state)}
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
       state
-      :on-hide (fn [_state e type]
-                 (when (not= type :esc)
-                   (editor-on-hide state (:value (editor-handler/get-state)) type e))))))
+      {:node @(::ref state)
+       :on-hide (fn [_state e type]
+                  (editor-on-hide state (:value (editor-handler/get-state)) type e))})))
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
@@ -878,10 +883,8 @@
                :on-change         (editor-handler/editor-on-change! block id search-timeout)
                :on-paste          (paste-handler/editor-on-paste! id)
                :on-key-down       (fn [e]
-                                    (if-let [on-key-down (:on-key-down config)]
-                                      (on-key-down e)
-                                      (when (= (util/ekey e) "Escape")
-                                        (editor-on-hide state content :esc e))))
+                                    (when-let [on-key-down (:on-key-down config)]
+                                      (on-key-down e)))
                :auto-focus true
                :class heading-class}
                (some? parent-block)
