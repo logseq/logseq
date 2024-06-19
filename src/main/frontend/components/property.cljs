@@ -185,6 +185,8 @@
               (swap! *property-schema update-schema-fn))
             (let [schema (or (and *property-schema @*property-schema)
                              (update-schema-fn property-schema))]
+              (when *show-new-property-config?
+                (reset! *show-new-property-config? :adding-property))
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
@@ -489,6 +491,9 @@
            [:div @*property-key]]
           [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
            (cond
+             (= @*show-new-property-config? :adding-property)
+             nil
+
              @*show-new-property-config?
              (schema-type property (merge opts
                                           {:*property-name *property-key
