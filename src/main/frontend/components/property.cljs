@@ -450,6 +450,35 @@
     (ui/icon icon {:class "opacity-50"
                    :size 15})))
 
+(defn- property-input-on-chosen
+  [block *property-key *show-new-property-config? {:keys [class-schema? page-configure?]}]
+  (fn [{:keys [value label]}]
+    (reset! *property-key (if (uuid? value) label value))
+    (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
+      (when (and *show-new-property-config? (not property))
+        (reset! *show-new-property-config? true))
+      (when property
+        (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
+              type (get-in property [:block/schema :type])]
+          (when property
+            (cond
+              add-class-property?
+              (p/do!
+               (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
+                                                                 :exit-edit? page-configure?})
+               (shui/dialog-close!))
+
+              (and (= :default type)
+                   (not (seq (:property/closed-values property))))
+              (p/do!
+               (pv/<create-new-block! block property "")
+               (shui/dialog-close!))
+
+              (or (not= :default type)
+                  (and (= :default type) (seq (:property/closed-values property))))
+              (p/do!
+               (reset! *show-new-property-config? false)))))))))
+
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
   (rum/local false ::show-new-property-config?)
@@ -479,7 +508,7 @@
                        (edit-original-block {:editing-default-property? editing-default-property?})))
                    (state/set-editor-action! nil)
                    state)}
-  [state block *property-key {:keys [class-schema? page? page-configure?]
+  [state block *property-key {:keys [class-schema? page?]
                               :as opts}]
   (let [*ref (::ref state)
         *show-new-property-config? (::show-new-property-config? state)
@@ -527,32 +556,7 @@
              (when (and property (not class-schema?))
                (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true))))]])
 
-       (let [on-chosen (fn [{:keys [value label]}]
-                         (reset! *property-key (if (uuid? value) label value))
-                         (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
-                           (when (and *show-new-property-config? (not property))
-                             (reset! *show-new-property-config? true))
-                           (when property
-                             (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
-                                   type (get-in property [:block/schema :type])]
-                               (when property
-                                 (cond
-                                   add-class-property?
-                                   (p/do!
-                                    (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
-                                                                                      :exit-edit? page-configure?})
-                                    (shui/dialog-close!))
-
-                                   (and (= :default type)
-                                        (not (seq (:property/closed-values property))))
-                                   (p/do!
-                                    (pv/<create-new-block! block property "")
-                                    (shui/dialog-close!))
-
-                                   (or (not= :default type)
-                                       (and (= :default type) (seq (:property/closed-values property))))
-                                   (p/do!
-                                    (reset! *show-new-property-config? false))))))))
+       (let [on-chosen (property-input-on-chosen block *property-key *show-new-property-config? opts)
              input-opts {:on-key-down
                          (fn [e]
                            ;; `Backspace` to close property popup and back to editing the current block
