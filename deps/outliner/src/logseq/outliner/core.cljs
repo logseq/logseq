@@ -17,7 +17,7 @@
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [frontend.worker.batch-tx :include-macros true :as batch-tx]
+            [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.db.frontend.class :as db-class]))

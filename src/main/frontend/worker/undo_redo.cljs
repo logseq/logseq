@@ -3,7 +3,7 @@
   (:require [clojure.set :as set]
             [datascript.core :as d]
             [frontend.schema-register :include-macros true :as sr]
-            [frontend.worker.batch-tx :include-macros true :as batch-tx]
+            [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]

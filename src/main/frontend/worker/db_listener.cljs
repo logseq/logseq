@@ -7,7 +7,7 @@
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [promesa.core :as p]
-            [frontend.worker.batch-tx :as batch-tx]
+            [logseq.outliner.batch-tx :as batch-tx]
             [frontend.schema-register :as sr]))
 
 
