@@ -75,8 +75,7 @@
                            :extract-fn :label
                            :extract-chosen-fn :value
                            :show-new-when-not-exact-match? true
-                           :input-opts {:on-blur toggle-fn
-                                        :on-key-down
+                           :input-opts {:on-key-down
                                         (fn [e]
                                           (case (util/ekey e)
                                             "Escape"
@@ -202,7 +201,7 @@
                         (not (seq (:property/closed-values property))))
                    (pv/<create-new-block! block property "")))))))}
 
-;; only set when in property configure modal
+        ;; only set when in property configure modal
         (and *property-name (:type property-schema))
         (assoc :default-value (name (:type property-schema))))
       (shui/select-trigger
