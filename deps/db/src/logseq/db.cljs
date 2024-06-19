@@ -5,7 +5,6 @@
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
