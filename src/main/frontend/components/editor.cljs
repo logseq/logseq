@@ -854,12 +854,7 @@
                   ::ref (atom nil)))
    :did-mount (fn [state]
                 (state/set-editor-args! (:rum/args state))
-                state)
-   :will-unmount (fn [state]
-                   (let [{:keys [block value]} (editor-handler/get-state)]
-                     (when-not (= (:block/uuid block) (:editor/deleting-block @state/state)) ; don't save deleting block
-                       (editor-handler/save-block! (state/get-current-repo) (:block/uuid block) value)))
-                   state)}
+                state)}
   (mixins/event-mixin
    (fn [state]
      (mixins/hide-when-esc-or-outside
