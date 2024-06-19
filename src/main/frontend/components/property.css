@@ -292,14 +292,6 @@ a.control-link {
     }
 }
 
-.ls-popup-closed:focus {
-    @apply font-medium outline-none;
-}
-
-.positioned-properties .property-k:focus, .positioned-properties .ls-popup-closed:focus {
-    @apply font-normal;
-}
-
 .ls-property-add {
     .cp__select-input {
         padding: 0.25em 0.75em;

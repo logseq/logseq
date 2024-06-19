@@ -395,10 +395,7 @@
                       (fn [e]
                         (case (util/ekey e)
                           "Escape"
-                          (do
-                            (shui/popup-hide!)
-                            (shui/dialog-close!)
-                            (when-let [f (:on-chosen opts)] (f)))
+                          (when-let [f (:on-chosen opts)] (f))
                           nil))})
         opts' (assoc opts
                      :block block
@@ -493,10 +490,7 @@
                                     (fn [e]
                                       (case (util/ekey e)
                                         "Escape"
-                                        (do
-                                          (shui/popup-hide!)
-                                          (shui/dialog-close!)
-                                          (when-let [f (:on-chosen select-opts)] (f)))
+                                        (when-let [f (:on-chosen select-opts)] (f))
                                         nil))})})))))
 
 (rum/defc property-normal-block-value
