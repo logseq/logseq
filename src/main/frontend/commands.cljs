@@ -816,7 +816,9 @@
     (.click input-file)))
 
 (defmethod handle-step :editor/exit [[_]]
-  (state/clear-edit!))
+  (p/do!
+    (state/pub-event! [:editor/save-current-block])
+    (state/clear-edit!)))
 
 (defmethod handle-step :editor/new-property [[_]]
   (state/pub-event! [:editor/new-property]))
