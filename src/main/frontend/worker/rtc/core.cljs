@@ -4,6 +4,7 @@
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
+            [frontend.worker.rtc.log :as rtc-log]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
@@ -134,29 +135,25 @@
         (reset! *rtc-lock nil)))))
 
 (defn- create-rtc-loop
-  "Return a map with [:rtc-log-flow :rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
+  "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
   TODO: auto refresh token if needed"
   [graph-uuid repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
   (let [ws-url              (or debug-ws-url (get-ws-url token))
         *auto-push?         (atom auto-push?)
-        *log                (atom nil)
         *last-calibrate-t   (atom nil)
         *online-users       (atom nil)
         started-dfv         (m/dfv)
-        add-log-fn          (fn [message]
+        add-log-fn          (fn [type message]
                               (assert (map? message) message)
-                              (reset! *log (assoc message
-                                                  :graph-uuid graph-uuid
-                                                  :created-at (js/Date.))))
+                              (rtc-log/rtc-log type (assoc message :graph-uuid graph-uuid)))
         {:keys [*current-ws get-ws-create-task]}
         (new-task--get-ws-create--memoized ws-url)
         get-ws-create-task  (r.client/ensure-register-graph-updates
                              get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users)
         mixed-flow          (create-mixed-flow repo get-ws-create-task *auto-push?)]
     (assert (some? *current-ws))
-    {:rtc-log-flow    (m/watch *log)
-     :rtc-state-flow  (create-rtc-state-flow (create-ws-state-flow *current-ws))
+    {:rtc-state-flow  (create-rtc-state-flow (create-ws-state-flow *current-ws))
      :*rtc-auto-push? *auto-push?
      :*online-users   *online-users
      :onstarted-task  started-dfv
@@ -189,13 +186,12 @@
            (m/reduce {} nil)
            (m/?))
           (catch Cancelled e
-            (add-log-fn {:type :rtc/cancelled :graph-uuid graph-uuid})
+            (add-log-fn :rtc.log/cancelled {})
             (throw e)))))}))
 
 (def ^:private empty-rtc-loop-metadata
   {:graph-uuid nil
    :user-uuid nil
-   :rtc-log-flow nil
    :rtc-state-flow nil
    :*rtc-auto-push? nil
    :*online-users nil
@@ -213,7 +209,7 @@
         (let [user-uuid (:sub (worker-util/parse-jwt token))
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
-              {:keys [onstarted-task rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users]}
+              {:keys [onstarted-task rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
               canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
               start-ex (m/? onstarted-task)]
@@ -222,7 +218,6 @@
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid
                                             :user-uuid user-uuid
-                                            :rtc-log-flow rtc-log-flow
                                             :rtc-state-flow rtc-state-flow
                                             :*rtc-auto-push? *rtc-auto-push?
                                             :*online-users *online-users
@@ -290,10 +285,10 @@
 (def ^:private create-get-state-flow
   (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
     (m/ap
-      (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-lock rtc-log-flow *online-users]}
+      (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-lock *online-users]}
             (m/?< rtc-loop-metadata-flow)]
         (try
-          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock rtc-log-flow)
+          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock)
             (m/?<
              (m/latest
               (fn [rtc-state rtc-auto-push? rtc-lock online-users]
@@ -372,36 +367,6 @@
 
 (subscribe-state)
 
-;;; subscribe rtc logs
-
-(def ^:private global-rtc-log-flow
-  (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)
-        rtc-download-log-flow (m/watch r.upload-download/*rtc-download-log)
-        rtc-upload-log-flow (m/watch r.upload-download/*rtc-upload-log)]
-    (c.m/mix
-     rtc-download-log-flow
-     rtc-upload-log-flow
-     (m/ap
-       (let [{:keys [rtc-log-flow]} (m/?< rtc-loop-metadata-flow)]
-         (try
-           (when rtc-log-flow (m/?< rtc-log-flow))
-           (catch Cancelled _)))))))
-
-(defonce ^:private *last-subscribe-logs-canceler (atom nil))
-(defn- subscribe-logs
-  []
-  (when-let [canceler @*last-subscribe-logs-canceler]
-    (canceler)
-    (reset! *last-subscribe-logs-canceler nil))
-  (let [cancel (c.m/run-task
-                (m/reduce
-                 (fn [_ v] (when v (worker-util/post-message :rtc-log v)))
-                 global-rtc-log-flow)
-                :subscribe-logs)]
-    (reset! *last-subscribe-logs-canceler cancel)
-    nil))
-(subscribe-logs)
-
 (comment
   (do
     (def user-uuid "7f41990d-2c8f-4f79-b231-88e9f652e072")
@@ -410,11 +375,10 @@
     (def conn (worker-state/get-datascript-conn repo))
     (def date-formatter "MMM do, yyyy")
     (def debug-ws-url "wss://ws-dev.logseq.com/rtc-sync?token=???")
-    (let [{:keys [rtc-log-flow rtc-state-flow *rtc-auto-push? rtc-loop-task]}
+    (let [{:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task]}
           (create-rtc-loop user-uuid graph-uuid repo conn date-formatter nil {:debug-ws-url debug-ws-url})
           c (c.m/run-task rtc-loop-task :rtc-loop-task)]
       (def cancel c)
-      (def rtc-log-flow rtc-log-flow)
       (def rtc-state-flow rtc-state-flow)
       (def *rtc-auto-push? *rtc-auto-push?)))
   (cancel))

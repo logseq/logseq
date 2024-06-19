@@ -342,7 +342,7 @@
               r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
                                                             :ops ops-for-remote :t-before (or local-tx 1)}))]
           (if-let [remote-ex (:ex-data r)]
-            (do (add-log-fn remote-ex)
+            (do (add-log-fn :rtc.log/push-local-update remote-ex)
                 (case (:type remote-ex)
                   ;; - :graph-lock-failed
                   ;;   conflict-update remote-graph, keep these local-pending-ops
@@ -368,7 +368,7 @@
                 (op-mem-layer/commit! repo)
                 (r.remote-update/apply-remote-update
                  repo conn date-formatter {:type :remote-update :value r} add-log-fn)
-                (add-log-fn {:type ::push-client-updates :remote-t (:t r)})))))
+                (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)})))))
       (op-mem-layer/rollback! repo))))
 
 (defn new-task--pull-remote-data
@@ -378,7 +378,7 @@
           r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
                                                         :ops [] :t-before (or local-tx 1)}))]
       (if-let [remote-ex (:ex-data r)]
-        (do (add-log-fn remote-ex)
+        (do (add-log-fn :rtc.log/push-local-update (assoc remote-ex :sub-type :pull-remote-data))
             (case (:type remote-ex)
               :graph-lock-failed nil
               :graph-lock-missing (throw r.ex/ex-remote-graph-lock-missing)
@@ -388,4 +388,5 @@
         (do (assert (pos? (:t r)) r)
             (r.remote-update/apply-remote-update
              repo conn date-formatter {:type :remote-update :value r} add-log-fn)
-            (add-log-fn {:type ::pull-remote-data :remote-t (:t r) :local-t local-tx}))))))
+            (add-log-fn :rtc.log/push-local-update {:sub-type :pull-remote-data
+                                                    :remote-t (:t r) :local-t local-tx}))))))
