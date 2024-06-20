@@ -11,7 +11,8 @@
             [malli.core :as ma]
             [malli.transform :as mt]
             [missionary.core :as m]
-            [promesa.core :as p]))
+            [promesa.core :as p])
+  (:import [missionary Cancelled]))
 
 (def op-schema
   [:multi {:dispatch first}
@@ -348,7 +349,6 @@
              :block-uuid->ops (dissoc block-uuid->ops block-uuid)
              :t+block-uuid-sorted-set (disj t+block-uuid-sorted-set [min-t block-uuid])))))
 
-
 (defn <init-load-from-indexeddb2!
   [repo]
   (p/let [v (op-idb-layer/<read2 repo)]
@@ -391,3 +391,11 @@
   (and (sqlite-util/db-based-graph? repo)
        (or (exists? js/process)
            (some? (get-local-tx repo)))))
+
+(defn create-pending-ops-count-flow
+  [repo]
+  (m/ap
+    (m/?< (m/watch *ops-store))
+    (try
+      (get-unpushed-block-update-count repo)
+      (catch Cancelled _))))

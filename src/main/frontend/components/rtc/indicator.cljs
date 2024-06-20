@@ -55,7 +55,8 @@
 
 (rum/defc details < rum/reactive
   []
-  (let [{:keys [graph-uuid local-tx rtc-state download-logs upload-logs misc-logs]} (rum/react *detail-info)]
+  (let [{:keys [graph-uuid local-tx rtc-state pending-local-ops
+                download-logs upload-logs misc-logs]} (rum/react *detail-info)]
     [:pre.select-text
      (-> (cond-> {}
            download-logs (assoc :download download-logs)
@@ -63,7 +64,8 @@
            misc-logs (assoc :misc misc-logs)
            graph-uuid (assoc :graph-uuid graph-uuid)
            local-tx (assoc :local-tx local-tx)
-           rtc-state (assoc :rtc-state rtc-state))
+           rtc-state (assoc :rtc-state rtc-state)
+           pending-local-ops (assoc :pending-local-ops pending-local-ops))
          (fipp/pprint {:width 20})
          with-out-str)]))
 

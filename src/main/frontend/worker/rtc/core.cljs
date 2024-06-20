@@ -291,16 +291,17 @@
           (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock)
             (m/?<
              (m/latest
-              (fn [rtc-state rtc-auto-push? rtc-lock online-users]
+              (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count]
                 {:graph-uuid graph-uuid
                  :user-uuid user-uuid
-                 :unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)
+                 :unpushed-block-update-count pending-local-ops-count
                  :local-tx (op-mem-layer/get-local-tx repo)
                  :rtc-state rtc-state
                  :rtc-lock rtc-lock
                  :auto-push? rtc-auto-push?
                  :online-users online-users})
-              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock) (m/watch *online-users))))
+              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock) (m/watch *online-users)
+              (op-mem-layer/create-pending-ops-count-flow repo))))
           (catch Cancelled _))))))
 
 (defn new-task--get-debug-state
