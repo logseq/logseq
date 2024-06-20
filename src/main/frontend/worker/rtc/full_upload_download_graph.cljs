@@ -110,7 +110,8 @@
 (defn new-task--upload-graph
   [get-ws-create-task repo conn remote-graph-name]
   (m/sp
-    (rtc-log/rtc-log :rtc.log/upload {:message "fetching presigned put-url"})
+    (rtc-log/rtc-log :rtc.log/upload {:sub-type :fetch-presigned-put-url
+                                      :message "fetching presigned put-url"})
     (let [[{:keys [url key]} all-blocks-str]
           (m/?
            (m/join
@@ -119,9 +120,11 @@
             (m/sp
               (let [all-blocks (export-as-blocks @conn)]
                 (ldb/write-transit-str all-blocks)))))]
-      (rtc-log/rtc-log :rtc.log/upload {:message "uploading data"})
+      (rtc-log/rtc-log :rtc.log/upload {:sub-type :upload-data
+                                        :message "uploading data"})
       (m/? (c.m/<! (http/put url {:body all-blocks-str :with-credentials? false})))
-      (rtc-log/rtc-log :rtc.log/upload {:message "requesting upload-graph"})
+      (rtc-log/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
+                                        :message "requesting upload-graph"})
       (let [upload-resp
             (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
                                                         :s3-key key
@@ -135,6 +138,8 @@
             (op-mem-layer/init-empty-ops-store! repo)
             (op-mem-layer/update-graph-uuid! repo graph-uuid)
             (m/? (op-mem-layer/new-task--sync-to-idb repo))
+            (rtc-log/rtc-log :rtc.log/upload {:sub-type :upload-completed
+                                              :message "upload-graph completed"})
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
@@ -260,7 +265,9 @@
 
 (defn new-task--request-download-graph
   [get-ws-create-task graph-uuid]
-  (rtc-log/rtc-log :rtc.log/download {:message "requesting download graph" :graph-uuid graph-uuid})
+  (rtc-log/rtc-log :rtc.log/download {:sub-type :request-download-graph
+                                      :message "requesting download graph"
+                                      :graph-uuid graph-uuid})
   (m/join :download-info-uuid
           (ws-util/send&recv get-ws-create-task {:action "download-graph"
                                                  :graph-uuid graph-uuid})))
@@ -275,7 +282,9 @@
   [get-ws-create-task download-info-uuid graph-uuid timeout-ms]
   (->
    (m/sp
-     (rtc-log/rtc-log :rtc.log/download {:message "waiting for the remote to prepare the data" :graph-uuid graph-uuid})
+     (rtc-log/rtc-log :rtc.log/download {:sub-type :wait-remote-graph-data-ready
+                                         :message "waiting for the remote to prepare the data"
+                                         :graph-uuid graph-uuid})
      (loop []
        (m/? (m/sleep 3000))
        (let [{:keys [download-info-list]}
@@ -295,14 +304,18 @@
 (defn new-task--download-graph-from-s3
   [graph-uuid graph-name s3-url]
   (m/sp
-    (rtc-log/rtc-log :rtc.log/download {:message "downloading graph data" :graph-uuid graph-uuid})
+    (rtc-log/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
+                                        :message "downloading graph data"
+                                        :graph-uuid graph-uuid})
     (let [^js worker-obj              (:worker/object @worker-state/*state)
           {:keys [status body] :as r} (m/? (c.m/<! (http/get s3-url {:with-credentials? false})))
           repo                        (str sqlite-util/db-version-prefix graph-name)]
       (if (not= 200 status)
         (throw (ex-info "download-graph from s3 failed" {:resp r}))
         (do
-          (rtc-log/rtc-log :rtc.log/download {:message "transacting graph data to local db" :graph-uuid graph-uuid})
+          (rtc-log/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
+                                              :message "transacting graph data to local db"
+                                              :graph-uuid graph-uuid})
           (let [all-blocks (ldb/read-transit-str body)]
             (worker-state/set-rtc-downloading-graph! true)
             (op-mem-layer/init-empty-ops-store! repo)
@@ -311,5 +324,7 @@
             (m/? (op-mem-layer/new-task--sync-to-idb repo))
             (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
             (worker-state/set-rtc-downloading-graph! false)
-            (rtc-log/rtc-log :rtc.log/download {:message "download completed" :graph-uuid graph-uuid})
+            (rtc-log/rtc-log :rtc.log/download {:sub-type :download-completed
+                                                :message "download completed"
+                                                :graph-uuid graph-uuid})
             nil))))))
