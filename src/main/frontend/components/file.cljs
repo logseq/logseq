@@ -2,13 +2,13 @@
   (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.string :as string]
-            [datascript.core :as d]
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.fs :as fs]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -16,12 +16,12 @@
             [goog.object :as gobj]
             [goog.string :as gstring]
             [logseq.common.config :as common-config]
+            [logseq.common.path :as path]
             [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
-            [rum.core :as rum]
-            [logseq.common.path :as path]
-            [frontend.db.async :as db-async]))
+            [rum.core :as rum]))
 
 (defn- get-path
   [state]
@@ -115,7 +115,7 @@
 
                     :else
                     path)
-        random-id (str (d/squuid))
+        random-id (str (common-uuid/gen-uuid))
         content (rum/react (::file-content state))]
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}

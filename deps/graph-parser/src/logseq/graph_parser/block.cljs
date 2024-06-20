@@ -4,18 +4,19 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.order :as db-order]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.utf8 :as utf8]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]
-            [datascript.impl.entity :as de]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defn heading-block?
   [block]
@@ -321,12 +322,13 @@
         (merge
          {:block/name page-name
           :block/original-name original-page-name}
-         (let [new-uuid (if skip-existing-page-check?
-                          (d/squuid)
+         (let [new-uuid* (if journal-day (common-uuid/gen-uuid journal-day) (common-uuid/gen-uuid))
+               new-uuid (if skip-existing-page-check?
+                          new-uuid*
                           (or
                            (cond page-entity       (:block/uuid page-entity)
                                  (uuid? page-uuid) page-uuid)
-                           (d/squuid)))]
+                           new-uuid*))]
            {:block/uuid new-uuid})
          (when namespace?
            (let [namespace (first (common-util/split-last "/" original-page-name))]

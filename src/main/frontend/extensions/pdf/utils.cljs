@@ -1,12 +1,12 @@
 (ns frontend.extensions.pdf.utils
-  (:require [promesa.core :as p]
+  (:require ["/frontend/extensions/pdf/utils" :as js-utils]
             [cljs-bean.core :as bean]
-            [frontend.util :as util]
+            [clojure.string :as string]
             [frontend.config :as config]
             [frontend.state :as state]
-            ["/frontend/extensions/pdf/utils" :as js-utils]
-            [datascript.core :as d]
-            [clojure.string :as string]))
+            [frontend.util :as util]
+            [logseq.common.uuid :as common-uuid]
+            [promesa.core :as p]))
 
 (defonce MAX-SCALE 5.0)
 (defonce MIN-SCALE 0.25)
@@ -124,8 +124,9 @@
   (when (sequential? its)
     (mapv #(if (map? %) % (bean/->clj %)) its)))
 
-(defn gen-uuid []
-  (d/squuid))
+(defn gen-uuid
+  []
+  (common-uuid/gen-uuid))
 
 (defn load-base-assets$
   []
