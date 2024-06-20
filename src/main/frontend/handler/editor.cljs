@@ -2932,7 +2932,7 @@
             (cursor/move-cursor-forward input)
             (autopair input-id key format nil)))
 
-          ; `;;` to add or change property for db graphs
+        ; `;;` to add or change property for db graphs
         (let [sym ";"]
           (and (config/db-based-graph? (state/get-current-repo)) (double-chars-typed? value pos key sym)))
         (state/pub-event! [:editor/new-property])

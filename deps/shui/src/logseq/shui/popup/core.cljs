@@ -78,9 +78,9 @@
                    (vector? event) event
 
                    (or (instance? js/MouseEvent (or (.-nativeEvent event) event))
-                     (instance? js/goog.events.BrowserEvent event))
+                       (instance? js/goog.events.BrowserEvent event))
                    (do (vreset! *target (.-target (or (.-nativeEvent event) event)))
-                     [(.-clientX event) (.-clientY event)])
+                       [(.-clientX event) (.-clientY event)])
 
                    (instance? js/Element event)
                    (let [^js rect (.getBoundingClientRect event)
@@ -88,26 +88,26 @@
                          width (.-width rect)
                          height (.-height rect)
                          bottom (.-bottom rect)]
-                     (do (vreset! *target event)
-                       [(+ left (case (keyword align)
-                                  :start 0
-                                  :end width
-                                  (/ width 2)))
-                        (- bottom height) width height]))
+                     (vreset! *target event)
+                     [(+ left (case (keyword align)
+                                :start 0
+                                :end width
+                                (/ width 2)))
+                      (- bottom height) width height])
                    :else [0 0])]
     (upsert-popup!
-      (merge opts
-        {:id (or id (gen-id)) :target (deref *target)
-         :trigger-id trigger-id
-         :open? true :content content :position position
-         :as-dropdown? as-dropdown?
-         :as-content? as-content?
-         :root-props root-props
-         :on-before-hide on-before-hide
-         :on-after-hide on-after-hide
-         :content-props (cond-> content-props
-                          (not (nil? align))
-                          (assoc :align (name align)))}))))
+     (merge opts
+            {:id (or id (gen-id)) :target (deref *target)
+             :trigger-id trigger-id
+             :open? true :content content :position position
+             :as-dropdown? as-dropdown?
+             :as-content? as-content?
+             :root-props root-props
+             :on-before-hide on-before-hide
+             :on-after-hide on-after-hide
+             :content-props (cond-> content-props
+                              (not (nil? align))
+                              (assoc :align (name align)))}))))
 
 (defn hide!
   ([] (when-let [id (some-> (get-popups) (last) :id)] (hide! id 0)))

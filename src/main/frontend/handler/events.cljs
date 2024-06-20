@@ -996,10 +996,9 @@
                                                     (- pos 2)]
                                                    :else
                                                    [nil pos])]
-                              (if editing-default-property?
-                                (when (and editing-block content')
-                                  (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content'))
-                                (when-not (state/editing?)
+                              (when content'
+                                (if editing-default-property?
+                                  (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content')
                                   (editor-handler/edit-block! editing-block (or pos :max)
                                                               (cond-> {}
                                                                 content'
