@@ -248,7 +248,7 @@
       (m/?
        (c.m/await-promise
         (p/do!
-         (.createOrOpenDB worker-obj repo {:close-other-db? false})
+         (.createOrOpenDB worker-obj repo (ldb/write-transit-str {:close-other-db? false}))
          (.exportDB worker-obj repo)
          (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
                                                   :gen-undo-ops? false

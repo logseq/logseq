@@ -36,9 +36,9 @@
 
 ;; FIXME: limit repo name's length and sanity
 ;; @shuyu Do we still need this?
-(defn <new [repo]
+(defn <new [repo opts]
   {:pre [(<= (count repo) 128)]}
-  (p/let [_ (protocol/<new (get-impl) repo)]
+  (p/let [_ (protocol/<new (get-impl) repo opts)]
     (<export-db repo {})))
 
 (defn export-current-graph!
