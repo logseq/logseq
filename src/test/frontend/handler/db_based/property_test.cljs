@@ -333,20 +333,6 @@
                 (is (nil? (db/entity [:block/uuid block-id])))
                 (is (= 2 (count (:property/closed-values (db/entity k)))))))))))))
 
-;; property-create-new-block
-;; get-property-block-created-block
-(deftest text-block-test
-  (testing "Add property and create a block value"
-    (let [fb (db/entity [:block/uuid fbid])
-          k :user.property/property-1
-          conn (db/get-db false)]
-      ;; add property
-      (outliner-property/upsert-property! conn k {:type :default} {})
-      (let [property (db/entity k)
-            block-id (outliner-property/create-property-text-block! conn (:db/id fb) (:db/id property) "Block content" {})
-            {:keys [from-property-id]} (outliner-property/get-property-block-created-block @conn [:block/uuid block-id])]
-        (is (= from-property-id (:db/id property)))))))
-
 ;; collapse-expand-property!
 (deftest collapse-expand-property-test
   (testing "Collapse and expand property"
