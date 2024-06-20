@@ -197,14 +197,14 @@
           :in $ ?property-id ?raw-value
           :where
           [?b ?property-id ?v]
-          [?v :block/content ?raw-value]]
+          (or [?v :block/content ?raw-value]
+              [?v :property.value/content ?raw-value])]
         db
         property-id
         raw-value)))
 
 (defn- find-or-create-property-value
-  "Find or create a property value. Only to be used with properties that have ref types.
-   Mainly used by :default property type"
+  "Find or create a property value. Only to be used with properties that have ref types"
   [conn property-id v]
   (or (get-property-value-eid @conn property-id v)
       (let [v-uuid (create-property-text-block! conn nil property-id v {})]
