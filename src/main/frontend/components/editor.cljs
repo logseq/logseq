@@ -861,7 +861,8 @@
       state
       {:node @(::ref state)
        :on-hide (fn [_state e type]
-                  (editor-on-hide state (:value (editor-handler/get-state)) type e))})))
+                  (when-not (= type :esc)
+                    (editor-on-hide state (:value (editor-handler/get-state)) type e)))})))
   (mixins/event-mixin setup-key-listener!)
   lifecycle/lifecycle
   [state {:keys [format block parent-block]} id config]
@@ -878,8 +879,10 @@
                :on-change         (editor-handler/editor-on-change! block id search-timeout)
                :on-paste          (paste-handler/editor-on-paste! id)
                :on-key-down       (fn [e]
-                                    (when-let [on-key-down (:on-key-down config)]
-                                      (on-key-down e)))
+                                    (if-let [on-key-down (:on-key-down config)]
+                                      (on-key-down e)
+                                      (when (= (util/ekey e) "Escape")
+                                        (editor-on-hide state content :esc e))))
                :auto-focus true
                :class heading-class}
                (some? parent-block)
