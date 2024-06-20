@@ -61,14 +61,17 @@
         initial-files [{:block/uuid (d/squuid)
                         :file/path (str "logseq/" "config.edn")
                         :file/content config-content
+                        :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
                        {:block/uuid (d/squuid)
                         :file/path (str "logseq/" "custom.css")
                         :file/content ""
+                        :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}
                        {:block/uuid (d/squuid)
                         :file/path (str "logseq/" "custom.js")
                         :file/content ""
+                        :file/created-at (js/Date.)
                         :file/last-modified-at (js/Date.)}]
         default-pages (->> (map sqlite-util/build-new-page built-in-pages-names)
                            (map sqlite-util/mark-block-as-built-in))
