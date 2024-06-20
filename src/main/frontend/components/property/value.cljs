@@ -96,21 +96,23 @@
   ([block property-id property-value' {:keys [exit-edit? class-schema?]
                                        :or {exit-edit? true}}]
    (let [repo (state/get-current-repo)
-         class? (contains? (:block/type block) "class")]
+         class? (contains? (:block/type block) "class")
+         property (db/entity property-id)
+         many? (db-property/many? property)]
      (assert (qualified-keyword? property-id) "property to add must be a keyword")
      (p/do!
       (if (and class? class-schema?)
         (db-property-handler/class-add-property! (:db/id block) property-id)
-        (p/let [property (db/entity property-id)]
-          (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
-                   (string? property-value'))
-            (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
-            (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
+        (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
+                 (string? property-value'))
+          (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
+          (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
       (when exit-edit?
         (shui/popup-hide-all!)
         (shui/dialog-close!))
-      (when-let [input (state/get-input)]
-        (.focus input))))))
+      (when-not many?
+        (when-let [input (state/get-input)]
+          (.focus input)))))))
 
 (defn- add-or-remove-property-value
   [block property value selected?]
