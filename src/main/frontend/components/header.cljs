@@ -70,8 +70,8 @@
         {:class "pt-[3px] pr-1"
          :on-click #(shui/dialog-open!
                      (fn []
-                       [:div
-                        [:h1.text-lg.-mt-6.-ml-2 "Collaborators:"]
+                       [:div.p-2.-mb-8
+                        [:h1.text-3xl.-mt-2.-ml-2 "Collaborators:"]
                         (settings/settings-collaboration)]))}
         (if (not (seq online-users))
           (shui/tabler-icon "user-plus")
