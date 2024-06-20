@@ -522,13 +522,6 @@
                       {:db/id property-id})]]
         (ldb/transact! conn tx-data)))))
 
-(defn get-property-block-created-block
-  "Get the root block and property that created this property block."
-  [db eid]
-  (let [block (d/entity db eid)
-        created-from-property (:logseq.property/created-from-property block)]
-    {:from-property-id (:db/id created-from-property)}))
-
 (defn class-add-property!
   [conn class-id property-id]
   (when-let [class (d/entity @conn class-id)]
