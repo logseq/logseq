@@ -107,13 +107,13 @@
 
    ;; file
    :file/path {:db/unique :db.unique/identity}
+   :file/created-at {}
    :file/last-modified-at {}
    ;; only store the content of logseq's files
    :file/content {}
 
    ;; TODO: do we really use this?
    :file/handle {}
-   ;; :file/created-at {}
    ;; :file/size {}
    })
 

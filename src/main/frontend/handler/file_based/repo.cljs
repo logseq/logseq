@@ -137,7 +137,8 @@
             (file-handler/alter-file repo-url
                                      (:file/path file)
                                      (:file/content file)
-                                     (merge {:new-graph? new-graph?
+                                     (merge (:stat file)
+                                            {:new-graph? new-graph?
                                              :re-render-root? false
                                              :from-disk? true
                                              :skip-db-transact? skip-db-transact?}

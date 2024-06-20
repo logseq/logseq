@@ -40,7 +40,7 @@
           missing-blocks))))))
 
 (defn- handle-add-and-change!
-  [repo path content db-content mtime backup?]
+  [repo path content db-content ctime mtime backup?]
   (let [config (state/get-config repo)
         path-hidden-patterns (:hidden config)
         db-last-modified-at (db/get-file-last-modified-at repo path)]
@@ -56,9 +56,10 @@
 
               _ (file-handler/alter-file repo path content {:re-render-root? true
                                                             :from-disk? true
-                                                            :fs/event :fs/local-file-change})]
-        (set-missing-block-ids! content)
-        (db/set-file-last-modified-at! repo path mtime)))))
+                                                            :fs/event :fs/local-file-change
+                                                            :ctime ctime
+                                                            :mtime mtime})]
+        (set-missing-block-ids! content)))))
 
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
@@ -72,7 +73,7 @@
                    (string/starts-with? dir "memory://") "Logseq demo"
                    :else (config/get-local-repo dir))
             repo-dir (config/get-local-dir repo)
-            {:keys [mtime]} stat
+            {:keys [mtime ctime]} stat
             ext (keyword (path/file-ext path))]
         (when (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
           (p/let [db-content (db-async/<get-file repo path)
@@ -92,12 +93,12 @@
                 (and (= "add" type)
                      (not= (string/trim content) (string/trim db-content)))
                 (let [backup? (not (string/blank? db-content))]
-                  (handle-add-and-change! repo path content db-content mtime backup?))
+                  (handle-add-and-change! repo path content db-content ctime mtime backup?))
 
                 (and (= "change" type)
                      (= dir repo-dir)
                      (not (common-config/local-asset? path)))
-                (handle-add-and-change! repo path content db-content mtime (not global-dir)) ;; no backup for global dir
+                (handle-add-and-change! repo path content db-content ctime mtime (not global-dir)) ;; no backup for global dir
 
                 (and (= "unlink" type)
                      exists-in-db?)

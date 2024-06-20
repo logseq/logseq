@@ -44,36 +44,16 @@
       (p/resolved files))))
 
 (defn- ->db-files
-  ;; TODO(andelf): rm nfs? parameter
   [result nfs?]
   (->>
    (cond
-     ;; TODO(andelf): use the same structure for both fields
-     (mobile-util/native-platform?)
-     (map (fn [{:keys [path content size mtime]}]
+     (or (mobile-util/native-platform?)
+         (util/electron?)
+         nfs?)
+     (map (fn [{:keys [path content stat]}]
             {:file/path             (common-util/path-normalize path)
-             :file/last-modified-at mtime
-             :file/size             size
-             :file/content content})
-          result)
-
-     (util/electron?)
-     (map (fn [{:keys [path stat content]}]
-            (let [{:keys [mtime size]} stat]
-              {:file/path             (common-util/path-normalize path)
-               :file/last-modified-at mtime
-               :file/size             size
-               :file/content content}))
-          result)
-
-     nfs?
-     (map (fn [{:keys [path content size mtime type] :as file-obj}]
-            (merge file-obj
-                   {:file/path             (common-util/path-normalize path)
-                    :file/last-modified-at mtime
-                    :file/size             size
-                    :file/type             type
-                    :file/content content}))
+             :file/content          content
+             :stat                  stat})
           result)
 
      :else ;; NFS backend

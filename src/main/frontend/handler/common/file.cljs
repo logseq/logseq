@@ -89,11 +89,9 @@
   "Main fn for updating a db with the results of a parsed file"
   ([repo-url file-path content]
    (reset-file! repo-url file-path content {}))
-  ([repo-url file-path content {:keys [verbose extracted-block-ids] :as options}]
-   (let [new? (nil? (db/entity [:file/path file-path]))
-         options (merge (dissoc options :verbose :extracted-block-ids)
-                        {:new? new?
-                         :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
+  ([repo-url file-path content {:keys [verbose extracted-block-ids _ctime _mtime] :as options}]
+   (let [options (merge (dissoc options :verbose :extracted-block-ids)
+                        {:delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
                          ;; Options here should also be present in gp-cli/parse-graph
                          :extract-options (merge
                                            {:user-config (state/get-config)

@@ -117,6 +117,7 @@
       (p/do!
        (db/transact! [{:file/path path
                        :file/content content
+                       :file/created-at (js/Date.)
                        :file/last-modified-at (js/Date.)}])
       ;; Post save
        (cond (= path "logseq/config.edn")
