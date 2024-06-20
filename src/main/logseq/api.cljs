@@ -3,7 +3,6 @@
             [cljs.reader]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
-            [goog.object :as gobj]
             [logseq.common.util :as common-util]
             [logseq.sdk.core]
             [logseq.sdk.git]
@@ -931,11 +930,6 @@
   (when-let [repo (and ns (state/get-current-repo))]
     (when-let [pages (db-model/get-namespace-hierarchy repo ns)]
       (bean/->js (sdk-utils/normalize-keyword-for-json pages)))))
-
-(defn- last-child-of-block
-  [block]
-  (when-let [children (:block/_parent block)]
-    (last (db-model/sort-by-order children))))
 
 (defn- first-child-of-block
   [block]
