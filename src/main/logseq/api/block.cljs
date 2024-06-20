@@ -10,6 +10,7 @@
             [frontend.modules.outliner.tree :as outliner-tree]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.db :as db]
+            [frontend.db.async :as db-async]
             [frontend.db.conn :as conn]
             [logseq.db.frontend.property :as db-property]
             [frontend.handler.db-based.property :as db-property-handler]
@@ -95,12 +96,19 @@
                         (db-property-handler/set-block-property! block-id ident :logseq.property/empty-placeholder))))))))
           )))))
 
+(defn sync-children-blocks!
+  [block]
+  (when block
+    (db-async/<get-block (state/get-current-repo)
+      (:block/uuid (:block/parent block)) {:children? true})))
+
 (defn get_block
   [id-or-uuid ^js opts]
   (when-let [block (if (number? id-or-uuid)
                      (db-utils/pull id-or-uuid)
                      (and id-or-uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error id-or-uuid))))]
-    (when-not (contains? block :block/name)
+    (when (or (true? (some-> opts (.-includePage)))
+            (not (contains? block :block/name)))
       (when-let [uuid (:block/uuid block)]
         (let [{:keys [includeChildren]} (bean/->clj opts)
               repo (state/get-current-repo)
