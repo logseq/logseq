@@ -333,3 +333,60 @@ test('Opening a second datepicker should close the first one #7341', async ({ pa
   // Close date picker
   await page.click('a:has-text("2000-05-06 Sat").opacity-80')
 })
+
+test('Block content should be preserved when adding a deadline via datepicker', async({page,block})=>{
+  var datePicker, step;
+
+  await createRandomPage(page)
+
+  async function openDatePicker(kind) {
+    await page.keyboard.type(' /' + kind, { delay: 20 });
+    await page.waitForTimeout(100) // Tolerable delay for the action menu to open
+    await expect(page.locator(`[data-modal-name="commands"]`)).toBeVisible();
+
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100) // Tolerable delay for the action menu to open
+    datePicker = page.locator(`[data-modal-name="date-picker"]`);
+    await expect(datePicker).toBeVisible();
+    return datePicker;
+
+  }
+
+  async function validateDatePickerInput(kind, step) {
+    // Expect:
+    //        previously edited block to still be in editing mode
+    //        content of block to be complete with scheduled date (if scheduled/deadline)
+    await expect(await block.isEditing()).toBe(true);
+
+    var content = page.locator('textarea >> nth=0');
+    await expect(content).toContainText(step);
+
+    if(kind == 'deadline') {
+      await expect(content).toContainText('DEADLINE');
+    }
+  }
+
+  // Select deadline today using enter key
+  await block.enterNext();
+  step = 'Test a deadline entered using the keyboard';
+  await block.mustType(step);
+  await openDatePicker('deadline');
+  await page.keyboard.press('Enter');
+  await validateDatePickerInput('deadline', step);
+
+  // Select deadline today using mouse click on submit button
+  await block.enterNext();
+  step = 'Test a deadline entered using the mouse';
+  await block.mustType(step);
+  datePicker = await openDatePicker('deadline');
+  await datePicker.getByText('Submit').click();
+  await validateDatePickerInput('deadline', step);
+
+  // Test date picker refocusing
+  await block.enterNext();
+  step = 'Test a date entered using the keyboard';
+  await block.mustType(step);
+  datePicker = await openDatePicker('date');
+  await page.keyboard.press('Enter');
+  await validateDatePickerInput('date', step );
+})
