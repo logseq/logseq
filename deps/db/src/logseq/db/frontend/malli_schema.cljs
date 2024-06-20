@@ -410,6 +410,7 @@
    [:block/tx-id {:optional true} :int]
    [:file/content :string]
    [:file/path :string]
+   [:file/size {:optional true} :int]
    [:file/created-at inst?]
    [:file/last-modified-at inst?]])
 
