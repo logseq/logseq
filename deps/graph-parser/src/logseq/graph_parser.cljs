@@ -8,8 +8,7 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]
-            [cljs-time.coerce :as tc]))
+            [logseq.db :as ldb]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
