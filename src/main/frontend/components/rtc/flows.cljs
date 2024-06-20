@@ -19,3 +19,6 @@
   (m/eduction
    (remove #(contains? #{:rtc.log/download :rtc.log/upload} (:type %)))
    rtc-log-flow))
+
+(def rtc-state-flow
+  (m/watch (:rtc/state @state/state)))
