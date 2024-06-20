@@ -1,16 +1,17 @@
 (ns logseq.db
   "Main namespace for public db fns. For DB and file graphs.
    For shared file graph only fns, use logseq.graph-parser.db"
-  (:require [datascript.core :as d]
-            [clojure.string :as string]
-            [logseq.common.util :as common-util]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
-            [logseq.db.frontend.rules :as rules]
-            [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.delete-blocks :as delete-blocks]
-            [datascript.impl.entity :as de]))
+            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.rules :as rules]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -365,7 +366,7 @@
 
 (defn new-block-id
   []
-  (d/squuid))
+  (common-uuid/gen-uuid))
 
 (defn get-tag-blocks
   [db tag-name]
@@ -468,7 +469,7 @@
   (transact!
    repo
    [(sqlite-util/block-with-timestamps
-     {:block/uuid (d/squuid)
+     {:block/uuid (common-uuid/gen-uuid)
       :block/name common-config/favorites-page-name
       :block/original-name common-config/favorites-page-name
       :block/type #{"hidden"}
