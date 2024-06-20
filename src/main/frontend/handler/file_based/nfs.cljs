@@ -212,7 +212,7 @@
                                           (:file/content file))]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
-                  (let [files (map #(dissoc % :file/file :file/handle) result)
+                  (let [files (map #(dissoc % :file/file) result)
                         [modified-files modified] (if re-index?
                                                     [files (set modified)]
                                                     (let [modified-files (filter (fn [file] (contains? added-or-modified (:file/path file))) files)]

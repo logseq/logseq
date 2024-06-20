@@ -107,20 +107,16 @@
 
    ;; file
    :file/path {:db/unique :db.unique/identity}
+   :file/content {}
    :file/created-at {}
    :file/last-modified-at {}
-   ;; only store the content of logseq's files
-   :file/content {}
-
-   ;; TODO: do we really use this?
-   :file/handle {}
-   ;; :file/size {}
+   :file/size {}
    })
 
 (def schema-for-db-based-graph
   (merge
    (dissoc schema
-           :block/namespace :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
+           :block/namespace :block/properties-text-values :block/pre-block? :recent/pages :block/file
            :block/properties :block/properties-order :block/repeated? :block/deadline :block/scheduled :block/priority
            :block/marker :block/macros)
    {:block/name {:db/index true}        ; remove db/unique for :block/name
