@@ -25,7 +25,8 @@
    [logseq.graph-parser.property :as gp-property]
    [logseq.graph-parser.util.block-ref :as block-ref]
    [logseq.graph-parser.util.page-ref :as page-ref]
-   [promesa.core :as p])
+   [promesa.core :as p]
+   [frontend.handler.export.common :as export-common])
   (:import
    [goog.string StringBuffer]))
 
@@ -53,13 +54,6 @@
             [?f :file/path ?path]
             [?f :file/content ?content]]
           (db/get-db repo) file-path))))
-
-(defn- get-blocks-contents
-  [repo root-block-uuid]
-  (->
-   (db/get-block-and-children repo root-block-uuid)
-   (outliner-tree/blocks->vec-tree (str root-block-uuid))
-   (outliner-file/tree->file-content {:init-level 1})))
 
 (defn download-file!
   [file-path]
@@ -189,7 +183,7 @@
 (declare get-page-page&block-refs)
 (defn get-block-page&block-refs [repo block-uuid embed-pages embed-blocks block-refs]
   (let [block (db/entity [:block/uuid (uuid block-uuid)])
-        block-content (get-blocks-contents repo (:block/uuid block))
+        block-content (export-common/get-blocks-contents repo (:block/uuid block))
         format (:block/format block)
         ast (mldoc/->edn block-content (gp-mldoc/default-config format))
         embed-pages-new  (get-embed-pages-from-ast ast)
