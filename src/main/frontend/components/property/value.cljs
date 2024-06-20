@@ -103,7 +103,7 @@
         (db-property-handler/class-add-property! (:db/id block) property-id)
         (p/let [property (db/entity property-id)]
           (if (and (db-property-type/ref-property-types (get-in property [:block/schema :type]))
-                   (not (int? property-value')))
+                   (string? property-value'))
             (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
             (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?
