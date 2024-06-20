@@ -31,7 +31,8 @@
             [shadow.cljs.modern :refer [defclass]]
             [logseq.common.util :as common-util]
             [frontend.worker.db.fix :as db-fix]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -161,7 +162,7 @@
       [db search-db])))
 
 (defn- create-or-open-db!
-  [repo]
+  [repo {:keys [config]}]
   (when-not (worker-state/get-sqlite-conn repo)
     (p/let [[db search-db] (get-db-and-search-db repo)
             storage (new-sqlite-storage repo {})]
@@ -173,6 +174,9 @@
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)]
         (swap! *datascript-conns assoc repo conn)
+        (when config
+          (let [initial-data (sqlite-create-graph/build-db-initial-data config)]
+            (d/transact! conn initial-data {:initial-db? true})))
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb2! repo)]
           (db-listener/listen-db-changes! repo conn))))))
 
@@ -282,12 +286,13 @@
      (bean/->js dbs)))
 
   (createOrOpenDB
-   [_this repo & {:keys [close-other-db?]
-                  :or {close-other-db? true}}]
-   (p/do!
-    (when close-other-db?
-      (close-other-dbs! repo))
-    (create-or-open-db! repo)))
+   [_this repo opts-str]
+   (let [{:keys [close-other-db? config]
+          :or {close-other-db? true}} (ldb/read-transit-str opts-str)]
+     (p/do!
+      (when close-other-db?
+        (close-other-dbs! repo))
+      (create-or-open-db! repo {:config config}))))
 
   (getMaxTx
    [_this repo]

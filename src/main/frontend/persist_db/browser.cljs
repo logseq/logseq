@@ -138,9 +138,9 @@
 
 (defrecord InBrowser []
   protocol/PersistentDB
-  (<new [_this repo]
+  (<new [_this repo opts]
     (when-let [^js sqlite @*worker]
-      (.createOrOpenDB sqlite repo)))
+      (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))))
 
   (<list-db [_this]
     (when-let [^js sqlite @*worker]
@@ -163,7 +163,7 @@
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
                       (.importDb sqlite repo disk-db-data))
-                  _ (.createOrOpenDB sqlite repo)]
+                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str {}))]
             (.getInitialData sqlite repo))
           (p/catch sqlite-error-handler))))
 

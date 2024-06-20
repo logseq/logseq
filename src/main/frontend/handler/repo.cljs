@@ -22,7 +22,6 @@
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
             [frontend.db.persist :as db-persist]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [frontend.mobile.util :as mobile-util]
@@ -189,13 +188,11 @@
 
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
-   (p/let [_ (persist-db/<new full-graph-name)
+   (p/let [config (migrate-db-config config/config-default-content)
+           _ (persist-db/<new full-graph-name {:config config})
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
-           initial-data (sqlite-create-graph/build-db-initial-data
-                         (migrate-db-config config/config-default-content))
-           _ (db/transact! full-graph-name initial-data)
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])

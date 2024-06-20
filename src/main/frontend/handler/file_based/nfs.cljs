@@ -128,7 +128,7 @@
                                [:notification/show
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
                                  :status :warning}])
-                              (p/do! (persist-db/<new repo)
+                              (p/do! (persist-db/<new repo {})
                                      (repo-handler/start-repo-db-if-not-exists! repo)
                                      (when (config/global-config-enabled?)
                                        (global-config-handler/restore-global-config!))

@@ -3,7 +3,7 @@
 
 (defprotocol PersistentDB
   (<list-db [this] "List all databases")
-  (<new [this repo] "Create or open a graph")
+  (<new [this repo opts] "Create or open a graph")
   (<unsafe-delete [this repo] "Delete graph and its vfs")
   (<release-access-handles [this repo] "Release access file handles")
   (<fetch-initial-data [this repo opts] "Fetch Initial data")
