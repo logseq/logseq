@@ -549,8 +549,8 @@ a.navigation {
 mark {
   background: var(--ls-page-mark-bg-color, #fef3ac);
   color: var(--ls-page-mark-color, #262626);
-  padding: 2px 4px;
-  border-radius: 3px;
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 /* inline code */
