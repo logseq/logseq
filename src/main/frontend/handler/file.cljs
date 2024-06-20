@@ -142,7 +142,7 @@
 (defn alter-file
   "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
-                             skip-db-transact? extracted-block-ids]
+                             skip-db-transact? extracted-block-ids ctime mtime]
                       :fs/keys [event]
                       :or {reset? true
                            re-render-root? false
@@ -157,7 +157,9 @@
       (let [opts {:new-graph? new-graph?
                   :from-disk? from-disk?
                   :skip-db-transact? skip-db-transact?
-                  :fs/event event}
+                  :fs/event event
+                  :ctime ctime
+                  :mtime mtime}
             result (if reset?
                      (do
                        (when-not skip-db-transact?

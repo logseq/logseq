@@ -8,7 +8,8 @@
             [logseq.graph-parser.extract :as extract]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [cljs-time.coerce :as tc]))
 
 (defn- retract-blocks-tx
   [blocks retain-uuids]
@@ -60,20 +61,18 @@
   "Parse file and save parsed data to the given db. Main parse fn used by logseq app.
 Options available:
 
-* :new? - Boolean which indicates if this file already exists. Default is true.
-* :delete-blocks-fn - Optional fn which is called with the new page, file and existing block uuids
+  * :delete-blocks-fn - Optional fn which is called with the new page, file and existing block uuids
   which may be referenced elsewhere. Used to delete the existing blocks before saving the new ones.
    Implemented in file-common-handler/validate-and-get-blocks-to-delete for IoC
 * :skip-db-transact? - Boolean which skips transacting in order to batch transactions. Default is false
 * :extract-options - Options map to pass to extract/extract"
-  ([conn file content] (parse-file conn file content {}))
-  ([conn file content {:keys [new? delete-blocks-fn extract-options skip-db-transact?]
-                       :or {new? true
-                            delete-blocks-fn (constantly [])
-                            skip-db-transact? false}
-                       :as options}]
-   (let [format (common-util/get-format file)
-         file-content [{:file/path file}]
+  ([conn file-path content] (parse-file conn file-path content {}))
+  ([conn file-path content {:keys [delete-blocks-fn extract-options skip-db-transact? ctime mtime]
+                            :or {delete-blocks-fn (constantly [])
+                                 skip-db-transact? false}
+                            :as options}]
+   (let [format (common-util/get-format file-path)
+         file-content [{:file/path file-path}]
          {:keys [tx ast]}
          (let [extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                         :date-formatter "MMM do, yyyy"
@@ -86,14 +85,14 @@ Options available:
                        blocks []
                        ast []}}
                (cond (contains? common-config/mldoc-support-formats format)
-                     (extract/extract file content extract-options')
+                     (extract/extract file-path content extract-options')
 
-                     (common-config/whiteboard? file)
-                     (extract/extract-whiteboard-edn file content extract-options')
+                     (common-config/whiteboard? file-path)
+                     (extract/extract-whiteboard-edn file-path content extract-options')
 
                      :else nil)
                block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks)
-               delete-blocks (delete-blocks-fn @conn (first pages) file block-ids)
+               delete-blocks (delete-blocks-fn @conn (first pages) file-path block-ids)
                block-refs-ids (->> (mapcat :block/refs blocks)
                                    (filter (fn [ref] (and (vector? ref)
                                                           (= :block/uuid (first ref)))))
@@ -106,11 +105,13 @@ Options available:
            ;; does order matter?
            {:tx (concat file-content refs pages-index delete-blocks pages block-ids blocks)
             :ast ast})
-         tx (concat tx [(cond-> {:file/path file
+         file-entity (d/entity @conn [:file/path file-path])
+         tx (concat tx [(cond-> {:file/path file-path
                                  :file/content content}
-                          new?
-                                ;; TODO: use file system timestamp?
-                          (assoc :file/created-at (common-util/time-ms)))])
+                          (or ctime (nil? file-entity))
+                          (assoc :file/created-at (or ctime (js/Date.)))
+                          mtime
+                          (assoc :file/last-modified-at mtime))])
          result (if skip-db-transact?
                   tx
                   (do
