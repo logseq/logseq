@@ -53,21 +53,35 @@
       (reset! *update-detail-info-canceler canceler))))
 (run-task--update-detail-info)
 
-(rum/defc details < rum/reactive
-  []
-  (let [{:keys [graph-uuid local-tx rtc-state pending-local-ops
-                download-logs upload-logs misc-logs]} (rum/react *detail-info)]
-    [:pre.select-text
-     (-> (cond-> {}
-           download-logs (assoc :download download-logs)
-           upload-logs (assoc :upload upload-logs)
-           misc-logs (assoc :misc misc-logs)
-           graph-uuid (assoc :graph-uuid graph-uuid)
-           local-tx (assoc :local-tx local-tx)
-           rtc-state (assoc :rtc-state rtc-state)
-           pending-local-ops (assoc :pending-local-ops pending-local-ops))
-         (fipp/pprint {:width 20})
-         with-out-str)]))
+(rum/defcs details < rum/reactive
+  (rum/local false ::expand-debug-info?)
+  [state online?]
+  (let [*expand-debug? (::expand-debug-info? state)
+        {:keys [graph-uuid local-tx rtc-state download-logs upload-logs misc-logs pending-local-ops pending-server-ops]} (rum/react *detail-info)]
+    [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
+     [:div.font-medium.mb-2 (if online? "Online" "Offline")]
+     [:div [:span.font-medium.mr-1 pending-local-ops] "pending local changes"]
+     ;; FIXME: pending-server-ops
+     [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] "pending server changes"]
+     ;; FIXME: What's the type for downloaded log?
+     (when-let [latest-log (some (fn [l] (when (contains? #{:rtc.log/push-local-update} (:type l)) l)) misc-logs)]
+       (when-let [time (:created-at latest-log)]
+         [:div.text-sm "Last synced time: "
+          (.toLocaleString time)]))
+     [:a.fade-link.text-sm {:on-click #(swap! *expand-debug? not)}
+        "More debug info"]
+     (when @*expand-debug?
+       [:div.rtc-info-debug
+        [:pre.select-text
+         (-> (cond-> {:pending-local-ops pending-local-ops}
+               download-logs (assoc :download download-logs)
+               upload-logs (assoc :upload upload-logs)
+               misc-logs (assoc :misc misc-logs)
+               graph-uuid (assoc :graph-uuid graph-uuid)
+               local-tx (assoc :local-tx local-tx)
+               rtc-state (assoc :rtc-state rtc-state))
+             (fipp/pprint {:width 20})
+             with-out-str)]])]))
 
 (defn- downloading?
   [detail-info]
@@ -92,29 +106,20 @@
         downloading?                (downloading? detail-info)
         rtc-state                   (:rtc-state detail-info)
         unpushed-block-update-count (:pending-local-ops detail-info)]
-    (cond-> [:div]
-      downloading?
-      (conj (shui/button
-             {:variant :ghost
-              :size    :sm}
-             "Downloading..."))
-      uploading?
-      (conj (shui/button
-             {:variant :ghost
-              :size    :sm}
-             "Uploading..."))
-      ;; (and graph-uuid
-      ;;      (= graph-uuid (ldb/get-graph-rtc-uuid (db/get-db))))
-      true
-      (conj
-       [:div.cp__rtc-sync
-        [:div.cp__rtc-sync-indicator
-         [:a.button.cloud
-          {:on-click #(shui/popup-show! (.-target %)
-                                        (details)
-                                        {:align "end"})
-           :class    (util/classnames [{:on      (and online? (= :open rtc-state))
-                                        :idle    (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
-                                        :queuing (pos? unpushed-block-update-count)}])}
-          [:span.flex.items-center
-           (ui/icon "cloud" {:size ui/icon-size})]]]]))))
+    [:div.cp__rtc-sync
+     [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
+      (when (or downloading? uploading?)
+        (shui/button
+         {:class   "opacity-50"
+          :variant :ghost
+          :size    :sm}
+         (if downloading? "Downloading..." "Uploading...")))
+      [:a.button.cloud
+       {:on-click #(shui/popup-show! (.-target %)
+                                     (details online?)
+                                     {:align "end"})
+        :class    (util/classnames [{:on      (and online? (= :open rtc-state))
+                                     :idle    (and online? (= :open rtc-state) (zero? unpushed-block-update-count))
+                                     :queuing (pos? unpushed-block-update-count)}])}
+       [:span.flex.items-center
+        (ui/icon "cloud" {:size ui/icon-size})]]]]))
