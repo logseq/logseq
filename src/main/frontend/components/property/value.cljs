@@ -108,7 +108,9 @@
             (property-handler/set-block-property! repo (:block/uuid block) property-id property-value'))))
       (when exit-edit?
         (shui/popup-hide-all!)
-        (shui/dialog-close!))))))
+        (shui/dialog-close!))
+      (when-let [input (state/get-input)]
+        (.focus input))))))
 
 (defn- add-or-remove-property-value
   [block property value selected?]
