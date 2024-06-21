@@ -2317,7 +2317,7 @@
         [:div.positioned-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
          (for [pid properties]
            (when-let [property (db/entity pid)]
-             (pv/property-value block property (get block pid) opts)))]))))
+             (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
