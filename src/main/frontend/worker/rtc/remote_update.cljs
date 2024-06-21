@@ -527,6 +527,7 @@
     (let [remote-t (:t remote-update-data)
           remote-t-before (:t-before remote-update-data)
           local-tx (op-mem-layer/get-local-tx repo)]
+      (rtc-log-and-state/update-remote-t graph-uuid remote-t)
       (cond
         (not (and (pos? remote-t)
                   (pos? remote-t-before)))
@@ -565,8 +566,7 @@
           (js/console.groupEnd)
 
           (op-mem-layer/update-local-tx! repo remote-t)
-          (rtc-log-and-state/update-local-t graph-uuid remote-t)
-          (rtc-log-and-state/update-remote-t graph-uuid remote-t))
+          (rtc-log-and-state/update-local-t graph-uuid remote-t))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before
                                              :local-t local-tx}))))))
