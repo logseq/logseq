@@ -1346,15 +1346,21 @@ Similar to re-frame subscriptions"
   []
   (set-state! :editor/last-saved-cursor {}))
 
-(defn clear-edit!
+(defn clear-cursor-range!
   []
+  (set-state! :editor/cursor-range nil))
+
+(defn clear-edit!
+  [& {:keys [clear-editing-block?]
+      :or {clear-editing-block? true}}]
   (clear-editor-action!)
-  (set-state! :editor/editing? {})
+  (when clear-editing-block?
+    (set-state! :editor/editing? {})
+    (set-state! :editor/block nil))
   (set-state! :editor/start-pos nil)
   (clear-editor-last-pos!)
-  (set-state! :editor/cursor-range nil)
+  (clear-cursor-range!)
   (set-state! :editor/content {})
-  (set-state! :editor/block nil)
   (set-state! :ui/select-query-cache {}))
 
 (defn into-code-editor-mode!
