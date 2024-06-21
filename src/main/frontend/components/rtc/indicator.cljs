@@ -108,12 +108,18 @@
         unpushed-block-update-count (:pending-local-ops detail-info)]
     [:div.cp__rtc-sync
      [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
-      (when (or downloading? uploading?)
+      (when downloading?
         (shui/button
          {:class   "opacity-50"
           :variant :ghost
           :size    :sm}
-         (if downloading? "Downloading..." "Uploading...")))
+         "Downloading..."))
+      (when uploading?
+        (shui/button
+         {:class   "opacity-50"
+          :variant :ghost
+          :size    :sm}
+         "Uploading..."))
       [:a.button.cloud
        {:on-click #(shui/popup-show! (.-target %)
                                      (details online?)
