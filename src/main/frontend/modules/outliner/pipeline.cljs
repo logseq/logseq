@@ -4,8 +4,7 @@
             [frontend.state :as state]
             [datascript.core :as d]
             [frontend.handler.ui :as ui-handler]
-            [frontend.util :as util]
-            [frontend.handler.editor :as editor-handler]))
+            [frontend.util :as util]))
 
 (defn invoke-hooks
   [{:keys [_request-id repo tx-meta tx-data deleted-block-uuids affected-keys blocks]}]
@@ -48,20 +47,10 @@
                               tx-data))]
               (d/transact! conn tx-data' tx-meta))
 
+            (state/set-state! :editor/start-pos nil)
+
             (when-not (:graph/importing @state/state)
-              ;; safe to edit the next block now since other blocks (e.g. prev editing block)
-              ;; has been saved to the db now
-              (when-let [next-edit-block @(:editor/next-edit-block @state/state)]
-                (let [{:keys [block pos container-id]} next-edit-block
-                      unsaved-chars @(:editor/async-unsaved-chars @state/state)]
-                  (editor-handler/edit-block! block (+ pos (count unsaved-chars)) {:container-id container-id
-                                                           :custom-content (str unsaved-chars (:block/content block))})
-                  (state/set-state! :editor/next-edit-block nil)
-                  (state/set-state! :editor/async-unsaved-chars nil)))
-
               (react/refresh! repo affected-keys)
-
-              (state/set-state! :editor/start-pos nil)
 
               (when (and state/lsp-enabled?
                          (seq blocks)
@@ -76,11 +65,4 @@
       (state/pub-event! [:page/deleted repo (:deleted-page tx-meta) (:file-path tx-meta) tx-meta]))
 
     (when (= (:outliner-op tx-meta) :rename-page)
-      (state/pub-event! [:page/renamed repo (:data tx-meta)]))
-
-    (when-let [deleting-block-id (:editor/deleting-block @state/state)]
-      (when (some (fn [datom] (and
-                               (= :block/uuid (:a datom))
-                               (= (:v datom) deleting-block-id)
-                               (true? (:added datom)))) tx-data) ; editing-block was added back (could be undo or from remote sync)
-        (state/set-state! :editor/deleting-block nil)))))
+      (state/pub-event! [:page/renamed repo (:data tx-meta)]))))

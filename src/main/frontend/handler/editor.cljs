@@ -39,7 +39,7 @@
             [frontend.search :as search]
             [frontend.state :as state]
             [frontend.template :as template]
-            [frontend.util :as util :refer [profile]]
+            [frontend.util :as util]
             [frontend.util.clock :as clock]
             [frontend.util.cursor :as cursor]
             [frontend.util.drawer :as drawer]
@@ -261,17 +261,15 @@
   [block value opts]
   (let [block {:db/id (:db/id block)
                :block/uuid (:block/uuid block)
-               :block/content value}]
-    (profile
-     "Save block: "
-     (let [block' (-> (wrap-parse-block block)
-                      ;; :block/uuid might be changed when backspace/delete
-                      ;; a block that has been refed
-                      (assoc :block/uuid (:block/uuid block)))
-           opts' (assoc opts :outliner-op :save-block)]
-       (ui-outliner-tx/transact!
-                   opts'
-                   (outliner-save-block! block'))))))
+               :block/content value}
+        block' (-> (wrap-parse-block block)
+                   ;; :block/uuid might be changed when backspace/delete
+                   ;; a block that has been refed
+                   (assoc :block/uuid (:block/uuid block)))
+        opts' (assoc opts :outliner-op :save-block)]
+    (ui-outliner-tx/transact!
+     opts'
+     (outliner-save-block! block'))))
 
 ;; id: block dom id, "ls-block-counter-uuid"
 (defn- another-block-with-same-id-exists?
@@ -372,10 +370,10 @@
             selection-end (util/get-selection-end input)
             [_ new-content] (compute-fst-snd-block-text value selection-start selection-end)]
         (state/set-edit-content! edit-input-id new-content)))
-    (let [sibling? (not= (:db/id left-or-parent) (:db/id (:block/parent block)))]
-      (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
-                                                                :keep-uuid? true})
-      [sibling? prev-block])))
+    (let [sibling? (not= (:db/id left-or-parent) (:db/id (:block/parent block)))
+          result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
+                                                                :keep-uuid? true})]
+      [result sibling? prev-block])))
 
 (defn insert-new-block-aux!
   [config
@@ -396,9 +394,9 @@
                        (wrap-parse-block))
         sibling? (or (:block/collapsed? (:block/link block)) (when block-self? false))]
     (util/set-change-value input fst-block-text)
-    (outliner-insert-block! config current-block next-block {:sibling? sibling?
-                                                             :keep-uuid? true})
-    [sibling? (assoc next-block :block/content snd-block-text)]))
+    (let [result (outliner-insert-block! config current-block next-block {:sibling? sibling?
+                                                                          :keep-uuid? true})]
+      [result sibling? (assoc next-block :block/content snd-block-text)])))
 
 (defn clear-when-saved!
   []
@@ -477,44 +475,53 @@
   ([state]
    (insert-new-block! state nil))
   ([_state block-value]
-   (when (not config/publishing?)
-     (when-let [state (get-state)]
-       (state/set-state! :editor/async-unsaved-chars "")
-       (let [{:keys [block value config]} state
-             value (if (string? block-value) block-value value)
-             block-id (:block/uuid block)
-             block-self? (block-self-alone-when-insert? config block-id)
-             input-id (state/get-edit-input-id)
-             input (gdom/getElement input-id)
-             selection-start (util/get-selection-start input)
-             selection-end (util/get-selection-end input)
-             [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
-             insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
-             block' (or (db/entity [:block/uuid block-id]) block)
-             original-block (:original-block config)
-             block'' (or
-                      (when original-block
-                        (let [e (db/entity (:db/id block'))]
-                          (if (and (some? (first (:block/_parent e)))
-                                   (not (:block/collapsed? e)))
+   (->
+    (when (not config/publishing?)
+      (when-let [state (get-state)]
+        (state/set-state! :editor/async-unsaved-chars "")
+        (let [{:keys [block value config]} state
+              value (if (string? block-value) block-value value)
+              block-id (:block/uuid block)
+              block-self? (block-self-alone-when-insert? config block-id)
+              input-id (state/get-edit-input-id)
+              input (gdom/getElement input-id)
+              selection-start (util/get-selection-start input)
+              selection-end (util/get-selection-end input)
+              [fst-block-text snd-block-text] (compute-fst-snd-block-text value selection-start selection-end)
+              insert-above? (and (string/blank? fst-block-text) (not (string/blank? snd-block-text)))
+              block' (or (db/entity [:block/uuid block-id]) block)
+              original-block (:original-block config)
+              block'' (or
+                       (when original-block
+                         (let [e (db/entity (:db/id block'))]
+                           (if (and (some? (first (:block/_parent e)))
+                                    (not (:block/collapsed? e)))
                           ;; object has children and not collapsed
-                            block'
-                            original-block)))
-                      block')
-             insert-fn (cond
-                         block-self?
-                         insert-new-block-aux!
+                             block'
+                             original-block)))
+                       block')
+              insert-fn (cond
+                          block-self?
+                          insert-new-block-aux!
 
-                         insert-above?
-                         insert-new-block-before-block-aux!
+                          insert-above?
+                          insert-new-block-before-block-aux!
 
-                         :else
-                         insert-new-block-aux!)
-             [sibling? next-block] (insert-fn config block'' value)]
-         (clear-when-saved!)
-         (state/set-state! :editor/next-edit-block {:block next-block
-                                                    :container-id (get-new-container-id :insert {:sibling? sibling?})
-                                                    :pos 0}))))))
+                          :else
+                          insert-new-block-aux!)
+              [result-promise sibling? next-block] (insert-fn config block'' value)]
+          (p/do!
+           result-promise
+           (clear-when-saved!)
+           (let [next-block' (db/entity [:block/uuid (:block/uuid next-block)])
+                 pos 0
+                 unsaved-chars @(:editor/async-unsaved-chars @state/state)
+                 container-id (get-new-container-id :insert {:sibling? sibling?})]
+             (edit-block! next-block' (+ pos (count unsaved-chars))
+                          {:container-id container-id
+                           :custom-content (str unsaved-chars (:block/content next-block'))}))))))
+    (p/finally (fn []
+                 (state/set-state! :editor/async-unsaved-chars nil))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
@@ -751,7 +758,6 @@
   [{:block/keys [uuid] :as _block}]
   (let [block (db/entity [:block/uuid uuid])]
     (when block
-      (state/set-state! :editor/deleting-block uuid)
       (let [blocks (block-handler/get-top-level-blocks [block])]
         (ui-outliner-tx/transact!
          {:outliner-op :delete-blocks}
@@ -850,19 +856,19 @@
                           (delete-block-aux! prev-block)
                           (save-block! repo block new-content {}))
                          (edit-block! (assoc block :block/content new-content) (count (:block/content prev-block))))
-                        (do
-                          (when edit-block-f (edit-block-f))
+                        (p/do!
                           (ui-outliner-tx/transact!
                            transact-opts
                            (when (seq children)
                              (outliner-op/move-blocks! children prev-block false))
                            (delete-block-aux! block)
-                           (save-block! repo prev-block new-content {})))))
+                           (save-block! repo prev-block new-content {}))
+                          (when edit-block-f (edit-block-f)))))
 
                     :else
-                    (do
-                      (when edit-block-f (edit-block-f))
-                      (delete-block-aux! block))))))))))))
+                    (p/do!
+                      (delete-block-aux! block)
+                      (when edit-block-f (edit-block-f)))))))))))))
 
 (defn delete-block!
   [repo]
@@ -2456,7 +2462,6 @@
   (when-not (auto-complete?)
     (let [{:keys [block config]} (get-state)]
       (when block
-        (state/set-state! :editor/async-unsaved-chars "")
         (let [block (db/entity (:db/id block))
               input (state/get-input)
               config (assoc config :keydown-new-block true)
@@ -2477,8 +2482,8 @@
                     (thingatpt/properties-at-point input))
                   (when (thingatpt/get-setting :list?)
                     (and (not (cursor/beginning-of-line? input))
-                         (thingatpt/list-item-at-point input))))
-              op (cond
+                         (thingatpt/list-item-at-point input))))]
+          (cond
                    thing-at-point
                    (case (:type thing-at-point)
                      "markup" (let [right-bound (:bounds thing-at-point)]
@@ -2514,15 +2519,7 @@
                    (indent-outdent false)
 
                    :else
-                   (do
-                     (profile
-                      "Insert block"
-                      (ui-outliner-tx/transact!
-                       {:outliner-op :insert-blocks}
-                       (insert-new-block! state)))
-                     :insert-new-block))]
-          (when-not (= op :insert-new-block)
-            (state/set-state! :editor/async-unsaved-chars nil)))))))
+                   (insert-new-block! state)))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"
