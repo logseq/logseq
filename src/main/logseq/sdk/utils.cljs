@@ -6,27 +6,32 @@
             [goog.object :as gobj]
             [cljs-bean.core :as bean]))
 
-(defn- entity? [e]
-  (when e (instance? de/Entity e)))
+(defn- entity->map
+  "Convert a db Entity to a map"
+  [e]
+  (assert (de/entity? e))
+  (assoc (into {} e) :db/id (:db/id e)))
 
 (defn normalize-keyword-for-json
   ([input] (normalize-keyword-for-json input true))
   ([input camel-case?]
    (when input
      (let [input (cond
-                   (entity? input) (into {} input)
-                   (sequential? input) (map #(if (entity? %) (into {} %) %) input)
+                   (de/entity? input) (entity->map input)
+                   (sequential? input) (map #(if (de/entity? %)
+                                               (entity->map %)
+                                               %) input)
                    :else input)]
        (walk/postwalk
-         (fn [a]
-           (cond
-             (keyword? a)
-             (cond-> (name a)
-               camel-case?
-               (csk/->camelCase))
+        (fn [a]
+          (cond
+            (keyword? a)
+            (cond-> (name a)
+              camel-case?
+              (csk/->camelCase))
 
-             (uuid? a) (str a)
-             :else a)) input)))))
+            (uuid? a) (str a)
+            :else a)) input)))))
 
 (defn uuid-or-throw-error
   [s]
