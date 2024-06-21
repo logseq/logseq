@@ -63,7 +63,7 @@
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]} (rum/react *detail-info)]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (if online? "Online" "Offline")]
-     [:div [:span.font-medium.mr-1 pending-local-ops] "pending local changes"]
+     [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] "pending local changes"]
      ;; FIXME: pending-server-ops
      [:div [:span.font-medium.mr-1 (or pending-server-ops 0)] "pending server changes"]
      ;; FIXME: What's the type for downloaded log?
@@ -72,7 +72,7 @@
          [:div.text-sm "Last synced time: "
           (.toLocaleString time)]))
      [:a.fade-link.text-sm {:on-click #(swap! *expand-debug? not)}
-        "More debug info"]
+      "More debug info"]
      (when @*expand-debug?
        [:div.rtc-info-debug
         [:pre.select-text
