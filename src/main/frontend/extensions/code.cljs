@@ -558,11 +558,13 @@
   ;; command is run. It's not elegant... open to suggestions for how to fix it!
   (let [block (state/get-edit-block)
         block-uuid (:block/uuid block)]
-    (state/clear-edit!)
-    (js/setTimeout
-     (fn []
-       (let [block-node (util/get-first-block-by-id block-uuid)
-             textarea-ref (.querySelector block-node "textarea")]
-         (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
-           (.focus codemirror-ref))))
-     256)))
+    (p/do!
+     (state/pub-event! [:editor/save-current-block])
+     (state/clear-edit!)
+     (js/setTimeout
+      (fn []
+        (let [block-node (util/get-first-block-by-id block-uuid)
+              textarea-ref (.querySelector block-node "textarea")]
+          (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
+            (.focus codemirror-ref))))
+      256))))
