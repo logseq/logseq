@@ -25,8 +25,9 @@
                                   (->
                                    (assoc m
                                           :block/level level
-                                          :block/children children)
-                                   (dissoc :block/parent :block/tx-id))))
+                                          :block/children children
+                                          :block/parent {:db/id (:db/id parent)})
+                                   (dissoc :block/tx-id))))
                               (sort-fn parent)))]
     (block-children root-id 1)))
 
@@ -62,9 +63,10 @@
       (let [result (blocks->vec-tree-aux repo db blocks root)]
         (if page?
           result
-           ;; include root block
+          ;; include root block
           (let [root-block (some #(when (= (:db/id %) (:db/id root)) %) blocks)
-                root-block (assoc root-block :block/children result)]
+                root-block (-> (assoc root-block :block/children result)
+                               (dissoc :block/tx-id))]
             [root-block]))))))
 
 (defn- tree [parent->children root default-level]
