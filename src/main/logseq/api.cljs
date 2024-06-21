@@ -13,7 +13,6 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
-            [frontend.components.plugins :as plugins]
             [frontend.config :as config]
             [frontend.handler.config :as config-handler]
             [frontend.handler.recent :as recent-handler]
