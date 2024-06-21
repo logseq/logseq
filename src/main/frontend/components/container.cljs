@@ -894,9 +894,9 @@
                          (not (or (.-ctrlKey e) (.-metaKey e) (.-altKey e)))
                          (not (util/input? (.-target e)))
                          (not (seq @jump-handler/*jump-data))
-                         (not= (shui-dialog/get-last-modal-id) :property-dialog)
                          (not @(:editor/latest-shortcut @state/state))
-                         (not (state/editing?)))
+                         (not (state/editing?))
+                         (seq (state/get-selection-blocks)))
                         (let [shift? (.-shiftKey e)
                               shortcut (if shift? (str "shift+" (.-key e)) (.-key e))]
                           (db-property-handler/set-property-by-shortcut! shortcut)))
