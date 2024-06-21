@@ -357,8 +357,10 @@
   (state/set-modal! capacitor-fs/instruction {:id :instruction
                                               :label "instruction__cp"}))
 
-(defmethod handle :modal/show-themes-modal [_]
-  (plugin/open-select-theme!))
+(defmethod handle :modal/show-themes-modal [[_ classic?]]
+  (if classic?
+    (plugin/open-select-theme!)
+    (route-handler/go-to-search! :themes)))
 
 (defmethod handle :modal/toggle-accent-colors-modal [_]
   (let [label "accent-colors-picker"]
