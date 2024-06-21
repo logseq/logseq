@@ -193,6 +193,7 @@
   (when-not config/publishing?
     (p/do!
      (state/pub-event! [:editor/save-code-editor])
+     (state/clear-edit! {:clear-editing-block? false})
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
              db-graph? (config/db-based-graph? repo)
