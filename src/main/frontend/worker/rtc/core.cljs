@@ -4,7 +4,7 @@
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
-            [frontend.worker.rtc.log :as rtc-log]
+            [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
@@ -146,7 +146,7 @@
         started-dfv         (m/dfv)
         add-log-fn          (fn [type message]
                               (assert (map? message) message)
-                              (rtc-log/rtc-log type (assoc message :graph-uuid graph-uuid)))
+                              (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
         {:keys [*current-ws get-ws-create-task]}
         (new-task--get-ws-create--memoized ws-url)
         get-ws-create-task  (r.client/ensure-register-graph-updates
@@ -169,7 +169,7 @@
            (let [event (m/?> mixed-flow)]
              (case (:type event)
                :remote-update
-               (try (r.remote-update/apply-remote-update repo conn date-formatter event add-log-fn)
+               (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
                     (catch :default e
                       (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
                         (m/? (r.client/new-task--pull-remote-data
@@ -291,17 +291,20 @@
           (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock)
             (m/?<
              (m/latest
-              (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count]
+              (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
                 {:graph-uuid graph-uuid
                  :user-uuid user-uuid
                  :unpushed-block-update-count pending-local-ops-count
-                 :local-tx (op-mem-layer/get-local-tx repo)
+                 :local-tx local-tx
+                 :remote-tx remote-tx
                  :rtc-state rtc-state
                  :rtc-lock rtc-lock
                  :auto-push? rtc-auto-push?
                  :online-users online-users})
               rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock) (m/watch *online-users)
-              (op-mem-layer/create-pending-ops-count-flow repo))))
+              (op-mem-layer/create-pending-ops-count-flow repo)
+              (rtc-log-and-state/create-local-t-flow graph-uuid)
+              (rtc-log-and-state/create-remote-t-flow graph-uuid))))
           (catch Cancelled _))))))
 
 (defn new-task--get-debug-state

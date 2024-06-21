@@ -5,9 +5,9 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [frontend.schema-register :as sr]
-            [logseq.outliner.batch-tx :as batch-tx]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
@@ -16,6 +16,7 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property.util :as db-property-util]
             [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [logseq.outliner.batch-tx :as batch-tx]
             [logseq.outliner.core :as outliner-core]
             [logseq.outliner.transaction :as outliner-tx]))
 
@@ -520,7 +521,7 @@
 
 (defn apply-remote-update
   "Apply remote-update(`remote-update-event`)"
-  [repo conn date-formatter remote-update-event add-log-fn]
+  [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
   (let [remote-update-data (:value remote-update-event)]
     (assert (rtc-const/data-from-ws-validator remote-update-data) remote-update-data)
     (let [remote-t (:t remote-update-data)
@@ -563,7 +564,9 @@
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           (js/console.groupEnd)
 
-          (op-mem-layer/update-local-tx! repo remote-t))
+          (op-mem-layer/update-local-tx! repo remote-t)
+          (rtc-log-and-state/update-local-t graph-uuid remote-t)
+          (rtc-log-and-state/update-remote-t graph-uuid remote-t))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before
                                              :local-t local-tx}))))))
