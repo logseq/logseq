@@ -6,10 +6,7 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.model :as model]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]
-            [frontend.util :as util]
-            [logseq.db :as ldb]))
+            [frontend.util.cursor :as cursor]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
