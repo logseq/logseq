@@ -71,6 +71,11 @@
                 :else [:block/name (util/page-name-sanity-lc id-or-name)])]
       (db-async/<pull (state/get-current-repo) eid))))
 
+(defn- db-graph?
+  []
+  (some-> (state/get-current-repo)
+    (config/db-based-graph?)))
+
 ;; helpers
 (defn ^:export install-plugin-hook
   [pid hook ^js opts]
@@ -146,15 +151,21 @@
 
 (def ^:export get_current_graph_favorites
   (fn []
-    (some->> (:favorites (state/get-config))
-             (remove string/blank?)
-             (filter string?)
-             (bean/->js))))
+    (if (db-graph?)
+      (-> (page-handler/get-favorites)
+        (p/then #(-> % (sdk-utils/normalize-keyword-for-json) (bean/->js))))
+      (some->> (:favorites (state/get-config))
+        (remove string/blank?)
+        (filter string?)
+        (bean/->js)))))
 
 (def ^:export get_current_graph_recent
   (fn []
     (some->> (recent-handler/get-recent-pages)
-             (bean/->js))))
+      (map #(db-utils/entity (:db/id %)))
+      (remove nil?)
+      (sdk-utils/normalize-keyword-for-json)
+      (bean/->js))))
 
 (def ^:export get_current_graph_templates
   (fn []
@@ -171,6 +182,8 @@
         (bean/->js {:url  repo
                     :name (util/node-path.basename repo)
                     :path (config/get-repo-dir repo)})))))
+
+(def ^:export check_current_is_db_graph db-graph?)
 
 (def ^:export show_themes
   (fn []

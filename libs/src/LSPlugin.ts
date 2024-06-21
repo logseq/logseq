@@ -452,10 +452,11 @@ export interface IAppProxy {
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
+  checkCurrentIsDbGraph: () => Promise<Boolean>
   getCurrentGraphConfigs: (...keys: string[]) => Promise<any>
   setCurrentGraphConfigs: (configs: {}) => Promise<void>
-  getCurrentGraphFavorites: () => Promise<Array<string> | null>
-  getCurrentGraphRecent: () => Promise<Array<string> | null>
+  getCurrentGraphFavorites: () => Promise<Array<string | PageEntity> | null>
+  getCurrentGraphRecent: () => Promise<Array<string | PageEntity> | null>
   getCurrentGraphTemplates: () => Promise<Record<string, BlockEntity> | null>
 
   // router
