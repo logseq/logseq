@@ -26,7 +26,7 @@
                                    (assoc m
                                           :block/level level
                                           :block/children children
-                                          :block/parent {:db/id (:db/id parent)})
+                                          :block/parent {:db/id parent})
                                    (dissoc :block/tx-id))))
                               (sort-fn parent)))]
     (block-children root-id 1)))
