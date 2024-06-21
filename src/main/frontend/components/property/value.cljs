@@ -851,7 +851,8 @@
          (values-cp toggle-fn)]))))
 
 (rum/defcs property-value < rum/reactive
-  [state block property v opts]
+  [state block property v {:keys [show-tooltip?]
+                           :as opts}]
   (ui/catch-error
    (ui/block-error "Something wrong" {})
    (let [block-cp (state/get-component :block/blocks-container)
@@ -876,22 +877,30 @@
              (first v)
              :else
              v)
-         closed-values? (seq (:property/closed-values property))]
-     [:div.property-value-inner
-      {:data-type type
-       :class (str (when empty-value? "empty-value")
-                   (when-not (:other-position? opts) " w-full"))}
-      (cond
-        (and multiple-values? (= type :default) (not closed-values?))
-        (property-normal-block-value block property v
-                                     (assoc opts :id (str (:db/id block) "-" (:db/id property))))
+         closed-values? (seq (:property/closed-values property))
+         value-cp [:div.property-value-inner
+                   {:data-type type
+                    :class (str (when empty-value? "empty-value")
+                                (when-not (:other-position? opts) " w-full"))}
+                   (cond
+                     (and multiple-values? (= type :default) (not closed-values?))
+                     (property-normal-block-value block property v
+                                                  (assoc opts :id (str (:db/id block) "-" (:db/id property))))
 
-        multiple-values?
-        (multiple-values block property v opts schema)
+                     multiple-values?
+                     (multiple-values block property v opts schema)
 
-        :else
-        (property-scalar-value block property v
-                               (merge
-                                opts
-                                {:editor-id editor-id
-                                 :dom-id dom-id})))])))
+                     :else
+                     (property-scalar-value block property v
+                                            (merge
+                                             opts
+                                             {:editor-id editor-id
+                                              :dom-id dom-id})))]]
+     (if show-tooltip?
+       (shui/tooltip-provider
+        (shui/tooltip
+         (shui/tooltip-trigger
+          value-cp)
+         (shui/tooltip-content
+          (str "Change " (:block/original-name property)))))
+       value-cp))))
