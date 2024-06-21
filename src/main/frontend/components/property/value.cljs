@@ -898,9 +898,10 @@
                                               :dom-id dom-id})))]]
      (if show-tooltip?
        (shui/tooltip-provider
-        (shui/tooltip
-         (shui/tooltip-trigger
-          value-cp)
-         (shui/tooltip-content
-          (str "Change " (:block/original-name property)))))
+         (shui/tooltip
+           {:delayDuration 1200}
+           (shui/tooltip-trigger
+             {:onFocusCapture #(util/stop-propagation %)} value-cp)
+           (shui/tooltip-content
+             (str "Change " (:block/original-name property)))))
        value-cp))))

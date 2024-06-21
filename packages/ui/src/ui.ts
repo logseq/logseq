@@ -83,7 +83,7 @@ import {
   AlertDialogPortal, AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, TooltipPortal } from '@/components/ui/tooltip'
 import { TooltipArrow } from '@radix-ui/react-tooltip'
 import { Link } from '@/components/ui/link'
 import { Separator } from '@/components/ui/separator'
@@ -182,7 +182,7 @@ const shadui = {
   AlertDialogAction,
   AlertDialogCancel,
   Tooltip, TooltipTrigger, TooltipArrow,
-  TooltipContent, TooltipProvider,
+  TooltipContent, TooltipProvider, TooltipPortal,
   Toggle, ToggleGroup, ToggleGroupItem,
   Avatar, AvatarImage, AvatarFallback
 }
