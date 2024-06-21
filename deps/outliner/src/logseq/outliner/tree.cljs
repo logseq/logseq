@@ -22,9 +22,11 @@
                                 (let [id (:db/id m)
                                       children (-> (block-children id (inc level))
                                                    (ldb/sort-by-order))]
-                                  (assoc m
-                                         :block/level level
-                                         :block/children children)))
+                                  (->
+                                   (assoc m
+                                          :block/level level
+                                          :block/children children)
+                                   (dissoc :block/parent :block/tx-id))))
                               (sort-fn parent)))]
     (block-children root-id 1)))
 

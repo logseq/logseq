@@ -108,17 +108,17 @@
                      (db-utils/pull id-or-uuid)
                      (and id-or-uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error id-or-uuid))))]
     (when (or (true? (some-> opts (.-includePage)))
-            (not (contains? block :block/name)))
+              (not (contains? block :block/name)))
       (when-let [uuid (:block/uuid block)]
         (let [{:keys [includeChildren]} (bean/->clj opts)
               repo (state/get-current-repo)
               block (if includeChildren
                       ;; nested children results
-                      (first (outliner-tree/blocks->vec-tree
-                               (db-model/get-block-and-children repo uuid) uuid))
+                      (let [blocks (db-model/get-block-and-children repo uuid)]
+                        (first (outliner-tree/blocks->vec-tree blocks uuid)))
                       ;; attached shallow children
                       (assoc block :block/children
-                        (map #(list :uuid (:block/uuid %))
-                          (db/get-block-immediate-children repo uuid))))
+                             (map #(list :uuid (:block/uuid %))
+                                  (db/get-block-immediate-children repo uuid))))
               block (into-properties repo block)]
           (bean/->js (sdk-utils/normalize-keyword-for-json block)))))))
