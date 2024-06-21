@@ -19,6 +19,7 @@
   (atom {:pending-local-ops 0
          :graph-uuid nil
          :local-tx nil
+         :remote-tx nil
          :rtc-state :open
          :download-logs nil
          :upload-logs nil
@@ -47,6 +48,7 @@
                                         :pending-local-ops (:unpushed-block-update-count state)
                                         :graph-uuid (:graph-uuid state)
                                         :local-tx (:local-tx state)
+                                        :remote-tx (:remote-tx state)
                                         :rtc-state (if (:rtc-lock state) :open :close)))
                                rtc-flows/rtc-state-flow))
                     ::update-detail-info)]
@@ -57,7 +59,8 @@
   (rum/local false ::expand-debug-info?)
   [state online?]
   (let [*expand-debug? (::expand-debug-info? state)
-        {:keys [graph-uuid local-tx rtc-state download-logs upload-logs misc-logs pending-local-ops pending-server-ops]} (rum/react *detail-info)]
+        {:keys [graph-uuid local-tx remote-tx rtc-state
+                download-logs upload-logs misc-logs pending-local-ops pending-server-ops]} (rum/react *detail-info)]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (if online? "Online" "Offline")]
      [:div [:span.font-medium.mr-1 pending-local-ops] "pending local changes"]
@@ -79,6 +82,7 @@
                misc-logs (assoc :misc misc-logs)
                graph-uuid (assoc :graph-uuid graph-uuid)
                local-tx (assoc :local-tx local-tx)
+               remote-tx (assoc :remote-tx remote-tx)
                rtc-state (assoc :rtc-state rtc-state))
              (fipp/pprint {:width 20})
              with-out-str)]])]))

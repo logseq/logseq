@@ -6,6 +6,7 @@
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
+            [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton :as r.skeleton]
@@ -17,11 +18,12 @@
   [get-ws-create-task graph-uuid repo]
   (m/sp
     (try
-      (let [{:keys [t]}
+      (let [{remote-t :t}
             (m/? (ws-util/send&recv get-ws-create-task {:action "register-graph-updates"
                                                         :graph-uuid graph-uuid}))]
+        (rtc-log-and-state/update-remote-t graph-uuid remote-t)
         (when-not (op-mem-layer/get-local-tx repo)
-          (op-mem-layer/update-local-tx! repo t)))
+          (op-mem-layer/update-local-tx! repo remote-t)))
       (catch :default e
         (if (= :rtc.exception/remote-graph-not-ready (:type (ex-data e)))
           (throw (ex-info "remote graph is still creating" {:missionary/retry true} e))
@@ -367,7 +369,7 @@
             (do (assert (pos? (:t r)) r)
                 (op-mem-layer/commit! repo)
                 (r.remote-update/apply-remote-update
-                 repo conn date-formatter {:type :remote-update :value r} add-log-fn)
+                 graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
                 (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)})))))
       (op-mem-layer/rollback! repo))))
 
@@ -387,6 +389,6 @@
               (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
         (do (assert (pos? (:t r)) r)
             (r.remote-update/apply-remote-update
-             repo conn date-formatter {:type :remote-update :value r} add-log-fn)
+             graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
             (add-log-fn :rtc.log/push-local-update {:sub-type :pull-remote-data
                                                     :remote-t (:t r) :local-t local-tx}))))))
