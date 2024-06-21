@@ -2,7 +2,8 @@
   "Provides tree fns and INode protocol"
   (:require [logseq.db :as ldb]
             [logseq.db.frontend.property.util :as db-property-util]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [datascript.impl.entity :as de]))
 
 (defprotocol INode
   (-save [this txs-state conn repo date-formatter opts])
@@ -50,7 +51,10 @@
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."
   [repo db blocks root-id]
-  (let [[page? root] (get-root-and-page db root-id)]
+  (let [blocks (map (fn [b] (if (de/entity? b)
+                              (assoc (into {} b) :db/id (:db/id b))
+                              b)) blocks)
+        [page? root] (get-root-and-page db root-id)]
     (if-not root ; custom query
       blocks
       (let [result (blocks->vec-tree-aux repo db blocks root)]
