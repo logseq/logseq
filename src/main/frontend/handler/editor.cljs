@@ -372,7 +372,7 @@
         (state/set-edit-content! edit-input-id new-content)))
     (let [sibling? (not= (:db/id left-or-parent) (:db/id (:block/parent block)))
           result (outliner-insert-block! config left-or-parent prev-block {:sibling? sibling?
-                                                                :keep-uuid? true})]
+                                                                           :keep-uuid? true})]
       [result sibling? prev-block])))
 
 (defn insert-new-block-aux!
@@ -392,11 +392,10 @@
         next-block (-> (merge (select-keys block [:block/parent :block/format :block/page])
                               new-m)
                        (wrap-parse-block))
-        sibling? (or (:block/collapsed? (:block/link block)) (when block-self? false))]
-    (util/set-change-value input fst-block-text)
-    (let [result (outliner-insert-block! config current-block next-block {:sibling? sibling?
+        sibling? (or (:block/collapsed? (:block/link block)) (when block-self? false))
+        result (outliner-insert-block! config current-block next-block {:sibling? sibling?
                                                                           :keep-uuid? true})]
-      [result sibling? (assoc next-block :block/content snd-block-text)])))
+    [result sibling? next-block]))
 
 (defn clear-when-saved!
   []
@@ -1855,24 +1854,25 @@
 
 (defonce *auto-save-timeout (atom nil))
 (defn edit-box-on-change!
-  [e _block id]
-  (let [value (util/evalue e)
-        repo (state/get-current-repo)]
-    (state/set-edit-content! id value false)
-    (when @*auto-save-timeout
-      (js/clearTimeout @*auto-save-timeout))
-    (block-handler/mark-last-input-time! repo)
-    (reset! *auto-save-timeout
-            (js/setTimeout
-             (fn []
-               (when (and (state/input-idle? repo :diff 450)
+  [e block id]
+  (when (= (:db/id block) (:db/id (state/get-edit-block)))
+    (let [value (util/evalue e)
+          repo (state/get-current-repo)]
+      (state/set-edit-content! id value false)
+      (when @*auto-save-timeout
+        (js/clearTimeout @*auto-save-timeout))
+      (block-handler/mark-last-input-time! repo)
+      (reset! *auto-save-timeout
+              (js/setTimeout
+               (fn []
+                 (when (and (state/input-idle? repo :diff 450)
                           ;; don't auto-save block if it has tags
-                          (not (and
-                                (config/db-based-graph? repo)
-                                (re-find #"#\S+" value))))
+                            (not (and
+                                  (config/db-based-graph? repo)
+                                  (re-find #"#\S+" value))))
                  ; don't auto-save for page's properties block
-                 (save-current-block! {:skip-properties? true})))
-             450))))
+                   (save-current-block! {:skip-properties? true})))
+               450)))))
 
 (defn- start-of-new-word?
   [input pos]
