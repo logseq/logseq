@@ -187,7 +187,7 @@
 
 (def ^:export show_themes
   (fn []
-    (plugins/open-select-theme!)))
+    (state/pub-event! [:modal/show-themes-modal])))
 
 (def ^:export set_theme_mode
   (fn [mode]

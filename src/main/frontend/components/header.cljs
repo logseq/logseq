@@ -135,7 +135,7 @@
 
                    (when config/lsp-enabled?
                      {:title (t :themes)
-                      :options {:on-click #(plugins/open-select-theme!)}
+                      :options {:on-click #(plugin-handler/show-themes-modal!)}
                       :icon (ui/icon "palette")})
 
                    (when current-repo

@@ -589,8 +589,8 @@
         (fs/unlink! repo path nil)))))
 
 (defn show-themes-modal!
-  []
-  (state/pub-event! [:modal/show-themes-modal]))
+  ([] (show-themes-modal! false))
+  ([classic?] (state/pub-event! [:modal/show-themes-modal classic?])))
 
 (defn goto-plugins-dashboard!
   []

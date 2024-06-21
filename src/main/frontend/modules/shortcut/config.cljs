@@ -523,7 +523,7 @@
                                              :fn      ui-handler/toggle-wide-mode!}
 
    :ui/select-theme-color                   {:binding "t i"
-                                             :fn      plugin-handler/show-themes-modal!}
+                                             :fn      #(plugin-handler/show-themes-modal! true)}
 
    :ui/goto-plugins                         {:binding  "t p"
                                              :inactive (not config/lsp-enabled?)
