@@ -40,6 +40,7 @@
 
 (def tooltip (util/lsui-wrap "Tooltip"))
 (def tooltip-trigger (util/lsui-wrap "TooltipTrigger"))
+(def tooltip-portal (util/lsui-wrap "TooltipPortal"))
 (def tooltip-content (util/lsui-wrap "TooltipContent"))
 (def tooltip-provider (util/lsui-wrap "TooltipProvider"))
 
