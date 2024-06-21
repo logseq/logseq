@@ -820,7 +820,11 @@
 #?(:cljs
    (defn copy-to-clipboard!
      [text & {:keys [graph html blocks owner-window]}]
-     (let [blocks (map (fn [block] (if (de/entity? block) (into {} block) block)) blocks)
+     (let [blocks (map (fn [block] (if (de/entity? block)
+                                     (-> (into {} block)
+                                         ;; FIXME: why :db/id is not included?
+                                         (assoc :db/id (:db/id block)))
+                                     block)) blocks)
            data (clj->js
                  (common-util/remove-nils-non-nested
                   {:text text
