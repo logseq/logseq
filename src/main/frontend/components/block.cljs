@@ -2303,20 +2303,20 @@
                      :inline-text inline-text
                      :other-position? true})]
     (when (seq properties)
-      (case position
-        :block-below
-        [:div.positioned-properties.flex.flex-row.gap-2.item-center.ml-2.pl-8.flex-wrap.text-sm.overflow-x-hidden.max-h-6
-         (for [pid properties]
-           (let [property (db/entity pid)
-                 v (get block pid)]
-             [:div.flex.flex-row.items-center.gap-1.px-1.hover:bg-secondary.rounded
-              [:div.flex.flex-row.opacity-50.hover:opacity-100
-               (property-component/property-key block property opts)
-               [:div.select-none ":"]]
-              (pv/property-value block property v opts)]))]
-        [:div.positioned-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
-         (for [pid properties]
-           (when-let [property (db/entity pid)]
+       (case position
+         :block-below
+         [:div.positioned-properties.flex.flex-row.gap-2.item-center.ml-2.pl-8.flex-wrap.text-sm.overflow-x-hidden.max-h-6
+          (for [pid properties]
+            (let [property (db/entity pid)
+                  v (get block pid)]
+              [:div.flex.flex-row.items-center.gap-1.px-1.hover:bg-secondary.rounded
+               [:div.flex.flex-row.opacity-50.hover:opacity-100
+                (property-component/property-key block property opts)
+                [:div.select-none ":"]]
+               (pv/property-value block property v opts)]))]
+         [:div.positioned-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
+          (for [pid properties]
+            (when-let [property (db/entity pid)]
              (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
@@ -3457,21 +3457,22 @@
              (when linked-block
                (str "-" (:block/uuid original-block))))))))
 
-(defn- block-list
+(rum/defc block-list
   [config blocks]
-  (let [first-journal-or-route-page-container? (or
-                                                (:first-journal? config)
-                                                (= :page (get-in config [:data :name])))
+  (let [[r, set-r!] (rum/use-state false)
+        first-journal-or-route-page-container? (or
+                                                 (:first-journal? config)
+                                                 (= :page (get-in config [:data :name])))
         virtualized? (and (not (:block-children? config))
-                          first-journal-or-route-page-container?)
+                       first-journal-or-route-page-container?)
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
                             block (nth blocks idx)]
                         (block-item (assoc config :top? top?)
-                                    block
-                                    {:top? top?
-                                     :bottom? bottom?})))
+                          block
+                          {:top? top?
+                           :bottom? bottom?})))
         virtual-opts (when virtualized?
                        {:custom-scroll-parent (gdom/getElement "main-content-container")
                         :compute-item-key (fn [idx]
@@ -3485,16 +3486,24 @@
                                               bottom? (= (dec (count blocks)) idx)
                                               block (nth blocks idx)]
                                           (block-item (assoc config :top? top?)
-                                                        block
-                                                        {:top? top?
-                                                         :bottom? bottom?})))})]
-    (cond
-      (and virtualized? (seq blocks))
-      (ui/virtualized-list virtual-opts)
-      :else
-      (map-indexed (fn [idx block]
-                     (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
-                   blocks))))
+                                            block
+                                            {:top? top?
+                                             :bottom? bottom?})))})]
+    (rum/use-effect!
+      (fn []
+        (js/setTimeout #(set-r! true) 0))
+      [])
+
+    (when r
+      [:div.blocks-list-wrap
+       {:data-level (or (:level config) 0)}
+       (cond
+         (and virtualized? (seq blocks))
+         (ui/virtualized-list virtual-opts)
+         :else
+         (map-indexed (fn [idx block]
+                        (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
+           blocks))])))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
   [state config blocks]
