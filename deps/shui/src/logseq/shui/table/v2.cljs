@@ -334,7 +334,8 @@
                         (get-in opts [:dynamic-widths col-index]))]
     ;; Whenever the cell changes, we need to calculate new bounds for the given content 
     ;; -innerText is used here to strip out formatting, this may turn out to not work for all given block types
-    (rum/use-layout-effect! #(->> (.. cell-ref -current -innerText) 
+    (rum/use-layout-effect! #(->> (-> (.. cell-ref -current -innerText)
+                                      (str/replace #"\\[^\s]+" " "))
                                   (count) 
                                   (handle-cell-width-change col-index))
                             [cell])
