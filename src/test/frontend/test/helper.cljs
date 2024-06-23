@@ -44,11 +44,6 @@
   []
   (conn/destroy-all!))
 
-(defn reset-test-db!
-  [& {:as opts}]
-  (destroy-test-db!)
-  (start-test-db! opts))
-
 (defn- parse-property-value [value]
   (if-let [refs (seq (map #(or (second %) (get % 2))
                           (re-seq #"#(\S+)|\[\[(.*?)\]\]" value)))]
