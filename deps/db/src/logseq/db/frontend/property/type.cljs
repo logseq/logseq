@@ -16,7 +16,7 @@
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :number :date :checkbox :url :page :object :template])
+  [:default :number :date :checkbox :url :page :object])
 
 (def closed-value-property-types
   "Valid property :type for closed values"
@@ -38,7 +38,7 @@
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
   :property.value/content or block/content"
-  (into #{:default :template}
+  (into #{:default}
         original-value-ref-property-types))
 
 (def ref-property-types
@@ -60,7 +60,6 @@
                :url #{:cardinality}
                :page #{:cardinality :classes}
                :object #{:cardinality :classes}
-               :template #{:classes}
                :checkbox #{}}))
 
 (assert (= (set user-built-in-property-types) (set (keys user-built-in-allowed-schema-attributes)))
@@ -149,10 +148,6 @@
    :object   [:fn
               {:error/message "should be a page/block with tags"}
               object-entity?]
-   ;; TODO: strict check on template
-   :template [:fn
-              {:error/message "should has #template"}
-              entity?]
 
    ;; Internal usage
    ;; ==============
@@ -171,7 +166,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :checkbox :url :number :date :page :object :template :entity})
+  #{:default :checkbox :url :number :date :page :object :entity})
 
 ;; Helper fns
 ;; ==========

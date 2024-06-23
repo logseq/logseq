@@ -62,11 +62,9 @@
                                   (when (fn? on-hide) (on-hide))
                                   (shui/popup-hide! id))
                      classes (model/get-all-classes (state/get-current-repo))
-                     options (cond->> (map (fn [[name id]]
-                                             {:label name :value id})
-                                           classes)
-                               (= :template (get-in property [:block/schema :type]))
-                               (remove (fn [[name _id]] (= name "Root class"))))
+                     options (map (fn [[name id]]
+                                    {:label name :value id})
+                                  classes)
                      opts {:items options
                            :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
                            :dropdown? false
@@ -320,12 +318,6 @@
                  [:label.col-span-2 "Specify classes:"]
                  (class-select property (assoc opts :disabled? disabled?))])
 
-              :template
-              [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-               [:label.col-span-2 "Specify template:"]
-               (class-select property (assoc opts
-                                             :multiple-choices? false
-                                             :disabled? disabled?))]
 
               nil))
 
@@ -445,7 +437,6 @@
                  :url "link"
                  :page "page"
                  :object "topology-star"
-                 :template "template"
                  "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))
@@ -694,7 +685,7 @@
                             (and (coll? v)
                                  (map? (first v))
                                  (:block/page (first v))))
-                        (contains? #{:default :template} type))
+                        (contains? #{:default} type))
             collapsed? (when block? (property-collapsed? block property))
             date? (= type :date)
             checkbox? (= type :checkbox)]

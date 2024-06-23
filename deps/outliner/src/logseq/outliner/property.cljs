@@ -170,19 +170,15 @@
 
 (defn create-property-text-block!
   "Creates a property value block for the given property and value. Adds it to
-  block if given block. Takes options:
-   * `template-id`: which template the new block belongs to"
-  [conn block-id property-id value {:keys [template-id new-block-id]}]
+  block if given block."
+  [conn block-id property-id value {:keys [new-block-id]}]
   (let [property (d/entity @conn property-id)
         block (when block-id (d/entity @conn block-id))]
     (when property
       (let [value' (convert-property-input-string (get-in property [:block/schema :type]) value)
             new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
                               new-block-id
-                              (assoc :block/uuid new-block-id)
-                              (int? template-id)
-                              (assoc :block/tags template-id
-                                     :logseq.property/created-from-template template-id))]
+                              (assoc :block/uuid new-block-id))]
         (ldb/transact! conn [new-value-block] {:outliner-op :insert-blocks})
         (let [property-id (:db/ident property)]
           (when (and property-id block)
@@ -330,7 +326,7 @@
                             {:outliner-op :save-block}))))))))
 
 (defn collapse-expand-block-property!
-  "Notice this works only if the value itself if a block (property type should be either :default or :template)"
+  "Notice this works only if the value itself if a block (property type should be :default)"
   [conn block-id property-id collapse?]
   (let [f (if collapse? :db/add :db/retract)]
     (ldb/transact! conn
