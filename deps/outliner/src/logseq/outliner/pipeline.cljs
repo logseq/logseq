@@ -110,7 +110,7 @@
         truncate-refs-tx (map (fn [m] [:db/retract (:db/id m) :block/path-refs]) refs-tx)]
     (concat truncate-refs-tx refs-tx)))
 
-(defn ref->eid
+(defn- ref->eid
   "ref: entity, map, int, eid"
   [ref]
   (cond
