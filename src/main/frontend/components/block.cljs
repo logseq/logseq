@@ -2323,10 +2323,13 @@
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [repo (state/get-current-repo)
         content (or (:block/original-name block)
-                    (property-util/remove-built-in-properties format content))
+                    (if (config/db-based-graph? (state/get-current-repo))
+                      (:block/content block)
+                      (property-util/remove-built-in-properties format content)))
         {:block/keys [title body] :as block} (if (:block/title block) block
                                                  (merge block (block/parse-title-and-body uuid format pre-block? content)))
         collapsed? (util/collapsed? block)
+        block (assoc block :block/content content)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
@@ -2883,7 +2886,7 @@
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
-        {:block/keys [uuid pre-block? raw-content content]} block
+        {:block/keys [uuid pre-block? content]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
@@ -2982,9 +2985,9 @@
 
       (if whiteboard-block?
         (block-reference {} (str uuid) nil)
-            ;; Not embed self
+        ;; Not embed self
         [:div.flex.flex-col.w-full
-         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? (or raw-content content)))
+         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
                hide-block-refs-count? (and (:embed? config)
                                            (= (:block/uuid block) (:embed-id config)))]
            (block-content-or-editor config block

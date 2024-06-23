@@ -132,9 +132,7 @@
   (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
-                         (p/let [result (if db-tag?
-                                          (editor-handler/get-matched-classes q)
-                                          (editor-handler/<get-matched-pages q))]
+                         (p/let [result (editor-handler/<get-matched-pages q)]
                            (set-matched-pages! result))))
                      [q])
     (let [matched-pages (cond
@@ -150,9 +148,11 @@
                           (empty? matched-pages)
                           (when-not (db/page-exists? q)
                             (if db-tag?
-                              (concat [(str (t :new-class) " " q)]
+                              (concat [(str (t :new-page) " " q)
+                                       (str (t :new-class) " " q)]
                                       matched-pages)
-                              (cons q matched-pages)))
+                              (cons (str (t :new-page) " " q)
+                                    matched-pages)))
 
                           ;; reorder, shortest and starts-with first.
                           :else
