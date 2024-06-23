@@ -12,11 +12,10 @@
   (re-pattern
    (str
     "(?i)"
-    "\\[\\[~\\^"
+    "~\\^"
     "("
     common-util/uuid-pattern
-    ")"
-    "\\]\\]")))
+    ")")))
 
 (defn special-id-ref->page
   "Convert special id ref backs to page name using refs."
@@ -24,12 +23,16 @@
   (reduce
    (fn [content ref]
      (if (:block/name ref)
-       (string/replace content
-                       (str page-ref/left-brackets
-                            page-ref-special-chars
-                            (:block/uuid ref)
-                            page-ref/right-brackets)
-                       (:block/original-name ref))
+       (-> content
+           (string/replace (str page-ref/left-brackets
+                                page-ref-special-chars
+                                (:block/uuid ref)
+                                page-ref/right-brackets)
+                           (:block/original-name ref))
+           (string/replace
+                (str "#" page-ref-special-chars
+                     (:block/uuid ref))
+                (str "#" (:block/original-name ref))))
        content))
    content
    refs))
@@ -38,16 +41,25 @@
   "Convert special id ref backs to page name refs using refs."
   [content* refs]
   (let [content (str content*)]
-    (if (string/includes? content (str page-ref/left-brackets page-ref-special-chars))
+    (if (or (string/includes? content (str page-ref/left-brackets page-ref-special-chars))
+            (string/includes? content (str "#" page-ref-special-chars)))
       (reduce
        (fn [content ref]
          (if (:block/name ref)
-           (string/replace content
-                           (str page-ref/left-brackets
-                                page-ref-special-chars
-                                (:block/uuid ref)
-                                page-ref/right-brackets)
-                           (page-ref/->page-ref (:block/original-name ref)))
+           (-> content
+               ;; Replace page refs
+               (string/replace
+                (str page-ref/left-brackets
+                     page-ref-special-chars
+                     (:block/uuid ref)
+                     page-ref/right-brackets)
+                (page-ref/->page-ref (:block/original-name ref)))
+               ;; Replace tags
+               (string/replace
+                (str "#" page-ref-special-chars
+                     (:block/uuid ref))
+                (str "#" (:block/original-name ref))))
+
            content))
        content
        refs)

@@ -336,7 +336,9 @@
       (fn [chosen e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [class? (and db-based? hashtag?)
+        (let [class? (and db-based? hashtag?
+                          (or (string/includes? chosen (str (t :new-class) " "))
+                              (ldb/class? (db/get-page chosen))))
               chosen (-> chosen
                          (string/replace-first (str (t :new-class) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
@@ -378,7 +380,8 @@
       (fn [chosen e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [page-ref-text (get-page-ref-text chosen)]
+        (let [chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+              page-ref-text (get-page-ref-text chosen')]
           (editor-handler/insert-command! id
                                           page-ref-text
                                           format

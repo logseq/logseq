@@ -102,7 +102,7 @@
                   (fn [tag]
                     (when (:block/uuid tag)
                       (str db-content/page-ref-special-chars (:block/uuid tag))))
-                  (concat (:block/tags result) (:block/tags block)))
+                  (:block/tags (db/entity (:db/id block))))
                  (remove nil?)))))))
 
 (defn save-file!

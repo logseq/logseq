@@ -19,8 +19,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [logseq.db.frontend.order :as db-order]
-            [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.db.frontend.class :as db-class]))
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (def ^:private block-map
   (mu/optional-keys
@@ -205,20 +204,6 @@
     (outliner-pipeline/db-rebuild-block-refs db block)
     (file-rebuild-block-refs repo db date-formatter block)))
 
-(defn- add-tag-types
-  [repo db txs-state new-tags]
-  (when (sqlite-util/db-based-graph? repo)
-    (let [add-tag-type (keep
-                        (fn [t]
-                          (let [eid (outliner-pipeline/ref->eid t)]
-                            (when (and (:block/original-name t) eid)
-                              (db-class/build-new-class
-                               db
-                               {:db/id eid
-                                :block/original-name (:block/original-name t)}))))
-                        new-tags)]
-      (swap! txs-state (fn [txs] (concat txs add-tag-type))))))
-
 (defn- fix-tag-ids
   "Updates :block/tags to reference ids from :block/refs"
   [m]
@@ -251,14 +236,15 @@
                    data)
                   db-based?
                   (dissoc :block/properties))
-          ;; new tags are needed in their original form before being altered
-          new-tags (:block/tags data')
           m* (-> data'
                  (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
                          :block/title :block/body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at
                  fix-tag-ids)
+          m* (if db-based?
+               (dissoc m* :block/tags)
+               m*)
           db @conn
           db-id (:db/id this)
           block-uuid (:block/uuid this)
@@ -266,11 +252,7 @@
           block-entity (d/entity db eid)
           m (cond-> m*
               db-based?
-              (dissoc :block/priority :block/marker :block/properties-order)
-              db-based?
-              (update :block/tags (fn [tags]
-                                    (concat (keep :db/id (:block/tags block-entity))
-                                            (keep outliner-pipeline/ref->eid tags)))))]
+              (dissoc :block/priority :block/marker :block/properties-order))]
       ;; Ensure block UUID never changes
       (let [e (d/entity db db-id)]
         (when (and e block-uuid)
@@ -285,7 +267,7 @@
                   (seq retract-attributes))
           (let [retract-attributes (concat
                                     (if db-based?
-                                      (conj db-schema/db-version-retract-attributes :block/tags)
+                                      db-schema/db-version-retract-attributes
                                       db-schema/retract-attributes)
                                     retract-attributes)]
             (swap! txs-state (fn [txs]
@@ -308,8 +290,6 @@
                              (vec (concat txs other-tx)))))
         (swap! txs-state conj
                (dissoc m :db/other-tx)))
-
-      (add-tag-types repo db txs-state new-tags)
 
       ;; delete heading property for db-based-graphs
       (when (and db-based? (integer? (:logseq.property/heading block-entity))
