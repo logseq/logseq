@@ -11,6 +11,7 @@
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.core :as outliner-core]
             [malli.error :as me]
@@ -125,8 +126,8 @@
             many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
         (when (seq tx-data)
           (ldb/transact! conn tx-data {:outliner-op :update-property
-                                     :property-id (:db/id property)
-                                     :many->one? many->one?}))
+                                       :property-id (:db/id property)
+                                       :many->one? many->one?}))
         property)
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
@@ -134,8 +135,8 @@
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
         (ldb/transact! conn
-                     [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
-                     {:outliner-op :new-property})
+                       [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
+                       {:outliner-op :new-property})
         (d/entity @conn db-ident')))))
 
 (defn- validate-property-value
@@ -173,18 +174,18 @@
   block if given block."
   [conn block-id property-id value {:keys [new-block-id]}]
   (let [property (d/entity @conn property-id)
-        block (when block-id (d/entity @conn block-id))]
-    (when property
-      (let [value' (convert-property-input-string (get-in property [:block/schema :type]) value)
-            new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
-                              new-block-id
-                              (assoc :block/uuid new-block-id))]
-        (ldb/transact! conn [new-value-block] {:outliner-op :insert-blocks})
-        (let [property-id (:db/ident property)]
-          (when (and property-id block)
-            (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
-              (raw-set-block-property! conn block property (get-in property [:block/schema :type]) block-id)))
-          (:block/uuid new-value-block))))))
+        block (when block-id (d/entity @conn block-id))
+        _ (assert (some? property) (str "Property " property-id " doesn't exist yet"))
+        value' (convert-property-input-string (get-in property [:block/schema :type]) value)
+        new-value-block (cond-> (db-property-build/build-property-value-block (or block property) property value')
+                          new-block-id
+                          (assoc :block/uuid new-block-id))]
+    (ldb/transact! conn [new-value-block] {:outliner-op :insert-blocks})
+    (let [property-id (:db/ident property)]
+      (when (and property-id block)
+        (when-let [block-id (:db/id (d/entity @conn [:block/uuid (:block/uuid new-value-block)]))]
+          (raw-set-block-property! conn block property (get-in property [:block/schema :type]) block-id)))
+      (:block/uuid new-value-block))))
 
 (defn- get-property-value-eid
   [db property-id raw-value]
@@ -304,8 +305,8 @@
     (if (contains? db-property/db-attribute-properties property-id)
       (when-let [block (d/entity @conn eid)]
         (ldb/transact! conn
-                     [[:db/retract (:db/id block) property-id]]
-                     {:outliner-op :save-block}))
+                       [[:db/retract (:db/id block) property-id]]
+                       {:outliner-op :save-block}))
       (batch-remove-property! conn [eid] property-id))))
 
 (defn delete-property-value!
@@ -322,16 +323,16 @@
               (prn :debug :tx-data
                    [[:db/retract (:db/id block) property-id property-value]])
               (ldb/transact! conn
-                            [[:db/retract (:db/id block) property-id property-value]]
-                            {:outliner-op :save-block}))))))))
+                             [[:db/retract (:db/id block) property-id property-value]]
+                             {:outliner-op :save-block}))))))))
 
 (defn collapse-expand-block-property!
   "Notice this works only if the value itself if a block (property type should be :default)"
   [conn block-id property-id collapse?]
   (let [f (if collapse? :db/add :db/retract)]
     (ldb/transact! conn
-                 [[f block-id :block/collapsed-properties property-id]]
-                 {:outliner-op :save-block})))
+                   [[f block-id :block/collapsed-properties property-id]]
+                   {:outliner-op :save-block})))
 
 (defn ^:api get-class-parents
   [tags]
@@ -453,7 +454,7 @@
                   (and (= (str resolved-value) (str (or (db-property/closed-value-content b)
                                                         (:block/uuid b))))
                        (not= id (:block/uuid b))))
-                (:property/closed-values property))
+                (entity-plus/lookup-kv-then-entity property :property/closed-values))
 
           ;; Make sure to update frontend.handler.db-based.property-test when updating ex-info message
           (throw (ex-info "Closed value choice already exists"
@@ -475,8 +476,8 @@
 
           :else
           (ldb/transact! conn
-                       (build-closed-value-tx @conn property resolved-value opts)
-                       {:outliner-op :save-block}))))))
+                         (build-closed-value-tx @conn property resolved-value opts)
+                         {:outliner-op :save-block}))))))
 
 (defn add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids"
@@ -494,7 +495,7 @@
                                          (map :db/id values))
                   property-tx (outliner-core/block-with-updated-at {:db/id (:db/id property)})]
               (ldb/transact! conn (cons property-tx value-property-tx)
-                           {:outliner-op :save-blocks}))))))))
+                             {:outliner-op :save-blocks}))))))))
 
 (defn delete-closed-value!
   "Returns true when deleted or if not deleted displays warning and returns false"
@@ -523,8 +524,8 @@
   (when-let [class (d/entity @conn class-id)]
     (if (contains? (:block/type class) "class")
       (ldb/transact! conn
-                   [[:db/add (:db/id class) :class/schema.properties property-id]]
-                   {:outliner-op :save-block})
+                     [[:db/add (:db/id class) :class/schema.properties property-id]]
+                     {:outliner-op :save-block})
       (throw (ex-info "Can't add a property to a block that isn't a class"
                       {:class-id class-id :property-id property-id})))))
 
@@ -535,4 +536,4 @@
       (when-let [property (d/entity @conn property-id)]
         (when-not (ldb/built-in-class-property? class property)
           (ldb/transact! conn [[:db/retract (:db/id class) :class/schema.properties property-id]]
-                       {:outliner-op :save-block}))))))
+                         {:outliner-op :save-block}))))))
