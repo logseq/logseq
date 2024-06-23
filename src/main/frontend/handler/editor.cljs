@@ -2494,42 +2494,42 @@
                     (and (not (cursor/beginning-of-line? input))
                          (thingatpt/list-item-at-point input))))]
           (cond
-                   thing-at-point
-                   (case (:type thing-at-point)
-                     "markup" (let [right-bound (:bounds thing-at-point)]
-                                (cursor/move-cursor-to
-                                 input
-                                 (+ (string/index-of content right-bound pos)
-                                    (count right-bound))))
-                     "admonition-block" (keydown-new-line)
-                     "source-block" (do
-                                      (keydown-new-line)
-                                      (case (:action thing-at-point)
-                                        :into-code-editor
-                                        (state/into-code-editor-mode!)
-                                        nil))
-                     "block-ref" (open-block-in-sidebar! (:link thing-at-point))
-                     "page-ref" (when-not (string/blank? (:link thing-at-point))
-                                  (let [page (:link thing-at-point)
-                                        page-name (db-model/get-redirect-page-name page)]
-                                    (insert-first-page-block-if-not-exists! page-name)))
-                     "list-item" (dwim-in-list)
-                     "properties-drawer" (dwim-in-properties state))
+            thing-at-point
+            (case (:type thing-at-point)
+              "markup" (let [right-bound (:bounds thing-at-point)]
+                         (cursor/move-cursor-to
+                          input
+                          (+ (string/index-of content right-bound pos)
+                             (count right-bound))))
+              "admonition-block" (keydown-new-line)
+              "source-block" (do
+                               (keydown-new-line)
+                               (case (:action thing-at-point)
+                                 :into-code-editor
+                                 (state/into-code-editor-mode!)
+                                 nil))
+              "block-ref" (open-block-in-sidebar! (:link thing-at-point))
+              "page-ref" (when-not (string/blank? (:link thing-at-point))
+                           (let [page (:link thing-at-point)
+                                 page-name (db-model/get-redirect-page-name page)]
+                             (insert-first-page-block-if-not-exists! page-name)))
+              "list-item" (dwim-in-list)
+              "properties-drawer" (dwim-in-properties state))
 
-                   (and (string/blank? content)
-                        (own-order-number-list? block)
-                        (not (some-> (db-model/get-block-parent (:block/uuid block))
-                                     (own-order-number-list?))))
-                   (remove-block-own-order-list-type! block)
+            (and (string/blank? content)
+                 (own-order-number-list? block)
+                 (not (some-> (db-model/get-block-parent (:block/uuid block))
+                              (own-order-number-list?))))
+            (remove-block-own-order-list-type! block)
 
-                   (and
-                    (string/blank? content)
-                    (not has-right?)
-                    (not (last-top-level-child? config block)))
-                   (indent-outdent false)
+            (and
+             (string/blank? content)
+             (not has-right?)
+             (not (last-top-level-child? config block)))
+            (indent-outdent false)
 
-                   :else
-                   (insert-new-block! state)))))))
+            :else
+            (insert-new-block! state)))))))
 
 (defn- inside-of-single-block
   "When we are in a single block wrapper, we should always insert a new line instead of new block"

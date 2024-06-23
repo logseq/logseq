@@ -80,6 +80,7 @@
             page-uuid (:block/uuid page)
             page-txs  (build-page-tx conn properties page (select-keys options [:whiteboard? :class? :tags]))
             first-block-tx (when (and
+                                  (nil? (d/entity @conn [:block/uuid page-uuid]))
                                   create-first-block?
                                   (not (or whiteboard? class?))
                                   page-txs)
