@@ -288,6 +288,7 @@
       ;; only latest rtc-log stored here, when a log stream is needed,
       ;; use missionary to create a rtc-log-flow, use (missionary.core/watch <atom>)
       :rtc/log                               (atom nil)
+      :rtc/recent-updates                    (atom {})
       :rtc/uploading?                        false
       :rtc/downloading-graph-uuid            nil
       :rtc/graphs                            []

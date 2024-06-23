@@ -1043,6 +1043,9 @@
 (defmethod handle :rtc/log [[_ data]]
   (state/set-state! :rtc/log data))
 
+(defmethod handle :rtc/recent-updates [[_ data]]
+  (state/set-state! :rtc/recent-updates data))
+
 (defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid]]
   (->
    (p/do!

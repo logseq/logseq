@@ -1,7 +1,6 @@
 (ns frontend.worker.rtc.log-and-state
   "Fns to generate rtc related logs"
-  (:require [frontend.common.missionary-util :as c.m]
-            [frontend.schema-register :as sr]
+  (:require [frontend.schema-register :as sr]
             [frontend.worker.util :as worker-util]
             [malli.core :as ma]
             [missionary.core :as m]))
@@ -30,21 +29,20 @@
   (reset! *rtc-log (assoc m :type type :created-at (js/Date.)))
   nil)
 
-(def rtc-log-flow (m/watch *rtc-log))
-
-
 ;;; some other states
 
 (def ^:private graph-uuid->t-schema
   [:map-of :uuid :int])
-(def ^:private graph-uuid->t-validator (ma/validator graph-uuid->t-schema))
-(def ^:private graph-uuid->t-validator* (fn [v] (if (graph-uuid->t-validator v)
-                                                  true
-                                                  (do (prn :debug-graph-uuid->t-validator v)
-                                                      false))))
 
-(def *graph-uuid->local-t (atom {} :validator graph-uuid->t-validator*))
-(def *graph-uuid->remote-t (atom {} :validator graph-uuid->t-validator*))
+(def ^:private graph-uuid->t-validator (let [validator (ma/validator graph-uuid->t-schema)]
+                                         (fn [v]
+                                           (if (validator v)
+                                             true
+                                             (do (prn :debug-graph-uuid->t-validator v)
+                                                 false)))))
+
+(def *graph-uuid->local-t (atom {} :validator graph-uuid->t-validator))
+(def *graph-uuid->remote-t (atom {} :validator graph-uuid->t-validator))
 
 (defn- ensure-uuid
   [v]
@@ -55,16 +53,18 @@
 
 (defn create-local-t-flow
   [graph-uuid]
-  (m/eduction
-   (map (fn [m] (get m (ensure-uuid graph-uuid))))
-   (m/watch *graph-uuid->local-t)))
+  (->> (m/watch *graph-uuid->local-t)
+       (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
+       (m/reductions {} nil)
+       (m/latest identity)))
 
 (defn create-remote-t-flow
   [graph-uuid]
   {:pre [(some? graph-uuid)]}
-  (m/eduction
-   (map (fn [m] (get m (ensure-uuid graph-uuid))))
-   (m/watch *graph-uuid->remote-t)))
+  (->> (m/watch *graph-uuid->remote-t)
+       (m/eduction (keep (fn [m] (get m (ensure-uuid graph-uuid)))))
+       (m/reductions {} nil)
+       (m/latest identity)))
 
 (defn update-local-t
   [graph-uuid local-t]
@@ -74,18 +74,43 @@
   [graph-uuid remote-t]
   (swap! *graph-uuid->remote-t assoc (ensure-uuid graph-uuid) remote-t))
 
+;;; recent-updates flow
+(def graph-uuid->recent-updates-schema
+  [:map-of :uuid ;; graph-uuid
+   [:map-of :uuid ;;user-uuid
+    [:sequential
+     [:cat
+      inst?
+      [:map
+       [:update-block-uuids {:optional true} [:set :uuid]]
+       [:delete-block-uuids {:optional true} [:set :uuid]]]]]]])
+
+(def graph-uuid->recent-updates-validator
+  (let [validator (ma/validator graph-uuid->recent-updates-schema)]
+    (fn [v]
+      (if (validator v)
+        true
+        (do (prn :debug-graph-uuid->recent-updates-validator v)
+            false)))))
+
+(def *graph-uuid->recent-updates (atom {} :validator graph-uuid->recent-updates-validator))
+
+(defn update-recent-updates
+  [graph-uuid recent-updates]
+  (reset! *graph-uuid->recent-updates {(ensure-uuid graph-uuid) recent-updates}))
+
 ;;; subscribe-logs, push to frontend
-(defonce ^:private *last-subscribe-logs-canceler (atom nil))
 (defn- subscribe-logs
   []
-  (when-let [canceler @*last-subscribe-logs-canceler]
-    (canceler)
-    (reset! *last-subscribe-logs-canceler nil))
-  (let [cancel (c.m/run-task
-                (m/reduce
-                 (fn [_ v] (when v (worker-util/post-message :rtc-log v)))
-                 rtc-log-flow)
-                :subscribe-logs)]
-    (reset! *last-subscribe-logs-canceler cancel)
-    nil))
+  (remove-watch *rtc-log :subscribe-logs)
+  (add-watch *rtc-log :subscribe-logs
+             (fn [_ _ _ n] (when n (worker-util/post-message :rtc-log n)))))
 (subscribe-logs)
+
+;;; subscribe-recent-updates, push to frontend
+(defn- subscribe-recent-updates
+  []
+  (remove-watch *graph-uuid->recent-updates :subscribe-recent-updates)
+  (add-watch *graph-uuid->recent-updates :subscribe-recent-updates
+             (fn [_ _ _ n] (when n (worker-util/post-message :rtc-recent-updates n)))))
+(subscribe-recent-updates)
