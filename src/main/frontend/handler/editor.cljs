@@ -813,7 +813,8 @@
       (let [prev-block (db-model/get-prev (db/get-db) (:db/id block-e))
             block-parent-id (str "ls-block-" block-id)]
         (cond
-          (nil? prev-block)
+          (and (nil? prev-block)
+               (nil? (:block/parent block-e)))
           nil
 
           :else
