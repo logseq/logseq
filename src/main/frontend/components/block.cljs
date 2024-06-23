@@ -3459,8 +3459,7 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [[r, set-r!] (rum/use-state false)
-        first-journal-or-route-page-container? (or
+  (let [first-journal-or-route-page-container? (or
                                                  (:first-journal? config)
                                                  (= :page (get-in config [:data :name])))
         virtualized? (and (not (:block-children? config))
@@ -3473,6 +3472,8 @@
                           block
                           {:top? top?
                            :bottom? bottom?})))
+        virtualized? (and virtualized? (seq blocks) (> (count blocks) 50))
+        [ready?, set-ready!] (rum/use-state (not virtualized?))
         virtual-opts (when virtualized?
                        {:custom-scroll-parent (gdom/getElement "main-content-container")
                         :compute-item-key (fn [idx]
@@ -3491,14 +3492,14 @@
                                              :bottom? bottom?})))})]
     (rum/use-effect!
       (fn []
-        (js/setTimeout #(set-r! true) 0))
+        (js/setTimeout #(set-ready! true) 0))
       [])
 
-    (when r
+    (when ready?
       [:div.blocks-list-wrap
        {:data-level (or (:level config) 0)}
        (cond
-         (and virtualized? (seq blocks))
+         virtualized?
          (ui/virtualized-list virtual-opts)
          :else
          (map-indexed (fn [idx block]

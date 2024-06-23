@@ -472,6 +472,14 @@
   (rum/local nil   ::current-page)
   (rum/local false ::hover-title?)
   (rum/local false ::show-page-info?)
+  (rum/local false ::main-ready?)
+  {:did-mount (fn [state]
+                (assoc state ::main-ready-timer
+                  (js/setTimeout #(reset! (::main-ready? state) true) 32)))
+   :will-unmount (fn [state]
+                   (some-> (::main-ready-timer state)
+                     (js/clearTimeout))
+                   state)}
   [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
     (let [current-repo (state/sub :git/current-repo)
@@ -553,35 +561,37 @@
              (page-blocks-cp repo page (merge option {:sidebar? sidebar?
                                                       :whiteboard? whiteboard?}))]])
 
-         [:div {:style {:padding-left 9}}
-          (when today?
-            (today-queries repo today? sidebar?))
+         (when @(::main-ready? state)
+           [:div {:style {:padding-left 9}}
+            (when today?
+              (today-queries repo today? sidebar?))
 
-          (when today?
-            (scheduled/scheduled-and-deadlines page-name))
+            (when today?
+              (scheduled/scheduled-and-deadlines page-name))
 
-          (when-not block?
-            (tagged-pages repo page page-original-name))
+            (when-not block?
+              (tagged-pages repo page page-original-name))
 
-         ;; referenced blocks
-          (when-not block-or-whiteboard?
-            (when (and page (not (false? linked-refs?)))
-              [:div {:key "page-references"}
-               (rum/with-key
-                 (reference/references page)
-                 (str route-page-name "-refs"))]))
+            ;; referenced blocks
+            (when-not block-or-whiteboard?
+              (when (and page (not (false? linked-refs?)))
+                [:div {:key "page-references"}
+                 (rum/with-key
+                   (reference/references page)
+                   (str route-page-name "-refs"))]))
 
-          (when (contains? (:block/type page) "class")
-            (class-component/class-children page))
+            (when (contains? (:block/type page) "class")
+              (class-component/class-children page))
 
-          (when-not block-or-whiteboard?
-            (when (and (not journal?) (not db-based?))
-              (hierarchy/structures route-page-name)))
+            (when-not block-or-whiteboard?
+              (when (and (not journal?) (not db-based?))
+                (hierarchy/structures route-page-name)))
 
-          (when (and (not (false? unlinked-refs?))
-                     (not (or block-or-whiteboard? sidebar? home?)))
-            [:div {:key "page-unlinked-references"}
-             (reference/unlinked-references page)])]]))))
+            (when (and (not (false? unlinked-refs?))
+                    (not (or block-or-whiteboard? sidebar? home?)))
+              [:div {:key "page-unlinked-references"}
+               (reference/unlinked-references page)])])
+         ]))))
 
 (rum/defcs page-aux < rum/reactive db-mixins/query
   {:init (fn [state]
