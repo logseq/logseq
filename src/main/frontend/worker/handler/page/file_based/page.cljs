@@ -106,6 +106,7 @@
                                  (assoc p :block/namespace [:block/uuid (:block/uuid (last txs))])))
                        page-txs)
             first-block-tx (when (and
+                                  (nil? (d/entity @conn [:block/uuid page-uuid]))
                                   create-first-block?
                                   (not whiteboard?)
                                   page-txs)
