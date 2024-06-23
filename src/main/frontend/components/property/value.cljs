@@ -410,20 +410,6 @@
                      :input-opts input-opts)]
     (select-page property opts')))
 
-(defn <create-new-block-from-template!
-  "`template`: tag block"
-  [block property template]
-  (p/let [new-block-id (db/new-block-id)
-          _ (db-property-handler/create-property-text-block!
-             (:db/id block)
-             (:db/id property)
-             ""
-             {:new-block-id new-block-id
-              :template-id (:db/id template)})
-          new-block (db/entity [:block/uuid new-block-id])]
-    (shui/popup-hide!)
-    new-block))
-
 (rum/defcs select < rum/reactive
   {:init (fn [state]
            (let [*values (atom :loading)]
@@ -519,66 +505,35 @@
            (block-container config value-block)))]
       (property-empty-btn-value))))
 
-(rum/defc property-template-value < rum/reactive
-  {:init (fn [state]
-           (when-let [block-id (second (:rum/args state))]
-             (db-async/<get-block (state/get-current-repo) block-id :children? false))
-           state)}
-  [config value opts]
-  (when value
-    (if (state/sub-async-query-loading value)
-      [:div.text-sm.opacity-70 "loading"]
-      (when-let [entity (db/sub-block (:db/id (db/entity [:block/uuid value])))]
-        (let [properties-cp (:properties-cp opts)]
-          (when (and entity properties-cp)
-            [:div.property-block-container.content.property-template
-             (properties-cp config entity (:editor-id config) opts)]))))))
-
-(defn- create-template-block!
-  [block property v-block *template-instance]
-  (when-not @*template-instance
-    (p/let [result (<create-new-block-from-template! block property v-block)]
-      (reset! *template-instance result))))
-
 (rum/defcs property-block-value < rum/reactive
-  (rum/local nil ::template-instance)
   {:init (fn [state]
            (let [block (first (:rum/args state))]
              (when-let [block-id (or (:db/id block) (:block/uuid block))]
                (db-async/<get-block (state/get-current-repo) block-id :children? true)))
            state)}
-  [state value block property opts page-cp editor-id]
-  (let [*template-instance (::template-instance state)
-        template-instance @*template-instance]
-    (when value
-      (if (state/sub-async-query-loading value)
-        [:div.text-sm.opacity-70 "loading"]
-        (if-let [v-block (db/sub-block (:db/id value))]
-          (let [class? (contains? (:block/type v-block) "class")
-                invalid-warning [:div.warning.text-sm
-                                 "Invalid block value, please delete the current property."]]
-            (when v-block
-              (cond
-                (:block/page v-block)
-                (property-normal-block-value block property v-block opts)
-
-                (and class? (seq (:class/schema.properties v-block)))
-                (if template-instance
-                  (property-template-value {:editor-id editor-id}
-                                           (:block/uuid template-instance)
-                                           opts)
-                  (create-template-block! block property v-block *template-instance))
+  [state value block property opts page-cp]
+  (when value
+    (if (state/sub-async-query-loading value)
+      [:div.text-sm.opacity-70 "loading"]
+      (if-let [v-block (db/sub-block (:db/id value))]
+        (let [class? (contains? (:block/type v-block) "class")
+              invalid-warning [:div.warning.text-sm
+                               "Invalid block value, please delete the current property."]]
+          (when v-block
+            (cond
+              (:block/page v-block)
+              (property-normal-block-value block property v-block opts)
 
                 ;; page/class/etc.
-                (:block/name v-block)
-                (rum/with-key
-                  (page-cp {:disable-preview? true
-                            :hide-close-button? true
-                            :tag? class?} v-block)
-                  (:db/id v-block))
-                :else
-                invalid-warning)))
-          (property-empty-btn-value))))))
+              (:block/name v-block)
+              (rum/with-key
+                (page-cp {:disable-preview? true
+                          :hide-close-button? true
+                          :tag? class?} v-block)
+                (:db/id v-block))
+              :else
+              invalid-warning)))
+        (property-empty-btn-value)))))
 
 (rum/defc closed-value-item < rum/reactive
   [value {:keys [inline-text icon?]}]
@@ -695,32 +650,15 @@
          (property-empty-text-value)
          (value-f))))))
 
-(defn- property-editing
-  [block property schema]
-  [:div.flex.flex-1
-   (case (:type schema)
-     :template
-     (when-let [template (first (:property/schema.classes property))]
-       (<create-new-block-from-template! block property template))
-     nil)])
-
 (defn- property-value-inner
   [block property value {:keys [inline-text page-cp
-                                editor-id dom-id row?]
+                                dom-id row?]
                          :as opts}]
   (let [schema (:block/schema property)
         multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
                    (when multiple-values? "property-value-content"))
-        type (:type schema)
-        type (if (= :default type)
-               (or
-                (let [v-block (db/entity value)]
-                  (when (get v-block (pu/get-pid :logseq.property/created-from-template))
-                    :template))
-                type)
-               type)
-        template? (= :template type)]
+        type (:type schema)]
     [:div.cursor-text
      {:id (or dom-id (random-uuid))
       :tabIndex 0
@@ -729,27 +667,15 @@
       :on-click (fn []
                   (when (and (= type :default) (nil? value))
                     (<create-new-block! block property "")))}
-     (if (and (string/blank? value) template?)
-       (when-let [template (first (:property/schema.classes schema))]
-         [:a.fade-link.pointer.text-sm.jtrigger
-          {:on-click (fn [e]
-                       (util/stop e)
-                       (<create-new-block-from-template! block property template))}
-          (str "Use template #" (:block/original-name template))])
-       (cond
-         (= type :template)
-         (property-template-value {:editor-id editor-id}
-                                  value
-                                  opts)
+     (cond
+       (and (= type :default) (nil? (:block/content value)))
+       [:div.jtrigger (property-empty-btn-value)]
 
-         (and (= type :default) (nil? (:block/content value)))
-         [:div.jtrigger (property-empty-btn-value)]
+       (= type :default)
+       (property-block-value value block property opts page-cp)
 
-         (= type :default)
-         (property-block-value value block property opts page-cp editor-id)
-
-         :else
-         (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros)))))]))
+       :else
+       (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
 
 (rum/defcs property-scalar-value < rum/reactive db-mixins/query rum/static
   [state block property value* {:keys [container-id editing? on-chosen]
@@ -792,9 +718,7 @@
                                               (add-property!)))})])
         ;; :others
           [:div.flex.flex-1
-           (if editing?
-             (property-editing block property schema)
-             (property-value-inner block property value opts))])))))
+           (property-value-inner block property value opts)])))))
 
 (rum/defc multiple-values < rum/static
   [block property v {:keys [on-chosen editing?] :as opts} schema]
