@@ -2188,7 +2188,7 @@
             (and meta? shift?)
             (when-not (empty? selection-blocks)
               (util/stop e)
-              (editor-handler/highlight-selection-area! block-id true))
+              (editor-handler/highlight-selection-area! block-id {:append? true}))
 
             meta?
             (do
@@ -2781,7 +2781,7 @@
            (non-dragging? e))
       (when-let [container (gdom/getElement "app-container")]
         (dom/add-class! container "blocks-selection-mode"))
-      (editor-handler/highlight-selection-area! block-id))))
+      (editor-handler/highlight-selection-area! block-id {:append? true}))))
 
 (defn- block-mouse-leave
   [e *control-show? block-id doc-mode?]

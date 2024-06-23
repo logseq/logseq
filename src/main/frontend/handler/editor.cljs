@@ -1228,19 +1228,27 @@
       (delete-block-aux! block))))
 
 (defn highlight-selection-area!
-  ([end-block]
-   (highlight-selection-area! end-block false))
-  ([end-block append?]
-   (when-let [start-block (state/get-selection-start-block-or-first)]
-     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
-           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
-           blocks (if (= :up direction)
-                    (reverse blocks)
-                    blocks)]
-       (if append?
-         (do (state/clear-edit!)
-             (state/conj-selection-block! blocks direction))
-         (state/exit-editing-and-set-selected-blocks! blocks direction))))))
+  [end-block & {:keys [append?]}]
+  (when-let [start-block (state/get-selection-start-block-or-first)]
+    (let [node (gdom/getElement start-block)
+          visible? (and node (util/el-visible-in-viewport? node))
+          selected-blocks (state/get-selection-blocks)
+          latest-visible-block (if visible?
+                                 node
+                                 (or (when-let [node (last selected-blocks)]
+                                       (gdom/getElement (.-id ^js node)))
+                                     (when-let [node (first selected-blocks)]
+                                       (gdom/getElement (.-id ^js node)))))]
+      (when latest-visible-block
+        (let [blocks (util/get-nodes-between-two-nodes latest-visible-block end-block "ls-block")
+              direction (util/get-direction-between-two-nodes latest-visible-block end-block "ls-block")
+              blocks (if (= :up direction)
+                       (reverse blocks)
+                       blocks)]
+          (if append?
+            (do (state/clear-edit!)
+                (state/conj-selection-block! blocks direction))
+            (state/exit-editing-and-set-selected-blocks! blocks direction)))))))
 
 
 (defn- select-block-up-down
