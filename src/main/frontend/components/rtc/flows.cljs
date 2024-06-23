@@ -44,6 +44,5 @@
                                 (concat (get-in latest-updates [graph-uuid k])
                                         (get-in @*buffer [graph-uuid k])))]))
                        latest-keys)}]
-            (prn :debug new-map latest-updates)
             (swap! *buffer merge new-map)
             @*buffer))))))
