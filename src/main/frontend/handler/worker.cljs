@@ -39,6 +39,9 @@
 (defmethod handle :rtc-log [_ _worker log]
   (state/pub-event! [:rtc/log log]))
 
+(defmethod handle :rtc-recent-updates [_ _worker log]
+  (state/pub-event! [:rtc/recent-updates log]))
+
 (defmethod handle :default [_ _worker data]
   (prn :debug "Worker data not handled: " data))
 

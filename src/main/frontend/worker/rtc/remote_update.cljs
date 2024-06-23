@@ -524,10 +524,12 @@
   [graph-uuid repo conn date-formatter remote-update-event add-log-fn]
   (let [remote-update-data (:value remote-update-event)]
     (assert (rtc-const/data-from-ws-validator remote-update-data) remote-update-data)
-    (let [remote-t (:t remote-update-data)
+    (let [recent-updates (:recent-updates remote-update-data)
+          remote-t (:t remote-update-data)
           remote-t-before (:t-before remote-update-data)
           local-tx (op-mem-layer/get-local-tx repo)]
       (rtc-log-and-state/update-remote-t graph-uuid remote-t)
+      (rtc-log-and-state/update-recent-updates graph-uuid recent-updates)
       (cond
         (not (and (pos? remote-t)
                   (pos? remote-t-before)))
