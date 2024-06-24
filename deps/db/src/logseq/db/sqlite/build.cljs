@@ -21,7 +21,8 @@
             [logseq.db.frontend.content :as db-content]
             [malli.core :as m]
             [malli.error :as me]
-            [cljs.pprint :as pprint]))
+            [cljs.pprint :as pprint]
+            [logseq.common.uuid :as common-uuid]))
 
 ;; should match definition in translate-property-value
 (defn page-prop-value?
@@ -458,6 +459,7 @@
                                        (-> (dissoc page :build/journal)
                                            (merge {:block/journal-day date-int
                                                    :block/original-name page-name
+                                                   :block/uuid (common-uuid/gen-uuid date-int)
                                                    :block/type "journal"})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
