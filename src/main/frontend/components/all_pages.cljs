@@ -88,9 +88,9 @@
         [column-visibility set-column-visibility!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
         ^js table (useReactTable #js {:options #js {}
-                                      :columns (clj->js columns)
-                                      :data (clj->js data)
-                                      :state (clj->js
+                                      :columns (->js columns)
+                                      :data (->js data)
+                                      :state (->js
                                               {:sorting sorting
                                                :columnFilters column-filters
                                                :columnVisibility column-visibility
