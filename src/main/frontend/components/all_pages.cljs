@@ -81,24 +81,23 @@
                 (shui/dropdown-menu-item
                  "View payment details")))))}])
 
-(rum/defc all-pages
+(rum/defc all-pages < rum/static
   []
   (let [[sorting set-sorting!] (rum/use-state {})
         [column-filters set-column-filters!] (rum/use-state {})
         [column-visibility set-column-visibility!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
-        ^js table (useReactTable #js {:options #js {}
-                                      :columns (->js columns)
+        ^js table (useReactTable #js {:columns (->js columns)
                                       :data (->js data)
                                       :state (->js
                                               {:sorting sorting
                                                :columnFilters column-filters
                                                :columnVisibility column-visibility
                                                :rowSelection row-selection})
-                                      :getCoreRowModel getCoreRowModel
-                                      :getSortedRowModel getSortedRowModel
-                                      :getFilteredRowModel getFilteredRowModel
-                                      :getPaginationRowModel getPaginationRowModel
+                                      :getCoreRowModel (getCoreRowModel)
+                                      :getSortedRowModel (getSortedRowModel)
+                                      :getFilteredRowModel (getFilteredRowModel)
+                                      :getPaginationRowModel (getPaginationRowModel)
                                       :onSortingChange (fn [new-sorting] (set-sorting! (->clj new-sorting)))
                                       :onColumnFiltersChange (fn [new-filters] (set-column-filters! (->clj new-filters)))
                                       :onColumnVisibilityChange (fn [new-visibility] (set-column-visibility! (->clj new-visibility)))
