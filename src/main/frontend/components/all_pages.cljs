@@ -131,48 +131,44 @@
        (shui/dropdown-menu-content
         {:align "end"}
         (for [^js column (.getAllColumns table)]
-          (rum/with-key
-            (shui/dropdown-menu-checkbox-item
-             {:key (.-id column)
-              :className "capitalize"
-              :checked (.getIsVisible column)
-              :onCheckedChange #(.toggleVisibility column (not %))}
-             (.-id column))
-            (.-id column)))))]
+          (shui/dropdown-menu-checkbox-item
+           {:key (.-id column)
+            :className "capitalize"
+            :checked (.getIsVisible column)
+            :onCheckedChange #(.toggleVisibility column (not %))}
+           (.-id column)))))]
      [:div.rounded-md.border
       (shui/table
        (shui/table-header
         (for [^js headerGroup (.getHeaderGroups table)]
-          (rum/with-key
-            (shui/table-row
-             {:key (.-id headerGroup)}
-             (for [^js header (.-headers headerGroup)]
-               (rum/with-key
-                 (shui/table-head
-                  {:key (.-id header)}
-                  (when-not (.-isPlaceholder header)
-                    (flexRender
-                     (-> header .-column .-columnDef .-header)
-                     (.getContext header))))
-                 (.-id header))))
-            (.-id headerGroup))))
+          (shui/table-row
+           {:key (.-id headerGroup)}
+           (for [^js header (.-headers headerGroup)]
+             (shui/table-head
+              {:key (.-id header)}
+              (when-not (.-isPlaceholder header)
+                (let [result (flexRender
+                              (-> header .-column .-columnDef .-header)
+                              (.getContext header))]
+                  (prn :debug :flexRender-result
+                       :type (type result))
+                  (js/console.dir result)
+                  result)))))))
        (shui/table-body
         (let [^js rows (.-rows (.getRowModel table))]
           (if (pos? (count rows))
             (for [^js row rows]
-              (rum/with-key
-                (shui/table-row
-                 {:key (.-id row)
-                  :data-state (when (.getIsSelected row) "selected")}
-                 (for [^js cell (.getVisibleCells row)]
-                   (rum/with-key
-                     (shui/table-cell
-                      {:key (.-id cell)}
-                      (flexRender
-                       (-> cell .-column .-columnDef .-cell)
-                       (.getContext cell)))
-                     (.-id cell))))
-                (.-id row)))
+              (shui/table-row
+               {:key (.-id row)
+                :data-state (when (.getIsSelected row) "selected")}
+               (for [^js cell (.getVisibleCells row)]
+                 (shui/table-cell
+                  {:key (.-id cell)}
+                  (.-id cell)
+                  ;; (flexRender
+                  ;;  (-> cell .-column .-columnDef .-cell)
+                  ;;  (.getContext cell))
+                  ))))
             (shui/table-row
              (shui/table-cell
               {:colSpan (count columns)
