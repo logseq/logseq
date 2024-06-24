@@ -88,6 +88,10 @@
     padding: 10px 15px;
     border-color: var(--ls-secondary-border-color);
   }
+
+  [data-tooltipped]:has(a.tag) {
+    @apply px-0.5;
+  }
 }
 
 .block-content-or-editor-wrap {
