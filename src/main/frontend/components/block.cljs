@@ -275,99 +275,104 @@
   (let [size (get state ::size)
         breadcrumb? (:breadcrumb? config)]
     (ui/resize-provider
-     (ui/resize-consumer
-      (if (and (not (mobile-util/native-platform?))
-               (not breadcrumb?))
-        (cond->
-         {:className "resize image-resize"
-          :onSizeChanged (fn [value]
-                           (when (and (not @*resizing-image?)
+      (ui/resize-consumer
+        (if (and (not (mobile-util/native-platform?))
+              (not breadcrumb?))
+          (cond->
+            {:className "resize image-resize"
+             :onSizeChanged (fn [value]
+                              (when (and (not @*resizing-image?)
                                       (some? @size)
                                       (not= value @size))
-                             (reset! *resizing-image? true))
-                           (reset! size value))
-          :onPointerUp (fn []
-                         (when (and @size @*resizing-image?)
-                           (when-let [block-id (:block/uuid config)]
-                             (let [size (bean/->clj @size)]
-                               (editor-handler/resize-image! block-id metadata full-text size))))
-                         (when @*resizing-image?
-                            ;; TODO: need a better way to prevent the clicking to edit current block
-                           (js/setTimeout #(reset! *resizing-image? false) 200)))
-          :onClick (fn [e]
-                     (when @*resizing-image? (util/stop e)))}
-          (and (:width metadata) (not (util/mobile?)))
-          (assoc :style {:width (:width metadata)}))
-        {})
-      [:div.asset-container {:key "resize-asset-container"}
-       [:img.rounded-sm.relative
-        (merge
-         {:loading "lazy"
-          :referrerPolicy "no-referrer"
-          :src     src
-          :title   title}
-         metadata)]
-       (when-not breadcrumb?
-         [:<>
-          [:.asset-overlay]
-          (let [image-src (fs/asset-path-normalize src)]
-            [:.asset-action-bar {:aria-hidden "true"}
-             ;; the image path bar
-             (when (util/electron?)
-               [:button.asset-action-btn.text-left
-                {:title         (t (if local? :asset/show-in-folder :asset/open-in-browser))
-                 :tabIndex      "-1"
-                 :on-pointer-down util/stop
-                 :on-click      (fn [e]
-                                  (util/stop e)
-                                  (if local?
-                                    (ipc/ipc "openFileInFolder" image-src)
-                                    (js/window.apis.openExternal image-src)))}
-                image-src])
-             [:.flex
-              (when-not config/publishing?
+                                (reset! *resizing-image? true))
+                              (reset! size value))
+             :onPointerUp (fn []
+                            (when (and @size @*resizing-image?)
+                              (when-let [block-id (:block/uuid config)]
+                                (let [size (bean/->clj @size)]
+                                  (editor-handler/resize-image! block-id metadata full-text size))))
+                            (when @*resizing-image?
+                              ;; TODO: need a better way to prevent the clicking to edit current block
+                              (js/setTimeout #(reset! *resizing-image? false) 200)))
+             :onClick (fn [e]
+                        (when @*resizing-image? (util/stop e)))}
+            (and (:width metadata) (not (util/mobile?)))
+            (assoc :style {:width (:width metadata)}))
+          {})
+        [:div.asset-container {:key "resize-asset-container"}
+         [:img.rounded-sm.relative
+          (merge
+            {:loading "lazy"
+             :referrerPolicy "no-referrer"
+             :src src
+             :title title}
+            metadata)]
+         (when-not breadcrumb?
+           [:<>
+            [:.asset-overlay]
+            (let [image-src (fs/asset-path-normalize src)]
+              [:.asset-action-bar {:aria-hidden "true"}
+               ;; the image path bar
+               (when (util/electron?)
+                 [:button.asset-action-btn.text-left
+                  {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+                   :tabIndex "-1"
+                   :on-pointer-down util/stop
+                   :on-click (fn [e]
+                               (util/stop e)
+                               (if local?
+                                 (ipc/ipc "openFileInFolder" image-src)
+                                 (js/window.apis.openExternal image-src)))}
+                  image-src])
+               [:.flex
+                (when-not config/publishing?
+                  [:button.asset-action-btn
+                   {:title (t :asset/delete)
+                    :tabIndex "-1"
+                    :on-pointer-down util/stop
+                    :on-click
+                    (fn [e]
+                      (util/stop e)
+                      (when-let [block-id (:block/uuid config)]
+                        (let [*local-selected? (atom local?)]
+                          (-> (shui/dialog-confirm!
+                                [:div.text-xs.opacity-60.-my-2
+                                 [:label.flex.gap-1.items-center
+                                  (shui/checkbox
+                                    {:default-checked @*local-selected?
+                                     :on-checked-change #(reset! *local-selected? %)})
+                                  (t (if local? :asset/physical-delete ""))]]
+                                {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))})
+                            (p/then (fn []
+                                      (shui/dialog-close!)
+                                      (editor-handler/delete-asset-of-block!
+                                        {:block-id block-id
+                                         :local? local?
+                                         :delete-local? @*local-selected?
+                                         :repo (state/get-current-repo)
+                                         :href src
+                                         :title title
+                                         :full-text full-text})))))
+                        ))}
+                   (ui/icon "trash")])
+
                 [:button.asset-action-btn
-                 {:title         (t :asset/delete)
-                  :tabIndex      "-1"
+                 {:title (t :asset/copy)
+                  :tabIndex "-1"
                   :on-pointer-down util/stop
-                  :on-click
-                  (fn [e]
-                    (when-let [block-id (:block/uuid config)]
-                      (let [confirm-fn (ui/make-confirm-modal
-                                        {:title         (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
-                                         :sub-title     (if local? :asset/physical-delete "")
-                                         :sub-checkbox? local?
-                                         :on-confirm    (fn [_e {:keys [close-fn sub-selected]}]
-                                                          (close-fn)
-                                                          (editor-handler/delete-asset-of-block!
-                                                           {:block-id      block-id
-                                                            :local?        local?
-                                                            :delete-local? (and sub-selected (first sub-selected))
-                                                            :repo          (state/get-current-repo)
-                                                            :href          src
-                                                            :title         title
-                                                            :full-text     full-text}))})]
-                        (util/stop e)
-                        (state/set-modal! confirm-fn))))}
-                 (ui/icon "trash")])
+                  :on-click (fn [e]
+                              (util/stop e)
+                              (-> (util/copy-image-to-clipboard image-src)
+                                (p/then #(notification/show! "Copied!" :success))))}
+                 (ui/icon "copy")]
 
-              [:button.asset-action-btn
-               {:title         (t :asset/copy)
-                :tabIndex      "-1"
-                :on-pointer-down util/stop
-                :on-click      (fn [e]
-                                 (util/stop e)
-                                 (-> (util/copy-image-to-clipboard image-src)
-                                     (p/then #(notification/show! "Copied!" :success))))}
-               (ui/icon "copy")]
+                [:button.asset-action-btn
+                 {:title (t :asset/maximize)
+                  :tabIndex "-1"
+                  :on-pointer-down util/stop
+                  :on-click open-lightbox}
 
-              [:button.asset-action-btn
-               {:title         (t :asset/maximize)
-                :tabIndex      "-1"
-                :on-pointer-down util/stop
-                :on-click      open-lightbox}
-
-               (ui/icon "maximize")]]])])]))))
+                 (ui/icon "maximize")]]])])]))))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
@@ -376,16 +381,16 @@
            :on-touch-start #(util/stop %)}])
 
 (rum/defcs asset-link < rum/reactive
-  (rum/local nil ::src)
+                        (rum/local nil ::src)
   [state config title href metadata full_text]
   (let [src (::src state)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         href (config/get-local-asset-absolute-path href)]
     (when (and (or granted?
-                   (util/electron?)
-                   (mobile-util/native-platform?)
-                   (config/db-based-graph? (state/get-current-repo)))
-               (nil? @src))
+                 (util/electron?)
+                 (mobile-util/native-platform?)
+                 (config/db-based-graph? (state/get-current-repo)))
+            (nil? @src))
       (p/then (assets-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
