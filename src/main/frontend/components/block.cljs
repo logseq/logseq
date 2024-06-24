@@ -342,7 +342,8 @@
                                     {:default-checked @*local-selected?
                                      :on-checked-change #(reset! *local-selected? %)})
                                   (t (if local? :asset/physical-delete ""))]]
-                                {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))})
+                                {:title (t :asset/confirm-delete (.toLocaleLowerCase (t :text/image)))
+                                 :outside-cancel? true})
                             (p/then (fn []
                                       (shui/dialog-close!)
                                       (editor-handler/delete-asset-of-block!
