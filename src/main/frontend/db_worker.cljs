@@ -30,7 +30,6 @@
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]
             [logseq.common.util :as common-util]
-            [frontend.worker.db.fix :as db-fix]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
@@ -376,17 +375,12 @@
    (when repo (worker-state/set-db-latest-tx-time! repo))
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (try
-       (let [tx-data (if (string? tx-data)
-                       (ldb/read-transit-str tx-data)
-                       tx-data)
+       (let [tx-data' (if (string? tx-data)
+                        (ldb/read-transit-str tx-data)
+                        tx-data)
              tx-meta (if (string? tx-meta)
                        (ldb/read-transit-str tx-meta)
                        tx-meta)
-             tx-data' (if (and (= :update-property (:outliner-op tx-meta))
-                               (:many->one? tx-meta) (:property-id tx-meta))
-                        (concat tx-data
-                                (db-fix/fix-cardinality-many->one @conn (:property-id tx-meta)))
-                        tx-data)
              tx-data' (if (contains? #{:insert-blocks} (:outliner-op tx-meta))
                         (map (fn [m]
                                (if (and (map? m) (nil? (:block/order m)))
