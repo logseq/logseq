@@ -152,7 +152,7 @@
 
 (rum/defcs schema-type <
   shortcut/disable-all-shortcuts
-  [state property {:keys [*property-name *property-schema built-in? disabled?
+  [state property {:keys [*property *property-name *property-schema built-in? disabled?
                           show-type-change-hints? block *show-new-property-config?
                           *show-class-select?
                           default-open? page-configure? class-schema?]
@@ -189,6 +189,7 @@
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
                       add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
+                (when *property (reset! *property property))
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
                  (when (= (:type schema) :object) (reset! *show-class-select? true))
@@ -452,8 +453,7 @@
       (when property
         (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
               type (get-in property [:block/schema :type])]
-          (when property
-            (cond
+          (cond
               add-class-property?
               (p/do!
                (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
@@ -469,7 +469,7 @@
               (or (not= :default type)
                   (and (= :default type) (seq (:property/closed-values property))))
               (p/do!
-               (reset! *show-new-property-config? false)))))))))
+               (reset! *show-new-property-config? false))))))))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
@@ -517,37 +517,37 @@
                                  ;; Filters out properties from being in wrong :view-context
                                  (and (not page?) (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
-        property @*property]
+        property @*property
+        property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
-     (if property
+     (if property-key
        [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
         [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
          (property-icon property (:type @*property-schema))
-         [:div @*property-key]]
+         [:div property-key]]
         [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
-         (cond
-           (= @*show-new-property-config? :adding-property)
-           nil
+         (when (not= @*show-new-property-config? :adding-property)
+           (cond
+             @*show-new-property-config?
+             (schema-type property (merge opts
+                                          {:*property *property
+                                           :*property-name *property-key
+                                           :*property-schema *property-schema
+                                           :default-open? true
+                                           :block block
+                                           :*show-new-property-config? *show-new-property-config?
+                                           :*show-class-select? *show-class-select?}))
 
-           @*show-new-property-config?
-           (schema-type property (merge opts
-                                        {:*property-name *property-key
-                                         :*property-schema *property-schema
-                                         :default-open? true
-                                         :block block
-                                         :*show-new-property-config? *show-new-property-config?
-                                         :*show-class-select? *show-class-select?}))
+             (and property @*show-class-select?)
+             (class-select property (assoc opts
+                                           :on-hide #(reset! *show-class-select? false)
+                                           :multiple-choices? false
+                                           :default-open? true))
 
-           @*show-class-select?
-           (class-select property (assoc opts
-                                         :on-hide #(reset! *show-class-select? false)
-                                         :multiple-choices? false
-                                         :default-open? true))
-
-           :else
-           (when (and property (not class-schema?))
-             (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true))))]]
+             :else
+             (when (and property (not class-schema?))
+               (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true)))))]]
 
        (let [on-chosen (property-input-on-chosen block *property *property-key *show-new-property-config? opts)
              input-opts {:on-key-down
