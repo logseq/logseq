@@ -658,7 +658,7 @@
   }
 
   .page {
-    margin-top: 0;
+    @apply mt-0 mx-3 my-5;
   }
 
   .non-block-editor textarea,
