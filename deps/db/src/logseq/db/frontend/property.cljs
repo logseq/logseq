@@ -266,7 +266,11 @@
 (defn create-user-property-ident-from-name
   "Creates a property :db/ident for a default user namespace"
   [property-name]
-  (db-ident/create-db-ident-from-name default-user-namespace property-name))
+  (let [property-name' (if (string? property-name)
+                         (keyword property-name) property-name)]
+    (if (qualified-keyword? property-name')
+      property-name'
+      (db-ident/create-db-ident-from-name default-user-namespace property-name))))
 
 (defn get-class-ordered-properties
   [class-entity]
