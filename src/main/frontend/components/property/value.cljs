@@ -98,7 +98,8 @@
    (let [repo (state/get-current-repo)
          class? (contains? (:block/type block) "class")
          property (db/entity property-id)
-         many? (db-property/many? property)]
+         many? (db-property/many? property)
+         checkbox? (= :checkbox (get-in property [:block/schema :type]))]
      (assert (qualified-keyword? property-id) "property to add must be a keyword")
      (p/do!
       (if (and class? class-schema?)
@@ -110,9 +111,12 @@
       (when exit-edit?
         (shui/popup-hide-all!)
         (shui/dialog-close!))
-      (when-not many?
+      (when-not (or many? checkbox?)
         (when-let [input (state/get-input)]
-          (.focus input)))))))
+          (.focus input)))
+      (when checkbox?
+        (state/set-editor-action-data! {:type :focus-property-value
+                                        :property property}))))))
 
 (defn- add-or-remove-property-value
   [block property value selected?]
@@ -685,7 +689,8 @@
         schema (:block/schema property)
         type (get schema :type :default)
         editing? (or editing?
-                     (state/sub-editing? [container-id (:block/uuid block) (:block/uuid property)]))
+                     (and (state/sub-editing? [container-id (:block/uuid block)])
+                          (= (:db/id property) (:db/id (:property (state/get-editor-action-data))))))
         select-type? (select-type? property type)
         closed-values? (seq (:property/closed-values property))
         select-opts {:on-chosen on-chosen}

@@ -199,6 +199,10 @@
                    nil
                    add-class-property?
                    (shui/dialog-close!)
+                   (and block (= type :checkbox))
+                   (p/do!
+                    (shui/popup-hide-all!)
+                    (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
                    (and block (= type :default)
                         (not (seq (:property/closed-values property))))
                    (pv/<create-new-block! block property "")))))))}
@@ -454,22 +458,28 @@
         (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
               type (get-in property [:block/schema :type])]
           (cond
-              add-class-property?
-              (p/do!
-               (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
-                                                                 :exit-edit? page-configure?})
-               (shui/dialog-close!))
+            add-class-property?
+            (p/do!
+             (pv/<add-property! block (:db/ident property) "" {:class-schema? class-schema?
+                                                               :exit-edit? page-configure?})
+             (shui/dialog-close!))
 
-              (and (= :default type)
-                   (not (seq (:property/closed-values property))))
-              (p/do!
-               (pv/<create-new-block! block property "")
-               (shui/dialog-close!))
+            (= :checkbox type)
+            (p/do!
+             (shui/popup-hide-all!)
+             (shui/dialog-close!)
+             (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
 
-              (or (not= :default type)
-                  (and (= :default type) (seq (:property/closed-values property))))
-              (p/do!
-               (reset! *show-new-property-config? false))))))))
+            (and (= :default type)
+                 (not (seq (:property/closed-values property))))
+            (p/do!
+             (pv/<create-new-block! block property "")
+             (shui/dialog-close!))
+
+            (or (not= :default type)
+                (and (= :default type) (seq (:property/closed-values property))))
+            (p/do!
+             (reset! *show-new-property-config? false))))))))
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
