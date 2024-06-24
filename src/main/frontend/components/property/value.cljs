@@ -87,7 +87,8 @@
       (p/do!
        (editor-handler/edit-block! block :max {:container-id :unknown-container})
        (shui/popup-hide!)
-       (shui/dialog-close!)))))
+       (shui/dialog-close!)))
+    block))
 
 (defn <add-property!
   "If a class and in a class schema context, add the property to its schema.
@@ -119,16 +120,18 @@
                                         :property property}))))))
 
 (defn- add-or-remove-property-value
-  [block property value selected?]
+  [block property value selected? {:keys [refresh-result-f]}]
   (let [many? (db-property/many? property)]
-    (if selected?
-      (<add-property! block (:db/ident property) value {:exit-edit? (not many?)})
-      (p/do!
-       (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)
-       (when (or (not many?)
+    (p/do!
+     (if selected?
+       (<add-property! block (:db/ident property) value {:exit-edit? (not many?)})
+       (p/do!
+        (db-property-handler/delete-property-value! (:db/id block) (:db/ident property) value)
+        (when (or (not many?)
                  ;; values will be cleared
-                 (and many? (<= (count (get block (:db/ident property))) 1)))
-         (shui/popup-hide!))))))
+                  (and many? (<= (count (get block (:db/ident property))) 1)))
+          (shui/popup-hide!))))
+     (when (fn? refresh-result-f) (refresh-result-f)))))
 
 (rum/defcs calendar-inner <
   (rum/local (str "calendar-inner-" (js/Date.now)) ::identity)
@@ -309,7 +312,7 @@
   (or (:block/original-name e)
       (:block/content e)))
 
-(defn select-page
+(rum/defc select-page < rum/reactive
   [property
    {:keys [block multiple-choices? dropdown? input-opts] :as opts}]
   (let [repo (state/get-current-repo)
@@ -376,7 +379,7 @@
                                              (when-not (string/blank? (string/trim chosen))
                                                (<create-page-if-not-exists! property classes' chosen)))]
                                 (if id
-                                  (add-or-remove-property-value block property id selected?)
+                                  (add-or-remove-property-value block property id selected? {})
                                   (log/error :msg "No :db/id found or created for chosen" :chosen chosen))))})
 
                 (and (seq classes') (not tags-or-alias?))
@@ -416,18 +419,24 @@
 
 (rum/defcs select < rum/reactive
   {:init (fn [state]
-           (let [*values (atom :loading)]
-             (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                 (:db/ident (nth (:rum/args state) 1)))]
-               (reset! *values result))
-             (assoc state ::values *values)))}
+           (let [*values (atom :loading)
+                 refresh-result-f (fn []
+                                    (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
+                                                                                        (:db/ident (nth (:rum/args state) 1)))]
+                                      (reset! *values result)))]
+             (refresh-result-f)
+             (assoc state
+                    ::values *values
+                    ::refresh-result-f refresh-result-f)))}
   [state block property
    {:keys [multiple-choices? dropdown? content-props] :as select-opts}
    {:keys [*show-new-property-config?]}]
-  (let [values (rum/react (::values state))]
+  (let [*values (::values state)
+        refresh-result-f (::refresh-result-f state)
+        values (rum/react *values)
+        block (db/sub-block (:db/id block))]
     (when-not (= :loading values)
       (let [schema (:block/schema property)
-            property (db/sub-block (:db/id property))
             type (:type schema)
             closed-values? (seq (:property/closed-values property))
             ref-type? (db-property-type/ref-property-types type)
@@ -463,7 +472,8 @@
                        (remove nil?))
             on-chosen (fn [chosen selected?]
                         (let [value (if (map? chosen) (:value chosen) chosen)]
-                          (add-or-remove-property-value block property value selected?)))
+                          (add-or-remove-property-value block property value selected?
+                                                        {:refresh-result-f refresh-result-f})))
             selected-choices' (get block (:db/ident property))
             selected-choices (if (every? de/entity? selected-choices')
                                (map :db/id selected-choices')
@@ -726,28 +736,18 @@
           [:div.flex.flex-1
            (property-value-inner block property value opts)])))))
 
-(rum/defc multiple-values < rum/static
+(rum/defc multiple-values-inner
   [block property v {:keys [on-chosen editing?] :as opts} schema]
   (let [type (get schema :type :default)
         date? (= type :date)
         *el (rum/use-ref nil)
-        items (if (coll? v) v (when v [v]))]
+        items v]
     (rum/use-effect!
      (fn []
        (when editing?
          (.click (rum/deref *el))))
      [editing?])
-    (let [values-cp (fn [toggle-fn]
-                      (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
-                        (if (and (seq items) not-empty-value?)
-                          (concat
-                           (for [item items]
-                             (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
-                           (when date?
-                             [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
-                          (when-not editing?
-                            (property-empty-text-value)))))
-          select-cp (fn [select-opts]
+    (let [select-cp (fn [select-opts]
                       (let [select-opts (merge {:multiple-choices? true
                                                 :on-chosen (fn []
                                                              (when on-chosen (on-chosen)))}
@@ -778,7 +778,23 @@
                                (util/stop e))
                            :dune))
           :class "flex flex-1 flex-row items-center flex-wrap gap-x-2 gap-y-2 pr-4"}
-         (values-cp toggle-fn)]))))
+         (let [not-empty-value? (not= (map :db/ident items) [:logseq.property/empty-placeholder])]
+           (if (and (seq items) not-empty-value?)
+             (concat
+              (for [item items]
+                (rum/with-key (select-item property type item opts) (or (:block/uuid item) (str item))))
+              (when date?
+                [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
+             (when-not editing?
+               (property-empty-text-value))))]))))
+
+(rum/defc multiple-values < rum/reactive
+  [block property opts schema]
+  (let [block (db/sub-block (:db/id block))
+        value (get block (:db/ident property))
+        value' (if (coll? value) value
+                   (when (some? value) #{value}))]
+    (multiple-values-inner block property value' opts schema)))
 
 (rum/defcs property-value < rum/reactive
   [state block property v {:keys [show-tooltip?]
@@ -818,7 +834,7 @@
                                                   (assoc opts :id (str (:db/id block) "-" (:db/id property))))
 
                      multiple-values?
-                     (multiple-values block property v opts schema)
+                     (multiple-values block property opts schema)
 
                      :else
                      (property-scalar-value block property v
