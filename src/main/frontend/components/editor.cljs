@@ -814,11 +814,12 @@
        nil)]))
 
 (defn- editor-on-hide
-  [state value type e]
+  [state value* type e]
   (let [repo (state/get-current-repo)
         action (state/get-editor-action)
         [opts _id config] (:rum/args state)
-        block (:block opts)]
+        block (:block opts)
+        value (or value* "")]
     (cond
       (and (= type :esc) (exist-editor-commands-popup?))
       nil
