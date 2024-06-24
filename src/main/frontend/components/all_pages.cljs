@@ -41,9 +41,11 @@
     :enableSorting false
     :enableHiding false}
    {:id "status"
+    :accessorKey "status"
     :header "Status"
     :cell (fn [^js opts] [:div.capitalize (.-status (.-original (.-row opts)))])}
    {:id "email"
+    :accessorKey "email"
     :header (fn [^js opts]
               (shui/button
                {:variant "ghost"
@@ -53,6 +55,7 @@
                 ))
     :cell (fn [opts] [:div.lowercase (.-email (.-original (.-row opts)))])}
    {:id "amount"
+    :accessorKey "amount"
     :header (fn [] [:div.text-right "Amount"])
     :cell (fn [opts]
             (let [amount (.-amount (.-original (.-row opts)))
@@ -87,21 +90,21 @@
         [column-filters set-column-filters!] (rum/use-state {})
         [column-visibility set-column-visibility!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
-        ^js table (useReactTable #js {:columns (->js columns)
-                                      :data (->js data)
-                                      :state (->js
-                                              {:sorting sorting
-                                               :columnFilters column-filters
-                                               :columnVisibility column-visibility
-                                               :rowSelection row-selection})
-                                      :getCoreRowModel (getCoreRowModel)
-                                      :getSortedRowModel (getSortedRowModel)
-                                      :getFilteredRowModel (getFilteredRowModel)
-                                      :getPaginationRowModel (getPaginationRowModel)
-                                      :onSortingChange (fn [new-sorting] (set-sorting! (->clj new-sorting)))
-                                      :onColumnFiltersChange (fn [new-filters] (set-column-filters! (->clj new-filters)))
-                                      :onColumnVisibilityChange (fn [new-visibility] (set-column-visibility! (->clj new-visibility)))
-                                      :onRowSelectionChange (fn [new-selection] (set-row-selection! (->clj new-selection)))})]
+        ^js table (useReactTable (->js
+                                  {:columns columns
+                                   :data data
+                                   :state {:sorting sorting
+                                           :columnFilters column-filters
+                                           :columnVisibility column-visibility
+                                           :rowSelection row-selection}
+                                   :getCoreRowModel (getCoreRowModel)
+                                   :getSortedRowModel (getSortedRowModel)
+                                   :getFilteredRowModel (getFilteredRowModel)
+                                   :getPaginationRowModel (getPaginationRowModel)
+                                   :onSortingChange (fn [new-sorting] (set-sorting! (->clj new-sorting)))
+                                   :onColumnFiltersChange (fn [new-filters] (set-column-filters! (->clj new-filters)))
+                                   :onColumnVisibilityChange (fn [new-visibility] (set-column-visibility! (->clj new-visibility)))
+                                   :onRowSelectionChange (fn [new-selection] (set-row-selection! (->clj new-selection)))}))]
     [:div.w-full
      [:div.flex.items-center.py-4
       (shui/input
@@ -133,17 +136,20 @@
              {:key (.-id column)
               :className "capitalize"
               :checked (.getIsVisible column)
-              :onCheckedChange #(.toggleVisibility column (not (.getIsVisible column)))})
+              :onCheckedChange #(.toggleVisibility column (not %))}
+             (.-id column))
             (.-id column)))))]
      [:div.rounded-md.border
       (shui/table
        (shui/table-header
-        (for [headerGroup (.getHeaderGroups table)]
+        (for [^js headerGroup (.getHeaderGroups table)]
           (rum/with-key
             (shui/table-row
+             {:key (.-id headerGroup)}
              (for [^js header (.-headers headerGroup)]
                (rum/with-key
                  (shui/table-head
+                  {:key (.-id header)}
                   (when-not (.-isPlaceholder header)
                     (flexRender
                      (-> header .-column .-columnDef .-header)
@@ -156,10 +162,12 @@
             (for [^js row rows]
               (rum/with-key
                 (shui/table-row
-                 {:data-state (when (.getIsSelected row) "selected")}
+                 {:key (.-id row)
+                  :data-state (when (.getIsSelected row) "selected")}
                  (for [^js cell (.getVisibleCells row)]
                    (rum/with-key
                      (shui/table-cell
+                      {:key (.-id cell)}
                       (flexRender
                        (-> cell .-column .-columnDef .-cell)
                        (.getContext cell)))
