@@ -4,6 +4,7 @@
             [logseq.shui.shortcut.v1 :as shui.shortcut.v1]
             [logseq.shui.toaster.core :as toaster-core]
             [logseq.shui.select.core :as select-core]
+            [logseq.shui.table.core :as table-core]
             [logseq.shui.select.multi :as select-multi]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.popup.core :as popup-core]
@@ -50,6 +51,16 @@
 (def card-description (util/lsui-wrap "CardDescription"))
 (def card-content (util/lsui-wrap "CardContent"))
 (def card-footer (util/lsui-wrap "CardFooter"))
+
+(def table table-core/table)
+(def table-header table-core/table-header)
+(def table-body table-core/table-body)
+(def table-footer table-core/table-footer)
+(def table-head table-core/table-head)
+(def table-row table-core/table-row)
+(def table-cell table-core/table-cell)
+(def table-caption table-core/table-caption)
+(def ^js tanStackReact table-core/tanStackReact)
 
 (def form-provider form-core/form-provider)
 (def form-item form-core/form-item)
