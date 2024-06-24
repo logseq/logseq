@@ -5,8 +5,6 @@
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]))
 
-(def repo test-helper/test-db-name-db-version)
-
 (def init-data (test-helper/initial-test-page-and-blocks))
 (defn start-and-destroy-db
   [f]
