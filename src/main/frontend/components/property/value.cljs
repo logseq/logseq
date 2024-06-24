@@ -436,7 +436,8 @@
                                          (icon-component/icon icon)
                                          value]
                                         value)
-                               :value (:db/id block)})) (:property/closed-values property))
+                               :value (:db/id block)
+                               :label-value value})) (:property/closed-values property))
                     (->> values
                          (mapcat (fn [value]
                                    (if (coll? value)
@@ -471,7 +472,7 @@
                      :show-new-when-not-exact-match? (not (or closed-values? (= :date type)))
                      :input-default-placeholder "Select"
                      :extract-chosen-fn :value
-                     :extract-fn :label
+                     :extract-fn (fn [x] (or (:label-value x) (:label x)))
                      :content-props content-props
                      :on-chosen on-chosen
                      :input-opts (fn [_]
