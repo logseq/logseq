@@ -43,7 +43,7 @@
    {:id "status"
     :accessorKey "status"
     :header "Status"
-    :cell (fn [^js opts] [:div.capitalize (.-status (.-original (.-row opts)))])}
+    :cell (fn [^js opts] (.-status (.-original (.-row opts))))}
    {:id "email"
     :accessorKey "email"
     :header (fn [^js opts]
@@ -52,26 +52,26 @@
                 :onClick #(.toggleSorting ^js (.-column opts) (= "asc" (.getIsSorted ^js (.-column opts))))}
                "Email"
                ;; [:> ArrowUpDown {:className "ml-2 h-4 w-4"}]
-                ))
-    :cell (fn [opts] [:div.lowercase (.-email (.-original (.-row opts)))])}
+               ))
+    :cell (fn [opts] (.-email (.-original (.-row opts))))}
    {:id "amount"
     :accessorKey "amount"
-    :header (fn [] [:div.text-right "Amount"])
+    :header (fn [_opts] "Amount")
     :cell (fn [opts]
             (let [amount (.-amount (.-original (.-row opts)))
                   formatted (.format (js/Intl.NumberFormat. "en-US" #js {:style "currency" :currency "USD"}) amount)]
-              [:div.text-right.font-medium formatted]))}
+              formatted))}
    {:id "actions"
     :enableHiding false
     :cell (fn [opts]
             (let [payment (.-original (.-row opts))]
               (shui/dropdown-menu
                (shui/dropdown-menu-trigger {:asChild true}
-                (shui/button
-                 {:variant "ghost" :className "h-8 w-8 p-0"}
-                 [:span.sr-only "Open menu"]
+                                           (shui/button
+                                            {:variant "ghost" :className "h-8 w-8 p-0"}
+                                            [:span.sr-only "Open menu"]
                  ;; [:> MoreHorizontal {:className "h-4 w-4"}]
-                  ))
+                                            ))
                (shui/dropdown-menu-content
                 (shui/dropdown-menu-label
                  "Actions")
@@ -147,13 +147,9 @@
              (shui/table-head
               {:key (.-id header)}
               (when-not (.-isPlaceholder header)
-                (let [result (flexRender
-                              (-> header .-column .-columnDef .-header)
-                              (.getContext header))]
-                  (prn :debug :flexRender-result
-                       :type (type result))
-                  (js/console.dir result)
-                  result)))))))
+                (flexRender
+                 (-> header .-column .-columnDef .-header)
+                 (.getContext header))))))))
        (shui/table-body
         (let [^js rows (.-rows (.getRowModel table))]
           (if (pos? (count rows))
@@ -164,10 +160,9 @@
                (for [^js cell (.getVisibleCells row)]
                  (shui/table-cell
                   {:key (.-id cell)}
-                  (.-id cell)
-                  ;; (flexRender
-                  ;;  (-> cell .-column .-columnDef .-cell)
-                  ;;  (.getContext cell))
+                  (flexRender
+                   (-> cell .-column .-columnDef .-cell)
+                   (.getContext cell))
                   ))))
             (shui/table-row
              (shui/table-cell
