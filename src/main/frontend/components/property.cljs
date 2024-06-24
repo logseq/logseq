@@ -565,6 +565,7 @@
                            ;; `Backspace` to close property popup and back to editing the current block
                            (when (and (= (util/ekey e) "Backspace")
                                       (= "" (.-value (.-target e))))
+                             (util/stop e)
                              (shui/popup-hide!)))}]
          (property-select exclude-properties {:on-chosen on-chosen
                                               :input-opts input-opts})))]))
