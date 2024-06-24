@@ -442,12 +442,13 @@
                    :size 15})))
 
 (defn- property-input-on-chosen
-  [block *property-key *show-new-property-config? {:keys [class-schema? page-configure?]}]
+  [block *property *property-key *show-new-property-config? {:keys [class-schema? page-configure?]}]
   (fn [{:keys [value label]}]
     (reset! *property-key (if (uuid? value) label value))
     (let [property (when (uuid? value) (db/entity [:block/uuid value]))]
       (when (and *show-new-property-config? (not property))
         (reset! *show-new-property-config? true))
+      (reset! *property property)
       (when property
         (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
               type (get-in property [:block/schema :type])]
@@ -472,6 +473,7 @@
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
+  (rum/local nil ::property)
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
@@ -502,6 +504,7 @@
   [state block *property-key {:keys [class-schema? page?]
                               :as opts}]
   (let [*ref (::ref state)
+        *property (::property state)
         *show-new-property-config? (::show-new-property-config? state)
         *show-class-select? (::show-class-select? state)
         *property-schema (::property-schema state)
@@ -514,40 +517,39 @@
                                  ;; Filters out properties from being in wrong :view-context
                                  (and (not page?) (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
-        property-key (rum/react *property-key)]
+        property @*property]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
-     (if property-key
-       (let [property (db/get-case-page @*property-key)]
-         [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
-          [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
-           (property-icon property (:type @*property-schema))
-           [:div @*property-key]]
-          [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
-           (cond
-             (= @*show-new-property-config? :adding-property)
-             nil
+     (if property
+       [:div.ls-property-add.grid.grid-cols-5.gap-1.flex.flex-1.flex-row.items-center
+        [:div.flex.flex-row.items-center.col-span-2.property-key.gap-1
+         (property-icon property (:type @*property-schema))
+         [:div @*property-key]]
+        [:div.col-span-3.flex.flex-row {:on-pointer-down (fn [e] (util/stop-propagation e))}
+         (cond
+           (= @*show-new-property-config? :adding-property)
+           nil
 
-             @*show-new-property-config?
-             (schema-type property (merge opts
-                                          {:*property-name *property-key
-                                           :*property-schema *property-schema
-                                           :default-open? true
-                                           :block block
-                                           :*show-new-property-config? *show-new-property-config?
-                                           :*show-class-select? *show-class-select?}))
+           @*show-new-property-config?
+           (schema-type property (merge opts
+                                        {:*property-name *property-key
+                                         :*property-schema *property-schema
+                                         :default-open? true
+                                         :block block
+                                         :*show-new-property-config? *show-new-property-config?
+                                         :*show-class-select? *show-class-select?}))
 
-             @*show-class-select?
-             (class-select property (assoc opts
-                                           :on-hide #(reset! *show-class-select? false)
-                                           :multiple-choices? false
-                                           :default-open? true))
+           @*show-class-select?
+           (class-select property (assoc opts
+                                         :on-hide #(reset! *show-class-select? false)
+                                         :multiple-choices? false
+                                         :default-open? true))
 
-             :else
-             (when (and property (not class-schema?))
-               (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true))))]])
+           :else
+           (when (and property (not class-schema?))
+             (pv/property-value block property (get block (:db/ident property)) (assoc opts :editing? true))))]]
 
-       (let [on-chosen (property-input-on-chosen block *property-key *show-new-property-config? opts)
+       (let [on-chosen (property-input-on-chosen block *property *property-key *show-new-property-config? opts)
              input-opts {:on-key-down
                          (fn [e]
                            ;; `Backspace` to close property popup and back to editing the current block
