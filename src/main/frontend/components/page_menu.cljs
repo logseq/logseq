@@ -34,14 +34,16 @@
   [page]
   (when page
     (-> (shui/dialog-confirm!
-         {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
-                  [:span.top-1.relative
-                   (shui/tabler-icon "alert-triangle")]
-                  (if (config/db-based-graph? (state/get-current-repo))
-                    (t :page/db-delete-confirmation)
-                    (t :page/delete-confirmation))]
-          :content [:p.opacity-60 (str "- " (:block/original-name page))]})
-        (p/then #(delete-page! page)))))
+          {:title [:h3.text-lg.leading-6.font-medium.flex.gap-2.items-center
+                   [:span.top-1.relative
+                    (shui/tabler-icon "alert-triangle")]
+                   (if (config/db-based-graph? (state/get-current-repo))
+                     (t :page/db-delete-confirmation)
+                     (t :page/delete-confirmation))]
+           :content [:p.opacity-60 (str "- " (:block/original-name page))]
+           :outside-cancel? true})
+      (p/then #(delete-page! page))
+      (p/catch #()))))
 
 (defn ^:large-vars/cleanup-todo page-menu
   [page]

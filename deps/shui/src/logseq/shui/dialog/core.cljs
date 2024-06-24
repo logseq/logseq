@@ -182,9 +182,12 @@
 
 (rum/defc confirm-inner
   [config]
-  (let [{:keys [deferred]} config]
+  (let [{:keys [deferred outside-cancel?]} config]
     (alert-inner
-      (assoc config :footer
+      (assoc config
+        :overlay-props
+        {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
+        :footer
         [:<>
          (base/button
            {:key "cancel"

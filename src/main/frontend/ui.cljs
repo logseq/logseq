@@ -653,50 +653,6 @@
       (fn [state]
         (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? style)))]))
 
-(defn make-confirm-modal
-  [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]
-    :or {on-cancel #()}}]
-  (fn [close-fn]
-    (let [*sub-checkbox-selected (and sub-checkbox? (atom []))]
-      [:div.ui__confirm-modal
-       {:class (str "is-" tag)}
-       [:div.sm:flex.sm:items-start
-        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
-         [:svg.h-6.w-6.text-error
-          {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-          [:path
-           {:d
-            "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            :stroke-width    "2"
-            :stroke-linejoin "round"
-            :stroke-linecap  "round"}]]]
-        [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-         [:h2.headline.text-lg.leading-6.font-medium
-          (if (keyword? title) (t title) title)]
-         [:label.sublabel
-          (when sub-checkbox?
-            (checkbox
-              {:on-change (fn [e]
-                            (let [checked (.. e -target -checked)]
-                              (reset! *sub-checkbox-selected [checked])))}))
-          [:h3.subline.text-gray-400
-           (if (keyword? sub-title)
-             (t sub-title)
-             sub-title)]]]]
-
-       [:div.mt-5.sm:mt-4.flex.gap-4
-        (button
-          (t :cancel)
-          {:theme :gray
-           :on-click (comp on-cancel close-fn)})
-        (button
-          (t :yes)
-          {:class "ui__modal-enter"
-           :on-click #(and (fn? on-confirm)
-                           (on-confirm % {:close-fn close-fn
-                                          :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))
-           :button-props {:autoFocus "on"}})]])))
-
 (rum/defc sub-modal < rum/reactive
   []
   (when-let [modals (seq (state/sub :modal/subsets))]
