@@ -473,7 +473,6 @@
 
 (rum/defcs property-input < rum/reactive
   (rum/local nil ::ref)
-  (rum/local nil ::property)
   (rum/local false ::show-new-property-config?)
   (rum/local false ::show-class-select?)
   (rum/local {} ::property-schema)
@@ -489,7 +488,8 @@
                      (.focus input)))))))
   {:init (fn [state]
            (state/set-editor-action! :property-input)
-           state)
+           (assoc state ::property (or (:*property (last (:rum/args state)))
+                                       (atom nil))))
    :will-unmount (fn [state]
                    (let [args (:rum/args state)
                          *property-key (second args)
@@ -517,7 +517,7 @@
                                  ;; Filters out properties from being in wrong :view-context
                                  (and (not page?) (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
-        property @*property
+        property (rum/react *property)
         property-key (rum/react *property-key)]
     [:div.ls-property-input.flex.flex-1.flex-row.items-center.flex-wrap.gap-1
      {:ref #(reset! *ref %)}
