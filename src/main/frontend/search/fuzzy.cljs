@@ -45,16 +45,16 @@
                       (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
         (empty? s) 0
         :else (if (= (first q) (first s))
-                  (recur (rest q)
-                         (rest s)
-                         (inc mult) ;; increase the multiplier as more query chars are matched
-                         (dec idx) ;; decrease idx so score gets lowered the further into the string we match
-                         (+ mult score)) ;; score for this match is current multiplier * idx
-                  (recur q
-                         (rest s)
-                         1 ;; when there is no match, reset multiplier to one
-                         (dec idx)
-                         score))))))
+                (recur (rest q)
+                       (rest s)
+                       (inc mult) ;; increase the multiplier as more query chars are matched
+                       (dec idx) ;; decrease idx so score gets lowered the further into the string we match
+                       (+ mult score)) ;; score for this match is current multiplier * idx
+                (recur q
+                       (rest s)
+                       1 ;; when there is no match, reset multiplier to one
+                       (dec idx)
+                       (dec score)))))))
 
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
