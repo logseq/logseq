@@ -18,7 +18,8 @@
    })
 
 (defn create-user-class-ident-from-name
-  "Creates a class :db/ident for a default user namespace"
+  "Creates a class :db/ident for a default user namespace.
+   NOTE: Only use this when creating a db-ident for a new class."
   [class-name]
   (db-ident/create-db-ident-from-name "user.class" class-name))
 

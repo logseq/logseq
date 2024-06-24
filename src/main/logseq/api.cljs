@@ -828,11 +828,24 @@
               (editor-handler/expand-block! block-uuid))
           nil)))))
 
+;; FIXME: This ns should not be creating idents. This allows for ident conflicts
+;; and assumes that names directly map to idents which is incorrect and breaks for multiple
+;; cases e.g. a property that has been renamed or sanitized. Instead it should
+;; find a property's ident by looking up the property in the db by its original-name
+(defn get-db-ident-for-property-name
+  "Finds a property :db/ident for a given property name"
+  [property-name]
+  (let [property-name' (if (string? property-name)
+                         (keyword property-name) property-name)]
+    (if (qualified-keyword? property-name')
+      property-name'
+      (db-property/create-user-property-ident-from-name property-name))))
+
 ;; properties (db only)
 (defn ^:export get_property
   [k]
   (when-let [k' (and (string? k) (keyword k))]
-    (p/let [k (if (qualified-keyword? k') k' (db-property/create-user-property-ident-from-name k))
+    (p/let [k (if (qualified-keyword? k') k' (get-db-ident-for-property-name k))
             p (db-utils/pull k)]
       (bean/->js (sdk-utils/normalize-keyword-for-json p)))))
 
@@ -840,7 +853,7 @@
   [k ^js schema ^js opts]
   (when-let [k' (and (string? k) (keyword k))]
     (p/let [k (if (qualified-keyword? k') k'
-                (db-property/create-user-property-ident-from-name k))
+                  (get-db-ident-for-property-name k))
             schema (or (and schema (bean/->clj schema)) {})
             schema (cond-> schema
                      (string? (:cardinality schema))
@@ -859,7 +872,7 @@
             _ (db-async/<get-block repo block-uuid :children? false)
             db? (config/db-based-graph? repo)
             key (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
-            key (if db? (db-property/create-user-property-ident-from-name key) key)
+            key (if db? (get-db-ident-for-property-name key) key)
             _ (when (and db? (not (db-utils/entity key)))
                 (db-property-handler/upsert-property! key {} {}))]
       (property-handler/set-block-property! repo block-uuid key value))))
@@ -871,7 +884,7 @@
             db? (config/db-based-graph? (state/get-current-repo))
             key-ns? (and (keyword? key) (namespace key))
             key (if key-ns? key (-> (if (keyword? key) (name key) key) (util/safe-lower-case)))
-            key (if (and db? (not key-ns?)) (db-property/create-user-property-ident-from-name key) key)]
+            key (if (and db? (not key-ns?)) (get-db-ident-for-property-name key) key)]
       (property-handler/remove-block-property!
       (state/get-current-repo)
       block-uuid key))))
@@ -884,8 +897,8 @@
         (let [properties (:block/properties block)
               property-name (-> (if (keyword? key) (name key) key) (util/safe-lower-case))
               property-value (or (get properties key)
-                               (get properties property-name)
-                               (get properties (db-property/create-user-property-ident-from-name property-name)))
+                                 (get properties property-name)
+                                 (get properties (get-db-ident-for-property-name property-name)))
               property-value (if-let [property-id (:db/id property-value)] (db/pull property-id) property-value)]
           (bean/->js (sdk-utils/normalize-keyword-for-json property-value)))))))
 
