@@ -1,4 +1,4 @@
-(ns logseq.shui.table.core
+(ns logseq.shui.tanstack-table.core
   (:require [rum.core :as rum]
             [logseq.shui.util :as util]))
 
