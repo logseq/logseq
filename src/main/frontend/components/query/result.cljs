@@ -4,6 +4,8 @@
             [frontend.search :as search]
             [frontend.db :as db]
             [frontend.db.query-dsl :as query-dsl]
+            [frontend.db.query-custom :as query-custom]
+            [frontend.db.query-react :as query-react]
             [frontend.state :as state]
             [logseq.common.util :as common-util]
             [frontend.util :as util]
@@ -45,7 +47,7 @@
                            (query-dsl/query (state/get-current-repo) q)))
 
                        :else
-                       (db/custom-query query {:current-block-uuid current-block-uuid}))
+                       (query-custom/custom-query query {:current-block-uuid current-block-uuid}))
                      (catch :default e
                        (reset! *query-error e)
                        (atom nil)))]
@@ -69,7 +71,7 @@
         ;; exclude the current one, otherwise it'll loop forever
         remove-blocks (if current-block-uuid [current-block-uuid] nil)
         transformed-query-result (when query-result
-                                   (let [result (db/custom-query-result-transform query-result remove-blocks query-m)]
+                                   (let [result (query-react/custom-query-result-transform query-result remove-blocks query-m)]
                                      (if (and query-result (coll? result) (:block/uuid (first result)))
                                        (cond-> result
                                          (get query-m :remove-block-children? true)

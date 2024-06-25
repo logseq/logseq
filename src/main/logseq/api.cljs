@@ -20,6 +20,7 @@
             [frontend.db :as db]
             [frontend.db.async :as db-async]
             [frontend.db.model :as db-model]
+            [frontend.db.query-custom :as query-custom]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.utils :as db-utils]
             [frontend.db.query-react :as query-react]
@@ -1034,9 +1035,9 @@
 (defn ^:export custom_query
   [query-string]
   (p/let [result (let [query (cljs.reader/read-string query-string)]
-                   (db/custom-query {:query query
-                                     :disable-reactive? true
-                                     :return-promise? true}))]
+                   (query-custom/custom-query {:query query
+                                               :disable-reactive? true
+                                               :return-promise? true}))]
     (bean/->js (sdk-utils/normalize-keyword-for-json (flatten result)))))
 
 (defn ^:export download_graph_db
