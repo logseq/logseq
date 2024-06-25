@@ -31,11 +31,11 @@
   [minutes]
   (let [*buffer (atom {})]
     (m/ap
-      (let [{:keys [graph-uuid online-users]} (m/?< (m/watch (:rtc/state @state/state)))
-            user-uuid->user (into {} (map (juxt :user/uuid identity)) online-users)
-            graph-uuid (uuid graph-uuid)]
+      (when-let [{:keys [graph-uuid online-users]} (not-empty (m/?< (m/watch (:rtc/state @state/state))))]
         (try
-          (let [latest-updates (m/?< (m/watch (:rtc/recent-updates @state/state)))]
+          (let [user-uuid->user (into {} (map (juxt :user/uuid identity)) online-users)
+                graph-uuid (uuid graph-uuid)
+                latest-updates (m/?< (m/watch (:rtc/recent-updates @state/state)))]
             (when-let [graph-uuid* (first (keys latest-updates))]
               (when (= graph-uuid graph-uuid*)
                 (let [mins-ago (t/minus (t/now) (t/minutes minutes))
