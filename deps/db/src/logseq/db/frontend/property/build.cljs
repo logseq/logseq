@@ -31,10 +31,6 @@
     icon
     (assoc :logseq.property/icon icon)
 
-    ;; For now, only closed values with :db/ident are built-in?
-    (and db-ident (keyword? db-ident))
-    sqlite-util/mark-block-as-built-in
-
     description
     (update :block/schema assoc :description description)
 

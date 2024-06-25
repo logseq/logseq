@@ -6,8 +6,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db :as ldb]))
+            [logseq.db.frontend.property :as db-property]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
@@ -54,7 +53,8 @@
                     (remove #(or (= "logseq.kv" (namespace (:db/ident %)))
                                  (= :logseq.property/empty-placeholder (:db/ident %)))))]
     (is (= []
-           (remove ldb/built-in? idents))
+           (remove #(->> % :logseq.property/built-in? (db-property/ref->property-value-content @conn))
+                   idents))
         "All entities with :db/ident have built-in property (except for kv idents)")))
 
 (deftest new-graph-creates-class

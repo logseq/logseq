@@ -53,7 +53,7 @@
                                                     :hide? true}}
    :logseq.property/source-page           {:schema {:type :entity
                                                     :hide? true}}
-   :logseq.property/built-in?             {:schema {:type :boolean
+   :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
    :logseq.property/hide-properties?      {:schema {:type :checkbox
                                                     :hide? true}}
