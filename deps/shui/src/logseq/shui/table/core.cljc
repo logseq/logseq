@@ -28,12 +28,18 @@
     (set-row-selection! {:selected-all? value})
     (set-row-selection! {})))
 
+(defn- set-conj
+  [col item]
+  (if (seq col)
+    (conj (if (set? col) col (set col)) item)
+    (conj #{} item)))
+
 (defn- row-toggle-selected!
   [row value set-row-selection! row-selection]
   (let [id (:id row)
         new-selection (if (:selected-all? row-selection)
-                        (update row-selection :excluded-ids (if value disj conj) id)
-                        (update row-selection :selected-ids (if value conj disj) id))]
+                        (update row-selection :excluded-ids (if value disj set-conj) id)
+                        (update row-selection :selected-ids (if value set-conj disj) id))]
     (set-row-selection! new-selection)))
 
 (defn- column-toggle-sorting!
@@ -41,15 +47,21 @@
   (let [id (:id column)
         existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
         value' (if existing-column
-                 (map (fn [item] (when (= (:id item) id) (update item :asc? not))) sorting)
-                 (conj sorting [{:id id :asc? true}]))]
+                 (mapv (fn [item] (when (= (:id item) id) (update item :asc? not))) sorting)
+                 (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? true}))]
     (set-sorting! value')))
+
+(defn get-selection-rows-count
+  [row-selection rows]
+  (if (:selected-all? row-selection)
+    (- (count rows) (count (:excluded-ids row-selection)))
+    (count (:selected-ids row-selection))))
 
 (defn table-option
   [{:keys [data columns state data-fns]
     :as option}]
   (let [{:keys [sorting row-filter row-selection visible-columns]} state
-        {:keys [set-sorting! set-row-filter! set-visible-columns! set-row-selection!]} data-fns
+        {:keys [set-sorting! set-visible-columns! set-row-selection!]} data-fns
         columns' (impl/visible-columns columns visible-columns)
         filtered-rows (impl/rows {:rows data
                                   :columns columns
@@ -67,7 +79,7 @@
            :selected-all? (:selected-all? row-selection)
            :selected-some? (select-some? row-selection filtered-rows)
            :row-selected? (fn [row] (row-selected? row row-selection))
-           :row-toggle-selected (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
+           :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [value] (toggle-selected-all! value set-row-selection!))
            :column-toggle-sorting! (fn [column] (column-toggle-sorting! column set-sorting! sorting)))))
 

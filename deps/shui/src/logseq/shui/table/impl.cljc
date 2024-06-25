@@ -13,7 +13,7 @@
 (defn visible-columns
   [columns visible-columns]
   (if (seq visible-columns)
-    (keep #(column-visible? % visible-columns) columns)
+    (filter #(column-visible? % visible-columns) columns)
     columns))
 
 (defn sort-rows
@@ -53,6 +53,8 @@
 
 (defn rows
   [{:keys [rows columns sorting row-filter]}]
+  (prn :debug :rows rows
+       :row-filter row-filter)
   (let [rows' (if row-filter (filter row-filter rows) rows)]
     (cond-> rows'
      (seq sorting) (sort-rows sorting columns))))
