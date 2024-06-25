@@ -205,9 +205,6 @@
          :create-property-text-block
          (apply outliner-property/create-property-text-block! conn args)
 
-         :collapse-expand-block-property
-         (apply outliner-property/collapse-expand-block-property! conn args)
-
          :batch-set-property
          (apply outliner-property/batch-set-property! conn args)
 

@@ -334,14 +334,6 @@
                              [[:db/retract (:db/id block) property-id property-value]]
                              {:outliner-op :save-block}))))))))
 
-(defn collapse-expand-block-property!
-  "Notice this works only if the value itself if a block (property type should be :default)"
-  [conn block-id property-id collapse?]
-  (let [f (if collapse? :db/add :db/retract)]
-    (ldb/transact! conn
-                   [[f block-id :block/collapsed-properties property-id]]
-                   {:outliner-op :save-block})))
-
 (defn ^:api get-class-parents
   [tags]
   (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
