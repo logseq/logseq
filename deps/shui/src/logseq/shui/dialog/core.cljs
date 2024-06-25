@@ -72,13 +72,16 @@
     (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
 
 ;; apis
+(declare close!)
+
 (defn open!
   [content-or-config & config']
   (let [config (if (map? content-or-config)
                  content-or-config
                  {:content content-or-config})
         content (:content config)
-        config (merge {:id (gen-id) :open? true} config (first config'))
+        id (gen-id)
+        config (merge {:id id :open? true :close #(close! id)} config (first config'))
         config (cond-> config
                  (fn? content)
                  (assoc :content (content config)))]

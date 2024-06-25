@@ -179,16 +179,6 @@
     }
   }
 
-  &[label="flashcards__cp"] {
-    .panel-content {
-      padding: 2rem 0;
-
-      @screen sm {
-        padding: 2rem 2rem;
-      }
-    }
-  }
-
   &[label="instruction__cp"] {
 
     .ui__modal-panel {
@@ -221,25 +211,6 @@ html.is-native-iphone-without-notch {
 
   .ls-card {
     min-height: 65vh;
-  }
-
-  .ui__modal {
-    &[label="flashcards__cp"] {
-      .panel-content {
-        padding: 2rem 1rem 1rem;
-        width: 90vw;
-
-        .cards-review {
-          padding-left: 0px;
-          padding-right: 0px;
-        }
-
-        .blocks-container {
-          transform: translateX(-7px);
-          width: 103%;
-        }
-      }
-    }
   }
 }
 
