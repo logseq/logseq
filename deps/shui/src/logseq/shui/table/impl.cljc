@@ -53,8 +53,6 @@
 
 (defn rows
   [{:keys [rows columns sorting row-filter]}]
-  (prn :debug :rows rows
-       :row-filter row-filter)
   (let [rows' (if row-filter (filter row-filter rows) rows)]
     (cond-> rows'
      (seq sorting) (sort-rows sorting columns))))
