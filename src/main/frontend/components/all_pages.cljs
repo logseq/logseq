@@ -31,7 +31,7 @@
 (defn row-checkbox [^js row]
   (shui/checkbox
    {:checked (.getIsSelected row)
-    :on-checked-change #(.toggleSelected row %)
+    :on-checked-change (fn [v] (.toggleSelected row v))
     :aria-label "Select row"}))
 
 (def columns
@@ -43,7 +43,8 @@
    {:id "status"
     :accessorKey "status"
     :header "Status"
-    :cell (fn [^js opts] (.-status (.-original (.-row opts))))}
+    :cell (fn [^js opts]
+            (.getValue (.-row opts) "status"))}
    {:id "email"
     :accessorKey "email"
     :header (fn [^js opts]
@@ -53,12 +54,12 @@
                "Email"
                ;; [:> ArrowUpDown {:className "ml-2 h-4 w-4"}]
                ))
-    :cell (fn [opts] (.-email (.-original (.-row opts))))}
+    :cell (fn [opts] (.getValue (.-row opts) "email"))}
    {:id "amount"
     :accessorKey "amount"
     :header (fn [_opts] "Amount")
     :cell (fn [opts]
-            (let [amount (.-amount (.-original (.-row opts)))
+            (let [amount (.getValue (.-row opts) "amount")
                   formatted (.format (js/Intl.NumberFormat. "en-US" #js {:style "currency" :currency "USD"}) amount)]
               formatted))}
    {:id "actions"
@@ -86,25 +87,25 @@
 
 (rum/defc all-pages < rum/static
   []
-  (let [[sorting set-sorting!] (rum/use-state {})
-        [column-filters set-column-filters!] (rum/use-state {})
-        [column-visibility set-column-visibility!] (rum/use-state {})
-        [row-selection set-row-selection!] (rum/use-state {})
-        ^js table (useReactTable (->js
-                                  {:columns columns
-                                   :data data
-                                   :state {:sorting sorting
-                                           :columnFilters column-filters
-                                           :columnVisibility column-visibility
-                                           :rowSelection row-selection}
-                                   :getCoreRowModel (getCoreRowModel)
-                                   :getSortedRowModel (getSortedRowModel)
-                                   :getFilteredRowModel (getFilteredRowModel)
-                                   :getPaginationRowModel (getPaginationRowModel)
-                                   :onSortingChange (fn [new-sorting] (set-sorting! (->clj new-sorting)))
-                                   :onColumnFiltersChange (fn [new-filters] (set-column-filters! (->clj new-filters)))
-                                   :onColumnVisibilityChange (fn [new-visibility] (set-column-visibility! (->clj new-visibility)))
-                                   :onRowSelectionChange (fn [new-selection] (set-row-selection! (->clj new-selection)))}))]
+  (let [[sorting set-sorting!] (rum/use-state #js [])
+        [column-filters set-column-filters!] (rum/use-state #js [])
+        [column-visibility set-column-visibility!] (rum/use-state #js {})
+        [row-selection set-row-selection!] (rum/use-state #js {})
+        ^js table (useReactTable #js {:columns (->js columns)
+                                      :data (->js data)
+                                      :state (->js
+                                              {:sorting sorting
+                                               :columnFilters column-filters
+                                               :columnVisibility column-visibility
+                                               :rowSelection row-selection})
+                                      :getCoreRowModel (getCoreRowModel)
+                                      :getSortedRowModel (getSortedRowModel)
+                                      :getFilteredRowModel (getFilteredRowModel)
+                                      :getPaginationRowModel (getPaginationRowModel)
+                                      :onSortingChange set-sorting!
+                                      :onColumnFiltersChange set-column-filters!
+                                      :onColumnVisibilityChange set-column-visibility!
+                                      :onRowSelectionChange set-row-selection!})]
     [:div.w-full
      [:div.flex.items-center.py-4
       (shui/input
@@ -112,7 +113,7 @@
         :value (or
                 (when-let [^js column (.getColumn table "email")]
                   (try
-                    (.getFilterValue column)
+                    (str (.getFilterValue column))
                     (catch :default _
                       nil)))
                 "")
@@ -162,8 +163,7 @@
                   {:key (.-id cell)}
                   (flexRender
                    (-> cell .-column .-columnDef .-cell)
-                   (.getContext cell))
-                  ))))
+                   (.getContext cell))))))
             (shui/table-row
              (shui/table-cell
               {:colSpan (count columns)
