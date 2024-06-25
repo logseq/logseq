@@ -6,6 +6,7 @@
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.page :as page]
             [frontend.components.all-pages :as all-pages]
+            ;; [frontend.components.all-pages2 :as all-pages]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.settings :as settings]
