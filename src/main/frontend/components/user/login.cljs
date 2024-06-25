@@ -1,5 +1,8 @@
 (ns frontend.components.user.login
-  (:require [rum.core :as rum]
+  (:require [clojure.string :as string]
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]
+            [dommy.core :refer-macros [sel]]
             [frontend.rum :refer [adapt-class]]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.user :as user]
@@ -79,9 +82,10 @@
 
 (defn open-login-modal!
   []
-  (state/set-modal!
+  (shui/dialog-open!
     (fn [_close] (page))
-    {:close-btn?      true
-     :label           "user-login"
-     :close-backdrop? false
-     :center?         false}))
+    {:label "user-login"
+     :content-props {:onPointerDownOutside #(let [inputs (sel "form[data-amplify-form] input:not([type=checkbox])")
+                                                  inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]
+                                              (when (seq inputs)
+                                                (.preventDefault %)))}}))
