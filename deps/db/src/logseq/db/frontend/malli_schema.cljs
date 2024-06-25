@@ -208,7 +208,6 @@
    [:block/properties {:optional true} block-properties]
    [:block/refs {:optional true} [:set :int]]
    [:block/tags {:optional true} [:set :int]]
-   [:block/collapsed-properties {:optional true} [:set :int]]
    [:block/tx-id {:optional true} :int]])
 
 (def page-attrs

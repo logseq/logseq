@@ -20,7 +20,6 @@
     :block/parent
     :block/order
     :block/collapsed?
-    :block/collapsed-properties
     :block/format
     :block/refs
     :block/_refs

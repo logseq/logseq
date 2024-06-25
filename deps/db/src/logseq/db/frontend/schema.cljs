@@ -23,8 +23,6 @@
                   :db/index true}
    :block/order {:db/index true}
    :block/collapsed? {}
-   :block/collapsed-properties {:db/valueType :db.type/ref
-                                :db/cardinality :db.cardinality/many}
 
    ;; :markdown, :org
    :block/format {}
