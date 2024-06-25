@@ -4,7 +4,8 @@
             [rum.core :as rum]
             [frontend.util :as util]
             [frontend.ui :as ui]
-            [logseq.shui.table.core :as table]))
+            [logseq.shui.table.core :as table]
+            [clojure.string :as string]))
 
 (def data
   [{:id "m5gr84i9" :amount 316 :status "success" :email "ken99@yahoo.com"}
@@ -26,16 +27,18 @@
     :aria-label "Select row"}))
 
 (def columns
-  [{:id "select"
+  [{:id :select
+    :name "Select"
     :header (fn [table _column] (header-checkbox table))
     :cell (fn [table row column] (row-checkbox table row column))
-    :enableSorting false
-    :enableHiding false}
-   {:id "status"
+    :column-list? false}
+   {:id :status
+    :name "Status"
     :header "Status"
     :cell (fn [_table row column]
             (get row (:id column)))}
-   {:id "email"
+   {:id :email
+    :name "Email"
     :header (fn [{:keys [column-toggle-sorting!]} column]
               (shui/button
                {:variant "ghost"
@@ -44,14 +47,15 @@
                (ui/icon "arrows-up-down")))
     :cell (fn [_table row column]
             (get row (:id column)))}
-   {:id "amount"
+   {:id :amount
+    :name "Amount"
     :header (fn [_] "Amount")
     :cell (fn [_table row column]
             (let [amount (get row (:id column))
                   formatted (.format (js/Intl.NumberFormat. "en-US" #js {:style "currency" :currency "USD"}) amount)]
               formatted))}
-   {:id "actions"
-    :enableHiding false
+   {:id :actions
+    :column-list? false
     :cell (fn [_table row _column]
             (shui/dropdown-menu
              (shui/dropdown-menu-trigger
@@ -87,7 +91,6 @@
                                                  :row-selection row-selection
                                                  :visible-columns visible-columns}
                                          :data-fns {:set-sorting! set-sorting!
-                                                    :set-row-filter! set-row-filter!
                                                     :set-visible-columns! set-visible-columns!
                                                     :set-row-selection! set-row-selection!}})]
     [:div.w-full
@@ -95,7 +98,16 @@
       (shui/input
        {:placeholder "Filter emails..."
         :value input
-        :onChange (fn [e] (set-input! (util/evalue e)))
+        :onChange (fn [e]
+                    (let [value (util/evalue e)]
+                      (set-input! value)
+                      (set-row-filter! (fn []
+                                           ;; Returns a fn here.
+                                           ;; https://stackoverflow.com/questions/55621212/is-it-possible-to-react-usestate-in-react
+                                         (fn [row]
+                                           (if (string/blank? value)
+                                             true
+                                             (when row (string/includes? (string/lower-case (:email row)) (string/lower-case value)))))))))
         :className "max-w-sm"})
       (shui/dropdown-menu
        (shui/dropdown-menu-trigger
@@ -106,48 +118,47 @@
          (ui/icon "chevron-down")))
        (shui/dropdown-menu-content
         {:align "end"}
-        (for [column columns]
+        (for [column (remove #(false? (:column-list? %)) columns)]
           (shui/dropdown-menu-checkbox-item
            {:key (str (:id column))
             :className "capitalize"
             :checked (column-visible? column)
             :onCheckedChange #(column-toggle-visiblity column %)}
-           (:id column)))))]
-     [:div.rounded-md.border
-      (table/table
-       (table/table-header
-        (table/table-row
-         (for [column (:columns table)]
-           (do
-             (prn :debug :column column)
+           (:name column)))))]
+     (let [columns' (:columns table)]
+       [:div.rounded-md.border
+        (table/table
+         (table/table-header
+          (table/table-row
+           (for [column columns']
              (table/table-head
               {:key (:id column)}
               (let [header-fn (:header column)]
                 (if (fn? header-fn)
                   (header-fn table column)
-                  header-fn)))))))
-       (table/table-body
-        (let [rows (:rows table)]
-          (if (pos? (count rows))
-            (for [row rows]
+                  header-fn))))))
+         (table/table-body
+          (let [rows (:rows table)]
+            (if (pos? (count rows))
+              (for [row rows]
+                (table/table-row
+                 {:key (str (:id row))
+                  :data-state (when (row-selected? row) "selected")}
+                 (for [column columns']
+                   (let [id (str (:id row) "-" (:id column))
+                         render (get column :cell)]
+                     (table/table-cell
+                      {:key id}
+                      (render table row column))))))
               (table/table-row
-               {:key (str (:id row))
-                :data-state (when (row-selected? row) "selected")}
-               (str row)
-               (comment
-                 (for [cell (.getVisibleCells row)]
-                   (table/table-cell
-                    {:key (.-id cell)})))))
-            (table/table-row
-             (table/table-cell
-              {:colSpan (count columns)
-               :className "h-24 text-center"}
-              "No results."))))))]
-     ;; [:div.flex.items-center.justify-end.space-x-2.py-4
-     ;;  [:div.flex-1.text-sm.text-muted-foreground
-     ;;   (let [selected-rows (.-rows ^js (.getFilteredSelectedRowModel table))
-     ;;         filter-rows (.-rows ^js (.getFilteredRowModel table))]
-     ;;     (str (count selected-rows)
-     ;;          " of "
-     ;;          (count filter-rows) " row(s) selected."))]]
-     ]))
+               (table/table-cell
+                {:colSpan (count columns)
+                 :className "h-24 text-center"}
+                "No results."))))))])
+     (let [selected-rows-count (table/get-selection-rows-count row-selection (:rows table))
+           rows-count (count (:rows table))]
+       [:div.flex.items-center.justify-end.space-x-2.py-4
+        [:div.flex-1.text-sm.text-muted-foreground
+         (if (pos? selected-rows-count)
+           (str selected-rows-count " of " rows-count " row(s) selected.")
+           (str "Total: " rows-count))]])]))
