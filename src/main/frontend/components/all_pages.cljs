@@ -40,13 +40,11 @@
     :cell (fn [opts] (row-checkbox (.-row opts)))
     :enableSorting false
     :enableHiding false}
-   {:id "status"
-    :accessorKey "status"
+   {:accessorKey "status"
     :header "Status"
     :cell (fn [^js opts]
             (.getValue (.-row opts) "status"))}
-   {:id "email"
-    :accessorKey "email"
+   {:accessorKey "email"
     :header (fn [^js opts]
               (shui/button
                {:variant "ghost"
@@ -55,8 +53,7 @@
                ;; [:> ArrowUpDown {:className "ml-2 h-4 w-4"}]
                ))
     :cell (fn [opts] (.getValue (.-row opts) "email"))}
-   {:id "amount"
-    :accessorKey "amount"
+   {:accessorKey "amount"
     :header (fn [_opts] "Amount")
     :cell (fn [opts]
             (let [amount (.getValue (.-row opts) "amount")
@@ -136,7 +133,7 @@
            {:key (.-id column)
             :className "capitalize"
             :checked (.getIsVisible column)
-            :onCheckedChange #(.toggleVisibility column (not %))}
+            :onCheckedChange #(.toggleVisibility column %)}
            (.-id column)))))]
      [:div.rounded-md.border
       (shui/table
