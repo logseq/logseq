@@ -809,7 +809,8 @@
                          (or
                           ;; built-in
                           (and (not (get-in ent [:block/schema :public?]))
-                               (ldb/built-in? ent))
+                               ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
+                               (get db-property/built-in-properties (:db/ident ent)))
                           ;; other position
                           (when-not (or (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
                                         (ldb/page? block))
