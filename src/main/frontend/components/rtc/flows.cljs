@@ -47,10 +47,11 @@
                                     [user-uuid
                                      {:user-info (user-uuid->user user-uuid)
                                       :updates
-                                      (take-while
-                                       (fn [[inst _]] (> inst mins-ago))
+                                      (sequence
+                                       (comp (take-while (fn [[inst _]] (> inst mins-ago)))
+                                             (dedupe))
                                        (concat (get-in latest-updates [graph-uuid user-uuid])
-                                               (get-in @*buffer [graph-uuid user-uuid])))}]))
+                                               (get-in @*buffer [graph-uuid user-uuid :updates])))}]))
                              latest-keys)}]
                   (swap! *buffer merge new-map)
                   @*buffer))))
