@@ -4,7 +4,8 @@
             [rum.core :as rum]
             [cljs-bean.core :refer [->js ->clj]]
             [frontend.util :as util]
-            [goog.object :as gobj]))
+            [goog.object :as gobj]
+            [frontend.ui :as ui]))
 
 (def useReactTable (gobj/get shui/tanStackReact "useReactTable"))
 (def getCoreRowModel (gobj/get shui/tanStackReact "getCoreRowModel"))
@@ -50,8 +51,7 @@
                {:variant "ghost"
                 :onClick #(.toggleSorting ^js (.-column opts) (= "asc" (.getIsSorted ^js (.-column opts))))}
                "Email"
-               ;; [:> ArrowUpDown {:className "ml-2 h-4 w-4"}]
-               ))
+               (ui/icon "arrows-up-down")))
     :cell (fn [opts] (.getValue (.-row opts) "email"))}
    {:accessorKey "amount"
     :header (fn [_opts] "Amount")
@@ -64,12 +64,12 @@
     :cell (fn [opts]
             (let [payment (.-original (.-row opts))]
               (shui/dropdown-menu
-               (shui/dropdown-menu-trigger {:asChild true}
-                                           (shui/button
-                                            {:variant "ghost" :className "h-8 w-8 p-0"}
-                                            [:span.sr-only "Open menu"]
-                 ;; [:> MoreHorizontal {:className "h-4 w-4"}]
-                                            ))
+               (shui/dropdown-menu-trigger
+                {:asChild true}
+                (shui/button
+                 {:variant "ghost" :className "h-8 w-8 p-0"}
+                 [:span.sr-only "Open menu"]
+                 (ui/icon "dots")))
                (shui/dropdown-menu-content
                 (shui/dropdown-menu-label
                  "Actions")
@@ -124,8 +124,7 @@
         (shui/button
          {:variant "outline" :className "ml-auto"}
          "Columns"
-         ;; [:> ChevronDown {:className "ml-2 h-4 w-4"}]
-         ))
+          (ui/icon "chevron-down")))
        (shui/dropdown-menu-content
         {:align "end"}
         (for [^js column (.getAllColumns table)]
