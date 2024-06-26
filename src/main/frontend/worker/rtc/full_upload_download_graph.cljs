@@ -12,7 +12,6 @@
             [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [malli.core :as ma]
