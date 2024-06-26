@@ -28,12 +28,22 @@
     :aria-label "Select row"}))
 
 (defn- header-cp
-  [{:keys [column-toggle-sorting!]} column]
-  (shui/button
-   {:variant "ghost"
-    :onClick #(column-toggle-sorting! column)}
-   (:name column)
-   (ui/icon "arrows-up-down")))
+  [{:keys [column-toggle-sorting! state]} column]
+  (let [sorting (:sorting state)
+        [asc?] (some (fn [item] (when (= (:id item) (:id column))
+                                  (when-some [asc? (:asc? item)]
+                                    [asc?]))) sorting)]
+    (shui/button
+     {:variant "text"
+      :class "!pl-0 hover:text-foreground"
+      :onClick #(column-toggle-sorting! column)}
+     (:name column)
+     (case asc?
+       true
+       (ui/icon "arrow-up")
+       false
+       (ui/icon "arrow-down")
+       nil))))
 
 (comment
   (defn- default-cell-cp
@@ -84,7 +94,7 @@
 (rum/defc all-pages < rum/static
   []
   (let [[input set-input!] (rum/use-state "")
-        [sorting set-sorting!] (rum/use-state [])
+        [sorting set-sorting!] (rum/use-state [{:id :block/updated-at, :asc? false}])
         [row-filter set-row-filter!] (rum/use-state nil)
         [visible-columns set-visible-columns!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
