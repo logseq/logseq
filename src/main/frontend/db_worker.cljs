@@ -421,19 +421,25 @@
    (when-let [conn (worker-state/get-datascript-conn repo)]
      (ldb/write-transit-str (sqlite-common-db/get-initial-data @conn))))
 
+  (get-page-refs-count
+   [_this repo]
+   (when-let [conn (worker-state/get-datascript-conn repo)]
+     (ldb/write-transit-str (sqlite-common-db/get-page->refs-count @conn))))
+
   (fetch-all-pages
    [_this repo exclude-page-ids-str]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (async/go
-       (let [all-pages (sqlite-common-db/get-all-pages @conn (ldb/read-transit-str exclude-page-ids-str))
-             partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
-         (doseq [[idx tx-data] partitioned-data]
-           (worker-util/post-message :sync-db-changes {:repo repo
-                                                       :tx-data tx-data
-                                                       :tx-meta {:initial-pages? true
-                                                                 :end? (= idx (dec (count partitioned-data)))}})
-           (async/<! (async/timeout 100)))))
-     nil))
+   ;; (when-let [conn (worker-state/get-datascript-conn repo)]
+   ;;   (async/go
+   ;;     (let [all-pages (sqlite-common-db/get-all-pages @conn (ldb/read-transit-str exclude-page-ids-str))
+   ;;           partitioned-data (map-indexed (fn [idx p] [idx p]) (partition-all 2000 all-pages))]
+   ;;       (doseq [[idx tx-data] partitioned-data]
+   ;;         (worker-util/post-message :sync-db-changes {:repo repo
+   ;;                                                     :tx-data tx-data
+   ;;                                                     :tx-meta {:initial-pages? true
+   ;;                                                               :end? (= idx (dec (count partitioned-data)))}})
+   ;;         (async/<! (async/timeout 100)))))
+   ;;   nil)
+   )
 
   (closeDB
    [_this repo]

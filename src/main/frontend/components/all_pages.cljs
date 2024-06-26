@@ -84,15 +84,15 @@
         [visible-columns set-visible-columns!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
         {:keys [column-visible? column-toggle-visiblity row-selected?]
-         :as table} (table/table-option {:data data
-                                         :columns columns
-                                         :state {:sorting sorting
-                                                 :row-filter row-filter
-                                                 :row-selection row-selection
-                                                 :visible-columns visible-columns}
-                                         :data-fns {:set-sorting! set-sorting!
-                                                    :set-visible-columns! set-visible-columns!
-                                                    :set-row-selection! set-row-selection!}})]
+         :as table} (shui/table-option {:data data
+                                        :columns columns
+                                        :state {:sorting sorting
+                                                :row-filter row-filter
+                                                :row-selection row-selection
+                                                :visible-columns visible-columns}
+                                        :data-fns {:set-sorting! set-sorting!
+                                                   :set-visible-columns! set-visible-columns!
+                                                   :set-row-selection! set-row-selection!}})]
     [:div.w-full
      [:div.flex.items-center.py-4
       (shui/input
@@ -127,35 +127,35 @@
            (:name column)))))]
      (let [columns' (:columns table)]
        [:div.rounded-md.border
-        (table/table
-         (table/table-header
-          (table/table-row
+        (shui/table
+         (shui/table-header
+          (shui/table-row
            (for [column columns']
-             (table/table-head
+             (shui/table-head
               {:key (:id column)}
               (let [header-fn (:header column)]
                 (if (fn? header-fn)
                   (header-fn table column)
                   header-fn))))))
-         (table/table-body
+         (shui/table-body
           (let [rows (:rows table)]
             (if (pos? (count rows))
               (for [row rows]
-                (table/table-row
+                (shui/table-row
                  {:key (str (:id row))
                   :data-state (when (row-selected? row) "selected")}
                  (for [column columns']
                    (let [id (str (:id row) "-" (:id column))
                          render (get column :cell)]
-                     (table/table-cell
+                     (shui/table-cell
                       {:key id}
                       (render table row column))))))
-              (table/table-row
-               (table/table-cell
+              (shui/table-row
+               (shui/table-cell
                 {:colSpan (count columns)
                  :className "h-24 text-center"}
                 "No results."))))))])
-     (let [selected-rows-count (table/get-selection-rows-count row-selection (:rows table))
+     (let [selected-rows-count (shui/table-get-selection-rows-count row-selection (:rows table))
            rows-count (count (:rows table))]
        [:div.flex.items-center.justify-end.space-x-2.py-4
         [:div.flex-1.text-sm.text-muted-foreground
