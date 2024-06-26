@@ -29,6 +29,7 @@
             [frontend.util.persist-var :as persist-var]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -530,7 +531,7 @@
 
 (defn preview
   [block-id]
-  (state/set-modal! #(preview-cp block-id) {:id :srs}))
+  (shui/dialog-open! #(preview-cp block-id) {:id :srs}))
 
 ;;; ================================================================
 ;;; register some external vars & related UI
@@ -694,8 +695,9 @@
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []
-                         (state/set-modal! #(cards (assoc config :modal? true) {:query-string query-string})
-                                           {:id :srs}))})
+                         (shui/dialog-open!
+                           #(cards (assoc config :modal? true) {:query-string query-string})
+                           {:id :srs}))})
           (let [view-fn (if modal? view-modal view)
                 blocks (if @*preview-mode? query-result review-cards)
                 blocks (if @*random-mode? (shuffle blocks) blocks)]

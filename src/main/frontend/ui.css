@@ -160,7 +160,7 @@
   }
 
   &[label="ls-modal-align-center"],
-  &.as-center{
+  &.as-center {
     top: 0;
 
     .ui__modal-panel {
@@ -178,15 +178,12 @@
       }
     }
   }
+}
 
-  &[label="instruction__cp"] {
-
-    .ui__modal-panel {
-      height: 90%;
-    }
-
-    .panel-content {
-      height: 100%;
+.ui__dialog-content {
+  &[label=flashcards__cp] {
+    .ui__dialog-main-content {
+      @apply max-h-[85vh] overflow-auto;
     }
   }
 }
