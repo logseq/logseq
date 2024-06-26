@@ -51,11 +51,16 @@
                  (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? true}))]
     (set-sorting! value')))
 
-(defn get-selection-rows-count
+(defn get-selection-rows
   [row-selection rows]
   (if (:selected-all? row-selection)
-    (- (count rows) (count (:excluded-ids row-selection)))
-    (count (:selected-ids row-selection))))
+    (let [excluded-ids (:excluded-ids row-selection)]
+      (if (seq excluded-ids)
+        (remove #(excluded-ids (:id %)) rows)
+        rows))
+    (let [selected-ids (:selected-ids row-selection)]
+      (when (seq selected-ids)
+        (filter #(selected-ids (:id %)) rows)))))
 
 (defn table-option
   [{:keys [data columns state data-fns]
