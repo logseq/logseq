@@ -8,7 +8,7 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util :refer [react]]
+            [frontend.util :as util]
             [clojure.core.async :as async]
             [frontend.db.async.util :as db-async-util]
             [promesa.core :as p]
@@ -198,16 +198,6 @@
   [repo-url affected-keys]
   (when (and repo-url (seq affected-keys))
     (refresh-affected-queries! repo-url affected-keys)))
-
-(defn sub-key-value
-  ([key]
-   (sub-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when (conn/get-db repo-url)
-     (let [m (some-> (q repo-url [:kv key] {} key key) react)]
-       (if-let [result (get m key)]
-         result
-         m)))))
 
 (defn run-custom-queries-when-idle!
   []

@@ -581,12 +581,6 @@
        (ui/icon "plus" {:size 15})
        [:div.ml-1.text-sm "Add property"]]]]))
 
-(defn- property-collapsed?
-  [block property]
-  (boolean?
-   (some (fn [p] (= (:db/id property) (:db/id p)))
-         (:block/collapsed-properties block))))
-
 (rum/defcs property-key <
   (rum/local false ::hover?)
   [state block property {:keys [class-schema? page-cp inline-text other-position?]}]
@@ -699,7 +693,6 @@
                                  (map? (first v))
                                  (:block/page (first v))))
                         (contains? #{:default} type))
-            collapsed? (when block? (property-collapsed? block property))
             date? (= type :date)
             checkbox? (= type :checkbox)]
         [:div {:class (cond
@@ -710,7 +703,6 @@
          [:div.property-key.col-span-2
           (property-key block property (assoc (select-keys opts [:class-schema?])
                                               :block? block?
-                                              :collapsed? collapsed?
                                               :inline-text inline-text
                                               :page-cp page-cp))]
          [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
@@ -720,9 +712,8 @@
            (if (and (:class-schema? opts) (:page-configure? opts))
              [:div.property-description.text-sm.opacity-70
               (inline-text {} :markdown (get-in property [:block/schema :description]))]
-             (when-not collapsed?
-               [:div.property-value.flex.flex-1
-                (pv/property-value block property v opts)]))]]]))))
+             [:div.property-value.flex.flex-1
+              (pv/property-value block property v opts)])]]]))))
 
 (rum/defcs ordered-properties < rum/reactive
   {:init (fn [state]
@@ -818,7 +809,8 @@
                          (or
                           ;; built-in
                           (and (not (get-in ent [:block/schema :public?]))
-                               (ldb/built-in? ent))
+                               ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
+                               (get db-property/built-in-properties (:db/ident ent)))
                           ;; other position
                           (when-not (or (and (:sidebar? opts) (= (:id opts) (str (:block/uuid block))))
                                         (ldb/page? block))

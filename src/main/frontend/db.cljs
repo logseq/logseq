@@ -2,8 +2,6 @@
   "Main entry ns for db related fns"
   (:require [frontend.db.conn :as conn]
             [frontend.db.model]
-            [frontend.db.query-custom]
-            [frontend.db.query-react]
             [frontend.db.react :as react]
             [frontend.db.utils]
             [frontend.namespaces :refer [import-vars]]
@@ -16,17 +14,14 @@
 (import-vars
  [frontend.db.conn
   ;; TODO: remove later
-  conns
   get-repo-path
   get-repo-name
   get-short-repo-name
-  datascript-db
   get-db
   remove-conn!]
 
  [frontend.db.utils
-  group-by-page seq-flatten
-  entity pull pull-many get-key-value]
+  entity pull pull-many]
 
  [frontend.db.model
   delete-blocks get-pre-block
@@ -50,13 +45,7 @@
   get-current-page
   remove-q! remove-query-component! add-q! add-query-component! clear-query-state!
   q
-  query-state query-components remove-custom-query! set-new-result! sub-key-value]
-
- [frontend.db.query-custom
-  custom-query]
-
- [frontend.db.query-react
-  react-query custom-query-result-transform])
+  query-state query-components remove-custom-query! set-new-result!])
 
 (defn start-db-conn!
   ([repo]

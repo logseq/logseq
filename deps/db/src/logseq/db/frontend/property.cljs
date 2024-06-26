@@ -53,7 +53,7 @@
                                                     :hide? true}}
    :logseq.property/source-page           {:schema {:type :entity
                                                     :hide? true}}
-   :logseq.property/built-in?             {:schema {:type :boolean
+   :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
    :logseq.property/hide-properties?      {:schema {:type :checkbox
                                                     :hide? true}}
@@ -264,13 +264,10 @@
 (def default-user-namespace "user.property")
 
 (defn create-user-property-ident-from-name
-  "Creates a property :db/ident for a default user namespace"
+  "Creates a property :db/ident for a default user namespace.
+   NOTE: Only use this when creating a db-ident for a new property."
   [property-name]
-  (let [property-name' (if (string? property-name)
-                         (keyword property-name) property-name)]
-    (if (qualified-keyword? property-name')
-      property-name'
-      (db-ident/create-db-ident-from-name default-user-namespace property-name))))
+  (db-ident/create-db-ident-from-name default-user-namespace property-name))
 
 (defn get-class-ordered-properties
   [class-entity]

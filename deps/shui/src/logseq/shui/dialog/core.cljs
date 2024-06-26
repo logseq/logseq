@@ -72,13 +72,16 @@
     (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
 
 ;; apis
+(declare close!)
+
 (defn open!
   [content-or-config & config']
   (let [config (if (map? content-or-config)
                  content-or-config
                  {:content content-or-config})
         content (:content config)
-        config (merge {:id (gen-id) :open? true} config (first config'))
+        id (gen-id)
+        config (merge {:id id :open? true :close #(close! id)} config (first config'))
         config (cond-> config
                  (fn? content)
                  (assoc :content (content config)))]
@@ -110,9 +113,10 @@
 ;; components
 (rum/defc modal-inner
   [config]
-  (let [{:keys [id title description content footer on-open-change align open? root-props content-props]} config
+  (let [{:keys [id title description content footer on-open-change align open?
+                auto-width? close-btn? root-props content-props]} config
         props (dissoc config
-                :id :title :description :content :footer
+                :id :title :description :content :footer :auto-width? :close-btn?
                 :align :on-open-change :open? :root-props :content-props)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
@@ -139,7 +143,10 @@
                                 (onPointerDownOutside e))
                               (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
                                 (.preventDefault e))))]
-        (dialog-content (merge props content-props)
+        (dialog-content
+          (cond-> (merge props content-props)
+            auto-width? (assoc :data-auto-width true)
+            (false? close-btn?) (assoc :data-close-btn false))
           (when title
             (dialog-header
               (when title (dialog-title title))

@@ -18,7 +18,8 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn- delete-page!
   [page]
@@ -100,7 +101,7 @@
           (when-not (or contents?
                         config/publishing?
                         (and db-based?
-                             (:logseq.property/built-in? page)))
+                             (db-property/property-value-content (:logseq.property/built-in? page))))
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page)}})
 

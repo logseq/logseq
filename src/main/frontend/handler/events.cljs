@@ -250,12 +250,11 @@
                 (p/catch (fn [^js e]
                            (notification/show! (str e) :error)
                            (js/console.error e)))))))))
-    (state/set-modal!
-      (file-sync/pick-dest-to-sync-panel graph)
-      {:center? true})))
+    (shui/dialog-open!
+      (file-sync/pick-dest-to-sync-panel graph))))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
-  (state/set-modal!
+  (shui/dialog-open!
     (file-sync/pick-page-histories-panel graph-uuid page-name)
     {:id :page-histories :label "modal-page-histories"}))
 
@@ -292,7 +291,7 @@
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
-    (state/set-modal! (ask-permission repo))))
+    (shui/dialog-open! (ask-permission repo))))
 
 (defonce *query-properties (atom {}))
 (rum/defc query-properties-settings-inner < rum/reactive
@@ -350,12 +349,16 @@
       {})))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards {:id :srs
-                                      :label "flashcards__cp"}))
+  (shui/dialog-open!
+    srs/global-cards
+    {:id :srs
+     :label "flashcards__cp"}))
 
 (defmethod handle :modal/show-instruction [_]
-  (state/set-modal! capacitor-fs/instruction {:id :instruction
-                                              :label "instruction__cp"}))
+  (shui/dialog-open!
+    capacitor-fs/instruction
+    {:id :instruction
+     :label "instruction__cp"}))
 
 (defmethod handle :modal/show-themes-modal [[_ classic?]]
   (if classic?
@@ -371,15 +374,8 @@
         {:id      label
          :label   label}))))
 
-(rum/defc modal-output
-  [content]
-  content)
-
-(defmethod handle :modal/show [[_ content]]
-  (state/set-modal! #(modal-output content)))
-
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
-  (state/set-modal! git-component/set-git-username-and-email))
+  (shui/dialog-open! git-component/set-git-username-and-email))
 
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
@@ -404,7 +400,8 @@
 
 
 (defmethod handle :modal/display-file-version-selector  [[_ versions path  get-content]]
-  (state/set-modal! #(git-component/file-version-selector versions path get-content)))
+  (shui/dialog-open!
+    #(git-component/file-version-selector versions path get-content)))
 
 (defmethod handle :graph/sync-context []
   (let [context {:dev? config/dev?
@@ -673,17 +670,16 @@
   (file-sync-restart!))
 
 (defmethod handle :graph/ask-for-re-fresh [_]
-  (handle
-    [:modal/show
-     [:div {:style {:max-width 700}}
-      [:p (t :sync-from-local-changes-detected)]
-      (ui/button
-        (t :yes)
-        :autoFocus "on"
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (state/close-modal!)
-                    (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
+  (shui/dialog-open!
+    [:div {:style {:max-width 700}}
+     [:p (t :sync-from-local-changes-detected)]
+     (ui/button
+       (t :yes)
+       :autoFocus "on"
+       :class "ui__modal-enter"
+       :on-click (fn []
+                   (state/close-modal!)
+                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]))
 
 (defmethod handle :sync/create-remote-graph [[_ current-repo]]
   (let [graph-name (js/decodeURI (util/node-path.basename current-repo))]
@@ -704,7 +700,7 @@
                             (state/get-repos)))))))
 
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
-  (state/set-modal!
+  (shui/dialog-open!
     (encryption/input-password
       repo-url nil (merge
                      (assoc remote-graph-info
@@ -744,15 +740,15 @@
                                     :path-params {:name (:block/name page-entity)}}))))))
 
 (defmethod handle :whiteboard/onboarding [[_ opts]]
-  (state/set-modal!
-    (fn [close-fn] (whiteboard/onboarding-welcome close-fn))
+  (shui/dialog-open!
+    (fn [{:keys [close]}] (whiteboard/onboarding-welcome close))
     (merge {:close-btn?      false
             :center?         true
             :close-backdrop? false} opts)))
 
 (defmethod handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]
-    (state/set-modal!
+    (shui/dialog-open!
       (file-sync/make-onboarding-panel type)
       (merge {:close-btn?      false
               :center?         true
@@ -827,7 +823,7 @@
                       :native-icloud? (not (string/blank? (state/get-icloud-container-root-url)))
                       :logged?        (user-handler/logged-in?)} opts)]
     (if (mobile-util/native-ios?)
-      (state/set-modal!
+      (shui/dialog-open!
         #(graph-picker/graph-picker-cp opts')
         {:label "graph-setup"})
       (page-handler/ls-dir-files! st/refresh! opts'))))
@@ -1035,7 +1031,7 @@
 
 (defmethod handle :show/multiple-tabs-error-dialog [_]
   (state/set-state! :error/multiple-tabs-access-opfs? true)
-  (state/set-modal! multi-tabs-dialog {:container-overflow-visible? true}))
+  (shui/dialog-open! multi-tabs-dialog))
 
 (defmethod handle :rtc/sync-state [[_ state]]
   (state/update-state! :rtc/state (fn [old] (merge old state))))
