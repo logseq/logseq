@@ -1,11 +1,10 @@
-(ns logseq.graph-parser.exporter-test
+(ns ^:node-only logseq.graph-parser.exporter-test
   (:require [cljs.test :refer [testing is]]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [datascript.core :as d]
             [clojure.string :as string]
             ["path" :as node-path]
             ["fs" :as fs]
-            ["fs/promises" :as fsp]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]
             [logseq.db.frontend.schema :as db-schema]
@@ -27,7 +26,7 @@
 
 (defn- <read-file
   [file]
-  (p/let [s (fsp/readFile (:path file))]
+  (p/let [s (fs/readFileSync (:path file))]
     (str s)))
 
 (defn- notify-user [m]
