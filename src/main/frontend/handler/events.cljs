@@ -299,7 +299,8 @@
                    (reset! *query-properties {})
                    state)}
   [block shown-properties all-properties]
-  (let [query-properties (rum/react *query-properties)]
+  (let [query-properties (rum/react *query-properties)
+        db-graph? (config/db-based-graph? (state/get-current-repo))]
     [:div
      [:h1.font-semibold.-mt-2.mb-2.text-lg (t :query/config-property-settings)]
      [:a.flex
@@ -316,7 +317,9 @@
                       (contains? shown-properties property)
                       property-value)]
          [:div.flex.flex-row.my-2.justify-between.align-items
-          [:div (if (uuid? property) (db-pu/get-property-name property) (name property))]
+          [:div (if (and db-graph? (qualified-keyword? property))
+                  (db-pu/get-property-name property)
+                  (name property))]
           [:div.mt-1 (ui/toggle shown?
                                 (fn []
                                   (let [value (not shown?)]
