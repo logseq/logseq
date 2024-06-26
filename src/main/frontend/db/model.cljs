@@ -43,6 +43,7 @@
   (let [db (conn/get-db repo)]
     (->>
      (d/datoms db :avet :block/name)
+     (distinct)
      (map #(d/entity db (:e %)))
      (remove hidden-page?)
      (remove (fn [page]

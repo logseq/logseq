@@ -9,7 +9,10 @@
             [frontend.components.page :as component-page]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.date :as date]))
+            [frontend.date :as date]
+            [goog.object :as gobj]
+            [goog.dom :as gdom]
+            [cljs-bean.core :as bean]))
 
 ;; columns:
 ;; page name, tags, backlinks, created at updated at
@@ -155,36 +158,40 @@
              :checked (column-visible? column)
              :onCheckedChange #(column-toggle-visiblity column %)}
             (:name column)))))]]
-     (let [columns' (:columns table)]
+     (let [columns' (:columns table)
+           rows (:rows table)]
        [:div.rounded-md.border
-        (shui/table
-         (shui/table-header
-          (shui/table-row
-           (for [column columns']
-             (shui/table-head
-              {:key (:id column)}
-              (let [header-fn (:header column)]
-                (if (fn? header-fn)
-                  (header-fn table column)
-                  header-fn))))))
-         (shui/table-body
-          (let [rows (:rows table)]
-            (if (pos? (count rows))
-              (for [row rows]
-                (shui/table-row
-                 {:key (str (:id row))
-                  :data-state (when (row-selected? row) "selected")}
-                 (for [column columns']
-                   (let [id (str (:id row) "-" (:id column))
-                         render (get column :cell)]
-                     (shui/table-cell
-                      {:key id}
-                      (render table row column))))))
-              (shui/table-row
-               (shui/table-cell
-                {:colSpan (count columns)
-                 :className "h-24 text-center"}
-                "No results."))))))])
+        (ui/virtualized-table
+         {:custom-scroll-parent (gdom/getElement "main-content-container")
+          :total-count (count rows)
+          :fixedHeaderContent (fn []
+                                (shui/table-row
+                                 {:class "bg-gray-01 shadow"}
+                                 (for [column columns']
+                                   (shui/table-head
+                                    {:key (str (:id column))}
+                                    (let [header-fn (:header column)]
+                                      (if (fn? header-fn)
+                                        (header-fn table column)
+                                        header-fn))))))
+          :components {:Table (fn [props]
+                                (shui/table {}
+                                  (.-children props)))
+                       :TableRow (fn [props]
+                                   (let [idx (gobj/get props "data-index")
+                                         row (nth rows idx)]
+                                     (shui/table-row
+                                      (merge
+                                       (bean/->clj props)
+                                       {:key (str (:id row))
+                                        :data-state (when (row-selected? row) "selected")})
+                                      (for [column columns']
+                                        (let [id (str (:id row) "-" (:id column))
+                                              render (get column :cell)]
+                                          (shui/table-cell
+                                           {:key id}
+                                           (render table row column)))))))}})])
+
      (let [rows-count (count (:rows table))]
        [:div.flex.items-center.justify-end.space-x-2.py-4
         [:div.flex-1.text-sm.text-muted-foreground
