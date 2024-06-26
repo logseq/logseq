@@ -1,6 +1,7 @@
 (ns frontend.mobile.graph-picker
   (:require
    [clojure.string :as string]
+   [logseq.shui.ui :as shui]
    [rum.core :as rum]
    [frontend.ui :as ui]
    [frontend.handler.notification :as notification]
@@ -116,12 +117,12 @@
 
          :intent "logseq"
          :on-click (fn []
-                     (state/close-modal!)
+                     (shui/dialog-close!)
                      (page-handler/ls-dir-files! shortcut/refresh!
-                                                 {:dir (when native-ios?
-                                                         (or
-                                                          (state/get-icloud-container-root-url)
-                                                          (state/get-local-container-root-url)))})))]
+                       {:dir (when native-ios?
+                               (or
+                                 (state/get-icloud-container-root-url)
+                                 (state/get-local-container-root-url)))})))]
 
        ;; step 1
        :new-graph

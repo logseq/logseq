@@ -12,9 +12,11 @@
             [frontend.state :as state]
             [frontend.storage :as storage]
             [frontend.util :as util]
+            [logseq.shui.dialog.core :as shui-dialog]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -228,8 +230,8 @@
 
 (defn toggle-cards!
   []
-  (if (and (= :srs (:modal/id @state/state)) (:modal/show? @state/state))
-    (state/close-modal!)
+  (if (shui-dialog/get-modal :srs)
+    (shui/dialog-close!)
     (state/pub-event! [:modal/show-cards])))
 
 (defn open-new-window-or-tab!

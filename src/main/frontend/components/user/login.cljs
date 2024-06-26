@@ -44,7 +44,7 @@
         (when session
           (user/login-callback session)
           (notification/show! (str "Hi, " username " :)") :success)
-          (state/close-modal!)))
+          (shui/dialog-close!)))
       [])
 
     nil))

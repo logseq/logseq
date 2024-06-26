@@ -85,7 +85,7 @@
                   (fn []
                     (let [buffer (.-result ^js reader)]
                       (import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
-                      (state/close-modal!))))
+                      (shui/dialog-close!))))
             (set! (.-onerror reader) (fn [e] (js/console.error e)))
             (set! (.-onabort reader) (fn [e]
                                        (prn :debug :aborted)
@@ -170,7 +170,7 @@
                          :tag-classes tag-classes-input
                          :property-classes property-classes-input
                          :property-parent-classes property-parent-classes-input})
-                       (state/close-modal!))]
+                       (shui/dialog-close!))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
