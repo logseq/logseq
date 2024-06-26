@@ -235,10 +235,12 @@
       [:thead
        [:tr.cursor
         (for [column columns]
-          (let [title (if (and (= column :clock-time) (integer? clock-time-total))
-                        (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
-                                                              clock-time-total))
-                        (name column))]
+          (let [title (if db-graph?
+                        (if (qualified-keyword? column) (db-pu/get-property-name column) (name column))
+                        (if (and (= column :clock-time) (integer? clock-time-total))
+                          (util/format "clock-time(total: %s)" (clock/seconds->days:hours:minutes:seconds
+                                                                clock-time-total))
+                          (name column)))]
             (sortable-title title column sort-state (:block/uuid current-block) {:db-graph? db-graph?})))]]
       [:tbody
        (for [row sort-result]
