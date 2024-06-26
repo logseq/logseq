@@ -124,7 +124,7 @@
                       (ui/icon "trash-x")))]
       [:div.flex.items-center.gap-2
        (shui/input
-        {:placeholder "Search pages..."
+        {:placeholder "Search pages"
          :value input
          :onChange (fn [e]
                      (let [value (util/evalue e)]

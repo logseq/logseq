@@ -43,12 +43,16 @@
     (set-row-selection! new-selection)))
 
 (defn- column-toggle-sorting!
-  [column set-sorting! sorting]
+  [column set-sorting! sorting {:keys [sort-by-one-column?]
+                                :or {sort-by-one-column? true}}]
   (let [id (:id column)
         existing-column (some (fn [item] (when (= (:id item) id) item)) sorting)
-        value' (if existing-column
-                 (mapv (fn [item] (when (= (:id item) id) (update item :asc? not))) sorting)
-                 (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? true}))]
+        value (if existing-column
+                (mapv (fn [item] (when (= (:id item) id) (update item :asc? not))) sorting)
+                (conj (if (vector? sorting) sorting (vec sorting)) {:id id :asc? true}))
+        value' (if sort-by-one-column?
+                 (filterv (fn [item] (when (= (:id item) id) item)) value)
+                 value)]
     (set-sorting! value')))
 
 (defn get-selection-rows
@@ -86,7 +90,7 @@
            :row-selected? (fn [row] (row-selected? row row-selection))
            :row-toggle-selected! (fn [row value] (row-toggle-selected! row value set-row-selection! row-selection))
            :toggle-selected-all! (fn [value] (toggle-selected-all! value set-row-selection!))
-           :column-toggle-sorting! (fn [column] (column-toggle-sorting! column set-sorting! sorting)))))
+           :column-toggle-sorting! (fn [column & {:as option}] (column-toggle-sorting! column set-sorting! sorting option)))))
 
 (defn- get-prop-and-children
   [prop-and-children]
