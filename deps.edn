@@ -4,7 +4,7 @@
   rum/rum                               {:mvn/version "0.12.9"}
 
   datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
-                                         :sha     "0a3ce97e0f3d6afffc395e5a901312d208ce68e2"}
+                                         :sha     "d23b959d039bb71da9d33c456fcdce198af0ad82"}
 
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:mvn/version "0.4.7"}
