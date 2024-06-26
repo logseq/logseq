@@ -7,9 +7,7 @@
             [promesa.core :as p]
             [cljs-time.core :as t]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [datascript.transit :as dt]
-            [frontend.db.async :as db-async]
-            [clojure.core.async :as async]))
+            [datascript.transit :as dt]))
 
 (defn restore-graph!
   "Restore db from SQLite"
@@ -33,6 +31,7 @@
     (state/set-state! :graph/loading? false)
     (react/clear-query-state!)
     (state/pub-event! [:ui/re-render-root])
-    (async/go
-      (async/<! (async/timeout 100))
-      (db-async/<fetch-all-pages repo))))
+    ;; (async/go
+    ;;   (async/<! (async/timeout 100))
+    ;;   (db-async/<fetch-all-pages repo))
+    ))

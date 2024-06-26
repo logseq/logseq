@@ -4,12 +4,12 @@
             [logseq.shui.shortcut.v1 :as shui.shortcut.v1]
             [logseq.shui.toaster.core :as toaster-core]
             [logseq.shui.select.core :as select-core]
-            [logseq.shui.tanstack-table.core :as tanstack-table-core]
             [logseq.shui.select.multi :as select-multi]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.popup.core :as popup-core]
             [logseq.shui.base.core :as base-core]
-            [logseq.shui.form.core :as form-core]))
+            [logseq.shui.form.core :as form-core]
+            [logseq.shui.table.core :as table-core]))
 
 (def button base-core/button)
 (def link base-core/link)
@@ -52,15 +52,6 @@
 (def card-content (util/lsui-wrap "CardContent"))
 (def card-footer (util/lsui-wrap "CardFooter"))
 
-(def table tanstack-table-core/table)
-(def table-header tanstack-table-core/table-header)
-(def table-body tanstack-table-core/table-body)
-(def table-footer tanstack-table-core/table-footer)
-(def table-head tanstack-table-core/table-head)
-(def table-row tanstack-table-core/table-row)
-(def table-cell tanstack-table-core/table-cell)
-(def table-caption tanstack-table-core/table-caption)
-(def ^js tanStackReact tanstack-table-core/tanStackReact)
 
 (def form-provider form-core/form-provider)
 (def form-item form-core/form-item)
@@ -137,3 +128,12 @@
 (def popup-hide-all! popup-core/hide-all!)
 
 (def multi-select-content select-multi/x-select-content)
+
+(def table-option table-core/table-option)
+(def table table-core/table)
+(def table-header table-core/table-header)
+(def table-head table-core/table-head)
+(def table-body table-core/table-body)
+(def table-row table-core/table-row)
+(def table-cell table-core/table-cell)
+(def table-get-selection-rows-count table-core/get-selection-rows-count)
