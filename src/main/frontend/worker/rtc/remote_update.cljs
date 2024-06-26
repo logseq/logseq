@@ -263,6 +263,8 @@
            (case (:op remote-op)
              :remove (dissoc affected-blocks-map (:block-uuid remote-op))
              :move (dissoc affected-blocks-map (:self remote-op))
+             ;; remove block/order, parents in update-attrs, if there're some unpushed local move-ops
+             :update-attrs (update affected-blocks-map (:self remote-op) dissoc :block/order :parents)
              ;; default
              affected-blocks-map))
 
@@ -335,7 +337,6 @@
     :block/tags
     :block/link
     :block/journal-day
-    :block/order
     :class/parent
     :class/schema.properties
     :property/schema.classes})
@@ -466,14 +467,14 @@
 
 (defn- apply-remote-update-ops
   [repo conn update-ops]
-  (doseq [{:keys [parents left self] :as op-value} update-ops]
-    (when (and parents left)
-      (let [r (check-block-pos @conn self parents left)]
+  (doseq [{:keys [parents self] block-order :block/order :as op-value} update-ops]
+    (when (and parents block-order)
+      (let [r (check-block-pos @conn self parents block-order)]
         (case r
           :not-exist
-          (insert-or-move-block repo conn self parents left false op-value)
+          (insert-or-move-block repo conn self parents block-order false op-value)
           :wrong-pos
-          (insert-or-move-block repo conn self parents left true op-value)
+          (insert-or-move-block repo conn self parents block-order true op-value)
           nil)))
     (update-block-attrs repo conn self op-value)))
 
