@@ -39,21 +39,24 @@
           _ (fsp/mkdir parent-dir #js {:recursive true})]
     (fsp/copyFile (:path file) (node-path/join parent-dir (node-path/basename (:path file))))))
 
+(defn- notify-user [m]
+  (println (:msg m))
+  (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
+  (println "Stacktrace:")
+  (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
+    (println (string/join
+              "\n"
+              (map
+               #(str (:file %) (when (:line %) (str ":" (:line %)))
+                     " calls #'"
+                     (str (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name])))
+               stack)))
+    (println (.-stack (get-in m [:ex-data :error])))))
+
 (def default-export-options
   {;; common options
    :rpath-key ::rpath
-   :notify-user (fn notify-user [m]
-                  (println (:msg m))
-                  (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
-                  (when-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
-                    (println "Stacktrace:")
-                    (println (string/join
-                              "\n"
-                              (map
-                               #(str (:file %) (when (:line %) (str ":" (:line %)))
-                                     " calls #'"
-                                     (str (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name])))
-                               stack)))))
+   :notify-user notify-user
    :<read-file <read-file
    ;; :set-ui-state prn
    ;; config file options
