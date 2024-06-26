@@ -136,4 +136,4 @@
 (def table-body table-core/table-body)
 (def table-row table-core/table-row)
 (def table-cell table-core/table-cell)
-(def table-get-selection-rows-count table-core/get-selection-rows-count)
+(def table-get-selection-rows table-core/get-selection-rows)

@@ -6,9 +6,9 @@
             [frontend.ui :as ui]
             [clojure.string :as string]
             [frontend.components.block :as component-block]
+            [frontend.components.page :as component-page]
             [frontend.db :as db]
             [frontend.state :as state]
-            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]))
 
 ;; columns:
@@ -35,9 +35,10 @@
    (:name column)
    (ui/icon "arrows-up-down")))
 
-(defn- default-cell-cp
-  [_table row column]
-  (str (get row (:id column))))
+(comment
+  (defn- default-cell-cp
+    [_table row column]
+    (str (get row (:id column)))))
 
 (defn- timestamp-cell-cp
   [_table row column]
@@ -75,6 +76,11 @@
     :header header-cp
     :cell timestamp-cell-cp}])
 
+(defn- get-all-pages
+  []
+  (->> (db/get-all-pages (state/get-current-repo))
+       (map (fn [p] (assoc p :id (:db/id p))))))
+
 (rum/defc all-pages < rum/static
   []
   (let [[input set-input!] (rum/use-state "")
@@ -82,7 +88,7 @@
         [row-filter set-row-filter!] (rum/use-state nil)
         [visible-columns set-visible-columns!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
-        data (db/get-all-pages (state/get-current-repo))
+        [data set-data!] (rum/use-state (get-all-pages))
         {:keys [column-visible? column-toggle-visiblity row-selected?]
          :as table} (shui/table-option {:data data
                                         :columns columns
@@ -92,41 +98,53 @@
                                                 :visible-columns visible-columns}
                                         :data-fns {:set-sorting! set-sorting!
                                                    :set-visible-columns! set-visible-columns!
-                                                   :set-row-selection! set-row-selection!}})]
+                                                   :set-row-selection! set-row-selection!}})
+        selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        selected-rows-count (count selected-rows)
+        selected? (pos? selected-rows-count)]
     [:div.w-full
-     [:h1.title (t :all-pages)]
-
-     [:div.flex.items-center.py-4
-      (shui/input
-       {:placeholder "Search page..."
-        :value input
-        :onChange (fn [e]
-                    (let [value (util/evalue e)]
-                      (set-input! value)
-                      (set-row-filter! (fn []
+     [:div.flex.items-center.pb-4.justify-between
+      [:div.ml-1
+       (when selected?
+         (shui/button {:variant :destructive
+                       :class "text-muted-foreground"
+                       :size :sm
+                       :on-click #(state/set-modal!
+                                   (component-page/batch-delete-dialog selected-rows false (fn [] (set-data! (get-all-pages)))))}
+                      (ui/icon "trash-x")))]
+      [:div.flex.items-center.gap-2
+       (shui/input
+        {:placeholder "Search pages..."
+         :value input
+         :onChange (fn [e]
+                     (let [value (util/evalue e)]
+                       (set-input! value)
+                       (set-row-filter! (fn []
                                            ;; Returns a fn here.
                                            ;; https://stackoverflow.com/questions/55621212/is-it-possible-to-react-usestate-in-react
-                                         (fn [row]
-                                           (if (string/blank? value)
-                                             true
-                                             (when row (string/includes? (:block/name row) (string/lower-case value)))))))))
-        :className "max-w-sm"})
-      (shui/dropdown-menu
-       (shui/dropdown-menu-trigger
-        {:asChild true}
-        (shui/button
-         {:variant "outline" :className "ml-auto"}
-         "Columns"
-         (ui/icon "chevron-down")))
-       (shui/dropdown-menu-content
-        {:align "end"}
-        (for [column (remove #(false? (:column-list? %)) columns)]
-          (shui/dropdown-menu-checkbox-item
-           {:key (str (:id column))
-            :className "capitalize"
-            :checked (column-visible? column)
-            :onCheckedChange #(column-toggle-visiblity column %)}
-           (:name column)))))]
+                                          (fn [row]
+                                            (if (string/blank? value)
+                                              true
+                                              (when row (string/includes? (:block/name row) (string/lower-case value)))))))))
+         :class "max-w-sm !h-7 !py-0"})
+
+       (shui/dropdown-menu
+        (shui/dropdown-menu-trigger
+         {:asChild true}
+         (shui/button
+          {:variant "outline" :size :sm
+           :class "text-muted-foreground"}
+          "Columns"
+          (ui/icon "chevron-down")))
+        (shui/dropdown-menu-content
+         {:align "end"}
+         (for [column (remove #(false? (:column-list? %)) columns)]
+           (shui/dropdown-menu-checkbox-item
+            {:key (str (:id column))
+             :className "capitalize"
+             :checked (column-visible? column)
+             :onCheckedChange #(column-toggle-visiblity column %)}
+            (:name column)))))]]
      (let [columns' (:columns table)]
        [:div.rounded-md.border
         (shui/table
@@ -144,10 +162,10 @@
             (if (pos? (count rows))
               (for [row rows]
                 (shui/table-row
-                 {:key (str (:db/id row))
+                 {:key (str (:id row))
                   :data-state (when (row-selected? row) "selected")}
                  (for [column columns']
-                   (let [id (str (:db/id row) "-" (:id column))
+                   (let [id (str (:id row) "-" (:id column))
                          render (get column :cell)]
                      (shui/table-cell
                       {:key id}
@@ -157,8 +175,7 @@
                 {:colSpan (count columns)
                  :className "h-24 text-center"}
                 "No results."))))))])
-     (let [selected-rows-count (shui/table-get-selection-rows-count row-selection (:rows table))
-           rows-count (count (:rows table))]
+     (let [rows-count (count (:rows table))]
        [:div.flex.items-center.justify-end.space-x-2.py-4
         [:div.flex-1.text-sm.text-muted-foreground
          (if (pos? selected-rows-count)
