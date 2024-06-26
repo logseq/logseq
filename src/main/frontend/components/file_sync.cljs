@@ -24,6 +24,7 @@
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [frontend.storage :as storage]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -359,10 +360,10 @@
                                          (js/decodeURI (util/node-path.basename current-repo))
 
                                          confirm-fn
-                                         (fn [close-fn]
-                                           (create-remote-graph-panel current-repo graph-name close-fn))]
+                                         (fn [{:keys [close]}]
+                                           (create-remote-graph-panel current-repo graph-name close))]
 
-                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
+                                     (shui/dialog-open! confirm-fn {:center? true :close-btn? false})))
         turn-on                 (->
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
