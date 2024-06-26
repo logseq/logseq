@@ -530,12 +530,23 @@
     (and (vector? parent) (contains? pre-blocks (second parent)))
     (assoc :block/parent page)))
 
+(defn- fix-block-name-lookup-ref
+  "Some graph-parser attributes return :block/name as a lookup ref. This fixes
+  those to use uuids since block/name is not unique for db graphs"
+  [block db page-names-to-uuids]
+  (cond-> block
+    (= :block/name (first (:block/page block)))
+    (assoc :block/page [:block/uuid (cached-prop-name->uuid db page-names-to-uuids (second (:block/page block)))])
+    (:block/name (:block/parent block))
+    (assoc :block/parent {:block/uuid (cached-prop-name->uuid db page-names-to-uuids (:block/name (:block/parent block)))})))
+
 (defn- build-block-tx
   [db block pre-blocks page-names-to-uuids {:keys [import-state tag-classes] :as options}]
   ;; (prn ::block-in block)
   (let [old-property-schemas @(:property-schemas import-state)]
     (-> block
         (fix-pre-block-references pre-blocks)
+        (fix-block-name-lookup-ref db page-names-to-uuids)
         (update-block-macros db page-names-to-uuids)
         ;; needs to come before update-block-refs to detect new property schemas
         (handle-block-properties db page-names-to-uuids (:block/refs block) options)
@@ -738,7 +749,7 @@
                                 blocks-tx
                                 log-fn)
         ;; Build indices
-        pages-index (map #(select-keys % [:block/name]) pages-tx)
+        pages-index (map #(select-keys % [:block/uuid]) pages-tx)
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
         block-refs-ids (->> (mapcat :block/refs blocks-tx)
                             (filter (fn [ref] (and (vector? ref)
