@@ -171,9 +171,10 @@
       (sqlite-common-db/create-kvs-table! db)
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
-            conn (sqlite-common-db/get-storage-conn storage schema)]
+            conn (sqlite-common-db/get-storage-conn storage schema)
+            initial-data-exists? (d/entity @conn :logseq.class/Root)]
         (swap! *datascript-conns assoc repo conn)
-        (when config
+        (when (and config (not initial-data-exists?))
           (let [initial-data (sqlite-create-graph/build-db-initial-data config)]
             (d/transact! conn initial-data {:initial-db? true})))
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb2! repo)]

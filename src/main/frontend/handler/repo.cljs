@@ -192,6 +192,7 @@
            _ (persist-db/<new full-graph-name {:config config})
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
+           _ (restore-and-setup-repo! full-graph-name)
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
