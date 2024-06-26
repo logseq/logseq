@@ -62,7 +62,25 @@
           unpushed-ops
           [[:move 1 {:block-uuid uuid1}]]
           r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
-      (is (empty? r)))))
+      (is (empty? r))))
+
+  (testing "case4: update remote :update-attrs op"
+    (let [[uuid1 uuid2] (repeatedly random-uuid)
+          affected-blocks-map
+          {uuid1
+           {:op :update-attrs
+            :self uuid1
+            :parents [uuid2]
+            :block/order "a0"
+            :block/content "update content"}}
+          unpushed-ops
+          [[:move 1 {:block-uuid uuid1}]]
+          r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
+      (is (= {uuid1
+              {:op :update-attrs
+               :self uuid1
+               :block/content "update content"}}
+             r)))))
 
 (deftest gen-remote-ops-test
   (let [repo (state/get-current-repo)
