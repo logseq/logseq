@@ -238,9 +238,7 @@
                  other-blocks
                  [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                   {:db/ident :logseq.kv/db-type :kv/value "db"}])
-        init-tx-data (concat [{:db/ident :logseq.kv/db-type :kv/value "db"}
-                              ;; TODO: remove this, should download from remote
-                              {:db/ident :logseq.kv/schema-version :kv/value db-schema/version}]
+        init-tx-data (concat [{:db/ident :logseq.kv/db-type :kv/value "db"}]
                              db-schema-def-blocks)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
