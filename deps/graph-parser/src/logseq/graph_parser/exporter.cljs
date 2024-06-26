@@ -773,7 +773,7 @@
         ;; returning val results in smoother ui updates
         m)
       (p/catch (fn [error]
-                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" error)
+                 (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
                                :level :error
                                :ex-data {:path path :error error}})))))
 

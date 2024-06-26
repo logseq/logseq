@@ -12,6 +12,7 @@
             [babashka.cli :as cli]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.common.graph :as common-graph]
+            #_:clj-kondo/ignore
             [logseq.outliner.cli :as outliner-cli]
             [promesa.core :as p]))
 
@@ -38,6 +39,27 @@
           _ (fsp/mkdir parent-dir #js {:recursive true})]
     (fsp/copyFile (:path file) (node-path/join parent-dir (node-path/basename (:path file))))))
 
+(def default-export-options
+  {;; common options
+   :rpath-key ::rpath
+   :notify-user (fn notify-user [m]
+                  (println (:msg m))
+                  (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
+                  (when-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
+                    (println "Stacktrace:")
+                    (println (string/join
+                              "\n"
+                              (map
+                               #(str (:file %) (when (:line %) (str ":" (:line %)))
+                                     " calls #'"
+                                     (str (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name])))
+                               stack)))))
+   :<read-file <read-file
+   ;; :set-ui-state prn
+   ;; config file options
+   ;; TODO: Add actual default
+   :default-config {}})
+
 (defn- import-file-graph-to-db
   "Import a file graph dir just like UI does. However, unlike the UI the
   exporter receives file maps containing keys :path and ::rpath since :path
@@ -47,16 +69,9 @@
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
         options (merge options
-                       {;; common options
-                        :rpath-key ::rpath
-                        :notify-user prn
-                        :<read-file <read-file
-                        ;; :set-ui-state prn
-                        ;; config file options
-                        ;; TODO: Add actual default
-                        :default-config {}
+                       default-export-options
                         ;; asset file options
-                        :<copy-asset (fn copy-asset [file]
+                       {:<copy-asset (fn copy-asset [file]
                                        (<copy-asset-file file db-graph-dir file-graph-dir))})]
     (gp-exporter/export-file-graph conn conn config-file *files options)))
 
@@ -70,7 +85,7 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [file conn {:keys [files] :as options}]
-  (let [doc-options (gp-exporter/build-doc-options conn {:macros {}} options)
+  (let [doc-options (gp-exporter/build-doc-options conn {:macros {}} (merge options default-export-options))
         files' (mapv #(hash-map :path %)
                      (into [file] (map resolve-path files)))]
     (gp-exporter/export-doc-files conn files' <read-file doc-options)))
