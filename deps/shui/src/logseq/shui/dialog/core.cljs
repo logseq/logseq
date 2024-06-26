@@ -113,9 +113,10 @@
 ;; components
 (rum/defc modal-inner
   [config]
-  (let [{:keys [id title description content footer on-open-change align open? auto-width? root-props content-props]} config
+  (let [{:keys [id title description content footer on-open-change align open?
+                auto-width? close-btn? root-props content-props]} config
         props (dissoc config
-                :id :title :description :content :footer auto-width?
+                :id :title :description :content :footer :auto-width? :close-btn?
                 :align :on-open-change :open? :root-props :content-props)
         props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
@@ -144,7 +145,8 @@
                                 (.preventDefault e))))]
         (dialog-content
           (cond-> (merge props content-props)
-            auto-width? (assoc :data-auto-width true))
+            auto-width? (assoc :data-auto-width true)
+            (false? close-btn?) (assoc :data-close-btn false))
           (when title
             (dialog-header
               (when title (dialog-title title))

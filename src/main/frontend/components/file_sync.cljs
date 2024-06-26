@@ -815,10 +815,10 @@
   ([] (open-icloud-graph-clone-picker (state/get-current-repo)))
   ([repo]
    (when (and repo (mobile-util/in-iCloud-container-path? repo))
-     (state/set-modal!
+     (shui/dialog-open!
       (fn [close-fn]
         (clone-local-icloud-graph-panel repo (util/node-path.basename repo) close-fn))
-      {:close-btn? false :center? true}))))
+      {:close-btn? false}))))
 
 (defn make-onboarding-panel
   [type]
