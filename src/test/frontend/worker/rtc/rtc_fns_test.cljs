@@ -19,7 +19,7 @@
   test-helper/db-based-start-and-destroy-db
   (worker-fixtures/listen-test-db-fixture [:sync-db-to-main-thread]))
 
-(deftest filter-remote-data-by-local-unpushed-ops-test
+(deftest update-remote-data-by-local-unpushed-ops-test
   (testing "case1"
     (let [[uuid1 uuid2] (repeatedly (comp str random-uuid))
           affected-blocks-map
@@ -32,12 +32,13 @@
           unpushed-ops
           [[:update 1 {:block-uuid uuid1
                        :av-coll [[:block/content "new-content-str" 1 true]]}]]
-          r (#'r.remote/filter-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
+          r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
       (is (= {uuid1
               {:op :move
                :self uuid1
                :parents [uuid2]
-               :block/order "a0"}}
+               :block/order "a0"
+               :block/content "new-content-str"}}
              r))))
   (testing "case2"
     (let [[uuid1] (repeatedly (comp str random-uuid))
@@ -47,7 +48,7 @@
             :block-uuid uuid1}}
           unpushed-ops
           [[:move 1 {:block-uuid uuid1}]]
-          r (#'r.remote/filter-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
+          r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
       (is (empty? r))))
 
   (testing "case3"
@@ -60,7 +61,7 @@
             :block/order "a0"}}
           unpushed-ops
           [[:move 1 {:block-uuid uuid1}]]
-          r (#'r.remote/filter-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
+          r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
       (is (empty? r)))))
 
 (deftest gen-remote-ops-test

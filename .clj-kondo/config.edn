@@ -60,6 +60,7 @@
              frontend.db-mixins db-mixins
              frontend.db.query-dsl query-dsl
              frontend.db.react react
+             frontend.db.query-custom query-custom
              frontend.db.query-react query-react
              frontend.db.util db-utils
              frontend.diff diff

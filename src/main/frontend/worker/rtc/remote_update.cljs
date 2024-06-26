@@ -234,23 +234,23 @@
   (doseq [op remove-page-ops]
     (worker-page/delete! repo conn (:block-uuid op) {:persist-op? false})))
 
-(defn- diff-remote-attr-map-by-local-av-coll
+(defn- patch-remote-attr-map-by-local-av-coll
   [attr-map av-coll]
   (let [a->add->v+t (reduce
                      (fn [m [a v t add?]]
                        (assoc-in m [a add?] [v t]))
                      {} av-coll)]
-    (into {}
-          (filter
+    (into attr-map
+          (keep
            (fn [[remote-a _remote-v]]
-             (let [v+t (get-in a->add->v+t [remote-a true])]
-               (nil? v+t))))
+             (when-let [v (get-in a->add->v+t [remote-a true 0])]
+               [remote-a v])))
           attr-map)))
 
-(defn- filter-remote-data-by-local-unpushed-ops
+(defn- update-remote-data-by-local-unpushed-ops
   "when remote-data request client to move/update/remove/... blocks,
-  these updates maybe not needed, because this client just updated some of these blocks,
-  so we need to filter these just-updated blocks out, according to the unpushed-local-ops"
+  these updates maybe not needed or need to update, because this client just updated some of these blocks,
+  so we need to update these remote-data by local-ops"
   [affected-blocks-map local-unpushed-ops]
   (assert (op-mem-layer/ops-coercer local-unpushed-ops) local-unpushed-ops)
   (reduce
@@ -269,10 +269,10 @@
          :update
          (let [block-uuid (:block-uuid local-op-value)]
            (if-let [remote-op (get affected-blocks-map block-uuid)]
-             (assoc affected-blocks-map block-uuid
-                    (if (#{:update-attrs :move} (:op remote-op))
-                      (diff-remote-attr-map-by-local-av-coll remote-op (:av-coll local-op-value))
-                      remote-op))
+             (let [remote-op* (if (#{:update-attrs :move} (:op remote-op))
+                                (patch-remote-attr-map-by-local-av-coll remote-op (:av-coll local-op-value))
+                                remote-op)]
+               (assoc affected-blocks-map block-uuid remote-op*))
              affected-blocks-map))
          ;;else
          affected-blocks-map)))
@@ -282,7 +282,7 @@
   [repo affected-blocks]
   (let [unpushed-ops (op-mem-layer/get-all-ops repo)
         affected-blocks-map* (if unpushed-ops
-                               (filter-remote-data-by-local-unpushed-ops
+                               (update-remote-data-by-local-unpushed-ops
                                 affected-blocks unpushed-ops)
                                affected-blocks)
         {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs

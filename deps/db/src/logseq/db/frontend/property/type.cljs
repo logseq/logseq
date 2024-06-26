@@ -11,8 +11,7 @@
 
 (def internal-built-in-property-types
   "Valid property types only for use by internal built-in-properties"
-  ;; TODO: Remove :boolean when logseq.property/built-in? references reusable property value entity on startup
-  #{:keyword :map :coll :any :entity :boolean})
+  #{:keyword :map :coll :any :entity})
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
@@ -138,7 +137,6 @@
               {:error/message "should be a journal date"}
               date?]
    :checkbox checkbox-entity?
-   :boolean  boolean?
    :url      [:fn
               {:error/message "should be a URL"}
               url-entity?]

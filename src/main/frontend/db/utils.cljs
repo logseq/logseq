@@ -62,14 +62,6 @@
        (->> (d/pull-many db selector eids)
             (map #(update-block-content % (:db/id %))))))))
 
-(defn get-key-value
-  ([key]
-   (get-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when-let [db (conn/get-db repo-url)]
-     (some-> (d/entity db key)
-             key))))
-
 (defn q
   [query & inputs]
   (when-let [repo (state/get-current-repo)]

@@ -238,6 +238,16 @@ html[data-theme=dark] {
 
 .ui__dialog-content {
   @apply outline-none;
+
+  &[data-auto-width] {
+    @apply max-w-[90vw] w-max sm:max-w-[960px];
+  }
+
+  &[data-close-btn=false] {
+    .ui__dialog-close {
+      @apply hidden;
+    }
+  }
 }
 
 .ui__button-shortcut-key {

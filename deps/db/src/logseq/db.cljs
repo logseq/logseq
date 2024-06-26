@@ -11,7 +11,8 @@
             [logseq.db.frontend.entity-plus :as entity-plus]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.property :as db-property]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -20,7 +21,6 @@
     :block/parent
     :block/order
     :block/collapsed?
-    :block/collapsed-properties
     :block/format
     :block/refs
     :block/_refs
@@ -449,7 +449,7 @@
 (defn built-in?
   "Built-in page or block"
   [entity]
-  (:logseq.property/built-in? entity))
+  (db-property/property-value-content (:logseq.property/built-in? entity)))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"

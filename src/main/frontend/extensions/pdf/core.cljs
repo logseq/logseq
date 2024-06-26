@@ -15,6 +15,7 @@
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -965,12 +966,13 @@
            "PasswordException"
            (do
              (set-loader-state! {:error nil})
-             (state/set-modal! (fn [close-fn]
-                                 (let [on-password-fn
-                                       (fn [password]
-                                         (close-fn)
-                                         (set-doc-password! password))]
-                                   (pdf-password-input on-password-fn)))))
+             (shui/dialog-open!
+               (fn [{:keys [close]}]
+                 (let [on-password-fn
+                       (fn [password]
+                         (close)
+                         (set-doc-password! password))]
+                   (pdf-password-input on-password-fn)))))
 
            (do
              (notification/show!

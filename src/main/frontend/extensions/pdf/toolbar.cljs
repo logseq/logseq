@@ -13,6 +13,7 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -100,8 +101,10 @@
       [:div.extensions__pdf-settings-item.toggle-input
        [:a.is-info.w-full.text-gray-500
         {:title    (t :pdf/doc-metadata)
-         :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
-                      (state/set-modal! (make-docinfo-in-modal ret)))}
+         :on-click (fn []
+                     (p/let [ret (pdf-utils/get-meta-data$ viewer)]
+                       (hide-settings!)
+                       (shui/dialog-open! (make-docinfo-in-modal ret))))}
 
         [:span.flex.items-center.justify-between.w-full
          (t :pdf/doc-metadata)

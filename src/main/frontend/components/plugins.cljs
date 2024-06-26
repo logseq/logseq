@@ -981,7 +981,7 @@
        (ui/button [:span (t :plugin/install)]
                   :on-click #(do
                                (plugin-config-handler/replace-plugins plugins)
-                               (state/close-sub-modal! "ls-plugins-from-file-modal")))]]
+                               (shui/dialog-close! "ls-plugins-from-file-modal")))]]
      ;; all done
      [:div.py-4 [:strong.text-xl (str "\uD83C\uDF89 " (t :plugin.install-from-file/success))]])])
 
@@ -1414,11 +1414,10 @@
 
 (defn open-plugins-from-file-modal!
   [plugins]
-  (state/set-sub-modal!
-    (fn [_close!]
+  (shui/dialog-open!
+    (fn []
       (plugins-from-file plugins))
-    {:center? true
-     :id      "ls-plugins-from-file-modal"}))
+    {:id "ls-plugins-from-file-modal"}))
 
 (defn open-focused-settings-modal!
   [title]

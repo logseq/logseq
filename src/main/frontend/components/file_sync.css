@@ -554,12 +554,6 @@
   }
 }
 
-div[label=modal-page-histories] {
-  .panel-content {
-    overflow: hidden;
-  }
-}
-
 html[data-theme='light'] {
   .cp__file-sync {
     &-welcome-logseq-sync {

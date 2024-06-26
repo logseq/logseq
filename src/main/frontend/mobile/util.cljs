@@ -44,6 +44,9 @@
           landscape? (> width height)
           [width height] (if landscape? [height width] [width height])]
       [(case [width height]
+         ;; The following list is from:
+         ;; - https://useyourloaf.com/blog/ipad-2024-screen-sizes/
+         ;; - https://useyourloaf.com/blog/iphone-15-screen-sizes/
          [320 568] "iPhoneSE4"
          [375 667] "iPhone8"
          [375 812] "iPhoneX"
@@ -61,6 +64,8 @@
          [834 1112] "iPadAir10.5"
          [834 1194] "iPadPro11"
          [1024 1366] "iPadPro12.9"
+         [1032 1376] "iPadPro13(M4)"
+         [834 1210]  "iPadPro11(M4)"
          "Not a known Apple device!")
        landscape?])))
 

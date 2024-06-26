@@ -85,11 +85,47 @@
      (when (and old-ref-type? (not ref-type?))
        [:db/retract (:db/id property) :db/valueType])]))
 
+(defn- update-property
+  [conn db-ident property schema {:keys [property-name properties]}]
+  (let [changed-property-attrs
+        ;; Only update property if something has changed as we are updating a timestamp
+        (cond-> {}
+          (not= schema (:block/schema property))
+          (assoc :block/schema schema)
+          (and (some? property-name) (not= property-name (:block/original-name property)))
+          (assoc :block/original-name property-name))
+        property-tx-data
+        (cond-> []
+          (seq changed-property-attrs)
+          (conj (outliner-core/block-with-updated-at
+                 (merge {:db/ident db-ident}
+                        (common-util/dissoc-in changed-property-attrs [:block/schema :cardinality]))))
+          (or (not= (:type schema) (get-in property [:block/schema :type]))
+              (and (:cardinality schema) (not= (:cardinality schema) (keyword (name (:db/cardinality property)))))
+              (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property)))
+              (seq (:property/closed-values property)))
+          (concat (update-datascript-schema property schema)))
+        tx-data (concat property-tx-data
+                        (when (seq properties)
+                          (mapcat
+                           (fn [[property-id v]]
+                             (build-property-value-tx-data property property-id v)) properties)))
+        many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
+    (when (and many->one? (seq (d/datoms @conn :avet db-ident)))
+      (throw (ex-info "Disallowed many to one conversion"
+                      {:type :notification
+                       :payload {:message "This property can't change from multiple values to one value because it has existing data."
+                                 :type :warning}})))
+    (when (seq tx-data)
+      (ldb/transact! conn tx-data {:outliner-op :update-property
+                                   :property-id (:db/id property)}))
+    property))
+
 (defn upsert-property!
   "Updates property if property-id is given. Otherwise creates a property
    with the given property-id or :property-name option. When a property is created
    it is ensured to have a unique :db/ident"
-  [conn property-id schema {:keys [property-name properties]}]
+  [conn property-id schema {:keys [property-name] :as opts}]
   (let [db @conn
         db-ident (or property-id
                      (try (db-property/create-user-property-ident-from-name property-name)
@@ -100,35 +136,7 @@
                                                        :type :error}})))))]
     (assert (qualified-keyword? db-ident))
     (if-let [property (and (qualified-keyword? property-id) (d/entity db db-ident))]
-      (let [changed-property-attrs
-            ;; Only update property if something has changed as we are updating a timestamp
-            (cond-> {}
-              (not= schema (:block/schema property))
-              (assoc :block/schema schema)
-              (and (some? property-name) (not= property-name (:block/original-name property)))
-              (assoc :block/original-name property-name))
-            property-tx-data
-            (cond-> []
-              (seq changed-property-attrs)
-              (conj (outliner-core/block-with-updated-at
-                     (merge {:db/ident db-ident}
-                            (common-util/dissoc-in changed-property-attrs [:block/schema :cardinality]))))
-              (or (not= (:type schema) (get-in property [:block/schema :type]))
-                  (and (:cardinality schema) (not= (:cardinality schema) (keyword (name (:db/cardinality property)))))
-                  (and (= :default (:type schema)) (not= :db.type/ref (:db/valueType property)))
-                  (seq (:property/closed-values property)))
-              (concat (update-datascript-schema property schema)))
-            tx-data (concat property-tx-data
-                            (when (seq properties)
-                              (mapcat
-                               (fn [[property-id v]]
-                                 (build-property-value-tx-data property property-id v)) properties)))
-            many->one? (and (db-property/many? property) (= :one (:cardinality schema)))]
-        (when (seq tx-data)
-          (ldb/transact! conn tx-data {:outliner-op :update-property
-                                       :property-id (:db/id property)
-                                       :many->one? many->one?}))
-        property)
+      (update-property conn db-ident property schema opts)
       (let [k-name (or (and property-name (name property-name))
                        (name property-id))
             db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
@@ -325,14 +333,6 @@
               (ldb/transact! conn
                              [[:db/retract (:db/id block) property-id property-value]]
                              {:outliner-op :save-block}))))))))
-
-(defn collapse-expand-block-property!
-  "Notice this works only if the value itself if a block (property type should be :default)"
-  [conn block-id property-id collapse?]
-  (let [f (if collapse? :db/add :db/retract)]
-    (ldb/transact! conn
-                   [[f block-id :block/collapsed-properties property-id]]
-                   {:outliner-op :save-block})))
 
 (defn ^:api get-class-parents
   [tags]
