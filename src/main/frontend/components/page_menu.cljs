@@ -28,8 +28,7 @@
                           (notification/show! (str "Page " (:block/original-name page) " was deleted successfully!")
                                               :success))
                         {:error-handler (fn [{:keys [msg]}]
-                                          (notification/show! msg :warning))})
-  (state/close-modal!))
+                                          (notification/show! msg :warning))}))
 
 (defn delete-page-confirm!
   [page]
@@ -140,8 +139,7 @@
                        (fn []
                          (page-handler/update-public-attribute!
                           page
-                          (if public? false true))
-                         (state/close-modal!))}})
+                          (if public? false true)))}})
 
           (when (and (util/electron?) file-rpath
                      (not (file-sync-handler/synced-file-graph? repo)))

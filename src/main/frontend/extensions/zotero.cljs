@@ -343,7 +343,7 @@
                          (p/let [_ (setting/add-profile profile-name)
                                  _ (setting/set-profile profile-name)]
                            (reset! profile* profile-name)))
-                       (state/close-modal!))))]
+                       (shui/dialog-close!))))]
       [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
        (ui/button "Cancel" {:variant :ghost :on-click close-fn :class "opacity-70 hover:opacity-100"})]]]))
 

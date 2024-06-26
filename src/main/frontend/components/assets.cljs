@@ -62,7 +62,7 @@
                     (when-not (string/blank? val)
                       (if-not (assets-handler/get-alias-by-name val)
                         (do (set-dir! val dir nil)
-                            (state/close-modal!))
+                            (shui/dialog-close!))
                         (notification/show!
                          (util/format "Alias name of [%s] already exists!" val) :warning))))]
 
