@@ -4,15 +4,16 @@
             [rum.core :as rum]
             [frontend.util :as util]
             [frontend.ui :as ui]
-            [logseq.shui.table.core :as table]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [frontend.components.block :as component-block]
+            [frontend.db :as db]
+            [frontend.state :as state]
+            [frontend.context.i18n :refer [t]]
+            [frontend.date :as date]))
 
-(def data
-  [{:id "m5gr84i9" :amount 316 :status "success" :email "ken99@yahoo.com"}
-   {:id "3u1reuv4" :amount 242 :status "success" :email "Abe45@gmail.com"}
-   {:id "derv1ws0" :amount 837 :status "processing" :email "Monserrat44@gmail.com"}
-   {:id "5kma53ae" :amount 874 :status "success" :email "Silas22@gmail.com"}
-   {:id "bhqecj4p" :amount 721 :status "failed" :email "carmella@hotmail.com"}])
+;; columns:
+;; page name, tags, backlinks, created at updated at
+;; default sort: updated at
 
 (defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
   (shui/checkbox
@@ -26,55 +27,53 @@
     :on-checked-change (fn [v] (row-toggle-selected! row v))
     :aria-label "Select row"}))
 
+(defn- header-cp
+  [{:keys [column-toggle-sorting!]} column]
+  (shui/button
+   {:variant "ghost"
+    :onClick #(column-toggle-sorting! column)}
+   (:name column)
+   (ui/icon "arrows-up-down")))
+
+(defn- default-cell-cp
+  [_table row column]
+  (str (get row (:id column))))
+
+(defn- timestamp-cell-cp
+  [_table row column]
+  (some-> (get row (:id column))
+          date/int->local-time-2))
+
 (def columns
   [{:id :select
     :name "Select"
     :header (fn [table _column] (header-checkbox table))
     :cell (fn [table row column] (row-checkbox table row column))
     :column-list? false}
-   {:id :status
-    :name "Status"
-    :header "Status"
-    :cell (fn [_table row column]
-            (get row (:id column)))}
-   {:id :email
-    :name "Email"
-    :header (fn [{:keys [column-toggle-sorting!]} column]
-              (shui/button
-               {:variant "ghost"
-                :onClick #(column-toggle-sorting! column)}
-               "Email"
-               (ui/icon "arrows-up-down")))
-    :cell (fn [_table row column]
-            (get row (:id column)))}
-   {:id :amount
-    :name "Amount"
-    :header (fn [_] "Amount")
-    :cell (fn [_table row column]
-            (let [amount (get row (:id column))
-                  formatted (.format (js/Intl.NumberFormat. "en-US" #js {:style "currency" :currency "USD"}) amount)]
-              formatted))}
-   {:id :actions
-    :column-list? false
+   {:id :block/original-name
+    :name "Page name"
+    :header header-cp
     :cell (fn [_table row _column]
-            (shui/dropdown-menu
-             (shui/dropdown-menu-trigger
-              {:asChild true}
-              (shui/button
-               {:variant "ghost" :className "h-8 w-8 p-0"}
-               [:span.sr-only "Open menu"]
-               (ui/icon "dots")))
-             (shui/dropdown-menu-content
-              (shui/dropdown-menu-label
-               "Actions")
-              (shui/dropdown-menu-item
-               {:onClick #(js/navigator.clipboard.writeText (:id row))}
-               "Copy payment ID")
-              (shui/dropdown-menu-separator)
-              (shui/dropdown-menu-item
-               "View customer")
-              (shui/dropdown-menu-item
-               "View payment details"))))}])
+            (component-block/page-cp {} row))}
+   ;; {:id :block/type
+   ;;  :name "Type"
+   ;;  :header header-cp
+   ;;  :cell (fn [_table row _column] (string/join ", " (get row :block/type)))
+   ;;  :get-value (fn [row] (string/join ", " (get row :block/type)))}
+   {:id :block/tags
+    :name "Tags"
+    :header header-cp
+    :cell (fn [_table row _column]
+            (component-block/tags {} row))
+    :get-value (fn [row] (string/join ", " (map :block/original-name (get row :block/tags))))}
+   {:id :block/created-at
+    :name "Created At"
+    :header header-cp
+    :cell timestamp-cell-cp}
+   {:id :block/updated-at
+    :name "Updated At"
+    :header header-cp
+    :cell timestamp-cell-cp}])
 
 (rum/defc all-pages < rum/static
   []
@@ -83,6 +82,7 @@
         [row-filter set-row-filter!] (rum/use-state nil)
         [visible-columns set-visible-columns!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
+        data (db/get-all-pages (state/get-current-repo))
         {:keys [column-visible? column-toggle-visiblity row-selected?]
          :as table} (shui/table-option {:data data
                                         :columns columns
@@ -94,9 +94,11 @@
                                                    :set-visible-columns! set-visible-columns!
                                                    :set-row-selection! set-row-selection!}})]
     [:div.w-full
+     [:h1.title (t :all-pages)]
+
      [:div.flex.items-center.py-4
       (shui/input
-       {:placeholder "Filter emails..."
+       {:placeholder "Search page..."
         :value input
         :onChange (fn [e]
                     (let [value (util/evalue e)]
@@ -107,7 +109,7 @@
                                          (fn [row]
                                            (if (string/blank? value)
                                              true
-                                             (when row (string/includes? (string/lower-case (:email row)) (string/lower-case value)))))))))
+                                             (when row (string/includes? (:block/name row) (string/lower-case value)))))))))
         :className "max-w-sm"})
       (shui/dropdown-menu
        (shui/dropdown-menu-trigger
@@ -142,10 +144,10 @@
             (if (pos? (count rows))
               (for [row rows]
                 (shui/table-row
-                 {:key (str (:id row))
+                 {:key (str (:db/id row))
                   :data-state (when (row-selected? row) "selected")}
                  (for [column columns']
-                   (let [id (str (:id row) "-" (:id column))
+                   (let [id (str (:db/id row) "-" (:id column))
                          render (get column :cell)]
                      (shui/table-cell
                       {:key id}
