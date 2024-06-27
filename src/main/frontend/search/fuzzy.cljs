@@ -54,7 +54,7 @@
                        (rest s)
                        1 ;; when there is no match, reset multiplier to one
                        (dec idx)
-                       (dec score)))))))
+                       (- score 0.1)))))))
 
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
