@@ -17,7 +17,7 @@
     columns))
 
 (defn sort-rows
-  "Support multiple sortings"
+  "Support multiple sorts"
   [rows sorting columns]
   (let [column-id->get-value (zipmap (map column-id columns)
                                      (map :get-value columns))]
