@@ -21,12 +21,17 @@
   boolean indicating if db is valid"
   [{:keys [db-after tx-data tx-meta]} validate-options]
   (let [changed-ids (->> tx-data (map :e) distinct)
-        ent-maps* (-> (mapcat #(d/datoms db-after :eavt %) changed-ids)
-                      (db-malli-schema/datoms->entity-maps {:entity-fn #(d/entity db-after %)})
-                      vals)
+        tx-datoms (mapcat #(d/datoms db-after :eavt %) changed-ids)
+        ent-maps* (map (fn [[db-id m]]
+                         ;; Add :db/id for debugging
+                         (assoc m :db/id db-id))
+                       (db-malli-schema/datoms->entity-maps tx-datoms {:entity-fn #(d/entity db-after %)}))
         ent-maps (db-malli-schema/update-properties-in-ents db-after ent-maps*)
         db-schema (update-schema db-malli-schema/DB db-after validate-options)
-        invalid-ent-maps (remove #(m/validate db-schema [%]) ent-maps)]
+        invalid-ent-maps (remove
+                          ;; remove :db/id as it adds needless declarations to schema
+                          #(m/validate db-schema [(dissoc % :db/id)])
+                          ent-maps)]
     (js/console.log "changed eids:" changed-ids tx-meta)
     (if (seq invalid-ent-maps)
       (do
