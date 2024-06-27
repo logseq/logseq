@@ -341,7 +341,8 @@
     :block/journal-day
     :class/parent
     :class/schema.properties
-    :property/schema.classes})
+    :property/schema.classes
+    :property.value/content})
 
 (defn- update-op-watched-attr?
   [attr]
