@@ -361,7 +361,7 @@
     page-or-block-attrs)))
 
 (def property-value-block
-  "A closed value for a property with closed/allowed values"
+  "A common property value for user properties"
   (vec
    (concat
     [:map]
