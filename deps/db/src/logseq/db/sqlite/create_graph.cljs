@@ -50,9 +50,6 @@
         tx (concat [built-in-property]
                    properties
                    [built-in-prop-value]
-                   ;; Adding built-ins must come after initial properties and built-in-prop-value
-                   [(mark-block-as-built-in' built-in-property)]
-                   (map mark-block-as-built-in' properties)
                    (keep #(when (= #{"closed value"} (:block/type %)) (mark-block-as-built-in' %))
                          properties))]
     {:tx tx

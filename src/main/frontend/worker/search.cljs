@@ -10,8 +10,7 @@
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db :as ldb]))
 
 ;; TODO: use sqlite for fuzzy search
 (defonce indices (atom nil))
@@ -264,7 +263,7 @@
   (when p
     {:id (str (:block/uuid p))
      :name (:block/name p)
-     :built-in? (boolean (db-property/property-value-content (:logseq.property/built-in? p)))
+     :built-in? (ldb/built-in? p)
      :original-name (:block/original-name p)}))
 
 (defn- hidden-page?
