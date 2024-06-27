@@ -36,14 +36,15 @@
                  "logseq/custom.js"]]
       (map #(d/pull db '[*] [:file/path %]) files))))
 
-(defn get-all-pages
-  [db exclude-page-ids]
-  (->> (d/datoms db :avet :block/name)
-       (keep (fn [e]
-               (when-not (contains? exclude-page-ids (:e e))
-                 (d/pull db '[:db/id :db/ident :block/uuid :block/name :block/original-name :block/alias :block/type :block/journal-day
-                              :block/created-at :block/updated-at]
-                         (:e e)))))))
+(comment
+  (defn get-all-pages
+   [db exclude-page-ids]
+   (->> (d/datoms db :avet :block/name)
+        (keep (fn [e]
+                (when-not (contains? exclude-page-ids (:e e))
+                  (d/pull db '[:db/id :db/ident :block/uuid :block/name :block/original-name :block/alias :block/type :block/journal-day
+                               :block/created-at :block/updated-at]
+                          (:e e))))))))
 
 (defn get-all-files
   [db]
@@ -205,13 +206,30 @@
      (mapcat (fn [p]
                (d/datoms db :eavt (:db/id p)))))))
 
+(defn get-all-pages
+  [db]
+  (let [datoms (d/datoms db :avet :block/name)]
+    (mapcat (fn [d] (d/datoms db :eavt (:e d))) datoms)))
+
+(defn get-page->refs-count
+  [db]
+  (let [datoms (d/datoms db :avet :block/name)]
+    (->>
+     (map (fn [d]
+            [(:e d)
+             (count (:block/_refs (d/entity db (:e d))))]) datoms)
+     (into {}))))
+
 (defn get-structured-datoms
   [db]
   (mapcat (fn [type]
             (->> (d/datoms db :avet :block/type type)
                  (mapcat (fn [d]
                            (d/datoms db :eavt (:e d))))))
-          ["property" "class" "closed value"]))
+          [
+           ;; property and class pages are pulled from `get-all-pages` already
+           ;; "property" "class"
+           "closed value"]))
 
 (defn get-favorites
   "Favorites page and its blocks"
@@ -242,9 +260,11 @@
         favorites (when db-graph? (get-favorites db))
         latest-journals (get-latest-journals db 1)
         all-files (get-all-files db)
+        all-pages (get-all-pages db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
         data (concat idents
+                     all-pages
                      structured-datoms
                      favorites
                      latest-journals
