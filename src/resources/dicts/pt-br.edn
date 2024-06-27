@@ -113,7 +113,6 @@
  :help/reference-autocomplete "Preenchimento automático de referência de página"
  :help/block-reference "Referência de bloco"
  :help/open-link-in-sidebar "Abrir link na barra lateral"
- :search/page-names "Pesquisar nomes de páginas"
  :search-item/page "Página"
  :search-item/no-result "Nenhum resultado correspondente"
  :help/context-menu "Bloquear menu de contexto"
@@ -170,7 +169,6 @@
  :page/delete "Excluir página"
  :page/add-to-favorites "Adicionar aos Favoritos"
  :page/unfavorite "Remover dos favoritos"
- :page/show-journals "Mostrar diários"
  :block/name "Nome da página"
  :page/copy-page-url "Copiar URL da página"
  :page/illegal-page-name "Nome de página inválido!"
@@ -550,10 +548,6 @@
 
  :updater/new-version-install "Uma nova versão foi baixada."
  :updater/quit-and-install "Reiniciar para instalar"
-
- :paginates/pages "Total de {1} páginas"
- :paginates/prev "Anterior"
- :paginates/next "Próxima"
 
  :tips/all-done "Tudo pronto!"
 

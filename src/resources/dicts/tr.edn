@@ -115,7 +115,6 @@
  :help/reference-autocomplete "Sayfa referansı otomatik tamamlama"
  :help/block-reference "Blok referansı"
  :help/open-link-in-sidebar "Bağlantıyı kenar çubuğunda aç"
- :search/page-names "Sayfa adlarında ara"
  :search-item/whiteboard "Beyaz tahta"
  :search-item/page "Sayfa"
  :search-item/no-result "Eşleşen sonuç yok"
@@ -174,7 +173,6 @@
  :page/delete "Sayfayı sil"
  :page/add-to-favorites "Sık kullanılanlara ekle"
  :page/unfavorite "Sayfayı sık kullanılanlardan kaldır"
- :page/show-journals "Günlükleri göster"
  :block/name "Sayfa adı"
  :page/copy-page-url "Sayfa URL adresini kopyala"
  :page/illegal-page-name "Geçersiz sayfa adı!"
@@ -578,10 +576,6 @@
 
  :updater/new-version-install "Yeni bir sürüm indirildi."
  :updater/quit-and-install "Yüklemek için yeniden başlatın"
-
- :paginates/pages "Toplam {1} sayfa"
- :paginates/prev "Önceki"
- :paginates/next "Sonraki"
 
  :tips/all-done "Tamamlandı!"
 

@@ -116,14 +116,9 @@
  :page/open-backup-directory "Open backups map pagina"
  :page/open-in-finder "Open in map"
  :page/open-with-default-app "Open met standaard app"
- :page/show-journals "Toon Journaals"
  :page/unfavorite "Pagina uit favorieten verwijderen"
  :page/updated-at "Bijgewerkt op"
  :page/version-history "Controleer pagina geschiedenis"
-
- :paginates/next "Volgende"
- :paginates/pages "Totaal {1} pagina's"
- :paginates/prev "Vorige"
 
  :pdf/copy-ref "Kopieer ref"
  :pdf/copy-text "Kopieer tekst"
@@ -164,7 +159,6 @@
  :right-side-bar/show-journals "Toon Journaals"
  :right-side-bar/switch-theme "Thema modes"
 
- :search/page-names "Zoek paginanamen"
  :select/default-prompt "Kies één"
  :select.graph/add-graph "Ja, voeg nog een grafiek toe"
  :select.graph/empty-placeholder-description "Geen overeenkomende grafieken. Wilt u er een toevoegen?"

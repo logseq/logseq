@@ -33,7 +33,6 @@
  :help/reference-autocomplete "Autocompletar referência de página"
  :help/block-reference "Referência de bloco"
  :help/open-link-in-sidebar "Abrir ligação na barra lateral"
- :search/page-names "Procurar nome da página"
  :search-item/whiteboard "Quadro branco"
  :search-item/page "Página"
  :help/context-menu "Menu de contexto"
@@ -77,7 +76,6 @@
  :page/delete "Apagar página"
  :page/add-to-favorites "Adicionar aos Favoritos"
  :page/unfavorite "Remover dos Favoritos"
- :page/show-journals "Mostrar Págs. Diárias"
  :block/name "Nome da página"
  :page/copy-page-url "Copiar URL da página"
  :file/name "Nome do ficheiro"
@@ -259,10 +257,6 @@
 
  :updater/new-version-install "Uma nova versão foi descarregada."
  :updater/quit-and-install "Reiniciar para instalar"
-
- :paginates/pages "{1} págs. no total"
- :paginates/prev "Ant."
- :paginates/next "Próx."
 
  :select/default-prompt "Selecione um"
  :select/default-select-multiple "Selecione um ou vários"

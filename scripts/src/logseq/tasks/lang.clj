@@ -161,7 +161,7 @@
   "Allows certain keys in a language to have the same translation
    as English. Happens more in romance languages but pretty rare otherwise"
   {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
-         :settings-of-plugins :code :on-boarding/section-pages :paginates/pages
+         :settings-of-plugins :code :on-boarding/section-pages
          :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
    :de #{:graph :host :plugins :port :right-side-bar/whiteboards
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating

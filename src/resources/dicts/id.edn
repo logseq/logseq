@@ -106,7 +106,6 @@
  :help/reference-autocomplete "Pelengkapan otomatis referensi halaman"
  :help/block-reference "Blok referensi"
  :help/open-link-in-sidebar "Buka tautan di bilah sisi"
- :search/page-names "Nama halaman pencarian"
  :search-item/whiteboard "Papan tulis"
  :search-item/page "Halaman"
  :search-item/no-result "Tidak ada hasil yang cocok"
@@ -165,7 +164,6 @@
  :page/delete "Hapus halaman"
  :page/add-to-favorites "Tambahkan ke Favorit"
  :page/unfavorite "Hapus dari Favorit"
- :page/show-journals "Tampilkan jurnal"
  :block/name "Nama Halaman"
  :page/copy-page-url "Salin URL halaman"
  :page/illegal-page-name "Nama halaman tidak sah!"
@@ -546,10 +544,6 @@
 
  :updater/new-version-install "Versi baru telah diunduh."
  :updater/quit-and-install "Mulai ulang untuk menginstal"
-
- :paginates/pages "Total {1} halaman"
- :paginates/prev "Sebelumnya"
- :paginates/next "Berikutnya"
 
  :tips/all-done "Semua Selesai!"
 

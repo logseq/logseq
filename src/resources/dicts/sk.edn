@@ -113,7 +113,6 @@
  :help/reference-autocomplete                      "Automatické dopĺňanie referencie na stránku"
  :help/block-reference                             "Referencia na blok"
  :help/open-link-in-sidebar                        "Otvoriť odkaz v bočnom paneli"
- :search/page-names                                "Vyhľadávať názvy stránok"
  :search-item/whiteboard                           "Tabuľa"
  :search-item/page                                 "Stránka"
  :search-item/no-result                            "Žiadne zhody"
@@ -170,7 +169,6 @@
  :page/delete                                      "Odstrániť stránku"
  :page/add-to-favorites                            "Pridať do obľúbených"
  :page/unfavorite                                  "Odstrániť z obľúbených"
- :page/show-journals                               "Zobraziť denníky"
  :block/name                                       "Názav stránky"
  :page/copy-page-url                               "Kopírovať adresu stránky"
  :page/illegal-page-name                           "Neplatný názov stránky!"
@@ -547,10 +545,6 @@
 
  :updater/new-version-install                      "Bola stiahnutá nová verzia."
  :updater/quit-and-install                         "Reštartovať a nainštalovať"
-
- :paginates/pages                                  "Celkovo {1} strán"
- :paginates/prev                                   "Predchádzajúca"
- :paginates/next                                   "Ďalšia"
 
  :tips/all-done                                    "Hotovo!"
 
