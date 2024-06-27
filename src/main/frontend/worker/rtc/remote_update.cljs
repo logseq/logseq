@@ -264,14 +264,15 @@
              :remove (dissoc affected-blocks-map (:block-uuid remote-op))
              :move (dissoc affected-blocks-map (:self remote-op))
              ;; remove block/order, parents in update-attrs, if there're some unpushed local move-ops
-             :update-attrs (update affected-blocks-map (:self remote-op) dissoc :block/order :parents)
+             (:update-attrs :move+update-attrs)
+             (update affected-blocks-map (:self remote-op) dissoc :block/order :parents)
              ;; default
              affected-blocks-map))
 
          :update
          (let [block-uuid (:block-uuid local-op-value)]
            (if-let [remote-op (get affected-blocks-map block-uuid)]
-             (let [remote-op* (if (#{:update-attrs :move} (:op remote-op))
+             (let [remote-op* (if (#{:update-attrs :move :move+update-attrs} (:op remote-op))
                                 (patch-remote-attr-map-by-local-av-coll remote-op (:av-coll local-op-value))
                                 remote-op)]
                (assoc affected-blocks-map block-uuid remote-op*))
@@ -288,13 +289,14 @@
                                 affected-blocks unpushed-ops)
                                affected-blocks)
         {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
+         move+update-ops-map :move+update-attrs
          update-page-ops-map :update-page remove-page-ops-map :remove-page}
         (update-vals
          (group-by (fn [[_ env]] (get env :op)) affected-blocks-map*)
          (partial into {}))]
     {:remove-ops-map remove-ops-map
-     :move-ops-map move-ops-map
-     :update-ops-map update-ops-map
+     :move-ops-map (merge move-ops-map move+update-ops-map)
+     :update-ops-map (merge update-ops-map move+update-ops-map)
      :update-page-ops-map update-page-ops-map
      :remove-page-ops-map remove-page-ops-map}))
 
