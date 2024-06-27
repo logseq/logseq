@@ -322,7 +322,9 @@
         (merge
          {:block/name page-name
           :block/original-name original-page-name}
-         (let [new-uuid* (if journal-day (common-uuid/gen-uuid journal-day) (common-uuid/gen-uuid))
+         (let [new-uuid* (if (uuid? page-uuid)
+                           page-uuid
+                           (if journal-day (common-uuid/gen-uuid journal-day) (common-uuid/gen-uuid)))
                new-uuid (if skip-existing-page-check?
                           new-uuid*
                           (or
