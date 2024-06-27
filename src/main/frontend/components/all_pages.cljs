@@ -102,7 +102,7 @@
        (map (fn [p] (assoc p :id (:db/id p))))))
 
 (rum/defc columns-select
-  [columns {:keys [column-visible? column-toggle-visiblity]}]
+  [columns {:keys [column-visible? column-toggle-visibility]}]
   (shui/dropdown-menu
    (shui/dropdown-menu-trigger
     {:asChild true}
@@ -118,7 +118,7 @@
        {:key (str (:id column))
         :className "capitalize"
         :checked (column-visible? column)
-        :onCheckedChange #(column-toggle-visiblity column %)}
+        :onCheckedChange #(column-toggle-visibility column %)}
        (:name column))))))
 
 (defn table-header

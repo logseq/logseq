@@ -84,7 +84,7 @@
 
            ;; fns
            :column-visible? (fn [column] (impl/column-visible? column visible-columns))
-           :column-toggle-visiblity (fn [column v] (set-visible-columns! (assoc visible-columns (impl/column-id column) v)))
+           :column-toggle-visibility (fn [column v] (set-visible-columns! (assoc visible-columns (impl/column-id column) v)))
            :selected-all? (:selected-all? row-selection)
            :selected-some? (select-some? row-selection filtered-rows)
            :row-selected? (fn [row] (row-selected? row row-selection))
