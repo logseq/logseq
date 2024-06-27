@@ -139,17 +139,14 @@
   [datoms & {:keys [entity-fn]}]
   (let [ent-maps
         (reduce (fn [acc {:keys [a e v]}]
-                  (let [acc (if (get-in acc [e :db/id])
-                              acc
-                              (assoc-in acc [e :db/id] e))]
-                    (if (contains? db-schema/card-many-attributes a)
-                     (update acc e update a (fnil conj #{}) v)
+                  (if (contains? db-schema/card-many-attributes a)
+                    (update acc e update a (fnil conj #{}) v)
                     ;; If there's already a val, don't clobber it and automatically start collecting it as a :many
-                     (if-let [existing-val (get-in acc [e a])]
-                       (if (set? existing-val)
-                         (update acc e assoc a (conj existing-val v))
-                         (update acc e assoc a #{existing-val v}))
-                       (update acc e assoc a v)))))
+                    (if-let [existing-val (get-in acc [e a])]
+                      (if (set? existing-val)
+                        (update acc e assoc a (conj existing-val v))
+                        (update acc e assoc a #{existing-val v}))
+                      (update acc e assoc a v))))
                 {}
                 datoms)
         entity-fn' (or entity-fn
