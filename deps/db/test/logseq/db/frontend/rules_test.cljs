@@ -102,7 +102,7 @@
             "page-property returns result when page has property")
         (is (= []
                (->> (q-with-rules '[:find (pull ?b [:block/original-name])
-                                    :where (page-property ?b :user.property/page-many ?pv) [?pv :block/original-name "Page B"]]
+                                    :where [?b :user.property/page-many ?pv] [?pv :block/original-name "Page B"]]
                                   @conn)
                     (map (comp :block/original-name first))))
             "page-property returns no result when page doesn't have property value"))
