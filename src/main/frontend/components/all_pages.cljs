@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
+            [frontend.handler.page :as page-handler]
             [frontend.db :as db]
             [frontend.state :as state]
             [frontend.date :as date]
@@ -91,7 +92,7 @@
 
 (defn- get-all-pages
   []
-  (->> (db/get-all-pages (state/get-current-repo))
+  (->> (page-handler/get-all-pages (state/get-current-repo))
        (map (fn [p] (assoc p :id (:db/id p))))))
 
 (rum/defc all-pages < rum/static
