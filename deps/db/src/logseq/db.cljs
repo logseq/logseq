@@ -457,11 +457,9 @@
              (common-util/uuid-string? (:block/name page))))))
 
 (defn built-in?
-  "Built-in property, page or block"
+  "Built-in page or block"
   [entity]
-  (or
-   (db-property/built-in? (:db/ident entity))
-   (db-property/property-value-content (:logseq.property/built-in? entity))))
+  (db-property/property-value-content (:logseq.property/built-in? entity)))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"

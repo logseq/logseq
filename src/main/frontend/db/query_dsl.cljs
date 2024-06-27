@@ -535,7 +535,6 @@ Some bindings in this fn:
         (if db-graph?
           ;; This keeps built-in properties from showing up in not results.
           ;; May need to be revisited as more class and property filters are explored
-          ;; FIXME: properties don't have :logseq.property/built-in? now
           (concat [['?b :block/uuid] '[(missing? $ ?b :logseq.property/built-in?)]] q)
           (concat [['?b :block/uuid]] q))
 
