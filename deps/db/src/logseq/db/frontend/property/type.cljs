@@ -36,12 +36,14 @@
 
 (def value-ref-property-types
   "Property value ref types where the refed entities either store their value in
-  :property.value/content or block/content"
+  :property.value/content or :block/content (for :default)"
   (into #{:default}
         original-value-ref-property-types))
 
 (def ref-property-types
-  "User facing ref types"
+  "User facing ref types. Property values that users see are stored in either
+  :property.value/content, :block/content or :block/original-name.
+  :block/original-name is for all the page related types"
   (into #{:page :date :object} value-ref-property-types))
 
 (assert (set/subset? ref-property-types
