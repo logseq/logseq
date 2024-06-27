@@ -204,15 +204,6 @@
                    datoms)]
       (ldb/transact! conn refs-tx {:outliner-op :rtc-download-rebuild-block-refs}))))
 
-(defn- filter-tempid-source-blocks
-  [blocks]
-  (keep
-   (fn [block]
-     (when (or (:db/ident block)
-               (:block/uuid block))
-       (select-keys block [:db/id :db/ident :block/uuid])))
-   blocks))
-
 (defn- block->schema-map
   [block]
   (when-let [db-ident (:db/ident block)]
