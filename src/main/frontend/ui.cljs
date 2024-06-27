@@ -1111,6 +1111,15 @@
       :intent "link"
       :small? true)]]))
 
+(rum/defc tooltip
+  [trigger tooltip-content]
+  (shui/tooltip-provider
+   (shui/tooltip
+    (shui/tooltip-trigger
+     trigger)
+    (shui/tooltip-content
+     tooltip-content))))
+
 (comment
   (rum/defc emoji-picker
    [opts]

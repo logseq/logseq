@@ -11,8 +11,8 @@
             [frontend.components.icon :as icon-component]
             [frontend.components.db-based.page :as db-page]
             [frontend.components.class :as class-component]
-            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.components.svg :as svg]
+            [frontend.components.objects :as objects]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
@@ -23,6 +23,7 @@
             [frontend.extensions.graph :as graph]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.format.mldoc :as mldoc]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.common :as common-handler]
             [frontend.handler.config :as config-handler]
             [frontend.handler.dnd :as dnd]
@@ -474,10 +475,10 @@
   (rum/local false ::main-ready?)
   {:did-mount (fn [state]
                 (assoc state ::main-ready-timer
-                  (js/setTimeout #(reset! (::main-ready? state) true) 32)))
+                       (js/setTimeout #(reset! (::main-ready? state) true) 32)))
    :will-unmount (fn [state]
                    (some-> (::main-ready-timer state)
-                     (js/clearTimeout))
+                           (js/clearTimeout))
                    state)}
   [state {:keys [repo page-name preview? sidebar? linked-refs? unlinked-refs? config] :as option}]
   (when-let [path-page-name (get-path-page-name state page-name)]
@@ -568,8 +569,12 @@
             (when today?
               (scheduled/scheduled-and-deadlines page-name))
 
-            (when-not block?
+            (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-original-name))
+
+            (when (and db-based? (ldb/class? page))
+              [:div.mt-8
+               (objects/objects page)])
 
             ;; referenced blocks
             (when-not block-or-whiteboard?
@@ -587,10 +592,9 @@
                 (hierarchy/structures route-page-name)))
 
             (when (and (not (false? unlinked-refs?))
-                    (not (or block-or-whiteboard? sidebar? home?)))
+                       (not (or block-or-whiteboard? sidebar? home?)))
               [:div {:key "page-unlinked-references"}
-               (reference/unlinked-references page)])])
-         ]))))
+               (reference/unlinked-references page)])])]))))
 
 (rum/defcs page-aux < rum/reactive db-mixins/query
   {:init (fn [state]

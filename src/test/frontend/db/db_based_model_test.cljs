@@ -72,16 +72,6 @@
       (is (= (set (map :db/id classes))
              #{(:db/id class1) (:db/id class2)})))))
 
-(deftest get-tag-blocks-test
-  (let [opts {:redirect? false :create-first-block? false :class? true}
-        _ (test-helper/create-page! "class1" opts)
-        _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})
-        _ (test-helper/save-block! repo sbid "Block 2" {:tags ["class1"]})]
-    (is
-     (= (ldb/get-tag-blocks (db/get-db) "class1")
-        [(:db/id (db/entity [:block/uuid fbid]))
-         (:db/id (db/entity [:block/uuid sbid]))]))))
-
 (deftest hidden-page-test
   (let [opts {:redirect? false :create-first-block? false}
         _ (test-helper/create-page! "page 1" opts)]

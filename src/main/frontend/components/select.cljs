@@ -139,15 +139,15 @@
                                                        (if (selected-choices chosen)
                                                          (do
                                                            (swap! *selected-choices disj chosen)
-                                                           (when on-chosen (on-chosen chosen false)))
+                                                           (when on-chosen (on-chosen chosen false @*selected-choices)))
                                                          (do
                                                            (swap! *selected-choices conj chosen)
-                                                           (when on-chosen (on-chosen chosen true))))
+                                                           (when on-chosen (on-chosen chosen true @*selected-choices))))
                                                        (do
                                                          (when (and close-modal? (not multiple-choices?))
                                                            (state/close-modal!))
                                                          (when on-chosen
-                                                           (on-chosen chosen true))))))
+                                                           (on-chosen chosen true @*selected-choices))))))
                               :empty-placeholder (empty-placeholder t)})]
 
                            (when (and multiple-choices? (fn? on-apply))
