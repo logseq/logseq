@@ -168,15 +168,22 @@
                                 (shui/table-row
                                  {:class "bg-gray-01 shadow"}
                                  (for [column columns']
-                                   (shui/table-head
-                                    {:key (str (:id column))}
-                                    (let [header-fn (:header column)]
-                                      (if (fn? header-fn)
-                                        (header-fn table column)
-                                        header-fn))))))
+                                   (let [style (case (:id column)
+                                                 :block/original-name
+                                                 {}
+                                                 :select
+                                                 {:width 32}
+                                                 {:width 180})]
+                                     (shui/table-head
+                                      {:key (str (:id column))
+                                       :style style}
+                                      (let [header-fn (:header column)]
+                                        (if (fn? header-fn)
+                                          (header-fn table column)
+                                          header-fn)))))))
           :components {:Table (fn [props]
                                 (shui/table {}
-                                  (.-children props)))
+                                            (.-children props)))
                        :TableRow (fn [props]
                                    (let [idx (gobj/get props "data-index")
                                          row (nth rows idx)]
