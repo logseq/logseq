@@ -8,6 +8,8 @@
 ;; Main property vars
 ;; ==================
 
+;; TODO: consider adding :db/version for each property or maintain a
+;; version->properties list to ensure users are using the app with correct version.
 (def ^:large-vars/data-var built-in-properties*
   "Map of built in properties for db graphs with their :db/ident as keys.
    Each property has a config map with the following keys:
@@ -166,6 +168,11 @@
                  v
                  (assoc v :name (keyword (string/lower-case (name k)))))]))
        (into (ordered-map))))
+
+(defn built-in?
+  "Whether property is a built-in property"
+  [ident]
+  (when ident (some? (built-in-properties ident))))
 
 (def db-attribute-properties
   "Internal properties that are also db schema attributes"

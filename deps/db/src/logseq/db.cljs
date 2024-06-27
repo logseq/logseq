@@ -447,9 +447,11 @@
       (d/pull-many db '[*] eids))))
 
 (defn built-in?
-  "Built-in page or block"
+  "Built-in property, page or block"
   [entity]
-  (db-property/property-value-content (:logseq.property/built-in? entity)))
+  (or
+   (db-property/built-in? (:db/ident entity))
+   (db-property/property-value-content (:logseq.property/built-in? entity))))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
