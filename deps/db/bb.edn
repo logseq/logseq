@@ -29,9 +29,10 @@
    :task (datalog/lint-rules
           (set
            (concat (mapcat val rules/rules)
-                  ;; TODO: Update linter to handle false positive on ?str-val for :property
+                   ;; TODO: Update linter to handle false positive on ?str-val for :property
                    (rules/extract-rules (dissoc rules/query-dsl-rules :property))
-                   (rules/extract-rules rules/db-query-dsl-rules))))}}
+                   ;; TODO: Update linter to handle false positive on :task and :priority
+                   (rules/extract-rules (dissoc rules/db-query-dsl-rules :task :priority)))))}}
 
  :tasks/config
  {:large-vars

@@ -196,13 +196,15 @@
 
     :task
     '[(task ?b ?statuses)
-      (property ?b :logseq.task/status ?status)
-      [(contains? ?statuses ?status)]]
+      ;; and needed to avoid binding error
+      (and (property ?b :logseq.task/status ?val)
+           [(contains? ?statuses ?val)])]
 
     :priority
     '[(priority ?b ?priorities)
-      (property ?b :logseq.task/priority ?priority)
-      [(contains? ?priorities ?priority)]]}))
+      ;; and needed to avoid binding error
+      (and (property ?b :logseq.task/priority ?priority)
+           [(contains? ?priorities ?priority)])]}))
 
 (def rules-dependencies
   "For db graphs, a map of rule names and the rules they depend on. If this map
