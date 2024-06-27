@@ -59,7 +59,6 @@
  :text/image "图片"
  :asset/confirm-delete "确定要删除{1}吗？"
  :asset/physical-delete "同时删除本地文件（目前不可撤销）"
- :search/page-names "搜索页面名称"
  :search-item/page "页面"
  :search-item/whiteboard "白板"
  :search-item/no-result "未找到匹配项"
@@ -133,7 +132,6 @@
  :page/delete "删除本页"
  :page/add-to-favorites "添加收藏"
  :page/unfavorite "取消收藏"
- :page/show-journals "显示日志"
  :block/name "页面名称"
  :file/name "文件名"
  :file/last-modified-at "最后更改于"
@@ -417,10 +415,6 @@
 
  :updater/new-version-install "新版本已经准备就绪，重启应用即可更新。"
  :updater/quit-and-install "现在安装"
-
- :paginates/pages "共计 {1} 页面"
- :paginates/prev "上一页"
- :paginates/next "下一页"
 
  :file-sync/other-user-graph "当前本地图谱绑定在其他用户的远程图谱上。因此无法启动同步。"
  :file-sync/graph-deleted "当前远程图谱已经删除"

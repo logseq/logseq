@@ -88,7 +88,6 @@
  :help/search                 "جستجو در برگه‌ها/بلوک‌ها/نظرات"
  :help/block-reference        "ارجاع بلوک"
  :help/open-link-in-sidebar   "باز کردن پیوند در نوار کناری"
- :search/page-names      "جستجو در نام برگه‌ها"
  :search-item/whiteboard "تخته‌سفید"
  :search-item/page       "برگه"
  :search-item/no-result  "نتایجی یافت نشد"
@@ -146,7 +145,6 @@
  :page/delete "حذف برگه"
  :page/add-to-favorites "افزودن به برگزیده‌ها"
  :page/unfavorite "برداشتن از برگزیده‌ها"
- :page/show-journals "نمایش روزنگارها"
  :block/name "نام برگه"
  :page/copy-page-url "رونوشت از نشانی برگه"
  :page/illegal-page-name "نام برگه غیرمجاز!"
@@ -416,10 +414,6 @@
 
  :updater/new-version-install "نسخه‌ای جدید بارگیری شده است."
  :updater/quit-and-install "بازراه‌اندازی برای نصب"
-
- :paginates/pages "مجموعا {1} برگه"
- :paginates/prev "قبلی"
- :paginates/next "بعدی"
 
  :tips/all-done "همه انجام شدند!"
 

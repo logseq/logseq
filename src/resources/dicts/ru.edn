@@ -41,7 +41,6 @@
  :help/reference-autocomplete                          "Автодополнение ссылок на страницу"
  :help/block-reference                                 "Ссылка на блок"
  :help/open-link-in-sidebar                            "Открыть ссылку на боковой панели"
- :search/page-names                                    "Искать имена страниц"
  :search-item/whiteboard                               "Интерактивная доска"
  :search-item/page                                     "Страница"
  :help/context-menu                                    "Контекстное меню блока"
@@ -86,7 +85,6 @@
  :page/delete                                          "Удалить страницу"
  :page/add-to-favorites                                "Добавить в Избранное"
  :page/unfavorite                                      "Удалить из Избранного"
- :page/show-journals                                   "Показать журналы"
  :block/name                                           "Имя страницы"
  :page/copy-page-url                                   "Копировать URL страницы"
  :page/illegal-page-name                               "Недопустимое название страницы!"
@@ -411,10 +409,6 @@
 
  :updater/new-version-install                          "Была загружена новая версия"
  :updater/quit-and-install                             "Перезапустить для установки"
-
- :paginates/pages                                      "Всего {1} страниц(а)"
- :paginates/prev                                       "Предыдущая"
- :paginates/next                                       "Следующая"
 
  :tips/all-done                                        "Всё готово!"
 

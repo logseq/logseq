@@ -116,7 +116,6 @@
  :help/reference-autocomplete "Page reference autocomplete"
  :help/block-reference "Block reference"
  :help/open-link-in-sidebar "Open link in sidebar"
- :search/page-names "Search page names"
  :search-item/whiteboard "Whiteboard"
  :search-item/page "Page"
  :search-item/no-result "No matched result"
@@ -176,7 +175,6 @@
  :page/delete "Delete page"
  :page/add-to-favorites "Add to Favorites"
  :page/unfavorite "Unfavorite page"
- :page/show-journals "Show journals"
  :block/name "Page name"
  :page/copy-page-url "Copy page URL"
  :page/illegal-page-name "Illegal page name!"
@@ -586,10 +584,6 @@
 
  :updater/new-version-install "A new version has been downloaded."
  :updater/quit-and-install "Restart to install"
-
- :paginates/pages "Total {1} pages"
- :paginates/prev "Prev"
- :paginates/next "Next"
 
  :tips/all-done "All Done!"
 

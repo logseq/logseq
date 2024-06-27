@@ -36,7 +36,6 @@
  :help/reference-autocomplete "Автозаповнення посилання на сторінку"
  :help/block-reference "Посилання на блок"
  :help/open-link-in-sidebar "Відкрити посилання у бічній панелі"
- :search/page-names "Пошук назв сторінок"
  :search-item/whiteboard "Дошка"
  :search-item/page "Сторінка"
  :help/context-menu "Контекстне меню блоку"
@@ -80,7 +79,6 @@
  :page/delete "Видалити сторінку"
  :page/add-to-favorites "Додати до обраного"
  :page/unfavorite "Вилучити сторінку з обраного"
- :page/show-journals "Показати журнали"
  :block/name "Назва сторінки"
  :page/copy-page-url "Скопіювати URL сторінки"
  :file/name "Назва файлу"
@@ -288,10 +286,6 @@
 
  :updater/new-version-install "Нова версія була завантажена."
  :updater/quit-and-install "Перезапустіть щоб встановити"
-
- :paginates/pages "Загалом {1} сторінок(ка)"
- :paginates/prev "Попередня"
- :paginates/next "Наступна"
 
  :select/default-prompt "Виберіть один"
  :select/default-select-multiple "Виберіть один або кілька"

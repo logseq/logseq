@@ -23,7 +23,6 @@
  :right-side-bar/contents "Inhoud"
  :right-side-bar/block-ref "Blok verwysing"
  :page/delete-confirmation "Is jy seker jy wil die bladsy uitvee?"
- :page/show-journals "Wys joernale"
  :file/name "Lêer naam"
  :file/last-modified-at "Laas verander op"
  :file/no-data "Geen data"

@@ -26,7 +26,6 @@
  :help/reference-autocomplete "Autouzupełnianie referencji bloku"
  :help/block-reference "Referencja bloku"
  :help/open-link-in-sidebar "Otwórz link w panelu bocznym"
- :search/page-names "Przeszukaj nazwy stron"
  :help/context-menu "Menu kontekstowe bloku"
  :help/markdown-syntax "Składnia Markdown"
  :help/org-mode-syntax "Składnia Org mode"
@@ -60,7 +59,6 @@
  :page/delete "Usuń stronę"
  :page/add-to-favorites "Dodaj do ulubionych"
  :page/unfavorite "Usuń z ulubionych"
- :page/show-journals "Pokaż dzienniki"
  :block/name "Nazwa strony"
  :page/copy-page-url "Kopiuj adres URL strony"
  :file/name "Nazwa pliku"
@@ -206,10 +204,6 @@
 
  :updater/new-version-install "Nowa wersja została ściągnięta."
  :updater/quit-and-install "Uruchom ponownie, aby zainstalować"
-
- :paginates/pages "{1} wszystkich stron"
- :paginates/prev "← Poprzednia"
- :paginates/next "Następna →"
 
  :select/default-prompt "Wybierz jeden"
  :select.graph/prompt "Wybierz graf"

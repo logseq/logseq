@@ -27,7 +27,6 @@
  :help/block-reference "Blokkreferanse"
  :help/forum-community "Forum-samfunn"
  :help/open-link-in-sidebar "Åpne lenke i sidestolpe"
- :search/page-names "Søk i navn på sider"
  :help/context-menu "Kontekstmeny"
  :help/markdown-syntax "Markdown syntaks"
  :help/org-mode-syntax "Org mode syntaks"
@@ -59,7 +58,6 @@
  :page/delete "Slett side"
  :page/add-to-favorites "Legg til i Favoritter"
  :page/unfavorite "Fjern side fra Faoritter"
- :page/show-journals "Vis Dagbøker"
  :block/name "Navn på siden"
  :file/name "Filnavn"
  :file/last-modified-at "Sist endret"
@@ -187,10 +185,6 @@
 
  :updater/new-version-install "En ny versjon er lastet ned. Start applikasjonen på nytt for å installere."
  :updater/quit-and-install "Start på nytt for å installere"
-
- :paginates/pages "Totalt {1} sider"
- :paginates/prev "Forrige"
- :paginates/next "Neste"
 
  :select/default-prompt "Velg en"
  :select.graph/prompt "Velg en graf"

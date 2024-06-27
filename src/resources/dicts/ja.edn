@@ -115,7 +115,6 @@
  :help/reference-autocomplete "ページ参照の自動補完"
  :help/block-reference "ブロック参照"
  :help/open-link-in-sidebar "サイドバーでリンクを開く"
- :search/page-names "ページ名で検索"
  :search-item/whiteboard "ホワイトボード"
  :search-item/page "ページ"
  :search-item/no-result "一致する結果がありません"
@@ -174,7 +173,6 @@
  :page/delete "ページを削除"
  :page/add-to-favorites "お気に入りへ追加"
  :page/unfavorite "お気に入りを解除"
- :page/show-journals "日誌を表示"
  :block/name "ページ名"
  :page/copy-page-url "ページの URL をコピー"
  :page/illegal-page-name "ページの名前が不正です"
@@ -559,10 +557,6 @@
 
  :updater/new-version-install "新しいバージョンがダウンロードされました。"
  :updater/quit-and-install "インストールのためアプリを再起動してください。"
-
- :paginates/pages "全 {1} ページ"
- :paginates/prev "前"
- :paginates/next "次"
 
  :tips/all-done "全て完了しました"
 
