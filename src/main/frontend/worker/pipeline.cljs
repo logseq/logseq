@@ -1,16 +1,17 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
+            [frontend.schema-register :as sr]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
-            [frontend.worker.util :as worker-util]
             [frontend.worker.state :as worker-state]
+            [frontend.worker.util :as worker-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.core :as outliner-core]
             [logseq.outliner.datascript-report :as ds-report]
-            [logseq.outliner.pipeline :as outliner-pipeline]
-            [logseq.outliner.core :as outliner-core]))
+            [logseq.outliner.pipeline :as outliner-pipeline]))
 
 (defn- refs-need-recalculated?
   [tx-meta]
@@ -39,10 +40,15 @@
                       :block/refs refs}]))))
             blocks)))
 
+(sr/defkeyword :skip-validate-db?
+  "tx-meta option, default = false")
+
 (defn validate-db!
   "Validate db is slow, we probably don't want to enable it for production."
-  [repo conn tx-report context]
-  (when (and (:dev? context) (not (:importing? context)) (sqlite-util/db-based-graph? repo))
+  [repo conn tx-report tx-meta context]
+  (when (and (not (:skip-validate-db? tx-meta false))
+             (:dev? context)
+             (not (:importing? context)) (sqlite-util/db-based-graph? repo))
     (let [valid? (db-validate/validate-tx-report! tx-report (:validate-db-options context))]
       (when (and (get-in context [:validate-db-options :fail-invalid?]) (not valid?))
         (worker-util/post-message :notification
@@ -113,7 +119,7 @@
                            (do
                              (when-not (exists? js/process) (d/store @conn))
                              tx-report))
-              _ (validate-db! repo conn tx-report context)
+              _ (validate-db! repo conn tx-report tx-meta context)
               full-tx-data (concat (:tx-data tx-report)
                                    (:tx-data refs-tx-report)
                                    (:tx-data tx-report'))

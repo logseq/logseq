@@ -110,7 +110,7 @@
   [get-ws-create-task repo conn remote-graph-name]
   (m/sp
     (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :fetch-presigned-put-url
-                                      :message "fetching presigned put-url"})
+                                                :message "fetching presigned put-url"})
     (let [[{:keys [url key]} all-blocks-str]
           (m/?
            (m/join
@@ -120,10 +120,10 @@
               (let [all-blocks (export-as-blocks @conn)]
                 (ldb/write-transit-str all-blocks)))))]
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
-                                        :message "uploading data"})
+                                                  :message "uploading data"})
       (m/? (c.m/<! (http/put url {:body all-blocks-str :with-credentials? false})))
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
-                                        :message "requesting upload-graph"})
+                                                  :message "requesting upload-graph"})
       (let [upload-resp
             (m/? (ws-util/send&recv get-ws-create-task {:action "upload-graph"
                                                         :s3-key key
@@ -138,7 +138,7 @@
             (op-mem-layer/update-graph-uuid! repo graph-uuid)
             (m/? (op-mem-layer/new-task--sync-to-idb repo))
             (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
-                                              :message "upload-graph completed"})
+                                                        :message "upload-graph completed"})
             nil)
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
@@ -213,6 +213,28 @@
        (select-keys block [:db/id :db/ident :block/uuid])))
    blocks))
 
+(defn- block->schema-map
+  [block]
+  (when-let [db-ident (:db/ident block)]
+    (let [value-type (:db/valueType block)
+          cardinality (:db/cardinality block)
+          db-index (:db/index block)]
+      (when (or value-type cardinality db-index)
+        (cond-> {:db/ident db-ident}
+          value-type (assoc :db/valueType value-type)
+          cardinality (assoc :db/cardinality cardinality)
+          db-index (assoc :db/index db-index))))))
+
+(defn- blocks->schema-blocks+normal-blocks
+  [blocks]
+  (reduce
+   (fn [[schema-blocks normal-blocks] block]
+     (if-let [schema-block (block->schema-map block)]
+       (let [strip-schema-attrs-block (dissoc block :db/valueType :db/cardinality :db/index)]
+         [(conj schema-blocks schema-block) (conj normal-blocks strip-schema-attrs-block)])
+       [schema-blocks (conj normal-blocks block)]))
+   [[] []] blocks))
+
 (defn- new-task--transact-remote-all-blocks
   [all-blocks repo graph-uuid]
   (let [{:keys [t blocks]} all-blocks
@@ -224,21 +246,13 @@
         ;;TODO: remove this, client/schema already converted to :db/cardinality, :db/valueType by remote,
         ;; and :client/schema should be removed by remote too
         blocks (map #(dissoc % :client/schema) blocks)
-        tempid-source-blocks (filter-tempid-source-blocks blocks)
         blocks (fill-block-fields blocks)
-        {db-schema-def-blocks true other-blocks false}
-        (group-by (fn [block]
-                    (boolean
-                     (and (:db/ident block)
-                          (or (:db/cardinality block)
-                              (:db/valueType block))))) blocks)
+        [schema-blocks normal-blocks] (blocks->schema-blocks+normal-blocks blocks)
         tx-data (concat
-                 tempid-source-blocks
-                 other-blocks
-                 [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
-                  {:db/ident :logseq.kv/db-type :kv/value "db"}])
+                 normal-blocks
+                 [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}])
         init-tx-data (concat [{:db/ident :logseq.kv/db-type :kv/value "db"}]
-                             db-schema-def-blocks)
+                             schema-blocks)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
       (op-mem-layer/update-local-tx! repo t)
@@ -247,15 +261,17 @@
       (m/?
        (c.m/await-promise
         (p/do!
-          (.createOrOpenDB worker-obj repo (ldb/write-transit-str {:close-other-db? false}))
-          (.exportDB worker-obj repo)
-          (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
-                                                   :gen-undo-ops? false
-                                                   :persist-op? false} (worker-state/get-context))
-          (.transact worker-obj repo tx-data {:rtc-download-graph? true
-                                              :gen-undo-ops? false
-                                              :persist-op? false} (worker-state/get-context))
-          (transact-block-refs! repo))))
+         (.createOrOpenDB worker-obj repo (ldb/write-transit-str {:close-other-db? false}))
+         (.exportDB worker-obj repo)
+         (.transact worker-obj repo init-tx-data {:rtc-download-graph? true
+                                                  :gen-undo-ops? false
+                                                  ;; only transact db schema, skip validation to avoid warning
+                                                  :skip-validate-db? true
+                                                  :persist-op? false} (worker-state/get-context))
+         (.transact worker-obj repo tx-data {:rtc-download-graph? true
+                                             :gen-undo-ops? false
+                                             :persist-op? false} (worker-state/get-context))
+         (transact-block-refs! repo))))
       (worker-util/post-message :add-repo {:repo repo}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -265,8 +281,8 @@
 (defn new-task--request-download-graph
   [get-ws-create-task graph-uuid]
   (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :request-download-graph
-                                      :message "requesting download graph"
-                                      :graph-uuid graph-uuid})
+                                                :message "requesting download graph"
+                                                :graph-uuid graph-uuid})
   (m/join :download-info-uuid
           (ws-util/send&recv get-ws-create-task {:action "download-graph"
                                                  :graph-uuid graph-uuid})))
@@ -282,8 +298,8 @@
   (->
    (m/sp
      (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :wait-remote-graph-data-ready
-                                         :message "waiting for the remote to prepare the data"
-                                         :graph-uuid graph-uuid})
+                                                   :message "waiting for the remote to prepare the data"
+                                                   :graph-uuid graph-uuid})
      (loop []
        (m/? (m/sleep 3000))
        (let [{:keys [download-info-list]}
@@ -304,8 +320,8 @@
   [graph-uuid graph-name s3-url]
   (m/sp
     (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :downloading-graph-data
-                                        :message "downloading graph data"
-                                        :graph-uuid graph-uuid})
+                                                  :message "downloading graph data"
+                                                  :graph-uuid graph-uuid})
     (let [^js worker-obj              (:worker/object @worker-state/*state)
           {:keys [status body] :as r} (m/? (c.m/<! (http/get s3-url {:with-credentials? false})))
           repo                        (str sqlite-util/db-version-prefix graph-name)]
@@ -313,8 +329,8 @@
         (throw (ex-info "download-graph from s3 failed" {:resp r}))
         (do
           (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :transact-graph-data-to-db
-                                              :message "transacting graph data to local db"
-                                              :graph-uuid graph-uuid})
+                                                        :message "transacting graph data to local db"
+                                                        :graph-uuid graph-uuid})
           (let [all-blocks (ldb/read-transit-str body)]
             (worker-state/set-rtc-downloading-graph! true)
             (op-mem-layer/init-empty-ops-store! repo)
@@ -324,6 +340,6 @@
             (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
             (worker-state/set-rtc-downloading-graph! false)
             (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
-                                                :message "download completed"
-                                                :graph-uuid graph-uuid})
+                                                          :message "download completed"
+                                                          :graph-uuid graph-uuid})
             nil))))))
