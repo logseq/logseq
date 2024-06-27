@@ -117,10 +117,13 @@
                                       (d/entity db k))]
                  (update m :block/properties (fnil conj [])
                          ;; use explicit call to be nbb compatible
-                         [(let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)]
-                            (cond-> (assoc (select-keys property [:db/ident :db/valueType :db/cardinality])
-                                    :block/schema
-                                    (select-keys (:block/schema property) [:type]))
+                         [(let [closed-values (entity-plus/lookup-kv-then-entity property :property/closed-values)
+                                property' (or
+                                           (get db-schema/schema-for-db-based-graph (:db/ident property))
+                                           (select-keys property [:db/ident :db/valueType :db/cardinality]))]
+                            (cond-> (assoc property'
+                                           :block/schema
+                                           (select-keys (:block/schema property) [:type]))
                               (seq closed-values)
                               (assoc :property/closed-values closed-values)))
                           v])
