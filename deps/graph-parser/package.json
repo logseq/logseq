@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v13",
+    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v14",
     "better-sqlite3": "9.3.0"
   },
   "dependencies": {

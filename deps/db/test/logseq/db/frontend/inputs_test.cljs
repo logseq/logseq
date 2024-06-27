@@ -59,24 +59,27 @@
                                  :input-options {:current-block-uuid block-uuid}}))))
         ":current-block input resolves to current block's :db/id")
 
-    (is (= []
-           (map :block/content
-                (custom-query @conn
-                              {:inputs [:current-block]
-                               :query '[:find (pull ?b [*])
-                                        :in $ ?current-block
-                                        :where [?b :block/parent ?current-block]]})))
-        ":current-block input doesn't resolve when :current-block-uuid is not provided")
+    (is (thrown-with-msg?
+         js/Error
+         #"Nothing found for entity"
+         (custom-query @conn
+                       {:inputs [:current-block]
+                        :query '[:find (pull ?b [*])
+                                 :in $ ?current-block
+                                 :where [?b :block/parent ?current-block]]
+                        :input-options {:current-block-uuid nil}}))
+        ":current-block input doesn't resolve and fails when :current-block-uuid is not provided")
 
-    (is (= []
-           (map :block/content
-                (custom-query @conn
-                              {:inputs [:current-block]
-                               :query '[:find (pull ?b [*])
-                                        :in $ ?current-block
-                                        :where [?b :block/parent ?current-block]]
-                               :input-options {:current-block-uuid :magic}})))
-        ":current-block input doesn't resolve when current-block-uuid is invalid")
+    (is (thrown-with-msg?
+         js/Error
+         #"Nothing found for entity"
+         (custom-query @conn
+                       {:inputs [:current-block]
+                        :query '[:find (pull ?b [*])
+                                 :in $ ?current-block
+                                 :where [?b :block/parent ?current-block]]
+                        :input-options {:current-block-uuid :magic}}))
+        ":current-block input doesn't resolve and fails when :current-block-uuid is invalid")
 
     (is (= ["parent"]
            (let [block-uuid (-> (d/q '[:find (pull ?b [:block/uuid])
