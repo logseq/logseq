@@ -286,8 +286,16 @@ prop-d:: [[nada]]"}])
       "Multiple boolean operators with todo and priority operators")
 
   (is (= ["DOING b4" "DOING b5"]
-           (map testable-content
-                (dsl-query "(and (task doing) (or [[A]] [[B]]))")))))
+         (map testable-content
+              (dsl-query "(and (task doing) (or [[A]] [[B]]))")))))
+
+(when js/process.env.DB_GRAPH
+
+  ;; Ensure some filters work when no data with relevant properties exist
+  (deftest queries-with-no-data
+    (load-test-files [])
+    (is (= [] (dsl-query "(task todo)")))
+    (is (= [] (dsl-query "(priority high)")))))
 
 (deftest sample-queries
   (load-test-files [{:file/path "pages/page1.md"
