@@ -14,7 +14,8 @@
             [goog.dom :as gdom]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.search.fuzzy :as fuzzy-search]))
 
 ;; columns:
 ;; page name, tags, backlinks, created at updated at
@@ -120,6 +121,41 @@
         :onCheckedChange #(column-toggle-visiblity column %)}
        (:name column))))))
 
+(defn table-header
+  [table columns]
+  (shui/table-row
+   {:class "bg-gray-01 shadow"}
+   (for [column columns]
+     (let [style (case (:id column)
+                   :block/original-name
+                   {}
+                   :select
+                   {:width 32}
+                   {:width 180})]
+       (shui/table-head
+        {:key (str (:id column))
+         :style style}
+        (let [header-fn (:header column)]
+          (if (fn? header-fn)
+            (header-fn table column)
+            header-fn)))))))
+
+(defn table-row
+  [{:keys [row-selected?] :as table} rows columns props]
+  (let [idx (gobj/get props "data-index")
+        row (nth rows idx)]
+    (shui/table-row
+     (merge
+      (bean/->clj props)
+      {:key (str (:id row))
+       :data-state (when (row-selected? row) "selected")})
+     (for [column columns]
+       (let [id (str (:id row) "-" (:id column))
+             render (get column :cell)]
+         (shui/table-cell
+          {:key id}
+          (render table row column)))))))
+
 (rum/defc all-pages < rum/static
   []
   (let [[input set-input!] (rum/use-state "")
@@ -136,16 +172,15 @@
                        data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
                  (set-data! data))))
            [])
-        {:keys [row-selected?]
-         :as table} (shui/table-option {:data data
-                                        :columns columns
-                                        :state {:sorting sorting
-                                                :row-filter row-filter
-                                                :row-selection row-selection
-                                                :visible-columns visible-columns}
-                                        :data-fns {:set-sorting! set-sorting!
-                                                   :set-visible-columns! set-visible-columns!
-                                                   :set-row-selection! set-row-selection!}})
+        table (shui/table-option {:data data
+                                  :columns columns
+                                  :state {:sorting sorting
+                                          :row-filter row-filter
+                                          :row-selection row-selection
+                                          :visible-columns visible-columns}
+                                  :data-fns {:set-sorting! set-sorting!
+                                             :set-visible-columns! set-visible-columns!
+                                             :set-row-selection! set-row-selection!}})
         selected-rows (shui/table-get-selection-rows row-selection (:rows table))
         selected-rows-count (count selected-rows)
         selected? (pos? selected-rows-count)]
@@ -172,7 +207,8 @@
                                           (fn [row]
                                             (if (string/blank? value)
                                               true
-                                              (when row (string/includes? (:block/name row) (string/lower-case value)))))))))
+                                              (when row
+                                                (pos? (fuzzy-search/score (string/lower-case value) (:block/name row))))))))))
          :class "max-w-sm !h-7 !py-0"})
        (columns-select columns table)]]
      (let [columns' (:columns table)
@@ -181,40 +217,11 @@
         (ui/virtualized-table
          {:custom-scroll-parent (gdom/getElement "main-content-container")
           :total-count (count rows)
-          :fixedHeaderContent (fn []
-                                (shui/table-row
-                                 {:class "bg-gray-01 shadow"}
-                                 (for [column columns']
-                                   (let [style (case (:id column)
-                                                 :block/original-name
-                                                 {}
-                                                 :select
-                                                 {:width 32}
-                                                 {:width 180})]
-                                     (shui/table-head
-                                      {:key (str (:id column))
-                                       :style style}
-                                      (let [header-fn (:header column)]
-                                        (if (fn? header-fn)
-                                          (header-fn table column)
-                                          header-fn)))))))
+          :fixedHeaderContent (fn [] (table-header table columns'))
           :components {:Table (fn [props]
                                 (shui/table {}
                                             (.-children props)))
-                       :TableRow (fn [props]
-                                   (let [idx (gobj/get props "data-index")
-                                         row (nth rows idx)]
-                                     (shui/table-row
-                                      (merge
-                                       (bean/->clj props)
-                                       {:key (str (:id row))
-                                        :data-state (when (row-selected? row) "selected")})
-                                      (for [column columns']
-                                        (let [id (str (:id row) "-" (:id column))
-                                              render (get column :cell)]
-                                          (shui/table-cell
-                                           {:key id}
-                                           (render table row column)))))))}})])
+                       :TableRow (fn [props] (table-row table rows columns' props))}})])
 
      (let [rows-count (count (:rows table))]
        [:div.flex.items-center.justify-end.space-x-2.py-4
