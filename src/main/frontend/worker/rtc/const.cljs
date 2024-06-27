@@ -121,6 +121,15 @@
         [:hash {:optional true} :int]
         [:db/ident {:optional true} :keyword]
         [::m/default extra-attr-map-schema]]]
+      [:move+update-attrs
+       [:map
+        [:op :keyword]
+        [:self :uuid]
+        [:parents {:optional true} [:sequential :uuid]]
+        [:block/order {:optional true} db-malli-schema/block-order]
+        [:hash {:optional true} :int]
+        [:db/ident {:optional true} :keyword]
+        [::m/default extra-attr-map-schema]]]
       [:update-page
        [:map
         [:op :keyword]
