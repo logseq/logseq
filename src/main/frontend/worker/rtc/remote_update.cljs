@@ -497,10 +497,10 @@
              original-name :block/original-name
              :as op-value} update-page-ops]
       (let [create-opts {:uuid self}
-            [_ x y] (worker-page/rtc-create-page! conn config (ldb/read-transit-str original-name) create-opts)]
+            [_ page-name page-uuid] (worker-page/rtc-create-page! conn config (ldb/read-transit-str original-name) create-opts)]
         ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
         ;; if there's already existing same name page
-        (prn :debug-create-page x y self)
+        (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})
         (update-block-attrs repo conn self op-value)))))
 
 (defn- ensure-refed-blocks-exist
