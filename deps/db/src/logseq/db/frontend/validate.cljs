@@ -4,7 +4,6 @@
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [malli.util :as mu]
             [malli.core :as m]
-            [cljs.pprint :as pprint]
             [malli.error :as me]))
 
 (defn update-schema
@@ -33,8 +32,13 @@
       (do
         (js/console.error "Invalid datascript entities detected amongst changed entity ids:" changed-ids)
         (doseq [m invalid-ent-maps]
-          (pprint/pprint {:entity-map m
-                          :errors (me/humanize (m/explain db-schema [m]))}))
+
+          (prn {:entity-map m
+                :errors (me/humanize (m/explain db-schema [m]))})
+          ;; FIXME: pprint fails sometime
+          ;; (pprint/pprint {;; :entity-map (map #(into {} %) m)
+          ;;                 :errors (me/humanize (m/explain db-schema [m]))})
+          )
         false)
       true)))
 

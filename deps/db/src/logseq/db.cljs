@@ -74,6 +74,7 @@
 
        ;; (prn :debug :transact :sync? (= d/transact! (or @*transact-fn d/transact!)) :tx-meta tx-meta)
        ;; (cljs.pprint/pprint tx-data)
+       ;; (js/console.trace)
 
        (let [f (or @*transact-fn d/transact!)]
          (try
