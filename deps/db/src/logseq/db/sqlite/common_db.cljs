@@ -36,16 +36,6 @@
                  "logseq/custom.js"]]
       (map #(d/pull db '[*] [:file/path %]) files))))
 
-(comment
-  (defn get-all-pages
-   [db exclude-page-ids]
-   (->> (d/datoms db :avet :block/name)
-        (keep (fn [e]
-                (when-not (contains? exclude-page-ids (:e e))
-                  (d/pull db '[:db/id :db/ident :block/uuid :block/name :block/original-name :block/alias :block/type :block/journal-day
-                               :block/created-at :block/updated-at]
-                          (:e e))))))))
-
 (defn get-all-files
   [db]
   (->> (d/datoms db :avet :file/path)

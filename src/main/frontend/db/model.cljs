@@ -14,7 +14,6 @@
             [frontend.util :as util :refer [react]]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.frontend.content :as db-content]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.db :as gp-db]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -41,13 +40,7 @@
 (defn get-all-pages
   [repo]
   (let [db (conn/get-db repo)]
-    (->>
-     (d/datoms db :avet :block/name)
-     (distinct)
-     (map #(d/entity db (:e %)))
-     (remove hidden-page?)
-     (remove (fn [page]
-             (common-util/uuid-string? (:block/name page)))))))
+    (ldb/get-all-pages db)))
 
 (defn get-all-page-original-names
   [repo]
@@ -720,15 +713,16 @@ independent of format as format specific heading characters are stripped"
                page)]
     (ldb/whiteboard-page? page)))
 
-(defn get-orphaned-pages
-  [opts]
-  (let [db (conn/get-db)]
-    (ldb/get-orphaned-pages db
-                            (merge opts
-                                   {:built-in-pages-names
-                                    (if (config/db-based-graph? (state/get-current-repo))
-                                      sqlite-create-graph/built-in-pages-names
-                                      gp-db/built-in-pages-names)}))))
+(comment
+  (defn get-orphaned-pages
+    [opts]
+    (let [db (conn/get-db)]
+      (ldb/get-orphaned-pages db
+                              (merge opts
+                                     {:built-in-pages-names
+                                      (if (config/db-based-graph? (state/get-current-repo))
+                                        sqlite-create-graph/built-in-pages-names
+                                        gp-db/built-in-pages-names)})))))
 
 ;; FIXME: use `Untitled` instead of UUID for db based graphs
 (defn untitled-page?

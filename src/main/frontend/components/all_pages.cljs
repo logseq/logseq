@@ -8,12 +8,13 @@
             [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
             [frontend.handler.page :as page-handler]
-            [frontend.db :as db]
             [frontend.state :as state]
             [frontend.date :as date]
             [goog.object :as gobj]
             [goog.dom :as gdom]
-            [cljs-bean.core :as bean]))
+            [cljs-bean.core :as bean]
+            [promesa.core :as p]
+            [logseq.db :as ldb]))
 
 ;; columns:
 ;; page name, tags, backlinks, created at updated at
@@ -70,17 +71,21 @@
     :header header-cp
     :cell (fn [_table row _column]
             (component-block/page-cp {} row))}
-   ;; {:id :block/type
-   ;;  :name "Type"
-   ;;  :header header-cp
-   ;;  :cell (fn [_table row _column] (string/join ", " (get row :block/type)))
-   ;;  :get-value (fn [row] (string/join ", " (get row :block/type)))}
+   {:id :block/type
+    :name "Type"
+    :header header-cp
+    :cell (fn [_table row _column] [:div.capitalize (string/join ", " (get row :block/type))])
+    :get-value (fn [row] (string/join ", " (get row :block/type)))}
    {:id :block/tags
     :name "Tags"
     :header header-cp
     :cell (fn [_table row _column]
             (component-block/tags {} row))
     :get-value (fn [row] (string/join ", " (map :block/original-name (get row :block/tags))))}
+   {:id :block.temp/refs-count
+    :name "Backlinks"
+    :header header-cp
+    :cell (fn [_table row _column] (:block.temp/refs-count row))}
    {:id :block/created-at
     :name "Created At"
     :header header-cp
@@ -95,15 +100,43 @@
   (->> (page-handler/get-all-pages (state/get-current-repo))
        (map (fn [p] (assoc p :id (:db/id p))))))
 
+(rum/defc columns-select
+  [columns {:keys [column-visible? column-toggle-visiblity]}]
+  (shui/dropdown-menu
+   (shui/dropdown-menu-trigger
+    {:asChild true}
+    (shui/button
+     {:variant "outline" :size :sm
+      :class "text-muted-foreground"}
+     "Columns"
+     (ui/icon "chevron-down")))
+   (shui/dropdown-menu-content
+    {:align "end"}
+    (for [column (remove #(false? (:column-list? %)) columns)]
+      (shui/dropdown-menu-checkbox-item
+       {:key (str (:id column))
+        :className "capitalize"
+        :checked (column-visible? column)
+        :onCheckedChange #(column-toggle-visiblity column %)}
+       (:name column))))))
+
 (rum/defc all-pages < rum/static
   []
   (let [[input set-input!] (rum/use-state "")
         [sorting set-sorting!] (rum/use-state [{:id :block/updated-at, :asc? false}])
         [row-filter set-row-filter!] (rum/use-state nil)
-        [visible-columns set-visible-columns!] (rum/use-state {})
+        [visible-columns set-visible-columns!] (rum/use-state {:block/type false})
         [row-selection set-row-selection!] (rum/use-state {})
         [data set-data!] (rum/use-state (get-all-pages))
-        {:keys [column-visible? column-toggle-visiblity row-selected?]
+        _ (rum/use-effect!
+           (fn []
+             (when-let [^js worker @state/*db-worker]
+               (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))
+                       result (ldb/read-transit-str result-str)
+                       data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
+                 (set-data! data))))
+           [])
+        {:keys [row-selected?]
          :as table} (shui/table-option {:data data
                                         :columns columns
                                         :state {:sorting sorting
@@ -141,24 +174,7 @@
                                               true
                                               (when row (string/includes? (:block/name row) (string/lower-case value)))))))))
          :class "max-w-sm !h-7 !py-0"})
-
-       (shui/dropdown-menu
-        (shui/dropdown-menu-trigger
-         {:asChild true}
-         (shui/button
-          {:variant "outline" :size :sm
-           :class "text-muted-foreground"}
-          "Columns"
-          (ui/icon "chevron-down")))
-        (shui/dropdown-menu-content
-         {:align "end"}
-         (for [column (remove #(false? (:column-list? %)) columns)]
-           (shui/dropdown-menu-checkbox-item
-            {:key (str (:id column))
-             :className "capitalize"
-             :checked (column-visible? column)
-             :onCheckedChange #(column-toggle-visiblity column %)}
-            (:name column)))))]]
+       (columns-select columns table)]]
      (let [columns' (:columns table)
            rows (:rows table)]
        [:div.rounded-md.border

@@ -446,6 +446,16 @@
     (when (seq eids)
       (d/pull-many db '[*] eids))))
 
+(defn get-all-pages
+  [db]
+  (->>
+   (d/datoms db :avet :block/name)
+   (distinct)
+   (map #(d/entity db (:e %)))
+   (remove hidden-page?)
+   (remove (fn [page]
+             (common-util/uuid-string? (:block/name page))))))
+
 (defn built-in?
   "Built-in property, page or block"
   [entity]
