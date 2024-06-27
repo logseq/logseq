@@ -349,6 +349,14 @@
             (recur (:class/parent current-parent))))))
     @*classes))
 
+(defn ^:api get-class-properties
+  [class]
+  (let [class-parents (get-class-parents [class])]
+    (->> (mapcat (fn [class]
+                   (:class/schema.properties class)) (concat [class] class-parents))
+         (common-util/distinct-by :db/id)
+         (ldb/sort-by-order))))
+
 (defn ^:api get-block-classes-properties
   [db eid]
   (let [block (d/entity db eid)

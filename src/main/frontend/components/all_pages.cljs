@@ -95,7 +95,6 @@
     :name "Updated At"
     :header header-cp
     :cell timestamp-cell-cp}])
-
 (defn- get-all-pages
   []
   (->> (page-handler/get-all-pages (state/get-current-repo))

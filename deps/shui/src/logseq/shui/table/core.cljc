@@ -122,7 +122,7 @@
 (rum/defc table-head < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:th (merge {:class "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
+    [:th (merge {:class "px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
                 prop)
      children]))
 
@@ -136,6 +136,6 @@
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:td (merge {:class "p-4 align-middle [&:has([role=checkbox])]:pr-0"}
+    [:td (merge {:class "px-4 py-1 align-middle [&:has([role=checkbox])]:pr-0"}
                    prop)
      children]))
