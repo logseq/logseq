@@ -217,9 +217,9 @@
   the property-schemas atom. If a property's :type changes, returns a map of
   the schema attribute changed and how it changed e.g. `{:type {:from :default :to :url}}`"
   [prop-val prop prop-val-text refs property-schemas macros]
-  ;; Explicitly fail an unexpected case rather cause silent downstream failures
+  ;; Explicitly fail an unexpected case rather than cause silent downstream failures
   (when (and (coll? prop-val) (not (every? string? prop-val)))
-    (throw (ex-info "Import cannot infer schema of unknown property value"
+    (throw (ex-info (str "Import cannot infer schema of unknown property value " (pr-str prop-val))
                     {:value prop-val :property prop})))
   (let [prop-type (cond (and (coll? prop-val)
                              (seq prop-val)
@@ -805,8 +805,9 @@
             (p/recur (export-doc-file (get doc-files (inc i)) conn <read-file options)
                      (inc i))))
         (p/catch (fn [e]
-                   (notify-user {:msg (str "Import has unexpected error:\n" e)
-                                 :level :error}))))))
+                   (notify-user {:msg (str "Import has unexpected error:\n" (.-message e))
+                                 :level :error
+                                 :ex-data {:error e}}))))))
 
 (defn- default-save-file [conn path content]
   (ldb/transact! conn [{:file/path path
@@ -827,8 +828,9 @@
            (-> (<read-file custom-js)
                (p/then #(<save-file repo-or-conn "logseq/custom.js" %)))))
         (p/catch (fn [error]
-                   (notify-user {:msg (str "Import unexpectedly failed while reading logseq files:\n" error)
-                                 :level :error}))))))
+                   (notify-user {:msg (str "Import unexpectedly failed while reading logseq files:\n" (.-message error))
+                                 :level :error
+                                 :ex-data {:error error}}))))))
 
 (defn- export-config-file
   [repo-or-conn config-file <read-file {:keys [<save-file notify-user default-config]
@@ -886,7 +888,7 @@
                      (p/catch
                       (<copy-asset-file file)
                       (fn [error]
-                        (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" error)
+                        (notify-user {:msg (str "Import failed on " (pr-str path) " with error:\n" (.-message error))
                                       :level :error
                                       :ex-data {:path path :error error}}))))]
     (when (seq asset-files)
@@ -897,8 +899,9 @@
               (p/recur (copy-asset (get asset-files (inc i)))
                        (inc i))))
           (p/catch (fn [e]
-                     (notify-user {:msg (str "Import has an unexpected error:\n" e)
-                                   :level :error})))))))
+                     (notify-user {:msg (str "Import has an unexpected error:\n" (.-message e))
+                                   :level :error
+                                   :ex-data {:error e}})))))))
 
 (defn- insert-favorites
   "Inserts favorited pages as uuids into a new favorite page"

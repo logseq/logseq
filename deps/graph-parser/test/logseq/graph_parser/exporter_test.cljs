@@ -37,11 +37,12 @@
     (println (string/join
               "\n"
               (map
-               #(str (:file %) (when (:line %) (str ":" (:line %)))
-                     " calls #'"
-                     (str (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name])))
-               stack)))
-    (println (.-stack (get-in m [:ex-data :error])))))
+               #(str (:file %)
+                     (when (:line %) (str ":" (:line %)))
+                     (when (:sci.impl/f-meta %)
+                       (str " calls #'" (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name]))))
+               (reverse stack))))
+    (println (some-> (get-in m [:ex-data :error]) .-stack))))
 
 (def default-export-options
   {;; common options
