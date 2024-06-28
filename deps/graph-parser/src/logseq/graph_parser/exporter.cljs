@@ -20,7 +20,10 @@
             [logseq.db.frontend.class :as db-class]
             [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [logseq.db.frontend.order :as db-order]))
+            [cljs.pprint]
+            [logseq.db.frontend.order :as db-order]
+            [logseq.db.frontend.db-ident :as db-ident]
+            [logseq.db.frontend.property.build :as db-property-build]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
@@ -212,11 +215,23 @@
                            remaining-text)]
     (some? non-ref-char)))
 
+(defn- create-property-ident [db all-idents property-name]
+  (let [db-ident (->> (db-property/create-user-property-ident-from-name (name property-name))
+                      ;; TODO: Detect new ident conflicts within same page
+                      (db-ident/ensure-unique-db-ident db))]
+    (swap! all-idents assoc property-name db-ident)))
+
+(defn- get-ident [all-idents kw]
+  (if (and (qualified-keyword? kw) (db-property/logseq-property? kw))
+    kw
+    (or (get all-idents kw)
+        (throw (ex-info (str "No ident found for " (pr-str kw)) {})))))
+
 (defn- infer-property-schema-and-get-property-change
   "Infers a property's schema from the given _user_ property value and adds new ones to
   the property-schemas atom. If a property's :type changes, returns a map of
   the schema attribute changed and how it changed e.g. `{:type {:from :default :to :url}}`"
-  [prop-val prop prop-val-text refs property-schemas macros]
+  [db prop-val prop prop-val-text refs {:keys [property-schemas all-idents]} macros]
   ;; Explicitly fail an unexpected case rather than cause silent downstream failures
   (when (and (coll? prop-val) (not (every? string? prop-val)))
     (throw (ex-info (str "Import cannot infer schema of unknown property value " (pr-str prop-val))
@@ -233,7 +248,9 @@
                         (db-property-type/infer-property-type-from-value
                          (macro-util/expand-value-if-macro prop-val macros)))
         prev-type (get-in @property-schemas [prop :type])]
-    (when-not prev-type
+    ;; Create new property
+    (when-not (get @property-schemas prop)
+      (create-property-ident db all-idents prop)
       (let [schema (cond-> {:type prop-type}
                      (#{:page :date} prop-type)
                      ;; Assume :many for now as detecting that detecting property values across files are consistent
@@ -340,35 +357,50 @@
        (map :name)
        set))
 
-(defn- update-properties
-  "Updates block property names and values"
-  [props db page-names-to-uuids
+(defn- build-properties-and-values
+  "For given block properties, builds property values tx and returns a map with
+  updated properties in :block-properties and any property values tx in :pvalues-tx"
+  [props db _page-names-to-uuids
    {:block/keys [properties-text-values] :as block}
-   {:keys [whiteboard? import-state] :as options}]
-  (let [prop-name->uuid (if whiteboard?
-                          (fn prop-name->uuid [k]
-                            (or (get-pid db k)
-                                (throw (ex-info (str "No uuid found for page " (pr-str k))
-                                                {:page k}))))
-                          (fn prop-name->uuid [k]
-                            (cached-prop-name->uuid db page-names-to-uuids k)))
+   {:keys [_whiteboard? import-state] :as options}]
+  (let [;; FIXME: Whiteboard
+        ;; prop-name->uuid (if whiteboard?
+        ;;                   (fn prop-name->uuid [k]
+        ;;                     (or (get-pid db k)
+        ;;                         (throw (ex-info (str "No uuid found for page " (pr-str k))
+        ;;                                         {:page k}))))
+        ;;                   (fn prop-name->uuid [k]
+        ;;                     (cached-prop-name->uuid db page-names-to-uuids k)))
+        {:keys [all-idents property-schemas]} import-state
+        get-ident' #(get-ident @all-idents %)
         user-properties (apply dissoc props built-in-property-names)]
-    (when (seq user-properties)
-      (swap! (:block-properties-text-values import-state)
-             assoc
+    ;; FIXME: Fix block-properties-text-values
+    #_(when (seq user-properties)
+        (swap! (:block-properties-text-values import-state)
+               assoc
              ;; For pages, valid uuid is in page-names-to-uuids, not in block
-             (if (:block/name block) (get page-names-to-uuids (:block/name block)) (:block/uuid block))
-             properties-text-values))
+               (if (:block/name block) (get page-names-to-uuids (:block/name block)) (:block/uuid block))
+               properties-text-values))
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
       {}
-      (-> (update-built-in-property-values
-           (select-keys props built-in-property-names)
-           db
-           (:ignored-properties import-state)
-           (select-keys block [:block/name :block/content]))
-          (merge (update-user-property-values user-properties prop-name->uuid properties-text-values import-state options))
-          (update-keys prop-name->uuid)))))
+      (let [props' (-> (update-built-in-property-values
+                        (select-keys props built-in-property-names)
+                        db
+                        (:ignored-properties import-state)
+                        (select-keys block [:block/name :block/content]))
+                       (merge (update-user-property-values user-properties get-ident' properties-text-values import-state options)))
+            pvalue-tx-m (->> props'
+                             (map (fn [[k v]]
+                                    (let [property-map {:db/ident (get-ident @all-idents k)
+                                                        :original-property-id k
+                                                        :block/schema (get @property-schemas k)}]
+                                      [property-map v])))
+                             (db-property-build/build-property-values-tx-m block))
+            block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
+                                 (update-keys get-ident'))]
+        {:block-properties block-properties
+         :pvalues-tx (into (mapcat #(if (set? %) % [%]) (vals pvalue-tx-m)))}))))
 
 (def ignored-built-in-properties
   "Ignore built-in properties that are already imported or not supported in db graphs"
@@ -405,7 +437,8 @@
          (into {}))))
 
 (defn- handle-page-and-block-properties
-  "Handles modifying :block/properties, updating classes from property-classes
+  "Returns a map of :block with updated block and :properties-tx with any properties tx.
+   Handles modifying :block/properties, updating classes from property-classes
   and removing any deprecated property related attributes. Before updating most
   :block/properties, their property schemas are inferred as that can affect how
   a property is updated. Only infers property schemas on user properties as
@@ -425,24 +458,32 @@
               (->> properties-to-infer
                    (keep (fn [[prop val]]
                            (when-let [property-change
-                                      (infer-property-schema-and-get-property-change val prop (get (:block/properties-text-values block) prop) refs (:property-schemas import-state) macros)]
+                                      (infer-property-schema-and-get-property-change db val prop (get (:block/properties-text-values block) prop) refs import-state macros)]
                              [prop property-change])))
                    (into {}))
               ;; _ (when (seq property-changes) (prn :prop-changes property-changes))
-              options' (assoc options :property-changes property-changes)]
-          (cond-> (assoc-in block [:block/properties]
-                            (update-properties properties' db page-names-to-uuids
-                                               (select-keys block [:block/properties-text-values :block/name :block/content :block/uuid])
-                                               options'))
-            (seq classes-from-properties)
+              options' (assoc options :property-changes property-changes)
+              {:keys [block-properties pvalues-tx]}
+              (build-properties-and-values properties' db page-names-to-uuids
+                                           (select-keys block [:block/properties-text-values :block/name :block/content :block/uuid])
+                                           options')]
+          ;; (prn :handle-props (:all-idents import-state) properties')
+          ;; (prn pvalues-tx)
+          ;; (prn block-properties)
+          {:block
+           (cond-> (dissoc block :block/properties)
+             true
+             (merge block-properties)
+             (seq classes-from-properties)
             ;; Add a map of {:block.temp/new-class TAG} to be processed later
-            (update :block/tags
-                    (fnil into [])
-                    (map #(hash-map :block.temp/new-class %
-                                    :block/uuid (or (get-pid db %) (d/squuid)))
-                         classes-from-properties))))
-        block)
-      (dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
+             (update :block/tags
+                     (fnil into [])
+                     (map #(hash-map :block.temp/new-class %
+                                     :block/uuid (or (get-pid db %) (d/squuid)))
+                          classes-from-properties)))
+           :properties-tx pvalues-tx})
+        {:block block :properties-tx []})
+      (update :block dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
   [{:block/keys [properties] :as block} db page-names-to-uuids refs
@@ -464,18 +505,23 @@
                        :block/uuid (or (get-pid db new-class) (d/squuid))
                        :block/name (common-util/page-name-sanity-lc new-class)})))))
         block)
-      (handle-page-and-block-properties db page-names-to-uuids refs options)))
+      (handle-page-and-block-properties db page-names-to-uuids refs options)
+      ;; FIXME: Handle page properties-tx
+      :block))
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
-  [block db page-names-to-uuids refs {:keys [property-classes] :as options}]
-  (cond-> (handle-page-and-block-properties block db page-names-to-uuids refs options)
-    (and (seq property-classes) (seq (:block/refs block)))
-    ;; remove unused, nonexistent property page
-    (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))
-    (and (seq property-classes) (seq (:block/path-refs block)))
-    ;; remove unused, nonexistent property page
-    (update :block/path-refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))))
+  [block* db page-names-to-uuids refs {:keys [property-classes] :as options}]
+  (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)]
+    {:block
+     (cond-> block
+       (and (seq property-classes) (seq (:block/refs block*)))
+       ;; remove unused, nonexistent property page
+       (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))
+       (and (seq property-classes) (seq (:block/path-refs block*)))
+       ;; remove unused, nonexistent property page
+       (update :block/path-refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
+     :properties-tx properties-tx}))
 
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
@@ -494,6 +540,7 @@
            (mapv (fn [ref]
                    (if (ref-to-ignore? ref)
                      ref
+                     ;; FIXME: Strip down just to just uuid
                      (merge (assoc ref :block/format :markdown)
                             (when-let [schema (get new-property-schemas (keyword (:block/name ref)))]
                               {:block/type "property"
@@ -541,36 +588,36 @@
     (assoc :block/parent {:block/uuid (cached-prop-name->uuid db page-names-to-uuids (:block/name (:block/parent block)))})))
 
 (defn- build-block-tx
-  [db block pre-blocks page-names-to-uuids {:keys [import-state tag-classes] :as options}]
+  [db block* pre-blocks page-names-to-uuids {:keys [import-state tag-classes] :as options}]
   ;; (prn ::block-in block)
-  (let [old-property-schemas @(:property-schemas import-state)]
-    (-> block
-        (fix-pre-block-references pre-blocks)
-        (fix-block-name-lookup-ref db page-names-to-uuids)
-        (update-block-macros db page-names-to-uuids)
+  (let [old-property-schemas @(:property-schemas import-state)
         ;; needs to come before update-block-refs to detect new property schemas
-        (handle-block-properties db page-names-to-uuids (:block/refs block) options)
-        (update-block-refs page-names-to-uuids old-property-schemas options)
-        (update-block-tags tag-classes page-names-to-uuids)
-        (update-block-marker db options)
-        (update-block-priority db options)
-        (update-block-deadline db options)
-        add-missing-timestamps
-        ;; ((fn [x] (prn :block-out x) x))
-        ;; TODO: org-mode content needs to be handled
-        (assoc :block/format :markdown))))
+        {:keys [block properties-tx]}
+        (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
+        block' (-> block
+                   (fix-pre-block-references pre-blocks)
+                   (fix-block-name-lookup-ref db page-names-to-uuids)
+                   (update-block-macros db page-names-to-uuids)
+                   (update-block-refs page-names-to-uuids old-property-schemas options)
+                   (update-block-tags tag-classes page-names-to-uuids)
+                   (update-block-marker db options)
+                   (update-block-priority db options)
+                   (update-block-deadline db options)
+                   add-missing-timestamps
+                   ;; ((fn [x] (prn :block-out x) x))
+                   ;; TODO: org-mode content needs to be handled
+                   (assoc :block/format :markdown))]
+    ;; Order matters as properties are referenced in block
+    (concat properties-tx [block'])))
 
 (defn- build-new-page
-  [m new-property-schemas tag-classes page-names-to-uuids page-tags-uuid]
+  [m tag-classes page-names-to-uuids page-tags-uuid]
   (-> m
       ;; Fix pages missing :block/original-name. Shouldn't happen
       ((fn [m']
          (if-not (:block/original-name m')
            (assoc m' :block/original-name (:block/name m'))
            m')))
-      (merge (when-let [schema (get new-property-schemas (keyword (:block/name m)))]
-               {:block/type "property"
-                :block/schema schema}))
       add-missing-timestamps
       ;; TODO: org-mode content needs to be handled
       (assoc :block/format :markdown)
@@ -614,7 +661,7 @@
                                 (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)
                                 schema
                                 (assoc :block/type "property" :block/schema schema))))
-                          (build-new-page % new-property-schemas tag-classes page-names-to-uuids page-tags-uuid))
+                          (build-new-page % tag-classes page-names-to-uuids page-tags-uuid))
                        all-pages')]
     {:pages-tx pages-tx
      :page-names-to-uuids page-names-to-uuids}))
@@ -663,7 +710,7 @@
     []))
 
 (defn new-import-state
-  "New import state that is used in add-file-to-db-graph. State is atom per
+  "New import state that is used for import of one graph. State is atom per
    key to make code more readable and encourage local mutations"
   []
   {;; Vec of maps with keys :property, :value, :schema and :location.
@@ -673,6 +720,8 @@
    ;; Map of property names (keyword) and their current schemas (map).
    ;; Used for adding schemas to properties and detecting changes across a property's usage
    :property-schemas (atom {})
+   ;; Map of property or class names (keyword) to db-ident keywords
+   :all-idents (atom {})
    ;; Map of block uuids to their :block/properties-text-values value.
    ;; Used if a property value changes to :default
    :block-properties-text-values (atom {})})
@@ -691,6 +740,23 @@
     :property-parent-classes (set/difference
                               (set (map (comp keyword string/lower-case) (:property-parent-classes user-options)))
                               built-in-property-names)}))
+
+(defn- split-pages-and-properties-tx
+  "Separates new pages from new properties tx in preparation for properties to
+  be transacted separatedly. Also rebuilds properties tx"
+  [pages-tx old-properties import-state]
+  (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
+        _ (prn :new-properties new-properties)
+        [properties-tx pages-tx'] ((juxt filter remove)
+                                   #(contains? new-properties (keyword (:block/name %))) pages-tx)
+        properties-tx' (map (fn [{:block/keys [original-name uuid]}]
+                              (let [db-ident (get @(:all-idents import-state) (keyword original-name))]
+                                (sqlite-util/build-new-property db-ident
+                                                                (get @(:property-schemas import-state) (keyword original-name))
+                                                                {:original-name original-name :block-uuid uuid})))
+                            properties-tx)
+        #_(cljs.pprint/pprint properties-tx')]
+    [pages-tx' properties-tx']))
 
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
@@ -726,6 +792,7 @@
               :else
               (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))
         tx-options (build-tx-options options)
+        old-properties (keys @(get-in options [:import-state :property-schemas]))
         ;; Build page and block txs
         {:keys [pages-tx page-names-to-uuids]} (build-pages-tx conn pages blocks tx-options)
         whiteboard-pages (->> pages-tx
@@ -739,8 +806,14 @@
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks-tx (->> blocks
                        (remove :block/pre-block?)
-                       (mapv #(build-block-tx @conn % pre-blocks page-names-to-uuids
-                                              (assoc tx-options :whiteboard? (some? (seq whiteboard-pages))))))
+                       (mapcat #(build-block-tx @conn % pre-blocks page-names-to-uuids
+                                                (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
+                       vec)
+
+        [pages-tx' properties-tx] (split-pages-and-properties-tx pages-tx old-properties (:import-state options))
+        ;; Necessary to transact new property entities first so that block+page properties can be transacted next
+        _ (d/transact! conn properties-tx)
+
         upstream-properties-tx (build-upstream-properties-tx
                                 @conn
                                 page-names-to-uuids
@@ -749,7 +822,7 @@
                                 blocks-tx
                                 log-fn)
         ;; Build indices
-        pages-index (map #(select-keys % [:block/uuid]) pages-tx)
+        pages-index (map #(select-keys % [:block/uuid]) pages-tx')
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
         block-refs-ids (->> (mapcat :block/refs blocks-tx)
                             (filter (fn [ref] (and (vector? ref)
@@ -760,8 +833,9 @@
         block-ids (set/union (set block-ids) (set block-refs-ids))
         ;; Order matters as upstream-properties-tx can override some blocks-tx and indices need
         ;; to come before their corresponding tx
-        tx (concat whiteboard-pages pages-index pages-tx block-ids blocks-tx upstream-properties-tx)
+        tx (concat whiteboard-pages pages-index pages-tx' block-ids blocks-tx upstream-properties-tx)
         tx' (common-util/fast-remove-nils tx)
+        ;; _ (cljs.pprint/pprint {:tx tx'})
         result (d/transact! conn tx')]
     result))
 
