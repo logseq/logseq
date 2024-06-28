@@ -58,23 +58,24 @@
   "Import a file graph dir just like UI does. However, unlike the UI the
   exporter receives file maps containing keys :path and ::rpath since :path
   are full paths"
-  [file-graph-dir conn options]
+  [file-graph-dir conn {:keys [assets] :as options}]
   (let [*files (build-graph-files file-graph-dir)
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
-        options (merge options
-                       default-export-options
-                       ;; TODO: Update when asset is tested
-                        ;; asset file options
-                       {:<copy-asset identity})]
-    (gp-exporter/export-file-graph conn conn config-file *files options)))
+        options' (-> (merge options
+                            default-export-options
+                            ;; asset file options
+                            {:<copy-asset #(swap! assets conj %)})
+                     (dissoc :assets))]
+    (gp-exporter/export-file-graph conn conn config-file *files options')))
 
 (deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-          _ (import-file-graph-to-db file-graph-dir conn {})]
+          assets (atom [])
+          _ (import-file-graph-to-db file-graph-dir conn {:assets assets})]
 
     (is (nil? (:errors (db-validate/validate-db! @conn)))
         "Created graph has no validation errors")
@@ -85,5 +86,6 @@
       (is (= "logseq.api.show_msg('hello good sir!');\n"
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
-    (testing "user pages"
-      (is (= 1 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn)))))))
+    (testing "user content"
+      (is (= 2 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 1 (count @assets))))))
