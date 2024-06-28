@@ -10,7 +10,17 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [logseq.graph-parser.exporter :as gp-exporter]))
+            [logseq.graph-parser.exporter :as gp-exporter]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.db.frontend.property :as db-property]))
+
+(defn- find-block-by-content [db content]
+  (->> content
+       (d/q '[:find [(pull ?b [*]) ...]
+              :in $ ?content
+              :where [?b :block/content ?content]]
+            db)
+       first))
 
 (defn- build-graph-files
   "Given a file graph directory, return all files including assets and adds relative paths
@@ -88,5 +98,23 @@
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
     (testing "user content"
-      (is (= 2 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      (is (= 1 (count @assets))))))
+      (is (= 3 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 1 (count @assets)))
+
+      (testing "user properties"
+        (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
+                 {:db/ident :user.property/prop-string :block/schema {:type :default}}
+                 {:db/ident :user.property/prop-num :block/schema {:type :number}}}
+               (->> @conn
+                    (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
+                           :where [?b :block/type "property"]])
+                    (remove #(db-malli-schema/internal-ident? (:db/ident %)))
+                    set))
+            "properties defined correctly")
+        (is (= {:user.property/prop-bool true
+                :user.property/prop-num 5
+                :user.property/prop-string "woot"}
+               (update-vals (db-property/properties (find-block-by-content @conn "b1"))
+                            (fn [ref]
+                              (db-property/ref->property-value-content @conn ref))))
+            "Basic block has correct properties")))))
