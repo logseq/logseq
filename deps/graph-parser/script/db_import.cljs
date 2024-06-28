@@ -9,6 +9,7 @@
             ["fs" :as fs]
             ["fs/promises" :as fsp]
             [nbb.core :as nbb]
+            [nbb.classpath :as cp]
             [babashka.cli :as cli]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.common.graph :as common-graph]
@@ -47,11 +48,14 @@
     (println (string/join
               "\n"
               (map
-               #(str (:file %) (when (:line %) (str ":" (:line %)))
-                     " calls #'"
-                     (str (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name])))
-               stack)))
-    (println (.-stack (get-in m [:ex-data :error])))))
+               #(str (:file %)
+                     (when (:line %) (str ":" (:line %)))
+                     (when (:sci.impl/f-meta %)
+                       (str " calls #'" (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name]))))
+               (reverse stack))))
+    (println (some-> (get-in m [:ex-data :error]) .-stack)))
+  (when (= :error (:level m))
+    (js/process.exit 1)))
 
 (def default-export-options
   {;; common options
@@ -125,7 +129,7 @@
                           ((juxt node-path/dirname node-path/basename) graph-dir'))
                         [(node-path/join (os/homedir) "logseq" "graphs") db-graph-dir])
         file-graph' (resolve-path file-graph)
-        conn (outliner-cli/init-conn dir db-name)
+        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         directory? (.isDirectory (fs/statSync file-graph'))]
     (p/do!
      (if directory?
