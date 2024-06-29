@@ -127,7 +127,7 @@
   (d/listen! conn :persistence
              (fn [tx-report]
                (when (not (:new-graph? (:tx-meta tx-report))) ; skip initial txs
-                 (if (util/electron?)
+                 (if (or util/electron? util/browser?)
                    (when-not (:dbsync? (:tx-meta tx-report))
                      ;; sync with other windows if needed
                      (p/let [graph-has-other-window? (ipc/ipc "graphHasOtherWindow" repo)]

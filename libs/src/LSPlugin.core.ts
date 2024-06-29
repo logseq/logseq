@@ -512,8 +512,28 @@ class PluginLocal extends EventEmitter<
       : filePath
   }
 
+  async _resolveLinks() {
+      // @ts-expect-error
+      if (window.frontend.config.plugin_local_enabled_QMARK_()) {
+    
+        // @ts-expect-error
+        const pluginLocalPath = "file://" + window.frontend.handler.plugin.get_ls_dotdir_root() + '/' + window.frontend.config.plugins_local_path();
+
+        // @ts-expect-error
+        const localPluginsURL = location.protocol + '//' + location.host + '/' + window.frontend.config.plugins_local_path();
+
+        if (this._options.entry.startsWith(pluginLocalPath)) {
+          this._options.entry = this._options.entry.replace(pluginLocalPath, localPluginsURL)
+        }
+
+        if (this._options.icon.startsWith(pluginLocalPath)) {
+          this._options.icon = this._options.icon.replace(pluginLocalPath, localPluginsURL)
+        }
+      }
+  }
+
   async _preparePackageConfigs() {
-    const { url } = this._options
+    let { url } = this._options
     let pkg: any
 
     try {
@@ -522,6 +542,12 @@ class PluginLocal extends EventEmitter<
       }
 
       debug('prepare package root', url)
+
+      if (url.startsWith('./')) {
+        // @ts-expect-error
+        url = url.replace('./', window.frontend.handler.plugin.get_ls_dotdir_root() + "/")
+        debug('resolved package root', url)
+      }
 
       pkg = await invokeHostExportedApi('load_plugin_config', url)
 
@@ -835,6 +861,8 @@ class PluginLocal extends EventEmitter<
       // }
 
       const installPackageThemes = await this._preparePackageConfigs()
+
+      await this._resolveLinks()
 
       this._dispose(await this._setupUserSettings(opts?.reload))
 

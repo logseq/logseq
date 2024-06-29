@@ -141,6 +141,13 @@
      (def electron? (memoize electron*?))))
 
 #?(:cljs
+   (do
+     (defn- browser*?
+       []
+       true)
+     (def browser? (memoize browser*?))))
+
+#?(:cljs
    (defn mocked-open-dir-path
      "Mocked open DIR path for by-passing open dir in electron during testing. Nil if not given"
      []

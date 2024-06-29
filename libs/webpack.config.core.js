@@ -33,7 +33,9 @@ module.exports = (env, argv) => {
 
   if (argv.mode === 'production') {
     delete config.devtool
-    config.plugins.push(new BundleAnalyzerPlugin())
+    config.plugins.push(new BundleAnalyzerPlugin({
+        analyzerMode: 'disabled'
+      }))
   }
 
   return config

@@ -198,7 +198,7 @@
      :mobile/app-state-change                 (atom nil)
 
      ;; plugin
-     :plugin/enabled                        (and (util/electron?)
+     :plugin/enabled                        (and (or util/electron? util/browser?)
                                                  ;; true false :theme-only
                                                  ((fnil identity true) (storage/get ::storage-spec/lsp-core-enabled)))
      :plugin/preferences                    nil

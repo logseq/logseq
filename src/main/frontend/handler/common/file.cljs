@@ -29,7 +29,8 @@
        caps and non-caps"
   [repo-url file-page file-path]
   (when-let [current-file (page-exists-in-another-file repo-url file-page file-path)]
-    (when (not= file-path current-file)
+    (let [ignored (and (config/plugin-local-enabled?) (string/starts-with? file-path (config/config-local-path)))]
+    (when (and (not= file-path current-file) (not ignored))
       (cond
         ;; TODO: handle case sensitive file system
         (= (gp-util/path-normalize (string/lower-case current-file))

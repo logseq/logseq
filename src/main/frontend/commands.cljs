@@ -235,7 +235,7 @@
      ["Template" [[:editor/input command-trigger nil]
                   [:editor/search-template]] "Insert a created template here"]
      (cond
-       (and (util/electron?) (config/local-db? (state/get-current-repo)))
+       (and (or util/electron? util/browser?) (config/local-db? (state/get-current-repo)))
 
        ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])]
 
