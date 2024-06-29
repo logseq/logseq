@@ -134,7 +134,8 @@
           {:key (str (:id column))
            :className "capitalize"
            :checked (column-visible? column)
-           :onCheckedChange #(column-toggle-visiblity column %)}
+           :onCheckedChange #(column-toggle-visiblity column %)
+           :onSelect (fn [e] (.preventDefault e))}
           (:name column)))))))))
 
 (defn table-header
