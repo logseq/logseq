@@ -283,6 +283,7 @@ let getTracingFilePath = function(): string {
 
 
 test.afterAll(async () => {
+  test.setTimeout(60000); // video.spec.ts needs > 30000 default
   await context.tracing.stopChunk({ path: getTracingFilePath() });
 })
 

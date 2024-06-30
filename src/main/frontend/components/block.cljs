@@ -9,6 +9,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.impl.entity :as e]
             [dommy.core :as dom]
             [frontend.commands :as commands]
             [frontend.components.block.macros :as block-macros]
@@ -16,19 +17,20 @@
             [frontend.components.lazy-editor :as lazy-editor]
             [frontend.components.macro :as macro]
             [frontend.components.plugins :as plugins]
+            [frontend.components.query :as query]
             [frontend.components.query.builder :as query-builder-component]
             [frontend.components.svg :as svg]
-            [frontend.components.query :as query]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
-            [frontend.db.model :as model]
             [frontend.db-mixins :as db-mixins]
+            [frontend.db.model :as model]
             [frontend.extensions.highlight :as highlight]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.lightbox :as lightbox]
             [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.extensions.sci :as sci]
             [frontend.extensions.video.youtube :as youtube]
             [frontend.extensions.zotero :as zotero]
@@ -39,6 +41,7 @@
             [frontend.handler.block :as block-handler]
             [frontend.handler.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.export.common :as export-common-handler]
             [frontend.handler.file-sync :as file-sync]
             [frontend.handler.notification :as notification]
             [frontend.handler.plugin :as plugin-handler]
@@ -46,16 +49,15 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
-            [frontend.handler.export.common :as export-common-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.outliner.tree :as tree]
             [frontend.security :as security]
-            [frontend.shui :refer [get-shui-component-version make-shui-context]]
+            [frontend.shui :refer [get-shui-component-version
+                                   make-shui-context]]
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.clock :as clock]
             [frontend.util.drawer :as drawer]
             [frontend.util.property :as property]
@@ -63,6 +65,7 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.common.path :as path :refer [path-normalize]]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.config :as gp-config]
             [logseq.graph-parser.mldoc :as gp-mldoc]
@@ -76,9 +79,7 @@
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
-            [shadow.loader :as loader]
-            [datascript.impl.entity :as e]
-            [logseq.common.path :as path]))
+            [shadow.loader :as loader]))
 
 
 
@@ -1063,7 +1064,7 @@
       (image-link config url s label metadata full_text)
 
       :else
-      (asset-reference config label s))))
+      (asset-reference config label (js/encodeURI s)))))
 
 (defn- search-link-cp
   [config url s label title metadata full_text]
@@ -1313,56 +1314,58 @@
 
 (defn- macro-video-cp
   [_config arguments]
-  (if-let [url (first arguments)]
-    (if (gp-util/url? url)
-      (let [results (text-util/get-matched-video url)
-            src (match results
-                  [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
-                  (if (= (count id) 11) ["youtube-player" id] url)
+  (let [f-arg (first arguments)]
+    (if-let [url (if (gp-config/local-asset? f-arg)
+                   (path-normalize f-arg)
+                   f-arg)]
+      (if (gp-util/url? url)
+        (let [results (text-util/get-matched-video url)
+              src (match results
+                    [_ _ _ (:or "youtube.com" "youtu.be" "y2u.be") _ id _]
+                    (if (= (count id) 11) ["youtube-player" id] url)
 
-                  [_ _ _ "youtube-nocookie.com" _ id _]
-                  (str "https://www.youtube-nocookie.com/embed/" id)
+                    [_ _ _ "youtube-nocookie.com" _ id _]
+                    (str "https://www.youtube-nocookie.com/embed/" id)
 
-                  [_ _ _ "loom.com" _ id _]
-                  (str "https://www.loom.com/embed/" id)
+                    [_ _ _ "loom.com" _ id _]
+                    (str "https://www.loom.com/embed/" id)
 
-                  [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
-                  (str "https://player.vimeo.com/video/" id)
+                    [_ _ _ (_ :guard #(string/ends-with? % "vimeo.com")) _ id _]
+                    (str "https://player.vimeo.com/video/" id)
 
-                  [_ _ _ "bilibili.com" _ id & query]
-                  (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
-                       (when-let [page (second query)]
-                         (str "&page=" page)))
+                    [_ _ _ "bilibili.com" _ id & query]
+                    (str "https://player.bilibili.com/player.html?bvid=" id "&high_quality=1"
+                         (when-let [page (second query)]
+                           (str "&page=" page)))
 
-                  :else
-                  ["video-file" url])]
-        (if
-         (coll? src)
-          (cond
-            (= (first src) "youtube-player")
-            (youtube/youtube-video (last src))
-            
-             (= (first src) "video-file")
-            (asset-reference nil nil (last src)))
-          (when src
-            (let [width (min (- (util/get-width) 96) 560)
-                  height (int (* width (/ (if (string/includes? src "player.bilibili.com")
-                                            360 315)
-                                          560)))]
-              [:iframe
-               {:allow-full-screen true
-                :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
-                :framespacing "0"
-                :frame-border "no"
-                :border "0"
-                :scrolling "no"
-                :src src
-                :width width
-                :height height}]))))
-      [:span.warning.mr-1 {:title "Invalid URL"}
-       (macro->text "video" arguments)])
-    [:span.warning.mr-1 {:title "Empty URL"}
-     (macro->text "video" arguments)]))
+                    :else ["asset-reference" url])]
+          (if
+           (coll? src)
+            (cond
+              (= (first src) "youtube-player")
+              (youtube/youtube-video (last src))
+
+              (= (first src) "asset-reference")
+              (asset-reference nil nil (last src)))
+            (when src
+              (let [width (min (- (util/get-width) 96) 560)
+                    height (int (* width (/ (if (string/includes? src "player.bilibili.com")
+                                              360 315)
+                                            560)))]
+                [:iframe
+                 {:allow-full-screen true
+                  :allow "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
+                  :framespacing "0"
+                  :frame-border "no"
+                  :border "0"
+                  :scrolling "no"
+                  :src src
+                  :width width
+                  :height height}]))))
+        [:span.warning.mr-1 {:title "Invalid URL"}
+         (macro->text "video" url)])
+      [:span.warning.mr-1 {:title "Empty URL"}
+       (macro->text "video" arguments)])))
 
 (defn- macro-else-cp
   [name config arguments]
