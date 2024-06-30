@@ -86,7 +86,8 @@
        :header header-cp
        :cell (fn [_table row _column]
                [:div.primary-cell
-                (component-block/block-container (assoc config :table? true) row)])}]
+                (component-block/block-container (assoc config :table? true) row)])
+       :disable-hide? true}]
      (map
       (fn [property]
         {:id (:db/ident property)
@@ -129,7 +130,8 @@
       (shui/dropdown-menu-sub-trigger
        "Properties")
       (shui/dropdown-menu-sub-content
-       (for [column (remove #(false? (:column-list? %)) columns)]
+       (for [column (remove #(or (false? (:column-list? %))
+                                 (:disable-hide? %)) columns)]
          (shui/dropdown-menu-checkbox-item
           {:key (str (:id column))
            :className "capitalize"
@@ -241,9 +243,10 @@
                            :input-default-placeholder "Select"
                            :multiple-choices? true
                            :on-chosen (fn [_value _selected? selected]
-                                        (when (seq selected)
-                                          (let [filters' (conj filters [property :is selected])]
-                                            (set-filters! filters'))))}))
+                                        (let [filters' (if (seq selected)
+                                                         (conj filters [property :is selected])
+                                                         filters)]
+                                          (set-filters! filters')))}))
                  option)]
     (select/select option)))
 
@@ -262,6 +265,106 @@
                                    :auto-focus? true}))}
    (ui/icon "filter")))
 
+(defn operator->text
+  [operator]
+  (case operator
+    :is "is"
+    :is-not "is not"
+    :is-empty "is empty"
+    :is-not-empty "is not empty"
+    :string-contains "text contains"
+    :string-not-contains "text not contains"
+    :date-before "Date before"
+    :date-after "Date after"
+    :number-gt ">"
+    :number-lt "<"
+    :number-gte ">="
+    :number-lte "<="))
+
+(defn get-property-operators
+  [property]
+  (concat
+   [:is :is-not]
+   (case (get-in property [:block/schema :type])
+     (:default :url :page :object)
+     [:string-contains :string-not-contains]
+     :date
+     [:date-before :date-after]
+     :number
+     [:number-gt :number-lt :number-gte :number-lte]
+     nil)
+   [:is-empty :is-not-empty]))
+
+(defn- get-filter-with-changed-operator
+  [property operator value]
+  (case operator
+    (:is :is-not)
+    (when (set? value) value)
+
+    (:is-empty :is-not-empty)
+    nil
+
+    (:string-contains :string-not-contains)
+    (when (string? value) value)
+
+    (:number-gt :number-lt :number-gte :number-lte)
+    (when (number? value) value)
+
+    (:date-before :date-after)
+    ;; FIXME: should be a valid date number
+    (when (number? value) value)))
+
+(rum/defc filter-operator < rum/static
+  [property operator filters set-filters! idx]
+  (shui/dropdown-menu
+   (shui/dropdown-menu-trigger
+    {:asChild true}
+    (shui/button
+     {:class "!px-2 rounded-none border-r"
+      :variant "ghost"
+      :size :sm}
+     [:span.text-xs (operator->text operator)]))
+   (shui/dropdown-menu-content
+    {:align "start"}
+    (let [operators (get-property-operators property)]
+      (for [operator operators]
+        (shui/dropdown-menu-item
+         {:on-click (fn []
+                      (let [new-filters (update filters idx
+                                                (fn [[property _old-operator value]]
+                                                  (let [value' (get-filter-with-changed-operator property operator value)]
+                                                    (if value'
+                                                      [property operator value']
+                                                      [property operator]))))]
+                        (set-filters! new-filters)))}
+         (operator->text operator)))))))
+
+(rum/defc filter-value < rum/static
+  [property operator value filters set-filters! idx]
+  (let [number-operator? (string/starts-with? (name operator) "number-")]
+    (case operator
+      (:string-contains :string-not-contains :number-gt :number-lt :number-gte :number-lte)
+      (shui/input
+       {:auto-focus true
+        :value (or value "")
+        :onChange (fn [e]
+                    (let [value (util/evalue e)
+                          number-value (and number-operator? (util/safe-parse-float value))]
+                      (when-not (and number-operator? (nil? number-value))
+                        (let [new-filters (update filters idx
+                                                  (fn [[property operator _value]]
+                                                    [property operator (or number-value value)]))]
+                          (set-filters! new-filters)))))
+        :class "w-24 !h-6 !py-0 border-none"})
+      (when value
+        (shui/button
+         {:class "!px-2 rounded-none border-r"
+          :variant "ghost"
+          :size :sm}
+         [:div.flex.flex-row.items-center.gap-1.text-xs
+          (->> (map (fn [v] [:div (get-property-value-content v property)]) value)
+               (interpose [:div "or"]))])))))
+
 (rum/defc filters-row < rum/static
   [{:keys [data-fns] :as table}]
   (let [filters (get-in table [:state :filters])
@@ -271,44 +374,30 @@
        (map-indexed
         (fn [idx filter]
           (let [[property operator value] filter]
-            (when (seq value)
-              (let [is? (= :is operator)]
-                [:div.flex.flex-row.items-center.border.rounded
-                 (shui/button
-                  {:class "!px-2 rounded-none border-r"
-                   :variant "ghost"
-                   :size :sm
-                   :disabled true}
-                  [:span.text-xs (:block/original-name property)])
-                 (shui/button
-                  {:class "!px-2 rounded-none border-r"
-                   :variant "ghost"
-                   :size :sm
-                   :on-click (fn [_e]
-                               (let [new-filters (update filters idx
-                                                         (fn [[property operator value]]
-                                                           ;; TODO: support more operators like `contains`, `between` for different types
-                                                           ;; and switch to use dropdown instead of toggle
-                                                           (let [operator' (if (= operator :is) :not :is)]
-                                                             [property operator' value])))]
-                                 (set-filters! new-filters)))}
-                  [:span.text-xs (if is? "is" "is not")])
-                 (shui/button
-                  {:class "!px-2 rounded-none border-r"
-                   :variant "ghost"
-                   :size :sm}
-                  [:div.flex.flex-row.items-center.gap-1.text-xs
-                   (->> (map (fn [v] [:div (get-property-value-content v property)]) value)
-                        (interpose [:div "or"]))])
-                 (shui/button
-                  {:class "!px-1 rounded-none"
-                   :variant "ghost"
-                   :size :sm
-                   :on-click (fn [e]
-                               (let [new-filters (vec (remove #{filter} filters))]
-                                 (set-filters! new-filters)))}
-                  (ui/icon "x"))]))))
+            [:div.flex.flex-row.items-center.border.rounded
+             (shui/button
+              {:class "!px-2 rounded-none border-r"
+               :variant "ghost"
+               :size :sm
+               :disabled true}
+              [:span.text-xs (:block/original-name property)])
+             (filter-operator property operator filters set-filters! idx)
+             (when-not (contains? #{:is-empty :is-not-empty} operator)
+               (filter-value property operator value filters set-filters! idx))
+             (shui/button
+              {:class "!px-1 rounded-none"
+               :variant "ghost"
+               :size :sm
+               :on-click (fn [_e]
+                           (let [new-filters (vec (remove #{filter} filters))]
+                             (set-filters! new-filters)))}
+              (ui/icon "x"))]))
         filters)])))
+
+(defn- fuzzy-matched?
+  [input s]
+  (pos? (fuzzy-search/score (string/lower-case (str input))
+                            (string/lower-case (str s)))))
 
 (defn- row-matched?
   [row input filters]
@@ -317,7 +406,7 @@
    (if (string/blank? input)
      true
      (when row
-       (pos? (fuzzy-search/score (string/lower-case input) (:object/name row)))))
+       (fuzzy-matched? input (:object/name row))))
    ;; filters check
    (every?
     (fn [[property operator match]]
@@ -325,13 +414,36 @@
             value' (cond
                      (set? value) value
                      (nil? value) #{}
-                     :else #{value})]
-        (case operator
-          :is
-          (boolean (seq (set/intersection value' match)))
-          :not
-          (boolean (empty? (set/intersection value' match)))
-          true)))
+                     :else #{value})
+            result
+            (case operator
+              :is
+              (boolean (seq (set/intersection value' match)))
+
+              :is-not
+              (boolean (empty? (set/intersection value' match)))
+
+              :is-empty
+              (nil? value)
+
+              :is-not-empty
+              (some? value)
+
+              :string-contains
+              (some #(fuzzy-matched? match (db-property/property-value-content %)) value')
+
+              :string-not-contains
+              (not-any? #(string/includes? (str (db-property/property-value-content %)) match) value')
+
+              :number-gt
+              (if match (some #(> (db-property/property-value-content %) match) value') true)
+              :number-gte
+              (if match (some #(>= (db-property/property-value-content %) match) value') true)
+              :number-lt
+              (if match (some #(< (db-property/property-value-content %) match) value') true)
+              :number-lte
+              (if match (some #(<= (db-property/property-value-content %) match) value') true))]
+        result))
     filters)))
 
 (rum/defc objects-inner < rum/static
