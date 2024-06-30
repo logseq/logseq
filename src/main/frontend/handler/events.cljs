@@ -276,7 +276,7 @@
   (when
    (and (not (util/electron?))
      (not (mobile-util/native-platform?)))
-    (fn [close-fn]
+    (fn [{:keys [close]}]
       [:div
        ;; TODO: fn translation with args
        [:p
@@ -287,11 +287,12 @@
          :class "ui__modal-enter"
          :on-click (fn []
                      (nfs/check-directory-permission! repo)
-                     (close-fn)))])))
+                     (close)))])))
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
-    (shui/dialog-open! (ask-permission repo))))
+    (some-> (ask-permission repo)
+      (shui/dialog-open! {:align :top}))))
 
 (defonce *query-properties (atom {}))
 (rum/defc query-properties-settings-inner < rum/reactive
