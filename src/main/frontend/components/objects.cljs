@@ -210,8 +210,22 @@
     (db-property/property-value-content e)
     (str e)))
 
+(defn- get-property-values
+  [rows property]
+  (let [property-ident (:db/ident property)
+        values (->> (mapcat (fn [e] (let [v (get e property-ident)]
+                                      (if (set? v) v #{v}))) rows)
+                    (remove nil?)
+                    (distinct))]
+    (->>
+     (map (fn [e]
+            {:label (get-property-value-content e property)
+             :value e})
+          values)
+     (sort-by :label))))
+
 (rum/defc filter-property < rum/static
-  [columns {:keys [rows data-fns] :as table}]
+  [columns {:keys [data-fns] :as table}]
   (let [[property-ident set-property-ident!] (rum/use-state nil)
         set-filters! (:set-filters! data-fns)
         property (when property-ident (db/entity property-ident))
@@ -228,19 +242,10 @@
                 :on-chosen (fn [value]
                              (set-property-ident! value))}
         option (if property
-                 (let [items (let [values (->> (mapcat (fn [e] (let [v (get e property-ident)]
-                                                                 (if (set? v) v #{v}))) rows)
-                                               (remove nil?)
-                                               (distinct))]
-                               (->>
-                                (map (fn [e]
-                                       {:label (get-property-value-content e property)
-                                        :value e})
-                                     values)
-                                (sort-by :label)))]
+                 (let [items (get-property-values (:data table) property)]
                    (merge option
                           {:items items
-                           :input-default-placeholder "Select"
+                           :input-default-placeholder (if property (:block/original-name property) "Select")
                            :multiple-choices? true
                            :on-chosen (fn [_value _selected? selected]
                                         (let [filters' (if (seq selected)
@@ -270,8 +275,6 @@
   (case operator
     :is "is"
     :is-not "is not"
-    :is-empty "is empty"
-    :is-not-empty "is not empty"
     :string-contains "text contains"
     :string-not-contains "text not contains"
     :date-before "date before"
@@ -293,17 +296,13 @@
      [:date-before :date-after :between]
      :number
      [:number-gt :number-lt :number-gte :number-lte :between]
-     nil)
-   [:is-empty :is-not-empty]))
+     nil)))
 
 (defn- get-filter-with-changed-operator
   [property operator value]
   (case operator
     (:is :is-not)
     (when (set? value) value)
-
-    (:is-empty :is-not-empty)
-    nil
 
     (:string-contains :string-not-contains)
     (when (string? value) value)
@@ -380,8 +379,41 @@
                      (set-filters! new-filters))))
      :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
 
+(rum/defc filter-value-select < rum/static
+  [{:keys [data-fns] :as table} property value _operator idx]
+  (let [items (get-property-values (:data table) property)
+        filters (get-in table [:state :filters])
+        set-filters! (:set-filters! data-fns)
+        option {:input-default-placeholder (:block/original-name property)
+                :multiple-choices? true
+                :selected-choices value
+                :input-opts {:class "!px-3 !py-1"}
+                :items items
+                :extract-fn :label
+                :extract-chosen-fn :value
+                :on-chosen (fn [_value _selected? selected]
+                             (let [new-filters (update filters idx
+                                                       (fn [[property operator _value]]
+                                                         [property operator selected]))]
+                               (set-filters! new-filters)))}]
+    (shui/dropdown-menu
+     (shui/dropdown-menu-trigger
+      {:asChild true}
+      (shui/button
+       {:class "!px-2 rounded-none border-r"
+        :variant "ghost"
+        :size :sm}
+       [:div.flex.flex-row.items-center.gap-1.text-xs
+        (if (seq value)
+          (->> (map (fn [v] [:div (get-property-value-content v property)]) value)
+               (interpose [:div "or"]))
+          "Empty")]))
+     (shui/dropdown-menu-content
+      {:align "start"}
+      (select/select option)))))
+
 (rum/defc filter-value < rum/static
-  [property operator value filters set-filters! idx]
+  [table property operator value filters set-filters! idx]
   (let [number-operator? (string/starts-with? (name operator) "number-")]
     (case operator
       :between
@@ -402,14 +434,9 @@
                                                     [property operator (or number-value value)])))]
                         (set-filters! new-filters))))
         :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
-      (when value
-        (shui/button
-         {:class "!px-2 rounded-none border-r"
-          :variant "ghost"
-          :size :sm}
-         [:div.flex.flex-row.items-center.gap-1.text-xs
-          (->> (map (fn [v] [:div (get-property-value-content v property)]) value)
-               (interpose [:div "or"]))])))))
+
+
+      (filter-value-select table property value operator idx))))
 
 (rum/defc filters-row < rum/static
   [{:keys [data-fns] :as table}]
@@ -428,8 +455,7 @@
                :disabled true}
               [:span.text-xs (:block/original-name property)])
              (filter-operator property operator filters set-filters! idx)
-             (when-not (contains? #{:is-empty :is-not-empty} operator)
-               (filter-value property operator value filters set-filters! idx))
+             (filter-value table property operator value filters set-filters! idx)
              (shui/button
               {:class "!px-1 rounded-none"
                :variant "ghost"
@@ -468,12 +494,6 @@
 
               :is-not
               (boolean (empty? (set/intersection value' match)))
-
-              :is-empty
-              (nil? value)
-
-              :is-not-empty
-              (some? value)
 
               :string-contains
               (some #(fuzzy-matched? match (db-property/property-value-content %)) value')
