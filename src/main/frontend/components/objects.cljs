@@ -189,7 +189,7 @@
         :on-key-down (fn [e]
                        (when (= "Escape" (util/ekey e))
                          (set-show-input! false)))
-        :class "max-w-sm !h-7 !py-0 border-none"})
+        :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
       (shui/button
        {:variant "ghost"
         ;; FIXME: remove ring when focused
@@ -274,12 +274,13 @@
     :is-not-empty "is not empty"
     :string-contains "text contains"
     :string-not-contains "text not contains"
-    :date-before "Date before"
-    :date-after "Date after"
+    :date-before "date before"
+    :date-after "date after"
     :number-gt ">"
     :number-lt "<"
     :number-gte ">="
-    :number-lte "<="))
+    :number-lte "<="
+    :between "between"))
 
 (defn get-property-operators
   [property]
@@ -289,9 +290,9 @@
      (:default :url :page :object)
      [:string-contains :string-not-contains]
      :date
-     [:date-before :date-after]
+     [:date-before :date-after :between]
      :number
-     [:number-gt :number-lt :number-gte :number-lte]
+     [:number-gt :number-lt :number-gte :number-lte :between]
      nil)
    [:is-empty :is-not-empty]))
 
@@ -309,6 +310,9 @@
 
     (:number-gt :number-lt :number-gte :number-lte)
     (when (number? value) value)
+
+    :between
+    (when (every? number? value) value)
 
     (:date-before :date-after)
     ;; FIXME: should be a valid date number
@@ -339,23 +343,65 @@
                         (set-filters! new-filters)))}
          (operator->text operator)))))))
 
+(rum/defc between < rum/static
+  [property [start end] filters set-filters! idx]
+  [:<>
+   (shui/input
+    {:auto-focus true
+     :placeholder "from"
+     :value (str start)
+     :onChange (fn [e]
+                 (let [input-value (util/evalue e)
+                       number-value (when-not (string/blank? input-value)
+                                      (util/safe-parse-float input-value))
+                       value [number-value end]
+                       value (if (every? nil? value) nil value)]
+                   (let [new-filters (update filters idx
+                                             (fn [[property operator _old_value]]
+                                               (if (nil? value)
+                                                 [property operator]
+                                                 [property operator value])))]
+                     (set-filters! new-filters))))
+     :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
+   (shui/input
+    {:value (str end)
+     :placeholder "to"
+     :onChange (fn [e]
+                 (let [input-value (util/evalue e)
+                       number-value (when-not (string/blank? input-value)
+                                      (util/safe-parse-float input-value))
+                       value [start number-value]
+                       value (if (every? nil? value) nil value)]
+                   (let [new-filters (update filters idx
+                                             (fn [[property operator _old_value]]
+                                               (if (nil? value)
+                                                 [property operator]
+                                                 [property operator value])))]
+                     (set-filters! new-filters))))
+     :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
+
 (rum/defc filter-value < rum/static
   [property operator value filters set-filters! idx]
   (let [number-operator? (string/starts-with? (name operator) "number-")]
     (case operator
+      :between
+      (between property value filters set-filters! idx)
+
       (:string-contains :string-not-contains :number-gt :number-lt :number-gte :number-lte)
       (shui/input
        {:auto-focus true
         :value (or value "")
         :onChange (fn [e]
                     (let [value (util/evalue e)
-                          number-value (and number-operator? (util/safe-parse-float value))]
-                      (when-not (and number-operator? (nil? number-value))
-                        (let [new-filters (update filters idx
-                                                  (fn [[property operator _value]]
-                                                    [property operator (or number-value value)]))]
-                          (set-filters! new-filters)))))
-        :class "w-24 !h-6 !py-0 border-none"})
+                          number-value (and number-operator? (when-not (string/blank? value)
+                                                               (util/safe-parse-float value)))]
+                      (let [new-filters (update filters idx
+                                                (fn [[property operator _value]]
+                                                  (if (and number-operator? (nil? number-value))
+                                                    [property operator]
+                                                    [property operator (or number-value value)])))]
+                        (set-filters! new-filters))))
+        :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
       (when value
         (shui/button
          {:class "!px-2 rounded-none border-r"
@@ -442,7 +488,17 @@
               :number-lt
               (if match (some #(< (db-property/property-value-content %) match) value') true)
               :number-lte
-              (if match (some #(<= (db-property/property-value-content %) match) value') true))]
+              (if match (some #(<= (db-property/property-value-content %) match) value') true)
+
+              :between
+              (if (seq match)
+                (some (fn [row]
+                        (let [[start end] match
+                              value (db-property/property-value-content row)
+                              conditions [(if start (<= start value) true)
+                                          (if end (<= value end) true)]]
+                          (if (seq match) (every? true? conditions) true))) value')
+                true))]
         result))
     filters)))
 
