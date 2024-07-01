@@ -105,48 +105,62 @@
       (is (= "logseq.api.show_msg('hello good sir!');\n"
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
-    (testing "user content"
-      (is (= 3 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+    (testing "graph wide counts"
+      ;; Includes 2 journals from logseq.task/deadline
+      (is (= 6 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
       ;; Count includes Contents
       (is (= 3
              (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
-      (is (= 1 (count @assets)))
+      (is (= 1 (count @assets))))
 
-      (testing "properties"
-        (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
-                 {:db/ident :user.property/prop-string :block/schema {:type :default}}
-                 {:db/ident :user.property/prop-num :block/schema {:type :number}}
-                 {:db/ident :user.property/prop-num2 :block/schema {:type :number}}}
-               (->> @conn
-                    (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
-                           :where [?b :block/type "property"]])
-                    (remove #(db-malli-schema/internal-ident? (:db/ident %)))
-                    set))
-            "Properties defined correctly")
+    (testing "user properties"
+      (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
+               {:db/ident :user.property/prop-string :block/schema {:type :default}}
+               {:db/ident :user.property/prop-num :block/schema {:type :number}}
+               {:db/ident :user.property/prop-num2 :block/schema {:type :number}}}
+             (->> @conn
+                  (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
+                         :where [?b :block/type "property"]])
+                  (remove #(db-malli-schema/internal-ident? (:db/ident %)))
+                  set))
+          "Properties defined correctly")
 
-        (is (= {:user.property/prop-bool true
-                :user.property/prop-num 5
-                :user.property/prop-string "woot"}
-               (update-vals (db-property/properties (find-block-by-content @conn "b1"))
-                            (fn [ref]
-                              (db-property/ref->property-value-content @conn ref))))
-            "Basic block has correct properties")
-        (is (= #{"prop-num" "prop-string" "prop-bool"}
-               (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))
-                    :block/refs
-                    (map :block/original-name)
-                    set))
-            "Block with properties has correct refs")
+      (is (= {:user.property/prop-bool true
+              :user.property/prop-num 5
+              :user.property/prop-string "woot"}
+             (update-vals (db-property/properties (find-block-by-content @conn "b1"))
+                          (fn [ref]
+                            (db-property/ref->property-value-content @conn ref))))
+          "Basic block has correct properties")
+      (is (= #{"prop-num" "prop-string" "prop-bool"}
+             (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))
+                  :block/refs
+                  (map :block/original-name)
+                  set))
+          "Block with properties has correct refs")
 
-        (is (= {:user.property/prop-num2 10}
-               (update-vals (db-property/properties (find-page-by-name @conn "new page"))
-                            (fn [ref]
-                              (db-property/ref->property-value-content @conn ref))))
-            "New page has correct properties")
-        (is (= {:user.property/prop-bool true
-                :user.property/prop-num 5
-                :user.property/prop-string "yeehaw"}
-               (update-vals (db-property/properties (find-page-by-name @conn "some page"))
-                            (fn [ref]
-                              (db-property/ref->property-value-content @conn ref))))
-            "Existing page has correct properties")))))
+      (is (= {:user.property/prop-num2 10}
+             (update-vals (db-property/properties (find-page-by-name @conn "new page"))
+                          (fn [ref]
+                            (db-property/ref->property-value-content @conn ref))))
+          "New page has correct properties")
+      (is (= {:user.property/prop-bool true
+              :user.property/prop-num 5
+              :user.property/prop-string "yeehaw"}
+             (update-vals (db-property/properties (find-page-by-name @conn "some page"))
+                          (fn [ref]
+                            (db-property/ref->property-value-content @conn ref))))
+          "Existing page has correct properties"))
+
+    (testing "built-in properties"
+      (is (= {:logseq.task/deadline "Nov 25th, 2022"}
+             (update-vals (db-property/properties (find-block-by-content @conn "only scheduled"))
+                          (fn [ref]
+                            (db-property/ref->property-value-content @conn ref))))
+          "deadline block has correct journal")
+
+      (is (= {:logseq.task/deadline "Nov 25th, 2022"}
+             (update-vals (db-property/properties (find-block-by-content @conn "only scheduled"))
+                          (fn [ref]
+                            (db-property/ref->property-value-content @conn ref))))
+          "scheduled block converted to deadline"))))
