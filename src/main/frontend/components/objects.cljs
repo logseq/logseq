@@ -22,7 +22,9 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [clojure.set :as set]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [cljs-time.core :as t]
+            [cljs-time.coerce :as tc]))
 
 (defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
   (shui/checkbox
@@ -90,6 +92,7 @@
        :column-list? false}
       {:id :object/name
        :name "Name"
+       :type :string
        :header header-cp
        :cell (fn [_table row _column]
                [:div.primary-cell
@@ -107,10 +110,12 @@
 
      [{:id :block/created-at
        :name "Created At"
+       :type :date-time
        :header header-cp
        :cell timestamp-cell-cp}
       {:id :block/updated-at
        :name "Updated At"
+       :type :date-time
        :header header-cp
        :cell timestamp-cell-cp}])))
 
@@ -225,34 +230,75 @@
           values)
      (sort-by :label))))
 
+(defn timestamp-property?
+  [ident]
+  (contains? #{:block/created-at :block/updated-at} ident))
+
+(defn- get-timestamp
+  [value after?]
+  (let [now (t/now)
+        f (if after? t/minus t/plus)]
+    (case value
+      "1 week ago"
+      (tc/to-long (f now (t/weeks 1)))
+      "1 month ago"
+      (tc/to-long (f now (t/months 1)))
+      "3 months ago"
+      (tc/to-long (f now (t/months 3)))
+      "1 year ago"
+      (tc/to-long (f now (t/years 1)))
+      nil)))
+
 (rum/defc filter-property < rum/static
   [columns {:keys [data-fns] :as table}]
-  (let [[property-ident set-property-ident!] (rum/use-state nil)
+  (let [[property set-property!] (rum/use-state nil)
+        timestamp? (timestamp-property? (:db/ident property))
         set-filters! (:set-filters! data-fns)
-        property (when property-ident (db/entity property-ident))
         filters (get-in table [:state :filters])
         columns (remove #(false? (:column-list? %)) columns)
         items (map (fn [column]
                      {:label (:name column)
-                      :value (:id column)}) columns)
+                      :value column}) columns)
         option {:input-default-placeholder "Filter"
                 :input-opts {:class "!px-3 !py-1"}
                 :items items
                 :extract-fn :label
                 :extract-chosen-fn :value
-                :on-chosen (fn [value]
-                             (if (db/entity value)
-                               (set-property-ident! value)
-                               (do
-                                 (shui/popup-hide!)
-                                 (let [property {:db/ident value
-                                                 :block/original-name (some (fn [item] (when (= value (:value item)) (:label item))) items)}
-                                       new-filter [property :string-contains]
-                                       filters' (if (seq filters)
-                                                  (conj filters new-filter)
-                                                  [new-filter])]
-                                   (set-filters! filters')))))}
-        option (if property
+                :on-chosen (fn [column]
+                             (let [id (:id column)
+                                   property (db/entity id)]
+                               (if (or property (timestamp-property? id))
+                                 (set-property! (or property
+                                                    {:db/ident (:id column)
+                                                     :block/original-name (:name column)}))
+                                 (do
+                                   (shui/popup-hide!)
+                                   (let [property {:db/ident id
+                                                   :block/original-name (some (fn [item] (when (= id (:value item)) (:label item))) items)}
+                                         new-filter [property :string-contains]
+                                         filters' (if (seq filters)
+                                                    (conj filters new-filter)
+                                                    [new-filter])]
+                                     (set-filters! filters'))))))}
+        option (cond
+                 timestamp?
+                 (let [items [{:value "1 week ago"
+                               :label "1 week ago"}
+                              {:value "1 month ago"
+                               :label "1 month ago"}
+                              {:value "3 months ago"
+                               :label "3 months ago"}
+                              {:value "1 year ago"
+                               :label "1 year ago"}
+                              {:value "Custom time"
+                               :label "Custom time"}]]
+                   (merge option
+                          {:items items
+                           :input-default-placeholder (if property (:block/original-name property) "Select")
+                           :on-chosen (fn [value]
+                                        (let [filters' (conj filters [property :after value])]
+                                          (set-filters! filters')))}))
+                 property
                  (let [items (get-property-values (:data table) property)]
                    (merge option
                           {:items items
@@ -263,6 +309,7 @@
                                                          (conj filters [property :is selected])
                                                          filters)]
                                           (set-filters! filters')))}))
+                 :else
                  option)]
     (select/select option)))
 
@@ -290,6 +337,8 @@
     :string-not-contains "text not contains"
     :date-before "date before"
     :date-after "date after"
+    :before "before"
+    :after "after"
     :number-gt ">"
     :number-lt "<"
     :number-gte ">="
@@ -298,16 +347,18 @@
 
 (defn get-property-operators
   [property]
-  (concat
-   [:is :is-not]
-   (case (get-in property [:block/schema :type])
-     (:default :url :page :object)
-     [:string-contains :string-not-contains]
-     :date
-     [:date-before :date-after]
-     :number
-     [:number-gt :number-lt :number-gte :number-lte :between]
-     nil)))
+  (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
+    [:before :after :between]
+    (concat
+     [:is :is-not]
+     (case (get-in property [:block/schema :type])
+       (:default :url :page :object)
+       [:string-contains :string-not-contains]
+       :date
+       [:date-before :date-after]
+       :number
+       [:number-gt :number-lt :number-gte :number-lte :between]
+       nil))))
 
 (defn- get-filter-with-changed-operator
   [property operator value]
@@ -325,7 +376,7 @@
     (when (and (vector? value) (every? number? value))
       value)
 
-    (:date-before :date-after)
+    (:date-before :date-after :before :after)
     ;; FIXME: should be a valid date number
     (when (number? value) value)))
 
@@ -396,7 +447,7 @@
   (let [items (get-property-values (:data table) property)
         filters (get-in table [:state :filters])
         set-filters! (:set-filters! data-fns)
-        many? (if (contains? #{:date-before :date-after} operator)
+        many? (if (contains? #{:date-before :date-after :before :after} operator)
                 false
                 true)
         _ (prn :debug :items items)
@@ -428,6 +479,9 @@
         (cond
           (de/entity? value)
           [:div (get-property-value-content value)]
+
+          (string? value)
+          [:div value]
 
           (seq value)
           (->> (map (fn [v] [:div (get-property-value-content v)]) value)
@@ -508,7 +562,8 @@
    ;; filters check
    (every?
     (fn [[property operator match]]
-      (let [value (get row (:db/ident property))
+      (let [property-ident (:db/ident property)
+            value (get row property-ident)
             value' (cond
                      (set? value) value
                      (nil? value) #{}
@@ -547,13 +602,19 @@
                 true)
 
               :date-before
-              (do
-                (prn :debug :value value'
-                     :match match)
-                (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true))
+              (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true)
 
               :date-after
               (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
+
+              :before
+              (let [search-value (get-timestamp match false)]
+                (if search-value (<= (get row property-ident) search-value) true))
+
+              :after
+              (let [search-value (get-timestamp match true)]
+                (if search-value (>= (get row property-ident) search-value) true))
+
               true)]
         result))
     filters)))
