@@ -131,6 +131,12 @@
                             (fn [ref]
                               (db-property/ref->property-value-content @conn ref))))
             "Basic block has correct properties")
+        (is (= #{"prop-num" "prop-string" "prop-bool"}
+               (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))
+                    :block/refs
+                    (map :block/original-name)
+                    set))
+            "Block with properties has correct refs")
 
         (is (= {:user.property/prop-num2 10}
                (update-vals (db-property/properties (find-page-by-name @conn "new page"))
