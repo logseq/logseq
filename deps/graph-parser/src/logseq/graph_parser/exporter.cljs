@@ -527,11 +527,10 @@
 (defn- update-block-refs
   "Updates the attributes of a block ref as this is where a new page is defined. Also
    updates block content effected by refs"
-  [block page-names-to-uuids old-property-schemas {:keys [whiteboard? import-state]}]
+  [block page-names-to-uuids {:keys [whiteboard?]}]
   (let [ref-to-ignore? (if whiteboard?
                          #(and (map? %) (:block/uuid %))
-                         #(and (vector? %) (= :block/uuid (first %))))
-        new-property-schemas (apply dissoc @(:property-schemas import-state) (keys old-property-schemas))]
+                         #(and (vector? %) (= :block/uuid (first %))))]
     (if (seq (:block/refs block))
       (cond-> block
         true
@@ -539,13 +538,8 @@
          :block/refs
          (fn [refs]
            (mapv (fn [ref]
-                   (if (ref-to-ignore? ref)
-                     ref
-                     ;; FIXME: Strip down just to just uuid
-                     (merge (assoc ref :block/format :markdown)
-                            (when-let [schema (get new-property-schemas (keyword (:block/name ref)))]
-                              {:block/type "property"
-                               :block/schema schema}))))
+                   ;; Only keep :block/uuid as we don't want to re-transact page refs
+                   (if (map? ref) (select-keys ref [:block/uuid]) ref))
                  refs)))
         (:block/content block)
         (update :block/content
@@ -589,17 +583,16 @@
     (assoc :block/parent {:block/uuid (cached-prop-name->uuid db page-names-to-uuids (:block/name (:block/parent block)))})))
 
 (defn- build-block-tx
-  [db block* pre-blocks page-names-to-uuids {:keys [import-state tag-classes] :as options}]
+  [db block* pre-blocks page-names-to-uuids {:keys [tag-classes] :as options}]
   ;; (prn ::block-in block)
-  (let [old-property-schemas @(:property-schemas import-state)
-        ;; needs to come before update-block-refs to detect new property schemas
+  (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
         block' (-> block
                    (fix-pre-block-references pre-blocks)
                    (fix-block-name-lookup-ref db page-names-to-uuids)
                    (update-block-macros db page-names-to-uuids)
-                   (update-block-refs page-names-to-uuids old-property-schemas options)
+                   (update-block-refs page-names-to-uuids options)
                    (update-block-tags tag-classes page-names-to-uuids)
                    (update-block-marker db options)
                    (update-block-priority db options)
