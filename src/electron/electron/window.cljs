@@ -112,7 +112,10 @@
   [^js win]
   (when (.isMinimized ^object win)
     (.restore win))
-  (.focus win))
+  ;; Ref: https://github.com/electron/electron/issues/8734
+  (.setVisibleOnAllWorkspaces win true)
+  (.focus win)
+  (.setVisibleOnAllWorkspaces win false))
 
 (defn get-graph-all-windows
   [graph-path] ;; graph-path == dir

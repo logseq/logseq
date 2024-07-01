@@ -55,6 +55,9 @@ The released files will be at `static/` directory.
 
 ``` bash
 yarn install
+cd static
+yarn install
+cd ..
 ```
 
 2. Compile to JavaScript and open the dev app
