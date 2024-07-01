@@ -21,7 +21,8 @@
             [frontend.mixins :as mixins]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [datascript.impl.entity :as de]))
 
 (defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
   (shui/checkbox
@@ -303,7 +304,7 @@
      (:default :url :page :object)
      [:string-contains :string-not-contains]
      :date
-     [:date-before :date-after :between]
+     [:date-before :date-after]
      :number
      [:number-gt :number-lt :number-gte :number-lte :between]
      nil)))
@@ -391,22 +392,31 @@
      :class "w-24 !h-6 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})])
 
 (rum/defc filter-value-select < rum/static
-  [{:keys [data-fns] :as table} property value _operator idx]
+  [{:keys [data-fns] :as table} property value operator idx]
   (let [items (get-property-values (:data table) property)
         filters (get-in table [:state :filters])
         set-filters! (:set-filters! data-fns)
-        option {:input-default-placeholder (:block/original-name property)
-                :multiple-choices? true
-                :selected-choices value
-                :input-opts {:class "!px-3 !py-1"}
-                :items items
-                :extract-fn :label
-                :extract-chosen-fn :value
-                :on-chosen (fn [_value _selected? selected]
-                             (let [new-filters (update filters idx
-                                                       (fn [[property operator _value]]
-                                                         [property operator selected]))]
-                               (set-filters! new-filters)))}]
+        many? (if (contains? #{:date-before :date-after} operator)
+                false
+                true)
+        _ (prn :debug :items items)
+        option (cond->
+                {:input-default-placeholder (:block/original-name property)
+
+                 :input-opts {:class "!px-3 !py-1"}
+                 :items items
+                 :extract-fn :label
+                 :extract-chosen-fn :value
+                 :on-chosen (fn [value _selected? selected]
+                              (let [value' (if many? selected value)
+                                    new-filters (update filters idx
+                                                        (fn [[property operator _value]]
+                                                          [property operator value']))]
+                                (set-filters! new-filters)))}
+                 many?
+                 (assoc
+                  :multiple-choices? true
+                  :selected-choices value))]
     (shui/dropdown-menu
      (shui/dropdown-menu-trigger
       {:asChild true}
@@ -415,9 +425,14 @@
         :variant "ghost"
         :size :sm}
        [:div.flex.flex-row.items-center.gap-1.text-xs
-        (if (seq value)
+        (cond
+          (de/entity? value)
+          [:div (get-property-value-content value)]
+
+          (seq value)
           (->> (map (fn [v] [:div (get-property-value-content v)]) value)
                (interpose [:div "or"]))
+          :else
           "Empty")]))
      (shui/dropdown-menu-content
       {:align "start"}
@@ -529,7 +544,17 @@
                               conditions [(if start (<= start value) true)
                                           (if end (<= value end) true)]]
                           (if (seq match) (every? true? conditions) true))) value')
-                true))]
+                true)
+
+              :date-before
+              (do
+                (prn :debug :value value'
+                     :match match)
+                (if match (some #(< (:block/journal-day %) (:block/journal-day match)) value') true))
+
+              :date-after
+              (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
+              true)]
         result))
     filters)))
 
