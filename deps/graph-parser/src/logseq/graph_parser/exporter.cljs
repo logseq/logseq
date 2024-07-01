@@ -6,6 +6,7 @@
             [clojure.edn :as edn]
             [datascript.core :as d]
             [logseq.graph-parser.extract :as extract]
+            [logseq.common.uuid :as common-uuid]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
@@ -176,24 +177,27 @@
   ":block/content doesn't contain DEADLINE.* text so unable to detect timestamp
   or repeater usage and notify user that they aren't supported"
   [block db {:keys [user-config]}]
-  (if-let [deadline (:block/deadline block)]
-    (let [deadline-prop (:block/uuid (d/entity db :logseq.task/deadline))
-          deadline-page (or (ffirst (d/q '[:find (pull ?b [:block/uuid])
-                                           :in $ ?journal-day
-                                           :where [?b :block/journal-day ?journal-day]]
-                                         db deadline))
+  (if-let [date-int (or (:block/deadline block) (:block/scheduled block))]
+    (let [existing-journal-page (ffirst (d/q '[:find (pull ?b [:block/uuid])
+                                               :in $ ?journal-day
+                                               :where [?b :block/journal-day ?journal-day]]
+                                             db date-int))
+          deadline-page (or existing-journal-page
                             ;; FIXME: Register new pages so that two different refs to same new page
                             ;; don't create different uuids and thus an invalid page
                             (assoc (sqlite-util/build-new-page
-                                    (date-time-util/int->journal-title deadline (common-config/get-date-formatter user-config)))
+                                    (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))
+                                   :block/uuid (common-uuid/gen-uuid date-int)
                                    :block/type "journal"
-                                   :block/journal-day deadline))]
-      (-> block
-          (update :block/properties assoc deadline-prop (:block/uuid deadline-page))
-          (update :block/refs (fnil into []) [:logseq.task/deadline deadline-page])
-          (update :block/path-refs (fnil into []) [:logseq.task/deadline deadline-page])
-          (dissoc :block/deadline)))
-    block))
+                                   :block/journal-day date-int))]
+      {:block
+       (-> block
+           (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
+           (update :block/refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
+           (update :block/path-refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
+           (dissoc :block/deadline :block/scheduled))
+       :properties-tx (when-not existing-journal-page [deadline-page])})
+    {:block block :properties-tx []}))
 
 (defn- text-with-refs?
   "Detects if a property value has text with refs e.g. `#Logseq is #awesome`
@@ -546,7 +550,9 @@
                 db-content/page-ref->special-id-ref
                 ;; TODO: Handle refs for whiteboard block which has none
                 (->> (:block/refs block)
-                     (remove ref-to-ignore?)
+                     (remove #(or (ref-to-ignore? %)
+                                  ;; ignore deadline related refs that don't affect content
+                                  (and (keyword? %) (db-malli-schema/internal-ident? %))))
                      (map #(add-uuid-to-page-map % page-names-to-uuids)))))
       block)))
 
@@ -588,7 +594,8 @@
   (let [;; needs to come before update-block-refs to detect new property schemas
         {:keys [block properties-tx]}
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
-        block' (-> block
+        {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block db options)
+        block' (-> block-after-built-in-props
                    (fix-pre-block-references pre-blocks)
                    (fix-block-name-lookup-ref db page-names-to-uuids)
                    (update-block-macros db page-names-to-uuids)
@@ -596,13 +603,12 @@
                    (update-block-tags tag-classes page-names-to-uuids)
                    (update-block-marker db options)
                    (update-block-priority db options)
-                   (update-block-deadline db options)
                    add-missing-timestamps
                    ;; ((fn [x] (prn :block-out x) x))
                    ;; TODO: org-mode content needs to be handled
                    (assoc :block/format :markdown))]
     ;; Order matters as properties are referenced in block
-    (concat properties-tx [block'])))
+    (concat properties-tx deadline-properties-tx [block'])))
 
 (defn- build-new-page
   [m tag-classes page-names-to-uuids page-tags-uuid]
@@ -741,7 +747,7 @@
   pages that are now properties"
   [pages-tx old-properties existing-pages import-state]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
-        _ (prn :new-properties new-properties existing-pages)
+        _ (prn :new-properties new-properties)
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
         property-pages-tx (map (fn [{:block/keys [original-name uuid]}]
