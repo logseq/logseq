@@ -63,9 +63,10 @@
 
 (defn- get-property-value-content
   [entity]
-  (if (map? entity)
-    (db-property/property-value-content entity)
-    (str entity)))
+  (when entity
+    (if (map? entity)
+      (db-property/property-value-content entity)
+      (str entity))))
 
 (defn- get-property-value-for-search
   [block property]
@@ -234,10 +235,24 @@
   [ident]
   (contains? #{:block/created-at :block/updated-at} ident))
 
+(def timestamp-options
+  [{:value "1 week ago"
+    :label "1 week ago"}
+   {:value "1 month ago"
+    :label "1 month ago"}
+   {:value "3 months ago"
+    :label "3 months ago"}
+   {:value "1 year ago"
+    :label "1 year ago"}
+   ;; TODO: support date picker
+   ;; {:value "Custom time"
+   ;;  :label "Custom time"}
+   ])
+
 (defn- get-timestamp
-  [value after?]
+  [value]
   (let [now (t/now)
-        f (if after? t/minus t/plus)]
+        f t/minus]
     (case value
       "1 week ago"
       (tc/to-long (f now (t/weeks 1)))
@@ -266,49 +281,48 @@
                 :extract-chosen-fn :value
                 :on-chosen (fn [column]
                              (let [id (:id column)
-                                   property (db/entity id)]
+                                   property (db/entity id)
+                                   internal-property {:db/ident (:id column)
+                                                      :block/original-name (:name column)}]
                                (if (or property (timestamp-property? id))
-                                 (set-property! (or property
-                                                    {:db/ident (:id column)
-                                                     :block/original-name (:name column)}))
+                                 (set-property! (or property internal-property))
                                  (do
                                    (shui/popup-hide!)
-                                   (let [property {:db/ident id
-                                                   :block/original-name (some (fn [item] (when (= id (:value item)) (:label item))) items)}
-                                         new-filter [property :string-contains]
+                                   (let [property internal-property
+                                         new-filter [property :text-contains]
                                          filters' (if (seq filters)
                                                     (conj filters new-filter)
                                                     [new-filter])]
                                      (set-filters! filters'))))))}
         option (cond
                  timestamp?
-                 (let [items [{:value "1 week ago"
-                               :label "1 week ago"}
-                              {:value "1 month ago"
-                               :label "1 month ago"}
-                              {:value "3 months ago"
-                               :label "3 months ago"}
-                              {:value "1 year ago"
-                               :label "1 year ago"}
-                              {:value "Custom time"
-                               :label "Custom time"}]]
-                   (merge option
-                          {:items items
-                           :input-default-placeholder (if property (:block/original-name property) "Select")
-                           :on-chosen (fn [value]
-                                        (let [filters' (conj filters [property :after value])]
-                                          (set-filters! filters')))}))
+                 (merge option
+                        {:items timestamp-options
+                         :input-default-placeholder (if property (:block/original-name property) "Select")
+                         :on-chosen (fn [value]
+                                      (shui/popup-hide!)
+                                      (let [filters' (conj filters [property :after value])]
+                                        (set-filters! filters')))})
                  property
-                 (let [items (get-property-values (:data table) property)]
-                   (merge option
-                          {:items items
-                           :input-default-placeholder (if property (:block/original-name property) "Select")
-                           :multiple-choices? true
-                           :on-chosen (fn [_value _selected? selected]
-                                        (let [filters' (if (seq selected)
-                                                         (conj filters [property :is selected])
-                                                         filters)]
-                                          (set-filters! filters')))}))
+                 (if (= :checkbox (get-in property [:block/schema :type]))
+                   (let [items [{:value true :label "true"}
+                                {:value false :label "false"}]]
+                     (merge option
+                            {:items items
+                             :input-default-placeholder (if property (:block/original-name property) "Select")
+                             :on-chosen (fn [value]
+                                          (let [filters' (conj filters [property :is value])]
+                                            (set-filters! filters')))}))
+                   (let [items (get-property-values (:data table) property)]
+                     (merge option
+                            {:items items
+                             :input-default-placeholder (if property (:block/original-name property) "Select")
+                             :multiple-choices? true
+                             :on-chosen (fn [_value _selected? selected]
+                                          (let [filters' (if (seq selected)
+                                                           (conj filters [property :is selected])
+                                                           filters)]
+                                            (set-filters! filters')))})))
                  :else
                  option)]
     (select/select option)))
@@ -333,8 +347,8 @@
   (case operator
     :is "is"
     :is-not "is not"
-    :string-contains "text contains"
-    :string-not-contains "text not contains"
+    :text-contains "text contains"
+    :text-not-contains "text not contains"
     :date-before "date before"
     :date-after "date after"
     :before "before"
@@ -348,12 +362,12 @@
 (defn get-property-operators
   [property]
   (if (contains? #{:block/created-at :block/updated-at} (:db/ident property))
-    [:before :after :between]
+    [:before :after]
     (concat
      [:is :is-not]
      (case (get-in property [:block/schema :type])
        (:default :url :page :object)
-       [:string-contains :string-not-contains]
+       [:text-contains :text-not-contains]
        :date
        [:date-before :date-after]
        :number
@@ -366,7 +380,7 @@
     (:is :is-not)
     (when (set? value) value)
 
-    (:string-contains :string-not-contains)
+    (:text-contains :text-not-contains)
     (when (string? value) value)
 
     (:number-gt :number-lt :number-gte :number-lte)
@@ -444,13 +458,20 @@
 
 (rum/defc filter-value-select < rum/static
   [{:keys [data-fns] :as table} property value operator idx]
-  (let [items (get-property-values (:data table) property)
+  (let [type (get-in property [:block/schema :type])
+        items (cond
+                (contains? #{:before :after} operator)
+                timestamp-options
+                (= type :checkbox)
+                [{:value true :label "true"} {:value false :label "false"}]
+                :else
+                (get-property-values (:data table) property))
         filters (get-in table [:state :filters])
         set-filters! (:set-filters! data-fns)
-        many? (if (contains? #{:date-before :date-after :before :after} operator)
+        many? (if (or (contains? #{:date-before :date-after :before :after} operator)
+                      (contains? #{:checkbox} type))
                 false
                 true)
-        _ (prn :debug :items items)
         option (cond->
                 {:input-default-placeholder (:block/original-name property)
 
@@ -459,6 +480,8 @@
                  :extract-fn :label
                  :extract-chosen-fn :value
                  :on-chosen (fn [value _selected? selected]
+                              (when-not many?
+                                (shui/popup-hide!))
                               (let [value' (if many? selected value)
                                     new-filters (update filters idx
                                                         (fn [[property operator _value]]
@@ -483,6 +506,9 @@
           (string? value)
           [:div value]
 
+          (boolean? value)
+          [:div (str value)]
+
           (seq value)
           (->> (map (fn [v] [:div (get-property-value-content v)]) value)
                (interpose [:div "or"]))
@@ -499,7 +525,7 @@
       :between
       (between property value filters set-filters! idx)
 
-      (:string-contains :string-not-contains :number-gt :number-lt :number-gte :number-lte)
+      (:text-contains :text-not-contains :number-gt :number-lt :number-gte :number-lte)
       (shui/input
        {:auto-focus true
         :value (or value "")
@@ -571,15 +597,21 @@
             result
             (case operator
               :is
-              (boolean (seq (set/intersection value' match)))
+              (if (boolean? match)
+                (= (boolean (get-property-value-content (get row property-ident))) match)
+                (when (coll? value)
+                  (boolean (seq (set/intersection value' match)))))
 
               :is-not
-              (boolean (empty? (set/intersection value' match)))
+              (if (boolean? match)
+                (not= (boolean (get-property-value-content (get row property-ident))) match)
+                (when (coll? value)
+                  (boolean (empty? (set/intersection value' match)))))
 
-              :string-contains
+              :text-contains
               (some #(fuzzy-matched? match (get-property-value-content %)) value')
 
-              :string-not-contains
+              :text-not-contains
               (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
 
               :number-gt
@@ -593,9 +625,9 @@
 
               :between
               (if (seq match)
-                (some (fn [row]
+                (some (fn [value-entity]
                         (let [[start end] match
-                              value (get-property-value-content row)
+                              value (get-property-value-content value-entity)
                               conditions [(if start (<= start value) true)
                                           (if end (<= value end) true)]]
                           (if (seq match) (every? true? conditions) true))) value')
@@ -608,11 +640,11 @@
               (if match (some #(> (:block/journal-day %) (:block/journal-day match)) value') true)
 
               :before
-              (let [search-value (get-timestamp match false)]
+              (let [search-value (get-timestamp match)]
                 (if search-value (<= (get row property-ident) search-value) true))
 
               :after
-              (let [search-value (get-timestamp match true)]
+              (let [search-value (get-timestamp match)]
                 (if search-value (>= (get row property-ident) search-value) true))
 
               true)]
