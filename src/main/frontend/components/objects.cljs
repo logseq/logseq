@@ -58,6 +58,12 @@
   (some-> (get row (:id column))
           date/int->local-time-2))
 
+(defn- get-property-value-content
+  [entity]
+  (if (map? entity)
+    (db-property/property-value-content entity)
+    (str entity)))
+
 (defn- get-property-value-for-search
   [block property]
   (let [type (get-in property [:block/schema :type])
@@ -204,12 +210,6 @@
         type (:type schema)]
     (db-property-type/ref-property-types type)))
 
-(defn- get-property-value-content
-  [e property]
-  (if (property-ref-type? property)
-    (db-property/property-value-content e)
-    (str e)))
-
 (defn- get-property-values
   [rows property]
   (let [property-ident (:db/ident property)
@@ -219,7 +219,7 @@
                     (distinct))]
     (->>
      (map (fn [e]
-            {:label (get-property-value-content e property)
+            {:label (get-property-value-content e)
              :value e})
           values)
      (sort-by :label))))
@@ -240,7 +240,17 @@
                 :extract-fn :label
                 :extract-chosen-fn :value
                 :on-chosen (fn [value]
-                             (set-property-ident! value))}
+                             (if (db/entity value)
+                               (set-property-ident! value)
+                               (do
+                                 (shui/popup-hide!)
+                                 (let [property {:db/ident value
+                                                 :block/original-name (some (fn [item] (when (= value (:value item)) (:label item))) items)}
+                                       new-filter [property :string-contains]
+                                       filters' (if (seq filters)
+                                                  (conj filters new-filter)
+                                                  [new-filter])]
+                                   (set-filters! filters')))))}
         option (if property
                  (let [items (get-property-values (:data table) property)]
                    (merge option
@@ -311,7 +321,8 @@
     (when (number? value) value)
 
     :between
-    (when (every? number? value) value)
+    (when (and (vector? value) (every? number? value))
+      value)
 
     (:date-before :date-after)
     ;; FIXME: should be a valid date number
@@ -405,7 +416,7 @@
         :size :sm}
        [:div.flex.flex-row.items-center.gap-1.text-xs
         (if (seq value)
-          (->> (map (fn [v] [:div (get-property-value-content v property)]) value)
+          (->> (map (fn [v] [:div (get-property-value-content v)]) value)
                (interpose [:div "or"]))
           "Empty")]))
      (shui/dropdown-menu-content
@@ -496,25 +507,25 @@
               (boolean (empty? (set/intersection value' match)))
 
               :string-contains
-              (some #(fuzzy-matched? match (db-property/property-value-content %)) value')
+              (some #(fuzzy-matched? match (get-property-value-content %)) value')
 
               :string-not-contains
-              (not-any? #(string/includes? (str (db-property/property-value-content %)) match) value')
+              (not-any? #(string/includes? (str (get-property-value-content %)) match) value')
 
               :number-gt
-              (if match (some #(> (db-property/property-value-content %) match) value') true)
+              (if match (some #(> (get-property-value-content %) match) value') true)
               :number-gte
-              (if match (some #(>= (db-property/property-value-content %) match) value') true)
+              (if match (some #(>= (get-property-value-content %) match) value') true)
               :number-lt
-              (if match (some #(< (db-property/property-value-content %) match) value') true)
+              (if match (some #(< (get-property-value-content %) match) value') true)
               :number-lte
-              (if match (some #(<= (db-property/property-value-content %) match) value') true)
+              (if match (some #(<= (get-property-value-content %) match) value') true)
 
               :between
               (if (seq match)
                 (some (fn [row]
                         (let [[start end] match
-                              value (db-property/property-value-content row)
+                              value (get-property-value-content row)
                               conditions [(if start (<= start value) true)
                                           (if end (<= value end) true)]]
                           (if (seq match) (every? true? conditions) true))) value')
