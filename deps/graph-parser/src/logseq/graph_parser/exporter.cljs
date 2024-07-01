@@ -23,7 +23,8 @@
             [cljs.pprint]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
-            [logseq.db.frontend.property.build :as db-property-build]))
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
 (defn- get-pid
   "Get a property's id (name or uuid) given its name. For db graphs"
@@ -486,28 +487,28 @@
       (update :block dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
-  [{:block/keys [properties] :as block} db page-names-to-uuids refs
+  [{:block/keys [properties] :as block*} db page-names-to-uuids refs
    {:keys [property-parent-classes log-fn] :as options}]
-  (-> (if (seq properties)
-        (let [parent-classes-from-properties (->> (select-keys properties property-parent-classes)
-                                                  (mapcat (fn [[_k v]] (if (coll? v) v [v])))
-                                                  distinct)]
-          (cond-> block
-            (seq parent-classes-from-properties)
-            (assoc :block/type "class")
-            (seq parent-classes-from-properties)
-            (assoc :class/parent
-                   (let [new-class (first parent-classes-from-properties)]
-                     (when (> (count parent-classes-from-properties) 1)
-                       (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
-                     (sqlite-util/build-new-class
-                      {:block/original-name new-class
-                       :block/uuid (or (get-pid db new-class) (d/squuid))
-                       :block/name (common-util/page-name-sanity-lc new-class)})))))
-        block)
-      (handle-page-and-block-properties db page-names-to-uuids refs options)
-      ;; FIXME: Handle page properties-tx
-      :block))
+  (let [{:keys [block properties-tx]} (handle-page-and-block-properties block* db page-names-to-uuids refs options)
+        block'
+        (if (seq properties)
+          (let [parent-classes-from-properties (->> (select-keys properties property-parent-classes)
+                                                    (mapcat (fn [[_k v]] (if (coll? v) v [v])))
+                                                    distinct)]
+            (cond-> block
+              (seq parent-classes-from-properties)
+              (assoc :block/type "class")
+              (seq parent-classes-from-properties)
+              (assoc :class/parent
+                     (let [new-class (first parent-classes-from-properties)]
+                       (when (> (count parent-classes-from-properties) 1)
+                         (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
+                       (sqlite-util/build-new-class
+                        {:block/original-name new-class
+                         :block/uuid (or (get-pid db new-class) (d/squuid))
+                         :block/name (common-util/page-name-sanity-lc new-class)})))))
+          block*)]
+    {:block block' :properties-tx properties-tx}))
 
 (defn- handle-block-properties
   "Does everything page properties does and updates a couple of block specific attributes"
@@ -625,7 +626,8 @@
       (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)))
 
 (defn- build-pages-tx
-  "Given all the pages and blocks parsed from a file, return all non-whiteboard pages to be transacted"
+  "Given all the pages and blocks parsed from a file, return a map containing all non-whiteboard pages to be transacted
+   and pages' properties"
   [conn pages blocks {:keys [page-tags-uuid import-state tag-classes property-classes property-parent-classes notify-user]
                       :as options}]
   (let [all-pages (->> (extract/with-ref-pages pages blocks)
@@ -635,35 +637,39 @@
                        ;; remove file path relative
                        (map #(dissoc % :block/file)))
         existing-pages (keep #(ldb/get-page @conn (:block/name %)) all-pages)
-        existing-page-names (set (map :block/name existing-pages))
-        new-pages (remove #(contains? existing-page-names (:block/name %)) all-pages)
-        page-names-to-uuids (into {}
-                                  (map (juxt :block/name :block/uuid) (concat new-pages existing-pages)))
+        existing-page-names-to-uuids (into {} (map (juxt :block/name :block/uuid) existing-pages))
+        new-pages (remove #(contains? existing-page-names-to-uuids (:block/name %)) all-pages)
+        page-names-to-uuids (merge existing-page-names-to-uuids
+                                   (into {} (map (juxt :block/name :block/uuid) new-pages)))
         old-property-schemas @(:property-schemas import-state)
-        ;; must come before building tx to detect new-property-schemas
-        all-pages' (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
-                         all-pages)
+        ;; FIXME: must come before building tx to detect new-property-schemas
+        all-pages-m (mapv #(handle-page-properties % @conn page-names-to-uuids all-pages options)
+                          all-pages)
+        all-pages' (map :block all-pages-m)
         new-property-schemas (apply dissoc @(:property-schemas import-state) (keys old-property-schemas))
-        pages-tx (keep #(if (existing-page-names (:block/name %))
-                          (let [schema (get new-property-schemas (keyword (:block/name %)))
+        pages-tx (keep (fn [m]
+                         (if-let [page-uuid (existing-page-names-to-uuids (:block/name m))]
+                           (let [schema (get new-property-schemas (keyword (:block/name m)))
                                 ;; These attributes are not allowed to be transacted because they must not change across files
-                                ;; block/uuid was particularly bad as it actually changed the page's identity across files
-                                disallowed-attributes [:block/name :block/uuid :block/format :block/original-name :block/journal-day
-                                                       :block/created-at :block/updated-at]
-                                allowed-attributes [:block/properties :block/tags :block/alias :class/parent :block/type :block/namespace]
-                                block-changes (select-keys % allowed-attributes)]
-                            (when-let [ignored-attrs (not-empty (apply dissoc % (into disallowed-attributes allowed-attributes)))]
-                              (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/original-name %)) ": "
-                                                      ignored-attrs)}))
-                            (when (or schema (seq block-changes))
-                              (cond-> (merge {:block/name (:block/name %)} block-changes)
-                                (:block/tags %)
-                                (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)
-                                schema
-                                (assoc :block/type "property" :block/schema schema))))
-                          (build-new-page % tag-classes page-names-to-uuids page-tags-uuid))
+                                 disallowed-attributes [:block/name :block/uuid :block/format :block/original-name :block/journal-day
+                                                        :block/created-at :block/updated-at]
+                                 allowed-attributes (into [:block/tags :block/alias :class/parent :block/type :block/namespace]
+                                                          (keep #(when (db-malli-schema/user-property? (key %)) (key %))
+                                                                m))
+                                 block-changes (select-keys m allowed-attributes)]
+                             (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
+                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/original-name m)) ": "
+                                                       ignored-attrs)}))
+                             (when (or schema (seq block-changes))
+                               (cond-> (merge block-changes {:block/uuid page-uuid})
+                                 (:block/tags m)
+                                 (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)
+                                 schema
+                                 (assoc :block/type "property" :block/schema schema))))
+                           (build-new-page m tag-classes page-names-to-uuids page-tags-uuid)))
                        all-pages')]
     {:pages-tx pages-tx
+     :page-properties-tx (mapcat :properties-tx all-pages-m)
      :page-names-to-uuids page-names-to-uuids}))
 
 (defn- build-upstream-properties-tx
@@ -797,7 +803,7 @@
         tx-options (build-tx-options options)
         old-properties (keys @(get-in options [:import-state :property-schemas]))
         ;; Build page and block txs
-        {:keys [pages-tx page-names-to-uuids]} (build-pages-tx conn pages blocks tx-options)
+        {:keys [pages-tx page-properties-tx page-names-to-uuids]} (build-pages-tx conn pages blocks tx-options)
         whiteboard-pages (->> pages-tx
                               ;; support old and new whiteboards
                               (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
@@ -813,9 +819,9 @@
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
 
-        [pages-tx' properties-tx] (split-pages-and-properties-tx pages-tx old-properties (:import-state options))
+        [pages-tx' property-pages-tx] (split-pages-and-properties-tx pages-tx old-properties (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-        _ (d/transact! conn properties-tx)
+        _ (d/transact! conn property-pages-tx)
 
         upstream-properties-tx (build-upstream-properties-tx
                                 @conn
@@ -836,7 +842,7 @@
         block-ids (set/union (set block-ids) (set block-refs-ids))
         ;; Order matters as upstream-properties-tx can override some blocks-tx and indices need
         ;; to come before their corresponding tx
-        tx (concat whiteboard-pages pages-index pages-tx' block-ids blocks-tx upstream-properties-tx)
+        tx (concat whiteboard-pages pages-index page-properties-tx pages-tx' block-ids blocks-tx upstream-properties-tx)
         tx' (common-util/fast-remove-nils tx)
         ;; _ (cljs.pprint/pprint {:tx tx'})
         result (d/transact! conn tx')]
