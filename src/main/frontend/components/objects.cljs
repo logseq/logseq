@@ -172,10 +172,13 @@
             (header-fn table column)
             header-fn)))))))
 
-(defn table-row
+(rum/defc table-row < rum/reactive
   [{:keys [row-selected?] :as table} rows columns props]
   (let [idx (gobj/get props "data-index")
-        row (nth rows idx)]
+        row (nth rows idx)
+        row (if-let [db-id (:db/id row)]
+              (db/sub-block db-id)
+              row)]
     (shui/table-row
      (merge
       (bean/->clj props)
