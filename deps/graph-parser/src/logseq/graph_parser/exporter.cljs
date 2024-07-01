@@ -743,7 +743,7 @@
 
 (defn- split-pages-and-properties-tx
   "Separates new pages from new properties tx in preparation for properties to
-  be transacted separatedly. Also rebuilds properties tx"
+  be transacted separately. Also rebuilds properties tx"
   [pages-tx old-properties import-state]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
         _ (prn :new-properties new-properties)
@@ -758,6 +758,25 @@
         #_(cljs.pprint/pprint properties-tx')]
     [pages-tx' properties-tx']))
 
+(defn- extract-pages-and-blocks
+  [db file content {:keys [extract-options notify-user]}]
+  (let [format (common-util/get-format file)
+        extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
+                                 :date-formatter "MMM do, yyyy"
+                                 :uri-encoded? false
+                                 :db-graph-mode? true
+                                 :filename-format :legacy}
+                                extract-options
+                                {:db db})]
+    (cond (contains? common-config/mldoc-support-formats format)
+          (extract/extract file content extract-options')
+
+          (common-config/whiteboard? file)
+          (extract/extract-whiteboard-edn file content extract-options')
+
+          :else
+          (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))))
+
 (defn add-file-to-db-graph
   "Parse file and save parsed data to the given db graph. Options available:
 
@@ -769,28 +788,12 @@
 * :macros - map of macros for use with macro expansion
 * :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
 * :log-fn - Logs messages for development. Defaults to prn"
-  [conn file content {:keys [extract-options notify-user log-fn]
+  [conn file content {:keys [notify-user log-fn]
                       :or {notify-user #(println "[WARNING]" (:msg %))
                            log-fn prn}
                       :as *options}]
   (let [options (assoc *options :notify-user notify-user :log-fn log-fn)
-        format (common-util/get-format file)
-        extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
-                                 :date-formatter "MMM do, yyyy"
-                                 :uri-encoded? false
-                                 :db-graph-mode? true
-                                 :filename-format :legacy}
-                                extract-options
-                                {:db @conn})
-        {:keys [pages blocks]}
-        (cond (contains? common-config/mldoc-support-formats format)
-              (extract/extract file content extract-options')
-
-              (common-config/whiteboard? file)
-              (extract/extract-whiteboard-edn file content extract-options')
-
-              :else
-              (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))
+        {:keys [pages blocks]} (extract-pages-and-blocks @conn file content options)
         tx-options (build-tx-options options)
         old-properties (keys @(get-in options [:import-state :property-schemas]))
         ;; Build page and block txs
