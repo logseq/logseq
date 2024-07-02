@@ -24,7 +24,8 @@
             [clojure.set :as set]
             [datascript.impl.entity :as de]
             [cljs-time.core :as t]
-            [cljs-time.coerce :as tc]))
+            [cljs-time.coerce :as tc]
+            [frontend.db.async :as db-async]))
 
 (defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
   (shui/checkbox
@@ -120,10 +121,11 @@
        :header header-cp
        :cell timestamp-cell-cp}])))
 
+;; TODO: block.temp/tagged-at
 (defn- get-all-objects
   [class]
-  ;; FIXME: async
-  (:block/_tags class))
+  (->> (:block/_tags class)
+       (map (fn [row] (assoc row :id (:db/id row))))))
 
 (rum/defc more-actions
   [columns {:keys [column-visible? column-toggle-visiblity]}]
@@ -658,22 +660,16 @@
 (rum/defc objects-inner < rum/static
   [config class]
   (let [[input set-input!] (rum/use-state "")
-        ;; TODO: block.temp/tagged-at
         [sorting set-sorting!] (rum/use-state [{:id :block/updated-at, :asc? false}])
         [filters set-filters!] (rum/use-state [])
         [row-filter set-row-filter!] (rum/use-state nil)
         [visible-columns set-visible-columns!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
         [data set-data!] (rum/use-state (get-all-objects class))
-        data (map (fn [row] (assoc row :id (:db/id row))) data)
         _ (rum/use-effect!
            (fn []
-             ;; (when-let [^js worker @state/*db-worker]
-             ;;   (p/let [result-str (.get-page-refs-count worker (state/get-current-repo))
-             ;;           result (ldb/read-transit-str result-str)
-             ;;           data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
-             ;;     (set-data! data)))
-             )
+             (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
+               (set-data! (get-all-objects class))))
            [])
         columns (build-columns class config)
         table (shui/table-option {:data data
