@@ -1,28 +1,25 @@
 .primary-cell {
-    @apply min-w-[140px];
+  @apply min-w-[140px];
 }
 
 .ls-table {
-    .ls-block {
-        @apply w-full;
-        padding-top: 0px;
-        padding-bottom: 0px;
-    }
+  .ls-block {
+    @apply w-full py-0;
+  }
 
-    .block-control, .block-control-wrap {
-        height: 20px;
-        min-height: 20px;
-    }
+  .block-control, .block-control-wrap {
+    @apply h-5 min-h-[20px];
+  }
 
-    .block-main-container, .block-content, {
-        min-height: 20px;
-    }
+  .block-main-container, .block-content {
+    @apply min-h-[20px];
+  }
 
-    .property-value-inner {
-        @apply cursor-pointer;
-    }
+  .property-value-inner {
+    @apply cursor-pointer;
+  }
 }
 
 .table-fixed {
-    table-layout: fixed;
+  table-layout: fixed;
 }
