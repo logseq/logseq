@@ -726,8 +726,7 @@
                                              :set-visible-columns! set-visible-columns!
                                              :set-row-selection! set-row-selection!}})
         selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        selected-rows-count (count selected-rows)
-        selected? (pos? selected-rows-count)]
+        selected-rows-count (count selected-rows)]
     (rum/use-effect!
      (fn []
        (set-row-filter! (fn []
@@ -758,7 +757,6 @@
          {:custom-scroll-parent (gdom/getElement "main-content-container")
           :total-count (count rows)
           :fixedHeaderContent (fn [] (table-header table columns'))
-          ;; :fixedFooterContent (fn [] (add-new-row table class))
           :components {:Table (fn [props]
                                 (shui/table {}
                                             (.-children props)))
