@@ -520,7 +520,8 @@
                       {:id (str "ac-" idx)
                        :tab-index "0"
                        :class (when chosen? "chosen")
-                       :on-pointer-down #(util/stop %)
+                       ;; TODO: should have more tests on touch devices
+                       ;:on-pointer-down #(util/stop %)
                        :on-click (fn [e]
                                    (util/stop e)
                                    (if (and (gobj/get e "shiftKey") on-shift-chosen)

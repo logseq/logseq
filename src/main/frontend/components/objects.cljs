@@ -357,7 +357,6 @@
                                   (fn []
                                     (filter-property columns table))
                                   {:align :end
-                                   :as-dropdown? true
                                    :auto-focus? true}))}
    (ui/icon "filter")))
 
