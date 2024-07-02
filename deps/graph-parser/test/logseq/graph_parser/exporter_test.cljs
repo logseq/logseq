@@ -103,7 +103,7 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
-  (let [doc-options (gp-exporter/build-doc-options conn {:macros {}} (merge options default-export-options))
+  (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
         files' (mapv #(hash-map :path %) files)]
     (gp-exporter/export-doc-files conn files' <read-file doc-options)))
 
@@ -116,9 +116,9 @@
                  (if (= :block/tags k)
                    (mapv #(:db/ident (d/entity db (:db/id %))) v)
                    (if (db-property-type/ref-property-types built-in-type)
-                     (db-property/ref->property-value-content db v)
+                     (db-property/ref->property-value-contents db v)
                      v))
-                 (db-property/ref->property-value-content db v))]))
+                 (db-property/ref->property-value-contents db v))]))
        (into {})))
 
 ;; Tests
@@ -145,7 +145,7 @@
       ;; Includes 2 journals as property values for :logseq.task/deadline
       (is (= 8 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
       ;; Count includes Contents and page references
-      (is (= 5
+      (is (= 6
              (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
       (is (= 1 (count @assets))))
 
@@ -212,14 +212,18 @@
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
-            tag-page (find-page-by-name @conn "Movie")]
+            tag-page (find-page-by-name @conn "Movie")
+            tagged-page (find-page-by-name @conn "Interstellar")]
         (is (string/starts-with? (str (:block/content block)) "Inception [[")
-            "block with tag converts tag to page ref")
+            "tagged block tag converts tag to page ref")
         (is (= [(:db/id tag-page)] (map :db/id (:block/refs block)))
-            "block with tag has correct refs")
-
+            "tagged block has correct refs")
         (is (and tag-page (not (:block/type tag-page)))
-            "tag page is not a class")))))
+            "tag page is not a class")
+
+        (is (= {:logseq.property/page-tags #{"Movie"}}
+               (readable-properties @conn tagged-page))
+            "tagged page has tags imported to property by default")))))
 
 (deftest-async export-file-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
