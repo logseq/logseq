@@ -136,8 +136,7 @@
     (shui/button
      {:variant "ghost"
       :class "text-muted-foreground !px-1"
-      :size :sm
-      :on-click #()}
+      :size :sm}
      (ui/icon "dots")))
    (shui/dropdown-menu-content
     {:align "end"}
@@ -667,6 +666,16 @@
         result))
     filters)))
 
+(defn- add-new-object!
+  [table class]
+  (p/let [block (editor-handler/api-insert-new-block! ""
+                                                      {:page (:block/uuid class)
+                                                       :properties {:block/tags (:db/id class)}
+                                                       :edit-block? false})
+          set-data! (get-in table [:data-fns :set-data!])
+          _ (set-data! (get-all-objects (db/entity (:db/id class))))]
+    (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 :unknown-container)))
+
 (rum/defc new-record-button < rum/static
   [class table]
   (ui/tooltip
@@ -674,16 +683,16 @@
     {:variant "ghost"
      :class "!px-1 text-muted-foreground"
      :size :sm
-     :on-click (fn []
-                 (p/let [block (editor-handler/api-insert-new-block! ""
-                                                                     {:page (:block/uuid class)
-                                                                      :properties {:block/tags (:db/id class)}
-                                                                      :edit-block? false})
-                         set-data! (get-in table [:data-fns :set-data!])
-                         _ (set-data! (get-all-objects (db/entity (:db/id class))))]
-                   (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 :unknown-container)))}
+     :on-click (fn [] (add-new-object! table class))}
     (ui/icon "plus"))
    [:div "New record"]))
+
+(rum/defc add-new-row < rum/static
+  [table class]
+  [:div.p-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm
+   {:on-click #(add-new-object! table class)}
+   (ui/icon "plus" {:size 14})
+   [:div "New"]])
 
 (rum/defc objects-inner < rum/static
   [config class]
@@ -722,35 +731,35 @@
                             (row-matched? row input filters)))))
      [input filters])
     [:div.ls-table.w-full.flex.flex-col.gap-2
-     ;; FIXME: horizontal scrollbar not shown on Mac always
-     [:div.ls-table-scrollable.w-full.flex.flex-col.gap-2.overflow-x-auto.force-show-scrollbars
-      [:div.ls-table-header.flex.items-center.justify-between
-       [:div.flex.flex-row.items-center.gap-2
-        [:div.font-medium (str (count data) " Objects")]]
-       [:div.flex.items-center.gap-1
+     [:div.ls-table-header.flex.items-center.justify-between
+      [:div.flex.flex-row.items-center.gap-2
+       [:div.font-medium (str (count data) " Objects")]]
+      [:div.flex.items-center.gap-1
 
-        (filter-properties columns table)
+       (filter-properties columns table)
 
-        (search input {:on-change set-input!
-                       :set-input! set-input!})
+       (search input {:on-change set-input!
+                      :set-input! set-input!})
 
-        (more-actions columns table)
+       (more-actions columns table)
 
-        (new-record-button class table)]]
+       (new-record-button class table)]]
 
-      (filters-row table)
+     (filters-row table)
 
-      (let [columns' (:columns table)
-            rows (:rows table)]
-        [:div.ls-table-rows.rounded-md.border.content
-         (ui/virtualized-table
-          {:custom-scroll-parent (gdom/getElement "main-content-container")
-           :total-count (count rows)
-           :fixedHeaderContent (fn [] (table-header table columns'))
-           :components {:Table (fn [props]
-                                 (shui/table {}
-                                             (.-children props)))
-                        :TableRow (fn [props] (table-row table rows columns' props))}})])]
+     (let [columns' (:columns table)
+           rows (:rows table)]
+       [:div.ls-table-rows.rounded-md.border.content.overflow-x-auto
+        (ui/virtualized-table
+         {:custom-scroll-parent (gdom/getElement "main-content-container")
+          :total-count (count rows)
+          :fixedHeaderContent (fn [] (table-header table columns'))
+          ;; :fixedFooterContent (fn [] (add-new-row table class))
+          :components {:Table (fn [props]
+                                (shui/table {}
+                                            (.-children props)))
+                       :TableRow (fn [props] (table-row table rows columns' props))}})
+        (add-new-row table class)])
 
      (let [rows-count (count (:rows table))]
        [:div.ls-table-footer.flex.items-center.justify-end.space-x-2.py-2
