@@ -195,7 +195,7 @@
           (render table row column)))))))
 
 (rum/defc search
-  [input {:keys [on-change]}]
+  [input {:keys [on-change set-input!]}]
   (let [[show-input? set-show-input!] (rum/use-state false)]
     (if show-input?
       [:div.flex.flex-row.items-center
@@ -208,13 +208,16 @@
                        (on-change value)))
          :on-key-down (fn [e]
                         (when (= "Escape" (util/ekey e))
-                          (set-show-input! false)))
+                          (set-show-input! false)
+                          (set-input! "")))
          :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
        (shui/button
         {:variant "ghost"
          :class "text-muted-foreground !px-1"
          :size :sm
-         :on-click #(set-show-input! false)}
+         :on-click #(do
+                      (set-show-input! false)
+                      (set-input! ""))}
         (ui/icon "x"))]
       (shui/button
        {:variant "ghost"
@@ -700,33 +703,36 @@
                             (row-matched? row input filters)))))
      [input filters])
     [:div.ls-table.w-full.flex.flex-col.gap-2
-     [:div.flex.items-center.justify-between
-      [:div.flex.flex-row.items-center.gap-2
-       [:div.font-medium (str (count data) " Objects")]]
-      [:div.flex.items-center.gap-1
+     ;; FIXME: horizontal scrollbar not shown on Mac always
+     [:div.ls-table-scrollable.w-full.flex.flex-col.gap-2.overflow-x-auto.force-show-scrollbars
+      [:div.ls-table-header.flex.items-center.justify-between
+       [:div.flex.flex-row.items-center.gap-2
+        [:div.font-medium (str (count data) " Objects")]]
+       [:div.flex.items-center.gap-1
 
-       (filter-properties columns table)
+        (filter-properties columns table)
 
-       (search input {:on-change set-input!})
+        (search input {:on-change set-input!
+                       :set-input! set-input!})
 
-       (more-actions columns table)]]
+        (more-actions columns table)]]
 
-     (filters-row table)
+      (filters-row table)
 
-     (let [columns' (:columns table)
-           rows (:rows table)]
-       [:div.rounded-md.border.content
-        (ui/virtualized-table
-         {:custom-scroll-parent (gdom/getElement "main-content-container")
-          :total-count (count rows)
-          :fixedHeaderContent (fn [] (table-header table columns'))
-          :components {:Table (fn [props]
-                                (shui/table {}
-                                            (.-children props)))
-                       :TableRow (fn [props] (table-row table rows columns' props))}})])
+      (let [columns' (:columns table)
+            rows (:rows table)]
+        [:div.ls-table-rows.rounded-md.border.content
+         (ui/virtualized-table
+          {:custom-scroll-parent (gdom/getElement "main-content-container")
+           :total-count (count rows)
+           :fixedHeaderContent (fn [] (table-header table columns'))
+           :components {:Table (fn [props]
+                                 (shui/table {}
+                                             (.-children props)))
+                        :TableRow (fn [props] (table-row table rows columns' props))}})])]
 
      (let [rows-count (count (:rows table))]
-       [:div.flex.items-center.justify-end.space-x-2.py-4
+       [:div.ls-table-footer.flex.items-center.justify-end.space-x-2.py-2
         [:div.flex-1.text-sm.text-muted-foreground
          (if (pos? selected-rows-count)
            (str selected-rows-count " of " rows-count " row(s) selected.")
