@@ -8,6 +8,7 @@
             [frontend.components.block :as component-block]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.components.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.date :as date]
@@ -126,6 +127,20 @@
        :header header-cp
        :cell timestamp-cell-cp}])))
 
+(defn- sort-columns
+  [columns ordered-column-ids]
+  (if (seq ordered-column-ids)
+    (let [id->columns (zipmap (map :id columns) columns)
+          ordered-id-set (set ordered-column-ids)]
+      (concat
+       (keep (fn [id]
+               (get id->columns id))
+             ordered-column-ids)
+       (remove
+        (fn [column] (ordered-id-set (:id column)))
+        columns)))
+    columns))
+
 ;; TODO: block.temp/tagged-at
 (defn- get-all-objects
   [class]
@@ -133,7 +148,7 @@
        (map (fn [row] (assoc row :id (:db/id row))))))
 
 (rum/defc more-actions
-  [columns {:keys [column-visible? column-toggle-visibility] :as table}]
+  [columns {:keys [column-visible? column-toggle-visibility]}]
   (shui/dropdown-menu
    (shui/dropdown-menu-trigger
     {:asChild true}
@@ -159,24 +174,35 @@
            :onSelect (fn [e] (.preventDefault e))}
           (:name column)))))))))
 
-(defn table-header
+(defn- get-column-size
+  [column]
+  (case (:id column)
+    :select 16
+    :object/name 360
+    (:block/created-at :block/updated-at) 160
+    180))
+
+(defn- table-header
   [table columns]
-  (shui/table-row
-   {:class "bg-gray-01 shadow"}
-   (for [column columns]
-     (let [opts (case (:id column)
-                  :block/original-name
-                  {}
-                  :select
-                  {:width 32}
-                  {:width 180})]
-       (shui/table-head
-        (merge opts
-               {:key (str (:id column))})
-        (let [header-fn (:header column)]
-          (if (fn? header-fn)
-            (header-fn table column)
-            header-fn)))))))
+  (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
+        items (mapv (fn [column]
+                      {:id (:name column)
+                       :value (:id column)
+                       :content (let [header-fn (:header column)
+                                      width (get-column-size column)]
+                                  [:div.overflow-x-hidden
+                                   {:class (when-not (= :select (:id column))
+                                             "px-4")
+                                    :style {:width width
+                                            :max-width width}}
+                                   (if (fn? header-fn)
+                                     (header-fn table column)
+                                     header-fn)])}) columns)]
+    (shui/table-row
+     {:class "bg-gray-01 shadow"}
+     (dnd/items items {:vertical? false
+                       :on-drag-end (fn [ordered-columns _m]
+                                      (set-ordered-columns! ordered-columns))}))))
 
 (rum/defc table-row < rum/reactive
   [{:keys [row-selected?] :as table} rows columns props]
@@ -191,9 +217,12 @@
        :data-state (when (row-selected? row) "selected")})
      (for [column columns]
        (let [id (str (:id row) "-" (:id column))
-             render (get column :cell)]
+             render (get column :cell)
+             width (get-column-size column)]
          (shui/table-cell
-          {:key id}
+          {:key id
+           :style {:width width
+                   :max-width width}}
           (render table row column)))))))
 
 (rum/defc search
@@ -692,7 +721,7 @@
 
 (rum/defc add-new-row < rum/static
   [table class]
-  [:div.py-2.px-4.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm
+  [:div.py-2.pr-4.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm
    {:on-click #(add-new-object! table class)}
    (ui/icon "plus" {:size 14})
    [:div "New"]])
@@ -704,6 +733,7 @@
         [filters set-filters!] (rum/use-state [])
         [row-filter set-row-filter!] (rum/use-state nil)
         [visible-columns set-visible-columns!] (rum/use-state {})
+        [ordered-columns set-ordered-columns!] (rum/use-state [])
         [row-selection set-row-selection!] (rum/use-state {})
         [data set-data!] (rum/use-state [])
         _ (rum/use-effect!
@@ -711,18 +741,21 @@
              (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
                (set-data! (get-all-objects (db/entity (:db/id class))))))
            [object-ids])
-        columns (build-columns class config)
+        columns (-> (build-columns class config)
+                    (sort-columns ordered-columns))
         table (shui/table-option {:data data
                                   :columns columns
                                   :state {:sorting sorting
                                           :filters filters
                                           :row-filter row-filter
                                           :row-selection row-selection
-                                          :visible-columns visible-columns}
+                                          :visible-columns visible-columns
+                                          :ordered-columns ordered-columns}
                                   :data-fns {:set-data! set-data!
                                              :set-filters! set-filters!
                                              :set-sorting! set-sorting!
                                              :set-visible-columns! set-visible-columns!
+                                             :set-ordered-columns! set-ordered-columns!
                                              :set-row-selection! set-row-selection!}})
         selected-rows (shui/table-get-selection-rows row-selection (:rows table))
         selected-rows-count (count selected-rows)]
@@ -732,10 +765,14 @@
                           (fn [row]
                             (row-matched? row input filters)))))
      [input filters])
-    [:div.ls-table.w-full.flex.flex-col.gap-2
-     [:div.ls-table-header.flex.items-center.justify-between
-      [:div.flex.flex-row.items-center.gap-2
-       [:div.font-medium (str (count data) " Objects")]]
+    [:div.ls-table.flex.flex-col.gap-2.grid
+     [:div.flex.items-center.justify-between
+      (let [rows-count (count (:rows table))]
+        [:div.flex.flex-row.items-center.gap-2
+         [:div.font-medium (str (if (pos? selected-rows-count)
+                                  selected-rows-count
+                                  rows-count)
+                                " Objects")]])
       [:div.flex.items-center.gap-1
 
        (filter-properties columns table)
@@ -751,25 +788,20 @@
 
      (let [columns' (:columns table)
            rows (:rows table)]
-       [:div.ls-table-rows.rounded-md.border.content.overflow-x-auto.force-visible-scrollbar
+       [:div.ls-table-rows.rounded-md.content.overflow-x-auto.force-visible-scrollbar
+        (table-header table columns)
+
         (ui/virtualized-table
          {:custom-scroll-parent (gdom/getElement "main-content-container")
           :total-count (count rows)
-          :fixedHeaderContent (fn [] (table-header table columns'))
           :components {:Table (fn [props]
                                 (shui/table {}
                                             (.-children props)))
                        :TableRow (fn [props] (table-row table rows columns' props))}})
-        (add-new-row table class)])
-
-     (let [rows-count (count (:rows table))]
-       [:div.ls-table-footer.flex.items-center.justify-end.space-x-2.py-2
-        [:div.flex-1.text-sm.text-muted-foreground
-         (if (pos? selected-rows-count)
-           (str selected-rows-count " of " rows-count " row(s) selected.")
-           (str "Total: " rows-count))]])]))
+        (add-new-row table class)])]))
 
 (rum/defcs objects < mixins/container-id rum/reactive db-mixins/query
   [state class]
-  (let [object-ids (db-model/get-class-objects (state/get-current-repo) (:db/id class))]
-    (objects-inner {:container-id (:container-id state)} class object-ids)))
+  [:div.ml-2
+   (let [object-ids (db-model/get-class-objects (state/get-current-repo) (:db/id class))]
+    (objects-inner {:container-id (:container-id state)} class object-ids))])
