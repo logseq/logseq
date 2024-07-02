@@ -178,7 +178,8 @@
         row (nth rows idx)
         row (if-let [db-id (:db/id row)]
               (db/sub-block db-id)
-              row)]
+              row)
+        row (assoc row :id (:db/id row))]
     (shui/table-row
      (merge
       (bean/->clj props)
@@ -664,6 +665,7 @@
         [visible-columns set-visible-columns!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
         [data set-data!] (rum/use-state (get-all-objects class))
+        data (map (fn [row] (assoc row :id (:db/id row))) data)
         _ (rum/use-effect!
            (fn []
              ;; (when-let [^js worker @state/*db-worker]
