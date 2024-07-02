@@ -118,7 +118,7 @@
 
 (defn- update-block-marker
   "If a block has a marker, convert it to a task object"
-  [block db {:keys [log-fn]}]
+  [block {:keys [log-fn]}]
   (if-let [marker (:block/marker block)]
     (let [old-to-new {"TODO" :logseq.task/status.todo
                       "LATER" :logseq.task/status.todo
@@ -130,14 +130,12 @@
                       "WAITING" :logseq.task/status.backlog
                       "CANCELED" :logseq.task/status.canceled
                       "CANCELLED" :logseq.task/status.canceled}
-          status-prop (:block/uuid (d/entity db :logseq.task/status))
           status-ident (or (old-to-new marker)
                            (do
                              (log-fn :invalid-todo (str (pr-str marker) " is not a valid marker so setting it to TODO"))
-                             :logseq.task/status.todo))
-          status-value (:block/uuid (d/entity db status-ident))]
+                             :logseq.task/status.todo))]
       (-> block
-          (update :block/properties assoc status-prop status-value)
+          (assoc :logseq.task/status status-ident)
           (update :block/content string/replace-first (re-pattern (str marker "\\s*")) "")
           (update :block/tags (fnil conj []) :logseq.class/task)
           (update :block/refs (fn [refs]
@@ -150,26 +148,24 @@
     block))
 
 (defn- update-block-priority
-  [block db {:keys [log-fn]}]
+  [block {:keys [log-fn]}]
   (if-let [priority (:block/priority block)]
     (let [old-to-new {"A" :logseq.task/priority.high
                       "B" :logseq.task/priority.medium
                       "C" :logseq.task/priority.low}
-          priority-prop (:block/uuid (d/entity db :logseq.task/priority))
-          priority-ident (or (old-to-new priority)
+          priority-value (or (old-to-new priority)
                              (do
                                (log-fn :invalid-priority (str (pr-str priority) " is not a valid priority so setting it to low"))
-                               :logseq.task/priority.low))
-          priority-value (:block/uuid (d/entity db priority-ident))]
+                               :logseq.task/priority.low))]
       (-> block
-          (update :block/properties assoc priority-prop priority-value)
+          (assoc :logseq.task/priority priority-value)
           (update :block/content string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
           (update :block/refs (fn [refs]
                                 (into (remove #(= priority (:block/original-name %)) refs)
-                                      [:logseq.task/priority priority-ident])))
+                                      [:logseq.task/priority priority-value])))
           (update :block/path-refs (fn [refs]
                                      (into (remove #(= priority (:block/original-name %)) refs)
-                                           [:logseq.task/priority priority-ident])))
+                                           [:logseq.task/priority priority-value])))
           (dissoc :block/priority)))
     block))
 
@@ -601,8 +597,8 @@
                    (update-block-macros db page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags tag-classes page-names-to-uuids)
-                   (update-block-marker db options)
-                   (update-block-priority db options)
+                   (update-block-marker options)
+                   (update-block-priority options)
                    add-missing-timestamps
                    ;; ((fn [x] (prn :block-out x) x))
                    ;; TODO: org-mode content needs to be handled
