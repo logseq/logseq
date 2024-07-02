@@ -15,7 +15,7 @@
 @import "photoswipe/dist/photoswipe.css";
 @import "shepherd.js/dist/css/shepherd.css";
 @import "packages/amplify/dist/amplify.css";
-@import "tldraw/apps/tldraw-logseq/src/styles.css";
+@import "packages/tldraw/apps/tldraw-logseq/src/styles.css";
 @import "katex/dist/katex.min.css";
 @import "codemirror/lib/codemirror.css";
 @import "codemirror/theme/solarized.css";

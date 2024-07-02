@@ -15,13 +15,13 @@
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [electron.ipc :as ipc]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
             [frontend.mobile.util :as mobile-util]
             [logseq.common.path :as path]
-            [logseq.graph-parser.config :as gp-config]))
+            [logseq.common.config :as common-config]))
 
 ;; TODO: extract all git ops using a channel
 
@@ -44,17 +44,17 @@
   [files formats]
   (filter
    (fn [file]
-     (let [format (gp-util/get-format file)]
+     (let [format (common-util/get-format file)]
        (contains? formats format)))
    files))
 
 (defn- only-text-formats
   [files]
-  (keep-formats files (gp-config/text-formats)))
+  (keep-formats files (common-config/text-formats)))
 
 (defn- only-image-formats
   [files]
-  (keep-formats files (gp-config/img-formats)))
+  (keep-formats files (common-config/img-formats)))
 
 (defn load-files-contents!
   [repo-url files ok-handler]
@@ -68,7 +68,7 @@
                                         (seq images)
                                         (merge (zipmap images (repeat (count images) ""))))
                         file-contents (for [[file content] file-contents]
-                                        {:file/path (gp-util/path-normalize file)
+                                        {:file/path (common-util/path-normalize file)
                                          :file/content content})]
                     (ok-handler file-contents))))
         (p/catch (fn [error]
@@ -92,7 +92,7 @@
   [path content]
   (when (or (= path "logseq/config.edn")
             (= (path/dirname path) (global-config-handler/safe-global-config-dir)))
-    (config-edn-common-handler/detect-deprecations path content)))
+    (config-edn-common-handler/detect-deprecations path content {:db-graph? (config/db-based-graph? (state/get-current-repo))})))
 
 (defn- validate-file
   "Returns true if valid and if false validator displays error message. Files
@@ -142,13 +142,13 @@
 (defn alter-file
   "Write any in-DB file, e.g. repo config, page, whiteboard, etc."
   [repo path content {:keys [reset? re-render-root? from-disk? skip-compare? new-graph? verbose
-                             skip-db-transact? extracted-block-ids]
+                             skip-db-transact? extracted-block-ids ctime mtime]
                       :fs/keys [event]
                       :or {reset? true
                            re-render-root? false
                            from-disk? false
                            skip-compare? false}}]
-  (let [path (gp-util/path-normalize path)
+  (let [path (common-util/path-normalize path)
         config-file? (= path "logseq/config.edn")
         _ (when config-file?
             (detect-deprecations path content))
@@ -157,7 +157,9 @@
       (let [opts {:new-graph? new-graph?
                   :from-disk? from-disk?
                   :skip-db-transact? skip-db-transact?
-                  :fs/event event}
+                  :fs/event event
+                  :ctime ctime
+                  :mtime mtime}
             result (if reset?
                      (do
                        (when-not skip-db-transact?
@@ -204,7 +206,7 @@
   [repo files {:keys [finish-handler]} file->content]
   (let [write-file-f (fn [[path content]]
                        (when path
-                         (let [path (gp-util/path-normalize path)
+                         (let [path (common-util/path-normalize path)
                                original-content (get file->content path)]
                           (-> (p/let [_ (or
                                          (util/electron?)
@@ -253,7 +255,7 @@
 (defn watch-for-current-graph-dir!
   []
   (when-let [repo (state/get-current-repo)]
-    (when-let [dir (config/get-repo-dir repo)]
+    (when-let [dir (and (not (config/db-based-graph? repo)) (config/get-repo-dir repo))]
       ;; An unwatch shouldn't be needed on startup. However not having this
       ;; after an app refresh can cause stale page data to load
       (fs/unwatch-dir! dir)

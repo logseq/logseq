@@ -5,15 +5,19 @@
   "author": "Logseq",
   "scripts": {
     "watch:ui:examples": "parcel serve ./examples/index.html",
-    "build:ui:only": "parcel build --target ui --no-source-maps",
-    "build:ui": "rm -rf .parcel-cache && yarn build:ui:only && cp dist/index.js ../../resources/js/ui.js",
+    "build:ui:only": "parcel build --target ui",
+    "build:ui": "rm -rf .parcel-cache && yarn build:ui:only",
     "watch:storybook": "storybook dev -p 6006",
-    "_postinstall": "yarn build:ui"
+    "install:primitives": "rm -rf primitives/ && git clone https://github.com/xyhp915/primitives.git --depth=1",
+    "build:primitives": "yarn install:primitives && cd primitives/ && yarn install && yarn build",
+    "preinstall": "test -f primitives/package.json || yarn build:primitives",
+    "postinstall": "yarn build:ui"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
     "@radix-ui/colors": "^3.0.0",
     "@radix-ui/react-alert-dialog": "^1.0.5",
+    "@radix-ui/react-avatar": "^1.0.4",
     "@radix-ui/react-checkbox": "^1.0.4",
     "@radix-ui/react-context-menu": "^2.1.5",
     "@radix-ui/react-dialog": "^1.0.5",
@@ -22,10 +26,13 @@
     "@radix-ui/react-popover": "^1.0.7",
     "@radix-ui/react-radio-group": "^1.1.3",
     "@radix-ui/react-select": "^2.0.0",
+    "@radix-ui/react-separator": "^1.0.3",
     "@radix-ui/react-slider": "^1.1.2",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-switch": "^1.0.3",
     "@radix-ui/react-toast": "^1.1.5",
+    "@radix-ui/react-toggle": "^1.0.3",
+    "@radix-ui/react-toggle-group": "^1.0.4",
     "@radix-ui/react-tooltip": "^1.0.7",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
@@ -36,8 +43,10 @@
     "react-day-picker": "^8.9.1",
     "react-dom": "^18",
     "react-hook-form": "^7.48.2",
+    "react-remove-scroll": "^2.5.7",
     "tailwind-merge": "^2.0.0",
     "tailwindcss-animate": "^1.0.7",
+    "uniqolor": "1.1.1",
     "yup": "^1.3.2",
     "zod": "^3.22.4"
   },
@@ -79,12 +88,13 @@
     },
     "react/jsx-dev-runtime": "./node_modules/react/jsx-dev-runtime.js",
     "react/jsx-runtime": "./node_modules/react/jsx-runtime.js",
-    "@/*": "./@/$1"
+    "@/*": "./@/$1",
+    "@radix-ui/react-*": "./primitives/packages/react/$1"
   },
   "targets": {
     "main": false,
     "ui": {
-      "source": "src/index.ts",
+      "source": "src/ui.ts",
       "outputFormat": "global",
       "includeNodeModules": {
         "react": false,

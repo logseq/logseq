@@ -1,21 +1,12 @@
 .block-content-wrapper {
-  /* 38px is the width of block-control */
-  width: calc(100% - 22px);
   user-select: text;
   @screen sm {
-    width: calc(100% - 33px);
     overflow-x: visible;
   }
 }
 
 .block-content {
-  min-height: 24px;
-  max-width: 100%;
-  overflow: initial;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  cursor: text;
+  @apply min-h-[24px] max-w-full whitespace-pre-wrap break-words cursor-text;
 
   img {
     max-width: 100%;
@@ -97,6 +88,19 @@
     padding: 10px 15px;
     border-color: var(--ls-secondary-border-color);
   }
+
+  [data-tooltipped]:has(a.tag) {
+    @apply px-0.5;
+  }
+}
+
+.block-content-or-editor-wrap {
+  @apply flex flex-1 flex-row flex-wrap gap-1;
+}
+
+.block-head-wrap {
+  @apply flex flex-1 w-full flex-row flex-wrap;
+  @apply justify-between items-center;
 }
 
 .breadcrumb {
@@ -124,6 +128,10 @@
         opacity: 1;
       }
     }
+  }
+
+  .page-ref {
+    @apply inline-flex items-baseline;
   }
 }
 
@@ -195,19 +203,14 @@
 .block-children {
   border-left: 1px solid;
   border-left-color: var(--lx-gray-04-alpha, var(--ls-guideline-color, var(--rx-gray-04-alpha))) !important;
+}
 
-  padding-top: 2px;
-  padding-bottom: 3px;
-
-  > .ls-block {
-    &:last-child {
-      margin-bottom: -5px;
-    }
-  }
+.hidden-block .block-children {
+  border-left: 0;
 }
 
 .block-control-wrap {
-  @apply h-[24px] mt-0 pr-[6px];
+  @apply h-[24px] mt-[1px];
 
   &.is-order-list {
     @apply mr-0 pr-0;
@@ -215,6 +218,30 @@
     .bullet-link-wrap {
       @apply relative left-[-3px];
     }
+  }
+
+  &.bullet-hidden {
+    padding-right: 2px;
+  }
+}
+
+.block-title-wrap {
+  @apply inline-flex items-center flex-wrap;
+
+  &.as-heading {
+    @apply flex flex-1;
+  }
+
+  &:has(.dsl-query), &:has(.embed-page) {
+    @apply flex flex-row w-full;
+
+    > .embed-page {
+      @apply w-full;
+    }
+  }
+
+  .dsl-query {
+    @apply w-full;
   }
 }
 
@@ -268,6 +295,11 @@
   padding: 2px 0;
   display: inherit;
 
+  .block-ref {
+    padding: 6px 5px;
+    border: none;
+  }
+
   &:hover {
     color: var(--ls-link-text-hover-color);
   }
@@ -301,11 +333,28 @@
   }
 }
 
+.page-reference {
+  @apply rounded transition-[background];
+
+  .bracket {
+    @apply opacity-30;
+  }
+
+  &:hover {
+    background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color, hsl(var(--primary)/.4)));
+  }
+}
+
 .page-ref {
+  @apply inline;
   color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)));
 
   &:hover {
     color: var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))));
+  }
+
+  .ui__icon.ti {
+    @apply relative left-[1px] top-[3px];
   }
 }
 
@@ -365,26 +414,64 @@
   }
 }
 
-.ls-block {
-  position: relative;
-  min-height: 24px;
-  padding: 2px 0;
-  border-bottom: 1px solid transparent;
-  transition: background-color 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+.block-main-container {
+  @apply min-h-[24px];
 
-  &.selected {
-    border-radius: 2px;
+  &[data-has-heading="1"], &:has(textarea.h1) {
+    > .block-control-wrap {
+      @apply relative top-4;
+    }
+
+    .block-content-or-editor-wrap {
+      .positioned-properties {
+        @apply relative top-4;
+      }
+    }
   }
 
-  span.bullet-container:not(.as-order-list) .selected {
-    border: 3px solid;
+  &[data-has-heading="2"], &:has(textarea.h2) {
+    > .block-control-wrap {
+      @apply relative top-3;
+    }
+
+    .block-content-or-editor-wrap {
+      .positioned-properties {
+        @apply relative top-3;
+      }
+    }
+  }
+
+  &[data-has-heading="3"], &:has(textarea.h3) {
+    > .block-control-wrap {
+      @apply relative top-[2px];
+    }
+
+    .block-content-or-editor-wrap {
+      .positioned-properties {
+        @apply relative top-[3px];
+      }
+    }
+  }
+
+  &[data-has-heading="5"] {
+    > .block-control-wrap {
+      @apply relative -top-[1px];
+    }
+  }
+
+  &[data-has-heading="6"], &:has(textarea.h6) {
+    h6.as-heading, textarea.h6 {
+      @apply pt-1;
+    }
   }
 }
 
-.ls-block,
-.editor-wrapper {
-  margin-right: auto;
-  margin-left: auto;
+.ls-block {
+  @apply relative py-0.5 transition-[background-color] mx-auto;
+
+  &.selected {
+    @apply rounded;
+  }
 }
 
 .ls-block h1,
@@ -431,9 +518,7 @@
 
 .ls-block :is(h1, h2),
 .editor-inner .uniline-block:is(.h1, .h2) {
-  border-bottom: 1px solid var(--ls-quaternary-background-color);
-  margin: 0.125em 0;
-  padding-bottom: 0.125em;
+  @apply border-b border-gray-06 mt-1 mb-2 pb-1;
 }
 
 .block-ref .ls-block :is(h1, h2),
@@ -687,10 +772,6 @@ a.filter svg {
   }
 }
 
-a[data-ref="card"], .page-reference[data-ref="card"] {
-  opacity: 0.3;
-}
-
 .ls-card a[data-ref="card"], .ls-card .page-reference[data-ref="card"] {
   display: none;
 }
@@ -756,6 +837,10 @@ html.is-mac {
 
   &-item {
     @apply bg-gray-03 rounded p-4;
+  }
+
+  .page-reference:hover {
+    background: var(--lx-accent-04-alpha, var(--ls-tertiary-background-color, hsl(var(--primary)/.4)));
   }
 }
 

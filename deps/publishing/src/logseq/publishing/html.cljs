@@ -5,7 +5,8 @@ necessary db filtering"
             [goog.string :as gstring]
             [goog.string.format]
             [datascript.transit :as dt]
-            [logseq.publishing.db :as db]))
+            [logseq.publishing.db :as db]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Copied from hiccup but tweaked for publish usage
 ;; Any changes here should also be made in frontend.publishing/unescape-html
@@ -124,6 +125,7 @@ necessary db filtering"
             [:script {:src "static/js/react.production.min.js"}]
             [:script {:src "static/js/react-dom.production.min.js"}]
             [:script {:src "static/js/ui.js"}]
+            [:script {:src "static/js/shared.js"}]
             [:script {:src "static/js/main.js"}]
             [:script {:src "static/js/interact.min.js"}]
             [:script {:src "static/js/highlight.min.js"}]
@@ -135,17 +137,21 @@ necessary db filtering"
 (defn build-html
   "Given the graph's db, filters the db using the given options and returns the
 generated index.html string and assets used by the html"
-  [db* {:keys [app-state repo-config html-options]}]
+  [db* {:keys [app-state repo-config html-options db-graph?]}]
   (let [all-pages-public? (if-let [val (:publishing/all-pages-public? repo-config)]
                             val
                             (:all-pages-public? repo-config))
         [db asset-filenames'] (if all-pages-public?
-                                (db/clean-export! db*)
-                                (db/filter-only-public-pages-and-blocks db*))
+                                (db/clean-export! db* {:db-graph? db-graph?})
+                                (db/filter-only-public-pages-and-blocks db* {:db-graph? db-graph?}))
         asset-filenames (remove nil? asset-filenames')
+
         db-str (dt/write-transit-str db)
+        repo-name (if db-graph? (str sqlite-util/db-version-prefix "Logseq demo") "Logseq demo")
+        ;; The repo-name is used by the client and thus determines whether
+        ;; it's a db graph or not
         state (assoc app-state
-                     :config {"local" repo-config})
+                     :config {repo-name repo-config})
         raw-html-str (publishing-html db-str state html-options)]
     {:html raw-html-str
      :asset-filenames asset-filenames}))

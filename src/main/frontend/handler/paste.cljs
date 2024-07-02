@@ -2,10 +2,9 @@
   (:require [frontend.state :as state]
             [frontend.db :as db]
             [frontend.format.block :as block]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.mldoc :as gp-mldoc]
+            [logseq.common.util :as common-util]
             [logseq.graph-parser.block :as gp-block]
-            [logseq.graph-parser.util.block-ref :as block-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [clojure.string :as string]
             [frontend.util :as util]
             [frontend.handler.editor :as editor-handler]
@@ -25,10 +24,10 @@
   (when-let [editing-block (state/get-edit-block)]
     (let [page-id (:db/id (:block/page editing-block))
           blocks (block/extract-blocks
-                  (mldoc/->edn text (gp-mldoc/default-config format))
+                  (mldoc/->edn text format)
                   text format
                   {:page-name (:block/name (db/entity page-id))})
-          blocks' (gp-block/with-parent-and-left page-id blocks)]
+          blocks' (gp-block/with-parent-and-order page-id blocks)]
       (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
 
 (defn- paste-segmented-text
@@ -65,7 +64,7 @@
 (defn- get-whiteboard-tldr-from-text
   [text]
   (when-let [matched-text (util/safe-re-find #"<whiteboard-tldr>(.*)</whiteboard-tldr>"
-                                             (gp-util/safe-decode-uri-component text))]
+                                             (common-util/safe-decode-uri-component text))]
     (try-parse-as-json (second matched-text))))
 
 (defn- selection-within-link?
@@ -95,7 +94,7 @@
                                           "web application/logseq"))))
           blocks-str (when blocks-blob (.text blocks-blob))]
          (when blocks-str
-           (gp-util/safe-read-string blocks-str))))
+           (common-util/safe-read-string blocks-str))))
 
 (defn- markdown-blocks?
   [text]
@@ -127,8 +126,8 @@
                           ;; text should always be prepared block-ref generated in tldr
                           text)
         {:keys [selection] :as selection-and-format} (editor-handler/get-selection-and-format)
-        text-url? (gp-util/url? text)
-        selection-url? (gp-util/url? selection)]
+        text-url? (common-util/url? text)
+        selection-url? (common-util/url? selection)]
     (cond
       (not (string/blank? shape-refs-text))
       (commands/simple-insert! input-id shape-refs-text nil)
@@ -161,7 +160,7 @@
                         (if (string/blank? result) nil result))
             text-blocks? (if (= format :markdown) markdown-blocks? org-blocks?)
             text' (or html-text
-                      (when (gp-util/url? text)
+                      (when (common-util/url? text)
                         (wrap-macro-url text))
                       text)
             blocks? (text-blocks? text')]
@@ -180,13 +179,13 @@
   [input text e html]
   (util/stop e)
   (->
-   (p/let [copied-blocks (get-copied-blocks)]
-     (if (seq copied-blocks)
+   (p/let [{:keys [graph blocks]} (get-copied-blocks)]
+     (if (and (seq blocks) (= graph (state/get-current-repo)))
        ;; Handle internal paste
-       (let [revert-cut-txs (get-revert-cut-txs copied-blocks)
+       (let [revert-cut-txs (get-revert-cut-txs blocks)
              keep-uuid? (= (state/get-block-op-type) :cut)]
-         (editor-handler/paste-blocks copied-blocks {:revert-cut-txs revert-cut-txs
-                                                     :keep-uuid? keep-uuid?}))
+         (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                              :keep-uuid? keep-uuid?}))
        (paste-copied-text input text html)))
    (p/catch (fn [error]
               (log/error :msg "Paste failed" :exception error)
@@ -198,7 +197,7 @@
   (utils/getClipText
    (fn [clipboard-data]
      (when-let [_ (state/get-input)]
-       (if (gp-util/url? clipboard-data)
+       (if (common-util/url? clipboard-data)
          (if (string/blank? (util/get-selected-text))
            (editor-handler/insert (or (wrap-macro-url clipboard-data) clipboard-data) true)
            (editor-handler/html-link-format! clipboard-data))

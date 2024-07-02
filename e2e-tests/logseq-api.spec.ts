@@ -42,7 +42,6 @@ test('block related apis',
     // update
     const content1 = content + '+ update!'
     await callAPI('update_block', b1.uuid, content1)
-    await page.waitForTimeout(1000)
     b1 = await callAPI('get_block', b1.uuid)
 
     expect(b1.content).toBe(content1)
@@ -93,3 +92,25 @@ test('block related apis',
     // await page.pause()
   })
 
+/**
+ * load local tests plugin
+ */
+export async function loadLocalE2eTestsPlugin(page) {
+  const pid = 'a-logseq-plugin-for-e2e-tests'
+  const hasLoaded = await page.evaluate(([pid]) => {
+    // @ts-ignore
+    const p = window.LSPluginCore.registeredPlugins.get(pid)
+    return p != null
+  }, [pid])
+
+  if (hasLoaded) return true
+
+  await callPageAPI(page, 'set_state_from_store',
+    'ui/developer-mode?', true)
+  await page.keyboard.press('t+p')
+  await page.locator('text=Load unpacked plugin')
+  await callPageAPI(page, 'set_state_from_store',
+    'plugin/selected-unpacked-pkg', `${__dirname}/plugin`)
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('Escape')
+}

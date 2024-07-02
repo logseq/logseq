@@ -3,11 +3,14 @@
   protocol for org and and markdown formats"
   (:require [clojure.string :as string]
             [frontend.format.protocol :as protocol]
+            [frontend.state :as state]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             ["mldoc" :as mldoc :refer [Mldoc]]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
+            [logseq.graph-parser.text :as text]
+            [logseq.graph-parser.block :as gp-block]
             [clojure.walk :as walk]))
 
 (defonce anchorLink (gobj/get Mldoc "anchorLink"))
@@ -33,34 +36,31 @@
                       title
                       (or references gp-mldoc/default-references)))
 
-(defn block-with-title?
-  [type]
-  (contains? #{"Paragraph"
-               "Raw_Html"
-               "Hiccup"
-               "Heading"} type))
+(def block-with-title? gp-mldoc/block-with-title?)
 
 (defn opml->edn
   [config content]
   (try
     (if (string/blank? content)
       {}
-      (let [[headers blocks] (-> content (parse-opml) (gp-util/json->clj))]
+      (let [[headers blocks] (-> content (parse-opml) (common-util/json->clj))]
         [headers (gp-mldoc/collect-page-properties blocks config)]))
     (catch :default e
       (log/error :edn/convert-failed e)
       [])))
 
+(defn get-default-config
+  [format]
+  (gp-mldoc/get-default-config (state/get-current-repo) format))
+
 (defn ->edn
-  "Alias to gp-mldoc/->edn but could serve as a wrapper e.g. handle
-  gp-mldoc/default-config"
-  [content config]
-  (gp-mldoc/->edn content config))
+  [content format]
+  (gp-mldoc/->edn (state/get-current-repo) content format))
 
 (defrecord MldocMode []
   protocol/Format
   (toEdn [_this content config]
-    (->edn content config))
+    (gp-mldoc/->edn content config))
   (toHtml [_this content config references]
     (export "html" content config references))
   (exportMarkdown [_this content config references]
@@ -72,9 +72,7 @@
   [plains]
   (string/join (map last plains)))
 
-(defn properties?
-  [ast]
-  (contains? #{"Properties" "Property_Drawer"} (ffirst ast)))
+(def properties? gp-mldoc/properties?)
 
 (defn typ-drawer?
   [ast typ]
@@ -92,3 +90,33 @@
          f))
      ast)
     @*result))
+
+(defn extract-tags
+  "Extract tags from content"
+  [content]
+  (let [ast (->edn content :markdown)
+        *result (atom [])]
+    (walk/prewalk
+     (fn [f]
+       (cond
+           ;; tag
+         (and (vector? f)
+              (= "Tag" (first f)))
+         (let [tag (-> (gp-block/get-tag f)
+                       text/page-ref-un-brackets!)]
+           (swap! *result conj tag)
+           nil)
+
+         :else
+         f))
+     ast)
+    (->> @*result
+         (remove string/blank?)
+         (distinct))))
+
+(defn get-title&body
+  "parses content and returns [title body]
+   returns nil if no title"
+  [content format]
+  (when-let [repo (state/get-current-repo)]
+    (gp-mldoc/get-title&body repo content format)))

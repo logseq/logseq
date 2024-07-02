@@ -6,7 +6,7 @@
             [frontend.extensions.zotero.schema :as schema]
             [frontend.extensions.zotero.setting :as setting]
             [frontend.util :as util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util.page-ref :as page-ref]))
 
 (defn item-type [item] (-> item :data :item-type))
 

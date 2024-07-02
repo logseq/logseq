@@ -15,6 +15,7 @@
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -537,22 +538,22 @@
 (rum/defc ^:large-vars/cleanup-todo pdf-highlights
   [^js el ^js viewer initial-hls loaded-pages {:keys [set-dirty-hls!]}]
 
-  (let [^js doc         (.-ownerDocument el)
-        ^js win         (.-defaultView doc)
-        *mounted        (rum/use-ref false)
+  (let [^js doc (.-ownerDocument el)
+        ^js win (.-defaultView doc)
+        *mounted (rum/use-ref false)
         [sel-state, set-sel-state!] (rum/use-state {:selection nil :range nil :collapsed nil :point nil})
         [highlights, set-highlights!] (rum/use-state initial-hls)
         [ctx-menu-state, set-ctx-menu-state!] (rum/use-state {:highlight nil :vw-pos nil :selection nil :point nil :reset-fn nil})
 
         clear-ctx-menu! (rum/use-callback
-                         #(let [reset-fn (:reset-fn ctx-menu-state)]
-                            (set-ctx-menu-state! {})
-                            (and (fn? reset-fn) (reset-fn)))
-                         [ctx-menu-state])
+                          #(let [reset-fn (:reset-fn ctx-menu-state)]
+                             (set-ctx-menu-state! {})
+                             (and (fn? reset-fn) (reset-fn)))
+                          [ctx-menu-state])
 
-        show-ctx-menu!  (fn [^js viewer hl point & ops]
-                          (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
-                            (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
+        show-ctx-menu! (fn [^js viewer hl point & ops]
+                         (let [vw-pos (pdf-utils/scaled-to-vw-pos viewer (:position hl))]
+                           (set-ctx-menu-state! (apply merge (list* {:highlight hl :vw-pos vw-pos :point point} ops)))))
 
         add-hl! (fn [hl]
                   (when (:id hl)
@@ -561,20 +562,21 @@
                       (set-highlights! (conj highlights hl)))
 
                     (when-let [vw-pos (and (pdf-assets/area-highlight? hl)
-                                           (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
+                                        (pdf-utils/scaled-to-vw-pos viewer (:position hl)))]
                       ;; exceptions
                       (pdf-assets/persist-hl-area-image$ viewer (:pdf/current @state/state)
-                                                         hl nil (:bounding vw-pos)))))
+                        hl nil (:bounding vw-pos)))))
 
-        upd-hl!         (fn [hl]
-                          (let [highlights (pdf-utils/fix-nested-js highlights)]
-                            (when-let [[target-idx] (medley/find-first
-                                                     #(= (:id (second %)) (:id hl))
-                                                     (medley/indexed highlights))]
-                              (set-highlights! (assoc-in highlights [target-idx] hl))
-                              (pdf-assets/update-hl-block! hl))))
+        upd-hl! (fn [hl]
+                  (let [highlights (pdf-utils/fix-nested-js highlights)]
+                    (when-let [[target-idx] (medley/find-first
+                                              #(= (:id (second %)) (:id hl))
+                                              (medley/indexed highlights))]
+                      (set-highlights! (assoc-in highlights [target-idx] hl))
+                      (pdf-assets/update-hl-block! hl))))
 
-        del-hl!         (fn [hl] (when-let [id (:id hl)] (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
+        del-hl! (fn [hl] (when-let [id (:id hl)]
+                           (set-highlights! (into [] (remove #(= id (:id %)) highlights)))))]
 
     ;; consume dirtied
     (rum/use-effect!
@@ -712,12 +714,13 @@
      (pdf-page-finder viewer)
 
      ;; area selection container
-     (pdf-highlight-area-selection
-      viewer
-      {:clear-ctx-menu! clear-ctx-menu!
-       :show-ctx-menu!  show-ctx-menu!
-       :add-hl!         add-hl!
-       })]))
+     (when (pdf-utils/support-area?)
+       (pdf-highlight-area-selection
+         viewer
+         {:clear-ctx-menu! clear-ctx-menu!
+          :show-ctx-menu! show-ctx-menu!
+          :add-hl! add-hl!
+          }))]))
 
 (rum/defc ^:large-vars/data-var pdf-viewer
   [_url ^js pdf-document {:keys [identity filename initial-hls initial-page initial-error]} ops]
@@ -963,12 +966,13 @@
            "PasswordException"
            (do
              (set-loader-state! {:error nil})
-             (state/set-modal! (fn [close-fn]
-                                 (let [on-password-fn
-                                       (fn [password]
-                                         (close-fn)
-                                         (set-doc-password! password))]
-                                   (pdf-password-input on-password-fn)))))
+             (shui/dialog-open!
+               (fn [{:keys [close]}]
+                 (let [on-password-fn
+                       (fn [password]
+                         (close)
+                         (set-doc-password! password))]
+                   (pdf-password-input on-password-fn)))))
 
            (do
              (notification/show!

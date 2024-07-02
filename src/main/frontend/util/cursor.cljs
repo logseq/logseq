@@ -31,12 +31,13 @@
   ([input] (get-caret-pos input (util/get-selection-start input)))
   ([input pos]
    (when input
-     (let [rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))]
+     (let [rect (bean/->clj (.. input (getBoundingClientRect) (toJSON)))
+           grapheme-pos (util/get-graphemes-pos (.-value input) pos)]
        (try
          (some-> (gdom/getElement "mock-text")
                  gdom/getChildren
                  array-seq
-                 (util/nth-safe pos)
+                 (util/nth-safe grapheme-pos)
                  mock-char-pos
                  (assoc :rect rect))
          (catch :default e
@@ -62,8 +63,13 @@
 (defn set-selection-to [input n m]
   (.setSelectionRange input n m))
 
-(defn move-cursor-to [input n]
-  (.setSelectionRange input n n))
+(defn move-cursor-to
+  ([input n] (move-cursor-to input n false))
+  ([input n delay?]
+   (.setSelectionRange input n n)
+   (when-not (= js/document.activeElement input)
+     (let [focus #(.focus input)]
+       (if delay? (js/setTimeout focus 16) (focus))))))
 
 (defn move-cursor-forward
   ([input]
@@ -85,8 +91,7 @@
      (let [{:keys [pos]} (get-caret-pos input)
            pos (if (= n 1)
                  (util/safe-dec-current-pos-from-end (.-value input) pos)
-                 (- pos n))
-           pos (max 0 (or pos (dec pos)))]
+                 (- pos n))]
        (move-cursor-to input pos)))))
 
 (defn- get-input-content&pos
@@ -173,7 +178,7 @@
     (move-cursor-to input idx)))
 
 (defn textarea-cursor-rect-first-row? [cursor]
-  (let [elms   (-> (gdom/getElement "mock-text")
+  (let [elms   (some-> (gdom/getElement "mock-text")
                    gdom/getChildren
                    array-seq)
         tops   (->> elms
@@ -187,7 +192,7 @@
 
 
 (defn textarea-cursor-rect-last-row? [cursor]
-  (let [elms   (-> (gdom/getElement "mock-text")
+  (let [elms   (some-> (gdom/getElement "mock-text")
                    gdom/getChildren
                    array-seq)
         tops   (->> elms

@@ -4,13 +4,7 @@
 
 .cp__plugins {
   &-page {
-    margin: -2rem;
-    padding: 1.5rem 2rem;
-    outline: none;
-
-    @screen xl {
-      width: 1260px;
-    }
+    @apply outline-none px-2 py-0;
 
     > h1 {
       margin: 0;
@@ -156,10 +150,11 @@
         z-index: 1;
       }
 
-      .form-input {
+      .ui__input {
         background-color: var(--ls-primary-background-color);
         padding: 6px 7px 5px 29px;
-        opacity: .5;
+        opacity: .7;
+        height: 30px;
 
         &:focus {
           background-color: var(--ls-secondary-background-color);
@@ -189,7 +184,7 @@
     @apply w-full max-h-[56vh] overflow-y-auto;
 
     &-inner {
-      @apply grid grid-flow-row gap-3 px-6
+      @apply grid grid-flow-row gap-3 px-4
       grid-cols-1 md:grid-cols-2 lg:grid-cols-3;
     }
   }
@@ -457,36 +452,22 @@
   }
 
   &-waiting-updates {
-    margin: -15px;
-
     > ul {
       li {
-        user-select: none;
-        justify-content: space-between;
-        opacity: .9;
+        @apply select-none justify-between opacity-90;
 
         sup {
-          padding-left: 8px;
-          font-weight: 400;
+          @apply pl-2 font-medium;
         }
 
         &:hover, &.checked {
-          opacity: 1;
+          @apply opacity-100;
         }
       }
     }
   }
 
   &-settings {
-    > header {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--ls-quaternary-background-color);
-
-      h1 {
-        @apply flex items-center text-[22px] m-0 space-x-1;
-      }
-    }
-
     &-inner {
       position: relative;
       padding: 10px 0 20px;
@@ -605,10 +586,10 @@
 
     .cp__settings-inner {
       aside {
-        @apply max-h-[70vh] overflow-auto p-3;
+        @apply max-h-[70vh] overflow-auto;
 
         ul {
-          @apply list-none p-0 m-0;
+          @apply list-none pt-1.5 m-0;
 
           img.icon {
             @apply w-[20px] h-[20px];
@@ -618,7 +599,7 @@
             @apply p-1.5 rounded;
 
             a {
-              @apply mb-0 text-gray-11;
+              @apply mb-0 text-gray-12 opacity-90;
             }
 
             strong {
@@ -847,61 +828,50 @@
       color: var(--ls-primary-text-color);
     }
   }
+}
 
-  .toolbar-plugins-manager {
-    &-trigger {
-      .menu-links-wrapper {
-        max-height: 80vh;
-      }
+.toolbar-plugins-manager {
+  &-content {
+    @apply max-h-[80vh];
 
-      .menu-link {
-        @apply px-[5px] py-1.5;
+    > .ui__dropdown-menu-item {
+      @apply px-[5px] py-1 text-sm relative w-full;
 
-        &.extra-item {
-          @apply opacity-80 px-4 py-1.5;
+      &.extra-item {
+        @apply opacity-80 px-3 py-1.5 hover:opacity-100;
 
-          .title-wrap {
-            margin-left: 8px !important;
-          }
-
-          &:hover {
-            opacity: 1;
-          }
+        .ui__icon {
+          @apply pr-[2px];
         }
       }
+    }
 
-      .item-wrap {
-        padding-right: 28px;
-        font-size: 14px;
-        position: relative;
+    .item-wrap {
+      @apply pr-[28px] text-sm relative w-full;
 
-        div[data-injected-ui] :is(.ti, .tie) {
-          position: relative;
-          bottom: -1px;
-        }
+      .ti {
+        @apply text-[18px];
       }
 
-      .pin {
-        position: absolute;
-        top: 0;
-        right: 0;
-        height: 100%;
-        padding: 0 6px;
-
-        &.pinned {
-          color: var(--ls-link-ref-text-color);
-          opacity: 90;
-        }
+      div[data-injected-ui] > a.button {
+        @apply h-auto px-1.5;
       }
 
-      .menu-links-wrapper {
-        a {
-          @apply !text-popover-foreground/80;
+      div[data-injected-ui] :is(.ti, .tie) {
+        @apply relative bottom-[-2px];
+      }
+    }
 
-          &.button {
-            @apply h-auto hover:bg-transparent scale-95;
-          }
-        }
+    .pin {
+      position: absolute;
+      top: 0;
+      right: 0;
+      height: 100%;
+      padding: 0 6px;
+
+      &.pinned {
+        color: var(--ls-link-ref-text-color);
+        opacity: 90;
       }
     }
   }
@@ -944,7 +914,7 @@
 }
 
 .lsp-frame-readme {
-  margin: -2rem;
+  margin: -1.5rem;
   min-height: 75vh;
   min-width: 900px;
 }
@@ -984,17 +954,18 @@ html[data-theme='dark'] {
   }
 }
 
-.ui__modal[label=plugin-settings-modal] {
-  .ui__modal-close-wrap {
-    padding-top: 14px;
-  }
+.ui__dialog-content[label=plugin-settings-modal] {
+  @apply w-auto lg:max-w-5xl p-0 gap-0;
 }
 
-.ui__modal[label=plugins-dashboard] {
-  .panel-content {
-    overflow-y: auto;
-    max-height: calc(100vh - 50px);
-  }
+.ui__dialog-content[label=plugins-dashboard] {
+  @apply overflow-y-hidden max-w-[90vw] lg:max-w-[1246px];
+
+  max-height: calc(100vh - 50px);
+}
+
+.ui__dialog-content[label=plugin-readme] {
+  @apply w-auto max-w-6xl;
 }
 
 body[data-page=plugins] {

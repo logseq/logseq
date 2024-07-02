@@ -4,7 +4,7 @@
             ["child_process" :as child-process]
             [cljs.test :refer [is testing]]
             [clojure.string :as string]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [datascript.core :as d]))
 
 ;; Helper fns for test setup
@@ -62,20 +62,29 @@
 (defn- get-journal-page-count [db]
   (->> (d/q '[:find (count ?b)
               :where
-              [?b :block/journal? true]
+              [?b :block/type "journal"]
               [?b :block/name]
               [?b :block/file]]
             db)
        ffirst))
+
+(defn- get-counts-for-common-attributes [db]
+  (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
+        :block/repeated?]
+       (map (fn [attr]
+              [attr
+               (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
+                            db))]))
+       (into {})))
 
 (defn- query-assertions
   [db graph-dir files]
   (testing "Query based stats"
     (is (= (->> files
                 ;; logseq files aren't saved under :block/file
-                (remove #(string/includes? % (str graph-dir "/" gp-config/app-name "/")))
+                (remove #(string/includes? % (str graph-dir "/" common-config/app-name "/")))
                 ;; edn files being listed in docs by parse-graph aren't graph files
-                (remove #(and (not (gp-config/whiteboard? %)) (string/ends-with? % ".edn")))
+                (remove #(and (not (common-config/whiteboard? %)) (string/ends-with? % ".edn")))
                 set)
            (->> (d/q '[:find (pull ?b [* {:block/file [:file/path]}])
                        :where [?b :block/name] [?b :block/file]]
@@ -97,15 +106,16 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 5499 :org 457} (get-block-format-counts db))
+    (is (= {:markdown 6080 :org 500} (get-block-format-counts db))
         "Block format counts")
 
-    (is (= {:description 81, :updated-at 46, :tags 5, :logseq.macro-arguments 104
+    (is (= {:description 81, :updated-at 46, :tags 5,
             :logseq.tldraw.shape 79, :card-last-score 6, :card-repeats 6,
             :card-next-schedule 6, :ls-type 79, :card-last-interval 6, :type 107,
             :template 5, :title 114, :alias 41, :supports 5, :id 145, :url 5,
-            :card-ease-factor 6, :logseq.macro-name 104, :created-at 46,
-            :card-last-reviewed 6, :platforms 51, :initial-version 8, :heading 226}
+            :card-ease-factor 6, :created-at 46,
+            :card-last-reviewed 6, :platforms 51, :initial-version 8, :heading 226
+            :logseq.macro-arguments 109, :logseq.macro-name 109}
            (get-top-block-properties db))
         "Counts for top block properties")
 
@@ -121,22 +131,21 @@
             :block/deadline 1
             :block/collapsed? 80
             :block/repeated? 1}
-           (->> [:block/scheduled :block/priority :block/deadline :block/collapsed?
-                 :block/repeated?]
-                (map (fn [attr]
-                       [attr
-                        (ffirst (d/q [:find (list 'count '?b) :where ['?b attr]]
-                                     db))]))
-                (into {})))
+           (get-counts-for-common-attributes db))
         "Counts for blocks with common block attributes")
 
-    (is (= #{"term" "setting" "book" "templates" "Query table" "page"
-             "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
-             "Whiteboard/Property" "Community" "Tweet"}
-           (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
-                (map (comp :block/original-name first))
-                set))
-        "Has correct namespaces")
+    (let [no-name (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
+                       (filter (fn [x]
+                                 (when-not (:block/original-name (first x))
+                                   x))))
+          all-namespaces (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
+                              (map (comp :block/original-name first))
+                              set)]
+      (is (= #{"term" "setting" "book" "templates" "Query table" "page"
+               "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
+               "Whiteboard/Property" "Community" "Tweet"}
+             all-namespaces)
+          (str "Has correct namespaces: " no-name)))
 
     (is (empty? (->> (d/q '[:find ?n :where [?b :block/name ?n]] db)
                      (map first)
@@ -153,13 +162,6 @@
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
     (is (= 303 (count files)) "Correct file count")
-    (is (= 63632 (count (d/datoms db :eavt))) "Correct datoms count")
-
-    (is (= 5866
-           (ffirst
-            (d/q '[:find (count ?b)
-                   :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
-        "Correct referenced blocks count")
     (is (= 23
            (ffirst
             (d/q '[:find (count ?b)

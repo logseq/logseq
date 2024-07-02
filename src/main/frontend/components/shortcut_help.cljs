@@ -4,11 +4,11 @@
             [frontend.state :as state]
             [frontend.extensions.latex :as latex]
             [frontend.extensions.highlight :as highlight]
-            [logseq.graph-parser.util.block-ref :as block-ref]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [rum.core :as rum]
             [frontend.components.shortcut :as shortcut]
-            [logseq.shui.core :as shui]))
+            [logseq.shui.ui :as shui]))
 
 (rum/defc trigger-table []
   [:table

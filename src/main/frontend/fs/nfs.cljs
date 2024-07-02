@@ -17,7 +17,7 @@
             [frontend.state :as state]
             [frontend.handler.notification :as notification]
             ["/frontend/utils" :as utils]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [logseq.common.path :as path]))
 
 ;; Cache the file handles in the memory so that
@@ -65,7 +65,7 @@
 
 (defn check-directory-permission!
   [repo]
-  (when (config/local-db? repo)
+  (when (config/local-file-based-graph? repo)
     (p/let [repo-dir (config/get-repo-dir repo)
             handle-path (str "handle/" repo-dir)
             handle (idb/get-item handle-path)]
@@ -99,9 +99,8 @@
 (defn await-get-nfs-file-handle
   "for accessing File handle outside, ensuring user granted."
   [repo handle-path]
-  (p/do!
-   (await-permission-granted repo)
-   (get-nfs-file-handle handle-path)))
+  (p/let [_ (await-permission-granted repo)]
+    (get-nfs-file-handle handle-path)))
 
 (defn- readdir-and-reload-all-handles
   "Return list of filenames"
@@ -125,7 +124,7 @@
                            (not (contains? #{"md" "org" "excalidraw" "edn" "css"} ext))))))
          (map (fn [file]
                 (-> (.-webkitRelativePath file)
-                    gp-util/path-normalize))))))
+                    common-util/path-normalize))))))
 
 
 (defn- get-files-and-reload-all-handles
@@ -153,13 +152,12 @@
                        (p/let [content (.text file)]
                          {:name        (.-name file)
                           :path        (-> (.-webkitRelativePath file)
-                                           gp-util/path-normalize)
+                                           common-util/path-normalize)
                           :mtime       (.-lastModified file)
                           :size        (.-size file)
                           :type        (.-kind (.-handle file))
                           :content     content
-                          :file/file   file
-                          :file/handle (.-handle file)})))))))
+                          :file/file   file})))))))
 
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
@@ -340,14 +338,13 @@
                                 ;; path content size mtime
                                 {:name        (.-name file)
                                  :path        (-> (.-webkitRelativePath file)
-                                                  gp-util/path-normalize)
+                                                  common-util/path-normalize)
                                  :mtime       (.-lastModified file)
                                  :size        (.-size file)
                                  :type        (.-kind (.-handle file))
                                  :content     content
                                  ;; expose the following, they are used by the file system
-                                 :file/file   file
-                                 :file/handle (.-handle file)}))))
+                                 :file/file   file}))))
             files (p/all files)]
       (add-nfs-file-handle! (str "handle/" dir-name) dir-handle)
       (idb/set-item! (str "handle/" dir-name) dir-handle)

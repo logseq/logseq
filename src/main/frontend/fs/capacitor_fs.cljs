@@ -231,34 +231,23 @@
                              "")
               disk-content (or disk-content "")
               repo-dir (config/get-local-dir repo)
-              ext (util/get-file-ext rpath)
               db-content (or old-content (db/get-file repo rpath) "")
               contents-matched? (contents-matched? disk-content db-content)]
-        (cond
-          (and
-           (not= stat :not-found)   ; file on the disk was deleted
-           (not contents-matched?)
-           (not (contains? #{"excalidraw" "edn" "css"} ext))
-           (not (string/includes? fpath "/.recycle/")))
-          (p/let [disk-content disk-content]
-            (state/pub-event! [:file/not-matched-from-disk rpath disk-content content]))
-
-          :else
-          (->
-           (p/let [result (<write-file-with-utf8 fpath content)
-                   mtime (-> (js->clj stat :keywordize-keys true)
-                             :mtime)]
-             (when-not contents-matched?
-               (backup-file repo-dir :backup-dir fpath disk-content))
-             (db/set-file-last-modified-at! repo rpath mtime)
-             (db/set-file-content! repo rpath content)
-             (when ok-handler
-               (ok-handler repo fpath result))
-             result)
-           (p/catch (fn [error]
-                      (if error-handler
-                        (error-handler error)
-                        (log/error :write-file-failed error))))))))))
+        (->
+         (p/let [result (<write-file-with-utf8 fpath content)
+                 mtime (-> (js->clj stat :keywordize-keys true)
+                           :mtime)]
+           (when-not contents-matched?
+             (backup-file repo-dir :backup-dir fpath disk-content))
+           (db/set-file-last-modified-at! repo rpath mtime)
+           (db/set-file-content! repo rpath content)
+           (when ok-handler
+             (ok-handler repo fpath result))
+           result)
+         (p/catch (fn [error]
+                    (if error-handler
+                      (error-handler error)
+                      (log/error :write-file-failed error)))))))))
 
 (defn ios-force-include-private
   "iOS sometimes return paths without the private part."
@@ -409,8 +398,7 @@
   (get-files [_this dir]
     (get-files dir))
   (watch-dir! [_this dir _options]
-    (p/do!
-     (.unwatch mobile-util/fs-watcher)
-     (.watch mobile-util/fs-watcher (clj->js {:path dir}))))
+    (p/let [_ (.unwatch mobile-util/fs-watcher)]
+      (.watch mobile-util/fs-watcher (clj->js {:path dir}))))
   (unwatch-dir! [_this _dir]
     (.unwatch mobile-util/fs-watcher)))

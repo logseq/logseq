@@ -3,8 +3,8 @@
   application"
   (:require [frontend.state :as state]
             [datascript.core :as d]
+            [datascript.transit :as dt]
             [frontend.db :as db]
-            [logseq.db.schema :as db-schema]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
             [frontend.page :as page]
@@ -21,7 +21,11 @@
             [frontend.components.whiteboard :as whiteboard]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.events :as events]
-            [frontend.handler.command-palette :as command-palette]))
+            [frontend.handler.command-palette :as command-palette]
+            [frontend.persist-db.browser :as db-browser]
+            [promesa.core :as p]
+            [frontend.handler.repo :as repo-handler]
+            [frontend.handler.ui :as ui-handler]))
 
 ;; The publishing site should be as thin as possible.
 ;; Both files and git libraries can be removed.
@@ -49,13 +53,18 @@
 
 (defn restore-from-transit-str!
   []
-  (state/set-current-repo! "local")
+  ;; Client sets repo name (and graph type) based on what was written in app state
   (when-let [data js/window.logseq_db]
-    (let [data (unescape-html data)
-          db-conn (d/create-conn db-schema/schema)
-          _ (swap! db/conns assoc "logseq-db/local" db-conn)
-          db (db/string->db data)]
-      (reset! db-conn db))))
+    (let [repo (-> @state/state :config keys first)]
+      (state/set-current-repo! repo)
+      (p/let [_ (repo-handler/restore-and-setup-repo! repo)
+              _ (let [data (unescape-html data)
+                      db (dt/read-transit-str data)
+                      datoms (d/datoms db :eavt)]
+                  (db/transact! repo datoms {:init-db? true
+                                             :new-graph? true}))]
+        (state/set-db-restoring! false)
+        (ui-handler/re-render-root!)))))
 
 (defn restore-state!
   []
@@ -78,10 +87,17 @@
 
 (defn- register-components-fns!
   []
-  (state/set-page-blocks-cp! page-component/page-blocks-cp)
+  (state/set-page-blocks-cp! page-component/page)
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/blocks-container block/blocks-container)
+  (state/set-component! :block/reference block/block-reference)
+  (state/set-component! :block/properties-cp block/db-properties-cp)
+  (state/set-component! :block/embed block/block-embed)
+  (state/set-component! :block/page-cp block/page-cp)
+  (state/set-component! :block/inline-text block/inline-text)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
@@ -92,13 +108,14 @@
   (register-components-fns!)
   ;; Set :preferred-lang as some components depend on it
   (i18n/start)
-  (restore-from-transit-str!)
   (restore-state!)
   (shortcut/refresh!)
   (events/run!)
-  ;; actually, there's no persist for publishing
-  (db/listen-and-persist! (state/get-current-repo))
-  (start))
+  (p/do!
+   (db-browser/start-db-worker!)
+   (state/set-db-restoring! true)
+   (start)
+   (restore-from-transit-str!)))
 
 (defn stop []
   ;; stop is called before any code is reloaded

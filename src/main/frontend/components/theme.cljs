@@ -7,6 +7,7 @@
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.state :as state]
             [frontend.components.settings :as settings]
@@ -30,6 +31,8 @@
     [:div.fixed.w-16.h-16.overflow-scroll.opacity-0
      {:ref   *el
       :class "top-1/2 -left-1/2 z-[-999]"}]))
+
+(defonce *once-theme-loaded? (volatile! false))
 
 (rum/defc ^:large-vars/cleanup-todo container
   [{:keys [route theme accent-color on-click current-repo nfs-granted? db-restoring?
@@ -62,8 +65,11 @@
         (.setAttribute doc "lang" preferred-language)))
 
     (rum/use-effect!
-     #(js/setTimeout (fn [] (ipc/ipc "theme-loaded")) 100) ; Wait for the theme to be applied
-     [])
+      #(js/setTimeout
+         (fn [] (when-not @*once-theme-loaded?
+                  (ipc/ipc :theme-loaded)
+                  (vreset! *once-theme-loaded? true))) 100) ; Wait for the theme to be applied
+      [])
 
     (rum/use-effect!
      #(when (and restored-sidebar?
@@ -120,9 +126,13 @@
      [system-theme?])
 
     (rum/use-effect!
-     #(state/set-modal!
-       (when settings-open?
-         (fn [] [:div.settings-modal (settings/settings settings-open?)])))
+     #(if settings-open?
+        (shui/dialog-open!
+          (fn [] [:div.settings-modal (settings/settings settings-open?)])
+          {:label "app-settings"
+           :align :top
+           :id :app-settings})
+        (shui/dialog-close! :app-settings))
      [settings-open?])
 
     (rum/use-effect!

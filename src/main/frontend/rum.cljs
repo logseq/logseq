@@ -85,6 +85,11 @@
   [a]
   (use-atom-fn a identity (fn [_ v] v)))
 
+(defn use-atom-in
+  [a ks]
+  (let [ks (if (keyword? ks) [ks] ks)]
+    (use-atom-fn a #(get-in % ks) (fn [a' v] (assoc-in a' ks v)))))
+
 (defn use-mounted
   []
   (let [*mounted (rum/use-ref false)]
@@ -138,20 +143,11 @@
          bp (->breakpoint (when (some? rect) (.-width rect)))]
      [ref bp])))
 
-(defn use-click-outside
-  "Returns a function that can be used to register a callback
-   that will be called when the user clicks outside the given dom node"
-  [handler & {:keys [capture? event]
-              :or {capture? false
-                   event "click"}}] ;; could be "mousedown" or "click"
-  (let [[ref set-ref] (rum/use-state nil)]
-    (rum/use-effect!
-     (fn []
-       (let [listener (fn [e]
-                        (when (and ref
-                                   (not (.. ref (contains (.-target e)))))
-                          (handler e)))]
-         (js/document.addEventListener event listener capture?)
-         #(js/document.removeEventListener event listener capture?)))
-     [ref])
-    set-ref))
+(defonce *key->atom (atom {}))
+(defn cached-derived-atom
+  "Make sure to return the same atom if `key` is the same."
+  [ref key f]
+  (or (get @*key->atom key)
+      (let [a (rum/derived-atom [ref] key f)]
+        (swap! *key->atom assoc key a)
+        a)))

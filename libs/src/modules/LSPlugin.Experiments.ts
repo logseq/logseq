@@ -3,9 +3,9 @@ import { PluginLocal } from '../LSPlugin.core'
 import { safeSnakeCase } from '../helpers'
 
 /**
- * WARN: These are some experience features and may be adjusted at any time.
+ * WARN: These are some experience features and might be adjusted at any time.
  * These unofficial plugins that use these APIs are temporarily
- * not supported on the Marketplace.
+ * may not be supported on the Marketplace.
  */
 export class LSPluginExperiments {
   constructor(private ctx: LSPluginUser) {}
@@ -18,6 +18,13 @@ export class LSPluginExperiments {
     return this.ensureHostScope().ReactDOM
   }
 
+  get Components() {
+    const exper = this.ensureHostScope().logseq.sdk.experiments
+    return {
+      Editor: exper.cp_page_editor as (props: { page: string } & any) => any
+    }
+  }
+
   get pluginLocal(): PluginLocal {
     return this.ensureHostScope().LSPluginCore.ensurePlugin(
       this.ctx.baseInfo.id
@@ -27,7 +34,8 @@ export class LSPluginExperiments {
   public invokeExperMethod(type: string, ...args: Array<any>) {
     const host = this.ensureHostScope()
     type = safeSnakeCase(type)?.toLowerCase()
-    return host.logseq.api['exper_' + type]?.apply(host, args)
+    const fn = host.logseq.api['exper_' + type] || host.logseq.sdk.experiments[type]
+    return fn?.apply(host, args)
   }
 
   async loadScripts(...scripts: Array<string>) {
@@ -44,7 +52,7 @@ export class LSPluginExperiments {
   }
 
   registerFencedCodeRenderer(
-    type: string,
+    lang: string,
     opts: {
       edit?: boolean
       before?: () => Promise<void>
@@ -52,9 +60,42 @@ export class LSPluginExperiments {
       render: (props: { content: string }) => any
     }
   ) {
-    return this.ensureHostScope().logseq.api.exper_register_fenced_code_renderer(
+    return this.invokeExperMethod(
+      'registerFencedCodeRenderer',
       this.ctx.baseInfo.id,
-      type,
+      lang,
+      opts
+    )
+  }
+
+  registerDaemonRenderer(
+    key: string,
+    opts: {
+      sub?: Array<string>,
+      render: (props: {}) => any
+    }
+  ) {
+    return this.invokeExperMethod(
+      'registerDaemonRenderer',
+      this.ctx.baseInfo.id,
+      key,
+      opts
+    )
+  }
+
+  registerRouteRenderer(
+    key: string,
+    opts: {
+      name?: string,
+      subs?: Array<string>
+      path: string,
+      render: (props: {}) => any
+    }
+  ) {
+    return this.invokeExperMethod(
+      'registerRouteRenderer',
+      this.ctx.baseInfo.id,
+      key,
       opts
     )
   }
@@ -74,7 +115,8 @@ export class LSPluginExperiments {
       default:
     }
 
-    return host.logseq.api.exper_register_extensions_enhancer(
+    return this.invokeExperMethod(
+      'registerExtensionsEnhancer',
       this.ctx.baseInfo.id,
       type,
       enhancer
@@ -83,7 +125,8 @@ export class LSPluginExperiments {
 
   ensureHostScope(): any {
     if (window === top) {
-      throw new Error('Can not access host scope!')
+      console.error('Can not access host scope!')
+      return {}
     }
 
     return top

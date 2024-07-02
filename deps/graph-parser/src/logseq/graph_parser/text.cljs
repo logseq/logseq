@@ -1,47 +1,18 @@
 (ns logseq.graph-parser.text
   "Miscellaneous text util fns for the parser"
-  (:require ["path" :as path]
-            [goog.string :as gstring]
+  (:require [goog.string :as gstring]
             [clojure.string :as string]
             [clojure.set :as set]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.mldoc :as gp-mldoc]
-            [logseq.graph-parser.util :as gp-util]
-            [logseq.graph-parser.util.page-ref :as page-ref]))
+            [logseq.common.util :as common-util]
+            [logseq.common.util.page-ref :as page-ref]))
 
-(defn get-file-basename
-  "Returns the basename of a file path. e.g. /a/b/c.md -> c.md"
-  [path]
-  (when-not (string/blank? path)
-    (.-base (path/parse (string/replace path "+" "/")))))
+(def get-file-basename page-ref/get-file-basename)
 
-(defn get-file-rootname
-  "Returns the rootname of a file path. e.g. /a/b/c.md -> c"
-  [path]
-  (when-not (string/blank? path)
-    (.-name (path/parse (string/replace path "+" "/")))))
+(def get-page-name page-ref/get-page-name)
 
-(def page-ref-re-0 #"\[\[(.*)\]\]")
-(def org-page-ref-re #"\[\[(file:.*)\]\[.+?\]\]")
-(def markdown-page-ref-re #"\[(.*)\]\(file:.*\)")
-
-(defn get-page-name
-  "Extracts page names from format-specific page-refs e.g. org/md specific and
-  logseq page-refs. Only call in contexts where format-specific page-refs are
-  used. For logseq page-refs use page-ref/get-page-name"
-  [s]
-  (and (string? s)
-       (or (when-let [[_ label _path] (re-matches markdown-page-ref-re s)]
-             (string/trim label))
-           (when-let [[_ path _label] (re-matches org-page-ref-re s)]
-             (some-> (get-file-rootname path)
-                     (string/replace "." "/")))
-           (-> (re-matches page-ref-re-0 s)
-               second))))
-
-(defn page-ref-un-brackets!
-  [s]
-  (or (get-page-name s) s))
+(def page-ref-un-brackets! page-ref/page-ref-un-brackets!)
 
 (defn get-nested-page-name
   [page-name]
@@ -75,14 +46,6 @@
 
        :else
        (remove-level-space-aux! text block-pattern space? trim-left?)))))
-
-(defn namespace-page?
-  [page-name]
-  (and (string? page-name)
-       (string/includes? page-name "/")
-       (not (string/starts-with? page-name "../"))
-       (not (string/starts-with? page-name "./"))
-       (not (gp-util/url? page-name))))
 
 (defn parse-non-string-property-value
   "Return parsed non-string property value or nil if none is found"
@@ -174,7 +137,7 @@
                  (name k))
       v'
 
-      (gp-util/wrapped-by-quotes? v')
+      (common-util/wrapped-by-quotes? v')
       v'
 
       ;; parse property value as needed
@@ -185,3 +148,11 @@
           (if-some [new-val (parse-non-string-property-value v')]
             new-val
             v'))))))
+
+(defn namespace-page?
+  [page-name]
+  (and (string? page-name)
+       (string/includes? page-name "/")
+       (not (string/starts-with? page-name "../"))
+       (not (string/starts-with? page-name "./"))
+       (not (common-util/url? page-name))))

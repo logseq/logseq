@@ -15,7 +15,7 @@
             [logseq.common.path :as path]
             [clojure.string :as string]
             [frontend.state :as state]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [electron.ipc :as ipc]))
 
 (defonce nfs-backend (nfs/->Nfs))
@@ -37,11 +37,22 @@
     nfs-backend))
 
 (defn get-fs
-  [dir]
-  (let [bfs-local? (and dir
-                        (or (string/starts-with? dir "/local")
-                            (string/starts-with? dir "local")))]
+  [dir & {:keys [repo rpath]}]
+  (let [repo (or repo (state/get-current-repo))
+        bfs-local? (and dir
+                        (or (string/starts-with? dir (str "/" config/demo-repo))
+                            (string/starts-with? dir config/demo-repo)))
+        db-assets? (and
+                    (config/db-based-graph? repo)
+                    rpath
+                    (string/starts-with? rpath "assets/"))]
     (cond
+      (and db-assets? (util/electron?))
+      node-backend
+
+      db-assets?
+      memory-backend
+
       (nil? dir) ;; global file op, use native backend
       (get-native-backend)
 
@@ -72,7 +83,7 @@
     (js/console.error "BUG: (deprecation) path-only? is always true"))
   (p/let [result (protocol/readdir (get-fs dir) dir)
           result (bean/->clj result)]
-    (map gp-util/path-normalize result)))
+    (map common-util/path-normalize result)))
 
 (defn unlink!
   "Should move the path to logseq/recycle instead of deleting it."
@@ -92,8 +103,9 @@
 (defn write-file!
   [repo dir rpath content opts]
   (when content
-    (let [path (gp-util/path-normalize rpath)
-          fs-record (get-fs dir)]
+    (let [path (common-util/path-normalize rpath)
+          fs-record (get-fs dir {:repo repo
+                                 :rpath rpath})]
       (->
        (p/let [opts (assoc opts
                            :error-handler
@@ -103,7 +115,7 @@
                                                                           :fs (type fs-record)
                                                                           :user-agent (when js/navigator js/navigator.userAgent)
                                                                           :content-length (count content)}}])))
-               _ (protocol/write-file! (get-fs dir) repo dir path content opts)])
+               _ (protocol/write-file! fs-record repo dir path content opts)])
        (p/catch (fn [error]
                   (log/error :file/write-failed {:dir dir
                                                  :path path
@@ -125,7 +137,7 @@
 (defn rename!
   "Rename files, incoming relative path, converted to absolute path"
   [repo old-path new-path]
-  (let [new-path (gp-util/path-normalize new-path)]
+  (let [new-path (common-util/path-normalize new-path)]
     (cond
       ; See https://github.com/isomorphic-git/lightning-fs/issues/41
       (= old-path new-path)
@@ -167,9 +179,8 @@
                   (str (config/get-repo-dir repo) "/" %))
                [old-path new-path])
           new-dir (path/dirname new-path)]
-      (p/do!
-       (mkdir-if-not-exists new-dir)
-       (protocol/copy! (get-fs old-path) repo old-path new-path)))))
+      (p/let [_ (mkdir-if-not-exists new-dir)]
+        (protocol/copy! (get-fs old-path) repo old-path new-path)))))
 
 
 

@@ -24,15 +24,16 @@
 
   lint:rules
   {:requires ([logseq.bb-tasks.lint.datalog :as datalog]
-              [logseq.db.rules :as rules])
+              [logseq.db.frontend.rules :as rules])
    :doc "Lint datalog rules for parsability and unbound variables"
    :task (datalog/lint-rules
-          (into (mapcat val rules/rules)
-                (-> rules/query-dsl-rules
-                    ;; TODO: Update linter to handle false positive on ?str-val
-                    (dissoc :property)
-                    vals)))}}
+          (set
+           (concat (mapcat val rules/rules)
+                   ;; TODO: Update linter to handle false positive on ?str-val for :property
+                   (rules/extract-rules (dissoc rules/query-dsl-rules :property))
+                   ;; TODO: Update linter to handle false positive on :task and :priority
+                   (rules/extract-rules (dissoc rules/db-query-dsl-rules :task :priority)))))}}
 
  :tasks/config
  {:large-vars
-  {:max-lines-count 30}}}
+  {:max-lines-count 50}}}

@@ -1,7 +1,11 @@
-{:aliases
+{:paths ["src" "resources"]
+ :deps {com.andrewmcveigh/cljs-time           {:git/url "https://github.com/logseq/cljs-time" ;; fork
+                                               :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
+        missionary/missionary                 {:mvn/version "b.39"}}
+ :aliases
  {:test {:extra-paths ["test"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}
-                       org.clojure/clojurescript {:mvn/version "1.11.54"}}
+                       org.clojure/clojurescript {:mvn/version "1.11.132"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
   :clj-kondo
   {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
