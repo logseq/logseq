@@ -55,7 +55,7 @@
        (ui/icon "arrow-up")
        false
        (ui/icon "arrow-down")
-       nil))))
+       [:div {:style {:width 18 :height 18}}]))))
 
 (defn- timestamp-cell-cp
   [_table row column]
@@ -198,17 +198,24 @@
   [input {:keys [on-change]}]
   (let [[show-input? set-show-input!] (rum/use-state false)]
     (if show-input?
-      (shui/input
-       {:placeholder "Type to search"
-        :auto-focus true
-        :value input
-        :onChange (fn [e]
-                    (let [value (util/evalue e)]
-                      (on-change value)))
-        :on-key-down (fn [e]
-                       (when (= "Escape" (util/ekey e))
-                         (set-show-input! false)))
-        :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
+      [:div.flex.flex-row.items-center
+       (shui/input
+        {:placeholder "Type to search"
+         :auto-focus true
+         :value input
+         :onChange (fn [e]
+                     (let [value (util/evalue e)]
+                       (on-change value)))
+         :on-key-down (fn [e]
+                        (when (= "Escape" (util/ekey e))
+                          (set-show-input! false)))
+         :class "max-w-sm !h-7 !py-0 border-none focus-visible:ring-0 focus-visible:ring-offset-0"})
+       (shui/button
+        {:variant "ghost"
+         :class "text-muted-foreground !px-1"
+         :size :sm
+         :on-click #(set-show-input! false)}
+        (ui/icon "x"))]
       (shui/button
        {:variant "ghost"
         ;; FIXME: remove ring when focused
