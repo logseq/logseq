@@ -46,17 +46,17 @@
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
    because it has been moved"
-  [tag-block tag-classes]
+  [db tag-block tag-classes]
   (if-let [new-class (:block.temp/new-class tag-block)]
     (sqlite-util/build-new-class
      {:block/original-name new-class
       :block/name (common-util/page-name-sanity-lc new-class)})
     (when (contains? tag-classes (:block/name tag-block))
-      (-> tag-block
-          add-missing-timestamps
-          ;; don't use build-new-class b/c of timestamps
-          (merge {:block/format :markdown
-                  :block/type "class"})))))
+      (-> (db-class/build-new-class db tag-block)
+          ;; override with imported timestamps
+          (dissoc :block/created-at :block/updated-at)
+          (merge (add-missing-timestamps
+                  (select-keys tag-block [:block/created-at :block/updated-at])))))))
 
 (defn- update-page-tags
   [block tag-classes names-uuids page-tags-uuid]
@@ -71,7 +71,8 @@
         true
         (update :block/tags
                 (fn [tags]
-                  (keep #(convert-tag-to-class % tag-classes) tags)))
+                  ;; FIXME: Add class support to pages
+                  (keep #(convert-tag-to-class nil % tag-classes) tags)))
         (seq page-tags)
         (update :block/properties merge {page-tags-uuid page-tags})))
     block))
@@ -97,7 +98,7 @@
    (string/trim)))
 
 (defn- update-block-tags
-  [block tag-classes page-names-to-uuids]
+  [block db tag-classes page-names-to-uuids]
   (if (seq (:block/tags block))
     (let [original-tags (remove :block.temp/new-class (:block/tags block))]
       (-> block
@@ -113,7 +114,7 @@
                        (map #(add-uuid-to-page-map % page-names-to-uuids))))
           (update :block/tags
                   (fn [tags]
-                    (keep #(convert-tag-to-class % tag-classes) tags)))))
+                    (keep #(convert-tag-to-class db % tag-classes) tags)))))
     block))
 
 (defn- update-block-marker
@@ -614,7 +615,7 @@
                    (fix-block-name-lookup-ref db page-names-to-uuids)
                    (update-block-macros db page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
-                   (update-block-tags tag-classes page-names-to-uuids)
+                   (update-block-tags db tag-classes page-names-to-uuids)
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
