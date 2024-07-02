@@ -14,7 +14,6 @@
             [goog.dom :as gdom]
             [cljs-bean.core :as bean]
             [promesa.core :as p]
-            [logseq.db :as ldb]
             [frontend.db :as db]
             [frontend.search.fuzzy :as fuzzy-search]
             [logseq.outliner.property :as outliner-property]
@@ -85,7 +84,8 @@
 
 (defn- build-columns
   [class config]
-  (let [properties (outliner-property/get-class-properties class)]
+  (let [properties (outliner-property/get-class-properties class)
+        container-id (state/get-next-container-id)]
     (concat
      [{:id :select
        :name "Select"
@@ -106,7 +106,7 @@
          :name (:block/original-name property)
          :header header-cp
          :cell (fn [_table row _column]
-                 (pv/property-value row property (get row (:db/ident property)) {}))
+                 (pv/property-value row property (get row (:db/ident property)) {:container-id container-id}))
          :get-value (fn [row] (get-property-value-for-search row property))})
       properties)
 
@@ -672,11 +672,11 @@
         [row-filter set-row-filter!] (rum/use-state nil)
         [visible-columns set-visible-columns!] (rum/use-state {})
         [row-selection set-row-selection!] (rum/use-state {})
-        [data set-data!] (rum/use-state (get-all-objects class))
+        [data set-data!] (rum/use-state [])
         _ (rum/use-effect!
            (fn []
              (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
-               (set-data! (get-all-objects class))))
+               (set-data! (get-all-objects (db/entity (:db/id class))))))
            [])
         columns (build-columns class config)
         table (shui/table-option {:data data
@@ -699,7 +699,7 @@
                           (fn [row]
                             (row-matched? row input filters)))))
      [input filters])
-    [:div.w-full.flex.flex-col.gap-2
+    [:div.ls-table.w-full.flex.flex-col.gap-2
      [:div.flex.items-center.justify-between
       [:div.flex.flex-row.items-center.gap-2
        [:div.font-medium (str (count data) " Objects")]]

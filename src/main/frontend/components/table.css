@@ -1,3 +1,20 @@
 .primary-cell {
     @apply min-w-[140px];
 }
+
+.ls-table {
+    .ls-block {
+        @apply w-full;
+        padding-top: 0px;
+        padding-bottom: 0px;
+    }
+
+    .block-control, .block-control-wrap {
+        height: 20px;
+        min-height: 20px;
+    }
+
+    .block-main-container, .block-content, {
+        min-height: 20px;
+    }
+}
