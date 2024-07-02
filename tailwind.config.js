@@ -128,6 +128,7 @@ module.exports = {
     './src/**/*.cljs',
     './resources/**/*.html',
     './deps/shui/src/**/*.cljs',
+    './deps/shui/src/**/*.cljc',
     './packages/ui/@/components/**/*.{ts,tsx}'
   ],
   safelist: [
