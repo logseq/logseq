@@ -8,6 +8,7 @@
             [frontend.components.block :as component-block]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.handler.editor :as editor-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [goog.object :as gobj]
@@ -178,9 +179,7 @@
   [{:keys [row-selected?] :as table} rows columns props]
   (let [idx (gobj/get props "data-index")
         row (nth rows idx)
-        row (if-let [db-id (:db/id row)]
-              (db/sub-block db-id)
-              row)
+        row (db/sub-block (:id row))
         row (assoc row :id (:db/id row))]
     (shui/table-row
      (merge
@@ -227,11 +226,12 @@
         :on-click #(set-show-input! true)}
        (ui/icon "search")))))
 
-(defn- property-ref-type?
-  [property]
-  (let [schema (:block/schema property)
-        type (:type schema)]
-    (db-property-type/ref-property-types type)))
+(comment
+  (defn- property-ref-type?
+   [property]
+   (let [schema (:block/schema property)
+         type (:type schema)]
+     (db-property-type/ref-property-types type))))
 
 (defn- get-property-values
   [rows property]
@@ -667,6 +667,24 @@
         result))
     filters)))
 
+(rum/defc new-record-button < rum/static
+  [class table]
+  (ui/tooltip
+   (shui/button
+    {:variant "ghost"
+     :class "!px-1 text-muted-foreground"
+     :size :sm
+     :on-click (fn []
+                 (p/let [block (editor-handler/api-insert-new-block! ""
+                                                                     {:page (:block/uuid class)
+                                                                      :properties {:block/tags (:db/id class)}
+                                                                      :edit-block? false})
+                         set-data! (get-in table [:data-fns :set-data!])
+                         _ (set-data! (get-all-objects (db/entity (:db/id class))))]
+                   (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 :unknown-container)))}
+    (ui/icon "plus"))
+   [:div "New record"]))
+
 (rum/defc objects-inner < rum/static
   [config class]
   (let [[input set-input!] (rum/use-state "")
@@ -689,7 +707,8 @@
                                           :row-filter row-filter
                                           :row-selection row-selection
                                           :visible-columns visible-columns}
-                                  :data-fns {:set-filters! set-filters!
+                                  :data-fns {:set-data! set-data!
+                                             :set-filters! set-filters!
                                              :set-sorting! set-sorting!
                                              :set-visible-columns! set-visible-columns!
                                              :set-row-selection! set-row-selection!}})
@@ -715,7 +734,9 @@
         (search input {:on-change set-input!
                        :set-input! set-input!})
 
-        (more-actions columns table)]]
+        (more-actions columns table)
+
+        (new-record-button class table)]]
 
       (filters-row table)
 

@@ -554,16 +554,17 @@
               [:div.mt-8
                (objects/objects page)])
 
-            [:div
-             (when (and block? (not sidebar?) (not whiteboard?))
-               (let [config (merge config {:id "block-parent"
-                                           :block? true})]
-                 [:div.mb-4
-                  (component-block/breadcrumb config repo block-id {:level-limit 3})]))
+            (when-not (and db-based? (ldb/class? page))
+              [:div
+              (when (and block? (not sidebar?) (not whiteboard?))
+                (let [config (merge config {:id "block-parent"
+                                            :block? true})]
+                  [:div.mb-4
+                   (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
              ;; blocks
-             (page-blocks-cp repo page (merge option {:sidebar? sidebar?
-                                                      :whiteboard? whiteboard?}))]])
+              (page-blocks-cp repo page (merge option {:sidebar? sidebar?
+                                                       :whiteboard? whiteboard?}))])])
 
          (when @(::main-ready? state)
            [:div {:style {:padding-left 9}}
