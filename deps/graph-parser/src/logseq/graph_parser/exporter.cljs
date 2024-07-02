@@ -261,8 +261,21 @@
     (when (and prev-type (not= prev-type prop-type))
       {:type {:from prev-type :to prop-type}})))
 
+(def built-in-property-name-to-idents
+  "Map of all built-in keyword property names to their idents. Using in-memory property
+  names because these are legacy names already in a user's file graph"
+  (->> db-property/built-in-properties
+       (map (fn [[k v]]
+              [(:name v) k]))
+       (into {})))
+
+(def built-in-property-names
+  "Set of all built-in property names as keywords. Using in-memory property
+  names because these are legacy names already in a user's file graph"
+  (->> built-in-property-name-to-idents keys set))
+
 (defn- update-built-in-property-values
-  [props db ignored-properties {:block/keys [content name]}]
+  [props {:keys [ignored-properties all-idents]} {:block/keys [content name]}]
   (->> props
        (keep (fn [[prop val]]
                (if (= :icon prop)
@@ -270,17 +283,17 @@
                             conj
                             {:property prop :value val :location (if name {:page name} {:block content})})
                      nil)
-                 [prop
+                 [(built-in-property-name-to-idents prop)
                   (case prop
                     :query-properties
                     (try
-                      (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-pid db %))
+                      (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-ident @all-idents %))
                             (edn/read-string val))
                       (catch :default e
                         (js/console.error "Translating query properties failed with:" e)
                         []))
                     :query-sort-by
-                    (if (#{:page :block :created-at :updated-at} val) val (get-pid db val))
+                    (if (#{:page :block :created-at :updated-at} val) val (get-ident @all-idents (keyword val)))
                     :filters
                     (try (edn/read-string val)
                          (catch :default e
@@ -350,18 +363,30 @@
       (throw (ex-info (str "No uuid found for page " (pr-str k))
                       {:page k}))))
 
-(def built-in-property-names
-  "Set of all built-in property names as keywords. Using in-memory property
-  names because these are legacy names already in a user's file graph"
-  (->> db-property/built-in-properties
-       vals
-       (map :name)
-       set))
+(defn- ->property-value-tx-m
+  "Given a new block and its properties, creates a map of properties which have values of property value tx.
+   Similar to sqlite.build/->property-value-tx-m"
+  [new-block properties get-schema-fn all-idents]
+  (->> properties
+       (keep (fn [[k v]]
+               (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                 (when (and (db-property-type/value-ref-property-types built-in-type)
+                            ;; closed values are referenced by their :db/ident so no need to create values
+                            (not (get-in db-property/built-in-properties [k :closed-values])))
+                   (let [property-map {:db/ident k
+                                       :block/schema {:type built-in-type}}]
+                     [property-map v]))
+                 (when (db-property-type/value-ref-property-types (:type (get-schema-fn k)))
+                   (let [property-map {:db/ident (get-ident all-idents k)
+                                       :original-property-id k
+                                       :block/schema (get-schema-fn k)}]
+                     [property-map v])))))
+       (db-property-build/build-property-values-tx-m new-block)))
 
 (defn- build-properties-and-values
   "For given block properties, builds property values tx and returns a map with
   updated properties in :block-properties and any property values tx in :pvalues-tx"
-  [props db _page-names-to-uuids
+  [props _db _page-names-to-uuids
    {:block/keys [properties-text-values] :as block}
    {:keys [_whiteboard? import-state] :as options}]
   (let [;; FIXME: Whiteboard
@@ -387,17 +412,10 @@
       {}
       (let [props' (-> (update-built-in-property-values
                         (select-keys props built-in-property-names)
-                        db
-                        (:ignored-properties import-state)
+                        (select-keys import-state [:ignored-properties :all-idents])
                         (select-keys block [:block/name :block/content]))
                        (merge (update-user-property-values user-properties get-ident' properties-text-values import-state options)))
-            pvalue-tx-m (->> props'
-                             (map (fn [[k v]]
-                                    (let [property-map {:db/ident (get-ident @all-idents k)
-                                                        :original-property-id k
-                                                        :block/schema (get @property-schemas k)}]
-                                      [property-map v])))
-                             (db-property-build/build-property-values-tx-m block))
+            pvalue-tx-m (->property-value-tx-m block props' #(get @property-schemas %) @all-idents)
             block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                  (update-keys get-ident'))]
         {:block-properties block-properties
