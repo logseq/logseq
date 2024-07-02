@@ -74,31 +74,6 @@
   [graph-uuid remote-t]
   (swap! *graph-uuid->remote-t assoc (ensure-uuid graph-uuid) remote-t))
 
-;;; recent-updates flow
-(def graph-uuid->recent-updates-schema
-  [:map-of :uuid ;; graph-uuid
-   [:map-of :uuid ;;user-uuid
-    [:sequential
-     [:cat
-      inst?
-      [:map
-       [:update-block-uuids {:optional true} [:set :uuid]]
-       [:delete-block-uuids {:optional true} [:set :uuid]]]]]]])
-
-(def graph-uuid->recent-updates-validator
-  (let [validator (ma/validator graph-uuid->recent-updates-schema)]
-    (fn [v]
-      (if (validator v)
-        true
-        (do (prn :debug-graph-uuid->recent-updates-validator v)
-            false)))))
-
-(def *graph-uuid->recent-updates (atom {} :validator graph-uuid->recent-updates-validator))
-
-(defn update-recent-updates
-  [graph-uuid recent-updates]
-  (reset! *graph-uuid->recent-updates {(ensure-uuid graph-uuid) recent-updates}))
-
 ;;; subscribe-logs, push to frontend
 (defn- subscribe-logs
   []
@@ -106,11 +81,3 @@
   (add-watch *rtc-log :subscribe-logs
              (fn [_ _ _ n] (when n (worker-util/post-message :rtc-log n)))))
 (subscribe-logs)
-
-;;; subscribe-recent-updates, push to frontend
-(defn- subscribe-recent-updates
-  []
-  (remove-watch *graph-uuid->recent-updates :subscribe-recent-updates)
-  (add-watch *graph-uuid->recent-updates :subscribe-recent-updates
-             (fn [_ _ _ n] (when n (worker-util/post-message :rtc-recent-updates n)))))
-(subscribe-recent-updates)
