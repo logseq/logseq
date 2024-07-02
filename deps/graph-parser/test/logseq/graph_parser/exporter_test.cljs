@@ -15,13 +15,24 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]))
 
+;; Helpers
+;; =======
+;; some have been copied from db-import script
+
 (defn- find-block-by-content [db content]
-  (->> content
-       (d/q '[:find [(pull ?b [*]) ...]
-              :in $ ?content
-              :where [?b :block/content ?content]]
-            db)
-       first))
+  (if (instance? js/RegExp content)
+    (->> content
+         (d/q '[:find [(pull ?b [*]) ...]
+                :in $ ?pattern
+                :where [?b :block/content ?content] [(re-find ?pattern ?content)]]
+              db)
+         first)
+    (->> content
+         (d/q '[:find [(pull ?b [*]) ...]
+                :in $ ?content
+                :where [?b :block/content ?content]]
+              db)
+         first)))
 
 (defn- find-page-by-name [db name]
   (->> name
@@ -89,6 +100,13 @@
                      (dissoc :assets))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
+(defn- import-files-to-db
+  "Import specific doc files for dev purposes"
+  [files conn options]
+  (let [doc-options (gp-exporter/build-doc-options conn {:macros {}} (merge options default-export-options))
+        files' (mapv #(hash-map :path %) files)]
+    (gp-exporter/export-doc-files conn files' <read-file doc-options)))
+
 (defn- readable-properties
   [db query-ent]
   (->> (db-property/properties query-ent)
@@ -102,6 +120,9 @@
                      v))
                  (db-property/ref->property-value-content db v))]))
        (into {})))
+
+;; Tests
+;; =====
 
 (deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
@@ -122,9 +143,9 @@
 
     (testing "graph wide counts"
       ;; Includes 2 journals as property values for :logseq.task/deadline
-      (is (= 7 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      ;; Count includes Contents
-      (is (= 3
+      (is (= 8 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      ;; Count includes Contents and page references
+      (is (= 5
              (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
       (is (= 1 (count @assets))))
 
@@ -182,9 +203,37 @@
       (is (= #{:logseq.task/status :block/tags}
              (set (keys (readable-properties @conn (find-block-by-content @conn "old todo block")))))
           "old task properties are ignored")
-      
+
       (is (= {:logseq.property/query-sort-by :user.property/prop-num
               :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
               :logseq.property/query-table true}
              (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
-          "query block has correct query properties"))))
+          "query block has correct query properties"))
+
+    (testing "tags without tag options"
+      (let [block (find-block-by-content @conn #"Inception")
+            tag-page (find-page-by-name @conn "Movie")]
+        (is (string/starts-with? (str (:block/content block)) "Inception [[")
+            "block with tag converts tag to page ref")
+        (is (= [(:db/id tag-page)] (map :db/id (:block/refs block)))
+            "block with tag has correct refs")
+
+        (is (and tag-page (not (:block/type tag-page)))
+            "tag page is not a class")))))
+
+(deftest-async export-file-with-tag-classes-option
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          file (node-path/join file-graph-dir "journals/2024_02_07.md")
+          conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          _ (import-files-to-db [file] conn {:tag-classes ["movie"]})]
+    (let [block (find-block-by-content @conn #"Inception")
+          tag-page (find-page-by-name @conn "Movie")
+          another-tag-page (find-page-by-name @conn "p0")]
+      (is (= (:block/content block) "Inception")
+          "block with :tag-classes tag strips tag from content")
+
+      (is (= ["class"] (:block/type tag-page))
+          "tag page in :tag-classes is a class")
+      (is (and another-tag-page (not (:block/type another-tag-page)))
+          "another tag page not in :tag-classes is not a class"))))
