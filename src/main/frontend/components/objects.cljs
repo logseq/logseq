@@ -133,7 +133,7 @@
        (map (fn [row] (assoc row :id (:db/id row))))))
 
 (rum/defc more-actions
-  [columns {:keys [column-visible? column-toggle-visiblity]}]
+  [columns {:keys [column-visible? column-toggle-visibility] :as table}]
   (shui/dropdown-menu
    (shui/dropdown-menu-trigger
     {:asChild true}
@@ -155,7 +155,7 @@
           {:key (str (:id column))
            :className "capitalize"
            :checked (column-visible? column)
-           :onCheckedChange #(column-toggle-visiblity column %)
+           :onCheckedChange #(column-toggle-visibility column %)
            :onSelect (fn [e] (.preventDefault e))}
           (:name column)))))))))
 
