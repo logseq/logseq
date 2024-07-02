@@ -347,13 +347,6 @@
     (select/select option)))
 
 (rum/defc filter-properties < rum/static
-  ;; FIXME: why this is needed?
-  ;; Clicking outside the popup doesn't close it
-  (mixins/event-mixin
-   (fn [state]
-     (mixins/hide-when-esc-or-outside
-      state
-      :on-hide (fn [_state _e] (shui/popup-hide!)))))
   [columns table]
   (shui/button
    {:variant "ghost"
