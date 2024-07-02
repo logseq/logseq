@@ -550,6 +550,10 @@
               (and (not db-based?) (not block?))
               [:div.pb-2])
 
+            (when (and db-based? (ldb/class? page))
+              [:div.mt-8
+               (objects/objects page)])
+
             [:div
              (when (and block? (not sidebar?) (not whiteboard?))
                (let [config (merge config {:id "block-parent"
@@ -571,10 +575,6 @@
 
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-original-name))
-
-            (when (and db-based? (ldb/class? page))
-              [:div.mt-8
-               (objects/objects page)])
 
             ;; referenced blocks
             (when-not block-or-whiteboard?
