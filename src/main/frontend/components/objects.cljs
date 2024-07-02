@@ -16,6 +16,7 @@
             [cljs-bean.core :as bean]
             [promesa.core :as p]
             [frontend.db :as db]
+            [frontend.db.model :as db-model]
             [frontend.search.fuzzy :as fuzzy-search]
             [logseq.outliner.property :as outliner-property]
             [frontend.mixins :as mixins]
@@ -25,7 +26,8 @@
             [datascript.impl.entity :as de]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [frontend.db-mixins :as db-mixins]))
 
 (defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
   (shui/checkbox
@@ -695,7 +697,7 @@
    [:div "New"]])
 
 (rum/defc objects-inner < rum/static
-  [config class]
+  [config class object-ids]
   (let [[input set-input!] (rum/use-state "")
         [sorting set-sorting!] (rum/use-state [{:id :block/updated-at, :asc? false}])
         [filters set-filters!] (rum/use-state [])
@@ -707,7 +709,7 @@
            (fn []
              (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
                (set-data! (get-all-objects (db/entity (:db/id class))))))
-           [])
+           [object-ids])
         columns (build-columns class config)
         table (shui/table-option {:data data
                                   :columns columns
@@ -768,6 +770,7 @@
            (str selected-rows-count " of " rows-count " row(s) selected.")
            (str "Total: " rows-count))]])]))
 
-(rum/defcs objects < mixins/container-id
+(rum/defcs objects < mixins/container-id rum/reactive db-mixins/query
   [state class]
-  (objects-inner {:container-id (:container-id state)} class))
+  (let [object-ids (db-model/get-class-objects (state/get-current-repo) (:db/id class))]
+    (objects-inner {:container-id (:container-id state)} class object-ids)))

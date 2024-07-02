@@ -785,19 +785,24 @@ independent of format as format specific heading characters are stripped"
 (defn get-class-objects
   [repo class-id]
   (when-let [class (db-utils/entity repo class-id)]
-    (if (first (:class/_parent class))        ; has children classes
-      (d/q
-       '[:find [?object ...]
-         :in $ % ?parent
-         :where
-         (class-parent ?parent ?c)
-         (or-join [?object ?c]
-          [?object :block/tags ?parent]
-          [?object :block/tags ?c])]
-       (conn/get-db repo)
-       (:class-parent rules/rules)
-       class-id)
-      (map :db/id (:block/_tags class)))))
+    (-> (react/q repo [:frontend.worker.react/objects (:db/id class)]
+                 {:query-fn (fn [_]
+                              (when-let [class (db-utils/entity repo class-id)]
+                                (if (first (:class/_parent class))        ; has children classes
+                                  (d/q
+                                   '[:find [?object ...]
+                                     :in $ % ?parent
+                                     :where
+                                     (class-parent ?parent ?c)
+                                     (or-join [?object ?c]
+                                              [?object :block/tags ?parent]
+                                              [?object :block/tags ?c])]
+                                   (conn/get-db repo)
+                                   (:class-parent rules/rules)
+                                   class-id)
+                                  (map :db/id (:block/_tags class)))))}
+                 nil)
+        react)))
 
 
 (defn get-all-namespace-relation
