@@ -2,7 +2,8 @@
   "Compute reactive query affected keys"
   (:require [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [cljs.spec.alpha :as s]))
+            [cljs.spec.alpha :as s]
+            [logseq.db :as ldb]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block
@@ -15,12 +16,15 @@
 ;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
 (s/def ::refs (s/tuple #(= ::refs %) int?))
+;; get class's Objects
+(s/def ::objects (s/tuple #(= ::objects %) int?))
 ;; custom react-query
 (s/def ::custom any?)
 
 (s/def ::react-query-keys (s/or :block ::block
                                 :journals ::journals
                                 :refs ::refs
+                                :objects ::objects
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -36,6 +40,9 @@
                             (when (contains? #{:block/refs :block/path-refs} (:a datom))
                               (not= (:v datom)
                                     (:db/id (:block/page (d/entity db-after (:e datom))))))) tx-data)
+                  (map :v)
+                  (distinct))
+        tags (->> (filter (fn [datom] (contains? #{:block/tags} (:a datom))) tx-data)
                   (map :v)
                   (distinct))
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
@@ -68,7 +75,12 @@
                         (fn [ref]
                           [[::refs ref]
                            [::block ref]])
-                        refs))]
+                        refs)
+
+                       (keep
+                        (fn [tag]
+                          (when tag [::objects tag]))
+                        tags))]
     (->>
      affected-keys
      (remove nil?)
