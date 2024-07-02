@@ -12,7 +12,8 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.type :as db-property-type]))
 
 (defn- find-block-by-content [db content]
   (->> content
@@ -93,8 +94,12 @@
   (->> (db-property/properties query-ent)
        (map (fn [[k v]]
               [k
-               (if (= :block/tags k)
-                 (mapv #(:db/ident (d/entity db (:db/id %))) v)
+               (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                 (if (= :block/tags k)
+                   (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                   (if (db-property-type/ref-property-types built-in-type)
+                     (db-property/ref->property-value-content db v)
+                     v))
                  (db-property/ref->property-value-content db v))]))
        (into {})))
 
@@ -176,4 +181,10 @@
 
       (is (= #{:logseq.task/status :block/tags}
              (set (keys (readable-properties @conn (find-block-by-content @conn "old todo block")))))
-          "old task properties are ignored"))))
+          "old task properties are ignored")
+      
+      (is (= {:logseq.property/query-sort-by :user.property/prop-num
+              :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
+              :logseq.property/query-table true}
+             (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
+          "query block has correct query properties"))))
