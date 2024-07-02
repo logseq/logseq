@@ -92,7 +92,7 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [file conn {:keys [files] :as options}]
-  (let [doc-options (gp-exporter/build-doc-options conn {:macros {}} (merge options default-export-options))
+  (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
         files' (mapv #(hash-map :path %)
                      (into [file] (map resolve-path files)))]
     (gp-exporter/export-doc-files conn files' <read-file doc-options)))

@@ -59,13 +59,14 @@
                   (select-keys tag-block [:block/created-at :block/updated-at])))))))
 
 (defn- update-page-tags
-  [block tag-classes names-uuids page-tags-uuid]
+  [block tag-classes names-uuids]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
                          (remove #(or (:block.temp/new-class %) (contains? tag-classes (:block/name %))))
-                         (map #(or (get names-uuids (:block/name %))
-                                   (throw (ex-info (str "No uuid found for tag " (pr-str (:block/name %)))
-                                                   {:tag %}))))
+                         (map #(vector :block/uuid
+                                       (or (get names-uuids (:block/name %))
+                                           (throw (ex-info (str "No uuid found for tag " (pr-str (:block/name %)))
+                                                           {:tag %})))))
                          set)]
       (cond-> block
         true
@@ -74,7 +75,7 @@
                   ;; FIXME: Add class support to pages
                   (keep #(convert-tag-to-class nil % tag-classes) tags)))
         (seq page-tags)
-        (update :block/properties merge {page-tags-uuid page-tags})))
+        (merge {:logseq.property/page-tags page-tags})))
     block))
 
 (defn- add-uuid-to-page-map [m page-names-to-uuids]
@@ -626,7 +627,7 @@
     (concat properties-tx deadline-properties-tx [block'])))
 
 (defn- build-new-page
-  [m tag-classes page-names-to-uuids page-tags-uuid]
+  [m tag-classes page-names-to-uuids]
   (-> m
       ;; Fix pages missing :block/original-name. Shouldn't happen
       ((fn [m']
@@ -637,13 +638,13 @@
       ;; TODO: org-mode content needs to be handled
       (assoc :block/format :markdown)
       (dissoc :block/whiteboard?)
-      (update-page-tags tag-classes page-names-to-uuids page-tags-uuid)))
+      (update-page-tags tag-classes page-names-to-uuids)))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
   all non-whiteboard pages to be transacted, pages' properties and additional
   data for subsequent steps"
-  [conn pages blocks {:keys [page-tags-uuid tag-classes property-classes property-parent-classes notify-user]
+  [conn pages blocks {:keys [tag-classes property-classes property-parent-classes notify-user]
                       :as options}]
   (let [all-pages (->> (extract/with-ref-pages pages blocks)
                        ;; remove unused property pages unless the page has content
@@ -673,8 +674,8 @@
                              (when (seq block-changes)
                                (cond-> (merge block-changes {:block/uuid page-uuid})
                                  (:block/tags m)
-                                 (update-page-tags tag-classes page-names-to-uuids page-tags-uuid))))
-                           (build-new-page m tag-classes page-names-to-uuids page-tags-uuid)))
+                                 (update-page-tags tag-classes page-names-to-uuids))))
+                           (build-new-page m tag-classes page-names-to-uuids)))
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
@@ -810,7 +811,6 @@
 * :extract-options - Options map to pass to extract/extract
 * :user-options - User provided options maps that alter how a file is converted to db graph. Current options
    are :tag-classes (set) and :property-classes (set).
-* :page-tags-uuid - uuid of pageTags property
 * :import-state - useful import state to maintain across files e.g. property schemas or ignored properties
 * :macros - map of macros for use with macro expansion
 * :notify-user - Displays warnings to user without failing the import. Fn receives a map with :msg
@@ -1039,14 +1039,13 @@
 
 (defn build-doc-options
   "Builds options for use with export-doc-files"
-  [conn config options]
+  [config options]
   (-> {:extract-options {:date-formatter (common-config/get-date-formatter config)
                          :user-config config
                          :filename-format (or (:file/name-format config) :legacy)
                          :verbose (:verbose options)}
        :user-config config
        :user-options (select-keys options [:tag-classes :property-classes :property-parent-classes])
-       :page-tags-uuid (:block/uuid (d/entity @conn :logseq.property/page-tags))
        :import-state (new-import-state)
        :macros (or (:macros options) (:macros config))}
       (merge (select-keys options [:set-ui-state :export-file :notify-user]))))
@@ -1081,7 +1080,7 @@
                          (remove logseq-file?)
                          (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:path %)))))
           asset-files (filter #(string/starts-with? (get % rpath-key) "assets/") files)
-          doc-options (build-doc-options conn config options)]
+          doc-options (build-doc-options config options)]
       (log-fn "Importing" (count files) "files ...")
       ;; These export* fns are all the major export/import steps
       (p/do!
