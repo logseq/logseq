@@ -17,6 +17,10 @@
     .block-main-container, .block-content, {
         min-height: 20px;
     }
+
+    .property-value-inner {
+        @apply cursor-pointer;
+    }
 }
 
 .table-fixed {
