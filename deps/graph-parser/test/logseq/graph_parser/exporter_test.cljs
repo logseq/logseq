@@ -129,8 +129,7 @@
               :user.property/prop-num 5
               :user.property/prop-string "woot"}
              (update-vals (db-property/properties (find-block-by-content @conn "b1"))
-                          (fn [ref]
-                            (db-property/ref->property-value-content @conn ref))))
+                          #(db-property/ref->property-value-content @conn %)))
           "Basic block has correct properties")
       (is (= #{"prop-num" "prop-string" "prop-bool"}
              (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))
@@ -141,26 +140,33 @@
 
       (is (= {:user.property/prop-num2 10}
              (update-vals (db-property/properties (find-page-by-name @conn "new page"))
-                          (fn [ref]
-                            (db-property/ref->property-value-content @conn ref))))
+                          #(db-property/ref->property-value-content @conn %)))
           "New page has correct properties")
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
               :user.property/prop-string "yeehaw"}
              (update-vals (db-property/properties (find-page-by-name @conn "some page"))
-                          (fn [ref]
-                            (db-property/ref->property-value-content @conn ref))))
+                          #(db-property/ref->property-value-content @conn %)))
           "Existing page has correct properties"))
 
     (testing "built-in properties"
-      (is (= {:logseq.task/deadline "Nov 25th, 2022"}
-             (update-vals (db-property/properties (find-block-by-content @conn "only scheduled"))
-                          (fn [ref]
-                            (db-property/ref->property-value-content @conn ref))))
-          "deadline block has correct journal")
+      (is (= {:logseq.task/deadline "Nov 26th, 2022"}
+             (update-vals (db-property/properties (find-block-by-content @conn "only deadline"))
+                          #(db-property/ref->property-value-content @conn %)))
+          "deadline block has correct journal as property value")
 
       (is (= {:logseq.task/deadline "Nov 25th, 2022"}
              (update-vals (db-property/properties (find-block-by-content @conn "only scheduled"))
-                          (fn [ref]
-                            (db-property/ref->property-value-content @conn ref))))
-          "scheduled block converted to deadline"))))
+                          #(db-property/ref->property-value-content @conn %)))
+          "scheduled block converted to correct deadline")
+
+      (is (= {:logseq.task/priority "High"}
+             (update-vals (db-property/properties (find-block-by-content @conn "high priority"))
+                          #(db-property/ref->property-value-content @conn %)))
+          "priority block has correct property")
+
+      (is (= {:logseq.task/status "Doing" :logseq.task/priority "Medium"}
+             (update-vals (select-keys (find-block-by-content @conn "status test")
+                                       [:logseq.task/status :logseq.task/priority])
+                          #(db-property/ref->property-value-content @conn %)))
+          "status block has two correct status properties"))))
