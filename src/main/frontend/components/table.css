@@ -18,3 +18,7 @@
         min-height: 20px;
     }
 }
+
+.table-fixed {
+    table-layout: fixed;
+}

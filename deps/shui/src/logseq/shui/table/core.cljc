@@ -102,7 +102,7 @@
 (rum/defc table < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:table (merge {:class "w-full caption-bottom text-sm"}
+    [:table (merge {:class "w-full caption-bottom text-sm table-fixed"}
                    prop)
      children]))
 

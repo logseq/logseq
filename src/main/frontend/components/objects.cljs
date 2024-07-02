@@ -33,13 +33,15 @@
   (shui/checkbox
    {:checked (or selected-all? (and selected-some? "indeterminate"))
     :on-checked-change toggle-selected-all!
-    :aria-label "Select all"}))
+    :aria-label "Select all"
+    :class "flex"}))
 
 (defn row-checkbox [{:keys [row-selected? row-toggle-selected!]} row _column]
   (shui/checkbox
    {:checked (row-selected? row)
     :on-checked-change (fn [v] (row-toggle-selected! row v))
-    :aria-label "Select row"}))
+    :aria-label "Select row"
+    :class "flex"}))
 
 (defn- header-cp
   [{:keys [column-toggle-sorting! state]} column]
@@ -162,15 +164,15 @@
   (shui/table-row
    {:class "bg-gray-01 shadow"}
    (for [column columns]
-     (let [style (case (:id column)
-                   :block/original-name
-                   {}
-                   :select
-                   {:width 32}
-                   {:width 180})]
+     (let [opts (case (:id column)
+                  :block/original-name
+                  {}
+                  :select
+                  {:width 32}
+                  {:width 180})]
        (shui/table-head
-        {:key (str (:id column))
-         :style style}
+        (merge opts
+               {:key (str (:id column))})
         (let [header-fn (:header column)]
           (if (fn? header-fn)
             (header-fn table column)
@@ -691,7 +693,7 @@
 
 (rum/defc add-new-row < rum/static
   [table class]
-  [:div.p-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm
+  [:div.py-2.px-4.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm
    {:on-click #(add-new-object! table class)}
    (ui/icon "plus" {:size 14})
    [:div "New"]])
