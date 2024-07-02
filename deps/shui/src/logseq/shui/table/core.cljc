@@ -122,7 +122,7 @@
 (rum/defc table-head < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:th (merge {:class "px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
+    [:th (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
                 prop)
      children]))
 
