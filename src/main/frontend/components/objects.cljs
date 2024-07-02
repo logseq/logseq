@@ -753,7 +753,7 @@
 
      (let [columns' (:columns table)
            rows (:rows table)]
-       [:div.ls-table-rows.rounded-md.border.content.overflow-x-auto
+       [:div.ls-table-rows.rounded-md.border.content.overflow-x-auto.force-visible-scrollbar
         (ui/virtualized-table
          {:custom-scroll-parent (gdom/getElement "main-content-container")
           :total-count (count rows)

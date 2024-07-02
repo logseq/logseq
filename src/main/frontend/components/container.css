@@ -775,6 +775,30 @@
   }
 }
 
+.force-visible-scrollbar {
+  &::-webkit-scrollbar {
+    -webkit-appearance: none;
+  }
+
+  &::-webkit-scrollbar:vertical {
+    width: 11px;
+  }
+
+  &::-webkit-scrollbar:horizontal {
+    height: 11px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    border: 2px solid white; /* should match background, can't be transparent */
+    background-color: rgba(0, 0, 0, .1);
+
+    &:hover {
+      background-color: rgba(0, 0, 0, .4);
+    }
+  }
+}
+
 li.dragging-target {
   border-left: 5px solid green;
 }
