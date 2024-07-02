@@ -242,6 +242,15 @@
         [?page :block/name]]
       tag-id))
 
+(defn <get-tag-objects
+  [graph tag-id]
+  (<q graph {:transact-db? true}
+      '[:find [(pull ?b [*]) ...]
+        :in $ ?tag-id
+        :where
+        [?b :block/tags ?tag-id]]
+      tag-id))
+
 (defn <get-tags
   [graph]
   (<q graph {:transact-db? false}
