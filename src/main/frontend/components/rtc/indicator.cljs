@@ -21,7 +21,6 @@
          :local-tx nil
          :remote-tx nil
          :rtc-state :open
-         :graph-uuid->user-uuid->recent-updates nil
          :download-logs nil
          :upload-logs nil
          :misc-logs nil}))
@@ -37,21 +36,13 @@
              (fn [_ log]
                (when log
                  (swap! *detail-info update k (fn [logs] (take 5 (conj logs log))))))
-             flow))
-          (update-recent-updates-task []
-            (m/reduce
-             (fn [_ recent-updates]
-               (when recent-updates
-                 (swap! *detail-info assoc :graph-uuid->user-uuid->recent-updates recent-updates)))
-             ;; recent 5mins updates
-             (rtc-flows/create-rtc-recent-updates-flow 5)))]
+             flow))]
     (let [canceler (c.m/run-task
                     (m/join
                      (constantly nil)
                      (update-log-task rtc-flows/rtc-download-log-flow :download-logs)
                      (update-log-task rtc-flows/rtc-upload-log-flow :upload-logs)
                      (update-log-task rtc-flows/rtc-misc-log-flow :misc-logs)
-                     (update-recent-updates-task)
                      (m/reduce (fn [_ state]
                                  (swap! *detail-info assoc
                                         :pending-local-ops (:unpushed-block-update-count state)
@@ -68,7 +59,7 @@
   (rum/local false ::expand-debug-info?)
   [state online?]
   (let [*expand-debug? (::expand-debug-info? state)
-        {:keys [graph-uuid local-tx remote-tx rtc-state graph-uuid->user-uuid->recent-updates
+        {:keys [graph-uuid local-tx remote-tx rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-server-ops]}
         (rum/react *detail-info)]
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
@@ -93,9 +84,7 @@
                graph-uuid (assoc :graph-uuid graph-uuid)
                local-tx (assoc :local-tx local-tx)
                remote-tx (assoc :remote-tx remote-tx)
-               rtc-state (assoc :rtc-state rtc-state)
-               graph-uuid->user-uuid->recent-updates
-               (assoc :graph-uuid->user-uuid->recent-updates graph-uuid->user-uuid->recent-updates))
+               rtc-state (assoc :rtc-state rtc-state))
              pprint/pprint
              with-out-str)]])]))
 
