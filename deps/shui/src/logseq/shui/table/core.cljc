@@ -102,40 +102,40 @@
 (rum/defc table < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:table (merge {:class "w-full caption-bottom text-sm table-fixed"}
+    [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
                    prop)
      children]))
 
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:thead prop
+    [:div prop
      children]))
 
 (rum/defc table-row < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:tr (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"}
-                prop)
+    [:div.flex.flex-row.items-center (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"}
+                               prop)
      children]))
 
 (rum/defc table-head < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:th (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
+    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
                 prop)
      children]))
 
 (rum/defc table-body < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:tbody (merge {:class "[&_tr:last-child]:border-0"}
+    [:div (merge {:class "[&_tr:last-child]:border-0"}
                    prop)
      children]))
 
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:td (merge {:class "px-4 py-1 align-middle [&:has([role=checkbox])]:pr-0"}
+    [:div (merge {:class "px-4 py-1 align-middle [&:has([role=checkbox])]:px-0"}
                    prop)
      children]))
