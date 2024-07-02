@@ -80,14 +80,6 @@
                                                  [:user/uuid :uuid]
                                                  [:user/name :string]
                                                  [:user/email :string]]]]
-   [:recent-updates {:optional true}
-    [:map-of :uuid ;;user-uuid
-     [:sequential
-      [:cat
-       [inst? {:decode/string mt/-string->date}]
-       [:map
-        [:update-block-uuids {:optional true} [:set :uuid]]
-        [:delete-block-uuids {:optional true} [:set :uuid]]]]]]]
    [:refed-blocks {:optional true}
     [:maybe
      [:sequential
