@@ -88,6 +88,16 @@
                      (dissoc :assets))]
     (gp-exporter/export-file-graph conn conn config-file *files options')))
 
+(defn- readable-properties
+  [db query-ent]
+  (->> (db-property/properties query-ent)
+       (map (fn [[k v]]
+              [k
+               (if (= :block/tags k)
+                 (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                 (db-property/ref->property-value-content db v))]))
+       (into {})))
+
 (deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
@@ -106,8 +116,8 @@
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
     (testing "graph wide counts"
-      ;; Includes 2 journals from logseq.task/deadline
-      (is (= 6 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      ;; Includes 2 journals as property values for :logseq.task/deadline
+      (is (= 7 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
       ;; Count includes Contents
       (is (= 3
              (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
@@ -139,34 +149,31 @@
           "Block with properties has correct refs")
 
       (is (= {:user.property/prop-num2 10}
-             (update-vals (db-property/properties (find-page-by-name @conn "new page"))
-                          #(db-property/ref->property-value-content @conn %)))
+             (readable-properties @conn (find-page-by-name @conn "new page")))
           "New page has correct properties")
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
               :user.property/prop-string "yeehaw"}
-             (update-vals (db-property/properties (find-page-by-name @conn "some page"))
-                          #(db-property/ref->property-value-content @conn %)))
+             (readable-properties @conn (find-page-by-name @conn "some page")))
           "Existing page has correct properties"))
 
     (testing "built-in properties"
       (is (= {:logseq.task/deadline "Nov 26th, 2022"}
-             (update-vals (db-property/properties (find-block-by-content @conn "only deadline"))
-                          #(db-property/ref->property-value-content @conn %)))
+             (readable-properties @conn (find-block-by-content @conn "only deadline")))
           "deadline block has correct journal as property value")
 
       (is (= {:logseq.task/deadline "Nov 25th, 2022"}
-             (update-vals (db-property/properties (find-block-by-content @conn "only scheduled"))
-                          #(db-property/ref->property-value-content @conn %)))
+             (readable-properties @conn (find-block-by-content @conn "only scheduled")))
           "scheduled block converted to correct deadline")
 
       (is (= {:logseq.task/priority "High"}
-             (update-vals (db-property/properties (find-block-by-content @conn "high priority"))
-                          #(db-property/ref->property-value-content @conn %)))
+             (readable-properties @conn (find-block-by-content @conn "high priority")))
           "priority block has correct property")
 
-      (is (= {:logseq.task/status "Doing" :logseq.task/priority "Medium"}
-             (update-vals (select-keys (find-block-by-content @conn "status test")
-                                       [:logseq.task/status :logseq.task/priority])
-                          #(db-property/ref->property-value-content @conn %)))
-          "status block has two correct status properties"))))
+      (is (= {:logseq.task/status "Doing" :logseq.task/priority "Medium" :block/tags [:logseq.class/task]}
+             (readable-properties @conn (find-block-by-content @conn "status test")))
+          "status block has correct task properties and class")
+
+      (is (= #{:logseq.task/status :block/tags}
+             (set (keys (readable-properties @conn (find-block-by-content @conn "old todo block")))))
+          "old task properties are ignored"))))
