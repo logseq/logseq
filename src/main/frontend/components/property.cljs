@@ -111,14 +111,17 @@
 
 (defn- handle-delete-property!
   [block property & {:keys [class? class-schema?]}]
-  (let [class? (or class? (some-> block :block/type (contains? "class")))]
-    (when (or (not (and class? class-schema?))
+  (let [class? (or class? (some-> block :block/type (contains? "class")))
+        remove! #(let [repo (state/get-current-repo)]
+                   (if (and class? class-schema?)
+                     (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
+                     (property-handler/remove-block-property! repo (:block/uuid block) (:db/ident property))))]
+    (if (and class? class-schema?)
+      (-> (shui/dialog-confirm!
             ;; Only ask for confirmation on class schema properties
-              (js/confirm "Are you sure you want to delete this property?"))
-      (let [repo (state/get-current-repo)]
-        (if (and class? class-schema?)
-          (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
-          (property-handler/remove-block-property! repo (:block/uuid block)  (:db/ident property)))))))
+            [:p (str "Are you sure you want to delete this property?")])
+        (p/then remove!))
+      (remove!))))
 
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context.
