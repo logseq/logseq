@@ -208,8 +208,7 @@
   "Adds aliases to a page when a page has aliases and is also an alias of other pages"
   [properties page-id]
   (let [repo (state/get-current-repo)
-        aliases (db/get-page-alias-names repo
-                                         (:block/name (db/pull page-id)))]
+        aliases (db/get-page-alias-names repo page-id)]
     (if (seq aliases)
       (if (:alias properties)
         (update properties :alias (fn [c]

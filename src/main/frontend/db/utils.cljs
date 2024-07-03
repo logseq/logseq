@@ -25,6 +25,10 @@
   ([eid]
    (entity (state/get-current-repo) eid))
   ([repo-or-db eid]
+   (assert (or (number? eid)
+               (sequential? eid)
+               (keyword? eid))
+           (str "Invalid entity eid: " eid))
    (when eid
      (when-let [db (if (string? repo-or-db)
                    ;; repo
