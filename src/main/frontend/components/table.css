@@ -61,6 +61,14 @@
 }
 
 .cp__all_pages_table {
+  th {
+    @apply opacity-50 text-left text-sm;
+  }
+
+  table, th, td {
+    @apply p-1 border;
+  }
+
   td {
     @apply whitespace-nowrap;
 

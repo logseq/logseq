@@ -160,14 +160,15 @@
            {:icon "trash"
             :on-click
             (fn []
-              (state/set-modal! (page/batch-delete-dialog
-                                 (map (fn [id]
-                                        (some (fn [w] (when (= (:db/id w) id) w)) whiteboards))
-                                      checked-page-ids)
-                                 false
-                                 (fn []
-                                   (set-checked-page-ids #{})
-                                   (route-handler/redirect-to-whiteboard-dashboard!)))))}))]
+              (shui/dialog-open!
+                (page/batch-delete-dialog
+                  (map (fn [id]
+                         (some (fn [w] (when (= (:db/id w) id) w)) whiteboards))
+                    checked-page-ids)
+                  false
+                  (fn []
+                    (set-checked-page-ids #{})
+                    (route-handler/redirect-to-whiteboard-dashboard!)))))}))]
        [:div
         {:ref ref}
         [:div.gap-8.grid.grid-rows-auto
