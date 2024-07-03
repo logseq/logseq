@@ -132,7 +132,6 @@
 (def table table-core/table)
 (def table-header table-core/table-header)
 (def table-head table-core/table-head)
-(def table-body table-core/table-body)
 (def table-row table-core/table-row)
 (def table-cell table-core/table-cell)
 (def table-get-selection-rows table-core/get-selection-rows)
