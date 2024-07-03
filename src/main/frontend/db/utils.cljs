@@ -25,16 +25,16 @@
   ([eid]
    (entity (state/get-current-repo) eid))
   ([repo-or-db eid]
-   (assert (or (number? eid)
-               (sequential? eid)
-               (keyword? eid))
-           (str "Invalid entity eid: " eid))
    (when eid
+     (assert (or (number? eid)
+                 (sequential? eid)
+                 (keyword? eid))
+             (str "Invalid entity eid: " (pr-str eid)))
      (when-let [db (if (string? repo-or-db)
-                   ;; repo
+                     ;; repo
                      (let [repo (or repo-or-db (state/get-current-repo))]
                        (conn/get-db repo))
-                   ;; db
+                     ;; db
                      repo-or-db)]
        (d/entity db eid)))))
 
