@@ -1009,7 +1009,7 @@
 
 (defn batch-delete-dialog
   [pages orphaned-pages? refresh-fn]
-  (fn [close-fn]
+  (fn [{:keys [close]}]
     [:div
      [:div.sm:flex.items-center
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
@@ -1021,7 +1021,7 @@
           (t :remove-orphaned-pages)
           (t :page/delete-confirmation))]]]
 
-     [:table.table-auto.cp__all_pages_table.mt-4
+     [:table.w-full.cp__all_pages_table.mt-4
       [:thead
        [:tr.opacity-70
         [:th [:span "#"]]
@@ -1044,12 +1044,12 @@
       (ui/button
        (t :cancel)
        :theme :gray
-       :on-click close-fn)
+       :on-click close)
 
       (ui/button
        (t :yes)
        :on-click (fn []
-                   (close-fn)
+                   (close)
                    (let [failed-pages (atom [])]
                      (p/let [_ (p/all (map (fn [page]
                                              (page-handler/<delete! (:block/uuid page) nil
