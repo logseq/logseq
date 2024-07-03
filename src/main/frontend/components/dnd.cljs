@@ -10,6 +10,10 @@
 (def sortable-context (r/adapt-class SortableContext))
 ;; (def drag-overlay (r/adapt-class DragOverlay))
 
+(rum/defc non-sortable-item
+  [props children]
+  [:div props children])
+
 (rum/defc sortable-item
   [props children]
   (let [sortable (useSortable #js {:id (:id props)})
@@ -76,9 +80,9 @@
         children (for [item col]
                    (let [id (str (:id item))]
                      (rum/with-key
-                       (sortable-item {:key id
-                                       :id id}
-                                      (:content item))
+                       (if (:disabled? item)
+                         (non-sortable-item {:key id :id id} (:content item))
+                         (sortable-item {:key id :id id} (:content item)))
                        id)))
         children' (if parent-node
                     [parent-node children]

@@ -10,6 +10,7 @@
             [frontend.components.select :as select]
             [frontend.components.dnd :as dnd]
             [frontend.handler.editor :as editor-handler]
+            [frontend.handler.property :as property-handler]
             [frontend.state :as state]
             [frontend.date :as date]
             [goog.object :as gobj]
@@ -201,7 +202,8 @@
                                    {:style {:width width}}
                                    (if (fn? header-fn)
                                      (header-fn table column)
-                                     header-fn)])}) columns)]
+                                     header-fn)])
+                       :disabled? (= (:id column) :select)}) columns)]
     (shui/table-header
      (dnd/items items {:vertical? false
                        :on-drag-end (fn [ordered-columns _m]
@@ -730,14 +732,62 @@
    (ui/icon "plus" {:size 14})
    [:div "New"]])
 
+(defn- table-sorting->persist-state
+  [sorting]
+  )
+
+(defn- table-filters->persist-state
+  [filters]
+  )
+
+(defn- db-set-table-state!
+  [table-entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}]
+  (let [repo (state/get-current-repo)]
+    {:set-sorting!
+     (fn [sorting]
+       (set-sorting! sorting)
+       (let [state (table-sorting->persist-state sorting)]
+         (prn :debug :sorting sorting :state state)
+         ;; (property-handler/set-block-property! repo (:db/id table-entity) :logseq.property/table-sorting state)
+         ))
+     :set-filters!
+     (fn [filters]
+       (set-filters! filters)
+       (let [state (table-filters->persist-state filters)]
+         (prn :debug :filters filters :state state)
+         ;; (property-handler/set-block-property! repo (:db/id table-entity) :logseq.property/table-filters state)
+         ))
+     :set-visible-columns!
+     (fn [columns]
+       (let [hidden-columns (vec (keep (fn [[column visible?]]
+                                         (when (false? visible?)
+                                           column)) columns))]
+         (set-visible-columns! columns)
+         (prn :debug :hidden-columns hidden-columns
+              :columns columns)
+         ;; (property-handler/set-block-property! repo (:db/id table-entity) :logseq.property/table-hidden-columns hidden-columns)
+         ))
+     :set-ordered-columns!
+     (fn [ordered-columns]
+       (let [ids (vec (remove #{:select} ordered-columns))]
+         (set-ordered-columns! ordered-columns)
+         (prn :debug :ordered-columns ids)
+         ;; (property-handler/set-block-property! repo (:db/id table-entity) :logseq.property/table-ordered-columns ids)
+         ))}))
+
 (rum/defc objects-inner < rum/static
   [config class object-ids]
   (let [[input set-input!] (rum/use-state "")
         [sorting set-sorting!] (rum/use-state [{:id :block/updated-at, :asc? false}])
         [filters set-filters!] (rum/use-state [])
-        [row-filter set-row-filter!] (rum/use-state nil)
         [visible-columns set-visible-columns!] (rum/use-state {})
         [ordered-columns set-ordered-columns!] (rum/use-state [])
+        {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}
+        (db-set-table-state! nil {:set-sorting! set-sorting!
+                                  :set-filters! set-filters!
+                                  :set-visible-columns! set-visible-columns!
+                                  :set-ordered-columns! set-ordered-columns!})
+        [row-filter set-row-filter!] (rum/use-state nil)
         [row-selection set-row-selection!] (rum/use-state {})
         [data set-data!] (rum/use-state [])
         _ (rum/use-effect!
