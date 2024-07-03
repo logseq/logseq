@@ -665,3 +665,11 @@ html.is-mobile {
     @apply inline-block;
   }
 }
+
+button[role="checkbox"][data-state=unchecked] {
+    border-color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
+}
+
+.dark-theme button[role="checkbox"][data-state=unchecked] {
+    border-color: var(--lx-gray-11, var(--ls-primary-text-color, hsl(var(--foreground))));
+}

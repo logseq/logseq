@@ -132,7 +132,7 @@
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.flex.relative prop
-     [:div {:class (str "flex py-1 align-middle border-r w-full overflow-x-clip items-center"
+     [:div {:class (str "flex align-middle border-r w-full overflow-x-clip items-center"
                         (if (:select? prop)
                           " px-0"
                           " px-4"))}
