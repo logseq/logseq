@@ -109,8 +109,9 @@
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.flex.flex-row.items-center (merge {:class "border-y transition-colors bg-gray-01"}
-                               prop)
+    [:div.flex.flex-row.items-center.w-fit
+     (merge {:class "border-y transition-colors bg-gray-01"}
+            prop)
      children]))
 
 (rum/defc table-row < rum/static
@@ -123,7 +124,7 @@
 (rum/defc table-head < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground"}
+    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:px-0"}
                 prop)
      children]))
 
@@ -131,5 +132,8 @@
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.flex.relative prop
-     [:div {:class "flex px-4 py-1 align-middle border-r w-full overflow-x-clip items-center"}
+     [:div {:class (str "flex py-1 align-middle border-r w-full overflow-x-clip items-center"
+                        (if (:select? prop)
+                          " px-0"
+                          " px-4"))}
       children]]))

@@ -31,18 +31,25 @@
             [frontend.db-mixins :as db-mixins]))
 
 (defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
-  (shui/checkbox
-   {:checked (or selected-all? (and selected-some? "indeterminate"))
-    :on-checked-change toggle-selected-all!
-    :aria-label "Select all"
-    :class "flex"}))
+  [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
+   {:html-for "header-checkbox"}
+   (shui/checkbox
+    {:id "header-checkbox"
+     :checked (or selected-all? (and selected-some? "indeterminate"))
+     :on-checked-change toggle-selected-all!
+     :aria-label "Select all"
+     :class "flex"})])
 
 (defn row-checkbox [{:keys [row-selected? row-toggle-selected!]} row _column]
-  (shui/checkbox
-   {:checked (row-selected? row)
-    :on-checked-change (fn [v] (row-toggle-selected! row v))
-    :aria-label "Select row"
-    :class "flex"}))
+  (let [id (str (:id row) "-" "checkbox")]
+    [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
+     {:html-for (str (:id row) "-" "checkbox")}
+     (shui/checkbox
+      {:id id
+       :checked (row-selected? row)
+       :on-checked-change (fn [v] (row-toggle-selected! row v))
+       :aria-label "Select row"
+       :class "flex"})]))
 
 (defn- header-cp
   [{:keys [column-toggle-sorting! state]} column]
@@ -177,7 +184,7 @@
 (defn- get-column-size
   [column]
   (case (:id column)
-    :select 49
+    :select 32
     :object/name 360
     (:block/created-at :block/updated-at) 160
     180))
@@ -191,7 +198,10 @@
                        :content (let [header-fn (:header column)
                                       width (get-column-size column)]
                                   [:div.ls-table-header-cell
-                                   {:style {:width width}}
+                                   {:class (if (= :select (:id column))
+                                             ""
+                                             "px-4")
+                                    :style {:width width}}
                                    (if (fn? header-fn)
                                      (header-fn table column)
                                      header-fn)])}) columns)]
@@ -214,9 +224,11 @@
      (for [column columns]
        (let [id (str (:id row) "-" (:id column))
              render (get column :cell)
-             width (get-column-size column)]
+             width (get-column-size column)
+             select? (= (:id column) :select)]
          (shui/table-cell
           {:key id
+           :select? select?
            :style {:width width}}
           (render table row column)))))))
 
