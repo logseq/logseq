@@ -819,8 +819,7 @@
                                         (ldb/page? block))
                             (outliner-property/property-with-other-position? ent)))))))
                   properties))
-        {:keys [classes all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
-        one-class? (= 1 (count classes))
+        {:keys [all-classes classes-properties]} (outliner-property/get-block-classes-properties (db/get-db) (:db/id block))
         classes-properties-set (set classes-properties)
         block-own-properties (->> properties
                                   (remove (fn [[id _]] (classes-properties-set id)))
@@ -850,31 +849,24 @@
                           (comp hide-with-property-id first))
         {_block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)
-        {_class-hidden-properties true
-         class-own-properties false} (group-by property-hide-f
-                                               (map (fn [id] [id (get block-properties id)]) classes-properties))
-        own-properties (->>
-                        (if one-class?
-                          (->> (concat block-own-properties' class-own-properties)
-                               remove-built-in-or-other-position-properties)
-                          block-own-properties'))
-        class->properties (loop [classes all-classes
-                                 properties #{}
-                                 result []]
-                            (if-let [class (first classes)]
-                              (let [cur-properties (->> (db-property/get-class-ordered-properties class)
-                                                        (map :db/ident)
-                                                        (remove properties)
-                                                        (remove hide-with-property-id)
-                                                        remove-built-in-or-other-position-properties)]
-                                (recur (rest classes)
-                                       (set/union properties (set cur-properties))
-                                       (if (seq cur-properties)
-                                         (conj result [class cur-properties])
-                                         result)))
-                              result))]
-    (when-not (and (empty? block-own-properties')
-                   (empty? class->properties)
+        class-properties (loop [classes all-classes
+                                properties (set (map first block-own-properties'))
+                                result []]
+                           (if-let [class (first classes)]
+                             (let [cur-properties (->> (db-property/get-class-ordered-properties class)
+                                                       (map :db/ident)
+                                                       (remove properties)
+                                                       (remove hide-with-property-id)
+                                                       remove-built-in-or-other-position-properties)]
+                               (recur (rest classes)
+                                      (set/union properties (set cur-properties))
+                                      (if (seq cur-properties)
+                                        (into result cur-properties)
+                                        result)))
+                             result))
+        full-properties (->> (concat block-own-properties' (map (fn [p] [p nil]) class-properties))
+                             remove-built-in-or-other-position-properties)]
+    (when-not (and (empty? full-properties)
                    (not (:page-configure? opts)))
       [:div.ls-properties-area
        (cond-> {:id id}
@@ -888,37 +880,17 @@
                                        (state/set-selection-blocks! [block])
                                        (some-> js/document.activeElement (.blur)))
                                      (d/remove-class! target "ls-popup-closed")))))
-       (let [own-properties' (cond
-                               (and page? page-configure?)
-                               (concat [[:block/tags (:block/tags block)]
-                                        [:logseq.property/icon (:logseq.property/icon block)]]
-                                       (remove (fn [[k _v]] (contains? #{:block/tags :logseq.property/icon} k)) own-properties))
+       (let [properties' (cond
+                           (and page? page-configure?)
+                           (concat [[:block/tags (:block/tags block)]
+                                    [:logseq.property/icon (:logseq.property/icon block)]]
+                                   (remove (fn [[k _v]] (contains? #{:block/tags :logseq.property/icon} k)) full-properties))
 
-                               page?
-                               (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) own-properties)
+                           page?
+                           (remove (fn [[k _v]] (contains? #{:logseq.property/icon} k)) full-properties)
 
-                               :else
-                               own-properties)]
-         (properties-section block (if class-schema? properties own-properties') opts))
+                           :else
+                           full-properties)]
+         (properties-section block (if class-schema? properties properties') opts))
 
-       (rum/with-key (new-property block opts) (str id "-add-property"))
-
-       (when (and (seq class->properties) (not one-class?))
-         (let [class-properties-col (keep
-                                     (fn [[class class-properties]]
-                                       (let [properties (->> class-properties
-                                                             (map (fn [id] [id (get block-properties id)])))]
-                                         (when (seq properties)
-                                           [class properties])))
-                                     class->properties)]
-           (when (seq class-properties-col)
-             (let [page-cp (:page-cp opts)]
-               [:div.parent-properties.flex.flex-1.flex-col.gap-1
-                (for [[class id-properties] class-properties-col]
-                  (when (seq id-properties)
-                    [:div
-                     (when page-cp
-                       [:span.text-sm.opacity-30.hover:opacity-100
-                        {:class (when (:in-block-container? opts) "ml-5")}
-                        (page-cp {} class)])
-                     (properties-section block id-properties opts)]))]))))])))
+       (rum/with-key (new-property block opts) (str id "-add-property"))])))

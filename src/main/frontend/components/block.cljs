@@ -3008,7 +3008,7 @@
      (when db-based? (block-positioned-properties config block :block-below))
 
      (when (and db-based? (not collapsed?))
-       [:div {:style {:padding-left 29}}
+       [:div {:style {:padding-left 45}}
         (db-properties-cp config block edit-input-id {:in-block-container? true})])
 
      (when-not (or (:hide-children? config) in-whiteboard?)
