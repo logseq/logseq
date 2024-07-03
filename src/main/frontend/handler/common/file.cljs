@@ -47,7 +47,7 @@
           (state/pub-event! [:notification/show
                              {:content error
                               :status :error
-                              :clear? false}]))))))
+                              :clear? false}])))))))
 
 (defn- validate-and-get-blocks-to-delete
   "An implementation for the delete-blocks-fn in graph-parser/parse-file"
