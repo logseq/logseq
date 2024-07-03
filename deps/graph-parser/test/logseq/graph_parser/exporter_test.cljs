@@ -235,7 +235,7 @@
           tag-page (find-page-by-name @conn "Movie")
           another-tag-page (find-page-by-name @conn "p0")]
       (is (= (:block/content block) "Inception")
-          "configured tagged block block with :tag-classes tag strips tag from content")
+          "tagged block with configured tag strips tag from content")
 
       (is (= ["class"] (:block/type tag-page))
           "configured tag page in :tag-classes is a class")
@@ -244,4 +244,4 @@
 
       (is (= {:block/tags [:user.class/Movie]}
              (readable-properties @conn (find-page-by-name @conn "Interstellar")))
-          "configured tagged page has tags imported as a class"))))
+          "tagged page has configured tag imported as a class"))))

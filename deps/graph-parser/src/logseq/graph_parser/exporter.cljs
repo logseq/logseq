@@ -534,7 +534,7 @@
                         {:block/original-name new-class
                          :block/uuid (or (get-pid db new-class) (d/squuid))
                          :block/name (common-util/page-name-sanity-lc new-class)})))))
-          block*)]
+          (dissoc block* :block/properties))]
     {:block block' :properties-tx properties-tx}))
 
 (defn- handle-block-properties
@@ -579,20 +579,6 @@
                      (map #(add-uuid-to-page-map % page-names-to-uuids)))))
       block)))
 
-(defn- update-block-macros
-  [block db page-names-to-uuids]
-  (if (seq (:block/macros block))
-    (update block :block/macros
-            (fn [macros]
-              (mapv (fn [m]
-                      (-> m
-                          (update :block/properties
-                                  (fn [props]
-                                    (update-keys props #(cached-prop-name->uuid db page-names-to-uuids %))))
-                          (assoc :block/uuid (d/squuid))))
-                    macros)))
-    block))
-
 (defn- fix-pre-block-references
   [{:block/keys [parent page] :as block} pre-blocks]
   (cond-> block
@@ -621,7 +607,6 @@
         block' (-> block-after-built-in-props
                    (fix-pre-block-references pre-blocks)
                    (fix-block-name-lookup-ref db page-names-to-uuids)
-                   (update-block-macros db page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db tag-classes page-names-to-uuids)
                    (update-block-marker options)
@@ -770,7 +755,7 @@
   pages that are now properties"
   [pages-tx old-properties existing-pages import-state]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
-        _ (prn :new-properties new-properties)
+        _ (when (seq new-properties) (prn :new-properties new-properties))
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
         property-pages-tx (map (fn [{:block/keys [original-name uuid]}]
