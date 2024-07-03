@@ -59,8 +59,8 @@
                                     [asc?]))) sorting)]
     (shui/button
      {:variant "text"
-      :class "h-8 !pl-0 !py-0 hover:text-foreground"
-      :onClick #(column-toggle-sorting! column)}
+      :class "h-8 !pl-4 !py-0 hover:text-foreground w-full justify-start"
+      :on-click #(column-toggle-sorting! column)}
      (:name column)
      (case asc?
        true
@@ -198,10 +198,7 @@
                        :content (let [header-fn (:header column)
                                       width (get-column-size column)]
                                   [:div.ls-table-header-cell
-                                   {:class (if (= :select (:id column))
-                                             ""
-                                             "px-4")
-                                    :style {:width width}}
+                                   {:style {:width width}}
                                    (if (fn? header-fn)
                                      (header-fn table column)
                                      header-fn)])}) columns)]
