@@ -66,15 +66,17 @@
             (merge (add-missing-timestamps
                     (select-keys tag-block [:block/created-at :block/updated-at]))))))))
 
+(defn- get-page-uuid [page-names-to-uuids page-name]
+  (or (get page-names-to-uuids page-name)
+      (throw (ex-info (str "No uuid found for page name " (pr-str page-name))
+                      {:page-name page-name}))))
+
 (defn- update-page-tags
   [block db tag-classes page-names-to-uuids]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
                          (remove #(or (:block.temp/new-class %) (contains? tag-classes (:block/name %))))
-                         (map #(vector :block/uuid
-                                       (or (get page-names-to-uuids (:block/name %))
-                                           (throw (ex-info (str "No uuid found for tag " (pr-str (:block/name %)))
-                                                           {:tag %})))))
+                         (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %))))
                          set)]
       (cond-> block
         true
@@ -86,11 +88,7 @@
     block))
 
 (defn- add-uuid-to-page-map [m page-names-to-uuids]
-  (assoc m
-         :block/uuid
-         (or (get page-names-to-uuids (:block/name m))
-             (throw (ex-info (str "No uuid found for page " (pr-str (:block/name m)))
-                             {:page m})))))
+  (assoc m :block/uuid (get-page-uuid page-names-to-uuids (:block/name m))))
 
 (defn- content-without-tags-ignore-case
   "Ignore case because tags in content can have any case and still have a valid ref"
@@ -580,22 +578,21 @@
       block)))
 
 (defn- fix-pre-block-references
-  [{:block/keys [parent page] :as block} pre-blocks]
+  "Point pre-block children to parents since pre blocks don't exist in db graphs"
+  [{:block/keys [parent] :as block} pre-blocks page-names-to-uuids]
   (cond-> block
-    ;; Children blocks of pre-blocks get lifted up to the next level which can cause conflicts
-    ;; TODO: Detect sibling blocks to avoid parent-left conflicts
     (and (vector? parent) (contains? pre-blocks (second parent)))
-    (assoc :block/parent page)))
+    (assoc :block/parent [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)))])))
 
 (defn- fix-block-name-lookup-ref
   "Some graph-parser attributes return :block/name as a lookup ref. This fixes
   those to use uuids since block/name is not unique for db graphs"
-  [block db page-names-to-uuids]
+  [block page-names-to-uuids]
   (cond-> block
     (= :block/name (first (:block/page block)))
-    (assoc :block/page [:block/uuid (cached-prop-name->uuid db page-names-to-uuids (second (:block/page block)))])
+    (assoc :block/page [:block/uuid (get-page-uuid page-names-to-uuids (second (:block/page block)))])
     (:block/name (:block/parent block))
-    (assoc :block/parent {:block/uuid (cached-prop-name->uuid db page-names-to-uuids (:block/name (:block/parent block)))})))
+    (assoc :block/parent {:block/uuid (get-page-uuid page-names-to-uuids (:block/name (:block/parent block)))})))
 
 (defn- build-block-tx
   [db block* pre-blocks page-names-to-uuids {:keys [tag-classes] :as options}]
@@ -605,8 +602,8 @@
         (handle-block-properties block* db page-names-to-uuids (:block/refs block*) options)
         {block-after-built-in-props :block deadline-properties-tx :properties-tx} (update-block-deadline block db options)
         block' (-> block-after-built-in-props
-                   (fix-pre-block-references pre-blocks)
-                   (fix-block-name-lookup-ref db page-names-to-uuids)
+                   (fix-pre-block-references pre-blocks page-names-to-uuids)
+                   (fix-block-name-lookup-ref page-names-to-uuids)
                    (update-block-refs page-names-to-uuids options)
                    (update-block-tags db tag-classes page-names-to-uuids)
                    (update-block-marker options)
