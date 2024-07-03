@@ -109,33 +109,27 @@
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div prop
+    [:div.flex.flex-row.items-center (merge {:class "border-y transition-colors bg-gray-01"}
+                               prop)
      children]))
 
 (rum/defc table-row < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.flex.flex-row.items-center (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"}
+    [:div.flex.flex-row.items-center (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
                                prop)
      children]))
 
 (rum/defc table-head < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
+    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground"}
                 prop)
-     children]))
-
-(rum/defc table-body < rum/static
-  [& prop-and-children]
-  (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "[&_tr:last-child]:border-0"}
-                   prop)
      children]))
 
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "px-4 py-1 align-middle [&:has([role=checkbox])]:px-0"}
-                   prop)
-     children]))
+    [:div.flex.relative prop
+     [:div {:class "flex px-4 py-1 align-middle border-r w-full overflow-x-clip items-center"}
+      children]]))

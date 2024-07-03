@@ -52,7 +52,7 @@
                                     [asc?]))) sorting)]
     (shui/button
      {:variant "text"
-      :class "!pl-0 !py-0 hover:text-foreground"
+      :class "h-8 !pl-0 !py-0 hover:text-foreground"
       :onClick #(column-toggle-sorting! column)}
      (:name column)
      (case asc?
@@ -96,15 +96,15 @@
      [{:id :select
        :name "Select"
        :header (fn [table _column] (header-checkbox table))
-       :cell (fn [table row column] (row-checkbox table row column))
+       :cell (fn [table row column]
+               (row-checkbox table row column))
        :column-list? false}
       {:id :object/name
        :name "Name"
        :type :string
        :header header-cp
        :cell (fn [_table row _column]
-               [:div.primary-cell
-                (component-block/block-container (assoc config :table? true) row)])
+               (component-block/block-container (assoc config :table? true) row))
        :disable-hide? true}]
      (map
       (fn [property]
@@ -177,7 +177,7 @@
 (defn- get-column-size
   [column]
   (case (:id column)
-    :select 16
+    :select 49
     :object/name 360
     (:block/created-at :block/updated-at) 160
     180))
@@ -190,16 +190,12 @@
                        :value (:id column)
                        :content (let [header-fn (:header column)
                                       width (get-column-size column)]
-                                  [:div.overflow-x-hidden
-                                   {:class (when-not (= :select (:id column))
-                                             "px-4")
-                                    :style {:width width
-                                            :max-width width}}
+                                  [:div.ls-table-header-cell
+                                   {:style {:width width}}
                                    (if (fn? header-fn)
                                      (header-fn table column)
                                      header-fn)])}) columns)]
-    (shui/table-row
-     {:class "bg-gray-01 shadow"}
+    (shui/table-header
      (dnd/items items {:vertical? false
                        :on-drag-end (fn [ordered-columns _m]
                                       (set-ordered-columns! ordered-columns))}))))
@@ -221,8 +217,7 @@
              width (get-column-size column)]
          (shui/table-cell
           {:key id
-           :style {:width width
-                   :max-width width}}
+           :style {:width width}}
           (render table row column)))))))
 
 (rum/defc search

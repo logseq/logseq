@@ -1,7 +1,3 @@
-.primary-cell {
-  @apply min-w-[140px];
-}
-
 .ls-table {
   .ls-block {
     @apply w-full py-0;
@@ -16,10 +12,10 @@
   }
 
   .property-value-inner {
-    @apply cursor-pointer;
+    @apply flex items-center cursor-pointer;
   }
-}
 
-.table-fixed {
-  table-layout: fixed;
+  .ls-table-header-cell {
+    @apply cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground overflow-x-hidden border-r;
+  }
 }
