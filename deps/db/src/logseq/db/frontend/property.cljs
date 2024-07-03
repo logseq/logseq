@@ -154,7 +154,27 @@
                                              {:type :checkbox
                                               :hide? true
                                               :view-context :page
-                                              :public? true}}))
+                                              :public? true}}
+   :logseq.property/table-sorting {:schema
+                                   {:type :coll
+                                    :hide? true
+                                    :public? false}}
+
+   :logseq.property/table-filters {:schema
+                                   {:type :coll
+                                    :hide? true
+                                    :public? false}}
+
+   :logseq.property/table-hidden-columns {:schema
+                                          {:type :keyword
+                                           :cardinality :many
+                                           :hide? true
+                                           :public? false}}
+
+   :logseq.property/table-ordered-columns {:schema
+                                           {:type :coll
+                                            :hide? true
+                                            :public? false}}))
 
 (def built-in-properties
   (->> built-in-properties*
