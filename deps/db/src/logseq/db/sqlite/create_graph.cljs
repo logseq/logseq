@@ -11,8 +11,8 @@
 (defn- mark-block-as-built-in [block built-in-prop-value]
   (assoc block :logseq.property/built-in? [:block/uuid (:block/uuid built-in-prop-value)]))
 
-(defn- build-initial-properties*
-  []
+(defn build-initial-properties*
+  [built-in-properties]
   (mapcat
    (fn [[db-ident {:keys [schema original-name closed-values] :as m}]]
      (let [prop-name (or original-name (name (:name m)))
@@ -27,7 +27,7 @@
                       schema
                       {:original-name prop-name})])]
        blocks))
-   (dissoc db-property/built-in-properties :logseq.property/built-in?)))
+   (dissoc built-in-properties :logseq.property/built-in?)))
 
 (defn- build-initial-properties
   "Builds initial properties and their closed values and marks them
@@ -45,7 +45,7 @@
                              true)
         mark-block-as-built-in' (fn [block]
                                   (mark-block-as-built-in {:block/uuid (:block/uuid block)} built-in-prop-value))
-        properties (build-initial-properties*)
+        properties (build-initial-properties* db-property/built-in-properties)
         ;; Tx order matters. built-in-property must come first as all properties depend on it.
         tx (concat [built-in-property]
                    properties
