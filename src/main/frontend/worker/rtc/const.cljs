@@ -46,6 +46,7 @@
     [:cat :keyword
      [:map
       [:block-uuid :uuid]
+      [:db/ident {:optional true} :keyword]
       [:pos block-pos-schema]
       [:av-coll [:sequential av-schema]]
       [:card-one-attrs {:optional true} [:sequential :keyword]]]]]

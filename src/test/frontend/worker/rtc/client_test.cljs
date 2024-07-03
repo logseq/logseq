@@ -9,6 +9,35 @@
 (def empty-db (d/empty-db db-schema/schema-for-db-based-graph))
 
 (deftest local-block-ops->remote-ops-test
+  (testing "user.class/yyy creation"
+    (let [block-uuid (random-uuid)
+          db (d/db-with empty-db [{:block/uuid block-uuid,
+                                   :block/updated-at 1720017595873,
+                                   :block/created-at 1720017595872,
+                                   :block/format :markdown,
+                                   :db/ident :user.class/yyy,
+                                   :block/type ["class"],
+                                   :block/name "yyy",
+                                   :block/original-name "yyy"}])]
+      (is (= [[:update
+               {:block-uuid block-uuid
+                :db/ident :user.class/yyy
+                :pos [nil nil],
+                :av-coll
+                [[:block/name "[\"~#'\",\"yyy\"]" 1 true]
+                 [:block/original-name "[\"~#'\",\"yyy\"]" 1 true]
+                 [:block/type "[\"~#'\",\"class\"]" 1 true]]}]]
+             (:remote-ops
+              (#'subject/local-block-ops->remote-ops
+               db
+               {:move [:move 1 {:block-uuid block-uuid}]
+                :update
+                [:update 1 {:block-uuid block-uuid
+                            :av-coll
+                            [[:block/name (ldb/write-transit-str "yyy") 1 true]
+                             [:block/original-name (ldb/write-transit-str "yyy") 1 true]
+                             [:block/type (ldb/write-transit-str "class") 1 true]]}]}))))))
+
   (testing "user.property/xxx creation"
     (let [block-uuid (random-uuid)
           block-order "b0P"
@@ -28,10 +57,10 @@
       (is (=
            [[:update
              {:block-uuid block-uuid,
+              :db/ident :user.property/xxx
               :pos [nil block-order],
               :av-coll
-              [[:db/ident "[\"~#'\",\"~:user.property/xxx\"]" 1 true]
-               [:block/name "[\"~#'\",\"xxx\"]" 1 true]
+              [[:block/name "[\"~#'\",\"xxx\"]" 1 true]
                [:block/original-name "[\"~#'\",\"xxx\"]" 1 true]
                [:block/type "[\"~#'\",\"property\"]" 1 true]]}]
             [:update-schema
@@ -48,7 +77,6 @@
               [:update 1 {:block-uuid block-uuid
                           :av-coll
                           [[:db/valueType (ldb/write-transit-str :db.type/ref) 1 true]
-                           [:db/ident (ldb/write-transit-str :user.property/xxx) 1 true]
                            [:block/name (ldb/write-transit-str "xxx") 1 true]
                            [:block/original-name (ldb/write-transit-str "xxx") 1 true]
                            [:block/type (ldb/write-transit-str "property") 1 true]
