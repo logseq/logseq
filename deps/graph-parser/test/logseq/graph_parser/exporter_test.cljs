@@ -223,21 +223,25 @@
 
         (is (= {:logseq.property/page-tags #{"Movie"}}
                (readable-properties @conn tagged-page))
-            "tagged page has tags imported to property by default")))))
+            "tagged page has tags imported as page-tags property by default")))))
 
 (deftest-async export-file-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          file (node-path/join file-graph-dir "journals/2024_02_07.md")
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-          _ (import-files-to-db [file] conn {:tag-classes ["movie"]})]
+          _ (import-files-to-db files conn {:tag-classes ["movie"]})]
     (let [block (find-block-by-content @conn #"Inception")
           tag-page (find-page-by-name @conn "Movie")
           another-tag-page (find-page-by-name @conn "p0")]
       (is (= (:block/content block) "Inception")
-          "block with :tag-classes tag strips tag from content")
+          "configured tagged block block with :tag-classes tag strips tag from content")
 
       (is (= ["class"] (:block/type tag-page))
-          "tag page in :tag-classes is a class")
+          "configured tag page in :tag-classes is a class")
       (is (and another-tag-page (not (:block/type another-tag-page)))
-          "another tag page not in :tag-classes is not a class"))))
+          "unconfigured tag page is not a class")
+
+      (is (= {:block/tags [:user.class/Movie]}
+             (readable-properties @conn (find-page-by-name @conn "Interstellar")))
+          "configured tagged page has tags imported as a class"))))

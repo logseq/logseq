@@ -52,19 +52,27 @@
      {:block/original-name new-class
       :block/name (common-util/page-name-sanity-lc new-class)})
     (when (contains? tag-classes (:block/name tag-block))
-      (-> (db-class/build-new-class db tag-block)
-          ;; override with imported timestamps
-          (dissoc :block/created-at :block/updated-at)
-          (merge (add-missing-timestamps
-                  (select-keys tag-block [:block/created-at :block/updated-at])))))))
+      (if-let [existing-tag-uuid (first
+                                  (d/q '[:find [?uuid ...]
+                                         :in $ ?name
+                                         :where [?b :block/uuid ?uuid] [?b :block/type "class"] [?b :block/name ?name]]
+                                       db
+                                       (:block/name tag-block)))]
+        [:block/uuid existing-tag-uuid]
+        ;; Creates or updates page within same tx
+        (-> (db-class/build-new-class db tag-block)
+            ;; override with imported timestamps
+            (dissoc :block/created-at :block/updated-at)
+            (merge (add-missing-timestamps
+                    (select-keys tag-block [:block/created-at :block/updated-at]))))))))
 
 (defn- update-page-tags
-  [block tag-classes names-uuids]
+  [block db tag-classes page-names-to-uuids]
   (if (seq (:block/tags block))
     (let [page-tags (->> (:block/tags block)
                          (remove #(or (:block.temp/new-class %) (contains? tag-classes (:block/name %))))
                          (map #(vector :block/uuid
-                                       (or (get names-uuids (:block/name %))
+                                       (or (get page-names-to-uuids (:block/name %))
                                            (throw (ex-info (str "No uuid found for tag " (pr-str (:block/name %)))
                                                            {:tag %})))))
                          set)]
@@ -72,8 +80,7 @@
         true
         (update :block/tags
                 (fn [tags]
-                  ;; FIXME: Add class support to pages
-                  (keep #(convert-tag-to-class nil % tag-classes) tags)))
+                  (keep #(convert-tag-to-class db % tag-classes) tags)))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
     block))
@@ -627,7 +634,7 @@
     (concat properties-tx deadline-properties-tx [block'])))
 
 (defn- build-new-page
-  [m tag-classes page-names-to-uuids]
+  [m db tag-classes page-names-to-uuids]
   (-> m
       ;; Fix pages missing :block/original-name. Shouldn't happen
       ((fn [m']
@@ -638,7 +645,7 @@
       ;; TODO: org-mode content needs to be handled
       (assoc :block/format :markdown)
       (dissoc :block/whiteboard?)
-      (update-page-tags tag-classes page-names-to-uuids)))
+      (update-page-tags db tag-classes page-names-to-uuids)))
 
 (defn- build-pages-tx
   "Given all the pages and blocks parsed from a file, return a map containing
@@ -674,8 +681,8 @@
                              (when (seq block-changes)
                                (cond-> (merge block-changes {:block/uuid page-uuid})
                                  (:block/tags m)
-                                 (update-page-tags tag-classes page-names-to-uuids))))
-                           (build-new-page m tag-classes page-names-to-uuids)))
+                                 (update-page-tags @conn tag-classes page-names-to-uuids))))
+                           (build-new-page m @conn tag-classes page-names-to-uuids)))
                        (map :block all-pages-m))]
     {:pages-tx pages-tx
      :page-properties-tx (mapcat :properties-tx all-pages-m)
