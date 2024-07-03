@@ -16,6 +16,39 @@ docker run -d --rm -p 127.0.0.1:3001:80 ghcr.io/logseq/logseq-webapp:latest
 
 Open the browser and go to <http://localhost:3001>.
 
+## With plugins enabled
+
+### Prepare the local folder
+
+Prepare your logseq's repo. Copy the `$HOME/.logseq/plugins` to `path/to/logseq-repo/dot-logseq`
+```shell
+cd path/to/logseq-repo
+cp -r $HOME/.logseq/plugins dot-logseq
+```
+
+Edit `dot-logseq/preferences.json` and list the plugins you want to enable under the `externals` key. Make sure the paths in the list are relative to the `path/to/logseq-repo` directory an    d start with `./`:
+
+```json
+{
+  ...
+  "externals": [
+    "./plugins/logseq-todo-plugin",
+    "./plugins/logseq-excalidraw"
+  ]
+}
+```
+
+### Build the image
+```shell
+git clone -b master https://github.com/logseq/logseq.git && cd logseq
+docker build -f Dockerfile.local . -t logseq-webapp-local:latest
+```
+
+### Run the container
+```shell
+docker run -d --rm -p 127.0.0.1:3001:80 -v path/to/logseq-repo/dot-logseq/plugins:/usr/share/nginx/html/plugins:ro logseq-webapp-local:latest
+```
+
 ## Remote(non-local) access
 
 Here we use the [mkcert](https://github.com/FiloSottile/mkcert) to generate locally-trusted development certificates. For other purposes, you should apply a certificate from a trusted CA.

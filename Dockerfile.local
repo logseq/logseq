@@ -7,10 +7,7 @@
 FROM clojure:temurin-11-tools-deps-1.11.1.1208-bullseye-slim as builder
 
 ARG DEBIAN_FRONTEND=noninteractive
-ENV LOGSEQ_SENTRY_DSN="" 
-ENV LOGSEQ_POSTHOG_TOKEN=""
-ENV LOGSEQ_DEBUG=true
-ENV ENABLE_PLUGINS_LOCAL=true
+ARG ENABLE_PLUGINS_LOCAL=true
 
 # Install reqs
 RUN apt-get update && apt-get install -y --no-install-recommends \
