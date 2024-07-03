@@ -77,7 +77,9 @@
           (shui/tabler-icon "user-plus")
           (shui/tabler-icon "user-plus"))]
        (when (seq online-users)
-         (for [{:keys [user-email user-name user-uuid]} online-users
+         (for [{user-email :user/email
+                user-name :user/name
+                user-uuid :user/uuid} online-users
                :let [color (shui-util/uuid-color user-uuid)]]
            (when user-name
              (shui/avatar

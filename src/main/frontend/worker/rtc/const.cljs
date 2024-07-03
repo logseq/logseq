@@ -213,16 +213,6 @@
       [:action :string]
       [:graph-uuid :string]
       [:block-uuids [:sequential :uuid]]]]
-    ["update-assets"
-     [:map
-      [:req-id :string]
-      [:action :string]
-      [:graph-uuid :uuid]
-      [:create {:optional true} [:sequential
-                                 [:map
-                                  [:asset-uuid :uuid]
-                                  [:asset-name :string]]]]
-      [:delete {:optional true} [:sequential :uuid]]]]
     ["calibrate-graph-skeleton"
      [:map
       [:req-id :string]

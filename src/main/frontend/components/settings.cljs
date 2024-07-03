@@ -1140,7 +1140,9 @@
      [:div.flex.flex-col.gap-2.mt-4
       [:h2.opacity-50.font-medium "Members:"]
       [:div.users.flex.flex-col.gap-1
-       (for [{:keys [user-name user-email graph<->user-user-type]} users]
+       (for [{user-name :user/name
+              user-email :user/email
+              graph<->user-user-type :graph<->user/user-type} users]
          [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
           [:div user-name]
           (when user-email [:div.opacity-50.text-sm user-email])
