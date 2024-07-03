@@ -130,7 +130,7 @@
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           assets (atom [])
-          _ (import-file-graph-to-db file-graph-dir conn {:assets assets})]
+          {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets})]
 
     (is (nil? (:errors (db-validate/validate-db! @conn)))
         "Created graph has no validation errors")
@@ -145,7 +145,7 @@
       ;; Includes 2 journals as property values for :logseq.task/deadline
       (is (= 8 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
       ;; Count includes Contents and page references
-      (is (= 6
+      (is (= 7
              (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
       (is (= 1 (count @assets))))
 
@@ -184,6 +184,10 @@
           "Existing page has correct properties"))
 
     (testing "built-in properties"
+      (is (= 2
+             (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
+          "icon properties are visibly ignored in order to not fail import")
+
       (is (= {:logseq.task/deadline "Nov 26th, 2022"}
              (readable-properties @conn (find-block-by-content @conn "only deadline")))
           "deadline block has correct journal as property value")
