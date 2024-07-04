@@ -23,14 +23,20 @@
   #{:block/content :block/created-at :block/updated-at :block/alias
     :block/tags :block/type :block/schema :block/link :block/journal-day
     :class/parent :class/schema.properties :property/schema.classes :property.value/content
-    :db/ident :db/index :db/valueType :db/cardinality})
+    :db/index :db/valueType :db/cardinality})
+
+(def ^:private watched-attr-ns
+  #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
+    "logseq.property.linked-references"
+    "logseq.class" "logseq.kv"})
 
 (defn- watched-attr?
   [attr]
   (or (contains? watched-attrs attr)
       (let [ns (namespace attr)]
-        (or (= "logseq.task" ns)        ;e.g. :logseq.task/status
-            (string/ends-with? ns ".property"))))) ; :logseq.property/xxx, :user.property/xxx
+        (or (contains? watched-attr-ns ns)
+            (string/ends-with? ns ".property")
+            (string/ends-with? ns ".class")))))
 
 (defn- ref-attr?
   [db attr]

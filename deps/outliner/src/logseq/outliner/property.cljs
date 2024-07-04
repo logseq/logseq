@@ -345,7 +345,7 @@
                  current-parent
                  (contains? (:block/type parent) "class")
                  (not (contains? @*classes (:db/id parent))))
-            (swap! *classes conj current-parent)
+            (swap! *classes conj (:db/id current-parent))
             (recur (:class/parent current-parent))))))
     @*classes))
 

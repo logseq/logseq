@@ -433,7 +433,7 @@
        nil))))
 
 (defn- get-filter-with-changed-operator
-  [property operator value]
+  [_property operator value]
   (case operator
     (:is :is-not)
     (when (set? value) value)
@@ -478,7 +478,7 @@
          (operator->text operator)))))))
 
 (rum/defc between < rum/static
-  [property [start end] filters set-filters! idx]
+  [_property [start end] filters set-filters! idx]
   [:<>
    (shui/input
     {:auto-focus true

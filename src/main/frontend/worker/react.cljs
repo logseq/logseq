@@ -2,8 +2,7 @@
   "Compute reactive query affected keys"
   (:require [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [cljs.spec.alpha :as s]
-            [logseq.db :as ldb]))
+            [cljs.spec.alpha :as s]))
 
 ;;; keywords specs for reactive query, used by `react/q` calls
 ;; ::block

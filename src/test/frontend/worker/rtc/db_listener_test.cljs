@@ -13,7 +13,6 @@
         id->same-entity-datoms (group-by first datom-vec-coll)]
     (update-vals id->same-entity-datoms #'worker-db-listener/entity-datoms=>a->add?->v->t)))
 
-
 (deftest entity-datoms=>ops-test
   (testing "remove whiteboard page-block"
     (let [conn (d/conn-from-db empty-db)
@@ -62,8 +61,39 @@
                        [:block/created-at "[\"~#'\",1716882111476]"]
                        [:block/schema "[\"^ \",\"~:type\",\"~:number\"]"]
                        [:db/cardinality "[\"~#'\",\"~:db.cardinality/one\"]"]
-                       [:db/ident "[\"~#'\",\"~:user.property/qqq\"]"]
+                       ;; [:db/ident "[\"~#'\",\"~:user.property/qqq\"]"]
                        [:block/type "[\"~#'\",\"property\"]"]]}]]
+           (map (fn [[op-type _t op-value]]
+                  [op-type (cond-> op-value
+                             (:av-coll op-value)
+                             (assoc :av-coll (map #(take 2 %) (:av-coll op-value))))])
+                ops)))))
+
+  (testing "create user-class"
+    (let [conn (d/conn-from-db empty-db)
+          tx-data [[:db/add 62 :block/uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6" 536870954]
+                   [:db/add 62 :block/updated-at 1720019497643 536870954]
+                   [:db/add 62 :class/parent 4 536870954]
+                   [:db/add 62 :block/created-at 1720019497643 536870954]
+                   [:db/add 62 :block/format :markdown 536870954]
+                   [:db/add 62 :db/ident :user.class/zzz 536870954]
+                   [:db/add 62 :block/type "class" 536870954]
+                   [:db/add 62 :block/name "zzz" 536870954]
+                   [:db/add 62 :block/original-name "zzz" 536870954]]
+          {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
+          ops (#'subject/entity-datoms=>ops db-before db-after
+                                            (tx-data=>e->a->add?->v->t tx-data)
+                                            (map vec tx-data))]
+      (is (=
+           [[:update-page {:block-uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6"}]
+            [:update {:block-uuid #uuid "66856a29-6eb3-4122-af97-8580a853c6a6",
+                      :av-coll
+                      [[:block/updated-at "[\"~#'\",1720019497643]"]
+                       [:block/created-at "[\"~#'\",1720019497643]"]
+                       [:block/type "[\"~#'\",\"class\"]"]
+                       ;;1. no :class/parent, because db/id 4 block doesn't exist in empty-db
+                       ;;2. shouldn't have :db/ident, :db/ident is special, will be handled later
+                       ]}]]
            (map (fn [[op-type _t op-value]]
                   [op-type (cond-> op-value
                              (:av-coll op-value)

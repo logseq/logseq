@@ -46,6 +46,7 @@
     [:cat :keyword
      [:map
       [:block-uuid :uuid]
+      [:db/ident {:optional true} :keyword]
       [:pos block-pos-schema]
       [:av-coll [:sequential av-schema]]
       [:card-one-attrs {:optional true} [:sequential :keyword]]]]]
@@ -213,16 +214,6 @@
       [:action :string]
       [:graph-uuid :string]
       [:block-uuids [:sequential :uuid]]]]
-    ["update-assets"
-     [:map
-      [:req-id :string]
-      [:action :string]
-      [:graph-uuid :uuid]
-      [:create {:optional true} [:sequential
-                                 [:map
-                                  [:asset-uuid :uuid]
-                                  [:asset-name :string]]]]
-      [:delete {:optional true} [:sequential :uuid]]]]
     ["calibrate-graph-skeleton"
      [:map
       [:req-id :string]

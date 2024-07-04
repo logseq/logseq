@@ -16,7 +16,9 @@
   [page]
   (when-let [page (or (text/get-nested-page-name page) page)]
     (let [repo (state/get-current-repo)
-          aliases (db/get-page-alias-names repo page)
+          page-entity (db/get-page page)
+          aliases (when-let [page-id (:db/id page-entity)]
+                    (db/get-page-alias-names repo page-id))
           all-page-names (conj aliases page)]
       (when-let [page (or (first (filter text/namespace-page? all-page-names))
                           (when (:block/_namespace (db/entity [:block/name (util/page-name-sanity-lc page)]))

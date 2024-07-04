@@ -6,6 +6,7 @@
 
 (defn add-page-to-recent!
   [db-id click-from-recent?]
+  (assert db-id (number? db-id))
   (when-not (:db/restoring? @state/state)
     (when-let [page (db/entity db-id)]
       (when-not (ldb/hidden-page? page)
