@@ -348,17 +348,17 @@
                                                         (when e (.preventDefault e))
                                                         (state/pub-event! [:editor/new-property {}]))}
 
-   :editor/add-block-deadline               {:binding "b d"
+   :editor/add-property-deadline            {:binding "p d"
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Deadline"}]))}
 
-   :editor/add-block-status                 {:binding "b s"
+   :editor/add-property-status              {:binding "p s"
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Status"}]))}
 
-   :editor/add-block-priority               {:binding "b p"
+   :editor/add-property-priority            {:binding "p p"
                                              :selection? true
                                              :fn      (fn []
                                                         (state/pub-event! [:editor/new-property {:property-key "Priority"}]))}
@@ -769,9 +769,9 @@
             :editor/copy-current-file
             :editor/copy-page-url
             :editor/new-whiteboard
-            :editor/add-block-deadline
-            :editor/add-block-status
-            :editor/add-block-priority
+            :editor/add-property-deadline
+            :editor/add-property-status
+            :editor/add-property-priority
             :ui/toggle-wide-mode
             :ui/select-theme-color
             :ui/goto-plugins
@@ -890,9 +890,9 @@
       :editor/select-block-down
       :editor/delete-selection
       :editor/add-property
-      :editor/add-block-deadline
-      :editor/add-block-status
-      :editor/add-block-priority]
+      :editor/add-property-deadline
+      :editor/add-property-status
+      :editor/add-property-priority]
 
      :shortcut.category/toggle
      [:ui/toggle-help
