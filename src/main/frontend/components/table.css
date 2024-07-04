@@ -61,6 +61,10 @@
 }
 
 .cp__all_pages_table {
+  &-wrap {
+    @apply max-h-[70vh] overflow-auto;
+  }
+
   th {
     @apply opacity-50 text-left text-sm;
   }
