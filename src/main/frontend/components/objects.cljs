@@ -78,8 +78,12 @@
 (defn- get-property-value-content
   [entity]
   (when entity
-    (if (map? entity)
+    (cond
+      (uuid? entity)
+      (db-property/property-value-content (db/entity [:block/uuid entity]))
+      (map? entity)
       (db-property/property-value-content entity)
+      :else
       (str entity))))
 
 (defn- get-property-value-for-search
@@ -518,7 +522,10 @@
                 (= type :checkbox)
                 [{:value true :label "true"} {:value false :label "false"}]
                 :else
-                (get-property-values (:data table) property))
+                (->> (get-property-values (:data table) property)
+                     (map (fn [{:keys [value label]}]
+                            {:label label
+                             :value (:block/uuid value)}))))
         filters (get-in table [:state :filters])
         set-filters! (:set-filters! data-fns)
         many? (if (or (contains? #{:date-before :date-after :before :after} operator)
@@ -550,22 +557,29 @@
        {:class "!px-2 rounded-none border-r"
         :variant "ghost"
         :size :sm}
-       [:div.flex.flex-row.items-center.gap-1.text-xs
-        (cond
-          (de/entity? value)
-          [:div (get-property-value-content value)]
+       (let [value (cond
+                     (uuid? value)
+                     (db/entity [:block/uuid value])
+                     (and (coll? value) (every? uuid? value))
+                     (set (map #(db/entity [:block/uuid %]) value))
+                     :else
+                     value)]
+         [:div.flex.flex-row.items-center.gap-1.text-xs
+          (cond
+            (de/entity? value)
+            [:div (get-property-value-content value)]
 
-          (string? value)
-          [:div value]
+            (string? value)
+            [:div value]
 
-          (boolean? value)
-          [:div (str value)]
+            (boolean? value)
+            [:div (str value)]
 
-          (seq value)
-          (->> (map (fn [v] [:div (get-property-value-content v)]) value)
-               (interpose [:div "or"]))
-          :else
-          "Empty")]))
+            (seq value)
+            (->> (map (fn [v] [:div (get-property-value-content v)]) value)
+                 (interpose [:div "or"]))
+            :else
+            "Empty")])))
      (shui/dropdown-menu-content
       {:align "start"}
       (select/select option)))))
@@ -657,8 +671,7 @@
                 (if (and (empty? match) (empty? value))
                   true
                   (when (coll? value)
-                    (boolean (seq (set/intersection (set (map :db/id value'))
-                                                    (set (map :db/id match))))))))
+                    (boolean (seq (set/intersection (set (map :block/uuid value')) match))))))
 
               :is-not
               (if (boolean? match)
@@ -669,7 +682,7 @@
                   (and (seq match) (empty? value))
                   true
                   (coll? value)
-                  (boolean (empty? (set/intersection (set (map :db/id value')) (set (map :db/id match)))))))
+                  (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))))
 
               :text-contains
               (some #(fuzzy-matched? match (get-property-value-content %)) value')
@@ -760,24 +773,6 @@
          [property operator])))
    filters))
 
-(defn- persist-state->table-filters
-  [filters]
-  (mapv
-   (fn [[property operator matches]]
-     (let [matches' (cond
-                      (uuid? matches)
-                      (db/entity [:block/uuid matches])
-
-                      (and (coll? matches) (every? uuid? matches))
-                      (set (keep #(db/entity [:block/uuid %]) matches))
-
-                      :else
-                      matches)]
-       (if matches'
-         [property operator matches']
-         [property operator])))
-   filters))
-
 (defn- db-set-table-state!
   [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}]
   (let [repo (state/get-current-repo)]
@@ -787,9 +782,9 @@
        (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-sorting sorting))
      :set-filters!
      (fn [filters]
-       (set-filters! filters)
-       (let [state (table-filters->persist-state filters)]
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-filters state)))
+       (let [filters (table-filters->persist-state filters)]
+         (set-filters! filters)
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-filters filters)))
      :set-visible-columns!
      (fn [columns]
        (let [hidden-columns (vec (keep (fn [[column visible?]]
@@ -808,7 +803,7 @@
   (let [[input set-input!] (rum/use-state "")
         sorting (:logseq.property/table-sorting class)
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
-        filters (persist-state->table-filters (:logseq.property/table-filters class))
+        filters (:logseq.property/table-filters class)
         [filters set-filters!] (rum/use-state (or filters []))
         hidden-columns (:logseq.property/table-hidden-columns class)
         [visible-columns set-visible-columns!] (rum/use-state (zipmap hidden-columns (repeat false)))
@@ -843,8 +838,9 @@
                                              :set-visible-columns! set-visible-columns!
                                              :set-ordered-columns! set-ordered-columns!
                                              :set-row-selection! set-row-selection!}})
-        selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        selected-rows-count (count selected-rows)]
+        ;; selected-rows (shui/table-get-selection-rows row-selection (:rows table))
+        ;; selected-rows-count (count selected-rows)
+        ]
     (rum/use-effect!
      (fn []
        (set-row-filter! (fn []
