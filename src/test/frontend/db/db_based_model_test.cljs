@@ -4,8 +4,7 @@
             [frontend.db :as db]
             [frontend.test.helper :as test-helper]
             [datascript.core :as d]
-            [logseq.outliner.property :as outliner-property]
-            [logseq.db :as ldb]))
+            [logseq.outliner.property :as outliner-property]))
 
 (def repo test-helper/test-db-name-db-version)
 

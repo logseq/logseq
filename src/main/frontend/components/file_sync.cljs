@@ -823,21 +823,21 @@
 (defn make-onboarding-panel
   [type]
 
-  (fn [close-fn]
+  (fn [{:keys [close]}]
 
     (case type
       :welcome
-      (onboarding-welcome-logseq-sync close-fn)
+      (onboarding-welcome-logseq-sync close)
 
       :unavailable
-      (onboarding-unavailable-file-sync close-fn)
+      (onboarding-unavailable-file-sync close)
 
       :congrats
-      (onboarding-congrats-successful-sync close-fn)
+      (onboarding-congrats-successful-sync close)
 
       [:p
        [:h1.text-xl.font-bold "Not handled!"]
-       [:a.button {:on-click close-fn} "Got it!"]])))
+       [:a.button {:on-click close} "Got it!"]])))
 
 (defn maybe-onboarding-show
   [type]

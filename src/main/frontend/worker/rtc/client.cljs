@@ -161,6 +161,7 @@
              [:update (cond-> {:block-uuid block-uuid
                                :pos pos
                                :av-coll other-av-coll}
+                        (:db/ident block) (assoc :db/ident (:db/ident block))
                         card-one-attrs (assoc :card-one-attrs card-one-attrs))]))
     (when update-schema-op
       (swap! *remote-ops conj update-schema-op))

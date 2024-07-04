@@ -601,14 +601,19 @@
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)
+                 page-uuid? (util/uuid-string? page-name')
                  *loading? (atom true)]
-             (p/do!
-              (db-async/<get-block (state/get-current-repo) page-name')
-              (reset! *loading? false)
-              (route-handler/update-page-title-and-label! (state/get-route-match)))
+             (p/let
+               [page-block (db-async/<get-block (state/get-current-repo) page-name')]
+               (reset! *loading? false)
+               (if (not page-block)
+                 (page-handler/<create! page-name' {:redirect? true})
+                 (if-let [page-uuid (and (not page-uuid?) (:block/uuid page-block))]
+                   (route-handler/redirect-to-page! (str page-uuid) {:push false})
+                   (route-handler/update-page-title-and-label! (state/get-route-match)))))
              (assoc state
-                    ::page-name page-name'
-                    ::loading? *loading?)))}
+               ::page-name page-name'
+               ::loading? *loading?)))}
   [state option]
   (page-inner (assoc option :*loading? (::loading? state))))
 
@@ -617,12 +622,12 @@
   (rum/with-key
     (page-aux option)
     (or (:page-name option)
-        (get-page-name state))))
+      (get-page-name state))))
 
 (rum/defc contents-page < rum/reactive
-  {:init (fn [state]
-           (db-async/<get-block (state/get-current-repo) "contents")
-           state)}
+                          {:init (fn [state]
+                                   (db-async/<get-block (state/get-current-repo) "contents")
+                                   state)}
   [page]
   (when-let [repo (state/get-current-repo)]
     (when-not (state/sub-async-query-loading "contents")
@@ -1014,7 +1019,7 @@
 
 (defn batch-delete-dialog
   [pages orphaned-pages? refresh-fn]
-  (fn [close-fn]
+  (fn [{:keys [close]}]
     [:div
      [:div.sm:flex.items-center
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
@@ -1026,44 +1031,47 @@
           (t :remove-orphaned-pages)
           (t :page/delete-confirmation))]]]
 
-     [:table.table-auto.cp__all_pages_table.mt-4
-      [:thead
-       [:tr.opacity-70
-        [:th [:span "#"]]
-        [:th [:span (t :block/name)]]
-        [:th [:span (t :page/backlinks)]]
-        (when-not orphaned-pages? [:th [:span (t :page/created-at)]])
-        (when-not orphaned-pages? [:th [:span (t :page/updated-at)]])]]
+     [:div.cp__all_pages_table-wrap
+      [:table.w-full.cp__all_pages_table.mt-4
+       [:thead
+        [:tr.opacity-70
+         [:th [:span "#"]]
+         [:th [:span (t :block/name)]]
+         [:th [:span (t :page/backlinks)]]
+         (when-not orphaned-pages? [:th [:span (t :page/created-at)]])
+         (when-not orphaned-pages? [:th [:span (t :page/updated-at)]])]]
 
-      [:tbody
-       (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
-         [:tr {:key name}
-          [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
-          [:td.name [:a {:href     (rfe/href :page {:name (:block/uuid page)})}
-                     (component-block/page-cp {} page)]]
-          [:td.backlinks [:span (or backlinks "0")]]
-          (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
-          (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]
+       [:tbody
+        (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
+          [:tr {:key name}
+           [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
+           [:td.name [:a {:href (rfe/href :page {:name (:block/uuid page)})}
+                      (component-block/page-cp {} page)]]
+           [:td.backlinks [:span (or backlinks "0")]]
+           (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
+           (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]]
+
+     [:p.px-1.opacity-50 [:small (str "Total: " (count pages))]]
 
      [:div.pt-6.flex.justify-end.gap-4
       (ui/button
-       (t :cancel)
-       :theme :gray
-       :on-click close-fn)
+        (t :cancel)
+        :variant :outline
+        :on-click close)
 
       (ui/button
-       (t :yes)
-       :on-click (fn []
-                   (close-fn)
-                   (let [failed-pages (atom [])]
-                     (p/let [_ (p/all (map (fn [page]
-                                             (page-handler/<delete! (:block/uuid page) nil
-                                                                    {:error-handler
-                                                                     (fn []
-                                                                       (swap! failed-pages conj (:block/name page)))}))
-                                           pages))]
-                       (if (seq @failed-pages)
-                         (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
-                                             :warning false)
-                         (notification/show! (t :tips/all-done) :success))))
-                   (js/setTimeout #(refresh-fn) 200)))]]))
+        (t :yes)
+        :on-click (fn []
+                    (close)
+                    (let [failed-pages (atom [])]
+                      (p/let [_ (p/all (map (fn [page]
+                                              (page-handler/<delete! (:block/uuid page) nil
+                                                {:error-handler
+                                                 (fn []
+                                                   (swap! failed-pages conj (:block/name page)))}))
+                                         pages))]
+                        (if (seq @failed-pages)
+                          (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
+                            :warning false)
+                          (notification/show! (t :tips/all-done) :success))))
+                    (js/setTimeout #(refresh-fn) 200)))]]))

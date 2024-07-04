@@ -752,11 +752,12 @@
 
 (defmethod handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]
-    (shui/dialog-open!
-      (file-sync/make-onboarding-panel type)
-      (merge {:close-btn?      false
-              :center?         true
-              :close-backdrop? (not= type :welcome)} opts))))
+    (when-not (config/db-based-graph? (state/get-current-repo))
+      (shui/dialog-open!
+        (file-sync/make-onboarding-panel type)
+        (merge {:close-btn? false
+                :center? true
+                :close-backdrop? (not= type :welcome)} opts)))))
 
 (defmethod handle :file-sync/maybe-onboarding-show [[_ type]]
   (file-sync/maybe-onboarding-show type))

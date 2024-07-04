@@ -25,8 +25,7 @@
             [datascript.impl.entity :as de]
             [frontend.handler.property.util :as pu]
             [logseq.db.frontend.property.type :as db-property-type]
-            [dommy.core :as d]
-            [frontend.db-mixins :as db-mixins]))
+            [dommy.core :as d]))
 
 (rum/defc property-empty-btn-value
   [& {:as opts}]
