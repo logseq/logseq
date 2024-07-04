@@ -118,7 +118,7 @@
     (map #(uninstall-shortcut-handler! % true))
     (doall))
 
-  (let [shortcut-map (dh/shortcut-map handler-id state)
+  (let [shortcut-map (dh/shortcuts-map-by-handler-id handler-id state)
         handler (new KeyboardShortcutHandler js/window)]
     ;; set arrows enter, tab to global
     (when set-global-keys?
@@ -133,7 +133,7 @@
 
     (let [f (fn [e]
               (let [id (keyword (.-identifier e))
-                    shortcut-map (dh/shortcut-map handler-id state) ;; required to get shortcut map dynamically
+                    shortcut-map (dh/shortcuts-map-by-handler-id handler-id state) ;; required to get shortcut map dynamically
                     dispatch-fn (get shortcut-map id)]
                 (state/set-state! :editor/latest-shortcut id)
                 ;; trigger fn
