@@ -596,14 +596,19 @@
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
                  page-name' (get-sanity-page-name state page-name)
+                 page-uuid? (util/uuid-string? page-name')
                  *loading? (atom true)]
-             (p/do!
-              (db-async/<get-block (state/get-current-repo) page-name')
-              (reset! *loading? false)
-              (route-handler/update-page-title-and-label! (state/get-route-match)))
+             (p/let
+               [page-block (db-async/<get-block (state/get-current-repo) page-name')]
+               (reset! *loading? false)
+               (if (not page-block)
+                 (page-handler/<create! page-name' {:redirect? true})
+                 (if-let [page-uuid (and (not page-uuid?) (:block/uuid page-block))]
+                   (route-handler/redirect-to-page! (str page-uuid) {:push false})
+                   (route-handler/update-page-title-and-label! (state/get-route-match)))))
              (assoc state
-                    ::page-name page-name'
-                    ::loading? *loading?)))}
+               ::page-name page-name'
+               ::loading? *loading?)))}
   [state option]
   (page-inner (assoc option :*loading? (::loading? state))))
 
@@ -612,12 +617,12 @@
   (rum/with-key
     (page-aux option)
     (or (:page-name option)
-        (get-page-name state))))
+      (get-page-name state))))
 
 (rum/defc contents-page < rum/reactive
-  {:init (fn [state]
-           (db-async/<get-block (state/get-current-repo) "contents")
-           state)}
+                          {:init (fn [state]
+                                   (db-async/<get-block (state/get-current-repo) "contents")
+                                   state)}
   [page]
   (when-let [repo (state/get-current-repo)]
     (when-not (state/sub-async-query-loading "contents")
