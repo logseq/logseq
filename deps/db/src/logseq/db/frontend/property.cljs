@@ -103,8 +103,7 @@
     :schema
     {:type :default
      :public? true
-     :position :block-left
-     :shortcut "s"}
+     :position :block-left}
     :closed-values
     (mapv (fn [[db-ident value icon]]
             {:db-ident db-ident
@@ -122,8 +121,7 @@
     :schema
     {:type :default
      :public? true
-     :position :block-left
-     :shortcut "p"}
+     :position :block-left}
     :closed-values
     (mapv (fn [[db-ident value icon]]
             {:db-ident db-ident
@@ -138,8 +136,7 @@
    {:original-name "Deadline"
     :schema {:type :date
              :public? true
-             :position :block-below
-             :shortcut "d"}}
+             :position :block-below}}
 
    ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
