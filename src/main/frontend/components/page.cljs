@@ -1026,44 +1026,47 @@
           (t :remove-orphaned-pages)
           (t :page/delete-confirmation))]]]
 
-     [:table.w-full.cp__all_pages_table.mt-4
-      [:thead
-       [:tr.opacity-70
-        [:th [:span "#"]]
-        [:th [:span (t :block/name)]]
-        [:th [:span (t :page/backlinks)]]
-        (when-not orphaned-pages? [:th [:span (t :page/created-at)]])
-        (when-not orphaned-pages? [:th [:span (t :page/updated-at)]])]]
+     [:div.cp__all_pages_table-wrap
+      [:table.w-full.cp__all_pages_table.mt-4
+       [:thead
+        [:tr.opacity-70
+         [:th [:span "#"]]
+         [:th [:span (t :block/name)]]
+         [:th [:span (t :page/backlinks)]]
+         (when-not orphaned-pages? [:th [:span (t :page/created-at)]])
+         (when-not orphaned-pages? [:th [:span (t :page/updated-at)]])]]
 
-      [:tbody
-       (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
-         [:tr {:key name}
-          [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
-          [:td.name [:a {:href     (rfe/href :page {:name (:block/uuid page)})}
-                     (component-block/page-cp {} page)]]
-          [:td.backlinks [:span (or backlinks "0")]]
-          (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
-          (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]
+       [:tbody
+        (for [[n {:block/keys [name created-at updated-at backlinks] :as page}] (medley/indexed pages)]
+          [:tr {:key name}
+           [:td.n.w-12 [:span.opacity-70 (str (inc n) ".")]]
+           [:td.name [:a {:href (rfe/href :page {:name (:block/uuid page)})}
+                      (component-block/page-cp {} page)]]
+           [:td.backlinks [:span (or backlinks "0")]]
+           (when-not orphaned-pages? [:td.created-at [:span (if created-at (date/int->local-time-2 created-at) "Unknown")]])
+           (when-not orphaned-pages? [:td.updated-at [:span (if updated-at (date/int->local-time-2 updated-at) "Unknown")]])])]]]
+
+     [:p.px-1.opacity-50 [:small (str "Total: " (count pages))]]
 
      [:div.pt-6.flex.justify-end.gap-4
       (ui/button
-       (t :cancel)
-       :theme :gray
-       :on-click close)
+        (t :cancel)
+        :variant :outline
+        :on-click close)
 
       (ui/button
-       (t :yes)
-       :on-click (fn []
-                   (close)
-                   (let [failed-pages (atom [])]
-                     (p/let [_ (p/all (map (fn [page]
-                                             (page-handler/<delete! (:block/uuid page) nil
-                                                                    {:error-handler
-                                                                     (fn []
-                                                                       (swap! failed-pages conj (:block/name page)))}))
-                                           pages))]
-                       (if (seq @failed-pages)
-                         (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
-                                             :warning false)
-                         (notification/show! (t :tips/all-done) :success))))
-                   (js/setTimeout #(refresh-fn) 200)))]]))
+        (t :yes)
+        :on-click (fn []
+                    (close)
+                    (let [failed-pages (atom [])]
+                      (p/let [_ (p/all (map (fn [page]
+                                              (page-handler/<delete! (:block/uuid page) nil
+                                                {:error-handler
+                                                 (fn []
+                                                   (swap! failed-pages conj (:block/name page)))}))
+                                         pages))]
+                        (if (seq @failed-pages)
+                          (notification/show! (t :all-pages/failed-to-delete-pages (string/join ", " (map pr-str @failed-pages)))
+                            :warning false)
+                          (notification/show! (t :tips/all-done) :success))))
+                    (js/setTimeout #(refresh-fn) 200)))]]))

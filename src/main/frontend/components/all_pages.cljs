@@ -189,7 +189,7 @@
       [:div.ml-1
        (when selected?
          (shui/button {:variant :destructive
-                       :class "text-muted-foreground"
+                       :class "text-red-500"
                        :size :sm
                        :on-click #(shui/dialog-open!
                                    (component-page/batch-delete-dialog selected-rows false (fn [] (set-data! (get-all-pages)))))}
