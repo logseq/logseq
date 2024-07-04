@@ -29,7 +29,8 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.db.async :as db-async]
-            [frontend.db-mixins :as db-mixins]))
+            [frontend.db-mixins :as db-mixins]
+            [goog.functions :refer [debounce]]))
 
 (defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
   [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
@@ -815,6 +816,7 @@
                                     :set-visible-columns! set-visible-columns!
                                     :set-ordered-columns! set-ordered-columns!})
         [row-filter set-row-filter!] (rum/use-state nil)
+        debounced-set-row-filter! (debounce set-row-filter! 200)
         [row-selection set-row-selection!] (rum/use-state {})
         [data set-data!] (rum/use-state [])
         _ (rum/use-effect!
@@ -843,9 +845,10 @@
         ]
     (rum/use-effect!
      (fn []
-       (set-row-filter! (fn []
-                          (fn [row]
-                            (row-matched? row input filters)))))
+       (debounced-set-row-filter!
+        (fn []
+          (fn [row]
+            (row-matched? row input filters)))))
      [input filters])
     [:div.ls-table.flex.flex-col.gap-2.grid
      [:div.flex.items-center.justify-between
