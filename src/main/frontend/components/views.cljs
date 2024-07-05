@@ -903,5 +903,5 @@
 
 (rum/defc view < rum/reactive
   [view-entity option]
-  (when-let [view-entity' (db/sub-block (:db/id view-entity))]
+  (let [view-entity' (db/sub-block (:db/id view-entity))]
     (view-inner view-entity' option)))
