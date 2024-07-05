@@ -338,8 +338,7 @@
                              (let [e (db/entity [:block/uuid id])]
                                (when-not (= :logseq.class/Root (:db/ident e))
                                  e)))))
-                (->> (model/get-class-objects repo (:db/id class))
-                     (keep db/entity))))
+                (model/get-class-objects repo (:db/id class))))
             classes)
 
            :else

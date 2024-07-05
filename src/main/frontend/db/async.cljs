@@ -244,12 +244,14 @@
 
 (defn <get-tag-objects
   [graph tag-id]
-  (<q graph {:transact-db? true}
-      '[:find [(pull ?b [*]) ...]
-        :in $ ?tag-id
-        :where
-        [?b :block/tags ?tag-id]]
-      tag-id))
+  (let [class-children (db-model/get-class-children graph tag-id)
+        class-ids (distinct (conj class-children tag-id))]
+    (<q graph {:transact-db? true}
+        '[:find [(pull ?b [*]) ...]
+          :in $ [?tag-id ...]
+          :where
+          [?b :block/tags ?tag-id]]
+        class-ids)))
 
 (defn <get-tags
   [graph]
