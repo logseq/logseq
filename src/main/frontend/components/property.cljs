@@ -864,7 +864,7 @@
                                         (into result cur-properties)
                                         result)))
                              result))
-        full-properties (->> (concat block-own-properties' (map (fn [p] [p nil]) class-properties))
+        full-properties (->> (concat block-own-properties' (map (fn [p] [p (get block p)]) class-properties))
                              remove-built-in-or-other-position-properties)]
     (when-not (and (empty? full-properties)
                    (not (:page-configure? opts)))
