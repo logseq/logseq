@@ -1,7 +1,16 @@
 (ns logseq.shui.table.core
   "Table"
   (:require [logseq.shui.table.impl :as impl]
+            [dommy.core :refer-macros [sel1]]
             [rum.core :as rum]))
+
+(defn- get-head-container
+  []
+  (sel1 "#head"))
+
+(defn- get-main-scroll-container
+  []
+  (sel1 "#main-content-container"))
 
 (defn- row-selected?
   [row row-selection]
@@ -109,9 +118,39 @@
 ;; FIXME: sticky header
 (rum/defc table-header < rum/static
   [& prop-and-children]
-  (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div.flex.flex-row.items-center.w-fit
+  (let [[prop children] (get-prop-and-children prop-and-children)
+        el-ref (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn []
+        (let [^js container (get-main-scroll-container)
+              ^js el (rum/deref el-ref)
+              ^js cls (.-classList el)
+              *ticking? (volatile! false)
+              el-top (-> el (.getBoundingClientRect) (.-top))
+              head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+              translate (fn [offset]
+                          (set! (. (.-style el) -transform) (str "translate3d(0, " offset "px , 0)"))
+                          (if (zero? offset)
+                            (.remove cls "translated")
+                            (.add cls "translated")))
+              handle (fn []
+                       (let [scroll-top (js/parseInt (.-scrollTop container))
+                             offset (if (> (+ scroll-top head-top) el-top)
+                                      (+ (- scroll-top el-top) head-top 1) 0)]
+                         (translate offset)))
+              handler (fn []
+                        (when (not @*ticking?)
+                          (js/window.requestAnimationFrame
+                            #(do (handle) (vreset! *ticking? false)))
+                          (vreset! *ticking? true)))]
+          (.addEventListener container "scroll" handler)
+          #(.removeEventListener container "scroll" handler)))
+      [])
+
+    [:div.ls-table-header
      (merge {:class "border-y transition-colors bg-gray-01"
+             :ref el-ref
              :style {:z-index 100}}
             prop)
      children]))
