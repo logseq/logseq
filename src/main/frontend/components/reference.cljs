@@ -6,6 +6,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [logseq.db :as ldb]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.async :as db-async]
             [frontend.db.utils :as db-utils]
@@ -64,7 +65,7 @@
   [page-entity page-name *filters total filter-n filtered-ref-blocks *ref-pages]
   (let [filters @*filters
         threshold (state/get-linked-references-collapsed-threshold)
-        default-collapsed? (>= total threshold)
+        default-collapsed? (or (>= total threshold) (ldb/class? page-entity))
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
@@ -79,10 +80,10 @@
         :on-pointer-down (fn [e]
                            (util/stop-propagation e)
                            (shui/popup-show! (.-target e)
-                            (fn []
-                              [:div.p-4
-                               (filters/filter-dialog page-entity *filters *ref-pages)])
-                            {:align "end"}))}
+                                             (fn []
+                                               [:div.p-4
+                                                (filters/filter-dialog page-entity *filters *ref-pages)])
+                                             {:align "end"}))}
        (ui/icon "filter" {:class (cond
                                    (and (empty? (:included filters)) (empty? (:excluded filters)))
                                    "opacity-60 hover:opacity-100"

@@ -369,16 +369,6 @@
   []
   (common-uuid/gen-uuid))
 
-(defn get-tag-blocks
-  [db tag-name]
-  (d/q '[:find [?b ...]
-         :in $ ?tag
-         :where
-         [?e :block/name ?tag]
-         [?b :block/tags ?e]]
-       db
-       (common-util/page-name-sanity-lc tag-name)))
-
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
   [db property-id]

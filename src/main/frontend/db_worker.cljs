@@ -31,7 +31,8 @@
             [shadow.cljs.modern :refer [defclass]]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.order :as db-order]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
+            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [frontend.worker.db.migrate :as db-migrate]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -177,6 +178,9 @@
         (when (and config (not initial-data-exists?))
           (let [initial-data (sqlite-create-graph/build-db-initial-data config)]
             (d/transact! conn initial-data {:initial-db? true})))
+
+        (db-migrate/migrate conn)
+
         (p/let [_ (op-mem-layer/<init-load-from-indexeddb2! repo)]
           (db-listener/listen-db-changes! repo conn))))))
 
