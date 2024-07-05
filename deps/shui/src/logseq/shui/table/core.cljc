@@ -102,40 +102,40 @@
 (rum/defc table < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:table (merge {:class "w-full caption-bottom text-sm"}
+    [:div (merge {:class "ls-table w-full caption-bottom text-sm table-fixed"}
                    prop)
      children]))
 
+;; FIXME: sticky header
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:thead prop
+    [:div.flex.flex-row.items-center.w-fit
+     (merge {:class "border-y transition-colors bg-gray-01"
+             :style {:z-index 100}}
+            prop)
      children]))
 
 (rum/defc table-row < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:tr (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted"}
-                prop)
+    [:div.flex.flex-row.items-center (merge {:class "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted bg-gray-01 items-stretch"}
+                               prop)
      children]))
 
 (rum/defc table-head < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:th (merge {:class "h-12 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:pr-0"}
+    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:px-0"}
                 prop)
-     children]))
-
-(rum/defc table-body < rum/static
-  [& prop-and-children]
-  (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:tbody (merge {:class "[&_tr:last-child]:border-0"}
-                   prop)
      children]))
 
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:td (merge {:class "p-4 align-middle [&:has([role=checkbox])]:pr-0"}
-                   prop)
-     children]))
+    [:div.flex.relative prop
+     [:div {:class (str "flex align-middle border-r w-full overflow-x-clip items-center"
+                        (if (:select? prop)
+                          " px-0"
+                          " px-4"))}
+      children]]))

@@ -2387,7 +2387,7 @@
           (cond
             (:block/name block)
             [:div.flex.flex-row.items-center.gap-1
-             (icon/get-page-icon block {})
+             (when-not (:table? config) (icon/get-page-icon block {}))
              (page-cp config block)]
 
             :else
@@ -2474,7 +2474,7 @@
   (let [*hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
-        editor-box (get config :editor-box)
+        editor-box (state/get-component :editor/box)
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
         block-reference-only? (some->
@@ -2486,9 +2486,10 @@
         db-based? (config/db-based-graph? repo)
         refs-count (if (seq (:block/_refs block))
                      (count (:block/_refs block))
-                     (rum/react *refs-count))]
+                     (rum/react *refs-count))
+        table? (:table? config)]
     [:div.block-content-or-editor-wrap
-     (when db-based? (block-positioned-properties config block :block-left))
+     (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.flex.flex-1.flex-col
       [:div.flex.flex-1.flex-row.gap-1.items-start
        (if (and edit? editor-box)
@@ -2514,7 +2515,7 @@
                                           (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
            (block-content config block edit-input-id block-id slide?))
 
-          (when db-based? (block-positioned-properties config block :block-right))
+          (when (and db-based? (not table?)) (block-positioned-properties config block :block-right))
 
           (when (and (not hide-block-refs-count?)
                      (not named?))
@@ -2535,14 +2536,15 @@
                                     (editor-handler/edit-block! block :max))}
                 svg/edit])])])
 
-       (when-not (:block-ref? config)
+       (when-not (or (:block-ref? config) (:table? config))
          [:div.flex.flex-row.items-center.gap-1.h-6
           (when (and db-based? (seq (:block/tags block)))
             (tags config block))])
 
-       (block-refs-count block refs-count *hide-block-refs?)]
+       (when-not (:table? config)
+         (block-refs-count block refs-count *hide-block-refs?))]
 
-      (when (and (not hide-block-refs?) (> refs-count 0))
+      (when (and (not (:table? config)) (not hide-block-refs?) (> refs-count 0))
         (when-let [refs-cp (state/get-component :block/linked-references)]
           (refs-cp uuid)))]]))
 
@@ -2887,8 +2889,9 @@
                                (str (:block/uuid block))))
         edit-input-id (str "edit-block-" (:block/uuid block))
         container-id (:container-id config*)
-        edit? (or (state/sub-editing? [container-id (:block/uuid block)])
+        editing? (or (state/sub-editing? [container-id (:block/uuid block)])
                   (state/sub-editing? [:unknown-container (:block/uuid block)]))
+        table? (:table? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
@@ -2954,20 +2957,20 @@
        custom-query?
        (assoc :data-query true))
 
-     (when (and ref? breadcrumb-show?)
+     (when (and ref? breadcrumb-show? (not table?))
        (breadcrumb config repo uuid {:show-page? false
                                      :indent? true
                                      :navigating-block *navigating-block}))
 
      ;; only render this for the first block in each container
-     (when top?
+     (when (and top? (not table?))
        (dnd-separator-wrapper block children block-id slide? true false))
 
      [:div.block-main-container.flex.flex-row.pr-2.gap-1
       {:data-has-heading (some-> block :block/properties (pu/lookup :logseq.property/heading))
        :on-touch-start (fn [event uuid] (block-handler/on-touch-start event uuid))
        :on-touch-move (fn [event]
-                        (block-handler/on-touch-move event block uuid edit? *show-left-menu? *show-right-menu?))
+                        (block-handler/on-touch-move event block uuid editing? *show-left-menu? *show-right-menu?))
        :on-touch-end (fn [event]
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-cancel (fn [_e]
@@ -2976,8 +2979,8 @@
                         (block-mouse-over e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
-      (when (and (not slide?) (not in-whiteboard?))
-        (let [edit? (or edit?
+      (when (and (not slide?) (not in-whiteboard?) (not table?))
+        (let [edit? (or editing?
                         (= uuid (:block/uuid (state/get-edit-block))))]
           (block-control config block
                          {:uuid uuid
@@ -2986,7 +2989,7 @@
                           :*control-show? *control-show?
                           :edit? edit?})))
 
-      (when (and @*show-left-menu? (not in-whiteboard?))
+      (when (and @*show-left-menu? (not in-whiteboard?) (not table?))
         (block-left-menu config block))
 
       (if whiteboard-block?
@@ -2994,29 +2997,31 @@
         ;; Not embed self
         [:div.flex.flex-col.w-full
          (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
-               hide-block-refs-count? (and (:embed? config)
-                                           (= (:block/uuid block) (:embed-id config)))]
+               hide-block-refs-count? (or (and (:embed? config)
+                                           (= (:block/uuid block) (:embed-id config)))
+                                          table?)]
            (block-content-or-editor config block
                                     {:edit-input-id edit-input-id
                                      :block-id block-id
-                                     :edit? edit?
+                                     :edit? editing?
                                      :hide-block-refs-count? hide-block-refs-count?}))])
 
-      (when (and @*show-right-menu? (not in-whiteboard?))
-        (block-right-menu config block edit?))]
+      (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
+        (block-right-menu config block editing?))]
 
-     (when db-based? (block-positioned-properties config block :block-below))
+     (when (and db-based? (not table?))
+       (block-positioned-properties config block :block-below))
 
-     (when (and db-based? (not collapsed?))
+     (when (and db-based? (not collapsed?) (not table?))
        [:div {:style {:padding-left 45}}
         (db-properties-cp config block edit-input-id {:in-block-container? true})])
 
-     (when-not (or (:hide-children? config) in-whiteboard?)
+     (when-not (or (:hide-children? config) in-whiteboard? table?)
        (let [config' (-> (update config :level inc)
                          (dissoc :original-block :data :first-journal?))]
          (block-children config' block children collapsed?)))
 
-     (when-not in-whiteboard? (dnd-separator-wrapper block children block-id slide? false false))]))
+     (when-not (or in-whiteboard? table?) (dnd-separator-wrapper block children block-id slide? false false))]))
 
 (defn- block-changed?
   [old-block new-block]

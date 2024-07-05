@@ -312,7 +312,7 @@
   (or (:block/original-name e)
       (:block/content e)))
 
-(rum/defc select-page < rum/reactive
+(rum/defc select-page < rum/reactive db-mixins/query
   [property
    {:keys [block multiple-choices? dropdown? input-opts] :as opts}]
   (let [repo (state/get-current-repo)
@@ -417,7 +417,7 @@
                      :input-opts input-opts)]
     (select-page property opts')))
 
-(rum/defcs select < rum/reactive
+(rum/defcs select < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [*values (atom :loading)
                  refresh-result-f (fn []
@@ -520,7 +520,7 @@
            (block-container config value-block)))]
       (property-empty-btn-value))))
 
-(rum/defcs property-block-value < rum/reactive
+(rum/defcs property-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [block (first (:rum/args state))]
              (when-let [block-id (or (:db/id block) (:block/uuid block))]
@@ -550,7 +550,7 @@
               invalid-warning)))
         (property-empty-btn-value)))))
 
-(rum/defc closed-value-item < rum/reactive
+(rum/defc closed-value-item < rum/reactive db-mixins/query
   [value {:keys [inline-text icon?]}]
   (when value
     (let [eid (if (de/entity? value) (:db/id value) [:block/uuid value])]
@@ -788,7 +788,7 @@
              (when-not editing?
                (property-empty-text-value))))]))))
 
-(rum/defc multiple-values < rum/reactive
+(rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts schema]
   (let [block (db/sub-block (:db/id block))
         value (get block (:db/ident property))
