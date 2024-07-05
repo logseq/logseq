@@ -253,7 +253,7 @@
         m #:block{:uuid id
                   :name (util/page-name-sanity-lc page-name),
                   :original-name page-name
-                  :type "whiteboard",
+                  :type #{"whiteboard" "page"},
                   :format :markdown
                   :updated-at (util/time-ms),
                   :created-at (util/time-ms)}
