@@ -25,26 +25,37 @@
             [logseq.shui.ui :as shui]
             [rum.core :as rum]))
 
-(defn header-checkbox [{:keys [selected-all? selected-some? toggle-selected-all!]}]
-  [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
-   {:html-for "header-checkbox"}
-   (shui/checkbox
-    {:id "header-checkbox"
-     :checked (or selected-all? (and selected-some? "indeterminate"))
-     :on-checked-change toggle-selected-all!
-     :aria-label "Select all"
-     :class "flex"})])
-
-(defn row-checkbox [{:keys [row-selected? row-toggle-selected!]} row _column]
-  (let [id (str (:id row) "-" "checkbox")]
+(rum/defc header-checkbox < rum/static
+  [{:keys [selected-all? selected-some? toggle-selected-all!]}]
+  (let [[show? set-show!] (rum/use-state false)]
     [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
-     {:html-for (str (:id row) "-" "checkbox")}
+     {:html-for "header-checkbox"
+      :on-mouse-over #(set-show! true)
+      :on-mouse-out #(set-show! false)}
+     (shui/checkbox
+      {:id "header-checkbox"
+       :checked (or selected-all? (and selected-some? "indeterminate"))
+       :on-checked-change toggle-selected-all!
+       :aria-label "Select all"
+       :class (str "flex transition-opacity "
+                   (if (or show? selected-all? selected-some?) "opacity-100" "opacity-0"))})]))
+
+(rum/defc row-checkbox < rum/static
+  [{:keys [row-selected? row-toggle-selected!]} row _column]
+  (let [id (str (:id row) "-" "checkbox")
+        [show? set-show!] (rum/use-state false)
+        checked? (row-selected? row)]
+    [:label.h-8.w-8.flex.items-center.justify-center.cursor-pointer
+     {:html-for (str (:id row) "-" "checkbox")
+      :on-mouse-over #(set-show! true)
+      :on-mouse-out #(set-show! false)}
      (shui/checkbox
       {:id id
-       :checked (row-selected? row)
+       :checked checked?
        :on-checked-change (fn [v] (row-toggle-selected! row v))
        :aria-label "Select row"
-       :class "flex"})]))
+       :class (str "flex transition-opacity "
+                   (if (or show? checked?) "opacity-100" "opacity-0"))})]))
 
 (defn- header-cp
   [{:keys [column-toggle-sorting! state]} column]
@@ -54,7 +65,7 @@
                                     [asc?]))) sorting)]
     (shui/button
      {:variant "text"
-      :class "h-8 !pl-4 !py-0 hover:text-foreground w-full justify-start"
+      :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
       :on-click #(column-toggle-sorting! column)}
      (:name column)
      (case asc?
@@ -202,9 +213,13 @@
                       {:id (:name column)
                        :value (:id column)
                        :content (let [header-fn (:header column)
-                                      width (get-column-size column)]
+                                      width (get-column-size column)
+                                      select? (= :select (:id column))
+                                      last-column? (= (:id column)
+                                                      (:id (last columns)))]
                                   [:div.ls-table-header-cell
-                                   {:style {:width width}}
+                                   {:style {:width width}
+                                    :class (when (or last-column? select?) "!border-0")}
                                    (if (fn? header-fn)
                                      (header-fn table column)
                                      header-fn)])
@@ -230,10 +245,12 @@
        (let [id (str (:id row) "-" (:id column))
              render (get column :cell)
              width (get-column-size column)
-             select? (= (:id column) :select)]
+             select? (= (:id column) :select)
+             last-column? (= (:id column) (:id (last columns)))]
          (shui/table-cell
           {:key id
            :select? select?
+           :last-column? last-column?
            :style {:width width}}
           (render table row column)))))))
 
@@ -871,7 +888,7 @@
 
      (let [columns' (:columns table)
            rows (:rows table)]
-       [:div.ls-table-rows.rounded-md.content.overflow-x-auto.force-visible-scrollbar
+       [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
         [:div.relative
          (table-header table columns')
 

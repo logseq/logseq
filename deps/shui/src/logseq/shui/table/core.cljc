@@ -126,7 +126,7 @@
 (rum/defc table-head < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-4 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:px-0"}
+    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:px-0"}
                 prop)
      children]))
 
@@ -134,8 +134,12 @@
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.flex.relative prop
-     [:div {:class (str "flex align-middle border-r w-full overflow-x-clip items-center"
-                        (if (:select? prop)
+     [:div {:class (str "flex align-middle w-full overflow-x-clip items-center"
+                        (cond
+                          (:select? prop)
                           " px-0"
-                          " px-4"))}
+                          (:last-column? prop)
+                          " px-2"
+                          :else
+                          " border-r px-2"))}
       children]]))
