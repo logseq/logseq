@@ -218,7 +218,7 @@
                        (map
                         (fn [page]
                           (let [entity (db/entity [:block/uuid (uuid (:id page))])
-                                whiteboard? (= (:block/type entity) "whiteboard")
+                                whiteboard? (contains? (:block/type entity) "whiteboard")
                                 source-page (model/get-alias-source-page repo (:db/id entity))]
                             (hash-map :icon (if whiteboard? "whiteboard" "page")
                                       :icon-theme :gray
@@ -240,7 +240,7 @@
                     (keep
                       (fn [page]
                         (let [entity (db/get-page page)
-                              whiteboard? (= (:block/type entity) "whiteboard")]
+                              whiteboard? (contains? (:block/type entity) "whiteboard")]
                           (when whiteboard?
                             (hash-map :icon "whiteboard"
                               :icon-theme :gray
