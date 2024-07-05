@@ -49,5 +49,5 @@
                       (concat new-properties
                               [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)]))]
         (when (seq tx-data)
-          (ldb/transact! conn new-properties {:db-migrate? true})
+          (ldb/transact! conn tx-data {:db-migrate? true})
           (println "DB schema migrated to " db-schema/version " from " version-in-db "."))))))
