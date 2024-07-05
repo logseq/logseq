@@ -18,12 +18,11 @@
        (map (fn [row] (assoc row :id (:db/id row))))))
 
 (defn- add-new-object!
-  [table class]
+  [class set-data!]
   (p/let [block (editor-handler/api-insert-new-block! ""
                                                       {:page (:block/uuid class)
                                                        :properties {:block/tags (:db/id class)}
                                                        :edit-block? false})
-          set-data! (get-in table [:data-fns :set-data!])
           _ (set-data! (get-all-objects class))]
     (editor-handler/edit-block! (db/entity [:block/uuid (:block/uuid block)]) 0 :unknown-container)))
 
@@ -40,7 +39,7 @@
     (views/view view-entity {:data data
                              :set-data! set-data!
                              :columns columns
-                             :add-new-object! #(add-new-object! view-entity class)})))
+                             :add-new-object! #(add-new-object! class set-data!)})))
 
 (rum/defcs objects < rum/reactive db-mixins/query mixins/container-id
   [state class]
