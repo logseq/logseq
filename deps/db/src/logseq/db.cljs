@@ -473,7 +473,7 @@
      {:block/uuid (common-uuid/gen-uuid)
       :block/name common-config/favorites-page-name
       :block/original-name common-config/favorites-page-name
-      :block/type #{"hidden"}
+      :block/type #{"page" "hidden"}
       :block/format :markdown})]))
 
 (defn build-favorite-tx

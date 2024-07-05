@@ -188,11 +188,12 @@
           deadline-page (or existing-journal-page
                             ;; FIXME: Register new pages so that two different refs to same new page
                             ;; don't create different uuids and thus an invalid page
-                            (assoc (sqlite-util/build-new-page
-                                    (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))
-                                   :block/uuid (common-uuid/gen-uuid date-int)
-                                   :block/type "journal"
-                                   :block/journal-day date-int))]
+                            (let [page-m (sqlite-util/build-new-page
+                                          (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))]
+                              (assoc page-m
+                                     :block/uuid (common-uuid/gen-uuid date-int)
+                                     :block/type (conj (:block/type page-m) "journal")
+                                     :block/journal-day date-int)))]
       {:block
        (-> block
            (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
