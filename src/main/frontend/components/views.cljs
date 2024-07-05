@@ -823,7 +823,7 @@
            (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-ordered-columns ids)))})
     option))
 
-(rum/defc view < rum/static
+(rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object!]}]
   (let [[input set-input!] (rum/use-state "")
         sorting (:logseq.property/table-sorting view-entity)
@@ -900,3 +900,8 @@
                                              (.-children props)))
                         :TableRow (fn [props] (table-row table rows columns' props))}})
          (when add-new-object! (add-new-row table))]])]))
+
+(rum/defc view < rum/reactive
+  [view-entity option]
+  (when-let [view-entity' (db/sub-block (:db/id view-entity))]
+    (view-inner view-entity' option)))
