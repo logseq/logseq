@@ -75,10 +75,10 @@
     (cond
       (uuid? entity)
       (db-property/property-value-content (db/entity [:block/uuid entity]))
-      (map? entity)
+      (de/entity? entity)
       (db-property/property-value-content entity)
       :else
-      (str entity))))
+      entity)))
 
 (defn- get-property-value-for-search
   [block property]
@@ -95,42 +95,56 @@
       (string/join ", " col))))
 
 (defn build-columns
-  [config properties]
+  [config properties & {:keys [with-object-name?]
+                        :or {with-object-name? true}}]
   (let [container-id (state/get-next-container-id)]
-    (concat
-     [{:id :select
-       :name "Select"
-       :header (fn [table _column] (header-checkbox table))
-       :cell (fn [table row column]
-               (row-checkbox table row column))
-       :column-list? false}
-      {:id :object/name
-       :name "Name"
-       :type :string
-       :header header-cp
-       :cell (fn [_table row _column]
-               (component-block/block-container (assoc config :table? true) row))
-       :disable-hide? true}]
-     (map
-      (fn [property]
-        {:id (:db/ident property)
-         :name (:block/original-name property)
-         :header header-cp
-         :cell (fn [_table row _column]
-                 (pv/property-value row property (get row (:db/ident property)) {:container-id container-id}))
-         :get-value (fn [row] (get-property-value-for-search row property))})
-      properties)
+    (->> (concat
+          [{:id :select
+            :name "Select"
+            :header (fn [table _column] (header-checkbox table))
+            :cell (fn [table row column]
+                    (row-checkbox table row column))
+            :column-list? false}
+           (when with-object-name?
+             {:id :object/name
+              :name "Name"
+              :type :string
+              :header header-cp
+              :cell (fn [_table row _column]
+                      (component-block/block-container (assoc config :table? true) row))
+              :disable-hide? true})]
+          (map
+           (fn [property]
+             (let [ident (or (:id property) (:db/ident property))
+                   property (if (de/entity? property)
+                              property
+                              (or (db/entity ident) property))]
+               {:id ident
+                :name (or (:name property)
+                          (:block/original-name property))
+                :header (or (:header property)
+                            header-cp)
+                :cell (or (:cell property)
+                          (when (de/entity? property)
+                            (fn [_table row _column]
+                              (pv/property-value row property (get row (:db/ident property)) {:container-id container-id}))))
+                :get-value (or (:get-value property)
+                               (when (de/entity? property)
+                                 (fn [row] (get-property-value-for-search row property))))
+                :type (:type property)}))
+           properties)
 
-     [{:id :block/created-at
-       :name "Created At"
-       :type :date-time
-       :header header-cp
-       :cell timestamp-cell-cp}
-      {:id :block/updated-at
-       :name "Updated At"
-       :type :date-time
-       :header header-cp
-       :cell timestamp-cell-cp}])))
+          [{:id :block/created-at
+            :name "Created At"
+            :type :date-time
+            :header header-cp
+            :cell timestamp-cell-cp}
+           {:id :block/updated-at
+            :name "Updated At"
+            :type :date-time
+            :header header-cp
+            :cell timestamp-cell-cp}])
+         (remove nil?))))
 
 (defn- sort-columns
   [columns ordered-column-ids]
@@ -177,7 +191,7 @@
   [column]
   (case (:id column)
     :select 32
-    :object/name 360
+    (:object/name :block/original-name :block/name :block/content) 360
     (:block/created-at :block/updated-at) 160
     180))
 
@@ -204,8 +218,9 @@
   [{:keys [row-selected?] :as table} rows columns props]
   (let [idx (gobj/get props "data-index")
         row (nth rows idx)
-        row (db/sub-block (:id row))
-        row (assoc row :id (:db/id row))]
+        row' (db/sub-block (:id row))
+        ;; merge entity temporal attributes
+        row (reduce (fn [e [k v]] (assoc e k v)) row' (.-kv ^js row))]
     (shui/table-row
      (merge
       (bean/->clj props)
@@ -312,6 +327,7 @@
 (rum/defc filter-property < rum/static
   [columns {:keys [data-fns] :as table}]
   (let [[property set-property!] (rum/use-state nil)
+        schema (:schema (db/get-db))
         timestamp? (timestamp-property? (:db/ident property))
         set-filters! (:set-filters! data-fns)
         filters (get-in table [:state :filters])
@@ -328,8 +344,11 @@
                              (let [id (:id column)
                                    property (db/entity id)
                                    internal-property {:db/ident (:id column)
-                                                      :block/original-name (:name column)}]
-                               (if (or property (timestamp-property? id))
+                                                      :block/original-name (:name column)
+                                                      :block/schema {:type (:type column)}}]
+                               (if (or property
+                                       (= :db.cardinality/many (:db/cardinality (get schema id)))
+                                       (not= (:type column) :string))
                                  (set-property! (or property internal-property))
                                  (do
                                    (shui/popup-hide!)
@@ -364,8 +383,11 @@
                              :input-default-placeholder (if property (:block/original-name property) "Select")
                              :multiple-choices? true
                              :on-chosen (fn [_value _selected? selected]
-                                          (let [filters' (if (seq selected)
-                                                           (conj filters [(:db/ident property) :is selected])
+                                          (let [selected-value (if (de/entity? (first selected))
+                                                                 (set (map :block/uuid selected))
+                                                                 selected)
+                                                filters' (if (seq selected)
+                                                           (conj filters [(:db/ident property) :is selected-value])
                                                            filters)]
                                             (set-filters! filters')))})))
                  :else
@@ -598,7 +620,7 @@
       (filter-value-select table property value operator idx))))
 
 (rum/defc filters-row < rum/static
-  [{:keys [data-fns] :as table}]
+  [{:keys [data-fns columns] :as table}]
   (let [filters (get-in table [:state :filters])
         {:keys [set-filters!]} data-fns]
     (when (seq filters)
@@ -609,7 +631,10 @@
                 property (if (= property-ident :object/name)
                            {:db/ident property-ident
                             :block/original-name "Name"}
-                           (db/entity property-ident))]
+                           (or (db/entity property-ident)
+                               (some (fn [column] (when (= (:id column) property-ident)
+                                                    {:db/ident (:id column)
+                                                     :block/original-name (:name column)})) columns)))]
             [:div.flex.flex-row.items-center.border.rounded
              (shui/button
               {:class "!px-2 rounded-none border-r"
@@ -650,26 +675,30 @@
                      (set? value) value
                      (nil? value) #{}
                      :else #{value})
+            entity? (de/entity? (first value'))
             result
             (case operator
               :is
               (if (boolean? match)
                 (= (boolean (get-property-value-content (get row property-ident))) match)
-                (if (and (empty? match) (empty? value))
+                (if (and (empty? match) (empty? value'))
                   true
-                  (when (coll? value)
-                    (boolean (seq (set/intersection (set (map :block/uuid value')) match))))))
+                  (if entity?
+                    (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
+                    (boolean (seq (set/intersection (set value') match))))))
 
               :is-not
               (if (boolean? match)
                 (not= (boolean (get-property-value-content (get row property-ident))) match)
                 (cond
-                  (and (empty? match) (seq value))
+                  (and (empty? match) (seq value'))
                   true
-                  (and (seq match) (empty? value))
+                  (and (seq match) (empty? value'))
                   true
-                  (coll? value)
-                  (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))))
+                  :else
+                  (if entity?
+                    (boolean (empty? (set/intersection (set (map :block/uuid value')) match)))
+                    (boolean (empty? (set/intersection (set value') match))))))
 
               :text-contains
               (some #(fuzzy-matched? match (get-property-value-content %)) value')
@@ -751,29 +780,31 @@
    filters))
 
 (defn- db-set-table-state!
-  [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}]
-  (let [repo (state/get-current-repo)]
-    {:set-sorting!
-     (fn [sorting]
-       (set-sorting! sorting)
-       (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-sorting sorting))
-     :set-filters!
-     (fn [filters]
-       (let [filters (table-filters->persist-state filters)]
-         (set-filters! filters)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-filters filters)))
-     :set-visible-columns!
-     (fn [columns]
-       (let [hidden-columns (vec (keep (fn [[column visible?]]
-                                         (when (false? visible?)
-                                           column)) columns))]
-         (set-visible-columns! columns)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-hidden-columns hidden-columns)))
-     :set-ordered-columns!
-     (fn [ordered-columns]
-       (let [ids (vec (remove #{:select} ordered-columns))]
-         (set-ordered-columns! ordered-columns)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-ordered-columns ids)))}))
+  [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!] :as option}]
+  (if entity
+    (let [repo (state/get-current-repo)]
+      {:set-sorting!
+       (fn [sorting]
+         (set-sorting! sorting)
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-sorting sorting))
+       :set-filters!
+       (fn [filters]
+         (let [filters (table-filters->persist-state filters)]
+           (set-filters! filters)
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-filters filters)))
+       :set-visible-columns!
+       (fn [columns]
+         (let [hidden-columns (vec (keep (fn [[column visible?]]
+                                           (when (false? visible?)
+                                             column)) columns))]
+           (set-visible-columns! columns)
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-hidden-columns hidden-columns)))
+       :set-ordered-columns!
+       (fn [ordered-columns]
+         (let [ids (vec (remove #{:select} ordered-columns))]
+           (set-ordered-columns! ordered-columns)
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-ordered-columns ids)))})
+    option))
 
 (rum/defc view < rum/static
   [view-entity {:keys [data set-data! columns add-new-object!]}]
@@ -841,13 +872,14 @@
      (let [columns' (:columns table)
            rows (:rows table)]
        [:div.ls-table-rows.rounded-md.content.overflow-x-auto.force-visible-scrollbar
-        (table-header table columns')
+        [:div.relative
+         (table-header table columns')
 
-        (ui/virtualized-table
-         {:custom-scroll-parent (gdom/getElement "main-content-container")
-          :total-count (count rows)
-          :components {:Table (fn [props]
-                                (shui/table {}
-                                            (.-children props)))
-                       :TableRow (fn [props] (table-row table rows columns' props))}})
-        (when add-new-object! (add-new-row table))])]))
+         (ui/virtualized-table
+          {:custom-scroll-parent (gdom/getElement "main-content-container")
+           :total-count (count rows)
+           :components {:Table (fn [props]
+                                 (shui/table {}
+                                             (.-children props)))
+                        :TableRow (fn [props] (table-row table rows columns' props))}})
+         (when add-new-object! (add-new-row table))]])]))

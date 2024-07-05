@@ -106,11 +106,13 @@
                    prop)
      children]))
 
+;; FIXME: sticky header
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
     [:div.flex.flex-row.items-center.w-fit
-     (merge {:class "border-y transition-colors bg-gray-01"}
+     (merge {:class "border-y transition-colors bg-gray-01"
+             :style {:z-index 100}}
             prop)
      children]))
 
