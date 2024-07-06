@@ -12,7 +12,6 @@
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
-            [goog.string :as gstring]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [malli.core :as ma]
@@ -23,10 +22,6 @@
   [:map
    [:ws-state {:optional true} [:enum :connecting :open :closing :closed]]])
 (def ^:private rtc-state-validator (ma/validator rtc-state-schema))
-
-(defn- get-ws-url
-  [token]
-  (gstring/format @worker-state/*rtc-ws-url token))
 
 (def ^:private sentinel (js-obj))
 (defn- get-remote-updates
@@ -139,7 +134,7 @@
   TODO: auto refresh token if needed"
   [graph-uuid repo conn date-formatter token
    & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
-  (let [ws-url              (or debug-ws-url (get-ws-url token))
+  (let [ws-url              (or debug-ws-url (ws-util/get-ws-url token))
         *auto-push?         (atom auto-push?)
         *last-calibrate-t   (atom nil)
         *online-users       (atom nil)
@@ -241,14 +236,14 @@
 
 (defn new-task--get-graphs
   [token]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (m/join :graphs
             (ws-util/send&recv get-ws-create-task {:action "list-graphs"}))))
 
 (defn new-task--delete-graph
   "Return a task that return true if succeed"
   [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (m/sp
       (let [{:keys [ex-data]}
             (m/? (ws-util/send&recv get-ws-create-task
@@ -259,14 +254,14 @@
 (defn new-task--get-user-info
   "Return a task that return users-info about the graph."
   [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (m/join :users
             (ws-util/send&recv get-ws-create-task
                                {:action "get-users-info" :graph-uuid graph-uuid}))))
 
 (defn new-task--grant-access-to-others
   [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (ws-util/send&recv get-ws-create-task
                        (cond-> {:action "grant-access"
                                 :graph-uuid graph-uuid}
@@ -276,7 +271,7 @@
 (defn new-task--get-block-content-versions
   "Return a task that return map [:ex-data :ex-message :versions]"
   [token graph-uuid block-uuid]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (m/join :versions (ws-util/send&recv get-ws-create-task
                                          {:action "query-block-content-versions"
                                           :block-uuids [block-uuid]
@@ -313,13 +308,13 @@
 
 (defn new-task--snapshot-graph
   [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (m/join #(select-keys % [:snapshot-uuid :graph-uuid])
             (ws-util/send&recv get-ws-create-task {:action "snapshot-graph"
                                                    :graph-uuid graph-uuid}))))
 (defn new-task--snapshot-list
   [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (m/join :snapshot-list
             (ws-util/send&recv get-ws-create-task {:action "snapshot-list"
                                                    :graph-uuid graph-uuid}))))
@@ -328,24 +323,24 @@
   [token repo remote-graph-name]
   (m/sp
     (if-let [conn (worker-state/get-datascript-conn repo)]
-      (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+      (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
         (m/? (r.upload-download/new-task--upload-graph get-ws-create-task repo conn remote-graph-name)))
       (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
                                                 :repo repo})))))
 
 (defn new-task--request-download-graph
   [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid)))
 
 (defn new-task--download-info-list
   [token graph-uuid]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid)))
 
 (defn new-task--wait-download-info-ready
   [token download-info-uuid graph-uuid timeout-ms]
-  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (get-ws-url token))]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
     (r.upload-download/new-task--wait-download-info-ready
      get-ws-create-task download-info-uuid graph-uuid timeout-ms)))
 

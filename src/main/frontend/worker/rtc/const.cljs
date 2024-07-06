@@ -70,6 +70,7 @@
     [:sequential [:or :uuid :string]]]])
 
 (def data-from-ws-schema
+  "TODO: split this mix schema to multiple ones"
   [:map
    [:req-id :string]
    [:t {:optional true} :int]
@@ -136,6 +137,7 @@
        [:map
         [:op :keyword]
         [:block-uuid :uuid]]]]]]
+   [:asset-uuid->url {:optional true} [:map-of :uuid :string]]
    [:ex-data {:optional true} [:map [:type :keyword]]]
    [:ex-message {:optional true} :string]])
 
@@ -227,7 +229,20 @@
                           [:block/parent {:optional true} :uuid]
                           [:block/type {:optional true} [:set :string]]
                           [:block/order {:optional true} :string]
-                          [:block/content {:optional true} :string]]]]]]]))
+                          [:block/content {:optional true} :string]]]]]]
+
+    ["get-assets-upload-urls"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]
+      [:asset-uuids [:sequential :uuid]]]]
+    ["get-assets-download-urls"
+     [:map
+      [:req-id :string]
+      [:action :string]
+      [:graph-uuid :string]
+      [:asset-uuids [:sequential :uuid]]]]]))
 (def data-to-ws-encoder (m/encoder data-to-ws-schema (mt/transformer
                                                       mt/string-transformer
                                                       (mt/key-transformer {:encode m/-keyword->string}))))
