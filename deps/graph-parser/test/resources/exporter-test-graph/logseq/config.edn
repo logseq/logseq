@@ -16,8 +16,7 @@
  ;; Exclude directories/files.
  ;; Example usage:
  ;; :hidden ["/archived" "/test.md" "../assets/archived"]
- ;; TODO: test
- ;;  :hidden ["test"]
+ :hidden ["ignored"]
 
  ;; Define the default journal page template.
  ;; Enter the template name between the quotes.
@@ -292,8 +291,7 @@
  ;;  :journal?        false} ; Default value: false
 
  ;; Favorites to list on the left sidebar
- ;; TODO: test
- ;;   :favorites ["Property" "some page"]
+   :favorites ["Interstellar" "some page"]
 
  ;; Set flashcards interval.
  ;; Expected value:
