@@ -404,7 +404,7 @@ result:
               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
         (is (rtc-const/data-from-ws-validator data-from-ws))
         (#'r.remote/apply-remote-remove-ops repo conn date-formatter remove-ops)
-        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)) {})]
+        (let [page-blocks (ldb/get-page-blocks @conn (:db/id (ldb/get-page @conn page-name)))]
           (is (= [uuid3 uuid1] (map :block/uuid (sort-by :block/order page-blocks)))))))))
 
 (deftest ^:fix-me apply-remote-update&remove-page-ops-test
