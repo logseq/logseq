@@ -141,9 +141,9 @@
 
       ;; Counts
       ;; Includes 2 journals as property values for :logseq.task/deadline
-      (is (= 8 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      ;; Count includes Contents and page references
-      (is (= 7
+      (is (= 9 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      ;; Count includes Contents, page references and property pages
+      (is (= 10
              (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
       (is (= 1 (count @assets))))
 
@@ -166,7 +166,10 @@
       (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
                {:db/ident :user.property/prop-string :block/schema {:type :default}}
                {:db/ident :user.property/prop-num :block/schema {:type :number}}
-               {:db/ident :user.property/prop-num2 :block/schema {:type :number}}}
+               {:db/ident :user.property/prop-num2 :block/schema {:type :number}}
+               {:db/ident :user.property/type :block/schema {:type :page}}
+               {:db/ident :user.property/rangeincludes :block/schema {:type :page}}
+               {:db/ident :user.property/unique :block/schema {:type :checkbox}}}
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
                          :where [?b :block/type "property"]])
@@ -186,6 +189,9 @@
                   (map :block/original-name)
                   set))
           "Block with properties has correct refs")
+      (is (= #{"Uri"}
+           (:user.property/rangeincludes (readable-properties @conn (find-page-by-name @conn "url"))))
+          "Block with :page property is correct")
 
       (is (= {:user.property/prop-num2 10}
              (readable-properties @conn (find-page-by-name @conn "new page")))
@@ -261,4 +267,23 @@
 
       (is (= {:block/tags [:user.class/Movie]}
              (readable-properties @conn (find-page-by-name @conn "Interstellar")))
+          "tagged page has configured tag imported as a class"))))
+
+(deftest-async export-file-with-property-classes-option
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
+          conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          _ (import-files-to-db files conn {:property-classes ["type"]})]
+    (let [block (find-block-by-content @conn #"The Creator")
+          tag-page (find-page-by-name @conn "Movie")]
+      (is (= (:block/content block) "The Creator")
+          "tagged block with configured tag strips tag from content")
+      (is (= ["class"] (:block/type tag-page))
+          "configured tag page derived from property-classes is a class")
+      (is (nil? (find-page-by-name @conn "type"))
+          "No page exists for configured property")
+
+      (is (= [:user.class/Property]
+             (:block/tags (readable-properties @conn (find-page-by-name @conn "url"))))
           "tagged page has configured tag imported as a class"))))

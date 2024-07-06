@@ -46,11 +46,14 @@
 (defn- convert-tag-to-class
   "Converts a tag block with class or returns nil if this tag should be removed
    because it has been moved"
-  [db tag-block tag-classes]
+  [db tag-block page-names-to-uuids tag-classes]
   (if-let [new-class (:block.temp/new-class tag-block)]
-    (sqlite-util/build-new-class
-     {:block/original-name new-class
-      :block/name (common-util/page-name-sanity-lc new-class)})
+    (merge (db-class/build-new-class
+            db
+            {:block/original-name new-class
+             :block/name (common-util/page-name-sanity-lc new-class)})
+           (when-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
+             {:block/uuid existing-tag-uuid}))
     (when (contains? tag-classes (:block/name tag-block))
       (if-let [existing-tag-uuid (first
                                   (d/q '[:find [?uuid ...]
@@ -82,7 +85,7 @@
         true
         (update :block/tags
                 (fn [tags]
-                  (keep #(convert-tag-to-class db % tag-classes) tags)))
+                  (keep #(convert-tag-to-class db % page-names-to-uuids tag-classes) tags)))
         (seq page-tags)
         (merge {:logseq.property/page-tags page-tags})))
     block))
@@ -120,7 +123,7 @@
                        (map #(add-uuid-to-page-map % page-names-to-uuids))))
           (update :block/tags
                   (fn [tags]
-                    (keep #(convert-tag-to-class db % tag-classes) tags)))))
+                    (keep #(convert-tag-to-class db % page-names-to-uuids tag-classes) tags)))))
     block))
 
 (defn- update-block-marker
@@ -326,7 +329,7 @@
       (or (get properties-text-values prop) (str val))
       (= {:from :page :to :date} type-change)
       ;; treat it the same as a :page
-      (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val))
+      (set (map #(vector :block/uuid (-> % common-util/page-name-sanity-lc prop-name->uuid)) val))
       ;; Unlike the other property changes, this one changes all the previous values of a property
       ;; in order to accommodate the change
       (= :default (:to type-change))
@@ -360,7 +363,7 @@
                     (if (= :default (get-in @property-schemas [prop :type]))
                       (get properties-text-values prop)
                       ;; assume for now a ref's :block/name can always be translated by lc helper
-                      (set (map (comp prop-name->uuid common-util/page-name-sanity-lc) val)))
+                      (set (map #(vector :block/uuid (-> % common-util/page-name-sanity-lc prop-name->uuid)) val)))
                     val)])))
        (into {})))
 
@@ -393,7 +396,7 @@
 (defn- build-properties-and-values
   "For given block properties, builds property values tx and returns a map with
   updated properties in :block-properties and any property values tx in :pvalues-tx"
-  [props _db _page-names-to-uuids
+  [props _db page-names-to-uuids
    {:block/keys [properties-text-values] :as block}
    {:keys [_whiteboard? import-state] :as options}]
   (let [;; FIXME: Whiteboard
@@ -417,11 +420,12 @@
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
       {}
-      (let [props' (-> (update-built-in-property-values
+      (let [page-name->uuid (partial get-page-uuid page-names-to-uuids)
+            props' (-> (update-built-in-property-values
                         (select-keys props built-in-property-names)
                         (select-keys import-state [:ignored-properties :all-idents])
                         (select-keys block [:block/name :block/content]))
-                       (merge (update-user-property-values user-properties get-ident' properties-text-values import-state options)))
+                       (merge (update-user-property-values user-properties page-name->uuid properties-text-values import-state options)))
             pvalue-tx-m (->property-value-tx-m block props' #(get @property-schemas %) @all-idents)
             block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                  (update-keys get-ident'))]
@@ -771,8 +775,7 @@
                  (assert existing-page-uuid)
                  (merge (select-keys new-prop [:block/type :block/schema :db/ident :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))
-             (set/intersection new-properties (set (map keyword (keys existing-pages)))))
-        #_(cljs.pprint/pprint properties-tx')]
+             (set/intersection new-properties (set (map keyword (keys existing-pages)))))]
     [pages-tx' (concat property-pages-tx convert-to-property-pages-tx)]))
 
 (defn- extract-pages-and-blocks
