@@ -112,8 +112,8 @@
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
    page-id - eid"
-  [db page-id {:keys [pull-keys]
-               :or {pull-keys '[*]}}]
+  [db page-id & {:keys [pull-keys]
+                 :or {pull-keys '[*]}}]
   (when page-id
     (let [datoms (d/datoms db :avet :block/page page-id)
           block-eids (mapv :e datoms)]

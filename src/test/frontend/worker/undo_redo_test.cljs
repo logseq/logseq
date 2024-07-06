@@ -205,7 +205,7 @@
 (defn- print-page-stat
   [db page-uuid]
   (let [page (d/entity db [:block/uuid page-uuid])
-        blocks (ldb/get-page-blocks db (:db/id page) {})]
+        blocks (ldb/get-page-blocks db (:db/id page))]
     (pp/pprint
      {:block-count (count blocks)
       :undo-op-count (count (get-in @(:undo/repo->page-block-uuid->undo-ops @worker-state/*state)
@@ -216,7 +216,7 @@
 (defn- print-page-blocks-tree
   [db page-uuid]
   (let [page (d/entity db [:block/uuid page-uuid])
-        blocks (ldb/get-page-blocks db (:db/id page) {})]
+        blocks (ldb/get-page-blocks db (:db/id page))]
     (prn ::page-block-tree)
     (pp/pprint
      (walk/postwalk

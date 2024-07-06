@@ -162,7 +162,7 @@
             (keep (fn [page-uuid]
                     (:db/id (db/get-page page-uuid)))
                   favorites)
-            current-blocks (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page) {}))]
+            current-blocks (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page)))]
         (p/do!
          (ui-outliner-tx/transact!
           {:outliner-op :reorder-favorites}

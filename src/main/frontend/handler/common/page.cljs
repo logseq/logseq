@@ -74,7 +74,7 @@
   [page-block-uuid]
   (let [db (conn/get-db)]
     (when-let [page (db/get-page common-config/favorites-page-name)]
-      (let [blocks (ldb/get-page-blocks db (:db/id page) {})]
+      (let [blocks (ldb/get-page-blocks db (:db/id page))]
         (when-let [page-block-entity (d/entity db [:block/uuid page-block-uuid])]
           (some (fn [block]
                   (when (= (:db/id (:block/link block)) (:db/id page-block-entity))
