@@ -765,7 +765,7 @@
                                                                    (get @(:property-schemas import-state) (keyword original-name))
                                                                    {:original-name original-name :block-uuid uuid})))
                                properties-tx)
-        convert-to-property-pages-tx
+        converted-property-pages-tx
         (map (fn [kw-name]
                (let [existing-page-uuid (get existing-pages (name kw-name))
                      db-ident (get @(:all-idents import-state) kw-name)
@@ -775,8 +775,16 @@
                  (assert existing-page-uuid)
                  (merge (select-keys new-prop [:block/type :block/schema :db/ident :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))
-             (set/intersection new-properties (set (map keyword (keys existing-pages)))))]
-    [pages-tx' (concat property-pages-tx convert-to-property-pages-tx)]))
+             (set/intersection new-properties (set (map keyword (keys existing-pages)))))
+        ;; Save properties on new property pages separately as they can contain new properties and thus need to be
+        ;; transacted separately the property pages
+        property-page-properties-tx (filter (fn [b]
+                                              (when-let [page-properties (db-property/properties b)]
+                                                (merge page-properties {:block/uuid (:block/uuid b)})))
+                                            properties-tx)]
+    {:pages-tx pages-tx'
+     :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
+     :property-page-properties-tx property-page-properties-tx}))
 
 (defn- extract-pages-and-blocks
   [db file content {:keys [extract-options notify-user]}]
@@ -832,7 +840,8 @@
                                                 (assoc tx-options :whiteboard? (some? (seq whiteboard-pages)))))
                        vec)
 
-        [pages-tx' property-pages-tx] (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
+        {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
+        (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
         _ (d/transact! conn property-pages-tx)
 
@@ -855,7 +864,7 @@
         block-ids (set/union (set block-ids) (set block-refs-ids))
         ;; Order matters as upstream-properties-tx can override some blocks-tx and indices need
         ;; to come before their corresponding tx
-        tx (concat whiteboard-pages pages-index page-properties-tx pages-tx' block-ids blocks-tx upstream-properties-tx)
+        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' block-ids blocks-tx upstream-properties-tx)
         tx' (common-util/fast-remove-nils tx)
         ;; _ (cljs.pprint/pprint {:tx tx'})
         result (d/transact! conn tx')]
