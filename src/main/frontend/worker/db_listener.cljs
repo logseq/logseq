@@ -55,6 +55,10 @@ generate rtc ops.")
   "DB-listener key.
 generate undo ops.")
 
+(sr/defkeyword :gen-asset-change-events
+  "DB-listener key.
+generate asset-change events.")
+
 (defmethod listen-db-changes :sync-db-to-main-thread
   [_ {:keys [tx-meta repo conn] :as tx-report}]
   (let [{:keys [from-disk?]} tx-meta
@@ -71,13 +75,13 @@ generate undo ops.")
 
       (when-not from-disk?
         (p/do!
-         (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
-               ^js wo (worker-state/get-worker-object)]
-           (when wo
-             (when (seq blocks-to-remove-set)
-               (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
-             (when (seq blocks-to-add)
-               (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))))
+          (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice repo tx-report')
+                ^js wo (worker-state/get-worker-object)]
+            (when wo
+              (when (seq blocks-to-remove-set)
+                (.search-delete-blocks wo repo (bean/->js blocks-to-remove-set)))
+              (when (seq blocks-to-add)
+                (.search-upsert-blocks wo repo (bean/->js blocks-to-add))))))))))
 
 
 (defn listen-db-changes!

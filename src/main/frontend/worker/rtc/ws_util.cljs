@@ -1,8 +1,10 @@
 (ns frontend.worker.rtc.ws-util
   "Add RTC related logic to the function based on ws."
-  (:require [missionary.core :as m]
-            [frontend.worker.rtc.exception :as r.ex]
-            [frontend.worker.rtc.ws :as ws]))
+  (:require [frontend.worker.rtc.exception :as r.ex]
+            [frontend.worker.rtc.ws :as ws]
+            [frontend.worker.state :as worker-state]
+            [goog.string :as gstring]
+            [missionary.core :as m]))
 
 (defn- handle-remote-ex
   [resp]
@@ -18,3 +20,7 @@
   (m/sp
     (let [ws (m/? get-ws-create-task)]
       (handle-remote-ex (m/? (ws/send&recv ws message))))))
+
+(defn get-ws-url
+  [token]
+  (gstring/format @worker-state/*rtc-ws-url token))
