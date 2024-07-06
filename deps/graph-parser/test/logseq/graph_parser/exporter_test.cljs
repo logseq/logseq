@@ -142,8 +142,8 @@
       ;; Counts
       ;; Includes 2 journals as property values for :logseq.task/deadline
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      ;; Count includes Contents, page references and property pages
-      (is (= 10
+      ;; Count includes Contents and page references
+      (is (= 9
              (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
       (is (= 1 (count @assets))))
 
@@ -168,6 +168,7 @@
                {:db/ident :user.property/prop-num :block/schema {:type :number}}
                {:db/ident :user.property/prop-num2 :block/schema {:type :number}}
                {:db/ident :user.property/type :block/schema {:type :page}}
+               {:db/ident :user.property/url :block/schema {:type :url}}
                {:db/ident :user.property/rangeincludes :block/schema {:type :page}}
                {:db/ident :user.property/unique :block/schema {:type :checkbox}}}
              (->> @conn
@@ -280,7 +281,7 @@
       (is (= (:block/content block) "The Creator")
           "tagged block with configured tag strips tag from content")
       (is (= ["class"] (:block/type tag-page))
-          "configured tag page derived from property-classes is a class")
+          "configured tag page derived from :property-classes is a class")
       (is (nil? (find-page-by-name @conn "type"))
           "No page exists for configured property")
 
