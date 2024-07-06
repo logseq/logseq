@@ -13,7 +13,9 @@
             [logseq.graph-parser.exporter :as gp-exporter]
             [logseq.db.frontend.malli-schema :as db-malli-schema]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.property.type :as db-property-type]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.common.config :as common-config]
+            [logseq.db :as ldb]))
 
 ;; Helpers
 ;; =======
@@ -132,8 +134,18 @@
           assets (atom [])
           {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets})]
 
-    (is (nil? (:errors (db-validate/validate-db! @conn)))
-        "Created graph has no validation errors")
+    (testing "whole graph"
+
+      (is (nil? (:errors (db-validate/validate-db! @conn)))
+          "Created graph has no validation errors")
+
+      ;; Counts
+      ;; Includes 2 journals as property values for :logseq.task/deadline
+      (is (= 8 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      ;; Count includes Contents and page references
+      (is (= 7
+             (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
+      (is (= 1 (count @assets))))
 
     (testing "logseq files"
       (is (= ".foo {}\n"
@@ -141,13 +153,14 @@
       (is (= "logseq.api.show_msg('hello good sir!');\n"
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
-    (testing "graph wide counts"
-      ;; Includes 2 journals as property values for :logseq.task/deadline
-      (is (= 8 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      ;; Count includes Contents and page references
-      (is (= 7
-             (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
-      (is (= 1 (count @assets))))
+    (testing "favorites"
+      (is (= #{"Interstellar" "some page"}
+             (->>
+              (ldb/get-page-blocks @conn
+                                   (:db/id (ldb/get-page @conn common-config/favorites-page-name))
+                                   {:pull-keys '[* {:block/link [:block/original-name]}]})
+              (map #(get-in % [:block/link :block/original-name]))
+              set))))
 
     (testing "user properties"
       (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
