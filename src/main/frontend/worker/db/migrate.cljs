@@ -11,7 +11,13 @@
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
-       :classes    []}]])
+       :classes    []}]
+   [4 {:fix (fn [conn]
+              (let [pages (d/datoms @conn :avet :block/name)
+                    tx-data (map (fn [d]
+                                   {:db/id (:e d)
+                                    :block/type "page"}) pages)]
+                tx-data))}]])
 
 ;; Question: do we need to assign persist UUIDs for later added built-in classes & properties?
 ;; @zhiyuan will this affect RTC?
@@ -47,7 +53,13 @@
                                 (map (fn [b] (assoc b :logseq.property/built-in? built-in-value))))
             tx-data (when (seq new-properties)
                       (concat new-properties
-                              [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)]))]
-        (when (seq tx-data)
-          (ldb/transact! conn tx-data {:db-migrate? true})
+                              [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)]))
+            fixes (mapcat
+                   (fn [update]
+                     (when-let [fix (:fix update)]
+                       (when (fn? fix)
+                         (fix conn)))) updates)
+            tx-data' (concat tx-data fixes)]
+        (when (seq tx-data')
+          (ldb/transact! conn tx-data' {:db-migrate? true})
           (println "DB schema migrated to " db-schema/version " from " version-in-db "."))))))
