@@ -1,6 +1,4 @@
 .ls-table {
-  @apply pt-[34px];
-
   .ls-block {
     @apply w-full py-0;
   }
@@ -15,6 +13,12 @@
 
   .property-value-inner {
     @apply flex items-center cursor-pointer;
+  }
+
+  .ls-table-rows {
+    > .relative {
+      @apply pt-[34px];
+    }
   }
 
   .ls-table-header {
