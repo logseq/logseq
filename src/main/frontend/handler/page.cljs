@@ -360,6 +360,7 @@
                    get-page-fn (if class? db/get-case-page db/get-page)]
                (when (and (not (string/blank? tag)) (:block/uuid edit-block))
                  (p/let [tag-entity (get-page-fn tag)
+                         _ (prn :debug :class? class?)
                          _ (when-not tag-entity
                              (if class?
                                (<create-class! tag {:redirect? false

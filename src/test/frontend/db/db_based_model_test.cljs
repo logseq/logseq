@@ -42,7 +42,7 @@
         _ (test-helper/create-page! "class1" opts)
         class (db/get-case-page "class1")
         _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]
-    (is (= (model/get-class-objects repo (:db/id class))
+    (is (= (map :db/id (model/get-class-objects repo (:db/id class)))
            [(:db/id (db/entity [:block/uuid fbid]))]))
 
     (testing "classes parent"
@@ -52,7 +52,7 @@
         (db/transact! [{:db/id (:db/id class2)
                         :class/parent (:db/id class)}]))
       (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
-      (is (= (model/get-class-objects repo (:db/id class))
+      (is (= (map :db/id (model/get-class-objects repo (:db/id class)))
              [(:db/id (db/entity [:block/uuid fbid]))
               (:db/id (db/entity [:block/uuid sbid]))])))))
 

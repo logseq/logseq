@@ -374,7 +374,6 @@
   [db property-id]
   (:class/_schema.properties (d/entity db property-id)))
 
-
 (defn get-alias-source-page
   "return the source page (page-name) of an alias"
   [db alias-id]
@@ -473,7 +472,7 @@
      {:block/uuid (common-uuid/gen-uuid)
       :block/name common-config/favorites-page-name
       :block/original-name common-config/favorites-page-name
-      :block/type #{"hidden"}
+      :block/type #{"page" "hidden"}
       :block/format :markdown})]))
 
 (defn build-favorite-tx
@@ -540,3 +539,16 @@
   (->> (d/datoms db :avet :block/type "property")
        (map (fn [d]
               (d/entity db (:e d))))))
+
+(defn get-class-parents
+  [class]
+  (let [*classes (atom #{})]
+    (when-let [parent (:class/parent class)]
+      (loop [current-parent parent]
+        (when (and
+               current-parent
+               (contains? (:block/type parent) "class")
+               (not (contains? @*classes (:db/id parent))))
+          (swap! *classes conj (:db/id current-parent))
+          (recur (:class/parent current-parent)))))
+    @*classes))

@@ -336,18 +336,8 @@
 
 (defn ^:api get-class-parents
   [tags]
-  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)
-        *classes (atom #{})]
-    (doseq [tag tags']
-      (when-let [parent (:class/parent tag)]
-        (loop [current-parent parent]
-          (when (and
-                 current-parent
-                 (contains? (:block/type parent) "class")
-                 (not (contains? @*classes (:db/id parent))))
-            (swap! *classes conj (:db/id current-parent))
-            (recur (:class/parent current-parent))))))
-    @*classes))
+  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)]
+    (set (mapcat ldb/get-class-parents tags'))))
 
 (defn ^:api get-class-properties
   [class]
