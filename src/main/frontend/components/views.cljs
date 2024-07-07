@@ -1,7 +1,6 @@
 (ns frontend.components.views
   "Different views of blocks"
-  (:require [cljs-bean.core :as bean]
-            [cljs-time.coerce :as tc]
+  (:require [cljs-time.coerce :as tc]
             [cljs-time.core :as t]
             [clojure.set :as set]
             [clojure.string :as string]
@@ -19,7 +18,6 @@
             [frontend.util :as util]
             [goog.dom :as gdom]
             [goog.functions :refer [debounce]]
-            [goog.object :as gobj]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
@@ -230,15 +228,13 @@
                                       (set-ordered-columns! ordered-columns))}))))
 
 (rum/defc table-row < rum/reactive
-  [{:keys [row-selected?] :as table} rows columns props]
-  (let [idx (gobj/get props "data-index")
-        row (nth rows idx)
-        row' (db/sub-block (:id row))
+  [{:keys [row-selected?] :as table} row columns props]
+  (let [row' (db/sub-block (:id row))
         ;; merge entity temporal attributes
         row (reduce (fn [e [k v]] (assoc e k v)) row' (.-kv ^js row))]
     (shui/table-row
      (merge
-      (bean/->clj props)
+      props
       {:key (str (:id row))
        :data-state (when (row-selected? row) "selected")})
      (for [column columns]
@@ -774,7 +770,7 @@
 
 (rum/defc add-new-row < rum/static
   [table]
-  [:div.py-2.pr-4.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm
+  [:div.py-1.px-2.cursor-pointer.flex.flex-row.items-center.gap-1.text-muted-foreground.hover:text-foreground.w-full.text-sm.border-b
    {:on-click (get-in table [:data-fns :add-new-object!])}
    (ui/icon "plus" {:size 14})
    [:div "New"]])
@@ -887,20 +883,23 @@
 
      (filters-row table)
 
-     (let [columns' (:columns table)
-           rows (:rows table)]
-       [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
-        [:div.relative
-         (table-header table columns')
+     (shui/table
+      (let [columns' (:columns table)
+            rows (:rows table)]
+        [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
+         [:div.relative
+          (table-header table columns')
 
-         (ui/virtualized-table
-          {:custom-scroll-parent (gdom/getElement "main-content-container")
-           :total-count (count rows)
-           :components {:Table (fn [props]
-                                 (shui/table {}
-                                             (.-children props)))
-                        :TableRow (fn [props] (table-row table rows columns' props))}})
-         (when add-new-object! (add-new-row table))]])]))
+          (ui/virtualized-list
+           {:custom-scroll-parent (gdom/getElement "main-content-container")
+            :compute-item-key (fn [idx]
+                                (let [block (nth rows idx)]
+                                  (str "table-row-" (:db/id block))))
+            :total-count (count rows)
+            :item-content (fn [idx]
+                            (let [row (nth rows idx)]
+                              (table-row table row columns' {})))})
+          (when add-new-object! (add-new-row table))]]))]))
 
 (rum/defc view < rum/reactive
   [view-entity option]
