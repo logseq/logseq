@@ -36,6 +36,7 @@
 (defonce local-assets-dir "assets")
 
 (defonce favorites-page-name "$$$favorites")
+(defonce views-page-name "$$$views")
 
 (defn local-asset?
   [s]

@@ -92,7 +92,8 @@
   (let [favorites-page (db/get-page common-config/favorites-page-name)]
     (when (d/entity (conn/get-db) [:block/uuid page-block-uuid])
       (p/do!
-       (when-not favorites-page (ldb/create-favorites-page (state/get-current-repo)))
+       (when-not favorites-page (ldb/create-favorites-page!
+ (state/get-current-repo)))
        (ui-outliner-tx/transact!
         {:outliner-op :insert-blocks}
         (outliner-op/insert-blocks! [(ldb/build-favorite-tx page-block-uuid)]

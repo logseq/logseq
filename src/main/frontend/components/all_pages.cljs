@@ -40,9 +40,11 @@
 
 (rum/defc all-pages < rum/static
   []
-  (let [[data set-data!] (rum/use-state (get-all-pages))
-        columns (views/build-columns {} (columns (db/get-db))
-                                     {:with-object-name? false})]
+  (let [db (db/get-db)
+        [data set-data!] (rum/use-state (get-all-pages))
+        columns (views/build-columns {} (columns db)
+                                     {:with-object-name? false})
+        view-entity (first (ldb/get-all-pages-views db))]
     (rum/use-effect!
      (fn []
        (when-let [^js worker @state/*db-worker]
@@ -52,9 +54,9 @@
            (set-data! data))))
      [])
     [:div.ls-all-pages.w-full
-     (views/view nil {:data data
-                      :set-data! set-data!
-                      :columns columns})]))
+     (views/view view-entity {:data data
+                              :set-data! set-data!
+                              :columns columns})]))
 
 (comment
   (rum/defc all-pages < rum/static

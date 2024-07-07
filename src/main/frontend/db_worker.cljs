@@ -32,7 +32,8 @@
             [logseq.common.util :as common-util]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [frontend.worker.db.migrate :as db-migrate]))
+            [frontend.worker.db.migrate :as db-migrate]
+            [logseq.common.config :as common-config]))
 
 (defonce *sqlite worker-state/*sqlite)
 (defonce *sqlite-conns worker-state/*sqlite-conns)
@@ -178,6 +179,9 @@
         (when (and config (not initial-data-exists?))
           (let [initial-data (sqlite-create-graph/build-db-initial-data config)]
             (d/transact! conn initial-data {:initial-db? true})))
+
+        (when-not (ldb/page-exists? @conn common-config/views-page-name)
+          (ldb/create-views-page! conn))
 
         (db-migrate/migrate conn)
 

@@ -235,6 +235,14 @@
                         (d/datoms db :eavt (:db/id child)))
                       children)))))
 
+(defn get-views-data
+  [db]
+  (let [page-id (get-first-page-by-name db common-config/views-page-name)
+        children (when page-id (:block/_parent (d/entity db page-id)))]
+    (when (seq children)
+      (mapcat (fn [b] (d/datoms db :eavt (:db/id b)))
+              children))))
+
 (defn get-initial-data
   "Returns current database schema and initial data.
    NOTE: This fn is called by DB and file graphs"
@@ -250,6 +258,7 @@
                            (d/datoms db :eavt (:db/id e))))
                        [:logseq.kv/db-type :logseq.kv/graph-uuid :logseq.property/empty-placeholder])
         favorites (when db-graph? (get-favorites db))
+        views (when db-graph? (get-views-data db))
         latest-journals (get-latest-journals db 1)
         all-files (get-all-files db)
         all-pages (get-all-pages db)
@@ -260,6 +269,7 @@
                      all-pages
                      structured-datoms
                      favorites
+                     views
                      latest-journals
                      all-files)]
     {:schema schema

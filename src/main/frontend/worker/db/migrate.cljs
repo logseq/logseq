@@ -17,7 +17,9 @@
                     tx-data (map (fn [d]
                                    {:db/id (:e d)
                                     :block/type "page"}) pages)]
-                tx-data))}]])
+                tx-data))}]
+   [5 {:properties [:logseq.property/view-for]
+       :classes    []}]])
 
 ;; Question: do we need to assign persist UUIDs for later added built-in classes & properties?
 ;; @zhiyuan will this affect RTC?

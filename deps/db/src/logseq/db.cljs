@@ -12,7 +12,8 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.order :as db-order]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -463,7 +464,8 @@
 (def write-transit-str sqlite-util/write-transit-str)
 (def read-transit-str sqlite-util/read-transit-str)
 
-(defn create-favorites-page
+(defn create-favorites-page!
+
   "Creates hidden favorites page for storing favorites"
   [repo]
   (transact!
@@ -481,6 +483,27 @@
   {:block/link [:block/uuid favorite-uuid]
    :block/content ""
    :block/format :markdown})
+
+(defn create-views-page!
+  "Creates hidden all pages for storing views"
+  [conn]
+  (let [page-id (common-uuid/gen-uuid)]
+    (transact!
+     conn
+     [(sqlite-util/block-with-timestamps
+       {:block/uuid page-id
+        :block/name common-config/views-page-name
+        :block/original-name common-config/views-page-name
+        :block/type #{"page" "hidden"}
+        :block/format :markdown})
+      (sqlite-util/block-with-timestamps
+       {:block/uuid (common-uuid/gen-uuid)
+        :block/content ""
+        :block/format :markdown
+        :block/parent [:block/uuid page-id]
+        :block/order (db-order/gen-key nil)
+        :block/page [:block/uuid page-id]
+        :logseq.property/view-for :all-pages})])))
 
 ;; TODO: why not generate a UUID for all local graphs?
 ;; And prefer this local graph UUID when picking an ID for new rtc graph?
@@ -552,3 +575,10 @@
           (swap! *classes conj (:db/id current-parent))
           (recur (:class/parent current-parent)))))
     @*classes))
+
+(defn get-all-pages-views
+  [db]
+  (when (db-based-graph? db)
+    (when-let [page (get-page db common-config/views-page-name)]
+      (->> (:block/_parent page)
+           (filter (fn [b] (= :all-pages (:logseq.property/view-for b))))))))
