@@ -36,6 +36,7 @@
     &.ls-fixed {
       @apply fixed overflow-hidden;
 
+      min-width: unset;
       top: 48px !important;
     }
   }
