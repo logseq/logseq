@@ -9,12 +9,13 @@
   - if an asset-block doesn't have both :file/path and :logseq.property.asset/remote-metadata,
     it means the other client hasn't uploaded the asset to server
 "
-  (:require [datascript.core :as d]
-            [frontend.worker.rtc.ws-util :as ws-util]
-            [missionary.core :as m]
-            [cljs-http.client :as http]
+  (:require [cljs-http.client :as http]
+            [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
-            [malli.core :as ma])
+            [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
+            [frontend.worker.rtc.ws-util :as ws-util]
+            [malli.core :as ma]
+            [missionary.core :as m])
   (:import [missionary Cancelled]))
 
 (defn get-all-asset-blocks
@@ -117,21 +118,41 @@
   (m/buffer 20 (m/watch *global-asset-change-event)))
 
 (defn- create-assets-sync-loop
-  [get-ws-create-task graph-uuid repo conn]
+  [get-ws-create-task graph-uuid conn]
   (let [started-dfv         (m/dfv)
-        asset-change-event-flow global-asset-change-event-flow]
+        asset-change-event-flow global-asset-change-event-flow
+        add-log-fn (fn [type message]
+                     (assert (map? message) message)
+                     (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))]
     {:assets-sync-loop-task
      (holding-assets-sync-lock
       started-dfv
       (m/sp
-       (try
-         (started-dfv true)
-         (let [event (m/?> asset-change-event-flow)]
+        (try
+          (started-dfv true)
+          (let [action->asset-blocks (get-action->asset-blocks @conn)]
+            (m/?
+             (m/join
+              (constantly nil)
+              (m/sp
+                ;; init phase:
+                ;; generate all asset-change-events from db
+                (m/? (new-task--download-assets
+                      get-ws-create-task conn graph-uuid (action->asset-blocks :download)))
+                (m/? (new-task--upload-assets
+                      get-ws-create-task conn graph-uuid (action->asset-blocks :upload))))
+              (->>
+               (let [event (m/?> asset-change-event-flow)
+                     {asset-uuids-to-download :download
+                      asset-uuids-to-upload :upload} event]
+                 (m/? (new-task--download-assets get-ws-create-task conn graph-uuid asset-uuids-to-download))
+                 (m/? (new-task--upload-assets get-ws-create-task conn graph-uuid asset-uuids-to-upload)))
+               m/ap (m/reduce {} nil) m/?))))
 
-           )
-         (catch Cancelled e
-           ;; TODO: add log
-           (throw e)))))}))
+          (catch Cancelled e
+            (add-log-fn :rtc.asset.log/cancelled {})
+            (throw e)))))}))
+
 (comment
   (def x (atom 1))
   (def f (m/ap
