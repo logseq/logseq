@@ -56,7 +56,7 @@
                    (keep #(when (= #{"closed value"} (:block/type %)) (mark-block-as-built-in' %))
                          properties))]
     {:tx tx
-     :properties (filter #(= "property" (:block/type %)) properties)
+     :properties (filter #(contains? (:block/type %) "property") properties)
      :built-in-prop-value built-in-prop-value}))
 
 

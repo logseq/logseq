@@ -247,12 +247,13 @@
              width (get-column-size column)
              select? (= (:id column) :select)
              last-column? (= (:id column) (:id (last columns)))]
-         (shui/table-cell
-          {:key id
-           :select? select?
-           :last-column? last-column?
-           :style {:width width}}
-          (render table row column)))))))
+         (when render
+           (shui/table-cell
+            {:key id
+             :select? select?
+             :last-column? last-column?
+             :style {:width width}}
+            (render table row column))))))))
 
 (rum/defc search
   [input {:keys [on-change set-input!]}]

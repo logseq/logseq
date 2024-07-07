@@ -322,7 +322,7 @@
                           page-name)
         page-block (merge {:block/name page-name
                            :block/original-name original-name
-                           :block/type "whiteboard"
+                           :block/type #{"whiteboard" "page"}
                            :block/file {:file/path (common-util/path-normalize file)}}
                           serialized-page)
         page-block (gp-whiteboard/migrate-page-block page-block)
