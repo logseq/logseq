@@ -51,7 +51,7 @@
                  data (map (fn [row] (assoc row :block.temp/refs-count (get result (:db/id row) 0))) data)]
            (set-data! data))))
      [])
-    [:div.ls-all-pages.max-w-fit.m-auto.w-full
+    [:div.ls-all-pages.w-full
      (views/view nil {:data data
                       :set-data! set-data!
                       :columns columns})]))
