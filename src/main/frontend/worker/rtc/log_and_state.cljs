@@ -19,7 +19,9 @@
    :rtc.log/download
    :rtc.log/cancelled
    :rtc.log/apply-remote-update
-   :rtc.log/push-local-update])
+   :rtc.log/push-local-update
+
+   :rtc.asset.log/cancelled])
 
 (def ^:private rtc-log-type-validator (ma/validator rtc-log-type-schema))
 
