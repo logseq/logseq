@@ -18,6 +18,9 @@
   .ls-table-header {
     @apply flex flex-row items-center w-fit relative;
 
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+
     &.translated {
       @apply shadow;
     }

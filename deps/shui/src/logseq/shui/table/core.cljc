@@ -134,12 +134,25 @@
                           (if (zero? offset)
                             (.remove cls "translated")
                             (.add cls "translated")))
+              *last-offset (volatile! 0)
               handle (fn []
                        (let [scroll-top (js/parseInt (.-scrollTop container))
                              offset (if (> (+ scroll-top head-top) el-top)
-                                      (+ (- scroll-top el-top) head-top 1) 0)]
-                         (translate offset)))
-              handler (fn []
+                                      (+ (- scroll-top el-top) head-top 1) 0)
+                             offset (js/parseInt offset)
+                             last-offset @*last-offset]
+                         (if (and (not (zero? last-offset))
+                               (not= offset last-offset))
+                           (let [dir (if (neg? (- offset last-offset)) -1 1)]
+                             (loop [offset' (+ last-offset dir)]
+                               (translate offset')
+                               (if (and (not= offset offset')
+                                       (< (abs (- offset offset')) 100))
+                                 (recur (+ offset' dir))
+                                 (translate offset))))
+                           (translate offset))
+                         (vreset! *last-offset offset)))
+              handler (fn [^js e]
                         (when (not @*ticking?)
                           (js/window.requestAnimationFrame
                             #(do (handle) (vreset! *ticking? false)))
