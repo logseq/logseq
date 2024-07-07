@@ -1,6 +1,7 @@
 (ns logseq.shui.demo
   (:require [rum.core :as rum]
             [logseq.shui.ui :as ui]
+            [dommy.core :refer-macros [sel1]]
             [logseq.shui.form.core :refer [yup yup-resolver] :as form-core]
             [promesa.core :as p]
             [logseq.shui.dialog.core :as dialog-core]))
@@ -15,7 +16,7 @@
   []
   (let [icon #(ui/tabler-icon (name %1) {:class "scale-90 pr-1 opacity-80"})]
     (ui/dropdown-menu-content
-      {:class    "w-56"
+      {:class "w-56"
        :on-click (fn [^js e] (some-> (.-target e) (.-innerText)
                                (#(identity ["You select: " [:b.text-red-700 %1]])) (ui/toast! :info)))}
       (ui/dropdown-menu-label "My Account")
@@ -98,13 +99,13 @@
   []
   [:div.border.p-6.rounded.bg-gray-01
    (let [form-ctx (form-core/use-form
-                    {:defaultValues {:username     ""
-                                     :agreement    true
+                    {:defaultValues {:username ""
+                                     :agreement true
                                      :notification "all"
-                                     :bio          ""}
-                     :yupSchema     (-> (.object yup)
-                                      (.shape #js {:username (-> (.string yup) (.required))})
-                                      (.required))})
+                                     :bio ""}
+                     :yupSchema (-> (.object yup)
+                                  (.shape #js {:username (-> (.string yup) (.required))})
+                                  (.required))})
          handle-submit (:handleSubmit form-ctx)
          on-submit-valid (handle-submit
                            (fn [^js e]
@@ -143,9 +144,9 @@
               (ui/form-label "Notify me about...")
               (ui/form-control
                 (ui/radio-group
-                  {:value           (:value field)
+                  {:value (:value field)
                    :on-value-change (:onChange field)
-                   :class           "flex flex-col space-y-3"}
+                   :class "flex flex-col space-y-3"}
                   (ui/form-item
                     {:class "flex flex-row space-x-3 items-center space-y-0"}
                     (ui/form-control
@@ -166,7 +167,7 @@
             (ui/form-item
               {:class "flex justify-start items-center space-x-3 space-y-0 my-3 pr-3"}
               (ui/form-control
-                (ui/checkbox {:checked           (:value field)
+                (ui/checkbox {:checked (:value field)
                               :on-checked-change (:onChange field)}))
               (ui/form-label {:class "font-normal cursor-pointer"} "Agreement terms"))))
 
@@ -179,21 +180,21 @@
   (let [[open? set-open!] (rum/use-state false)
         [date set-date!] (rum/use-state (js/Date.))]
     (ui/popover
-      {:open           open?
+      {:open open?
        :on-open-change (fn [o] (set-open! o))}
       ;; trigger
       (ui/popover-trigger
         {:as-child true
-         :class    "w-2/3"}
+         :class "w-2/3"}
         (ui/input
-          {:type          :text
-           :placeholder   "pick a date"
+          {:type :text
+           :placeholder "pick a date"
            :default-value (.toDateString date)}))
       ;; content
       (ui/popover-content
         {:on-open-auto-focus #(.preventDefault %)
-         :side-offset        8
-         :class              "p-0"}
+         :side-offset 8
+         :class "p-0"}
         (ui/calendar
           {:selected date
            :on-day-click
@@ -205,7 +206,7 @@
   []
   (let [[open? set-open!] (rum/use-state false)]
     (ui/dialog
-      {:open           open?
+      {:open open?
        :on-open-change #(set-open! %)}
       (ui/dialog-trigger
         {:as-child true}
@@ -223,7 +224,7 @@
         (ui/dialog-footer
           (ui/button
             {:on-click #(set-open! false)
-             :size     :md} "🍄 * Footer"))))))
+             :size :md} "🍄 * Footer"))))))
 
 
 (rum/defc page []
@@ -483,3 +484,63 @@
         (sample-date-picker))]
 
      [:hr.mb-80]]))
+
+
+(defn- get-head-container
+  []
+  (sel1 "#head"))
+
+(defn- get-main-scroll-container
+  []
+  (sel1 "#main-content-container"))
+
+(rum/defc sticky-table
+  []
+
+  (let [el-ref (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (let [^js container (get-main-scroll-container)
+              ^js el (rum/deref el-ref)
+              ^js cls (.-classList el)
+              *ticking? (volatile! false)
+              el-top (-> el (.getBoundingClientRect) (.-top))
+              head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+              translate (fn [offset]
+                          (set! (. (.-style el) -transform) (str "translate3d(0, " offset "px , 0)"))
+                          (if (zero? offset)
+                            (.remove cls "translated")
+                            (.add cls "translated")))
+              *last-offset (volatile! 0)
+              handle (fn []
+                       (let [scroll-top (js/parseInt (.-scrollTop container))
+                             offset (if (> (+ scroll-top head-top) el-top)
+                                      (+ (- scroll-top el-top) head-top 1) 0)
+                             offset (js/parseInt offset)
+                             last-offset @*last-offset]
+                         (if (and (not (zero? last-offset))
+                               (not= offset last-offset))
+                           (let [dir (if (neg? (- offset last-offset)) -1 1)]
+                             (loop [offset' (+ last-offset dir)]
+                               (translate offset')
+                               (if (and (not= offset offset')
+                                     (< (abs (- offset offset')) 100))
+                                 (recur (+ offset' dir))
+                                 (translate offset))))
+                           (translate offset))
+                         (vreset! *last-offset offset)))
+              handler (fn [^js e]
+                        (when (not @*ticking?)
+                          (js/window.requestAnimationFrame
+                            #(do (handle) (vreset! *ticking? false)))
+                          (vreset! *ticking? true)))]
+          (.addEventListener container "scroll" handler)
+          #(.removeEventListener container "scroll" handler)))
+      [])
+
+    [:div.charlie-table
+     [:div.charlie-table-header
+      {:ref el-ref}
+      [:strong "header"]]
+     [:div.charlie-table-content
+      [:strong "content"]]]))
