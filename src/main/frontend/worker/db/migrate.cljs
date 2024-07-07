@@ -35,7 +35,8 @@
       nil
 
       (> db-schema/version version-in-db)
-      (let [built-in-value (:db/id (get (d/entity db :logseq.class/Root) :logseq.property/built-in?))
+      (let [db-based? (ldb/db-based-graph? @conn)
+            built-in-value (:db/id (get (d/entity db :logseq.class/Root) :logseq.property/built-in?))
             updates (keep (fn [[v updates]]
                             (when (> v version-in-db)
                               updates))
@@ -51,15 +52,13 @@
                                 (into {})
                                 sqlite-create-graph/build-initial-properties*
                                 (map (fn [b] (assoc b :logseq.property/built-in? built-in-value))))
-            tx-data (when (seq new-properties)
-                      (concat new-properties
-                              [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)]))
             fixes (mapcat
                    (fn [update]
                      (when-let [fix (:fix update)]
                        (when (fn? fix)
                          (fix conn)))) updates)
-            tx-data' (concat tx-data fixes)]
+            tx-data' (if db-based? (concat new-properties fixes) fixes)]
         (when (seq tx-data')
-          (ldb/transact! conn tx-data' {:db-migrate? true})
+          (let [tx-data' (concat tx-data' [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)])]
+            (ldb/transact! conn tx-data' {:db-migrate? true}))
           (println "DB schema migrated to " db-schema/version " from " version-in-db "."))))))
