@@ -216,7 +216,8 @@
                                       last-column? (= (:id column)
                                                       (:id (last columns)))]
                                   [:div.ls-table-header-cell
-                                   {:style {:width width}
+                                   {:style {:width width
+                                            :min-width width}
                                     :class (when (or last-column? select?) "!border-0")}
                                    (if (fn? header-fn)
                                      (header-fn table column)
@@ -248,7 +249,8 @@
             {:key id
              :select? select?
              :last-column? last-column?
-             :style {:width width}}
+             :style {:width width
+                     :min-width width}}
             (render table row column))))))))
 
 (rum/defc search

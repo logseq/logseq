@@ -171,7 +171,11 @@
    :logseq.property/table-ordered-columns {:schema
                                            {:type :coll
                                             :hide? true
-                                            :public? false}}))
+                                            :public? false}}
+   :logseq.property/view-for {:schema
+                             {:type :keyword
+                              :hide? true
+                              :public? false}}))
 
 (def built-in-properties
   (->> built-in-properties*
