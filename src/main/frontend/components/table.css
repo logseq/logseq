@@ -18,6 +18,8 @@
   .ls-table-header {
     @apply flex flex-row items-center w-fit relative;
 
+    min-width: 100%;
+
     will-change: transform;
     transform: translate3d(0, 0, 0);
 

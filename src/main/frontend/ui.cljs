@@ -6,7 +6,7 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
-            ["react-virtuoso" :refer [Virtuoso TableVirtuoso]]
+            ["react-virtuoso" :refer [Virtuoso]]
             ["@emoji-mart/data" :as emoji-data]
             ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
@@ -43,7 +43,6 @@
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
 (defonce virtualized-list (r/adapt-class Virtuoso))
-(defonce virtualized-table (r/adapt-class TableVirtuoso))
 
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
