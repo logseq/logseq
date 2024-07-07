@@ -129,5 +129,4 @@
 
 (defn page?
   [block]
-  (and (:block/name block)
-       (nil? (:block/page block))))
+  (contains? (:block/type block) "page"))
