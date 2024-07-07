@@ -206,16 +206,19 @@
         (let [user-uuid (:sub (worker-util/parse-jwt token))
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
-              {:keys [get-ws-create-task onstarted-task rtc-state-flow
-                      *rtc-auto-push? rtc-loop-task *online-users]}
+              {:keys [get-ws-create-task rtc-state-flow
+                      *rtc-auto-push? rtc-loop-task *online-users]
+               onstarted-task1 :onstarted-task}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
-              {:keys [assets-sync-loop-task]}
+              {:keys [assets-sync-loop-task]
+               onstarted-task2 :onstarted-task}
               (r.asset/create-assets-sync-loop get-ws-create-task graph-uuid conn)
               canceler1 (c.m/run-task rtc-loop-task :rtc-loop-task)
               canceler2 (c.m/run-task assets-sync-loop-task :assets-sync-loop-task)
               canceler #(do (canceler1) (canceler2))
-              start-ex (m/? onstarted-task)]
-          (if (:ex-data start-ex)
+              start-ex1 (m/? onstarted-task1)
+              start-ex2 (m/? onstarted-task2)]
+          (if-let [start-ex (or (:ex-data start-ex1) (:ex-data start-ex2))]
             (r.ex/->map start-ex)
             (do (reset! *rtc-loop-metadata {:repo repo
                                             :graph-uuid graph-uuid

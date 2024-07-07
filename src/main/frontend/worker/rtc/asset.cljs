@@ -124,7 +124,8 @@
         add-log-fn (fn [type message]
                      (assert (map? message) message)
                      (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))]
-    {:assets-sync-loop-task
+    {:onstarted-task started-dfv
+     :assets-sync-loop-task
      (holding-assets-sync-lock
       started-dfv
       (m/sp
