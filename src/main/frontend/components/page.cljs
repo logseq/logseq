@@ -577,6 +577,9 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-original-name))
 
+            (when (contains? (:block/type page) "class")
+              (class-component/class-children page))
+
             ;; referenced blocks
             (when-not block-or-whiteboard?
               (when (and page (not (false? linked-refs?)))
@@ -584,9 +587,6 @@
                  (rum/with-key
                    (reference/references page)
                    (str route-page-name "-refs"))]))
-
-            (when (contains? (:block/type page) "class")
-              (class-component/class-children page))
 
             (when-not block-or-whiteboard?
               (when (and (not journal?) (not db-based?))
