@@ -2,6 +2,7 @@
   "Table"
   (:require [logseq.shui.table.impl :as impl]
             [dommy.core :refer-macros [sel1]]
+            [cljs-bean.core :as bean]
             [rum.core :as rum]))
 
 (defn- get-head-container
@@ -115,52 +116,101 @@
                    prop)
      children]))
 
-;; FIXME: sticky header
+;; FIXME: ux
+(defn- use-sticky-element!
+  [^js/HTMLElement container target-ref]
+  (rum/use-effect!
+    (fn []
+      (let [^js el (rum/deref target-ref)
+            ^js cls (.-classList el)
+            *ticking? (volatile! false)
+            el-top (-> el (.getBoundingClientRect) (.-top))
+            head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+            translate (fn [offset]
+                        (set! (. (.-style el) -transform) (str "translate3d(0, " offset "px , 0)"))
+                        (if (zero? offset)
+                          (.remove cls "translated")
+                          (.add cls "translated")))
+            *last-offset (volatile! 0)
+            handle (fn []
+                     (let [scroll-top (js/parseInt (.-scrollTop container))
+                           offset (if (> (+ scroll-top head-top) el-top)
+                                    (+ (- scroll-top el-top) head-top 1) 0)
+                           offset (js/parseInt offset)
+                           last-offset @*last-offset]
+                       (if (and (not (zero? last-offset))
+                             (not= offset last-offset))
+                         (let [dir (if (neg? (- offset last-offset)) -1 1)]
+                           (loop [offset' (+ last-offset dir)]
+                             (translate offset')
+                             (if (and (not= offset offset')
+                                   (< (abs (- offset offset')) 100))
+                               (recur (+ offset' dir))
+                               (translate offset))))
+                         (translate offset))
+                       (vreset! *last-offset offset)))
+            handler (fn [^js e]
+                      (when (not @*ticking?)
+                        (js/window.requestAnimationFrame
+                          #(do (handle) (vreset! *ticking? false)))
+                        (vreset! *ticking? true)))]
+        (.addEventListener container "scroll" handler)
+        #(.removeEventListener container "scroll" handler)))
+    []))
+
+;; FIXME: another solution for the sticky header
+(defn- use-sticky-element2!
+  [^js/HTMLDivElement container target-ref]
+  (rum/use-effect!
+    (fn []
+      (let [^js target (rum/deref target-ref)
+            ^js target-cls (.-classList target)
+            ^js table (.closest target ".ls-table-rows")
+            *ticking? (volatile! false)
+            el-top (-> target (.getBoundingClientRect) (.-top))
+            head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+            update-target! (fn []
+                             (if (.contains target-cls "ls-fixed")
+                               (let [^js rect (-> table (.getBoundingClientRect))
+                                     width (.-clientWidth table)
+                                     left (.-left rect)]
+                                 (set! (. (.-style target) -width) (str width "px"))
+                                 (set! (. (.-style target) -left) (str left "px")))
+                               (do
+                                 (set! (. (.-style target) -width) "auto")
+                                 (set! (. (.-style target) -left) "0px")))
+                             ;; update scroll
+                             (set! (. target -scrollLeft) (.-scrollLeft table)))
+            ;; target observer
+            target-observe! (fn []
+                              (let [scroll-top (js/parseInt (.-scrollTop container))
+                                    fixed? (> (+ scroll-top head-top) el-top)]
+                                (if fixed?
+                                  (.add target-cls "ls-fixed")
+                                  (.remove target-cls "ls-fixed"))
+                                (update-target!)))
+            target-observe! (fn [^js _e]
+                              (when (not @*ticking?)
+                                (js/window.requestAnimationFrame
+                                  #(do (target-observe!) (vreset! *ticking? false)))
+                                (vreset! *ticking? true)))
+            resize-observer (js/ResizeObserver. update-target!)]
+        ;; events
+        (.observe resize-observer container)
+        (.observe resize-observer table)
+        (.addEventListener container "scroll" target-observe!)
+        (.addEventListener table "scroll" update-target!)
+        (.addEventListener table "resize" update-target!)
+
+        #(do (.removeEventListener container "scroll" target-observe!)
+           (.disconnect resize-observer))))
+    []))
+
 (rum/defc table-header < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
-        el-ref (rum/use-ref nil)]
-
-    (rum/use-effect!
-      (fn []
-        (let [^js container (get-main-scroll-container)
-              ^js el (rum/deref el-ref)
-              ^js cls (.-classList el)
-              *ticking? (volatile! false)
-              el-top (-> el (.getBoundingClientRect) (.-top))
-              head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
-              translate (fn [offset]
-                          (set! (. (.-style el) -transform) (str "translate3d(0, " offset "px , 0)"))
-                          (if (zero? offset)
-                            (.remove cls "translated")
-                            (.add cls "translated")))
-              *last-offset (volatile! 0)
-              handle (fn []
-                       (let [scroll-top (js/parseInt (.-scrollTop container))
-                             offset (if (> (+ scroll-top head-top) el-top)
-                                      (+ (- scroll-top el-top) head-top 1) 0)
-                             offset (js/parseInt offset)
-                             last-offset @*last-offset]
-                         (if (and (not (zero? last-offset))
-                               (not= offset last-offset))
-                           (let [dir (if (neg? (- offset last-offset)) -1 1)]
-                             (loop [offset' (+ last-offset dir)]
-                               (translate offset')
-                               (if (and (not= offset offset')
-                                       (< (abs (- offset offset')) 100))
-                                 (recur (+ offset' dir))
-                                 (translate offset))))
-                           (translate offset))
-                         (vreset! *last-offset offset)))
-              handler (fn [^js e]
-                        (when (not @*ticking?)
-                          (js/window.requestAnimationFrame
-                            #(do (handle) (vreset! *ticking? false)))
-                          (vreset! *ticking? true)))]
-          (.addEventListener container "scroll" handler)
-          #(.removeEventListener container "scroll" handler)))
-      [])
-
+        el-ref (rum/use-ref nil)
+        _ (use-sticky-element2! (get-main-scroll-container) el-ref)]
     [:div.ls-table-header
      (merge {:class "border-y transition-colors bg-gray-01"
              :ref el-ref

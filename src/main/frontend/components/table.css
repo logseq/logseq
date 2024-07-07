@@ -1,4 +1,6 @@
 .ls-table {
+  @apply pt-[34px];
+
   .ls-block {
     @apply w-full py-0;
   }
@@ -16,15 +18,21 @@
   }
 
   .ls-table-header {
-    @apply flex flex-row items-center w-fit relative;
+    @apply flex flex-row items-center w-fit absolute left-0 top-0;
 
     min-width: 100%;
 
     will-change: transform;
     transform: translate3d(0, 0, 0);
 
-    &.translated {
+    &.translated, &.ls-fixed {
       @apply shadow;
+    }
+
+    &.ls-fixed {
+      @apply fixed overflow-hidden;
+
+      top: 48px !important;
     }
   }
 
