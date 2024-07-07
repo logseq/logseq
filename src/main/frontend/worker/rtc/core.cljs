@@ -1,6 +1,7 @@
 (ns frontend.worker.rtc.core
   "Main(use missionary) ns for rtc related fns"
   (:require [frontend.common.missionary-util :as c.m]
+            [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client :as r.client]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
@@ -148,7 +149,8 @@
                              get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users)
         mixed-flow          (create-mixed-flow repo get-ws-create-task *auto-push?)]
     (assert (some? *current-ws))
-    {:rtc-state-flow  (create-rtc-state-flow (create-ws-state-flow *current-ws))
+    {:get-ws-create-task get-ws-create-task
+     :rtc-state-flow  (create-rtc-state-flow (create-ws-state-flow *current-ws))
      :*rtc-auto-push? *auto-push?
      :*online-users   *online-users
      :onstarted-task  started-dfv
@@ -204,9 +206,14 @@
         (let [user-uuid (:sub (worker-util/parse-jwt token))
               config (worker-state/get-config repo)
               date-formatter (common-config/get-date-formatter config)
-              {:keys [onstarted-task rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users]}
+              {:keys [get-ws-create-task onstarted-task rtc-state-flow
+                      *rtc-auto-push? rtc-loop-task *online-users]}
               (create-rtc-loop graph-uuid repo conn date-formatter token)
-              canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
+              {:keys [assets-sync-loop-task]}
+              (r.asset/create-assets-sync-loop get-ws-create-task graph-uuid conn)
+              canceler1 (c.m/run-task rtc-loop-task :rtc-loop-task)
+              canceler2 (c.m/run-task assets-sync-loop-task :assets-sync-loop-task)
+              canceler #(do (canceler1) (canceler2))
               start-ex (m/? onstarted-task)]
           (if (:ex-data start-ex)
             (r.ex/->map start-ex)

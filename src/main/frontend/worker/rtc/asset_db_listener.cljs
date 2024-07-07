@@ -1,11 +1,10 @@
 (ns frontend.worker.rtc.asset-db-listener
   "Listen asset-block changes in db, generate asset-sync operations"
-  (:require [frontend.schema-register :as sr]
+  (:require [datascript.core :as d]
+            [frontend.schema-register :as sr]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.asset :as r.asset]
-            [datascript.core :as d]))
-
+            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
 
 (defn entity-datoms=>action+asset-uuid
   [db-after entity-datoms]
@@ -26,18 +25,14 @@
               (fn [action->asset-uuids [action asset-uuid]]
                 (update action->asset-uuids action (fnil conj #{}) asset-uuid))
               {}))]
-
-    ))
+    (reset! r.asset/*global-asset-change-event action->asset-uuids)))
 
 (sr/defkeyword :generate-asset-change-events?
   "tx-meta option, generate events to notify asset-sync (default true)")
 
-
 (defmethod db-listener/listen-db-changes :gen-asset-change-events
-  [_ {:keys [_tx-data tx-meta db-before db-after
-             repo id->attr->datom e->a->add?->v->t same-entity-datoms-coll]}]
+  [_ {:keys [_tx-data tx-meta _db-before db-after
+             repo _id->attr->datom _e->a->add?->v->t same-entity-datoms-coll]}]
   (when (and (op-mem-layer/rtc-db-graph? repo)
              (:generate-asset-change-events? tx-meta true))
-
-    )
-  )
+    (generate-asset-change-events db-after same-entity-datoms-coll)))

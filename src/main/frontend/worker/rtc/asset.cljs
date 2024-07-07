@@ -117,7 +117,7 @@
 (defonce ^:private global-asset-change-event-flow
   (m/buffer 20 (m/watch *global-asset-change-event)))
 
-(defn- create-assets-sync-loop
+(defn create-assets-sync-loop
   [get-ws-create-task graph-uuid conn]
   (let [started-dfv         (m/dfv)
         asset-change-event-flow global-asset-change-event-flow
