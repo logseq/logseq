@@ -32,7 +32,7 @@
     (docs-graph-helper/docs-graph-assertions @conn graph-dir files)
 
     (testing "Additional counts"
-      (is (= 47996 (count (d/datoms @conn :eavt))) "Correct datoms count"))
+      (is (= 48766 (count (d/datoms @conn :eavt))) "Correct datoms count"))
 
     (testing "Asts"
       (is (seq asts) "Asts returned are non-zero")
@@ -150,7 +150,7 @@
   (let [graph-dir "tmp/file-and-db-graph"
         ;; pages and their blocks which are being tested
         pages-to-blocks
-        {{:block/name "page1"}
+        {{:block/name "page1" :block/type ["page"]}
          [{:block/content "block 1"} {:block/content "block 2"}]
          {:block/name "jul 20th, 2023" :block/type #{"journal"} :block/journal-day 20230720}
          [{:block/content "b1"} {:block/content "b2"}]}

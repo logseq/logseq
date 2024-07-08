@@ -144,7 +144,8 @@
       (is (= 9 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
       ;; Count includes Contents and page references
       (is (= 9
-             (count (d/q '[:find (pull ?b [*]) :where [?b :block/original-name ?name] (not [?b :block/type])] @conn))))
+             (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...] :where [?b :block/original-name]] @conn)
+                         (filter #(= ["page"] (:block/type %)))))))
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -242,7 +243,7 @@
             "tagged block tag converts tag to page ref")
         (is (= [(:db/id tag-page)] (map :db/id (:block/refs block)))
             "tagged block has correct refs")
-        (is (and tag-page (not (:block/type tag-page)))
+        (is (and tag-page (not (contains? (set (:block/type tag-page)) "class")))
             "tag page is not a class")
 
         (is (= {:logseq.property/page-tags #{"Movie"}}
@@ -263,7 +264,7 @@
 
       (is (= ["class"] (:block/type tag-page))
           "configured tag page in :tag-classes is a class")
-      (is (and another-tag-page (not (:block/type another-tag-page)))
+      (is (and another-tag-page (not (contains? (set (:block/type another-tag-page)) "class")))
           "unconfigured tag page is not a class")
 
       (is (= {:block/tags [:user.class/Movie]}
@@ -280,7 +281,7 @@
           tag-page (find-page-by-name @conn "Movie")]
       (is (= (:block/content block) "The Creator")
           "tagged block with configured tag strips tag from content")
-      (is (= ["class"] (:block/type tag-page))
+      (is (= ["class" "page"] (:block/type tag-page))
           "configured tag page derived from :property-classes is a class")
       (is (nil? (find-page-by-name @conn "type"))
           "No page exists for configured property")
