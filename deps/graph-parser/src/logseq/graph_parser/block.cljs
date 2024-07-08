@@ -604,7 +604,7 @@
 
 (defn fix-duplicate-id
   [block]
-  (println "Logseq will assign a new id for this block: " block)
+  (println "Logseq will assign a new id for block with content:" (pr-str (:block/content block)))
   (-> block
       (assoc :block/uuid (d/squuid))
       (update :block/properties dissoc :id)

@@ -54,10 +54,14 @@
       :block/original-name "Bar"
       :block/uuid #uuid "71515b7d-b5fc-496b-b6bf-c58004a34ee3"})})
 
-(deftest parse-file
+(defn- parse-file
+  [conn file-path file-content & [options]]
+  (graph-parser/parse-file conn file-path file-content (merge-with merge options {:extract-options {:verbose false}})))
+
+(deftest parse-file-test
   (testing "id properties"
     (let [conn (gp-db/start-conn)]
-      (graph-parser/parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098" {})
+      (parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098")
       (is (= [{:id "628953c1-8d75-49fe-a648-f4c612109098"}]
              (->> (d/q '[:find (pull ?b [*])
                          :in $
@@ -73,16 +77,16 @@
       (with-redefs [gp-block/with-pre-block-if-exists (fn stub-failure [& _args]
                                                         (throw (js/Error "Testing unexpected failure")))]
         (try
-          (graph-parser/parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098"
-                                   {:delete-blocks-fn (fn [_db page _file _uuids]
-                                                        (reset! deleted-page page))})
+          (parse-file conn "foo.md" "- id:: 628953c1-8d75-49fe-a648-f4c612109098"
+                      {:delete-blocks-fn (fn [_db page _file _uuids]
+                                           (reset! deleted-page page))})
           (catch :default _)))
       (is (= nil @deleted-page)
           "Page should not be deleted when there is unexpected failure")))
 
   (testing "parsing whiteboard page"
     (let [conn (gp-db/start-conn)]
-      (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
+      (parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn))
       (let [blocks (d/q '[:find (pull ?b [* {:block/page
                                              [:block/name
                                               :block/original-name
@@ -102,16 +106,18 @@
 
   (testing "Loading whiteboard pages that same block/uuid should throw an error."
     (let [conn (gp-db/start-conn)]
-      (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
-      (is (thrown-with-msg?
-           js/Error
-           #"Conflicting upserts"
-           (graph-parser/parse-file conn "/whiteboards/foo-conflict.edn" (pr-str foo-conflict-edn) {})))))
+      (parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn))
+      ;; Reduce output with with-out-str
+      (with-out-str
+        (is (thrown-with-msg?
+             js/Error
+             #"Conflicting upserts"
+             (parse-file conn "/whiteboards/foo-conflict.edn" (pr-str foo-conflict-edn)))))))
 
   (testing "Loading whiteboard pages should ignore the :block/name property inside :block/parent."
     (let [conn (gp-db/start-conn)]
-      (graph-parser/parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn) {})
-      (graph-parser/parse-file conn "/whiteboards/bar.edn" (pr-str bar-edn) {})
+      (parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn))
+      (parse-file conn "/whiteboards/bar.edn" (pr-str bar-edn))
       (let [pages (d/q '[:find ?name
                          :in $
                          :where
@@ -128,7 +134,7 @@
                   (string/join "\n"))
         ;; Test page properties and block properties
         body (str text "\n- " text)
-        _ (graph-parser/parse-file conn "foo.md" body {})
+        _ (parse-file conn "foo.md" body)
         properties-orders (->> (d/q '[:find (pull ?b [*])
                                       :in $
                                       :where [?b :block/content] [(missing? $ ?b :block/name)]]
@@ -148,10 +154,10 @@
 
 (deftest quoted-property-values
   (let [conn (gp-db/start-conn)
-        _ (graph-parser/parse-file conn
-                                   "foo.md"
-                                   "- desc:: \"#foo is not a ref\""
-                                   {:extract-options {:user-config {}}})
+        _ (parse-file conn
+                      "foo.md"
+                      "- desc:: \"#foo is not a ref\""
+                      {:extract-options {:user-config {}}})
         block (->> (d/q '[:find (pull ?b [* {:block/refs [*]}])
                           :in $
                           :where [?b :block/properties]]
@@ -167,10 +173,9 @@
 
 (deftest non-string-property-values
   (let [conn (gp-db/start-conn)]
-    (graph-parser/parse-file conn
-                             "lythe-of-heaven.md"
-                             "rating:: 8\nrecommend:: true\narchive:: false"
-                             {})
+    (parse-file conn
+                "lythe-of-heaven.md"
+                "rating:: 8\nrecommend:: true\narchive:: false")
     (is (= {:rating 8 :recommend true :archive false}
            (->> (d/q '[:find (pull ?b [*])
                        :in $
@@ -181,12 +186,11 @@
 
 (deftest linkable-built-in-properties
   (let [conn (gp-db/start-conn)
-        _ (graph-parser/parse-file conn
-                                   "lol.md"
-                                   (str "alias:: 233\ntags:: fun, facts"
-                                        "\n- "
-                                        "alias:: 666\ntags:: block, facts")
-                                   {})
+        _ (parse-file conn
+                      "lol.md"
+                      (str "alias:: 233\ntags:: fun, facts"
+                           "\n- "
+                           "alias:: 666\ntags:: block, facts"))
         page-block (->> (d/q '[:find (pull ?b [:block/properties {:block/alias [:block/name]} {:block/tags [:block/name]}])
                                :in $
                                :where [?b :block/name "lol"]]
@@ -225,10 +229,10 @@
         block-property-transform (fn [m] (update-keys m #(keyword (str "block-" (name %)))))
         block-file-properties (block-property-transform file-properties)
         block-content (gp-property/->block-content block-file-properties)
-        _ (graph-parser/parse-file conn
-                                   "property-relationships.md"
-                                   (str page-content "\n- " block-content)
-                                   {:extract-options {:user-config user-config}})
+        _ (parse-file conn
+                      "property-relationships.md"
+                      (str page-content "\n- " block-content)
+                      {:extract-options {:user-config user-config}})
         pages (->> (d/q '[:find (pull ?b [* :block/properties])
                           :in $
                           :where [?b :block/name] [?b :block/properties]]
@@ -299,7 +303,7 @@
                     "#blarg" "invalid"}
         body (str (gp-property/->block-content properties)
                   "\n- " (gp-property/->block-content properties))]
-    (graph-parser/parse-file conn "foo.md" body {})
+    (parse-file conn "foo.md" body)
 
     (is (= [{:block/properties {:foo "valid"}
              :block/invalid-properties #{"[[foo]]" "some,prop" "#blarg"}}]
@@ -328,10 +332,7 @@
   (testing "from title"
     (let [conn (gp-db/start-conn)
           built-in-pages (set (map string/lower-case gp-db/built-in-pages-names))]
-      (graph-parser/parse-file conn
-                               "foo.md"
-                               "title:: core.async"
-                               {})
+      (parse-file conn "foo.md" "title:: core.async")
       (is (= #{"core.async"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
@@ -344,13 +345,12 @@
   (testing "from cased org title"
     (let [conn (gp-db/start-conn)
           built-in-pages (set gp-db/built-in-pages-names)]
-      (graph-parser/parse-file conn
-                               "foo.org"
-                               ":PROPERTIES:
+      (parse-file conn
+                  "foo.org"
+                  ":PROPERTIES:
 :ID:       72289d9a-eb2f-427b-ad97-b605a4b8c59b
 :END:
-#+tItLe: Well parsed!"
-                               {})
+#+tItLe: Well parsed!")
       (is (= #{"Well parsed!"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
@@ -364,16 +364,16 @@
   (testing "for file, mailto, web and other uris in markdown"
     (let [conn (gp-db/start-conn)
           built-in-pages (set (map string/lower-case gp-db/built-in-pages-names))]
-      (graph-parser/parse-file conn
-                               "foo.md"
-                               (str "- [title]([[bar]])\n"
+      (parse-file conn
+                  "foo.md"
+                  (str "- [title]([[bar]])\n"
                                     ;; all of the uris below do not create pages
-                                    "- ![image.png](../assets/image_1630480711363_0.png)\n"
-                                    "- [Filename.txt](file:///E:/test/Filename.txt)\n"
-                                    "- [mail](mailto:test@test.com?subject=TestSubject)\n"
-                                    "- [onenote link](onenote:https://d.docs.live.net/b2127346582e6386a/blablabla/blablabla/blablabla%20blablabla.one#Etat%202019&section-id={133DDF16-9A1F-4815-9A05-44303784442E6F94}&page-id={3AAB677F0B-328F-41D0-AFF5-66408819C085}&end)\n"
-                                    "- [lock file](deps/graph-parser/yarn.lock)"
-                                    "- [example](https://example.com)"))
+                       "- ![image.png](../assets/image_1630480711363_0.png)\n"
+                       "- [Filename.txt](file:///E:/test/Filename.txt)\n"
+                       "- [mail](mailto:test@test.com?subject=TestSubject)\n"
+                       "- [onenote link](onenote:https://d.docs.live.net/b2127346582e6386a/blablabla/blablabla/blablabla%20blablabla.one#Etat%202019&section-id={133DDF16-9A1F-4815-9A05-44303784442E6F94}&page-id={3AAB677F0B-328F-41D0-AFF5-66408819C085}&end)\n"
+                       "- [lock file](deps/graph-parser/yarn.lock)"
+                       "- [example](https://example.com)"))
       (is (= #{"foo" "bar"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
@@ -383,15 +383,15 @@
                   (remove built-in-pages)
                   set)))))
 
-(testing "for web and page uris in org"
+  (testing "for web and page uris in org"
     (let [conn (gp-db/start-conn)
           built-in-pages (set (map string/lower-case gp-db/built-in-pages-names))]
-      (graph-parser/parse-file conn
-                               "foo.org"
-                               (str "* [[bar][title]]\n"
+      (parse-file conn
+                  "foo.org"
+                  (str "* [[bar][title]]\n"
                                     ;; all of the uris below do not create pages
-                                    "* [[https://example.com][example]]\n"
-                                    "* [[../assets/conga_parrot.gif][conga]]"))
+                       "* [[https://example.com][example]]\n"
+                       "* [[../assets/conga_parrot.gif][conga]]"))
       (is (= #{"foo" "bar"}
              (->> (d/q '[:find (pull ?b [*])
                          :in $
@@ -407,14 +407,14 @@
           extract-block-ids (atom #{})
           parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
           block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]
-      (graph-parser/parse-file conn
-                               "foo.md"
-                               "- foo
+      (parse-file conn
+                  "foo.md"
+                  "- foo
 id:: 63f199bc-c737-459f-983d-84acfcda14fe
 - bar
 id:: 63f199bc-c737-459f-983d-84acfcda14fe
 "
-                               parse-opts)
+                  parse-opts)
       (let [blocks (:block/_parent (ldb/get-page @conn "foo"))]
         (is (= 2 (count blocks)))
         (is (= 1 (count (filter #(= (:block/uuid %) block-id) blocks)))))))
@@ -424,21 +424,21 @@ id:: 63f199bc-c737-459f-983d-84acfcda14fe
           extract-block-ids (atom #{})
           parse-opts {:extract-options {:extract-block-ids extract-block-ids}}
           block-id #uuid "63f199bc-c737-459f-983d-84acfcda14fe"]
-      (graph-parser/parse-file conn
-                               "foo.md"
-                               "- foo
+      (parse-file conn
+                  "foo.md"
+                  "- foo
 id:: 63f199bc-c737-459f-983d-84acfcda14fe
 bar
 - test"
-                               parse-opts)
-      (graph-parser/parse-file conn
-                               "bar.md"
-                               "- bar
+                  parse-opts)
+      (parse-file conn
+                  "bar.md"
+                  "- bar
 id:: 63f199bc-c737-459f-983d-84acfcda14fe
 bar
 - test
 "
-                               parse-opts)
+                  parse-opts)
       (is (= "foo"
              (-> (d/entity @conn [:block/uuid block-id])
                  :block/page
