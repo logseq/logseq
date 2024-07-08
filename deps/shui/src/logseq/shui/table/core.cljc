@@ -240,8 +240,8 @@
                         (cond
                           (:select? prop)
                           " px-0"
-                          (:last-column? prop)
-                          " px-2"
+                          (:add-property? prop)
+                          ""
                           :else
                           " border-r px-2"))}
       children]]))

@@ -36,11 +36,10 @@
        (ldb/sort-by-order))))
 
 (rum/defc objects-inner < rum/static
-  [config class]
+  [config class properties]
   (let [[loading? set-loading?] (rum/use-state nil)
         [view-entity set-view-entity!] (rum/use-state nil)
         [data set-data!] (rum/use-state [])
-        properties (outliner-property/get-class-properties class)
         columns (views/build-columns config properties)]
 
     (rum/use-effect!
@@ -65,11 +64,18 @@
                                                                                                         :properties {:logseq.property/view-for (:db/ident class)}})]
                                                  (let [view (db/entity [:block/uuid (:block/uuid result)])]
                                                    (set-view-entity! view)
-                                                   view)))}))))
+                                                   view)))
+                               :show-add-property? true
+                               :add-property! (fn []
+                                                (state/pub-event! [:editor/new-property {:block class
+                                                                                         :page-configure? true
+                                                                                         :class-schema? true}]))}))))
 
 (rum/defcs objects < rum/reactive db-mixins/query mixins/container-id
   [state class]
   (when class
-    (let [config {:container-id (:container-id state)}]
+    (let [class (db/sub-block (:db/id class))
+          config {:container-id (:container-id state)}
+          properties (outliner-property/get-class-properties class)]
       [:div.ml-2
-       (objects-inner config class)])))
+       (objects-inner config class properties)])))
