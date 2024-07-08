@@ -243,15 +243,25 @@
       tag-id))
 
 (defn <get-tag-objects
-  [graph tag-id]
-  (let [class-children (db-model/get-class-children graph tag-id)
-        class-ids (distinct (conj class-children tag-id))]
+  [graph class-id]
+  (let [class-children (db-model/get-class-children graph class-id)
+        class-ids (distinct (conj class-children class-id))]
     (<q graph {:transact-db? true}
         '[:find [(pull ?b [*]) ...]
-          :in $ [?tag-id ...]
+          :in $ [?class-id ...]
           :where
-          [?b :block/tags ?tag-id]]
+          [?b :block/tags ?class-id]]
         class-ids)))
+
+(defn <get-views
+  [graph class-id]
+  (<q graph {:transact-db? true}
+      '[:find [(pull ?b [*]) ...]
+        :in $ ?class-id
+        :where
+        [?class-id :db/ident ?ident]
+        [?b :logseq.property/view-for ?ident]]
+      class-id))
 
 (defn <get-tags
   [graph]

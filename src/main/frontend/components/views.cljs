@@ -21,7 +21,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.shui.ui :as shui]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [promesa.core :as p]))
 
 (rum/defc header-checkbox < rum/static
   [{:keys [selected-all? selected-some? toggle-selected-all!]}]
@@ -796,34 +797,36 @@
    filters))
 
 (defn- db-set-table-state!
-  [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!] :as option}]
-  (if entity
-    (let [repo (state/get-current-repo)]
-      {:set-sorting!
-       (fn [sorting]
-         (set-sorting! sorting)
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-sorting sorting))
-       :set-filters!
-       (fn [filters]
-         (let [filters (table-filters->persist-state filters)]
-           (set-filters! filters)
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-filters filters)))
-       :set-visible-columns!
-       (fn [columns]
-         (let [hidden-columns (vec (keep (fn [[column visible?]]
-                                           (when (false? visible?)
-                                             column)) columns))]
-           (set-visible-columns! columns)
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-hidden-columns hidden-columns)))
-       :set-ordered-columns!
-       (fn [ordered-columns]
-         (let [ids (vec (remove #{:select} ordered-columns))]
-           (set-ordered-columns! ordered-columns)
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-ordered-columns ids)))})
-    option))
+  [entity {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns! create-view!]}]
+  (let [repo (state/get-current-repo)]
+    {:set-sorting!
+     (fn [sorting]
+       (set-sorting! sorting)
+       (p/let [entity (or entity (create-view!))]
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-sorting sorting)))
+     :set-filters!
+     (fn [filters]
+       (let [filters (table-filters->persist-state filters)]
+         (set-filters! filters)
+         (p/let [entity (or entity (create-view!))]
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-filters filters))))
+     :set-visible-columns!
+     (fn [columns]
+       (let [hidden-columns (vec (keep (fn [[column visible?]]
+                                         (when (false? visible?)
+                                           column)) columns))]
+         (set-visible-columns! columns)
+         (p/let [entity (or entity (create-view!))]
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-hidden-columns hidden-columns))))
+     :set-ordered-columns!
+     (fn [ordered-columns]
+       (let [ids (vec (remove #{:select} ordered-columns))]
+         (set-ordered-columns! ordered-columns)
+         (p/let [entity (or entity (create-view!))]
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-ordered-columns ids))))}))
 
 (rum/defc view-inner < rum/static
-  [view-entity {:keys [data set-data! columns add-new-object!]}]
+  [view-entity {:keys [data set-data! columns add-new-object! create-view!]}]
   (let [[input set-input!] (rum/use-state "")
         sorting (:logseq.property/table-sorting view-entity)
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
@@ -837,8 +840,12 @@
         (db-set-table-state! view-entity {:set-sorting! set-sorting!
                                           :set-filters! set-filters!
                                           :set-visible-columns! set-visible-columns!
-                                          :set-ordered-columns! set-ordered-columns!})
-        [row-filter set-row-filter!] (rum/use-state nil)
+                                          :set-ordered-columns! set-ordered-columns!
+                                          :create-view! create-view!})
+        row-filter-fn (fn []
+                        (fn [row]
+                          (row-matched? row input filters)))
+        [row-filter set-row-filter!] (rum/use-state row-filter-fn)
         debounced-set-row-filter! (debounce set-row-filter! 200)
         [row-selection set-row-selection!] (rum/use-state {})
         columns (sort-columns columns ordered-columns)
@@ -860,13 +867,14 @@
         ;; selected-rows (shui/table-get-selection-rows row-selection (:rows table))
         ;; selected-rows-count (count selected-rows)
         ]
+
     (rum/use-effect!
-     (fn []
-       (debounced-set-row-filter!
-        (fn []
-          (fn [row]
-            (row-matched? row input filters)))))
+     (fn [] (debounced-set-row-filter!
+             (fn []
+               (fn [row]
+                 (row-matched? row input filters)))))
      [input filters])
+
     [:div.ls-table.flex.flex-col.gap-2.grid
      [:div.flex.items-center.justify-between
       (let [data-count (count (:data table))]

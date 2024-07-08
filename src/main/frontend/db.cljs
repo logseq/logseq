@@ -9,7 +9,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.state :as state]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.outliner.op]))
 
 (import-vars
  [frontend.db.conn
