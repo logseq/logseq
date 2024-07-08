@@ -149,8 +149,12 @@
                 (mapv (fn [m]
                         (let [command (if db-based?
                                         [:div.flex.flex-row.items-center.gap-2 m [:div.text-xs.opacity-50 "Status"]]
-                                        m)]
-                          [command (->marker m) (str "Set status to " m)]))))]
+                                        m)
+                              icon (case m
+                                     "Canceled" "Cancelled"
+                                     "Doing" "InProgress50"
+                                     m)]
+                          [command (->marker m) (str "Set status to " m) icon]))))]
     (when (seq result)
       (update result 0 (fn [v] (conj v "TASK"))))))
 
@@ -174,7 +178,7 @@
                         (let [command (if db-based?
                                         [:div.flex.flex-row.items-center.gap-2 item [:div.text-xs.opacity-50 "Priority"]]
                                         item)]
-                          [command (->priority item) (str "Set priority to " item)]))))]
+                          [command (->priority item) (str "Set priority to " item) (str "priorityLvl" item)]))))]
     (when (seq result)
       (update result 0 (fn [v] (conj v "PRIORITY"))))))
 
@@ -190,7 +194,7 @@
   []
   (mapv (fn [level]
           (let [heading (str "Heading " level)]
-            [heading (->heading level)])) (range 1 7)))
+            [heading (->heading level) heading (str "h-" level)])) (range 1 7)))
 
 (defonce *matched-commands (atom nil))
 (defonce *initial-commands (atom nil))
@@ -272,30 +276,34 @@
         [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
          [:editor/search-page]]
         "Create a backlink to a page"
+        :icon/pageRef
         "BASIC"]
-       ["Page embed" (embed-page) "Embed a page here"]
+       ["Page embed" (embed-page) "Embed a page here" :icon/xEmbed]
        ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
-                           [:editor/search-block :reference]] "Create a backlink to a block"]
-       ["Block embed" (embed-block) "Embed a block here"]]
+                           [:editor/search-block :reference]]
+        "Create a backlink to a block" :icon/blockRef]
+       ["Block embed" (embed-block) "Embed a block here" :icon/xEmbed]]
 
         ;; format
-      [["Link" (link-steps) "Create a HTTP link" "FORMAT"]
-       ["Image link" (image-link-steps) "Create a HTTP link to a image"]
+      [["Link" (link-steps) "Create a HTTP link" :icon/link "FORMAT"]
+       ["Image link" (image-link-steps) "Create a HTTP link to a image" :icon/photoLink]
        (when (state/markdown?)
          ["Underline" [[:editor/input "<ins></ins>"
                         {:last-pattern command-trigger
-                         :backward-pos 6}]] "Create a underline text decoration"])
+                         :backward-pos 6}]] "Create a underline text decoration"
+          :icon/underline])
        ["Code block" [[:editor/input "```\n```\n" {:type "block"
                                                    :backward-pos 5
                                                    :only-breakline? true}]
-                      [:editor/select-code-block-mode]] "Insert code block"]]
+                      [:editor/select-code-block-mode]] "Insert code block"
+        :icon/code]]
 
       (headings)
 
       ;; task management
       (get-statuses)
       [["Deadline" [[:editor/clear-current-slash]
-                    [:editor/set-deadline]]]
+                    [:editor/set-deadline]] "" :icon/calendar-stats]
        (when-not db?
          ["Scheduled" [[:editor/clear-current-slash]
                        [:editor/set-scheduled]]])]
@@ -307,33 +315,38 @@
       [["Tomorrow"
         #(get-page-ref-text (date/tomorrow))
         "Insert the date of tomorrow"
+        :icon/tomorrow
         "TIME & DATE"]
-       ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday"]
-       ["Today" #(get-page-ref-text (date/today)) "Insert the date of today"]
-       ["Current time" #(date/get-current-time) "Insert current time"]
-       ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here"]]
+       ["Yesterday" #(get-page-ref-text (date/yesterday)) "Insert the date of yesterday" :icon/yesterday]
+       ["Today" #(get-page-ref-text (date/today)) "Insert the date of today" :icon/calendar]
+       ["Current time" #(date/get-current-time) "Insert current time" :icon/clock]
+       ["Date picker" [[:editor/show-date-picker]] "Pick a date and insert here" :icon/calendar-dots]]
 
       ;; order list
       [["Number list"
         [[:editor/clear-current-slash]
          [:editor/toggle-own-number-list]]
         "Number list"
+        :icon/numberedParents
         "LIST TYPE"]
        ["Number children" [[:editor/clear-current-slash]
-                           [:editor/toggle-children-number-list]] "Number children"]]
+                           [:editor/toggle-children-number-list]]
+        "Number children"
+        :icon/numberedChildren]]
 
       ;; advanced
       [["Query"
         [[:editor/input "{{query }}" {:backward-pos 2}]
          [:editor/exit]]
         query-doc
+        :icon/query
         "ADVANCED"]
        (when-not db?
          ["Zotero" (zotero-steps) "Import Zotero journal article"])
-       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function"]
+       ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
        ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
                                                        :backward-pos 4}]
-                      [:codemirror/focus]] "Insert a calculator"]
+                      [:codemirror/focus]] "Insert a calculator" :icon/calculator]
        (when-not db?
          ["Draw" (fn []
                    (let [file (draw/file-name)
@@ -346,24 +359,29 @@
        (cond
          (and (util/electron?) (config/local-file-based-graph? (state/get-current-repo)))
 
-         ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)"])
+         ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)" :icon/upload])
 
        (when-not db?
          ["Template" [[:editor/input command-trigger nil]
-                      [:editor/search-template]] "Insert a created template here"])
+                      [:editor/search-template]] "Insert a created template here"
+          :icon/template])
 
-       ["Embed HTML " (->inline "html")]
+       ["Embed HTML " (->inline "html") "" :icon/htmlEmbed]
 
        ["Embed Video URL" [[:editor/input "{{video }}" {:last-pattern command-trigger
-                                                        :backward-pos 2}]]]
+                                                        :backward-pos 2}]] ""
+        :icon/videoEmbed]
 
-       ["Embed Youtube timestamp" [[:youtube/insert-timestamp]]]
+       ["Embed Youtube timestamp" [[:youtube/insert-timestamp]] "" :icon/videoEmbed]
 
        ["Embed Twitter tweet" [[:editor/input "{{tweet }}" {:last-pattern command-trigger
-                                                            :backward-pos 2}]]]
+                                                            :backward-pos 2}]] ""
+        :icon/xEmbed]
+
        (when db?
          ["Add new property" [[:editor/clear-current-slash]
-                              [:editor/new-property]]])]
+                              [:editor/new-property]] ""
+          :icon/cube-plus])]
 
       (let [commands (cond->> @*extend-slash-commands
                        db?
@@ -374,7 +392,9 @@
 ;; Allow user to modify or extend, should specify how to extend.
 
       (state/get-commands)
-      (state/get-plugins-slash-commands))
+       (when-let [plugin-commands (some->> (state/get-plugins-slash-commands)
+                                    (mapv #(vec (concat % [nil :icon/puzzle]))))]
+         (update plugin-commands 0 (fn [v] (conj v "PLUGINS")))))
      (remove nil?)
      (util/distinct-by-last-wins first))))
 
