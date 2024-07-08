@@ -336,9 +336,11 @@
    (mapcat
     (fn [{:keys [page blocks]}]
       (let [new-page (merge
+                      ;; TODO: Use sqlite-util/build-new-page
                       {:db/id (or (:db/id page) (new-db-id))
                        :block/original-name (or (:block/original-name page) (string/capitalize (:block/name page)))
                        :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/original-name page)))
+                       :block/type #{"page"}
                        :block/format :markdown}
                       (dissoc page :build/properties :db/id :block/name :block/original-name :build/tags))
             pvalue-tx-m (->property-value-tx-m new-page (:build/properties page) properties all-idents)]
@@ -460,7 +462,7 @@
                                            (merge {:block/journal-day date-int
                                                    :block/original-name page-name
                                                    :block/uuid (common-uuid/gen-uuid date-int)
-                                                   :block/type "journal"})))))
+                                                   :block/type #{"journal" "page"}})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks
