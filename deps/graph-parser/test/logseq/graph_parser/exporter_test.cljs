@@ -141,11 +141,14 @@
 
       ;; Counts
       ;; Includes 2 journals as property values for :logseq.task/deadline
-      (is (= 9 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
-      ;; Count includes Contents and page references
-      (is (= 9
-             (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...] :where [?b :block/original-name]] @conn)
-                         (filter #(= ["page"] (:block/type %)))))))
+      (is (= 10 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+
+      ;; Don't count pages like url.md that have properties but no content
+      (is (= 5
+             (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...]
+                                :where [?b :block/original-name] [_ :block/page ?b]] @conn)
+                         (filter #(= ["page"] (:block/type %))))))
+          "Correct number of pages with block content")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -155,30 +158,38 @@
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
     (testing "favorites"
-      (is (= #{"Interstellar" "some page"}
-             (->>
-              (ldb/get-page-blocks @conn
-                                   (:db/id (ldb/get-page @conn common-config/favorites-page-name))
-                                   {:pull-keys '[* {:block/link [:block/original-name]}]})
-              (map #(get-in % [:block/link :block/original-name]))
-              set))))
+       (is (= #{"Interstellar" "some page"}
+              (->>
+               (ldb/get-page-blocks @conn
+                                    (:db/id (ldb/get-page @conn common-config/favorites-page-name))
+                                    {:pull-keys '[* {:block/link [:block/original-name]}]})
+               (map #(get-in % [:block/link :block/original-name]))
+               set))))
 
     (testing "user properties"
+      (is (= 12
+             (->> @conn
+                  (d/q '[:find [(pull ?b [:db/ident]) ...]
+                         :where [?b :block/type "property"]])
+                  (remove #(db-malli-schema/internal-ident? (:db/ident %)))
+                  count))
+          "Correct number of user properties")
       (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
                {:db/ident :user.property/prop-string :block/schema {:type :default}}
                {:db/ident :user.property/prop-num :block/schema {:type :number}}
-               {:db/ident :user.property/prop-num2 :block/schema {:type :number}}
-               {:db/ident :user.property/type :block/schema {:type :page}}
                {:db/ident :user.property/url :block/schema {:type :url}}
                {:db/ident :user.property/sameas :block/schema {:type :url}}
-               {:db/ident :user.property/rangeincludes :block/schema {:type :page}}
-               {:db/ident :user.property/unique :block/schema {:type :checkbox}}}
+               {:db/ident :user.property/rangeincludes :block/schema {:type :page}}}
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
                          :where [?b :block/type "property"]])
-                  (remove #(db-malli-schema/internal-ident? (:db/ident %)))
+                  (filter #(contains? #{:prop-bool :prop-string :prop-num :rangeincludes :url :sameas}
+                                      (keyword (name (:db/ident %)))))
                   set))
-          "Properties defined correctly")
+          "Main property types have correct inferred :type")
+      (is (= :default
+             (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
+          "Property value consisting of text and refs is inferred as :default")
 
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
@@ -192,9 +203,6 @@
                   (map :block/original-name)
                   set))
           "Block with properties has correct refs")
-      (is (= #{"Uri"}
-           (:user.property/rangeincludes (readable-properties @conn (find-page-by-name @conn "url"))))
-          "Block with :page property is correct")
 
       (is (= {:user.property/prop-num2 10}
              (readable-properties @conn (find-page-by-name @conn "new page")))
@@ -228,7 +236,11 @@
 
       (is (= #{:logseq.task/status :block/tags}
              (set (keys (readable-properties @conn (find-block-by-content @conn "old todo block")))))
-          "old task properties are ignored")
+          "old task properties like 'todo' are ignored")
+
+      (is (= {:logseq.property/order-list-type "number"}
+             (readable-properties @conn (find-block-by-content @conn "list one")))
+          "numered block has correct property")
 
       (is (= {:logseq.property/query-sort-by :user.property/prop-num
               :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
@@ -262,6 +274,9 @@
           another-tag-page (find-page-by-name @conn "p0")]
       (is (= (:block/content block) "Inception")
           "tagged block with configured tag strips tag from content")
+      (is (= [:user.class/Movie]
+             (:block/tags (readable-properties @conn block)))
+          "tagged block has configured tag imported as a class")
 
       (is (= ["class" "page"] (:block/type tag-page))
           "configured tag page in :tag-classes is a class")
@@ -282,6 +297,13 @@
           tag-page (find-page-by-name @conn "Movie")]
       (is (= (:block/content block) "The Creator")
           "tagged block with configured tag strips tag from content")
+      (is (= [:user.class/Movie]
+             (:block/tags (readable-properties @conn block)))
+          "tagged block has configured tag imported as a class")
+      (is (= (:user.property/testtagclass block) (:block/tags block))
+          "tagged block can have another property that references the same class it is tagged with,
+           without creating a duplicate class")
+
       (is (= ["class" "page"] (:block/type tag-page))
           "configured tag page derived from :property-classes is a class")
       (is (nil? (find-page-by-name @conn "type"))
