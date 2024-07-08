@@ -31,7 +31,8 @@
   [blocks opts]
   (op-transact!
    (let [ids (map :db/id blocks)]
-    [:delete-blocks [ids opts]])))
+     (when (seq ids)
+       [:delete-blocks [ids opts]]))))
 
 (defn move-blocks!
   [blocks target-block sibling?]

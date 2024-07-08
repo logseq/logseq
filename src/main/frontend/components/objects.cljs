@@ -11,7 +11,9 @@
             [frontend.state :as state]
             [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.modules.outliner.ui :as ui-outliner-tx]
+            [frontend.modules.outliner.op :as outliner-op]))
 
 (defn- get-all-objects
   [class]
@@ -69,7 +71,22 @@
                                :add-property! (fn []
                                                 (state/pub-event! [:editor/new-property {:block class
                                                                                          :page-configure? true
-                                                                                         :class-schema? true}]))}))))
+                                                                                         :class-schema? true}]))
+                               :on-delete-rows (fn [table selected-rows]
+                                                 (let [pages (filter ldb/page? selected-rows)
+                                                       blocks (remove ldb/page? selected-rows)]
+                                                   (p/do!
+                                                    (ui-outliner-tx/transact!
+                                                     {:outliner-op :delete-blocks}
+                                                     (when (seq blocks)
+                                                       (outliner-op/delete-blocks! blocks nil))
+                                                     (let [page-ids (map :db/id pages)
+                                                           tx-data (map (fn [pid] [:db/retract pid :block/tags (:db/id class)]) page-ids)]
+                                                       (when (seq tx-data)
+                                                         (outliner-op/transact! tx-data {:outliner-op :save-block}))))
+                                                    (set-data! (get-all-objects class))
+                                                    (when-let [f (get-in table [:data-fns :set-row-selection!])]
+                                                      (f {})))))}))))
 
 (rum/defcs objects < rum/reactive db-mixins/query mixins/container-id
   [state class]

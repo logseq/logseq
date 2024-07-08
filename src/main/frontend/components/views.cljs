@@ -215,8 +215,25 @@
     (ui/icon "plus")
     "New property")])
 
+(rum/defc action-bar < rum/static
+  [table selected-rows {:keys [on-delete-rows]}]
+  (shui/table-actions
+   {}
+   (shui/button
+    {:variant "ghost"
+     :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
+     :disabled true}
+    (str (count selected-rows) " selected"))
+   (when (fn? on-delete-rows)
+     (shui/button
+      {:variant "ghost"
+       :class "h-8 !pl-4 !px-2 !py-0 hover:text-foreground w-full justify-start"
+       :on-click (fn []
+                   (on-delete-rows table selected-rows))}
+      (ui/icon "trash")))))
+
 (defn- table-header
-  [table columns {:keys [show-add-property? add-property!]}]
+  [table columns {:keys [show-add-property? add-property!] :as option} selected-rows]
   (let [set-ordered-columns! (get-in table [:data-fns :set-ordered-columns!])
         items (mapv (fn [column]
                       {:id (:name column)
@@ -241,11 +258,15 @@
                        :value :add-new-property
                        :content (add-property-button)
                        :disabled? true})
-                items)]
+                items)
+        selection-rows-count (count selected-rows)]
     (shui/table-header
      (dnd/items items {:vertical? false
                        :on-drag-end (fn [ordered-columns _m]
-                                      (set-ordered-columns! ordered-columns))}))))
+                                      (set-ordered-columns! ordered-columns))})
+     (when (pos? selection-rows-count)
+       [:div.absolute.top-0.left-8
+        (action-bar table selected-rows option)]))))
 
 (rum/defc table-row < rum/reactive
   [{:keys [row-selected?] :as table} row columns props {:keys [show-add-property?]}]
@@ -887,9 +908,7 @@
                                              :set-ordered-columns! set-ordered-columns!
                                              :set-row-selection! set-row-selection!
                                              :add-new-object! add-new-object!}})
-        ;; selected-rows (shui/table-get-selection-rows row-selection (:rows table))
-        ;; selected-rows-count (count selected-rows)
-        ]
+        selected-rows (shui/table-get-selection-rows row-selection (:rows table))]
 
     (rum/use-effect!
      (fn [] (debounced-set-row-filter!
@@ -921,7 +940,7 @@
             rows (:rows table)]
         [:div.ls-table-rows.content.overflow-x-auto.force-visible-scrollbar
          [:div.relative
-          (table-header table columns' option)
+          (table-header table columns' option selected-rows)
 
           (ui/virtualized-list
            {:custom-scroll-parent (gdom/getElement "main-content-container")

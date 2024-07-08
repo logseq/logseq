@@ -134,4 +134,5 @@
 (def table-footer table-core/table-footer)
 (def table-row table-core/table-row)
 (def table-cell table-core/table-cell)
+(def table-actions table-core/table-actions)
 (def table-get-selection-rows table-core/get-selection-rows)

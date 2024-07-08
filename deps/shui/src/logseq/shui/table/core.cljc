@@ -236,13 +236,6 @@
                                prop)
      children]))
 
-(rum/defc table-head < rum/static
-  [& prop-and-children]
-  (let [[prop children] (get-prop-and-children prop-and-children)]
-    [:div (merge {:class "cursor-pointer transition-colors hover:bg-muted/50 px-2 text-left align-middle font-medium text-muted-foreground [&:has([role=checkbox])]:px-0"}
-                prop)
-     children]))
-
 (rum/defc table-cell < rum/static
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)]
@@ -256,3 +249,15 @@
                           :else
                           " border-r px-2"))}
       children]]))
+
+(rum/defc table-actions < rum/static
+  [& prop-and-children]
+  (let [[prop children] (get-prop-and-children prop-and-children)
+        el-ref (rum/use-ref nil)
+        ;; _ (use-sticky-element2! (get-main-scroll-container) el-ref)
+        ]
+    [:div.ls-table-actions.flex.flex-row.items-center.gap-1.bg-gray-01
+     (merge {:ref el-ref
+             :style {:z-index 101}}
+            prop)
+     children]))
