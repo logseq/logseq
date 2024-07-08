@@ -600,16 +600,16 @@
 (rum/defcs page-aux < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [page-name (:page-name (first (:rum/args state)))
-                 preview? (:preview? (last (:rum/args state)))
+                 option (last (:rum/args state))
+                 preview-or-sidebar? (or (:preview? option) (:sidebar? option))
                  page-name' (get-sanity-page-name state page-name)
                  page-uuid? (util/uuid-string? page-name')
                  *loading? (atom true)]
-             (p/let
-              [page-block (db-async/<get-block (state/get-current-repo) page-name')]
+             (p/let [page-block (db-async/<get-block (state/get-current-repo) page-name')]
                (reset! *loading? false)
                (if (not page-block)
-                 (page-handler/<create! page-name' {:redirect? (when-not preview? true)})
-                 (when-not preview?
+                 (page-handler/<create! page-name' {:redirect? (when-not preview-or-sidebar? true)})
+                 (when-not preview-or-sidebar?
                    (if-let [page-uuid (and (not page-uuid?) (:block/uuid page-block))]
                      (route-handler/redirect-to-page! (str page-uuid) {:push false})
                      (route-handler/update-page-title-and-label! (state/get-route-match))))))
