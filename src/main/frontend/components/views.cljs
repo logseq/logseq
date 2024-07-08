@@ -185,7 +185,7 @@
     (shui/dropdown-menu-group
      (shui/dropdown-menu-sub
       (shui/dropdown-menu-sub-trigger
-       "Properties")
+       "Properties visibility")
       (shui/dropdown-menu-sub-content
        (for [column (remove #(or (false? (:column-list? %))
                                  (:disable-hide? %)) columns)]
