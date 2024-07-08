@@ -392,8 +392,8 @@
 ;; Allow user to modify or extend, should specify how to extend.
 
       (state/get-commands)
-       (when-let [plugin-commands (some->> (state/get-plugins-slash-commands)
-                                    (mapv #(vec (concat % [nil :icon/puzzle]))))]
+       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
+                                         (mapv #(vec (concat % [nil :icon/puzzle])))))]
          (update plugin-commands 0 (fn [v] (conj v "PLUGINS")))))
      (remove nil?)
      (util/distinct-by-last-wins first))))
