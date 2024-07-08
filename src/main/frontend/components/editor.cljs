@@ -46,14 +46,20 @@
       matched
       {:get-group-name
        (fn [item]
-         (when (= (count item) 4) (last item)))
+         (when (= (count item) 5) (last item)))
 
        :item-render
        (fn [item]
          (let [command-name (first item)
                command-doc (get item 2)
                plugin-id (get-in item [1 1 1 :pid])
-               doc (when (state/show-command-doc?) command-doc)]
+               doc (when (state/show-command-doc?) command-doc)
+               icon-name (some-> item (get 3) (name))
+               command-name (if icon-name
+                              [:span.flex.items-center.gap-1
+                               (shui/tabler-icon icon-name)
+                               [:strong.font-normal command-name]]
+                              command-name)]
            (cond
              (or plugin-id (vector? doc))
              [:div.has-help
@@ -64,9 +70,7 @@
                            :fixed-position? true
                            :position "right"}
 
-                          [:small (svg/help-circle)]))
-              (when plugin-id
-                [:small {:title (str plugin-id)} (ui/icon "puzzle")])]
+                          [:small (svg/help-circle)]))]
 
              (string? doc)
              [:div {:title doc}
@@ -98,12 +102,12 @@
   (when (= :block-commands (state/get-editor-action))
     (let [matched (util/react *matched-block-commands)]
       (ui/auto-complete
-       (map first matched)
-       {:on-chosen (fn [chosen]
-                     (editor-handler/insert-command! id (get (into {} matched) chosen)
-                                                     format
-                                                     {:last-pattern commands/angle-bracket
-                                                      :command :block-commands}))
+        (map first matched)
+        {:on-chosen (fn [chosen]
+                      (editor-handler/insert-command! id (get (into {} matched) chosen)
+                        format
+                        {:last-pattern commands/angle-bracket
+                         :command :block-commands}))
         :class     "black"}))))
 
 (defn- page-on-chosen-handler
