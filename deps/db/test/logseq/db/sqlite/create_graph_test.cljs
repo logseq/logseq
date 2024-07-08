@@ -6,7 +6,8 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.validate :as db-validate]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.sqlite.build :as sqlite-build]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
@@ -74,7 +75,24 @@
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         validation (db-validate/validate-db! @conn)]
     ;; For debugging
-    ;; (cljs.pprint/pprint (map :entity (:errors validation)))
     ;; (println (count (:errors validation)) "errors of" (count (:entities validation)))
-    (is (nil? (:errors validation))
+    (is (empty? (map :entity (:errors validation)))
         "New graph has no validation errors")))
+
+(deftest property-types
+  (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
+        _ (d/transact! conn (sqlite-create-graph/build-db-initial-data
+                             (pr-str {:macros {"docs-base-url" "https://docs.logseq.com/#/page/$1"}})))]
+
+    (testing ":url property"
+      (sqlite-build/create-blocks
+       conn
+       {:properties {:url {:block/schema {:type :url}}}
+        :pages-and-blocks
+        [{:page {:block/original-name "page1"}
+          :blocks [{:block/content "b1" :build/properties {:url "https://logseq.com"}}
+                   ;; :url macros are used for consistently building urls with the same hostname e.g. docs graph
+                   {:block/content "b2" :build/properties {:url "{{docs-base-url test}}"}}]}]})
+
+      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+          "Graph with different :url blocks has no validation errors"))))

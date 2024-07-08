@@ -262,9 +262,8 @@
  ;; input "{{poem red,blue}}"
  ;; becomes
  ;; Rose is red, violet's blue. Life's ordered: Org assists you.
- ;; TODO: test
-;;  :macros
-;;  {"docs-base-url" "https://docs.logseq.com/#/page/$1"}
+ :macros
+ {"docs-base-url" "https://docs.logseq.com/#/page/$1"}
 
  ;; Configure the default expansion level for linked references.
  ;; For example, consider the following block hierarchy:
