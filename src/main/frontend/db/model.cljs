@@ -792,6 +792,15 @@ independent of format as format specific heading characters are stripped"
              distinct))
       (:block/_tags class))))
 
+(defn sub-class-objects
+  [repo class-id]
+  (when class-id
+    (-> (react/q repo [:frontend.worker.react/objects class-id]
+                 {:query-fn (fn [_]
+                              (get-class-objects repo class-id))}
+                 nil)
+        react)))
+
 
 (defn get-all-namespace-relation
   [repo]
