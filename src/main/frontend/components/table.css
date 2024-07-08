@@ -51,6 +51,6 @@
 
   div[data-viewport-type="window"] {
     min-width: 100%;
-    width: auto;
+    width: auto !important;
   }
 }
