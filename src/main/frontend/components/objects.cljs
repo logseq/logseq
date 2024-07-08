@@ -38,11 +38,16 @@
        (ldb/sort-by-order))))
 
 (rum/defc objects-inner < rum/static
-  [config class properties]
+  [config class objects properties]
   (let [[loading? set-loading?] (rum/use-state nil)
         [view-entity set-view-entity!] (rum/use-state nil)
-        [data set-data!] (rum/use-state [])
+        [data set-data!] (rum/use-state objects)
         columns (views/build-columns config properties)]
+
+    (rum/use-effect!
+     (fn []
+       (set-data! objects))
+     [objects])
 
     (rum/use-effect!
      (fn []
@@ -93,6 +98,9 @@
   (when class
     (let [class (db/sub-block (:db/id class))
           config {:container-id (:container-id state)}
-          properties (outliner-property/get-class-properties class)]
+          properties (outliner-property/get-class-properties class)
+          repo (state/get-current-repo)
+          objects (->> (db-model/sub-class-objects repo (:db/id class))
+                       (map (fn [row] (assoc row :id (:db/id row)))))]
       [:div.ml-2
-       (objects-inner config class properties)])))
+       (objects-inner config class objects properties)])))
