@@ -437,6 +437,8 @@
   "Ignore built-in properties that are already imported or not supported in db graphs"
   ;; Already imported via a datascript attribute i.e. have :attribute on property config
   [:tags :alias :collapsed
+   ;; Supported
+   :id
    ;; Not supported as they have been ignored for a long time and cause invalid built-in pages
    :now :later :doing :done :canceled :cancelled :in-progress :todo :wait :waiting
    ;; deprecated in db graphs
@@ -449,7 +451,7 @@
   [properties class-related-properties]
   (let [dissoced-props (concat ignored-built-in-properties
                                ;; TODO: Add import support for these dissoced built-in properties
-                               [:title :id :created-at :updated-at
+                               [:title :created-at :updated-at
                                 :card-last-interval :card-repeats :card-last-reviewed :card-next-schedule
                                 :card-ease-factor :card-last-score]
                                class-related-properties)]
