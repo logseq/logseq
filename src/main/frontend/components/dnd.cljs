@@ -78,11 +78,14 @@
                                    verticalListSortingStrategy
                                    horizontalListSortingStrategy)}
         children (for [item col]
-                   (let [id (str (:id item))]
+                   (let [id (str (:id item))
+                         prop (merge
+                                 (:prop item)
+                                 {:key id :id id})]
                      (rum/with-key
                        (if (:disabled? item)
-                         (non-sortable-item {:key id :id id} (:content item))
-                         (sortable-item {:key id :id id} (:content item)))
+                         (non-sortable-item prop (:content item))
+                         (sortable-item prop (:content item)))
                        id)))
         children' (if parent-node
                     [parent-node children]
