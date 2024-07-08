@@ -110,12 +110,11 @@
   [block]
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
-   (merge (cond->
-           {:block/type (set (concat (:block/type block) ["class" "page"]))
-            :block/format :markdown}
-            (not= (:db/ident block) :logseq.class/Root)
-            (assoc :class/parent :logseq.class/Root))
-          block)))
+   (cond-> (merge block
+                  {:block/type (set (concat (:block/type block) ["class" "page"]))
+                   :block/format :markdown})
+     (not= (:db/ident block) :logseq.class/Root)
+     (assoc :class/parent :logseq.class/Root))))
 
 (defn build-new-page
   "Builds a basic page to be transacted. A minimal version of gp-block/page-name->map"

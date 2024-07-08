@@ -262,7 +262,7 @@
       (is (= (:block/content block) "Inception")
           "tagged block with configured tag strips tag from content")
 
-      (is (= ["class"] (:block/type tag-page))
+      (is (= ["class" "page"] (:block/type tag-page))
           "configured tag page in :tag-classes is a class")
       (is (and another-tag-page (not (contains? (set (:block/type another-tag-page)) "class")))
           "unconfigured tag page is not a class")
