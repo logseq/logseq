@@ -4,6 +4,7 @@
             [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
             [frontend.components.views :as views]
+            [frontend.context.i18n :refer [t]]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
             [logseq.db :as ldb]
@@ -16,7 +17,7 @@
   [db]
   (let [db-based? (ldb/db-based-graph? db)]
     (->> [{:id :block/original-name
-           :name "Page name"
+           :name (t :block/name)
            :cell (fn [_table row _column]
                    (component-block/page-cp {} row))
            :type :string}
@@ -29,7 +30,7 @@
             {:id :block/tags
              :name "Tags"})
           {:id :block.temp/refs-count
-           :name "Backlinks"
+           :name (t :page/backlinks)
            :cell (fn [_table row _column] (:block.temp/refs-count row))
            :type :number}]
          (remove nil?)
