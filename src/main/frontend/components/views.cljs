@@ -9,6 +9,7 @@
             [frontend.components.dnd :as dnd]
             [frontend.components.property.value :as pv]
             [frontend.components.select :as select]
+            [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
@@ -168,12 +169,12 @@
            properties)
 
           [{:id :block/created-at
-            :name "Created At"
+            :name (t :page/created-at)
             :type :date-time
             :header header-cp
             :cell timestamp-cell-cp}
            {:id :block/updated-at
-            :name "Updated At"
+            :name (t :page/updated-at)
             :type :date-time
             :header header-cp
             :cell timestamp-cell-cp}])
