@@ -45,7 +45,8 @@
 (defn- extract [file content & [options]]
   (extract/extract file
                    content
-                   (merge {:block-pattern "-" :db (d/empty-db db-schema/schema)}
+                   (merge {:block-pattern "-" :db (d/empty-db db-schema/schema)
+                           :verbose false}
                           options)))
 
 (defn- extract-block-content

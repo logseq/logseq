@@ -120,6 +120,10 @@
        (map first)
        first))
 
+(defn- parse-file
+  [conn file-path file-content & [options]]
+  (graph-parser/parse-file conn file-path file-content (merge-with merge options {:extract-options {:verbose false}})))
+
 (deftest refs-from-block-refs
   (let [conn (gp-db/start-conn)
         id "63f528da-284a-45d1-ac9c-5d6a7435f6b4"
@@ -127,7 +131,7 @@
         block-ref-via-content (str "Link to " (block-ref/->block-ref id))
         block-ref-via-block-properties (str "B block\nref:: " (block-ref/->block-ref id))
         body (str "- " block "\n- " block-ref-via-content "\n- " block-ref-via-block-properties)]
-    (graph-parser/parse-file conn "foo.md" body {})
+    (parse-file conn "foo.md" body {})
 
     (testing "Block refs in blocks"
       (is (= [{:block/uuid (uuid id)}]
@@ -141,7 +145,7 @@
 
     (testing "Block refs in pre-block"
       (let [block-ref-via-page-properties (str "page-ref:: " (block-ref/->block-ref id))]
-        (graph-parser/parse-file conn "foo2.md" block-ref-via-page-properties {})
+        (parse-file conn "foo2.md" block-ref-via-page-properties {})
         (is (contains?
              (set (:block/refs (find-block-for-content @conn block-ref-via-page-properties)))
              {:block/uuid (uuid id)})
@@ -152,7 +156,7 @@
         deadline-block "do something\nDEADLINE: <2023-02-21 Tue>"
         scheduled-block "do something else\nSCHEDULED: <2023-02-20 Mon>"
         body (str "- " deadline-block "\n- " scheduled-block)]
-    (graph-parser/parse-file conn "foo.md" body {})
+    (parse-file conn "foo.md" body {})
 
     (is (= 20230220
            (:block/scheduled (find-block-for-content @conn scheduled-block)))
