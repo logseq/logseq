@@ -95,7 +95,7 @@
                {:restore? restore-slash?
                 :command command}))))
        :class
-       "black"})))
+       "cp__commands-slash"})))
 
 (rum/defc block-commands < rum/reactive
   [id format]
