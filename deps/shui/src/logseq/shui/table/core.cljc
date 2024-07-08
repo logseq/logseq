@@ -220,7 +220,7 @@
     [:div.ls-table-header
      (merge {:class "border-y transition-colors bg-gray-01"
              :ref el-ref
-             :style {:z-index 100}}
+             :style {:z-index 9}}
             prop)
      children]))
 
