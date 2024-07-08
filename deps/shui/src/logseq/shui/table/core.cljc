@@ -166,9 +166,13 @@
       (let [^js target (rum/deref target-ref)
             ^js target-cls (.-classList target)
             ^js table (.closest target ".ls-table-rows")
+            ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
             *ticking? (volatile! false)
             el-top (-> target (.getBoundingClientRect) (.-top))
             head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+            update-footer! (fn []
+                             (when table-footer
+                               (set! (. (.-style table-footer) -width) (str (.-scrollWidth table) "px"))))
             update-target! (fn []
                              (if (.contains target-cls "ls-fixed")
                                (let [^js rect (-> table (.getBoundingClientRect))
@@ -201,7 +205,9 @@
         (.addEventListener container "scroll" target-observe!)
         (.addEventListener table "scroll" update-target!)
         (.addEventListener table "resize" update-target!)
+        (update-footer!)
 
+        ;; teardown
         #(do (.removeEventListener container "scroll" target-observe!)
            (.disconnect resize-observer))))
     []))
@@ -217,6 +223,11 @@
              :style {:z-index 100}}
             prop)
      children]))
+
+(rum/defc table-footer
+  [children]
+  [:div.ls-table-footer
+   children])
 
 (rum/defc table-row < rum/static
   [& prop-and-children]
