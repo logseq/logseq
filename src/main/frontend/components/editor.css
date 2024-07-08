@@ -113,3 +113,15 @@ pre {
     @apply w-auto;
   }
 }
+
+.cp__commands-slash {
+  .ui__icon {
+    @apply opacity-80;
+  }
+
+  .menu-link {
+    &.chosen .ui__icon {
+      @apply opacity-100;
+    }
+  }
+}
