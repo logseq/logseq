@@ -11,8 +11,7 @@
             [frontend.state :as state]
             [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]
-            [rum.core :as rum]
-            [logseq.shui.ui :as shui]))
+            [rum.core :as rum]))
 
 (defn- get-all-objects
   [class]
