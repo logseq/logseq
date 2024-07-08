@@ -2,7 +2,8 @@
   "Provides property types and related helper fns e.g. property value validation
   fns and their allowed schema attributes"
   (:require [datascript.core :as d]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [logseq.common.util.macro :as macro-util]))
 
 ;; Config vars
 ;; ===========
@@ -81,16 +82,22 @@
          (catch :default _e
            false))))
 
-(defn- entity?
-  [db id]
-  (some? (d/entity db id)))
+(defn macro-url?
+  [s]
+  ;; TODO: Confirm that macro expanded value is url when it's easier to pass data into validations
+  (macro-util/macro? s))
 
 (defn- url-entity?
   [db val {:keys [new-closed-value?]}]
   (if new-closed-value?
-    (url? val)
+    (or (url? val) (macro-url? val))
     (when-let [ent (d/entity db val)]
-      (url? (:property.value/content ent)))))
+      (or (url? (:property.value/content ent))
+          (macro-url? (:property.value/content ent))))))
+
+(defn- entity?
+  [db id]
+  (some? (d/entity db id)))
 
 (defn- number-entity?
   [db id-or-value {:keys [new-closed-value?]}]

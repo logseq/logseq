@@ -170,6 +170,7 @@
                {:db/ident :user.property/prop-num2 :block/schema {:type :number}}
                {:db/ident :user.property/type :block/schema {:type :page}}
                {:db/ident :user.property/url :block/schema {:type :url}}
+               {:db/ident :user.property/sameas :block/schema {:type :url}}
                {:db/ident :user.property/rangeincludes :block/schema {:type :page}}
                {:db/ident :user.property/unique :block/schema {:type :checkbox}}}
              (->> @conn
