@@ -934,7 +934,8 @@
                             (let [row (nth rows idx)]
                               (table-row table row columns' {} option)))})
 
-          (when add-new-object! (add-new-row table))]]))]))
+          (when add-new-object!
+            (shui/table-footer (add-new-row table)))]]))]))
 
 (rum/defc view < rum/reactive
   [view-entity option]

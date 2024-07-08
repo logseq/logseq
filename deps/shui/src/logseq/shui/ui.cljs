@@ -131,6 +131,7 @@
 (def table-option table-core/table-option)
 (def table table-core/table)
 (def table-header table-core/table-header)
+(def table-footer table-core/table-footer)
 (def table-row table-core/table-row)
 (def table-cell table-core/table-cell)
 (def table-get-selection-rows table-core/get-selection-rows)
