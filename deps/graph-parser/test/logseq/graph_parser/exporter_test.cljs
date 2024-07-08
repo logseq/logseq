@@ -141,7 +141,7 @@
 
       ;; Counts
       ;; Includes 2 journals as property values for :logseq.task/deadline
-      (is (= 10 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 11 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 5
@@ -214,6 +214,10 @@
           "Existing page has correct properties"))
 
     (testing "built-in properties"
+      (is (= [(:db/id (find-block-by-content @conn "original block"))]
+             (mapv :db/id (:block/refs (find-block-by-content @conn #"ref to"))))
+          "block with a block-ref has correct :block/refs")
+
       (is (= 2
              (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
           "icon properties are visibly ignored in order to not fail import")
