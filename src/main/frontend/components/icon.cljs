@@ -97,7 +97,7 @@
 (rum/defc icon-cp < rum/static
   [icon {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
-   (when-let [icon (if (string? icon) (string/replace icon " " "") icon)]
+   (when-let [icon (cond-> icon (string? icon) (string/replace " " ""))]
      {:key icon
       :tabIndex "0"
       :title icon
