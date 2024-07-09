@@ -571,7 +571,12 @@
          (fn [refs]
            (mapv (fn [ref]
                    ;; Only keep :block/uuid as we don't want to re-transact page refs
-                   (if (map? ref) (select-keys ref [:block/uuid]) ref))
+                   (if (map? ref)
+                     ;; a new page's uuid can change across blocks so rely on consistent one from pages-tx
+                     (if-let [existing-uuid (some->> (:block/name ref) (get page-names-to-uuids))]
+                       [:block/uuid existing-uuid]
+                       [:block/uuid (:block/uuid ref)])
+                     ref))
                  refs)))
         (:block/content block)
         (update :block/content

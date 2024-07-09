@@ -140,8 +140,8 @@
           "Created graph has no validation errors")
 
       ;; Counts
-      ;; Includes 2 journals as property values for :logseq.task/deadline
-      (is (= 11 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      ;; Includes journals as property values e.g. :logseq.task/deadline
+      (is (= 13 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 5
@@ -158,16 +158,16 @@
              (ffirst (d/q '[:find ?content :where [?b :file/path "logseq/custom.js"] [?b :file/content ?content]] @conn)))))
 
     (testing "favorites"
-       (is (= #{"Interstellar" "some page"}
-              (->>
-               (ldb/get-page-blocks @conn
-                                    (:db/id (ldb/get-page @conn common-config/favorites-page-name))
-                                    {:pull-keys '[* {:block/link [:block/original-name]}]})
-               (map #(get-in % [:block/link :block/original-name]))
-               set))))
+      (is (= #{"Interstellar" "some page"}
+             (->>
+              (ldb/get-page-blocks @conn
+                                   (:db/id (ldb/get-page @conn common-config/favorites-page-name))
+                                   {:pull-keys '[* {:block/link [:block/original-name]}]})
+              (map #(get-in % [:block/link :block/original-name]))
+              set))))
 
     (testing "user properties"
-      (is (= 12
+      (is (= 14
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/type "property"]])
@@ -179,11 +179,13 @@
                {:db/ident :user.property/prop-num :block/schema {:type :number}}
                {:db/ident :user.property/url :block/schema {:type :url}}
                {:db/ident :user.property/sameas :block/schema {:type :url}}
-               {:db/ident :user.property/rangeincludes :block/schema {:type :page}}}
+               {:db/ident :user.property/rangeincludes :block/schema {:type :page}}
+               {:db/ident :user.property/startedat :block/schema {:type :date}}}
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
                          :where [?b :block/type "property"]])
-                  (filter #(contains? #{:prop-bool :prop-string :prop-num :rangeincludes :url :sameas}
+                  (filter #(contains? #{:prop-bool :prop-string :prop-num :rangeincludes :url :sameas
+                                        :startedat}
                                       (keyword (name (:db/ident %)))))
                   set))
           "Main property types have correct inferred :type")
@@ -222,6 +224,11 @@
              (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
           "icon properties are visibly ignored in order to not fail import")
 
+      (let [b (find-block-by-content @conn #"MEETING TITLE")]
+        (is (= {}
+              (and b (readable-properties @conn b)))
+            ":template properties are ignored to not invalidate its property types"))
+
       (is (= {:logseq.task/deadline "Nov 26th, 2022"}
              (readable-properties @conn (find-block-by-content @conn "only deadline")))
           "deadline block has correct journal as property value")
@@ -251,6 +258,11 @@
               :logseq.property/query-table true}
              (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
           "query block has correct query properties"))
+
+    (testing "property :type changes"
+      (is (= :page
+           (get-in (d/entity @conn :user.property/finishedat) [:block/schema :type]))
+          "property remains :page after one value is :page and the next is :date"))
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
