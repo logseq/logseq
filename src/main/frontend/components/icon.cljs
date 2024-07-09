@@ -97,18 +97,19 @@
 (rum/defc icon-cp < rum/static
   [icon {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
-   {:key icon
-    :tabIndex "0"
-    :title icon
-    :on-click (fn [e]
-                (on-chosen e {:type :tabler-icon
-                              :id icon
-                              :name icon}))
-    :on-mouse-over #(reset! hover {:type :tabler-icon
-                                   :id icon
-                                   :name icon
-                                   :icon icon})
-    :on-mouse-out #()}
+   (when-let [icon (if (string? icon) (string/replace icon " " "") icon)]
+     {:key icon
+      :tabIndex "0"
+      :title icon
+      :on-click (fn [e]
+                  (on-chosen e {:type :tabler-icon
+                                :id icon
+                                :name icon}))
+      :on-mouse-over #(reset! hover {:type :tabler-icon
+                                     :id icon
+                                     :name icon
+                                     :icon icon})
+      :on-mouse-out #()})
    (ui/icon icon {:size 24})])
 
 (rum/defc icons-cp < rum/static
