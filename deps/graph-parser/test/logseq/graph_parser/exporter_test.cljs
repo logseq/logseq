@@ -226,7 +226,7 @@
 
       (let [b (find-block-by-content @conn #"MEETING TITLE")]
         (is (= {}
-              (and b (readable-properties @conn b)))
+               (and b (readable-properties @conn b)))
             ":template properties are ignored to not invalidate its property types"))
 
       (is (= {:logseq.task/deadline "Nov 26th, 2022"}
@@ -261,8 +261,11 @@
 
     (testing "property :type changes"
       (is (= :page
-           (get-in (d/entity @conn :user.property/finishedat) [:block/schema :type]))
-          "property remains :page after one value is :page and the next is :date"))
+             (get-in (d/entity @conn :user.property/finishedat) [:block/schema :type]))
+          "property remains :page after one value is :page and the next is :date")
+      (is (= :default
+             (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
+          ":number property changes to :default after one value is :default"))
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
