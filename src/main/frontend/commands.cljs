@@ -280,11 +280,11 @@
         "Create a backlink to a page"
         :icon/pageRef
         "BASIC"]
-       ["Page embed" (embed-page) "Embed a page here" :icon/xEmbed]
+       ["Page embed" (embed-page) "Embed a page here" :icon/pageEmbed]
        ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                            [:editor/search-block :reference]]
         "Create a backlink to a block" :icon/blockRef]
-       ["Block embed" (embed-block) "Embed a block here" :icon/xEmbed]]
+       ["Block embed" (embed-block) "Embed a block here" :icon/blockEmbed]]
 
         ;; format
       [["Link" (link-steps) "Create a HTTP link" :icon/link "FORMAT"]
