@@ -63,6 +63,7 @@
            (cond
              (or plugin-id (vector? doc))
              [:div.has-help
+              {:title plugin-id}
               command-name
               (when doc (ui/tippy
                           {:html doc
@@ -108,7 +109,7 @@
                         format
                         {:last-pattern commands/angle-bracket
                          :command :block-commands}))
-        :class     "black"}))))
+         :class "black"}))))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]
@@ -116,7 +117,7 @@
     (fn [chosen-item _e]
       (let [value (.-value input)
             value' (str (common-util/safe-subs value 0 q)
-                        (common-util/safe-subs value (+ (count q) 4 pos)))]
+                     (common-util/safe-subs value (+ (count q) 4 pos)))]
         (state/set-edit-content! (.-id input) value')
         (state/clear-editor-action!)
         (p/let [page (db/get-page chosen-item)

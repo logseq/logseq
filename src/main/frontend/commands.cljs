@@ -178,7 +178,9 @@
                         (let [command (if db-based?
                                         [:div.flex.flex-row.items-center.gap-2 item [:div.text-xs.opacity-50 "Priority"]]
                                         item)]
-                          [command (->priority item) (str "Set priority to " item) (str "priorityLvl" item)]))))]
+                          [command (->priority item) (str "Set priority to " item) (str "priorityLvl" item)])))
+                 (cons ["No priority" (->priority nil) "" :icon/priorityLvlNone])
+                 (vec))]
     (when (seq result)
       (update result 0 (fn [v] (conj v "PRIORITY"))))))
 
@@ -708,7 +710,9 @@
 (defn- db-based-set-priority
   [priority]
   (when-let [block (state/get-edit-block)]
-    (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/priority priority)))
+    (if (nil? priority)
+      (db-property-handler/remove-block-property! (:block/uuid block) :logseq.task/priority)
+      (db-property-handler/batch-set-property-closed-value! [(:block/uuid block)] :logseq.task/priority priority))))
 
 (defmethod handle-step :editor/set-priority [[_ priority] _format]
   (if (config/db-based-graph? (state/get-current-repo))
