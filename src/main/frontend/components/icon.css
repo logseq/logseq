@@ -108,3 +108,7 @@
   }
 }
 
+.ls-icon-picker {
+  @apply w-auto overflow-hidden;
+}
+

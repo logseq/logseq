@@ -340,7 +340,7 @@
          :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
          :on-click #(when-not disabled?
                       (shui/popup-show! (.-target %) content-fn
-                        {:content-props {:class "w-auto"}}))}
+                        {:content-props {:class "ls-icon-picker"}}))}
         (if has-icon?
           (icon icon-value (merge {:size 18} icon-props))
           "Empty")))))
