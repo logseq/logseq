@@ -256,6 +256,8 @@
                         :date
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
                         :default
+                        (coll? prop-val)
+                        :page
                         :else
                         (db-property-type/infer-property-type-from-value
                          (macro-util/expand-value-if-macro prop-val macros)))
@@ -494,11 +496,11 @@
                                            (select-keys block [:block/properties-text-values :block/name :block/content :block/uuid])
                                            options')]
           {:block
-           (cond-> (dissoc block :block/properties)
+           (cond-> block
              true
              (merge block-properties)
              (seq classes-from-properties)
-            ;; Add a map of {:block.temp/new-class TAG} to be processed later
+             ;; Add a map of {:block.temp/new-class TAG} to be processed later
              (update :block/tags
                      (fnil into [])
                      (map #(hash-map :block.temp/new-class %
@@ -506,7 +508,7 @@
                           classes-from-properties)))
            :properties-tx pvalues-tx})
         {:block block :properties-tx []})
-      (update :block dissoc :block/properties-text-values :block/properties-order :block/invalid-properties)))
+      (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
 
 (defn- handle-page-properties
   [{:block/keys [properties] :as block*} db page-names-to-uuids refs
