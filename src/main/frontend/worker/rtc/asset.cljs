@@ -63,7 +63,8 @@
         (doseq [[asset-uuid put-url] asset-uuid->url]
           (assert (uuid? asset-uuid) asset-uuid)
           (let [{:keys [status] :as r}
-                (m/? (c.m/<! (http/put put-url {:body (js/JSON.stringify
+                (m/? (c.m/<! (http/put put-url {:headers {"x-amz-meta-checksum" "TEST-CHECKSUM"}
+                                                :body (js/JSON.stringify
                                                        (clj->js {:TEST-ASSET true
                                                                  :asset-uuid (str asset-uuid)
                                                                  :graph-uuid (str graph-uuid)}))
