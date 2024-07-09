@@ -107,7 +107,11 @@
 
 (def ^:private asset-change-event-schema
   [:map-of
-   [:enum :download :upload]
+   [:enum :download :upload
+    ;; Why don't need :delete event?
+    ;; when remove-block-op sync to server, server will know this asset need to be deleted
+    ;; :delete
+    ]
    [:sequential :uuid]])
 
 (def ^:private asset-change-event-validator (ma/validator asset-change-event-schema))
