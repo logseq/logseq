@@ -19,7 +19,8 @@
                                     :block/type "page"}) pages)]
                 tx-data))}]
    [5 {:properties [:logseq.property/view-for]
-       :classes    []}]])
+       :classes    []}]
+   [6 {:properties [:logseq.property.asset/remote-metadata]}]])
 
 ;; Question: do we need to assign persist UUIDs for later added built-in classes & properties?
 ;; @zhiyuan will this affect RTC?

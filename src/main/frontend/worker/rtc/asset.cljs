@@ -49,6 +49,7 @@
 
 (defn new-task--upload-assets
   [get-ws-create-task conn graph-uuid asset-uuids]
+  {:pre [(every? uuid? asset-uuids)]}
   (m/sp
     (when (seq asset-uuids)
       (let [asset-uuid->url (->> (m/? (ws-util/send&recv get-ws-create-task {:action "get-assets-upload-urls"
@@ -73,12 +74,14 @@
 
 (defn new-task--download-assets
   [get-ws-create-task conn graph-uuid asset-uuids]
+  {:pre [(every? uuid? asset-uuids)]}
   (m/sp
     (when (seq asset-uuids)
-      (let [asset-uuid->url (->> (m/? (ws-util/send&recv get-ws-create-task {:action "get-assets-download-urls"
-                                                                             :graph-uuid graph-uuid
-                                                                             :asset-uuids asset-uuids}))
-                                 :asset-uuid->url)]
+      (let [asset-uuid->url
+            (->> (m/? (ws-util/send&recv get-ws-create-task {:action "get-assets-download-urls"
+                                                             :graph-uuid graph-uuid
+                                                             :asset-uuids asset-uuids}))
+                 :asset-uuid->url)]
         (doseq [[asset-uuid get-url] asset-uuid->url]
           (assert (uuid? asset-uuid) asset-uuid)
           (let [{:keys [status _body] :as r} (m/? (c.m/<! (http/get get-url {:with-credentials? false})))]
@@ -112,7 +115,7 @@
     ;; when remove-block-op sync to server, server will know this asset need to be deleted
     ;; :delete
     ]
-   [:sequential :uuid]])
+   [:set :uuid]])
 
 (def ^:private asset-change-event-validator (ma/validator asset-change-event-schema))
 
@@ -142,17 +145,18 @@
               (m/sp
                 ;; init phase:
                 ;; generate all asset-change-events from db
+                (prn "init phase: generate all asset-change-events from db")
                 (m/? (new-task--download-assets
-                      get-ws-create-task conn graph-uuid (action->asset-blocks :download)))
+                      get-ws-create-task conn graph-uuid (map :block/uuid (action->asset-blocks :download))))
                 (m/? (new-task--upload-assets
-                      get-ws-create-task conn graph-uuid (action->asset-blocks :upload))))
+                      get-ws-create-task conn graph-uuid (map :block/uuid (action->asset-blocks :upload)))))
               (->>
                (let [event (m/?> asset-change-event-flow)
                      {asset-uuids-to-download :download
                       asset-uuids-to-upload :upload} event]
                  (m/? (new-task--download-assets get-ws-create-task conn graph-uuid asset-uuids-to-download))
                  (m/? (new-task--upload-assets get-ws-create-task conn graph-uuid asset-uuids-to-upload)))
-               m/ap (m/reduce {} nil) m/?))))
+               m/ap (m/reduce {} nil)))))
 
           (catch Cancelled e
             (add-log-fn :rtc.asset.log/cancelled {})

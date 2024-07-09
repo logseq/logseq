@@ -173,9 +173,13 @@
                                             :hide? true
                                             :public? false}}
    :logseq.property/view-for {:schema
-                             {:type :keyword
-                              :hide? true
-                              :public? false}}))
+                              {:type :keyword
+                               :hide? true
+                               :public? false}}
+   :logseq.property.asset/remote-metadata {:schema
+                                           {:type :map
+                                            :hide? true
+                                            :public? false}}))
 
 (def built-in-properties
   (->> built-in-properties*
