@@ -117,6 +117,10 @@ pre {
 .cp__commands-slash {
   .ui__icon {
     @apply opacity-80;
+
+    &.ls-icon-queryCode {
+      @apply relative left-[1px];
+    }
   }
 
   .menu-link {
