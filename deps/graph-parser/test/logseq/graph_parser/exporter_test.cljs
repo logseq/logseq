@@ -141,7 +141,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 13 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 14 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 5
@@ -177,21 +177,22 @@
       (is (= #{{:db/ident :user.property/prop-bool :block/schema {:type :checkbox}}
                {:db/ident :user.property/prop-string :block/schema {:type :default}}
                {:db/ident :user.property/prop-num :block/schema {:type :number}}
-               {:db/ident :user.property/url :block/schema {:type :url}}
                {:db/ident :user.property/sameas :block/schema {:type :url}}
                {:db/ident :user.property/rangeincludes :block/schema {:type :page}}
                {:db/ident :user.property/startedat :block/schema {:type :date}}}
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
                          :where [?b :block/type "property"]])
-                  (filter #(contains? #{:prop-bool :prop-string :prop-num :rangeincludes :url :sameas
-                                        :startedat}
+                  (filter #(contains? #{:prop-bool :prop-string :prop-num :rangeincludes :sameas :startedat}
                                       (keyword (name (:db/ident %)))))
                   set))
           "Main property types have correct inferred :type")
       (is (= :default
              (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
           "Property value consisting of text and refs is inferred as :default")
+      (is (= :url
+             (get-in (d/entity @conn :user.property/url) [:block/schema :type]))
+          "Property value with a macro correctly inferred as :url")
 
       (is (= {:user.property/prop-bool true
               :user.property/prop-num 5
@@ -259,13 +260,25 @@
              (readable-properties @conn (find-block-by-content @conn "{{query (property :prop-string)}}")))
           "query block has correct query properties"))
 
+    (testing "db attributes"
+      (is (= true
+             (:block/collapsed? (find-block-by-content @conn "collapsed block")))
+          "Collapsed blocks are imported"))
+
     (testing "property :type changes"
       (is (= :page
              (get-in (d/entity @conn :user.property/finishedat) [:block/schema :type]))
-          "property remains :page after one value is :page and the next is :date")
+          ":page property to :date value remains :page")
       (is (= :default
              (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
-          ":number property changes to :default after one value is :default"))
+          ":number property to :default value changes to :default")
+
+      (is (= :default
+             (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
+          ":default property to :page (or any non :default value) remains :default")
+      (is (= "[[Jakob]]"
+             (:user.property/description (readable-properties @conn (find-block-by-content @conn #":default to :page"))))
+          ":page property value correctly saved as :default with full text"))
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
