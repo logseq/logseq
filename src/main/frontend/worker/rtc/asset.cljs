@@ -52,15 +52,18 @@
   {:pre [(every? uuid? asset-uuids)]}
   (m/sp
     (when (seq asset-uuids)
-      (let [asset-uuid->url (->> (m/? (ws-util/send&recv get-ws-create-task {:action "get-assets-upload-urls"
-                                                                             :graph-uuid graph-uuid
-                                                                             :asset-uuids asset-uuids}))
+      (let [asset-uuid->url (->> (m/? (ws-util/send&recv get-ws-create-task
+                                                         {:action "get-assets-upload-urls"
+                                                          :graph-uuid graph-uuid
+                                                          :asset-uuid->metadata
+                                                          (into {}
+                                                                (map (fn [asset-uuid] [asset-uuid {"checksum" "TEST-CHECKSUM"}]))
+                                                                asset-uuids)}))
                                  :asset-uuid->url)]
         (doseq [[asset-uuid put-url] asset-uuid->url]
           (assert (uuid? asset-uuid) asset-uuid)
           (let [{:keys [status] :as r}
-                (m/? (c.m/<! (http/put put-url {:headers {"x-amz-meta-checksum" "TEST"}
-                                                :body (js/JSON.stringify
+                (m/? (c.m/<! (http/put put-url {:body (js/JSON.stringify
                                                        (clj->js {:TEST-ASSET true
                                                                  :asset-uuid (str asset-uuid)
                                                                  :graph-uuid (str graph-uuid)}))
