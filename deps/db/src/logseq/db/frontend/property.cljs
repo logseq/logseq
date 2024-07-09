@@ -128,10 +128,10 @@
              :value value
              :uuid (random-uuid)
              :icon {:type :tabler-icon :id icon}})
-          [[:logseq.task/priority.urgent "Urgent" "cell-signal-5"]
-           [:logseq.task/priority.high "High" "cell-signal-4"]
-           [:logseq.task/priority.medium "Medium" "cell-signal-3"]
-           [:logseq.task/priority.low "Low" "cell-signal-2"]])}
+          [[:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]
+           [:logseq.task/priority.high "High" "priorityLvlHigh"]
+           [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
+           [:logseq.task/priority.low "Low" "priorityLvlLow"]])}
    :logseq.task/deadline
    {:original-name "Deadline"
     :schema {:type :date
