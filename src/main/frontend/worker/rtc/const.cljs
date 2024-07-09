@@ -236,7 +236,7 @@
       [:req-id :string]
       [:action :string]
       [:graph-uuid :string]
-      [:asset-uuids [:sequential :uuid]]]]
+      [:asset-uuid->metadata [:map-of :uuid [:map-of :string :string]]]]]
     ["get-assets-download-urls"
      [:map
       [:req-id :string]
