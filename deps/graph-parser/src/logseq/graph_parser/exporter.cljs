@@ -315,6 +315,14 @@
                     val)])))
        (into {})))
 
+(defn- update-page-or-date-values
+  "Converts :page or :date names to entity values"
+  [page-names-to-uuids property-values]
+  (set (map #(vector :block/uuid
+                     ;; assume for now a ref's :block/name can always be translated by lc helper
+                     (get-page-uuid page-names-to-uuids (common-util/page-name-sanity-lc %)))
+            property-values)))
+
 (defn- handle-changed-property
   "Handles a property's schema changing across blocks. Handling usually means
   converting a property value to a new changed value or nil if the property is
@@ -322,7 +330,7 @@
   property's previous usages instead of its current value e.g. when changing to
   a :default type. This is done by adding an entry to upstream-properties and
   building the additional tx to ensure this happens"
-  [val prop prop-name->uuid properties-text-values
+  [val prop page-names-to-uuids properties-text-values
    {:keys [ignored-properties property-schemas]}
    {:keys [property-changes log-fn upstream-properties]}]
   (let [type-change (get-in property-changes [prop :type])]
@@ -330,9 +338,17 @@
       ;; ignore :to as any property value gets stringified
       (= :default (:from type-change))
       (or (get properties-text-values prop) (str val))
-      (= {:from :page :to :date} type-change)
+
       ;; treat it the same as a :page
-      (set (map #(vector :block/uuid (-> % common-util/page-name-sanity-lc prop-name->uuid)) val))
+      (= {:from :page :to :date} type-change)
+      (update-page-or-date-values page-names-to-uuids val)
+
+      ;; Change to :page as dates can be pages but pages can't be dates
+      (= {:from :date :to :page} type-change)
+      (do
+        (swap! property-schemas assoc-in [prop :type] :page)
+        (update-page-or-date-values page-names-to-uuids val))
+
       ;; Unlike the other property changes, this one changes all the previous values of a property
       ;; in order to accommodate the change
       (= :default (:to type-change))
@@ -346,6 +362,7 @@
           (swap! upstream-properties assoc prop {:schema {:type :default}})
           (swap! property-schemas assoc prop {:type :default})
           (get properties-text-values prop)))
+
       :else
       (do
         (log-fn :prop-change-ignored {:property prop :val val :change type-change})
@@ -353,20 +370,19 @@
         nil))))
 
 (defn- update-user-property-values
-  [props prop-name->uuid properties-text-values
+  [props page-names-to-uuids properties-text-values
    {:keys [property-schemas] :as import-state}
    {:keys [property-changes] :as options}]
   (->> props
        (keep (fn [[prop val]]
                (if (get-in property-changes [prop :type])
-                 (when-let [val' (handle-changed-property val prop prop-name->uuid properties-text-values import-state options)]
+                 (when-let [val' (handle-changed-property val prop page-names-to-uuids properties-text-values import-state options)]
                    [prop val'])
                  [prop
                   (if (set? val)
                     (if (= :default (get-in @property-schemas [prop :type]))
                       (get properties-text-values prop)
-                      ;; assume for now a ref's :block/name can always be translated by lc helper
-                      (set (map #(vector :block/uuid (-> % common-util/page-name-sanity-lc prop-name->uuid)) val)))
+                      (update-page-or-date-values page-names-to-uuids val))
                     val)])))
        (into {})))
 
@@ -416,12 +432,11 @@
     ;; TODO: Add import support for :template. Ignore for now as they cause invalid property types
     (if (contains? props :template)
       {}
-      (let [page-name->uuid (partial get-page-uuid page-names-to-uuids)
-            props' (-> (update-built-in-property-values
+      (let [props' (-> (update-built-in-property-values
                         (select-keys props built-in-property-names)
                         (select-keys import-state [:ignored-properties :all-idents])
                         (select-keys block [:block/name :block/content]))
-                       (merge (update-user-property-values user-properties page-name->uuid properties-text-values import-state options)))
+                       (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
             pvalue-tx-m (->property-value-tx-m block props' #(get @property-schemas %) @all-idents)
             block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
                                  (update-keys get-ident'))]
@@ -1057,8 +1072,7 @@
   [conn repo config {:keys [log-fn] :or {log-fn prn}}]
   (when-let [favorites (seq (:favorites config))]
     (p/do!
-     (ldb/create-favorites-page!
- repo)
+     (ldb/create-favorites-page! repo)
      (if-let [favorited-ids
               (keep (fn [page-name]
                       (some-> (ldb/get-page @conn page-name)
