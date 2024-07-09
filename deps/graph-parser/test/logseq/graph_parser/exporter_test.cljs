@@ -149,6 +149,8 @@
                                 :where [?b :block/original-name] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
           "Correct number of pages with block content")
+      (is (= 2 (count @(:ignored-properties import-state)))
+          "Only ignored properties should be related to :icon")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -268,6 +270,9 @@
     (testing "property :type changes"
       (is (= :page
              (get-in (d/entity @conn :user.property/finishedat) [:block/schema :type]))
+          ":date property to :page value changes to :page")
+      (is (= :page
+             (get-in (d/entity @conn :user.property/participants) [:block/schema :type]))
           ":page property to :date value remains :page")
       (is (= :default
              (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
