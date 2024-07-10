@@ -321,7 +321,7 @@
           page-entity (model/get-page page-uuid)
           tx (sqlite-util/block-with-timestamps
               {:block/uuid new-block-id
-               :block/content (or content "")
+               :block/title (or content "")
                :block/format :markdown
                :block/page (:db/id page-entity)
                :block/parent (:db/id page-entity)})

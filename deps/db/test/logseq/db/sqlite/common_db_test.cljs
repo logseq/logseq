@@ -57,7 +57,7 @@
                    :block/created-at created-at
                    :block/updated-at created-at}
                   {:db/id 100002
-                   :block/content "test"
+                   :block/title "test"
                    :block/uuid block-uuid
                    :block/page {:db/id 100001}
                    :block/created-at created-at

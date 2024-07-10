@@ -20,7 +20,7 @@
                    :av-coll
                    [[:block/updated-at "[\"~#'\",1715327859860]" 1 true]
                     [:block/created-at "[\"~#'\",1715327859860]" 1 true]
-                    [:block/content "[\"~#'\",\"\"]" 1 true]]}]]]
+                    [:block/title "[\"~#'\",\"\"]" 1 true]]}]]]
         (op-layer/add-ops! repo ops)
         (is (= {:move
                 [:move
@@ -33,7 +33,7 @@
                   :av-coll
                   [[:block/updated-at "[\"~#'\",1715327859860]" 1 true]
                    [:block/created-at "[\"~#'\",1715327859860]" 1 true]
-                   [:block/content "[\"~#'\",\"\"]" 1 true]]}]}
+                   [:block/title "[\"~#'\",\"\"]" 1 true]]}]}
                (op-layer/get-block-ops repo block-uuid)))))
 
     (testing "more updates on this block"
@@ -43,8 +43,8 @@
                    :av-coll
                    [[:block/updated-at "[\"~#'\",1715327859860]" 2 false]
                     [:block/updated-at "[\"~#'\",1715329245395]" 2 true]
-                    [:block/content "[\"~#'\",\"\"]" 2 false]
-                    [:block/content "[\"~#'\",\"iii\"]" 2 true]]}]
+                    [:block/title "[\"~#'\",\"\"]" 2 false]
+                    [:block/title "[\"~#'\",\"iii\"]" 2 true]]}]
                  [:update
                   3
                   {:block-uuid block-uuid,
@@ -63,11 +63,11 @@
                 :av-coll
                 [[:block/updated-at "[\"~#'\",1715327859860]" 1 true]
                  [:block/created-at "[\"~#'\",1715327859860]" 1 true]
-                 [:block/content "[\"~#'\",\"\"]" 1 true]
+                 [:block/title "[\"~#'\",\"\"]" 1 true]
                  [:block/updated-at "[\"~#'\",1715327859860]" 2 false]
                  [:block/updated-at "[\"~#'\",1715329245395]" 2 true]
-                 [:block/content "[\"~#'\",\"\"]" 2 false]
-                 [:block/content "[\"~#'\",\"iii\"]" 2 true]
+                 [:block/title "[\"~#'\",\"\"]" 2 false]
+                 [:block/title "[\"~#'\",\"iii\"]" 2 true]
                  [:block/tags #uuid "663dd8e0-8840-4411-ab6f-2632ac36bf11" 3 true]]}]}
              (op-layer/get-block-ops repo block-uuid)))
         (is (= [1 block-uuid]

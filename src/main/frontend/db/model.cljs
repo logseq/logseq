@@ -148,7 +148,7 @@ independent of format as format specific heading characters are stripped"
                   [?page :block/uuid ?page-uuid]
                   [?b :block/page ?page]
                   (has-property ?b :logseq.property/heading)
-                  [?b :block/content ?content]
+                  [?b :block/title ?content]
                   [(?content-matches ?content ?route-name ?b)]]
                 db
                 (uuid page-uuid-str)
@@ -171,7 +171,7 @@ independent of format as format specific heading characters are stripped"
                   [?b :block/page ?page]
                   [?b :block/properties ?prop]
                   [(get ?prop :heading) _]
-                  [?b :block/content ?content]
+                  [?b :block/title ?content]
                   [(?content-matches ?content ?route-name)]]
                 db
                 (uuid page-uuid-str)

@@ -194,7 +194,7 @@
               (transact-db! :move-blocks repo conn [b] local-parent false)
               (transact-db! :insert-blocks repo conn
                             [{:block/uuid block-uuid
-                              :block/content ""
+                              :block/title ""
                               :block/format :markdown}]
                             local-parent {:sibling? false :keep-uuid? true}))
             (transact-db! :update-block-order-directly repo conn block-uuid first-remote-parent remote-block-order))
@@ -330,7 +330,7 @@
         (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo shape page-id)])))))
 
 (def ^:private update-op-watched-attrs
-  #{:block/content
+  #{:block/title
     :block/updated-at
     :block/created-at
     :block/alias

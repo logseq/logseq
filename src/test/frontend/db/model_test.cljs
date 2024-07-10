@@ -162,9 +162,9 @@ foo:: bar"}])
   - child 2
     - grandchild 2
   - child 3"}])
-  (let [parent (-> (d/q '[:find (pull ?b [*]) :where [?b :block/content "parent"]]
+  (let [parent (-> (d/q '[:find (pull ?b [*]) :where [?b :block/title "parent"]]
                         (conn/get-db test-helper/test-db))
                    ffirst)]
     (is (= ["child 1" "child 2" "child 3"]
-           (map :block/content
+           (map :block/title
                 (model/get-block-immediate-children test-helper/test-db (:block/uuid parent)))))))

@@ -28,17 +28,17 @@
             :self uuid1
             :parents [uuid2]
             :block/order "a0"
-            :block/content "content-str"}}
+            :block/title "content-str"}}
           unpushed-ops
           [[:update 1 {:block-uuid uuid1
-                       :av-coll [[:block/content "new-content-str" 1 true]]}]]
+                       :av-coll [[:block/title "new-content-str" 1 true]]}]]
           r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
       (is (= {uuid1
               {:op :move
                :self uuid1
                :parents [uuid2]
                :block/order "a0"
-               :block/content "new-content-str"}}
+               :block/title "new-content-str"}}
              r))))
   (testing "case2"
     (let [[uuid1] (repeatedly (comp str random-uuid))
@@ -72,14 +72,14 @@
             :self uuid1
             :parents [uuid2]
             :block/order "a0"
-            :block/content "update content"}}
+            :block/title "update content"}}
           unpushed-ops
           [[:move 1 {:block-uuid uuid1}]]
           r (#'r.remote/update-remote-data-by-local-unpushed-ops affected-blocks-map unpushed-ops)]
       (is (= {uuid1
               {:op :update-attrs
                :self uuid1
-               :block/content "update content"}}
+               :block/title "update content"}}
              r)))))
 
 (deftest gen-remote-ops-test
@@ -95,10 +95,10 @@
      (outliner-core/insert-blocks!
       repo
       conn
-      [{:block/uuid uuid2 :block/content "uuid2-block"}
-       {:block/uuid uuid3 :block/content "uuid3-block"
+      [{:block/uuid uuid2 :block/title "uuid2-block"}
+       {:block/uuid uuid3 :block/title "uuid3-block"
         :block/parent [:block/uuid uuid1]}
-       {:block/uuid uuid4 :block/content "uuid4-block"
+       {:block/uuid uuid4 :block/title "uuid4-block"
         :block/parent [:block/uuid uuid1]}]
       (ldb/get-page @conn  "gen-remote-ops-test")
       {:sibling? true :keep-uuid? true}))
@@ -108,7 +108,7 @@
                                  [:move 2 {:block-uuid uuid4}]
                                  [:move 3 {:block-uuid uuid3}]
                                  [:update 4 {:block-uuid uuid4
-                                             :av-coll [[:block/content (ldb/write-transit-str "uuid4-block") 4 true]]}]])
+                                             :av-coll [[:block/title (ldb/write-transit-str "uuid4-block") 4 true]]}]])
     (let [_ (op-mem-layer/new-branch! repo)
           r1 (#'r.client/gen-block-uuid->remote-ops repo conn :n 1)
           _ (op-mem-layer/rollback! repo)
@@ -138,10 +138,10 @@
      (outliner-core/insert-blocks!
       repo
       conn
-      [{:block/uuid uuid1-client :block/content "uuid1-client"
+      [{:block/uuid uuid1-client :block/title "uuid1-client"
         :block/left [:block/uuid page-uuid]
         :block/parent [:block/uuid page-uuid]}
-       {:block/uuid uuid2-client :block/content "uuid2-client"
+       {:block/uuid uuid2-client :block/title "uuid2-client"
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
@@ -210,10 +210,10 @@
 ;;      (outliner-core/insert-blocks!
 ;;       repo
 ;;       conn
-;;       [{:block/uuid uuid1-client :block/content "uuid1-client"
+;;       [{:block/uuid uuid1-client :block/title "uuid1-client"
 ;;         :block/left [:block/uuid page-uuid]
 ;;         :block/parent [:block/uuid page-uuid]}
-;;        {:block/uuid uuid2-client :block/content "uuid2-client"
+;;        {:block/uuid uuid2-client :block/title "uuid2-client"
 ;;         :block/left [:block/uuid uuid1-client]
 ;;         :block/parent [:block/uuid page-uuid]}]
 ;;       (ldb/get-page @conn page-name)
@@ -316,10 +316,10 @@
      (outliner-core/insert-blocks!
       repo
       conn
-      [{:block/uuid uuid1-client :block/content "uuid1-client"
+      [{:block/uuid uuid1-client :block/title "uuid1-client"
         :block/left [:block/uuid page-uuid]
         :block/parent [:block/uuid page-uuid]}
-       {:block/uuid uuid2-client :block/content "uuid2-client"
+       {:block/uuid uuid2-client :block/title "uuid2-client"
         :block/left [:block/uuid uuid1-client]
         :block/parent [:block/uuid page-uuid]}]
       (ldb/get-page @conn page-name)
@@ -383,13 +383,13 @@ result:
         ;; - 2
         ;;   - 3
         repo conn
-        [{:block/uuid uuid1 :block/content "1"
+        [{:block/uuid uuid1 :block/title "1"
           :block/order "a0"
           :block/parent [:block/uuid page-uuid]}
-         {:block/uuid uuid2 :block/content "2"
+         {:block/uuid uuid2 :block/title "2"
           :block/order "a1"
           :block/parent [:block/uuid page-uuid]}
-         {:block/uuid uuid3 :block/content "3"
+         {:block/uuid uuid3 :block/title "3"
           :block/order "a0"
           :block/parent [:block/uuid uuid2]}]
         (ldb/get-page @conn page-name)
@@ -473,11 +473,11 @@ result:
         repo
         conn
         [{:block/uuid uuid1-client
-          :block/content "uuid1-client"
+          :block/title "uuid1-client"
           :block/left [:block/uuid page1-uuid]
           :block/parent [:block/uuid page1-uuid]}
          {:block/uuid uuid2-client
-          :block/content "uuid2-client"
+          :block/title "uuid2-client"
           :block/left [:block/uuid uuid1-client]
           :block/parent [:block/uuid page1-uuid]}]
         (ldb/get-page @conn page-name)
@@ -492,12 +492,12 @@ result:
                                          :self uuid1-remote
                                          :parents [page2-uuid]
                                          :left page2-uuid
-                                         :block/content "uuid1-remote"}
+                                         :block/title "uuid1-remote"}
                            uuid2-remote {:op :move
                                          :self uuid2-remote
                                          :parents [page2-uuid]
                                          :left uuid1-remote
-                                         :block/content "uuid2-remote"}}}
+                                         :block/title "uuid2-remote"}}}
             all-ops (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))
             update-page-ops (vals (:update-page-ops-map all-ops))
             move-ops (#'r.remote/move-ops-map->sorted-move-ops (:move-ops-map all-ops))]

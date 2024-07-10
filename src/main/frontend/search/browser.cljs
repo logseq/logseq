@@ -19,7 +19,7 @@
         (keep (fn [{:keys [content page] :as block}]
                 {:page? (= (:uuid block) page)
                  :block/uuid (uuid (:uuid block))
-                 :block/content content
+                 :block/title content
                  :block/page (uuid page)}) result))
       (p/resolved nil)))
   (rebuild-pages-indice! [_this]

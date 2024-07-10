@@ -133,8 +133,8 @@
 (defn block-content-refs
   "Return ref block ids for given block"
   [db block]
-  (let [content (or (:block/raw-content block)
-                    (:block/content block))]
+  (let [content (or (:block/raw-title block)
+                    (:block/title block))]
     (when (string? content)
       (->> (db-content/get-matched-special-ids content)
            (map (fn [id]

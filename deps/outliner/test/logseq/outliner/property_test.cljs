@@ -11,7 +11,7 @@
   (->> content
        (d/q '[:find [(pull ?b [*]) ...]
               :in $ ?content
-              :where [?b :block/content ?content]]
+              :where [?b :block/title ?content]]
             @conn)
        first))
 
@@ -67,8 +67,8 @@
   (testing "Create a new :default property value"
     (let [conn (create-conn-with-blocks
                 [{:page {:block/title "page1"}
-                  :blocks [{:block/content "b1" :build/properties {:default "foo"}}
-                           {:block/content "b2"}]}])
+                  :blocks [{:block/title "b1" :build/properties {:default "foo"}}
+                           {:block/title "b2"}]}])
           block (find-block-by-content conn "b2")
           ;; Use same args as outliner.op
           _ (outliner-property/create-property-text-block! conn (:db/id block) :user.property/default "" {})
@@ -84,8 +84,8 @@
   (testing "Create cases for a new :one :number property value"
     (let [conn (create-conn-with-blocks
                 [{:page {:block/title "page1"}
-                  :blocks [{:block/content "b1" :build/properties {:num 2}}
-                           {:block/content "b2"}]}])
+                  :blocks [{:block/title "b1" :build/properties {:num 2}}
+                           {:block/title "b2"}]}])
           block (find-block-by-content conn "b2")
           ;; Use same args as outliner.op
           _ (outliner-property/create-property-text-block! conn (:db/id block) :user.property/num "3" {})
@@ -107,8 +107,8 @@
   (testing "Create new :many :number property values"
     (let [conn (create-conn-with-blocks
                 [{:page {:block/title "page1"}
-                  :blocks [{:block/content "b1" :build/properties {:num-many #{2}}}
-                           {:block/content "b2"}]}])
+                  :blocks [{:block/title "b1" :build/properties {:num-many #{2}}}
+                           {:block/title "b2"}]}])
           block (find-block-by-content conn "b2")
           ;; Use same args as outliner.op
           _ (outliner-property/create-property-text-block! conn (:db/id block) :user.property/num-many "3" {})
@@ -124,8 +124,8 @@
   (testing "Set a :number value with existing value"
     (let [conn (create-conn-with-blocks
                 [{:page {:block/title "page1"}
-                  :blocks [{:block/content "b1" :build/properties {:num 2}}
-                           {:block/content "b2"}]}])
+                  :blocks [{:block/title "b1" :build/properties {:num 2}}
+                           {:block/title "b2"}]}])
           property-value (:user.property/num (find-block-by-content conn "b1"))
           _ (assert (:db/id property-value))
           block-uuid (:block/uuid (find-block-by-content conn "b2"))
@@ -137,8 +137,8 @@
   (testing "Update a :number value with existing value"
     (let [conn (create-conn-with-blocks
                 [{:page {:block/title "page1"}
-                  :blocks [{:block/content "b1" :build/properties {:num 2}}
-                           {:block/content "b2" :build/properties {:num 3}}]}])
+                  :blocks [{:block/title "b1" :build/properties {:num 2}}
+                           {:block/title "b2" :build/properties {:num 3}}]}])
           property-value (:user.property/num (find-block-by-content conn "b1"))
           _ (assert (:db/id property-value))
           block-uuid (:block/uuid (find-block-by-content conn "b2"))
@@ -151,8 +151,8 @@
   (testing "Setting :default with same property value reuses existing entity"
     (let [conn (create-conn-with-blocks
                 [{:page {:block/title "page1"}
-                  :blocks [{:block/content "b1" :build/properties {:logseq.property/order-list-type "number"}}
-                           {:block/content "b2"}]}])
+                  :blocks [{:block/title "b1" :build/properties {:logseq.property/order-list-type "number"}}
+                           {:block/title "b2"}]}])
           property-value (:logseq.property/order-list-type (find-block-by-content conn "b1"))
           block-uuid (:block/uuid (find-block-by-content conn "b2"))
           ;; Use same args as outliner.op
@@ -165,8 +165,8 @@
   (testing "Setting :checkbox with same property value reuses existing entity"
     (let [conn (create-conn-with-blocks
                 [{:page {:block/title "page1"}
-                  :blocks [{:block/content "b1" :build/properties {:checkbox true}}
-                           {:block/content "b2"}]}])
+                  :blocks [{:block/title "b1" :build/properties {:checkbox true}}
+                           {:block/title "b2"}]}])
           property-value (:user.property/checkbox (find-block-by-content conn "b1"))
           block-uuid (:block/uuid (find-block-by-content conn "b2"))
           ;; Use same args as outliner.op
@@ -179,7 +179,7 @@
 (deftest remove-block-property!
   (let [conn (create-conn-with-blocks
               [{:page {:block/title "page1"}
-                :blocks [{:block/content "b1" :build/properties {:default "foo"}}]}])
+                :blocks [{:block/title "b1" :build/properties {:default "foo"}}]}])
         block (find-block-by-content conn "b1")
         _ (assert (:user.property/default block))
         ;; Use same args as outliner.op
@@ -191,8 +191,8 @@
 (deftest batch-set-property!
   (let [conn (create-conn-with-blocks
               [{:page {:block/title "page1"}
-                :blocks [{:block/content "item 1"}
-                         {:block/content "item 2"}]}])
+                :blocks [{:block/title "item 1"}
+                         {:block/title "item 2"}]}])
         block-ids (map #(-> (find-block-by-content conn %) :block/uuid) ["item 1" "item 2"])
         _ (outliner-property/batch-set-property! conn block-ids :logseq.property/order-list-type "number")
         updated-blocks (map #(find-block-by-content conn %) ["item 1" "item 2"])]
@@ -204,8 +204,8 @@
 (deftest batch-remove-property!
   (let [conn (create-conn-with-blocks
               [{:page {:block/title "page1"}
-                :blocks [{:block/content "item 1" :build/properties {:logseq.property/order-list-type "number"}}
-                         {:block/content "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}])
+                :blocks [{:block/title "item 1" :build/properties {:logseq.property/order-list-type "number"}}
+                         {:block/title "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}])
         block-ids (map #(-> (find-block-by-content conn %) :block/uuid) ["item 1" "item 2"])
         _ (outliner-property/batch-remove-property! conn block-ids :logseq.property/order-list-type)
         updated-blocks (map #(find-block-by-content conn %) ["item 1" "item 2"])]
@@ -216,8 +216,8 @@
 (deftest add-existing-values-to-closed-values!
   (let [conn (create-conn-with-blocks
               [{:page {:block/title "page1"}
-                :blocks [{:block/content "b1" :build/properties {:num 1}}
-                         {:block/content "b2" :build/properties {:num 2}}]}])
+                :blocks [{:block/title "b1" :build/properties {:num 1}}
+                         {:block/title "b2" :build/properties {:num 2}}]}])
         values (map (fn [d] (:block/uuid (d/entity @conn (:v d)))) (d/datoms @conn :avet :user.property/num))
         _ (outliner-property/add-existing-values-to-closed-values! conn :user.property/num values)]
     (is (= [1 2]
@@ -267,7 +267,7 @@
                                       :block/schema {:type :default}}}
                :pages-and-blocks
                [{:page {:block/title "page1"}
-                 :blocks [{:block/content "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
+                 :blocks [{:block/title "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
         _ (assert (:user.property/default (find-block-by-content conn "b1")))
         property-uuid (:block/uuid (d/entity @conn :user.property-default))
         _ (outliner-property/delete-closed-value! conn property-uuid [:block/uuid closed-value-uuid])]
@@ -300,7 +300,7 @@
                          :c2 {:build/schema-properties [:p2 :p3]}}
                :pages-and-blocks
                [{:page {:block/title "p1"}
-                 :blocks [{:block/content "o1"
+                 :blocks [{:block/title "o1"
                            :build/tags [:c1 :c2]}]}]})
         block (find-block-by-content conn "o1")]
     (is (= [:user.property/p1 :user.property/p2 :user.property/p3]

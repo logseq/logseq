@@ -250,7 +250,7 @@
                  state)}
   [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
-                    (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
+                    (remove (fn [b] (string/blank? (:block/title (db-model/query-block-by-uuid (:block/uuid b)))))))
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Block embed"))
         chosen-handler (block-on-chosen-handler embed? input id q format selected-text)
@@ -265,7 +265,7 @@
                            repo (state/sub :git/current-repo)
                            format (get page-entity :block/format :markdown)
                            block (db-model/query-block-by-uuid uuid)
-                           content (:block/content block)]
+                           content (:block/title block)]
                        (when-not (string/blank? content)
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
       :class       "ac-block-search"})))

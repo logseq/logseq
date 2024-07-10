@@ -32,7 +32,7 @@
   [content block format new-marker old-marker]
   (if (and (state/enable-timetracking?) new-marker)
     (try
-      (let [logbook-exists? (and (:block/body block) (drawer/get-logbook (:block/body block)))
+      (let [logbook-exists? (and (:block.temp/ast-body block) (drawer/get-logbook (:block.temp/ast-body block)))
             new-marker (string/trim (string/lower-case (name new-marker)))
             old-marker (when old-marker (string/trim (string/lower-case (name old-marker))))
             new-content (cond
@@ -61,7 +61,7 @@
 (defn- with-timetracking
   [block value]
   (if (and (state/enable-timetracking?)
-           (not= (:block/content block) value))
+           (not= (:block/title block) value))
     (let [format (:block/format block)
           new-marker (last (util/safe-re-find (status/marker-pattern format) (or value "")))
           new-value (with-marker-time value block format
@@ -71,22 +71,22 @@
     value))
 
 (defn wrap-parse-block
-  [{:block/keys [content format uuid level pre-block?] :as block
+  [{:block/keys [title format uuid level pre-block?] :as block
     :or {format :markdown}}]
   (let [repo (state/get-current-repo)
         block (or (and (:db/id block) (db/pull (:db/id block))) block)
         page (:block/page block)
         block (merge block
-                     (block/parse-title-and-body uuid format pre-block? (:block/content block)))
+                     (block/parse-title-and-body uuid format pre-block? (:block/title block)))
         properties (:block/properties block)
         properties (if (and (= format :markdown)
                             (number? (:heading properties)))
                      (dissoc properties :heading)
                      properties)
-        real-content (:block/content block)
-        content (if (and (seq properties) real-content (not= real-content content))
-                  (property-file/with-built-in-properties-when-file-based repo properties content format)
-                  content)
+        real-content (:block/title block)
+        content (if (and (seq properties) real-content (not= real-content title))
+                  (property-file/with-built-in-properties-when-file-based repo properties title format)
+                  title)
         content (drawer/with-logbook block content)
         content (with-timetracking block content)
         first-block? (= (:block/uuid (ldb/get-first-child (db/get-db) (:db/id page)))
@@ -112,7 +112,7 @@
                              (let [content' (str (config/get-block-pattern format) (if block-with-title? " " "\n") content)]
                                [content content']))
         block (assoc block
-                     :block/content content'
+                     :block/title content'
                      :block/format format)
         block (apply dissoc block (remove #{:block/pre-block?} db-schema/retract-attributes))
         block (block/parse-block block)
@@ -126,7 +126,7 @@
     (-> block
         (dissoc :block.temp/top?
                 :block.temp/bottom?)
-        (assoc :block/content content
+        (assoc :block/title content
                :block/properties new-properties)
         (merge (if level {:block/level level} {})))))
 
@@ -136,7 +136,7 @@
                          (uuid? block-or-id) (db/entity [:block/uuid block-or-id])
                          :else block-or-id)]
     (let [format (:block/format block)
-          content (:block/content block)
+          content (:block/title block)
           properties (:block/properties block)
           properties (if (nil? value)
                        (dissoc properties key)
@@ -148,7 +148,7 @@
       {:block/uuid (:block/uuid block)
        :block/properties properties
        :block/properties-order (or (keys properties) [])
-       :block/content content})))
+       :block/title content})))
 
 (defn- set-heading-aux!
   [block-id heading]
@@ -170,26 +170,26 @@
         (and (or (nil? heading) (true? heading))
              (number? old-heading))
         (let [block' (set-block-property-aux! block :heading heading)
-              content (commands/clear-markdown-heading (:block/content block'))]
-          (merge block' {:block/content content}))
+              content (commands/clear-markdown-heading (:block/title block'))]
+          (merge block' {:block/title content}))
 
         (and (or (nil? old-heading) (true? old-heading))
              (number? heading))
         (let [block' (set-block-property-aux! block :heading nil)
               properties (assoc (:block/properties block) :heading heading)
-              content (commands/set-markdown-heading (:block/content block') heading)]
-          (merge block' {:block/content content :block/properties properties}))
+              content (commands/set-markdown-heading (:block/title block') heading)]
+          (merge block' {:block/title content :block/properties properties}))
 
         ;; heading-num1 -> heading-num2
         :else
         (let [properties (assoc (:block/properties block) :heading heading)
               content (-> block
-                          :block/content
+                          :block/title
                           commands/clear-markdown-heading
                           (commands/set-markdown-heading heading))]
           {:block/uuid (:block/uuid block)
            :block/properties properties
-           :block/content content}))
+           :block/title content}))
       (set-block-property-aux! block :heading heading))))
 
 (defn batch-set-heading! [block-ids heading]

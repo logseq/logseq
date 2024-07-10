@@ -44,18 +44,18 @@
       content
       uuids))))
 
-(defn update-uid [{:block/keys [uuid content] :as b}
+(defn update-uid [{:block/keys [uuid title] :as b}
                   uuid->uid-map]
   (cond-> b
     (contains? uuid->uid-map uuid)
     (assoc :block/uid (get uuid->uid-map uuid))
 
-    (some (fn [id] (str/includes? (str content) (str id))) (keys uuid->uid-map))
-    (update :block/content #(update-content % uuid->uid-map))))
+    (some (fn [id] (str/includes? (str title) (str id))) (keys uuid->uid-map))
+    (update :block/title #(update-content % uuid->uid-map))))
 
-(defn update-todo [{:block/keys [content] :as block}]
-  (if content
-    (update block :block/content
+(defn update-todo [{:block/keys [title] :as block}]
+  (if title
+    (update block :block/title
             (fn [c]
               (-> c
                   (str/replace todo-marker-regex "{{[[TODO]]}}")
@@ -77,8 +77,7 @@
 
              (update-todo)
 
-             (s/rename-keys {:block/title :page/title
-                             :block/content :block/string})
+             (s/rename-keys {:block/title :page/title})
 
              (select-keys keyseq))
 

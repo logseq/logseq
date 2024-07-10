@@ -72,9 +72,9 @@
      "(and \"for #clojure\" #tag foo)")))
 
 (defn- testable-content
-  "Only test :block/content up to page-ref as page-ref content varies between db and file graphs"
-  [{:block/keys [content]}]
-  (some->> content
+  "Only test :block/title up to page-ref as page-ref content varies between db and file graphs"
+  [{:block/keys [title]}]
+  (some->> title
            (re-find #"[^\[]+")
            str/trim))
 
@@ -97,51 +97,51 @@ prop-d:: [[nada]]"}])
 
   (testing "Blocks have given property value"
     (is (= #{"b1" "b2"}
-           (set (map (comp first str/split-lines :block/content)
+           (set (map (comp first str/split-lines :block/title)
                      (dsl-query "(property prop-a val-a)")))))
 
     (is (= ["b2"]
-           (map (comp first str/split-lines :block/content)
+           (map (comp first str/split-lines :block/title)
                 (dsl-query "(property prop-b val-b)")))))
 
   (is (= ["b2"]
-         (map (comp first str/split-lines :block/content)
+         (map (comp first str/split-lines :block/title)
               (dsl-query "(and (property prop-b val-b))")))
       "Blocks have property value with empty AND")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/content)
+         (map (comp first str/split-lines :block/title)
               (dsl-query "(and (property prop-c \"page c\"))")))
       "Blocks have property value from a set of values")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/content)
+         (map (comp first str/split-lines :block/title)
               (dsl-query "(and (property prop-c \"page c\") (property prop-c \"page b\"))")))
       "Blocks have ANDed property values")
 
   (is (= #{"b2" "b3"}
          (set
-          (map (comp first str/split-lines :block/content)
+          (map (comp first str/split-lines :block/title)
                (dsl-query "(or (property prop-c \"page c\") (property prop-b val-b))"))))
       "Blocks have ORed property values")
 
   (is (= ["b1"]
-           (map (comp first str/split-lines :block/content)
+           (map (comp first str/split-lines :block/title)
                 (dsl-query "(property prop-num 2000)")))
         "Blocks have integer property value")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/content)
+         (map (comp first str/split-lines :block/title)
               (dsl-query "(property prop-linked-num 3000)")))
       "Blocks have property with integer page value")
 
   (is (= ["b3"]
-         (map (comp first str/split-lines :block/content)
+         (map (comp first str/split-lines :block/title)
               (dsl-query "(property prop-d no-space-link)")))
       "Blocks have property value with no space")
 
   (is (= ["b3" "b4"]
-         (map (comp first str/split-lines :block/content)
+         (map (comp first str/split-lines :block/title)
               (dsl-query "(property prop-d)")))
       "Blocks that have a property"))
 
@@ -155,16 +155,16 @@ prop-d:: [[nada]]"}])
  (deftest db-only-block-property-queries
    (load-test-files-for-db-graph
     [{:page {:block/title "page1"}
-      :blocks [{:block/content "b1"
+      :blocks [{:block/title "b1"
                 :build/properties {:Foo "bar"}}
-               {:block/content "b2"
+               {:block/title "b2"
                 :build/properties {:foo "bar"}}]}])
 
    (is (= ["b1"]
-          (map :block/content (dsl-query "(property Foo)")))
+          (map :block/title (dsl-query "(property Foo)")))
        "filter is case sensitive")
    (is (= ["b2"]
-          (map :block/content (dsl-query "(property :user.property/foo)")))
+          (map :block/title (dsl-query "(property :user.property/foo)")))
        "filter can handle qualified keyword properties")))
 
 (deftest block-property-query-performance
@@ -312,11 +312,11 @@ prop-d:: [[nada]]"}])
 (deftest priority-queries
   (load-test-files (if js/process.env.DB_GRAPH
                      [{:page {:block/title "page1"}
-                       :blocks [{:block/content "[#A] b1"
+                       :blocks [{:block/title "[#A] b1"
                                  :build/properties {:logseq.task/priority :logseq.task/priority.high}}
-                                {:block/content "[#B] b2"
+                                {:block/title "[#B] b2"
                                  :build/properties {:logseq.task/priority :logseq.task/priority.medium}}
-                                {:block/content "[#A] b3"
+                                {:block/title "[#A] b3"
                                  :build/properties {:logseq.task/priority :logseq.task/priority.high}}]}]
 
                      [{:file/path "pages/page1.md"
@@ -327,23 +327,23 @@ prop-d:: [[nada]]"}])
 
   (testing "one arg queries"
     (is (= #{"[#A] b1" "[#A] b3"}
-           (set (map :block/content
+           (set (map :block/title
                      (dsl-query (if js/process.env.DB_GRAPH "(priority high)" "(priority a)"))))))
     (is (= #{"[#A] b1" "[#A] b3"}
-           (set (map :block/content
+           (set (map :block/title
                  (dsl-query (if js/process.env.DB_GRAPH "(priority high)" "(priority a)")))))))
 
   (testing "two arg queries"
       (is (= #{"[#A] b1" "[#B] b2" "[#A] b3"}
-             (set (map :block/content
+             (set (map :block/title
                        (dsl-query (if js/process.env.DB_GRAPH "(priority high medium)" "(priority a b)"))))))
       (is (= #{"[#A] b1" "[#B] b2" "[#A] b3"}
-             (set (map :block/content
+             (set (map :block/title
                        (dsl-query (if js/process.env.DB_GRAPH "(priority [high medium])" "(priority [a b])")))))
           "Arguments with vector notation"))
 
   (is (= #{"[#A] b1" "[#B] b2" "[#A] b3"}
-           (set (map :block/content
+           (set (map :block/title
                      (dsl-query (if js/process.env.DB_GRAPH "(priority high medium low)" "(priority a b c)")))))
         "Three arg queries and args that have no match"))
 
@@ -431,10 +431,10 @@ prop-d:: [[nada]]"}])
                      :file/content "- b1 Hit\n- b2 Another"}])
 
   (is (= ["b1 Hit"]
-         (map :block/content (dsl-query "\"Hit\""))))
+         (map :block/title (dsl-query "\"Hit\""))))
 
   (is (= []
-         (map :block/content (dsl-query "\"miss\"")))
+         (map :block/title (dsl-query "\"miss\"")))
       "Correctly returns no results"))
 
 (deftest page-queries
@@ -508,10 +508,10 @@ prop-d:: [[nada]]"}])
 (deftest nested-page-ref-queries
   (load-test-files (if js/process.env.DB_GRAPH
                      [{:page {:block/title "page1"}
-                       :blocks [{:block/content "p1 [[Parent page]]"
-                                 :build/children [{:block/content "[[Child page]]"}]}
-                                {:block/content "p2 [[Parent page]]"
-                                 :build/children [{:block/content "Non linked content"}]}]}]
+                       :blocks [{:block/title "p1 [[Parent page]]"
+                                 :build/children [{:block/title "[[Child page]]"}]}
+                                {:block/title "p2 [[Parent page]]"
+                                 :build/children [{:block/title "Non linked content"}]}]}]
                      [{:file/path "pages/page1.md"
                        :file/content "foo:: bar
 - p1 [[Parent page]]
@@ -563,10 +563,10 @@ created-at:: 1608968448116
                      '(task doing)
                      '(task now))]
     (is (= ["NOW b1"]
-           (map :block/content (custom-query {:query task-query}))))
+           (map :block/title (custom-query {:query task-query}))))
 
     (is (= ["NOW b1"]
-           (map :block/content (custom-query {:query (list 'and task-query "b")})))
+           (map :block/title (custom-query {:query (list 'and task-query "b")})))
         "Query with rule that can't be derived from the form itself")))
 
 (if js/process.env.DB_GRAPH

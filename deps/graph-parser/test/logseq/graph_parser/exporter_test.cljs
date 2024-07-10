@@ -26,13 +26,13 @@
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?pattern
-                :where [?b :block/content ?content] [(re-find ?pattern ?content)]]
+                :where [?b :block/title ?content] [(re-find ?pattern ?content)]]
               db)
          first)
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?content
-                :where [?b :block/content ?content]]
+                :where [?b :block/title ?content]]
               db)
          first)))
 
@@ -289,7 +289,7 @@
       (let [block (find-block-by-content @conn #"Inception")
             tag-page (find-page-by-name @conn "Movie")
             tagged-page (find-page-by-name @conn "Interstellar")]
-        (is (string/starts-with? (str (:block/content block)) "Inception [[")
+        (is (string/starts-with? (str (:block/title block)) "Inception [[")
             "tagged block tag converts tag to page ref")
         (is (= [(:db/id tag-page)] (map :db/id (:block/refs block)))
             "tagged block has correct refs")
@@ -309,7 +309,7 @@
     (let [block (find-block-by-content @conn #"Inception")
           tag-page (find-page-by-name @conn "Movie")
           another-tag-page (find-page-by-name @conn "p0")]
-      (is (= (:block/content block) "Inception")
+      (is (= (:block/title block) "Inception")
           "tagged block with configured tag strips tag from content")
       (is (= [:user.class/Movie]
              (:block/tags (readable-properties @conn block)))
@@ -332,7 +332,7 @@
           _ (import-files-to-db files conn {:property-classes ["type"]})]
     (let [block (find-block-by-content @conn #"The Creator")
           tag-page (find-page-by-name @conn "Movie")]
-      (is (= (:block/content block) "The Creator")
+      (is (= (:block/title block) "The Creator")
           "tagged block with configured tag strips tag from content")
       (is (= [:user.class/Movie]
              (:block/tags (readable-properties @conn block)))

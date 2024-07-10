@@ -48,13 +48,13 @@
     content))
 
 (defn- transform-content
-  [repo db {:block/keys [collapsed? format pre-block? content page properties] :as b} level {:keys [heading-to-list?]} context]
+  [repo db {:block/keys [collapsed? format pre-block? title page properties] :as b} level {:keys [heading-to-list?]} context]
   (let [block-ref-not-saved? (and (seq (:block/_refs (d/entity db (:db/id b))))
-                                  (not (string/includes? content (str (:block/uuid b))))
+                                  (not (string/includes? title (str (:block/uuid b))))
                                   (not (sqlite-util/db-based-graph? repo)))
         heading (:heading properties)
         markdown? (= :markdown format)
-        content (or content "")
+        content (or title "")
         page-first-child? (= (:db/id b) (ldb/get-first-child db (:db/id page)))
         pre-block? (or pre-block?
                        (and page-first-child?

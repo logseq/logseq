@@ -23,7 +23,7 @@
      :block/refs refs
      :block/order (db-order/gen-key nil nil)
      :block/format format
-     :block/content content
+     :block/title content
      :block/parent page
      :block/page page}))
 
@@ -61,7 +61,7 @@
        :block/page page-id
        :block/parent page-id
        :block/order (db-order/gen-key nil nil)
-       :block/content ""
+       :block/title ""
        :block/format format})]))
 
 (defn create!

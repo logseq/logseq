@@ -116,9 +116,9 @@
   (let [to-page (ldb/get-page db new-name)
         old-title (:block/title page)
         blocks (:block/_refs (d/entity db (:db/id page)))
-        tx     (->> (map (fn [{:block/keys [uuid content properties format] :as block}]
-                           (let [content    (let [content' (replace-old-page! config content old-title new-name format)]
-                                              (when-not (= content' content)
+        tx     (->> (map (fn [{:block/keys [uuid title properties format] :as block}]
+                           (let [content    (let [content' (replace-old-page! config title old-title new-name format)]
+                                              (when-not (= content' title)
                                                 content'))
                                  properties (let [properties' (walk-replace-old-page! config properties old-title new-name format)]
                                               (when-not (= properties' properties)
@@ -126,7 +126,7 @@
                              (when (or content properties)
                                (common-util/remove-nils-non-nested
                                 {:block/uuid       uuid
-                                 :block/content    content
+                                 :block/title    content
                                  :block/properties properties
                                  :block/properties-order (when (seq properties)
                                                            (map first properties))

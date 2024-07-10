@@ -281,7 +281,7 @@
                          (let [id (:block/uuid block)]
                            {:icon "block"
                             :icon-theme :gray
-                            :text (highlight-content-query (:block/content block) @!input)
+                            :text (highlight-content-query (:block/title block) @!input)
                             :header (block/breadcrumb {:search? true} repo id {})
                             :current-page? (when-let [page-id (:block/page block)]
                                              (= page-id (:block/uuid current-page)))
@@ -367,7 +367,7 @@
                                       (uuid (:block/uuid block)))]
                              {:icon "block"
                               :icon-theme :gray
-                              :text (highlight-content-query (:block/content block) @!input)
+                              :text (highlight-content-query (:block/title block) @!input)
                               :header (block/breadcrumb {:search? true} repo id {})
                               :current-page? true
                               :source-block block})) blocks)]
@@ -705,7 +705,7 @@
               link (if (config/db-based-graph? repo)
                      (some (fn [[k v]]
                              (when (= :url (get-in (db/entity repo k) [:block/schema :type]))
-                               (:block/content v)))
+                               (:block/title v)))
                            (:block/properties page'))
                      (some #(re-find editor-handler/url-regex (val %)) (:block/properties page')))]
         (if link
@@ -716,7 +716,7 @@
       (p/let [block-id (:block/uuid (:source-block item))
               _ (db-async/<get-block repo block-id :children? false)
               block (db/entity [:block/uuid block-id])
-              link (re-find editor-handler/url-regex (:block/content block))]
+              link (re-find editor-handler/url-regex (:block/title block))]
         (if link
           (js/window.open link)
           (notification/show! "No link found in this block's content." :warning)))

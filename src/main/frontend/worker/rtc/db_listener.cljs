@@ -20,7 +20,7 @@
       :else                                           {false (conj {} latest-retract)})))
 
 (def ^:private watched-attrs
-  #{:block/content :block/created-at :block/updated-at :block/alias
+  #{:block/title :block/created-at :block/updated-at :block/alias
     :block/tags :block/type :block/schema :block/link :block/journal-day
     :class/parent :class/schema.properties :property/schema.classes :property.value/content
     :db/index :db/valueType :db/cardinality})

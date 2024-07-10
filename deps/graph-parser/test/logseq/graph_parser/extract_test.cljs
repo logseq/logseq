@@ -52,7 +52,7 @@
 (defn- extract-block-content
   [text]
   (let [{:keys [blocks]} (extract "a.md" text)]
-    (mapv :block/content blocks)))
+    (mapv :block/title blocks)))
 
 (defn- extract-title [file text]
   (-> (extract file text) :pages first :block/properties :title))
@@ -129,9 +129,9 @@
 (def foo-edn
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
-    ({:block/content "foo content a",
+    ({:block/title "foo content a",
       :block/format :markdown},
-     {:block/content "foo content b",
+     {:block/title "foo content b",
       :block/format :markdown}),
     :pages
     ({:block/format :markdown,

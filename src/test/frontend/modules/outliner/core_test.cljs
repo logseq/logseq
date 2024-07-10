@@ -87,7 +87,7 @@
         blocks (outliner-core/tree-vec-flatten blocks :block/children)]
     (map (fn [block] (assoc block
                             :block/page 1
-                            :block/content "1")) blocks)))
+                            :block/title "1")) blocks)))
 
 (defn- build-blocks
   [tree]
@@ -416,21 +416,21 @@
  "
     (transact-tree! tree)
     (db/transact! test-db [{:block/uuid 22
-                            :block/content ""}])
+                            :block/title ""}])
     (let [target-block (get-block 22)]
       (outliner-tx/transact!
         (transact-opts)
        (outliner-core/insert-blocks!
         test-db
         (db/get-db test-db false)
-        [{:block/content "test"
+        [{:block/title "test"
           :block/parent 1
           :block/page 1}]
         target-block
         {:sibling? false
          :outliner-op :paste
          :replace-empty-target? true}))
-      (is (= "test" (:block/content (get-block 22))))
+      (is (= "test" (:block/title (get-block 22))))
       (is (= [22] (get-children 1)))
       (is (= [2 12 16] (get-children 22))))))
 
@@ -555,10 +555,10 @@ tags:: tag1, tag2
           pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))
           _ (assert (set/subset? #{"blarg" "bar"} pages) "Pages from block exist")
           block-with-refs (ffirst (d/q '[:find (pull ?b [* {:block/refs [*]}])
-                                         :where [?b :block/content "block #blarg #bar"]]
+                                         :where [?b :block/title "block #blarg #bar"]]
                                        @conn))
           _ (save-block! (-> block-with-refs
-                             (assoc :block/content "block"
+                             (assoc :block/title "block"
                                     :block/refs [])))
           updated-pages (set (map first (d/q '[:find ?bn :where [?b :block/name ?bn]] @conn)))]
       (is (not (contains? updated-pages "blarg"))

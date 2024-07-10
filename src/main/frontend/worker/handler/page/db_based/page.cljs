@@ -59,7 +59,7 @@
        :block/page page-id
        :block/parent page-id
        :block/order (db-order/gen-key nil nil)
-       :block/content ""
+       :block/title ""
        :block/format format})]))
 
 (defn create!

@@ -33,7 +33,7 @@
                                      (map last items))]
           (when-let [block (db/entity [:block/uuid block-id])]
             (let [format (:block/format block)
-                  content (:block/content block)
+                  content (:block/title block)
                   properties (:block/properties block)
                   properties-text-values (:block/properties-text-values block)
                   properties (-> (merge properties new-properties)
@@ -54,7 +54,7 @@
                          :block/properties properties
                          :block/properties-order property-ks
                          :block/properties-text-values properties-text-values
-                         :block/content content}]
+                         :block/title content}]
               (outliner-op/save-block! block {:retract-attributes? false}))))))
      (let [block-id (ffirst col)
            block-id (if (string? block-id) (uuid block-id) block-id)

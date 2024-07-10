@@ -120,7 +120,7 @@
 
    :block-content
    '[(block-content ?b ?query)
-     [?b :block/content ?content]
+     [?b :block/title ?content]
      [(clojure.string/includes? ?content ?query)]]
 
    :page
@@ -171,7 +171,7 @@
     '[(page-property ?p ?prop ?val)
       [?p :block/name]
       [?p ?prop ?pv]
-      (or [?pv :block/content ?val]
+      (or [?pv :block/title ?val]
           [?pv :property.value/content ?val]
           [?pv :block/title ?val])
       [?prop-e :db/ident ?prop]
@@ -187,7 +187,7 @@
     :property
     '[(property ?b ?prop ?val)
       [?b ?prop ?pv]
-      (or [?pv :block/content ?val]
+      (or [?pv :block/title ?val]
           [?pv :property.value/content ?val]
           [?pv :block/title ?val])
       [(missing? $ ?b :block/name)]

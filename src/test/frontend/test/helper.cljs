@@ -99,27 +99,27 @@
                    (->> (string/split content* #"\n-\s*")
                         (mapv (fn [s]
                                 (let [[content & props] (string/split-lines s)]
-                                  (cond-> {:block/content content}
+                                  (cond-> {:block/title content}
                                     ;; If no property chars may accidentally parse child blocks
                                     ;; so don't do property parsing
                                     (and (string/includes? s ":: ") props)
                                     (merge (property-lines->attributes props)))))))
                    ;; only has a page pre-block
-                   [{:block/content content*}])
+                   [{:block/title content*}])
         [page-attrs blocks*]
-        (if (string/includes? (:block/content (first blocks**)) "::")
-          [(property-lines->attributes (string/split-lines (:block/content (first blocks**))))
+        (if (string/includes? (:block/title (first blocks**)) "::")
+          [(property-lines->attributes (string/split-lines (:block/title (first blocks**))))
            (rest blocks**)]
           [nil blocks**])
         blocks
-        (mapv #(if-let [status (some-> (second (re-find status/bare-marker-pattern (:block/content %)))
+        (mapv #(if-let [status (some-> (second (re-find status/bare-marker-pattern (:block/title %)))
                                        file-to-db-statuses)]
                  (-> %
                      (assoc :block/tags [{:db/ident :logseq.class/task}])
                      (update :build/properties merge {:logseq.task/status status}))
                  %)
               blocks*)]
-    {:blocks (mapv (fn [b] (update b :block/content #(string/replace-first % #"^-\s*" "")))
+    {:blocks (mapv (fn [b] (update b :block/title #(string/replace-first % #"^-\s*" "")))
                    blocks)
      :page-attributes page-attrs}))
 
@@ -189,14 +189,14 @@ This can be called in synchronous contexts as no async fns should be invoked"
        :block/page page-id
        :block/parent page-id
        :block/order (db-order/gen-key nil)
-       :block/content "block 1"
+       :block/title "block 1"
        :block/format :markdown}
       ;; second block
       {:block/uuid second-block-uuid
        :block/page page-id
        :block/parent page-id
        :block/order (db-order/gen-key nil)
-       :block/content "block 2"
+       :block/title "block 2"
        :block/format :markdown}]
      (map sqlite-util/block-with-timestamps))))
 

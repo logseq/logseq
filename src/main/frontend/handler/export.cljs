@@ -108,7 +108,7 @@
                           :block/properties
                           :block/format
                           :block/children
-                          :block/content
+                          :block/title
                           :block/created-at
                           :block/updated-at]
                          pages)}))

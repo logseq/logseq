@@ -310,7 +310,7 @@
 (defn- get-title
   [e]
   (or (:block/title e)
-      (:block/content e)))
+      (:block/title e)))
 
 (rum/defc select-page < rum/reactive db-mixins/query
   [property
@@ -612,7 +612,7 @@
        (when-some [content (if (some? (:property.value/content value))
                              ;; content needs to be a string for display purposes
                              (str (:property.value/content value))
-                             (:block/content value))]
+                             (:block/title value))]
          (inline-text-cp content))
 
        :else
@@ -682,7 +682,7 @@
                   (when (and (= type :default) (nil? value))
                     (<create-new-block! block property "")))}
      (cond
-       (and (= type :default) (nil? (:block/content value)))
+       (and (= type :default) (nil? (:block/title value)))
        [:div.jtrigger (property-empty-btn-value)]
 
        (= type :default)

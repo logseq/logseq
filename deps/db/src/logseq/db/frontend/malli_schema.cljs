@@ -331,7 +331,7 @@
 
 (def block-attrs
   "Common attributes for normal blocks"
-  [[:block/content :string]
+  [[:block/title :string]
    [:block/parent :int]
    [:block/order block-order]
    ;; refs
@@ -346,7 +346,7 @@
   (vec
    (concat
     [:map]
-    [[:block/content :string]
+    [[:block/title :string]
      [:block/parent :int]
      ;; These blocks only associate with pages of type "whiteboard"
      [:block/page :int]
@@ -359,7 +359,7 @@
    (concat
     [:map]
     [[:property.value/content [:or :string :double :boolean]]]
-    (remove #(#{:block/content} (first %)) block-attrs)
+    (remove #(#{:block/title} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def closed-value-block*
@@ -369,22 +369,22 @@
     [[:block/type [:= #{"closed value"}]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
-     [:block/content {:optional true} :string]
+     [:block/title {:optional true} :string]
      [:property.value/content {:optional true} [:or :string :double]]
      [:block/closed-value-property {:optional true} [:set :int]]
      [:block/schema {:optional true}
       [:map
        [:description {:optional true} :string]]]]
-    (remove #(#{:block/content} (first %)) block-attrs)
+    (remove #(#{:block/title} (first %)) block-attrs)
     page-or-block-attrs)))
 
 (def closed-value-block
   "A closed value for a property with closed/allowed values"
   [:and closed-value-block*
-   [:fn {:error/message ":block/content or :property.value/content required"
+   [:fn {:error/message ":block/title or :property.value/content required"
          :error/path [:property.value/content]}
     (fn [m]
-      (or (:block/content m) (:property.value/content m)))]])
+      (or (:block/title m) (:property.value/content m)))]])
 
 (def normal-block
   "A block with content and no special type or tag behavior"

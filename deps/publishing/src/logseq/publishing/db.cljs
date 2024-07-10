@@ -128,7 +128,7 @@
      (keep
       (fn [datom]
         (cond-> []
-          (= :block/content (:a datom))
+          (= :block/title (:a datom))
           (concat (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))]
                     (when (seq matched)
                       (for [[_ path] matched]

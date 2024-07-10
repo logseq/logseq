@@ -201,7 +201,7 @@
    (p/let [ref-page (when pdf-current (ensure-ref-page! pdf-current))]
      (when ref-page
        (let [ref-block (db-model/query-block-by-uuid id)]
-         (if-not (nil? (:block/content ref-block))
+         (if-not (nil? (:block/title ref-block))
            (do
              (println "[existed ref block]" ref-block)
              ref-block)

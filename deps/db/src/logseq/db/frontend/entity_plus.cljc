@@ -23,8 +23,8 @@
   ([^Entity e k default-value]
    (when k
      (case k
-       :block/raw-content
-       (lookup-entity e :block/content default-value)
+       :block/raw-title
+       (lookup-entity e :block/title default-value)
 
        :block/properties
        (let [db (.-db e)]
@@ -35,7 +35,7 @@
                                (into {})))
            (lookup-entity e :block/properties nil)))
 
-       :block/content
+       :block/title
        (or
         (get (.-kv e) k)
         (let [result (lookup-entity e k default-value)]
@@ -57,10 +57,6 @@
        :property/closed-values
        (->> (lookup-entity e :block/_closed-value-property default-value)
             (sort-by :block/order))
-
-       :object/name
-       (or (lookup-entity e :block/title nil)
-           (lookup-entity e :block/content nil))
 
        (or (get (.-kv e) k)
            (lookup-entity e k default-value))))))

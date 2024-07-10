@@ -140,7 +140,7 @@
                     (row-checkbox table row column))
             :column-list? false}
            (when with-object-name?
-             {:id :object/name
+             {:id :block/title
               :name "Name"
               :type :string
               :header header-cp
@@ -226,7 +226,7 @@
   (case (:id column)
     :select 32
     :add-property 160
-    (:object/name :block/title :block/name :block/content) 360
+    (:block/title :block/name) 360
     (:block/created-at :block/updated-at) 160
     180))
 
@@ -713,7 +713,7 @@
        (map-indexed
         (fn [idx filter]
           (let [[property-ident operator value] filter
-                property (if (= property-ident :object/name)
+                property (if (= property-ident :block/title)
                            {:db/ident property-ident
                             :block/title "Name"}
                            (or (db/entity property-ident)
@@ -751,7 +751,7 @@
    (if (string/blank? input)
      true
      (when row
-       (fuzzy-matched? input (:object/name row))))
+       (fuzzy-matched? input (:block/title row))))
    ;; filters check
    (every?
     (fn [[property-ident operator match]]

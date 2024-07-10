@@ -58,9 +58,9 @@
         repo
         conn
         [{:block/uuid uuid1
-          :block/content "uuid1-client"
+          :block/title "uuid1-client"
           :block/parent [:block/uuid page1-uuid]}
-         {:block/uuid uuid2 :block/content "uuid2-client"
+         {:block/uuid uuid2 :block/title "uuid2-client"
           :block/parent [:block/uuid page1-uuid]}]
         (ldb/get-page @conn page1-name)
         {:sibling? true :keep-uuid? true}))

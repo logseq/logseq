@@ -59,7 +59,7 @@
       (if (pu/lookup properties :logseq.property/heading)
         {:to :page-block
          :path-params {:name (get-in block [:block/page :block/name])
-                       :block-route-name (model/heading-content->route-name (:block/content block))}}
+                       :block-route-name (model/heading-content->route-name (:block/title block))}}
         {:to :page
          :path-params {:name (if (string? page-name-or-block-uuid)
                                (util/page-name-sanity-lc page-name-or-block-uuid)
@@ -134,7 +134,7 @@
           block? (util/uuid-string? name)
           block-title (when (and block? (not page))
                         (when-let [block (db/entity [:block/uuid (uuid name)])]
-                          (let [content (text/remove-level-spaces (:block/content block)
+                          (let [content (text/remove-level-spaces (:block/title block)
                                                                   (:block/format block) (config/get-block-pattern (:block/format block)))]
                             (if (> (count content) 48)
                               (str (subs content 0 48) "...")
