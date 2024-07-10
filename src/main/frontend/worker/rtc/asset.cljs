@@ -149,15 +149,16 @@
               (m/sp
                 ;; init phase:
                 ;; generate all asset-change-events from db
-                (prn "init phase: generate all asset-change-events from db")
+                (when (or (seq (action->asset-blocks :download))
+                          (seq (action->asset-blocks :upload)))
+                  (prn "init phase: generate all asset-change-events from db" action->asset-blocks))
                 (m/? (new-task--download-assets
                       get-ws-create-task conn graph-uuid (map :block/uuid (action->asset-blocks :download))))
                 (m/? (new-task--upload-assets
                       get-ws-create-task conn graph-uuid (map :block/uuid (action->asset-blocks :upload)))))
               (->>
-               (let [event (m/?> asset-change-event-flow)
-                     {asset-uuids-to-download :download
-                      asset-uuids-to-upload :upload} event]
+               (let [{asset-uuids-to-download :download
+                      asset-uuids-to-upload :upload} (m/?> asset-change-event-flow)]
                  (m/? (new-task--download-assets get-ws-create-task conn graph-uuid asset-uuids-to-download))
                  (m/? (new-task--upload-assets get-ws-create-task conn graph-uuid asset-uuids-to-upload)))
                m/ap (m/reduce {} nil)))))
