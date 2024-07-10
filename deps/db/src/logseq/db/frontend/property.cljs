@@ -203,7 +203,7 @@
 
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
-    "logseq.property.linked-references"})
+    "logseq.property.linked-references" "logseq.property.asset"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
