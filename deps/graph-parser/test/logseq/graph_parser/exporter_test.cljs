@@ -142,7 +142,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 14 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 16 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 4
@@ -169,7 +169,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 14
+      (is (= 15
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/type "property"]])
@@ -216,7 +216,11 @@
               :user.property/prop-num 5
               :user.property/prop-string "yeehaw"}
              (readable-properties @conn (find-page-by-name @conn "some page")))
-          "Existing page has correct properties"))
+          "Existing page has correct properties")
+
+      (is (= {:user.property/rating 5.5}
+             (readable-properties @conn (find-block-by-content @conn ":rating float")))
+          "Block with float property imports as a float"))
 
     (testing "built-in properties"
       (is (= [(:db/id (find-block-by-content @conn "original block"))]
@@ -280,6 +284,23 @@
       (is (= "[[Jakob]]"
              (:user.property/description (readable-properties @conn (find-block-by-content @conn #":default to :page"))))
           ":page property value correctly saved as :default with full text"))
+
+    (testing "replacing refs in :block/content"
+      (is (= 2
+             (->> (find-block-by-content @conn #"replace with same start string")
+                  :block/content
+                  (re-seq #"\[\[~\^\S+\]\]")
+                  distinct
+                  count))
+          "A block with ref names that start with same string has 2 distinct refs")
+
+      (is (= 1
+             (->> (find-block-by-content @conn #"replace case insensitive")
+                  :block/content
+                  (re-seq #"\[\[~\^\S+\]\]")
+                  distinct
+                  count))
+          "A block with different case of same ref names has 1 distinct ref"))
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
