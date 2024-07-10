@@ -412,33 +412,32 @@
                                          (prn :debug :create-db-failed)
                                          (js/console.error error)))))
                            (reset! *creating-db? false)
-                           (shui/dialog-close!))))))]
+                           (shui/dialog-close!))))))
+        submit! (fn [^js e click?]
+                  (when-let [value (and (or click? (= (gobj/get e "key") "Enter"))
+                                     (util/trim-safe (.-value (rum/deref input-ref))))]
+                    (reset! *graph-name value)
+                    (new-db-f)))]
     [:div.new-graph.flex.flex-col.gap-4.p-1.pt-2
      (shui/input
-       {:value @*graph-name
+       {:default-value @*graph-name
         :disabled @*creating-db?
         :ref input-ref
         :placeholder "your graph name"
-        :auto-focus true
-        :on-change #(reset! *graph-name (util/evalue %))
-        :on-key-down (fn [^js e]
-                       (when (= (gobj/get e "key") "Enter")
-                         (new-db-f)))})
+        :on-key-down submit!})
      (when (user-handler/logged-in?)
        [:div.flex.flex-row.items-center.gap-1
         (shui/checkbox
-         {:id "rtc-sync"
-          :value @*cloud?
-          :on-checked-change #(swap! *cloud? not)})
+          {:id "rtc-sync"
+           :value @*cloud?
+           :on-checked-change #(swap! *cloud? not)})
         [:label.opacity-70.text-sm
          {:for "rtc-sync"}
          "Use Logseq Sync?"]])
 
      (shui/button
-      {:on-click new-db-f
-       :on-key-down   (fn [^js e]
-                        (when (= (gobj/get e "key") "Enter")
-                          (new-db-f)))}
+      {:on-click #(submit! % true)
+       :on-key-down submit!}
       (if @*creating-db?
         (ui/loading "Creating graph")
         "Submit"))]))
