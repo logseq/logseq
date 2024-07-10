@@ -48,7 +48,8 @@
                                :original-name page1-name}]
                 [:update {:block-uuid page1-uuid
                           :pos [nil nil]
-                          :av-coll-keys [:block/created-at :block/updated-at]}]] ops*))))
+                          :av-coll-keys [:block/created-at :block/updated-at :block/type]}]] ops*)
+            ops)))
 
     (testing "insert some blocks"
       (outliner-tx/transact!
