@@ -43,8 +43,8 @@
 
 (def ref-property-types
   "User facing ref types. Property values that users see are stored in either
-  :property.value/content, :block/content or :block/original-name.
-  :block/original-name is for all the page related types"
+  :property.value/content, :block/content or :block/title.
+  :block/title is for all the page related types"
   (into #{:page :date :object} value-ref-property-types))
 
 (assert (set/subset? ref-property-types
@@ -120,7 +120,7 @@
 (defn- page?
   [db val]
   (when-let [ent (d/entity db val)]
-    (some? (:block/original-name ent))))
+    (some? (:block/title ent))))
 
 (defn- object-entity?
   [db val]
@@ -130,7 +130,7 @@
 (defn- date?
   [db val]
   (when-let [ent (d/entity db val)]
-    (and (some? (:block/original-name ent))
+    (and (some? (:block/title ent))
          (contains? (:block/type ent) "journal"))))
 
 

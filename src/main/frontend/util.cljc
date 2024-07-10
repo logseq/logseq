@@ -1018,7 +1018,7 @@
    (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
 
 #?(:cljs
-   (def get-page-original-name common-util/get-page-original-name))
+   (def get-page-title common-util/get-page-title))
 
 #?(:cljs
    (defn add-style!

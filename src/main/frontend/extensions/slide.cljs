@@ -104,7 +104,7 @@
                        (render!)))))
                 state)}
   [page]
-  (let [page-name (:block/original-name page)
+  (let [page-name (:block/title page)
         loading? (rum/react *loading?)
         journal? (ldb/journal-page? page)
         repo (state/get-current-repo)

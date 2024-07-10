@@ -77,7 +77,7 @@
 
              (update-todo)
 
-             (s/rename-keys {:block/original-name :page/title
+             (s/rename-keys {:block/title :page/title
                              :block/content :block/string})
 
              (select-keys keyseq))

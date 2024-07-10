@@ -66,7 +66,7 @@
                           result)
                     result)
           sort-by-column' (if (and db-graph? (qualified-keyword? sort-by-column))
-                            (:block/original-name (db-utils/entity repo sort-by-column))
+                            (:block/title (db-utils/entity repo sort-by-column))
                             sort-by-column)]
       (sort-by (fn [item]
                  (block/normalize-block (sort-by-fn sort-by-column' item {:page? page? :db-graph? db-graph?})
@@ -157,9 +157,9 @@
   (case column
     :page
     [:string (if page?
-               (or (:block/original-name row)
+               (or (:block/title row)
                    (:block/name row))
-               (or (get-in row [:block/page :block/original-name])
+               (or (get-in row [:block/page :block/title])
                    (get-in row [:block/page :block/name])))]
 
     :block       ; block title

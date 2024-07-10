@@ -150,16 +150,16 @@ prop-d:: [[nada]]"}])
     (test-helper/with-config {}
       (block-property-queries-test))))
 
-       
+
 (when js/process.env.DB_GRAPH
  (deftest db-only-block-property-queries
    (load-test-files-for-db-graph
-    [{:page {:block/original-name "page1"}
+    [{:page {:block/title "page1"}
       :blocks [{:block/content "b1"
                 :build/properties {:Foo "bar"}}
                {:block/content "b2"
                 :build/properties {:foo "bar"}}]}])
-   
+
    (is (= ["b1"]
           (map :block/content (dsl-query "(property Foo)")))
        "filter is case sensitive")
@@ -237,7 +237,7 @@ prop-d:: [[nada]]"}])
           :block/name
           (dsl-query "(and (not (page-property foo bar)) (page-property parent [[child page 2]]))")))
       "Page property queries nested NOT in first clause")
-  
+
   (testing "boolean values"
       (is (= ["page1"]
              (map :block/name (dsl-query "(page-property interesting true)")))
@@ -311,7 +311,7 @@ prop-d:: [[nada]]"}])
 
 (deftest priority-queries
   (load-test-files (if js/process.env.DB_GRAPH
-                     [{:page {:block/original-name "page1"}
+                     [{:page {:block/title "page1"}
                        :blocks [{:block/content "[#A] b1"
                                  :build/properties {:logseq.task/priority :logseq.task/priority.high}}
                                 {:block/content "[#B] b2"
@@ -507,7 +507,7 @@ prop-d:: [[nada]]"}])
 
 (deftest nested-page-ref-queries
   (load-test-files (if js/process.env.DB_GRAPH
-                     [{:page {:block/original-name "page1"}
+                     [{:page {:block/title "page1"}
                        :blocks [{:block/content "p1 [[Parent page]]"
                                  :build/children [{:block/content "[[Child page]]"}]}
                                 {:block/content "p2 [[Parent page]]"

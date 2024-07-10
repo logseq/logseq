@@ -34,7 +34,7 @@
                              (into {})))
                  (seq (:block/refs result*))
                  (assoc :block.debug/refs
-                        (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))
+                        (mapv #(or (:block/title (db/entity (:db/id %))) %) (:block/refs result*))))
         pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!

@@ -23,8 +23,8 @@
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (sqlite-build/create-blocks
              conn
-             [{:page {:block/original-name "bar"}}
-              {:page {:block/original-name "page1"}
+             [{:page {:block/title "bar"}}
+              {:page {:block/title "page1"}
                :blocks [{:block/content "parent [[foo]]"
                          :build/children
                          [{:block/content "child [[baz]]"
@@ -32,7 +32,7 @@
                            [{:block/content "grandchild [[bing]]"}]}]}]}])
           blocks (get-blocks @conn)
           ;; Update parent block to replace 'foo' with 'bar' ref
-          new-tag-id (ffirst (d/q '[:find ?b :where [?b :block/original-name "bar"]] @conn))
+          new-tag-id (ffirst (d/q '[:find ?b :where [?b :block/title "bar"]] @conn))
           modified-blocks (map #(if (string/starts-with? (:block/content %) "parent")
                                   (assoc %
                                          :block/refs [{:db/id new-tag-id}]
@@ -52,4 +52,3 @@
               {:block/content "grandchild"
                :path-ref-names #{"page1" "bar" "baz" "bing"}}]
              updated-blocks)))))
-

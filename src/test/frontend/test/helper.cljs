@@ -138,7 +138,7 @@
                                      (string/replace "_" "")
                                      parse-double)
                              (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))}
-                        {:block/original-name
+                        {:block/title
                          (or (second (re-find #"/([^/]+)\." path))
                              (throw (ex-info (str "Can't detect page name of file: " (pr-str path)) {})))})]
                   {:page (cond-> unique-page-attrs
@@ -183,7 +183,7 @@ This can be called in synchronous contexts as no async fns should be invoked"
      [;; page
       {:block/uuid page-uuid
        :block/name "test"
-       :block/original-name "Test"}
+       :block/title "Test"}
       ;; first block
       {:block/uuid first-block-uuid
        :block/page page-id

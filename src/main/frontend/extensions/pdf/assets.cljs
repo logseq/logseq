@@ -245,7 +245,7 @@
   [block]
   (let [id (:block/uuid block)
         page (db/entity (:db/id (:block/page block)))
-        page-name (:block/original-name page)
+        page-name (:block/title page)
         file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
         db-base? (config/db-based-graph? (state/get-current-repo))]

@@ -25,7 +25,7 @@
   [page]
   (page-handler/<delete! (:block/uuid page)
                         (fn []
-                          (notification/show! (str "Page " (:block/original-name page) " was deleted successfully!")
+                          (notification/show! (str "Page " (:block/title page) " was deleted successfully!")
                                               :success))
                         {:error-handler (fn [{:keys [msg]}]
                                           (notification/show! msg :warning))}))
@@ -40,7 +40,7 @@
                    (if (config/db-based-graph? (state/get-current-repo))
                      (t :page/db-delete-confirmation)
                      (t :page/delete-confirmation))]
-           :content [:p.opacity-60 (str "- " (:block/original-name page))]
+           :content [:p.opacity-60 (str "- " (:block/title page))]
            :outside-cancel? true})
       (p/then #(delete-page! page))
       (p/catch #()))))
@@ -49,7 +49,7 @@
   [page]
   (when-let [page-name (and page (db/page? page) (:block/name page))]
     (let [repo (state/sub :git/current-repo)
-          page-original-name (:block/original-name page)
+          page-title (:block/title page)
           whiteboard? (contains? (set (:block/type page)) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
@@ -74,8 +74,8 @@
              :options {:on-click
                        (fn []
                          (if favorited?
-                           (page-handler/<unfavorite-page! page-original-name)
-                           (page-handler/<favorite-page! page-original-name)))}})
+                           (page-handler/<unfavorite-page! page-title)
+                           (page-handler/<favorite-page! page-title)))}})
 
           (when (or (util/electron?) file-sync-graph-uuid)
             {:title   (t :page/version-history)
@@ -95,7 +95,7 @@
           (when (or (util/electron?)
                     (mobile-util/native-platform?))
             {:title   (t :page/copy-page-url)
-             :options {:on-click #(page-handler/copy-page-url page-original-name)}})
+             :options {:on-click #(page-handler/copy-page-url page-title)}})
 
           (when-not (or contents?
                         config/publishing?

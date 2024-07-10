@@ -285,9 +285,9 @@
   []
   (tc/to-long (t/now)))
 
-(defn get-page-original-name
+(defn get-page-title
   [page]
-  (or (:block/original-name page)
+  (or (:block/title page)
       (:block/name page)))
 
 (defn string-join-path

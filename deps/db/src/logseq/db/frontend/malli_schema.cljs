@@ -213,7 +213,7 @@
 (def page-attrs
   "Common attributes for pages"
   [[:block/name :string]
-   [:block/original-name :string]
+   [:block/title :string]
    [:block/type [:set [:enum "page" "class" "property" "whiteboard" "journal" "hidden"]]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?

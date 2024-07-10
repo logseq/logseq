@@ -20,7 +20,7 @@
   [page filters filtered-references*]
   [:div.flex.gap-2.flex-wrap.items-center
    (let [filtered-references (if (de/entity? (first filtered-references*))
-                               (map (fn [e] [(:block/original-name e)]) filtered-references*)
+                               (map (fn [e] [(:block/title e)]) filtered-references*)
                                filtered-references*)] <
         (for [[ref-name ref-count] filtered-references]
           (when ref-name

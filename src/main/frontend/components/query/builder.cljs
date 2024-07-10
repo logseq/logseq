@@ -142,7 +142,7 @@
          (set-properties! properties)))
      [])
     (select (map #(hash-map :db/ident (:db/ident %)
-                            :value (:block/original-name %))
+                            :value (:block/title %))
                  properties)
             (fn [{value :value db-ident :db/ident}]
               (reset! *mode "property-value")
@@ -191,7 +191,7 @@
          (set-values! result)))
      [])
     (let [items (->> values
-                     (map :block/original-name)
+                     (map :block/title)
                      sort)]
       (select items
               (fn [{:keys [value]}]
@@ -256,13 +256,13 @@
                               (append-tree! *tree opts loc (vec (cons :priority choices)))))})
 
        "page"
-       (let [pages (sort (db-model/get-all-page-original-names repo))]
+       (let [pages (sort (db-model/get-all-page-titles repo))]
          (select pages
                  (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page value]))))
 
        "page reference"
-       (let [pages (sort (db-model/get-all-page-original-names repo))]
+       (let [pages (sort (db-model/get-all-page-titles repo))]
          (select pages
                  (fn [{:keys [value]}]
                    (append-tree! *tree opts loc [:page-ref value]))

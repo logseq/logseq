@@ -21,12 +21,12 @@
   (when (and db (string? page-name))
     (first (sort (map :e (get-pages-by-name db page-name))))))
 
-(defn get-first-page-by-original-name
-  "Return the oldest page's db id for :block/original-name"
+(defn get-first-page-by-title
+  "Return the oldest page's db id for :block/title"
   [db page-name]
   {:pre [(string? page-name)]}
   (first (sort (map :e
-                    (d/datoms db :avet :block/original-name page-name)))))
+                    (d/datoms db :avet :block/title page-name)))))
 
 (comment
   (defn- get-built-in-files

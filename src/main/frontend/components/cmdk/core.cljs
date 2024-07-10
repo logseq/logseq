@@ -224,7 +224,7 @@
                                       :icon-theme :gray
                                       :text (:title page)
                                       :source-page (if source-page
-                                                     (:block/original-name source-page)
+                                                     (:block/title source-page)
                                                      (:title page)))))))]
       (swap! !results update group merge {:status :success :items items}))))
 
@@ -233,7 +233,7 @@
         !results (::results state)]
     (swap! !results assoc-in [group :status] :loading)
     (p/let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
-                          (map :block/original-name))
+                          (map :block/title))
             pages (search/fuzzy-search whiteboards @!input {:limit 100})
             items (->> pages
                     (remove nil?)

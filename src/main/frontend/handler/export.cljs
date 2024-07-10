@@ -89,7 +89,7 @@
        (and (map? x) (contains? x :block/uuid))
        (-> x
            (s/rename-keys {:block/uuid :block/id
-                           :block/original-name :block/page-name})
+                           :block/title :block/page-name})
            (dissoc-properties [:id])
            (select-keys keyseq))
 

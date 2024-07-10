@@ -135,7 +135,7 @@
                   (fn [alias]
                     (let [page-name (common-util/page-name-sanity-lc alias)]
                       {:block/name page-name
-                       :block/original-name alias}))
+                       :block/title alias}))
                   aliases)
         result (cond-> page-m
                  (seq aliases')
@@ -146,7 +146,7 @@
                                           tags (if (coll? tags) tags [(str tags)])
                                           tags (remove string/blank? tags)]
                                       (map (fn [tag] {:block/name (common-util/page-name-sanity-lc tag)
-                                                      :block/original-name tag})
+                                                      :block/title tag})
                                            tags))))]
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
@@ -239,7 +239,7 @@
             [properties [] {}])
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
           namespace-pages (when-not db-based?
-                            (let [page (:block/original-name page-map)]
+                            (let [page (:block/title page-map)]
                               (when (text/namespace-page? page)
                                 (->> (common-util/split-namespace-pages page)
                                      (map (fn [page]
@@ -261,7 +261,7 @@
                          (assoc page :block/uuid page-id)))
                      pages)
           blocks (->> (remove nil? blocks)
-                      (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta))))]
+                      (map (fn [b] (dissoc b :block/body :block/level :block/children :block/meta))))]
       [pages blocks])
     (catch :default e
       (log/error :exception e))))
@@ -314,14 +314,14 @@
                       (common-util/dissoc-in [:block/left :block/name])))
                 blocks)
         serialized-page (first pages)
-        ;; whiteboard edn file should normally have valid :block/original-name, :block/name, :block/uuid
+        ;; whiteboard edn file should normally have valid :block/title, :block/name, :block/uuid
         page-name (-> (or (:block/name serialized-page)
                           (filepath->page-name file))
                       (common-util/page-name-sanity-lc))
-        original-name (or (:block/original-name serialized-page)
+        title (or (:block/title serialized-page)
                           page-name)
         page-block (merge {:block/name page-name
-                           :block/original-name original-name
+                           :block/title title
                            :block/type #{"whiteboard" "page"}
                            :block/file {:file/path (common-util/path-normalize file)}}
                           serialized-page)

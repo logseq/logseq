@@ -50,7 +50,7 @@
   (if-let [new-class (:block.temp/new-class tag-block)]
     (merge (db-class/build-new-class
             db
-            {:block/original-name new-class
+            {:block/title new-class
              :block/name (common-util/page-name-sanity-lc new-class)})
            (when-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
              {:block/uuid existing-tag-uuid}))
@@ -115,7 +115,7 @@
                   content-without-tags-ignore-case
                   (->> original-tags
                        (filter #(tag-classes (:block/name %)))
-                       (map :block/original-name)))
+                       (map :block/title)))
           (update :block/content
                   db-content/replace-tags-with-page-refs
                   (->> original-tags
@@ -149,10 +149,10 @@
           (update :block/content string/replace-first (re-pattern (str marker "\\s*")) "")
           (update :block/tags (fnil conj []) :logseq.class/task)
           (update :block/refs (fn [refs]
-                                (into (remove #(= marker (:block/original-name %)) refs)
+                                (into (remove #(= marker (:block/title %)) refs)
                                       [:logseq.class/task :logseq.task/status status-ident])))
           (update :block/path-refs (fn [refs]
-                                     (into (remove #(= marker (:block/original-name %)) refs)
+                                     (into (remove #(= marker (:block/title %)) refs)
                                            [:logseq.class/task :logseq.task/status status-ident])))
           (dissoc :block/marker)))
     block))
@@ -171,10 +171,10 @@
           (assoc :logseq.task/priority priority-value)
           (update :block/content string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
           (update :block/refs (fn [refs]
-                                (into (remove #(= priority (:block/original-name %)) refs)
+                                (into (remove #(= priority (:block/title %)) refs)
                                       [:logseq.task/priority priority-value])))
           (update :block/path-refs (fn [refs]
-                                     (into (remove #(= priority (:block/original-name %)) refs)
+                                     (into (remove #(= priority (:block/title %)) refs)
                                            [:logseq.task/priority priority-value])))
           (dissoc :block/priority)))
     block))
@@ -252,7 +252,7 @@
                              (seq prop-val)
                              (set/subset? prop-val
                                           (set (keep #(when (contains? (:block/type %) "journal")
-                                                        (:block/original-name %)) refs))))
+                                                        (:block/title %)) refs))))
                         :date
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
                         :default
@@ -543,7 +543,7 @@
                        (when (> (count parent-classes-from-properties) 1)
                          (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
                        (sqlite-util/build-new-class
-                        {:block/original-name new-class
+                        {:block/title new-class
                          :block/uuid (or (get-pid db new-class) (d/squuid))
                          :block/name (common-util/page-name-sanity-lc new-class)})))))
           (dissoc block* :block/properties))]
@@ -637,10 +637,10 @@
 (defn- build-new-page
   [m db tag-classes page-names-to-uuids]
   (-> m
-      ;; Fix pages missing :block/original-name. Shouldn't happen
+      ;; Fix pages missing :block/title. Shouldn't happen
       ((fn [m']
-         (if-not (:block/original-name m')
-           (assoc m' :block/original-name (:block/name m'))
+         (if-not (:block/title m')
+           (assoc m' :block/title (:block/name m'))
            m')))
       add-missing-timestamps
       ;; TODO: org-mode content needs to be handled
@@ -670,14 +670,14 @@
         pages-tx (keep (fn [m]
                          (if-let [page-uuid (existing-page-names-to-uuids (:block/name m))]
                            (let [;; These attributes are not allowed to be transacted because they must not change across files
-                                 disallowed-attributes [:block/name :block/uuid :block/format :block/original-name :block/journal-day
+                                 disallowed-attributes [:block/name :block/uuid :block/format :block/title :block/journal-day
                                                         :block/created-at :block/updated-at]
                                  allowed-attributes (into [:block/tags :block/alias :class/parent :block/type :block/namespace]
                                                           (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                                                 m))
                                  block-changes (select-keys m allowed-attributes)]
                              (when-let [ignored-attrs (not-empty (apply dissoc m (into disallowed-attributes allowed-attributes)))]
-                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/original-name m)) ": "
+                               (notify-user {:msg (str "Import ignored the following attributes on page " (pr-str (:block/title m)) ": "
                                                        ignored-attrs)}))
                              (when (seq block-changes)
                                (cond-> (merge block-changes {:block/uuid page-uuid})
@@ -802,11 +802,11 @@
         _ (when (seq new-properties) (prn :new-properties new-properties))
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
-        property-pages-tx (map (fn [{:block/keys [original-name uuid]}]
-                                 (let [db-ident (get @(:all-idents import-state) (keyword original-name))]
+        property-pages-tx (map (fn [{:block/keys [title uuid]}]
+                                 (let [db-ident (get @(:all-idents import-state) (keyword title))]
                                    (sqlite-util/build-new-property db-ident
-                                                                   (get @(:property-schemas import-state) (keyword original-name))
-                                                                   {:original-name original-name :block-uuid uuid})))
+                                                                   (get @(:property-schemas import-state) (keyword title))
+                                                                   {:title title :block-uuid uuid})))
                                properties-tx)
         converted-property-pages-tx
         (map (fn [kw-name]
@@ -814,7 +814,7 @@
                      db-ident (get @(:all-idents import-state) kw-name)
                      new-prop (sqlite-util/build-new-property db-ident
                                                               (get @(:property-schemas import-state) kw-name)
-                                                              {:original-name (name kw-name)})]
+                                                              {:title (name kw-name)})]
                  (assert existing-page-uuid)
                  (merge (select-keys new-prop [:block/type :block/schema :db/ident :db/index :db/cardinality :db/valueType])
                         {:block/uuid existing-page-uuid})))

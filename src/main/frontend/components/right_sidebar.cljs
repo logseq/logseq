@@ -102,7 +102,7 @@
         (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
           [:.text-md.mr-2 icon]
           (ui/icon (if (contains? (:block/type page) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
-        [:span.overflow-hidden.text-ellipsis (:block/original-name page)]]
+        [:span.overflow-hidden.text-ellipsis (:block/title page)]]
        (page-cp repo page-name)])
 
     :search
@@ -124,7 +124,7 @@
     :page-slide-view
     (let [page (db/entity db-id)]
       [[:a.page-title {:href (rfe/href :page {:name (str (:block/uuid page))})}
-        (:block/original-name page)]
+        (:block/title page)]
        [:div.ml-2.slide.mt-2
         (slide/slide page)]])
 

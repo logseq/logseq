@@ -40,7 +40,7 @@
   (->> name
        (d/q '[:find [(pull ?b [*]) ...]
               :in $ ?name
-              :where [?b :block/original-name ?name]]
+              :where [?b :block/title ?name]]
             db)
        first))
 
@@ -145,8 +145,8 @@
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 5
-             (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...]
-                                :where [?b :block/original-name] [_ :block/page ?b]] @conn)
+             (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
+                                :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
           "Correct number of pages with block content")
       (is (= 2 (count @(:ignored-properties import-state)))
@@ -164,8 +164,8 @@
              (->>
               (ldb/get-page-blocks @conn
                                    (:db/id (ldb/get-page @conn common-config/favorites-page-name))
-                                   {:pull-keys '[* {:block/link [:block/original-name]}]})
-              (map #(get-in % [:block/link :block/original-name]))
+                                   {:pull-keys '[* {:block/link [:block/title]}]})
+              (map #(get-in % [:block/link :block/title]))
               set))))
 
     (testing "user properties"
@@ -205,7 +205,7 @@
       (is (= #{"prop-num" "prop-string" "prop-bool"}
              (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))
                   :block/refs
-                  (map :block/original-name)
+                  (map :block/title)
                   set))
           "Block with properties has correct refs")
 

@@ -59,7 +59,7 @@
             (sort-by :block/order))
 
        :object/name
-       (or (lookup-entity e :block/original-name nil)
+       (or (lookup-entity e :block/title nil)
            (lookup-entity e :block/content nil))
 
        (or (get (.-kv e) k)

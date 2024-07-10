@@ -89,7 +89,7 @@
        conn
        {:properties {:url {:block/schema {:type :url}}}
         :pages-and-blocks
-        [{:page {:block/original-name "page1"}
+        [{:page {:block/title "page1"}
           :blocks [{:block/content "b1" :build/properties {:url "https://logseq.com"}}
                    ;; :url macros are used for consistently building urls with the same hostname e.g. docs graph
                    {:block/content "b2" :build/properties {:url "{{docs-base-url test}}"}}]}]})

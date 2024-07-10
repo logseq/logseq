@@ -80,7 +80,7 @@ and handles unexpected failure."
                  (merge block new-block)
                   (> (count blocks) 1)
                   (assoc :block/warning :multiple-blocks))
-          block (dissoc block :block/title :block/body :block/level)]
+          block (dissoc block :block/body :block/level)]
       (if uuid (assoc block :block/uuid uuid) block))))
 
 (defn parse-title-and-body

@@ -769,7 +769,7 @@
       (when-let [sibling-entity (db/entity [:block/uuid (uuid sibling-block-id)])]
         (if (:block/name sibling-entity)
           {:prev-block sibling-entity
-           :new-value (:block/original-name sibling-entity)
+           :new-value (:block/title sibling-entity)
            :edit-block-f #(edit-block! sibling-entity :max)}
           (let [db? (config/db-based-graph? repo)
                 original-content (if (= (:db/id sibling-entity) (:db/id (state/get-edit-block)))
@@ -1304,7 +1304,7 @@
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save the block/file in "will-unmount" event?
-        (if (:block/original-name entity)
+        (if (:block/title entity)
           (let [existing-tags (:block/tags block)
                 tags (mldoc/extract-tags value)]
             (when (seq tags)

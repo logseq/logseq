@@ -141,7 +141,7 @@
           journal-page? (and journal-page? (not (string/blank? journal-title)))
           filename (if journal-page?
                      (worker-date/date->file-name journal-title (:journal-file-name-format context))
-                     (-> (or (:block/original-name page-block) (:block/name page-block))
+                     (-> (or (:block/title page-block) (:block/name page-block))
                          wfu/file-name-sanity))
           sub-dir (cond
                     journal-page?    (:journals-directory context)

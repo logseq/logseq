@@ -37,7 +37,7 @@
      [:map
       [:block-uuid :uuid]
       [:page-name :string]
-      [:original-name :string]]]]
+      [:title :string]]]]
    [:remove-page
     [:cat :keyword
      [:map
@@ -128,8 +128,7 @@
        [:map
         [:op :keyword]
         [:self :uuid]
-        [:page-name :string]
-        [:block/original-name :string]
+        [:block/title :string]
         [:db/ident {:optional true} :keyword]
         [:block/order {:optional true} db-malli-schema/block-order]
         [::m/default extra-attr-map-schema]]]

@@ -19,7 +19,7 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (sqlite-build/create-blocks
            conn
-           [{:page {:block/original-name "page1"}
+           [{:page {:block/title "page1"}
              :blocks [{:block/content "parent"
                        :build/children
                        [{:block/content "child 1"}

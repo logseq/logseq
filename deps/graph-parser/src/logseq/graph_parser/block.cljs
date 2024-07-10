@@ -318,10 +318,10 @@
                                    (if class?
                                      (ldb/get-case-page db original-page-name)
                                      (ldb/get-page db original-page-name)))
-                     original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
+                     original-page-name (or from-page (:block/title page-entity) original-page-name)]
                  (merge
                   {:block/name page-name
-                   :block/original-name original-page-name}
+                   :block/title original-page-name}
                   (let [new-uuid* (if (uuid? page-uuid)
                                     page-uuid
                                     (if journal-day (common-uuid/gen-uuid journal-day) (common-uuid/gen-uuid)))
@@ -391,7 +391,7 @@
                               children-pages (when-not db-based?
                                                (->> (mapcat (fn [p]
                                                               (let [p (if (map? p)
-                                                                        (:block/original-name p)
+                                                                        (:block/title p)
                                                                         p)]
                                                                 (when (string? p)
                                                                   (let [p (or (text/get-nested-page-name p) p)]
@@ -520,7 +520,7 @@
                          property-refs (->> (get-page-refs-from-properties
                                              properties db date-formatter
                                              user-config)
-                                            (map :block/original-name))
+                                            (map :block/title))
                          pre-block? (if (:heading properties) false true)
                          block {:block/uuid id
                                 :block/content content

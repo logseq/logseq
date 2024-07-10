@@ -18,14 +18,14 @@
                                    :db/ident :user.class/yyy,
                                    :block/type ["class"],
                                    :block/name "yyy",
-                                   :block/original-name "yyy"}])]
+                                   :block/title "yyy"}])]
       (is (= [[:update
                {:block-uuid block-uuid
                 :db/ident :user.class/yyy
                 :pos [nil nil],
                 :av-coll
                 [[:block/name "[\"~#'\",\"yyy\"]" 1 true]
-                 [:block/original-name "[\"~#'\",\"yyy\"]" 1 true]
+                 [:block/title "[\"~#'\",\"yyy\"]" 1 true]
                  [:block/type "[\"~#'\",\"class\"]" 1 true]]}]]
              (:remote-ops
               (#'subject/local-block-ops->remote-ops
@@ -35,7 +35,7 @@
                 [:update 1 {:block-uuid block-uuid
                             :av-coll
                             [[:block/name (ldb/write-transit-str "yyy") 1 true]
-                             [:block/original-name (ldb/write-transit-str "yyy") 1 true]
+                             [:block/title (ldb/write-transit-str "yyy") 1 true]
                              [:block/type (ldb/write-transit-str "class") 1 true]]}]}))))))
 
   (testing "user.property/xxx creation"
@@ -53,7 +53,7 @@
                                    :block/type #{"property"},
                                    :block/order block-order,
                                    :block/name "xxx",
-                                   :block/original-name "xxx"}])]
+                                   :block/title "xxx"}])]
       (is (=
            [[:update
              {:block-uuid block-uuid,
@@ -61,7 +61,7 @@
               :pos [nil block-order],
               :av-coll
               [[:block/name "[\"~#'\",\"xxx\"]" 1 true]
-               [:block/original-name "[\"~#'\",\"xxx\"]" 1 true]
+               [:block/title "[\"~#'\",\"xxx\"]" 1 true]
                [:block/type "[\"~#'\",\"property\"]" 1 true]]}]
             [:update-schema
              {:block-uuid block-uuid
@@ -78,7 +78,7 @@
                           :av-coll
                           [[:db/valueType (ldb/write-transit-str :db.type/ref) 1 true]
                            [:block/name (ldb/write-transit-str "xxx") 1 true]
-                           [:block/original-name (ldb/write-transit-str "xxx") 1 true]
+                           [:block/title (ldb/write-transit-str "xxx") 1 true]
                            [:block/type (ldb/write-transit-str "property") 1 true]
                            [:db/cardinality (ldb/write-transit-str :db.cardinality/one) 1 true]
                            [:db/index (ldb/write-transit-str true) 1 true]]}]})))))))

@@ -31,12 +31,12 @@
   (testing "Case change"
     (let [page (db/get-page "test")]
       (page-rename (:block/uuid page) "Test")
-      (is (= "Test" (:block/original-name (db/entity (:db/id page)))))))
+      (is (= "Test" (:block/title (db/entity (:db/id page)))))))
 
   (testing "Name changed"
     (let [page (db/get-page "Test")]
       (page-rename (:block/uuid page) "New name")
-      (is (= "New name" (:block/original-name (db/entity (:db/id page)))))))
+      (is (= "New name" (:block/title (db/entity (:db/id page)))))))
 
   (testing "Merge existing page"
     (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? true})

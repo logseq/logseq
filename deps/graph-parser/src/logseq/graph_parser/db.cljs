@@ -22,7 +22,7 @@
 (defn- page-title->block
   [title]
   {:block/name (string/lower-case title)
-   :block/original-name title
+   :block/title title
    :block/uuid (random-uuid)})
 
 (def built-in-pages

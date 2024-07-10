@@ -7,5 +7,5 @@
     (is (= "string [[~^foo]] string2 [[~^foo-bar]]"
            (db-content/replace-tags-with-page-refs
             "string #foo string2 #foo-bar"
-            [{:block/original-name "foo" :block/uuid "foo"}
-             {:block/original-name "foo-bar" :block/uuid "foo-bar"}])))))
+            [{:block/title "foo" :block/uuid "foo"}
+             {:block/title "foo-bar" :block/uuid "foo-bar"}])))))

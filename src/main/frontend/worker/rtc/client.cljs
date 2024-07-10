@@ -169,12 +169,12 @@
 
 (defmethod local-block-ops->remote-ops-aux :update-page-op
   [_ & {:keys [db block-uuid *remote-ops]}]
-  (when-let [{page-name :block/name original-name :block/original-name}
+  (when-let [{page-name :block/name title :block/title}
              (d/entity db [:block/uuid block-uuid])]
     (swap! *remote-ops conj
            [:update-page {:block-uuid block-uuid
                           :page-name page-name
-                          :original-name (or original-name page-name)}])))
+                          :title (or title page-name)}])))
 
 (defmethod local-block-ops->remote-ops-aux :remove-op
   [_ & {:keys [db remove-op *remote-ops]}]

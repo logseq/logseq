@@ -68,12 +68,12 @@
    nodes))
 
 (defn- normalize-page-name
-  [{:keys [nodes links page-name->original-name]}]
+  [{:keys [nodes links page-name->title]}]
   (let [links (->>
                (map
                  (fn [{:keys [source target]}]
-                   (let [source (get page-name->original-name source)
-                         target (get page-name->original-name target)]
+                   (let [source (get page-name->title source)
+                         target (get page-name->title target)]
                      (when (and source target)
                        {:source source :target target})))
                  links)
@@ -81,8 +81,8 @@
         nodes (->> (remove-uuids-and-files! nodes)
                    (util/distinct-by (fn [node] (:id node)))
                    (map (fn [node]
-                          (if-let [original-name (get page-name->original-name (:id node))]
-                            (assoc node :id original-name :label original-name)
+                          (if-let [title (get page-name->title (:id node))]
+                            (assoc node :id title :label title)
                             nil)))
                    (remove nil?))]
     {:nodes nodes
@@ -99,8 +99,8 @@
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
             full-pages-map (into {} (map (juxt :block/name identity) full-pages))
-            all-pages (map common-util/get-page-original-name full-pages)
-            page-name->original-name (zipmap (map :block/name full-pages) all-pages)
+            all-pages (map common-util/get-page-title full-pages)
+            page-name->title (zipmap (map :block/name full-pages) all-pages)
             created-ats (map :block/created-at full-pages)
 
             ;; build up nodes
@@ -131,7 +131,7 @@
             nodes (build-nodes dark? (string/lower-case current-page) page-links tags nodes namespaces)]
         (-> {:nodes (map #(assoc % :block/created-at (get-in full-pages-map [(:id %) :block/created-at])) nodes)
              :links links
-             :page-name->original-name page-name->original-name}
+             :page-name->title page-name->title}
             normalize-page-name
             (assoc :all-pages
                    {:created-at-min (apply min created-ats)
@@ -190,12 +190,12 @@
                        (distinct))
             nodes (build-nodes dark? page links (set tags) nodes namespaces)
             full-pages (db/get-all-pages repo)
-            all-pages (map common-util/get-page-original-name full-pages)
-            page-name->original-name (zipmap (map :block/name full-pages) all-pages)]
+            all-pages (map common-util/get-page-title full-pages)
+            page-name->title (zipmap (map :block/name full-pages) all-pages)]
         (normalize-page-name
          {:nodes nodes
           :links links
-          :page-name->original-name page-name->original-name})))))
+          :page-name->title page-name->title})))))
 
 (defn build-block-graph
   "Builds a citation/reference graph for a given block uuid."

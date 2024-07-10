@@ -104,7 +104,7 @@
      [:div.dashboard-card-title-name.font-bold
       (if (common-util/uuid-string? (:block/name whiteboard))
         [:span.opacity-50 (t :untitled)]
-        (:block/original-name whiteboard))]
+        (:block/title whiteboard))]
      [:div.flex-1]
      [:div.dashboard-card-checkbox
       {:tab-index -1
@@ -208,7 +208,7 @@
       [:div.whiteboard-page-title
        {:style {:color "var(--ls-primary-text-color)"
                 :user-select "none"}}
-       (page/page-title page {:*hover? (atom false)})]
+       (page/page-title-cp page {:*hover? (atom false)})]
 
       (references-count (:block/uuid page) "text-md cursor-pointer" {})]
      (tldraw-app page-uuid block-id)]))

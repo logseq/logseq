@@ -136,10 +136,10 @@
 
     (let [no-name (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                        (filter (fn [x]
-                                 (when-not (:block/original-name (first x))
+                                 (when-not (:block/title (first x))
                                    x))))
           all-namespaces (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
-                              (map (comp :block/original-name first))
+                              (map (comp :block/title first))
                               set)]
       (is (= #{"term" "setting" "book" "templates" "Query table" "page"
                "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
