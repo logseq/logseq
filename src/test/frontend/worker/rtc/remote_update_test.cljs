@@ -8,11 +8,11 @@
 (deftest remote-op-value->tx-data-test
   (let [[block-uuid ref-uuid1 ref-uuid2] (repeatedly random-uuid)
         db (d/empty-db db-schema/schema-for-db-based-graph)]
-    (testing ":block/content"
+    (testing ":block/title"
       (let [db (d/db-with db [{:block/uuid block-uuid
-                               :block/content "local-content"}])
-            op-value {:block/content (ldb/write-transit-str "remote-content")}]
-        (is (= [[:db/add (:db/id (d/entity db [:block/uuid block-uuid])) :block/content "remote-content"]]
+                               :block/title "local-content"}])
+            op-value {:block/title (ldb/write-transit-str "remote-content")}]
+        (is (= [[:db/add (:db/id (d/entity db [:block/uuid block-uuid])) :block/title "remote-content"]]
                (#'subject/remote-op-value->tx-data db (d/entity db [:block/uuid block-uuid]) op-value)))))
 
     (testing ":block/tags (1)"

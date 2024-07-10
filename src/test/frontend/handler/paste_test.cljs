@@ -200,8 +200,8 @@
 (deftest-async editor-on-paste-with-copied-blocks
   (let [actual-blocks (atom nil)
         ;; Simplified version of block attributes that are copied
-        expected-blocks [{:block/content "Test node"}
-                         {:block/content "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
+        expected-blocks [{:block/title "Test node"}
+                         {:block/title "Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"}]
         clipboard "- Test node\n\t- Notes\nid:: 6422ec75-85c7-4e09-9a4d-2a1639a69b2f"]
     (test-helper/with-reset
       reset

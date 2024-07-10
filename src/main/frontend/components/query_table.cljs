@@ -29,7 +29,7 @@
   (let [ks [:block/properties :clock-time]
         result (map (fn [b]
                       (let [b (block/parse-title-and-body b)]
-                        (assoc-in b ks (or (clock/clock-summary (:block/body b) false) 0))))
+                        (assoc-in b ks (or (clock/clock-summary (:block.temp/ast-body b) false) 0))))
                     result)]
     (if (every? #(zero? (get-in % ks)) result)
       (map #(medley/dissoc-in % ks) result)
@@ -42,7 +42,7 @@
     :updated-at
     (:block/updated-at item)
     :block
-    (:block/content item)
+    (:block/title item)
     :page
     (if page? (:block/name item) (get-in item [:block/page :block/name]))
     (if db-graph?
@@ -88,7 +88,7 @@
         ;; Starting with #6105, we started putting properties under namespaces.
         nlp-date? (and (not db-graph?) (:logseq.query/nlp-date properties))
         sort-by-column (or (keyword query-sort-by)
-                           (if (query-dsl/query-contains-filter? (:block/content current-block) "sort-by")
+                           (if (query-dsl/query-contains-filter? (:block/title current-block) "sort-by")
                              nil
                              :updated-at))]
     {:sort-desc? desc?
@@ -163,7 +163,7 @@
                    (get-in row [:block/page :block/name])))]
 
     :block       ; block title
-    (let [content (:block/content row)
+    (let [content (:block/title row)
           uuid (:block/uuid row)
           {:block/keys [title]} (block/parse-title-and-body
                                  (:block/uuid row)
@@ -283,8 +283,8 @@
           result' (cond-> (if page? result (attach-clock-property result))
                     db-graph?
                     ((fn [res]
-                       (map #(if (:block/content %)
-                               (update % :block/content
+                       (map #(if (:block/title %)
+                               (update % :block/title
                                  db-content/special-id-ref->page-ref
                                  ;; Lookup here instead of initial query as advanced queries
                                  ;; won't usually have a ref's name

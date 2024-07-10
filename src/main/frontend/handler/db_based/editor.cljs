@@ -61,7 +61,7 @@
 
 (defn- replace-page-refs-with-ids
   [block]
-  (let [content (:block/content block)
+  (let [content (:block/title block)
         content' (if (some :block/name (:block/refs block))
                    (reduce
                     (fn [content {:block/keys [title uuid]}]
@@ -69,34 +69,34 @@
                     content
                     (filter :block/name (:block/refs block)))
                    content)]
-    (assoc block :block/content content')))
+    (assoc block :block/title content')))
 
 (defn wrap-parse-block
-  [{:block/keys [content level] :as block}]
+  [{:block/keys [title level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
-        block (if (nil? content)
+        block (if (nil? title)
                 block
-                (let [ast (mldoc/->edn (string/trim content) :markdown)
+                (let [ast (mldoc/->edn (string/trim title) :markdown)
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
-                      content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
-                      parsed-block (block/parse-block (assoc block :block/content content'))
+                      content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") title)
+                      parsed-block (block/parse-block (assoc block :block/title content'))
                       parsed-block' (cond-> (dissoc parsed-block :block/properties)
                                       (:block/properties parsed-block)
                                       (merge (update-keys (:block/properties parsed-block)
                                                           (fn [k]
                                                             (or ({:heading :logseq.property/heading} k)
                                                                 (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))
-                      block' (merge block parsed-block' {:block/content content})]
+                      block' (merge block parsed-block' {:block/title title})]
                   (update block' :block/refs remove-non-existed-refs!)))
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]
     (-> result
         ;; Remove tags from content
-        (assoc :block/content
+        (assoc :block/title
                (db-content/content-without-tags
-                (:block/content result)
+                (:block/title result)
                 (->>
                  (map
                   (fn [tag]
@@ -143,24 +143,24 @@
 
       (and (or (nil? heading) (true? heading))
            (number? old-heading))
-      (let [content (commands/clear-markdown-heading (:block/content block))]
-        {:block/content content
+      (let [content (commands/clear-markdown-heading (:block/title block))]
+        {:block/title content
          :block/uuid (:block/uuid block)})
 
       (and (or (nil? old-heading) (true? old-heading))
            (number? heading))
-      (let [content (commands/set-markdown-heading (:block/content block) heading)]
-        {:block/content content
+      (let [content (commands/set-markdown-heading (:block/title block) heading)]
+        {:block/title content
          :block/uuid (:block/uuid block)})
 
         ;; heading-num1 -> heading-num2
       :else
       (let [content (-> block
-                        :block/content
+                        :block/title
                         commands/clear-markdown-heading
                         (commands/set-markdown-heading heading))]
         {:block/uuid (:block/uuid block)
-         :block/content content}))))
+         :block/title content}))))
 
 (defn batch-set-heading!
   [repo block-ids heading]

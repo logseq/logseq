@@ -67,9 +67,9 @@
             "Current block is not included in results")))))
 
 (deftest get-query-result-with-remove-block-children-option
-  (let [result [{:db/id 1 :block/content "parent" :block/uuid 1}
-                {:db/id 2 :block/content "child" :block/uuid 2 :block/parent {:db/id 1}}]]
-    (is (= [{:db/id 1 :block/content "parent" :block/uuid 1}]
+  (let [result [{:db/id 1 :block/title "parent" :block/uuid 1}
+                {:db/id 2 :block/title "child" :block/uuid 2 :block/parent {:db/id 1}}]]
+    (is (= [{:db/id 1 :block/title "parent" :block/uuid 1}]
            (mock-get-query-result result {:remove-block-children? true} {:table? true}))
         "Removes children when :remove-block-children? is true")
     (is (= result
@@ -77,7 +77,7 @@
         "Doesn't remove children when :remove-block-children? is false")))
 
 (deftest get-query-result-sets-result-in-config
-  (let [result [{:db/id 1 :block/content "parent" :block/uuid 1}]
+  (let [result [{:db/id 1 :block/title "parent" :block/uuid 1}]
         config {:query-result (atom nil)}]
     (is (= result
            (mock-get-query-result result {} {:table? true :config config})))

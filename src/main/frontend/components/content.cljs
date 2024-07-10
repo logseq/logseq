@@ -332,7 +332,7 @@
                {:key "(Dev) Show block AST"
                 :on-click (fn []
                             (let [block (db/pull [:block/uuid block-id])]
-                              (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
+                              (dev-common-handler/show-content-ast (:block/title block) (:block/format block))))}
                (t :dev/show-block-ast))
               (shui/dropdown-menu-item
                {:key "(Dev) Show block content history"

@@ -35,7 +35,7 @@
        (if (check? x)
          (reset! result (transform x))
          x))
-     (:block/body block))
+     (:block.temp/ast-body block))
     @result))
 
 (defn get-timestamp
@@ -200,7 +200,7 @@
              block (or (db/entity [:block/uuid block-id]) block)
              content (if (and db-graph? (:block/name block))
                        (:block/title block)
-                       (or custom-content (:block/content block) ""))
+                       (or custom-content (:block/title block) ""))
              content-length (count content)
              text-range (cond
                           (vector? pos)

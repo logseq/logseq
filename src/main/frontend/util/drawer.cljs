@@ -125,7 +125,7 @@
 (defn with-logbook
   [block content]
   (let [new-clocks (last (get-drawer-ast (:block/format block) content "logbook"))
-        logbook (get-logbook (:block/body block))]
+        logbook (get-logbook (:block.temp/ast-body block))]
     (if logbook
       (let [content (remove-logbook content)
             clocks (->> (concat new-clocks (when-not new-clocks (last logbook)))
@@ -133,7 +133,7 @@
             clocks (->> (map string/trim clocks)
                         (remove string/blank?)
                         (string/join "\n"))]
-        (if (:block/title block)
+        (if (:block.temp/ast-title block)
           (insert-drawer (:block/format block) content "LOGBOOK" clocks)
           content))
       content)))

@@ -60,7 +60,7 @@
 -"}])
     (p/let [conn (db/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
-                              :where [?b :block/content ""]
+                              :where [?b :block/title ""]
                               [?p :block/name "page1"]
                               [?b :block/page ?p]]
                             @conn)
@@ -68,9 +68,9 @@
       (delete-block @conn block
                     {:on-delete (fn []
                                   (let [updated-blocks (->> (d/q '[:find (pull ?b [*])
-                                                                   :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
+                                                                   :where [?b :block/title] [(missing? $ ?b :block/pre-block?)]]
                                                                  @conn)
-                                                            (map (comp :block/content first)))]
+                                                            (map (comp :block/title first)))]
                                     (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))})))
 
   (testing "backspace deletes empty block in embedded context"
@@ -83,7 +83,7 @@
 -"}])
     (p/let [conn (db/get-db test-helper/test-db false)
             block (->> (d/q '[:find (pull ?b [*])
-                              :where [?b :block/content ""]
+                              :where [?b :block/title ""]
                               [?p :block/name "page1"]
                               [?b :block/page ?p]]
                             @conn)
@@ -92,7 +92,7 @@
                     {:embed? true
                      :on-delete (fn []
                                   (let [updated-blocks (->> (d/q '[:find (pull ?b [*])
-                                                                   :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
+                                                                   :where [?b :block/title] [(missing? $ ?b :block/pre-block?)]]
                                                                  @conn)
-                                                            (map (comp :block/content first)))]
+                                                            (map (comp :block/title first)))]
                                     (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))}))))

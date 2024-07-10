@@ -28,7 +28,7 @@
     :block/path-refs
     :block/tags
     :block/link
-    :block/content
+    :block/title
     :block/marker
     :block/priority
     :block/properties
@@ -60,7 +60,7 @@
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block/title :block/body :block/level :block/container :db/other-tx
+                                  :block.temp/ast-title :block.temp/ast-body :block/level :block/container :db/other-tx
                                   :block/unordered)
                           m)) tx-data)
          tx-data (->> (common-util/fast-remove-nils tx-data)
@@ -245,7 +245,7 @@
                                    (and
                                     first-child
                                     (= 1 (count children))
-                                    (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
+                                    (contains? #{"" "-" "*"} (string/trim (:block/title first-child))))))
                                 (not (contains? built-in-pages name))
                                 (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
@@ -432,7 +432,7 @@
                 (when-let [e (d/entity db eid)]
                   (or (some alias (map :db/id (:block/refs e)))
                       (:block/link e)
-                      (nil? (:block/content e)))))
+                      (nil? (:block/title e)))))
               search-result-eids)]
     (when (seq eids)
       (d/pull-many db '[*] eids))))
@@ -481,7 +481,7 @@
   "Builds tx for a favorite block in favorite page"
   [favorite-uuid]
   {:block/link [:block/uuid favorite-uuid]
-   :block/content ""
+   :block/title ""
    :block/format :markdown})
 
 (defn create-views-page!
@@ -498,7 +498,7 @@
         :block/format :markdown})
       (sqlite-util/block-with-timestamps
        {:block/uuid (common-uuid/gen-uuid)
-        :block/content ""
+        :block/title ""
         :block/format :markdown
         :block/parent [:block/uuid page-id]
         :block/order (db-order/gen-key nil)

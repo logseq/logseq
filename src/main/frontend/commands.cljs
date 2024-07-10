@@ -124,7 +124,7 @@
 
 (defn db-based-statuses
   []
-  (map (fn [e] (:block/content e))
+  (map (fn [e] (:block/title e))
        (db-pu/get-closed-property-values :logseq.task/status)))
 
 (defn db-based-embed-page
@@ -164,7 +164,7 @@
 
 (defn db-based-priorities
   []
-  (map (fn [e] (:block/content e))
+  (map (fn [e] (:block/title e))
     (db-pu/get-closed-property-values :logseq.task/priority)))
 
 (defn get-priorities

@@ -165,7 +165,7 @@
     (is (= 23
            (ffirst
             (d/q '[:find (count ?b)
-                   :where [?b :block/content ?content]
+                   :where [?b :block/title ?content]
                    [(clojure.string/includes? ?content "+BEGIN_QUERY")]]
                  db)))
         "Advanced query count"))

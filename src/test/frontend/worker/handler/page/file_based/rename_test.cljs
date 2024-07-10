@@ -73,7 +73,7 @@
       ;; Blocks from both pages have been merged
       (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data)))))
       ;; Content updated
-      (is (= "Block 1 [[Existing page]]" (:block/content (db/entity [:block/uuid fbid])))))))
+      (is (= "Block 1 [[Existing page]]" (:block/title (db/entity [:block/uuid fbid])))))))
 
 (defn- replace-page-ref!
   [content old-name new-name]

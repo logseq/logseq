@@ -52,8 +52,6 @@
    :block/alias {:db/valueType :db.type/ref
                  :db/cardinality :db.cardinality/many}
 
-   :block/content {}
-
    ;; todo keywords, e.g. "TODO", "DOING", "DONE"
    :block/marker {}
 

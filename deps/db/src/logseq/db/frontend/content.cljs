@@ -93,9 +93,9 @@
   "Replace `[[internal-id]]` with `[[page name]]`"
   [repo db item eid]
   (if (sqlite-util/db-based-graph? repo)
-    (if-let [content (:block/content item)]
+    (if-let [content (:block/title item)]
       (let [refs (:block/refs (d/entity db eid))]
-        (assoc item :block/content (special-id-ref->page-ref content refs)))
+        (assoc item :block/title (special-id-ref->page-ref content refs)))
       item)
     item))
 

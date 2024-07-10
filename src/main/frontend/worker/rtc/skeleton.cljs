@@ -13,7 +13,7 @@
                                               {:block/parent [:block/uuid]}
                                               :block/order
                                               :block/type
-                                              :block/content])
+                                              :block/title])
                              (filter :block/uuid))]
     (map
      (fn [block]

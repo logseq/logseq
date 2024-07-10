@@ -523,7 +523,7 @@
                                             (map :block/title))
                          pre-block? (if (:heading properties) false true)
                          block {:block/uuid id
-                                :block/content content
+                                :block/title content
                                 :block/level 1
                                 :block/properties properties
                                 :block/properties-order (vec properties-order)
@@ -531,7 +531,7 @@
                                 :block/invalid-properties invalid-properties
                                 :block/pre-block? pre-block?
                                 :block/macros (extract-macros-from-ast body)
-                                :block/body body}
+                                :block.temp/ast-body body}
                          {:keys [tags refs]}
                          (with-page-block-refs {:body body :refs property-refs} db date-formatter)]
                      (cond-> block
@@ -583,7 +583,7 @@
                     (update :properties-order (fn [keys] (vec (remove #{:collapsed} keys)))))
                 block)
         block (assoc block
-                     :content (get-block-content encoded-content block format pos-meta block-pattern))
+                     :block/title (get-block-content encoded-content block format pos-meta block-pattern))
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))
                 block)
@@ -604,13 +604,13 @@
 
 (defn fix-duplicate-id
   [block]
-  (println "Logseq will assign a new id for block with content:" (pr-str (:block/content block)))
+  (println "Logseq will assign a new id for block with content:" (pr-str (:block/title block)))
   (-> block
       (assoc :block/uuid (d/squuid))
       (update :block/properties dissoc :id)
       (update :block/properties-text-values dissoc :id)
       (update :block/properties-order #(vec (remove #{:id} %)))
-      (update :block/content (fn [c]
+      (update :block/title (fn [c]
                          (let [replace-str (re-pattern
                                             (str
                                              "\n*\\s*"

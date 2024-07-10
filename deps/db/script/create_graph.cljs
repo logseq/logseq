@@ -30,7 +30,7 @@
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx sqlite-build-edn)]
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
-             (count (filter :block/content init-tx)) "blocks ...")
+             (count (filter :block/title init-tx)) "blocks ...")
     (d/transact! conn init-tx)
     (d/transact! conn block-props-tx)
     (println "Created graph" (str db-name "!"))))

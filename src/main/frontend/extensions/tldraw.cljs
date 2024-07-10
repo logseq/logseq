@@ -76,7 +76,7 @@
             blocks (map (fn [b]
                           (-> b
                               (update :block/uuid str)
-                              (update :block/content #(->> (text-util/cut-by % "$pfts_2lqh>$" "$<pfts_2lqh$")
+                              (update :block/title #(->> (text-util/cut-by % "$pfts_2lqh>$" "$<pfts_2lqh$")
                                                            (apply str))))) blocks)
             pages (when pages? (search/page-search q))]
       (clj->js {:pages pages :blocks blocks}))))

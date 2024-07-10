@@ -31,7 +31,7 @@
       (do (println "Would update" (count blocks-to-update) "blocks with the following tx:")
           (prn update-tx)
           (println "With the following blocks updated:")
-          (prn (map #(select-keys (d/entity @conn %) [:block/name :block/content]) blocks-to-update)))
+          (prn (map #(select-keys (d/entity @conn %) [:block/name :block/title]) blocks-to-update)))
       (do
         (db-pipeline/add-listener conn)
         (d/transact! conn update-tx)

@@ -99,7 +99,7 @@
        (db-property-build/build-property-values-tx-m new-block)))
 
 (defn- extract-content-refs
-  "Extracts basic refs from :block/content like `[[foo]]`. Adding more ref support would
+  "Extracts basic refs from :block/title like `[[foo]]`. Adding more ref support would
   require parsing each block with mldoc and extracting with text/extract-refs-from-mldoc-ast"
   [s]
   ;; FIXME: Better way to ignore refs inside a macro
@@ -114,7 +114,7 @@
                    :block/order (db-order/gen-key nil)
                    :block/parent (or (:block/parent m) {:db/id page-id})}
         pvalue-tx-m (->property-value-tx-m new-block properties properties-config all-idents)
-        ref-names (extract-content-refs (:block/content m))]
+        ref-names (extract-content-refs (:block/title m))]
     (cond-> []
       ;; Place property values first since they are referenced by block
       (seq pvalue-tx-m)
@@ -134,7 +134,7 @@
                                                            (throw (ex-info (str "No uuid for page ref name" (pr-str %)) {})))
                                                        :block/title %)
                                             ref-names)]
-                       {:block/content (db-content/page-ref->special-id-ref (:block/content m) block-refs)
+                       {:block/title (db-content/page-ref->special-id-ref (:block/title m) block-refs)
                         :block/refs block-refs})))))))
 
 (defn- build-properties-tx [properties page-uuids all-idents]
@@ -222,7 +222,7 @@
    {:closed true
     ;; Define recursive :block schema
     :registry {::block [:map
-                        [:block/content :string]
+                        [:block/title :string]
                         [:build/children {:optional true} [:vector [:ref ::block]]]
                         [:build/properties {:optional true} User-properties]
                         [:build/tags {:optional true} [:vector Class]]]}}
@@ -398,7 +398,7 @@
              (mapcat
               (fn [{:keys [blocks]}]
                 (->> blocks
-                     (mapcat #(extract-content-refs (:block/content %)))
+                     (mapcat #(extract-content-refs (:block/title %)))
                      (remove existing-pages))))
              distinct
              (map #(hash-map :page {:block/title %})))]
@@ -557,7 +557,7 @@
          is not required if using this since it generates one
        * :build/properties - Defines properties on a page
      * :blocks - This is a vec of datascript attribute maps for blocks with
-       :block/content required. e.g. `{:block/content \"bar\"}`. Additional keys available:
+       :block/title required. e.g. `{:block/title \"bar\"}`. Additional keys available:
        * :build/children - A vec of blocks that are nested (indented) under the current block.
           Allows for outlines to be expressed to whatever depth
        * :build/properties - Defines properties on a block

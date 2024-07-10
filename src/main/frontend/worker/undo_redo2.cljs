@@ -295,7 +295,7 @@
               ((if undo? push-redo-op push-undo-op) repo op)
               (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                                         (map second))
-                    block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid
+                    block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
                                                                                 (if undo?
                                                                                   (first editor-cursors)
                                                                                   (last editor-cursors)))]))]

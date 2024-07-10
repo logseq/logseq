@@ -23,7 +23,7 @@
         (and (:block/uuid result)
              (not= (:uuid x) (:block/uuid result))
              (= (select-keys result
-                             [:block/properties :block/content :block/properties-text-values :block/properties-order]) (gp-block/block-keywordize y))))
+                             [:block/properties :block/title :block/properties-text-values :block/properties-order]) (gp-block/block-keywordize y))))
     {:properties {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :tags [], :format :markdown, :meta {:start_pos 51, :end_pos 101}, :macros [], :content "bar\nid:: 63f199bc-c737-459f-983d-84acfcda14fe", :properties-text-values {:id "63f199bc-c737-459f-983d-84acfcda14fe"}, :level 1, :uuid #uuid "63f199bc-c737-459f-983d-84acfcda14fe", :properties-order [:id]}
     {:properties {},
      :content "bar",
@@ -114,7 +114,7 @@
   [db content]
   (->> (d/q '[:find (pull ?b [* {:block/refs [:block/uuid]}])
               :in $ ?content
-              :where [?b :block/content ?content]]
+              :where [?b :block/title ?content]]
             db
             content)
        (map first)

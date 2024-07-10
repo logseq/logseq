@@ -112,7 +112,7 @@
   (editor-handler/save-block-if-changed!
    block
    (property-file/insert-properties-when-file-based
-    (state/get-current-repo) (:block/format block) (:block/content block) props)
+    (state/get-current-repo) (:block/format block) (:block/title block) props)
    {:force? true}))
 
 (defn- reset-block-card-properties!
@@ -207,7 +207,7 @@
 
 (defn- has-cloze?
   [blocks]
-  (->> (map :block/content blocks)
+  (->> (map :block/title blocks)
        (some #(string/includes? % "{{cloze "))))
 
 (defn- clear-collapsed-property
@@ -783,7 +783,7 @@
   "given a block struct, adds the #card to title and returns
    a seq of [original-block new-content-string]"
   [block]
-    (when-let [content (:block/content block)]
+    (when-let [content (:block/title block)]
       (let [format (:block/format block)
             content (-> (property-file/remove-built-in-properties-when-file-based
                          (state/get-current-repo) (:block/format block) content)

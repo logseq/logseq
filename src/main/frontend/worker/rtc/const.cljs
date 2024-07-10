@@ -228,7 +228,7 @@
                           [:block/parent {:optional true} :uuid]
                           [:block/type {:optional true} [:set :string]]
                           [:block/order {:optional true} :string]
-                          [:block/content {:optional true} :string]]]]]]
+                          [:block/title {:optional true} :string]]]]]]
 
     ["get-assets-upload-urls"
      [:map

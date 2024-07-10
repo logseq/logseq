@@ -202,7 +202,7 @@
           :in $ ?property-id ?raw-value
           :where
           [?b ?property-id ?v]
-          (or [?v :block/content ?raw-value]
+          (or [?v :block/title ?raw-value]
               [?v :property.value/content ?raw-value])]
         db
         property-id
@@ -417,7 +417,7 @@
                                          (dissoc schema :description))}
                         (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
                           {:property.value/content resolved-value}
-                          {:block/content resolved-value})))
+                          {:block/title resolved-value})))
                        icon
                        (assoc :logseq.property/icon icon)))]
                   (let [max-order (:block/order (last (:property/closed-values property)))

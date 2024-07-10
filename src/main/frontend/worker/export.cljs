@@ -45,7 +45,7 @@
                               blocks
                               (map (fn [b]
                                      (let [b' (if (seq (:block/properties b))
-                                                (update b :block/content
+                                                (update b :block/title
                                                         (fn [content]
                                                           (gp-property/remove-properties (:block/format b) content)))
                                                 b)]

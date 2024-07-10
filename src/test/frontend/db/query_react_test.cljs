@@ -19,19 +19,19 @@ adds rules that users often use"
 
 (defn- blocks-created-between-inputs [a b]
   (sort
-   (map #(-> % :block/content string/split-lines first)
+   (map #(-> % :block/title string/split-lines first)
         (custom-query {:inputs [a b]
                        :query '[:find (pull ?b [*])
                                 :in $ ?start ?end
                                 :where
-                                [?b :block/content]
+                                [?b :block/title]
                                 [?b :block/created-at ?timestamp]
                                 [(>= ?timestamp ?start)]
                                 [(<= ?timestamp ?end)]]}))))
 
 
 (defn- blocks-with-tag-on-specified-current-page [& {:keys [current-page tag]}]
-  (map :block/content (custom-query {:title "Query title"
+  (map :block/title (custom-query {:title "Query title"
                                      :inputs [:current-page tag]
                                      :query '[:find (pull ?b [*])
                                               :in $ ?current-page ?tag-name

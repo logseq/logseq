@@ -111,12 +111,12 @@
   (if (seq (:block/tags block))
     (let [original-tags (remove :block.temp/new-class (:block/tags block))]
       (-> block
-          (update :block/content
+          (update :block/title
                   content-without-tags-ignore-case
                   (->> original-tags
                        (filter #(tag-classes (:block/name %)))
                        (map :block/title)))
-          (update :block/content
+          (update :block/title
                   db-content/replace-tags-with-page-refs
                   (->> original-tags
                        (remove #(tag-classes (:block/name %)))
@@ -146,7 +146,7 @@
                              :logseq.task/status.todo))]
       (-> block
           (assoc :logseq.task/status status-ident)
-          (update :block/content string/replace-first (re-pattern (str marker "\\s*")) "")
+          (update :block/title string/replace-first (re-pattern (str marker "\\s*")) "")
           (update :block/tags (fnil conj []) :logseq.class/task)
           (update :block/refs (fn [refs]
                                 (into (remove #(= marker (:block/title %)) refs)
@@ -169,7 +169,7 @@
                                :logseq.task/priority.low))]
       (-> block
           (assoc :logseq.task/priority priority-value)
-          (update :block/content string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
+          (update :block/title string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
           (update :block/refs (fn [refs]
                                 (into (remove #(= priority (:block/title %)) refs)
                                       [:logseq.task/priority priority-value])))
@@ -180,7 +180,7 @@
     block))
 
 (defn- update-block-deadline
-  ":block/content doesn't contain DEADLINE.* text so unable to detect timestamp
+  ":block/title doesn't contain DEADLINE.* text so unable to detect timestamp
   or repeater usage and notify user that they aren't supported"
   [block db {:keys [user-config]}]
   (if-let [date-int (or (:block/deadline block) (:block/scheduled block))]
@@ -288,13 +288,13 @@
   (->> built-in-property-name-to-idents keys set))
 
 (defn- update-built-in-property-values
-  [props {:keys [ignored-properties all-idents]} {:block/keys [content name]}]
+  [props {:keys [ignored-properties all-idents]} {:block/keys [title name]}]
   (->> props
        (keep (fn [[prop val]]
                (if (= :icon prop)
                  (do (swap! ignored-properties
                             conj
-                            {:property prop :value val :location (if name {:page name} {:block content})})
+                            {:property prop :value val :location (if name {:page name} {:block title})})
                      nil)
                  [(built-in-property-name-to-idents prop)
                   (case prop
@@ -435,7 +435,7 @@
       (let [props' (-> (update-built-in-property-values
                         (select-keys props built-in-property-names)
                         (select-keys import-state [:ignored-properties :all-idents])
-                        (select-keys block [:block/name :block/content]))
+                        (select-keys block [:block/name :block/title]))
                        (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
             pvalue-tx-m (->property-value-tx-m block props' #(get @property-schemas %) @all-idents)
             block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
@@ -508,7 +508,7 @@
               options' (assoc options :property-changes property-changes)
               {:keys [block-properties pvalues-tx]}
               (build-properties-and-values properties' db page-names-to-uuids
-                                           (select-keys block [:block/properties-text-values :block/name :block/content :block/uuid])
+                                           (select-keys block [:block/properties-text-values :block/name :block/title :block/uuid])
                                            options')]
           {:block
            (cond-> block
@@ -585,8 +585,8 @@
                        [:block/uuid (:block/uuid ref)])
                      ref))
                  refs)))
-        (:block/content block)
-        (update :block/content
+        (:block/title block)
+        (update :block/title
                 db-content/page-ref->special-id-ref
                 ;; TODO: Handle refs for whiteboard block which has none
                 (->> (:block/refs block)
@@ -714,9 +714,9 @@
                                                           {:property-ident property-ident
                                                            :block-uuid (:block-uuid m)})))
                         prop-value-content (get-pvalue-content (:block/uuid m) prop)]
-                    ;; Switch to :block/content since :default is stored differently
+                    ;; Switch to :block/title since :default is stored differently
                     [[:db/retract prop-value-id :property.value/content]
-                     [:db/add prop-value-id :block/content prop-value-content]]))
+                     [:db/add prop-value-id :block/title prop-value-content]]))
                 existing-blocks)
         ;; Look up blocks about to be transacted for current file a.k.a. pending
         ;; Map of property value uuids to their original block uuids
@@ -735,7 +735,7 @@
                     (let [prop-value-content (get-pvalue-content original-block-uuid prop)
                           prop-value-id [:block/uuid (:block/uuid m)]]
                       [[:db/retract prop-value-id :property.value/content]
-                       [:db/add prop-value-id :block/content prop-value-content]])))
+                       [:db/add prop-value-id :block/title prop-value-content]])))
                 blocks-tx)]
     (concat existing-blocks-tx pending-blocks-tx)))
 

@@ -17,7 +17,7 @@
             :block/parent property-id}
            (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
              {:property.value/content value}
-             {:block/content value}))))
+             {:block/title value}))))
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
@@ -73,7 +73,7 @@
         :block/order (db-order/gen-key)}
        (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
          {:property.value/content value}
-         {:block/content value}))
+         {:block/title value}))
       sqlite-util/block-with-timestamps))
 
 (defn build-property-values-tx-m

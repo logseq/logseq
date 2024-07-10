@@ -923,7 +923,7 @@
             hl-type (pu/lookup properties :logseq.property/hl-type)
             repo (state/get-current-repo)
             stop-inner-events? (= block-type :whiteboard-shape)]
-        (if (and block (:block/content block))
+        (if (and block (:block/title block))
           (let [title [:span.block-ref
                        (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
                                       block nil (:block/uuid block)
@@ -1805,16 +1805,18 @@
           (block-list config' children))]])))
 
 (defn- block-content-empty?
-  [{:block/keys [properties title body]}]
-  (and
-   (or
-    (empty? properties)
-    (and (not (config/db-based-graph? (state/get-current-repo)))
-         (property-file/properties-hidden? properties)))
+  [{:block/keys [properties] :as block}]
+  (let [ast-title (:block.temp/ast-title block)
+        ast-body (:block.temp/ast-body block)]
+    (and
+     (or
+      (empty? properties)
+      (and (not (config/db-based-graph? (state/get-current-repo)))
+           (property-file/properties-hidden? properties)))
 
-   (empty? title)
+     (empty? ast-title)
 
-   (every? #(= % ["Horizontal_Rule"]) body)))
+     (every? #(= % ["Horizontal_Rule"]) ast-body))))
 
 (rum/defcs block-control < rum/reactive
   [state config block {:keys [uuid block-id collapsed? *control-show? edit? selected?]}]
@@ -1925,9 +1927,9 @@
 (declare block-content)
 
 (defn build-block-title
-  [config {:block/keys [title marker pre-block? properties]
-           :as t}]
-  (let [config (assoc config :block t)
+  [config {:block/keys [marker pre-block? properties] :as t}]
+  (let [block-title (:block.temp/ast-title t)
+        config (assoc config :block t)
         level (:level config)
         slide? (boolean (:slide? config))
         block-ref? (:block-ref? config)
@@ -2007,7 +2009,7 @@
          (when-not area? [(hl-ref)])
 
          (conj
-          (map-inline config title)
+          (map-inline config block-title)
           (when (= block-type :whiteboard-shape) [:span.mr-1 (ui/icon "whiteboard-element" {:extension? true})]))
 
          ;; highlight ref block (area)
@@ -2226,10 +2228,10 @@
                                                   (dom/by-class "block-content-inner")
                                                   first
                                                   util/caret-range)
-                             {:block/keys [content format]} block
+                             {:block/keys [title format]} block
                              content (if (config/db-based-graph? (state/get-current-repo))
-                                       (or (:block/title block) content)
-                                       (->> content
+                                       (or (:block/title block) title)
+                                       (->> title
                                             (property-file/remove-built-in-properties-when-file-based
                                              (state/get-current-repo) format)
                                             (drawer/remove-logbook)))]
@@ -2282,7 +2284,7 @@
                             (or (not collapsed?)
                                 (some? (mldoc/extract-first-query-from-ast body))))))
           [:div.block-body
-           (let [body (block/trim-break-lines! (:block/body block))
+           (let [body (block/trim-break-lines! (:block.temp/ast-body block))
                  uuid (:block/uuid block)]
              (for [[idx child] (medley/indexed body)]
                (when-let [block (markup-element-cp config child)]
@@ -2326,20 +2328,22 @@
              (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
-  [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid title properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [repo (state/get-current-repo)
-        content (or (:block/title block)
-                    (if (config/db-based-graph? (state/get-current-repo))
-                      (:block/content block)
-                      (property-util/remove-built-in-properties format content)))
-        {:block/keys [title body] :as block} (if (:block/title block) block
-                                                 (merge block (block/parse-title-and-body uuid format pre-block? content)))
+        content (if (config/db-based-graph? (state/get-current-repo))
+                  (:block/title block)
+                  (property-util/remove-built-in-properties format title))
+        block (merge block (block/parse-title-and-body uuid format pre-block? content))
+        ;; _ (prn :debug :block block
+        ;;        :parsed-result (block/parse-title-and-body uuid format pre-block? content))
+        ast-body (:block.temp/ast-body block)
+        ast-title (:block.temp/ast-title block)
         collapsed? (util/collapsed? block)
-        block (assoc block :block/content content)
+        block (assoc block :block/title content)
         plugin-slotted? (and config/lsp-enabled? (state/slot-hook-exist? uuid))
         block-ref? (:block-ref? config)
         stop-events? (:stop-events? config)
-        block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq title))
+        block-ref-with-title? (and block-ref? (not (state/show-full-blocks?)) (seq ast-title))
         block-type (or
                     (pu/lookup properties :logseq.property/ls-type)
                     :default)
@@ -2393,7 +2397,7 @@
             :else
             (build-block-title config block))])
 
-       (file-block/clock-summary-cp block body)]
+       (file-block/clock-summary-cp block ast-body)]
 
       (when deadline
         (when-let [deadline-ast (block-handler/get-deadline-ast block)]
@@ -2410,13 +2414,13 @@
       (when (and (seq properties)
                  (let [hidden? (property-file/properties-hidden? properties)]
                    (not hidden?))
-                 (not (and block-ref? (or (seq title) (seq body))))
+                 (not (and block-ref? (or (seq ast-title) (seq ast-body))))
                  (not (:slide? config))
                  (not= block-type :whiteboard-shape)
                  (not (config/db-based-graph? repo)))
         (properties-cp config block))
 
-      (block-content-inner config block body plugin-slotted? collapsed? block-ref-with-title?)
+      (block-content-inner config block ast-body plugin-slotted? collapsed? block-ref-with-title?)
 
       (case (:block/warning block)
         :multiple-blocks
@@ -2478,7 +2482,7 @@
         editor-id (str "editor-" edit-input-id)
         slide? (:slide? config)
         block-reference-only? (some->
-                               (:block/content block)
+                               (:block/title block)
                                string/trim
                                block-ref/block-ref?)
         named? (some? (:block/name block))
@@ -2506,10 +2510,10 @@
          [:div.flex.flex-1.w-full.block-content-wrapper {:style {:display (if (:slide? config) "block" "flex")}}
           (ui/catch-error
            (ui/block-error "Block Render Error:"
-                           {:content (:block/content block)
+                           {:content (:block/title block)
                             :section-attrs
                             {:on-click #(let [content (or (:block/title block)
-                                                          (:block/content block))]
+                                                          (:block/title block))]
                                           (editor-handler/clear-selection!)
                                           (editor-handler/unhighlight-blocks!)
                                           (state/set-editing! edit-input-id content block "" {:container-id (:container-id config)}))}})
@@ -2559,7 +2563,7 @@
                 :block? true
                 :editor-box (state/get-component :editor/box)
                 :in-whiteboard? true}]
-    (when (:block/content block)
+    (when (:block/title block)
       [:div.single-block
        (block-container config block)])))
 
@@ -2644,20 +2648,22 @@
                                  (page-cp (dissoc config :breadcrumb? true) page)
                                  {:block/name (or page-title page-name)}])
               parents-props (doall
-                             (for [{:block/keys [uuid name content] :as block} parents]
+                             (for [{:block/keys [uuid name title] :as block} parents]
                                (if name
                                  [block (page-cp {} block)]
-                                 (let [{:block/keys [title body]} (block/parse-title-and-body
+                                 (let [result (block/parse-title-and-body
                                                                    uuid
                                                                    (:block/format block)
                                                                    (:block/pre-block? block)
-                                                                   content)
+                                                                   title)
+                                       ast-body (:block.temp/ast-body result)
+                                       ast-title (:block.temp/ast-title result)
                                        config (assoc config :block/uuid uuid)]
                                    [block
-                                    (when title
-                                      (if (seq title)
-                                        (->elem :span.inline-wrap (map-inline config title))
-                                        (->elem :div (markup-elements-cp config body))))]))))
+                                    (when ast-title
+                                      (if (seq ast-title)
+                                        (->elem :span.inline-wrap (map-inline config ast-title))
+                                        (->elem :div (markup-elements-cp config ast-body))))]))))
               breadcrumb (->> (into [] parents-props)
                               (concat [page-name-props] (when more? [:more]))
                               (filterv identity)
@@ -2895,7 +2901,7 @@
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
         *navigating-block (get container-state ::navigating-block)
-        {:block/keys [uuid pre-block? content]} block
+        {:block/keys [uuid pre-block? title]} block
         config (build-config config* block {:navigated? navigated? :navigating-block navigating-block})
         level (:level config)
         *control-show? (get container-state ::control-show?)
@@ -2935,7 +2941,7 @@
                    (when selected? " selected")
                    (when pre-block? " pre-block")
                    (when order-list? " is-order-list")
-                   (when (string/blank? content) " is-blank")
+                   (when (string/blank? title) " is-blank")
                    (when original-block " embed-block"))
        :haschild (str (boolean has-child?))}
 
@@ -2996,7 +3002,7 @@
         (block-reference {} (str uuid) nil)
         ;; Not embed self
         [:div.flex.flex-col.w-full
-         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? content))
+         (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
                hide-block-refs-count? (or (and (:embed? config)
                                            (= (:block/uuid block) (:embed-id config)))
                                           table?)]

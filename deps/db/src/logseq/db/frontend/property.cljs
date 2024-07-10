@@ -249,14 +249,14 @@
 (defn closed-value-content
   "Gets content/value of a given closed value ent/map. Works for all closed value types"
   [ent]
-  (or (:block/content ent)
+  (or (:block/title ent)
       (:property.value/content ent)))
 
 (defn property-value-content
   "Given an entity, gets the content for the property value of a ref type
   property i.e. what the user sees. For page types the content is the page name"
   [ent]
-  (or (:block/content ent)
+  (or (:block/title ent)
       (if-some [content (:property.value/content ent)]
         content
         (:block/title ent))))

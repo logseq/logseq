@@ -35,7 +35,7 @@
   '[:block/properties
     :block/uuid
     :block/order
-    :block/content
+    :block/title
     :block/format
     :block/created-at
     :block/updated-at
@@ -50,7 +50,7 @@
             :db/id
             :block/uuid ;; shape block uuid is read from properties
             :block/collapsed?
-            :block/content
+            :block/title
             :block/format
             :block/order
             :block/page
@@ -73,7 +73,7 @@
               blocks (ldb/get-page-blocks @conn (:db/id page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
           (if (and (= 1 (count blocks))
-                   (string/blank? (:block/content (first blocks)))
+                   (string/blank? (:block/title (first blocks)))
                    (nil? (:block/file page-block))
                    (not whiteboard?))
             (dissoc-request! request-id)

@@ -70,8 +70,8 @@
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-block-ast []
-  (if-let [{:block/keys [content format]} (:block (first (state/get-editor-args)))]
-    (show-content-ast content format)
+  (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
+    (show-content-ast title format)
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-page-data []

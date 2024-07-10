@@ -215,7 +215,7 @@
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))})
-     
+
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
@@ -237,7 +237,7 @@
   [entities]
   {:entities (count entities)
    :pages (count (filter :block/name entities))
-   :blocks (count (filter :block/content entities))
+   :blocks (count (filter :block/title entities))
    :classes (count (filter #(contains? (:block/type %) "class") entities))
    :objects (count (filter #(seq (:block/tags %)) entities))
    :properties (count (filter #(contains? (:block/type %) "property") entities))

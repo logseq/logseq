@@ -11,10 +11,10 @@
 (def foo-edn
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
-    ({:block/content "foo content a",
+    ({:block/title "foo content a",
       :block/format :markdown
       :block/parent {:block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"}},
-     {:block/content "foo content b",
+     {:block/title "foo content b",
       :block/format :markdown
       :block/parent {:block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"}}),
     :pages
@@ -27,9 +27,9 @@
 (def foo-conflict-edn
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
-    ({:block/content "foo content a",
+    ({:block/title "foo content a",
       :block/format :markdown},
-     {:block/content "foo content b",
+     {:block/title "foo content b",
       :block/format :markdown}),
     :pages
     ({:block/format :markdown,
@@ -40,11 +40,11 @@
 (def bar-edn
   "Example exported whiteboard page as an edn exportable."
   '{:blocks
-    ({:block/content "foo content a",
+    ({:block/title "foo content a",
       :block/format :markdown
       :block/parent {:block/uuid #uuid "71515b7d-b5fc-496b-b6bf-c58004a34ee3"
                      :block/name "foo"}},
-     {:block/content "foo content b",
+     {:block/title "foo content b",
       :block/format :markdown
       :block/parent {:block/uuid #uuid "71515b7d-b5fc-496b-b6bf-c58004a34ee3"
                      :block/name "foo"}}),
@@ -65,7 +65,7 @@
       (is (= [{:id "628953c1-8d75-49fe-a648-f4c612109098"}]
              (->> (d/q '[:find (pull ?b [*])
                          :in $
-                         :where [?b :block/content] [(missing? $ ?b :block/name)]]
+                         :where [?b :block/title] [(missing? $ ?b :block/name)]]
                        @conn)
                   (map first)
                   (map :block/properties)))
@@ -94,7 +94,7 @@
                                               {:block/file
                                                [:file/path]}]}])
                           :in $
-                          :where [?b :block/content] [(missing? $ ?b :block/name)]]
+                          :where [?b :block/title] [(missing? $ ?b :block/name)]]
                         @conn)
             parent (:block/page (ffirst blocks))]
         (is (= {:block/name "foo"
@@ -137,7 +137,7 @@
         _ (parse-file conn "foo.md" body)
         properties-orders (->> (d/q '[:find (pull ?b [*])
                                       :in $
-                                      :where [?b :block/content] [(missing? $ ?b :block/name)]]
+                                      :where [?b :block/title] [(missing? $ ?b :block/name)]]
                                     @conn)
                                (map first)
                                (map :block/properties-order))]

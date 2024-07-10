@@ -13,7 +13,7 @@
            (mapcat (fn [ref]
                      (if replacing-block-ref
                        (let [id (:db/id ref)
-                             new-content (some-> (:block/content ref)
+                             new-content (some-> (:block/title ref)
                                                  (string/replace (block-ref/->block-ref (str (:block/uuid block)))
                                                                  (block-ref/->block-ref (str (:block/uuid replacing-block-ref)))))
                              tx (cond->
@@ -22,11 +22,11 @@
                                   [:db/add (:db/id ref) :block/refs (:db/id replacing-block-ref)]
                                   [:db/add (:db/id ref) :block/path-refs (:db/id replacing-block-ref)]]
                                   new-content
-                                  (conj [:db/add id :block/content new-content]))]
+                                  (conj [:db/add id :block/title new-content]))]
                          tx)
                        (let [id (:db/id ref)
-                             block-content (:block/content block)
-                             new-content (some-> (:block/content ref)
+                             block-content (:block/title block)
+                             new-content (some-> (:block/title ref)
                                                  (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                  block-content)
                                                  (string/replace (block-ref/->block-ref (str (:block/uuid block)))
@@ -35,7 +35,7 @@
                                  [[:db/retract (:db/id ref) :block/refs (:db/id block)]
                                   [:db/retract (:db/id ref) :block/path-refs (:db/id block)]]
                                   new-content
-                                  (conj [:db/add id :block/content new-content]))]
+                                  (conj [:db/add id :block/title new-content]))]
                          tx)))
                    refs)))
        (apply concat)))

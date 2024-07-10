@@ -86,7 +86,7 @@
            (or preview?
                (not (contains? #{:home :all-journals} (state/get-current-route))))
            (not sidebar?))
-      (when (and (string/blank? (:block/content block))
+      (when (and (string/blank? (:block/title block))
                  (not preview?))
         (editor-handler/edit-block! block :max))))
   state)
