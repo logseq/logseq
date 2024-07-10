@@ -20,7 +20,7 @@
     :pages
     ({:block/format :markdown,
       :block/name "foo"
-      :block/original-name "Foo"
+      :block/title "Foo"
       :block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"
       :block/properties {:title "my whiteboard foo"}})})
 
@@ -34,7 +34,7 @@
     :pages
     ({:block/format :markdown,
       :block/name "foo conflicted"
-      :block/original-name "Foo conflicted"
+      :block/title "Foo conflicted"
       :block/uuid #uuid "16c90195-6a03-4b3f-839d-095a496d9acd"})})
 
 (def bar-edn
@@ -51,7 +51,7 @@
     :pages
     ({:block/format :markdown,
       :block/name "bar"
-      :block/original-name "Bar"
+      :block/title "Bar"
       :block/uuid #uuid "71515b7d-b5fc-496b-b6bf-c58004a34ee3"})})
 
 (defn- parse-file
@@ -89,7 +89,7 @@
       (parse-file conn "/whiteboards/foo.edn" (pr-str foo-edn))
       (let [blocks (d/q '[:find (pull ?b [* {:block/page
                                              [:block/name
-                                              :block/original-name
+                                              :block/title
                                               :block/type
                                               {:block/file
                                                [:file/path]}]}])
@@ -98,7 +98,7 @@
                         @conn)
             parent (:block/page (ffirst blocks))]
         (is (= {:block/name "foo"
-                :block/original-name "Foo"
+                :block/title "Foo"
                 :block/type ["page" "whiteboard"]
                 :block/file {:file/path "/whiteboards/foo.edn"}}
                parent)
@@ -168,7 +168,7 @@
            (:block/properties block))
         "Quoted value is unparsed")
     (is (= ["desc"]
-           (map :block/original-name (:block/refs block)))
+           (map :block/title (:block/refs block)))
         "No refs from property value")))
 
 (deftest non-string-property-values
@@ -242,12 +242,12 @@
         blocks (->> (d/q '[:find (pull ?b [:block/pre-block?
                                            :block/properties
                                            :block/properties-text-values
-                                           {:block/refs [:block/original-name]}])
+                                           {:block/refs [:block/title]}])
                            :in $
                            :where [?b :block/properties] [(missing? $ ?b :block/name)]]
                          @conn)
                     (map first)
-                    (map (fn [m] (update m :block/refs #(map :block/original-name %)))))
+                    (map (fn [m] (update m :block/refs #(map :block/title %)))))
         block-db-properties (block-property-transform db-properties)]
 
     (testing "Page properties"
@@ -356,7 +356,7 @@
                          :in $
                          :where [?b :block/name]]
                        @conn)
-                  (map (comp :block/original-name first))
+                  (map (comp :block/title first))
                   (remove built-in-pages)
                   set))))))
 

@@ -52,7 +52,6 @@
    :block/alias {:db/valueType :db.type/ref
                  :db/cardinality :db.cardinality/many}
 
-   ;; full-text for current block
    :block/content {}
 
    ;; todo keywords, e.g. "TODO", "DOING", "DONE"
@@ -88,7 +87,7 @@
    :block/name {:db/unique :db.unique/identity}
 
    ;; page's original name
-   :block/original-name {:db/index true}
+   :block/title {:db/index true}
 
    ;; page's journal day
    :block/journal-day {}

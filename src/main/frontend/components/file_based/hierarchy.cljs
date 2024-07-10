@@ -29,10 +29,10 @@
                          (distinct)
                          (sort-by :block/name)
                          (map (fn [page]
-                                (or (:block/original-name page) (:block/name page))))
+                                (or (:block/title page) (:block/name page))))
                          (map #(string/split % "/")))
               page-namespace (db-model/get-page-namespace repo page)
-              page-namespace (util/get-page-original-name page-namespace)]
+              page-namespace (util/get-page-title page-namespace)]
           (cond
             (seq pages)
             {:namespaces pages

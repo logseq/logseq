@@ -40,14 +40,14 @@
       (outliner-property/upsert-property! conn nil {} {:property-name ":p1"})
       (outliner-property/upsert-property! conn nil {} {:property-name "1p1"})
 
-      (is (= {:block/name "p1" :block/original-name "p1" :block/schema {:type :default}}
-             (select-keys (d/entity @conn :user.property/p1) [:block/name :block/original-name :block/schema]))
+      (is (= {:block/name "p1" :block/title "p1" :block/schema {:type :default}}
+             (select-keys (d/entity @conn :user.property/p1) [:block/name :block/title :block/schema]))
           "Existing db/ident does not get modified")
       (is (= ":p1"
-             (:block/original-name (d/entity @conn :user.property/p1-1)))
+             (:block/title (d/entity @conn :user.property/p1-1)))
           "2nd property gets unique ident")
       (is (= "1p1"
-             (:block/original-name (d/entity @conn :user.property/p1-2)))
+             (:block/title (d/entity @conn :user.property/p1-2)))
           "3rd property gets unique ident"))))
 
 (deftest convert-property-input-string
@@ -66,7 +66,7 @@
 (deftest create-property-text-block!
   (testing "Create a new :default property value"
     (let [conn (create-conn-with-blocks
-                [{:page {:block/original-name "page1"}
+                [{:page {:block/title "page1"}
                   :blocks [{:block/content "b1" :build/properties {:default "foo"}}
                            {:block/content "b2"}]}])
           block (find-block-by-content conn "b2")
@@ -83,7 +83,7 @@
 
   (testing "Create cases for a new :one :number property value"
     (let [conn (create-conn-with-blocks
-                [{:page {:block/original-name "page1"}
+                [{:page {:block/title "page1"}
                   :blocks [{:block/content "b1" :build/properties {:num 2}}
                            {:block/content "b2"}]}])
           block (find-block-by-content conn "b2")
@@ -106,7 +106,7 @@
 
   (testing "Create new :many :number property values"
     (let [conn (create-conn-with-blocks
-                [{:page {:block/original-name "page1"}
+                [{:page {:block/title "page1"}
                   :blocks [{:block/content "b1" :build/properties {:num-many #{2}}}
                            {:block/content "b2"}]}])
           block (find-block-by-content conn "b2")
@@ -123,7 +123,7 @@
 (deftest set-block-property-basic-cases
   (testing "Set a :number value with existing value"
     (let [conn (create-conn-with-blocks
-                [{:page {:block/original-name "page1"}
+                [{:page {:block/title "page1"}
                   :blocks [{:block/content "b1" :build/properties {:num 2}}
                            {:block/content "b2"}]}])
           property-value (:user.property/num (find-block-by-content conn "b1"))
@@ -136,7 +136,7 @@
 
   (testing "Update a :number value with existing value"
     (let [conn (create-conn-with-blocks
-                [{:page {:block/original-name "page1"}
+                [{:page {:block/title "page1"}
                   :blocks [{:block/content "b1" :build/properties {:num 2}}
                            {:block/content "b2" :build/properties {:num 3}}]}])
           property-value (:user.property/num (find-block-by-content conn "b1"))
@@ -150,7 +150,7 @@
 (deftest set-block-property-with-non-ref-values
   (testing "Setting :default with same property value reuses existing entity"
     (let [conn (create-conn-with-blocks
-                [{:page {:block/original-name "page1"}
+                [{:page {:block/title "page1"}
                   :blocks [{:block/content "b1" :build/properties {:logseq.property/order-list-type "number"}}
                            {:block/content "b2"}]}])
           property-value (:logseq.property/order-list-type (find-block-by-content conn "b1"))
@@ -164,7 +164,7 @@
 
   (testing "Setting :checkbox with same property value reuses existing entity"
     (let [conn (create-conn-with-blocks
-                [{:page {:block/original-name "page1"}
+                [{:page {:block/title "page1"}
                   :blocks [{:block/content "b1" :build/properties {:checkbox true}}
                            {:block/content "b2"}]}])
           property-value (:user.property/checkbox (find-block-by-content conn "b1"))
@@ -178,7 +178,7 @@
 
 (deftest remove-block-property!
   (let [conn (create-conn-with-blocks
-              [{:page {:block/original-name "page1"}
+              [{:page {:block/title "page1"}
                 :blocks [{:block/content "b1" :build/properties {:default "foo"}}]}])
         block (find-block-by-content conn "b1")
         _ (assert (:user.property/default block))
@@ -190,7 +190,7 @@
 
 (deftest batch-set-property!
   (let [conn (create-conn-with-blocks
-              [{:page {:block/original-name "page1"}
+              [{:page {:block/title "page1"}
                 :blocks [{:block/content "item 1"}
                          {:block/content "item 2"}]}])
         block-ids (map #(-> (find-block-by-content conn %) :block/uuid) ["item 1" "item 2"])
@@ -203,7 +203,7 @@
 
 (deftest batch-remove-property!
   (let [conn (create-conn-with-blocks
-              [{:page {:block/original-name "page1"}
+              [{:page {:block/title "page1"}
                 :blocks [{:block/content "item 1" :build/properties {:logseq.property/order-list-type "number"}}
                          {:block/content "item 2" :build/properties {:logseq.property/order-list-type "number"}}]}])
         block-ids (map #(-> (find-block-by-content conn %) :block/uuid) ["item 1" "item 2"])
@@ -215,7 +215,7 @@
 
 (deftest add-existing-values-to-closed-values!
   (let [conn (create-conn-with-blocks
-              [{:page {:block/original-name "page1"}
+              [{:page {:block/title "page1"}
                 :blocks [{:block/content "b1" :build/properties {:num 1}}
                          {:block/content "b2" :build/properties {:num 2}}]}])
         values (map (fn [d] (:block/uuid (d/entity @conn (:v d)))) (d/datoms @conn :avet :user.property/num))
@@ -266,7 +266,7 @@
                                                             {:uuid used-closed-value-uuid :value "bar"}]
                                       :block/schema {:type :default}}}
                :pages-and-blocks
-               [{:page {:block/original-name "page1"}
+               [{:page {:block/title "page1"}
                  :blocks [{:block/content "b1" :user.property/default [:block/uuid used-closed-value-uuid]}]}]})
         _ (assert (:user.property/default (find-block-by-content conn "b1")))
         property-uuid (:block/uuid (d/entity @conn :user.property-default))
@@ -299,7 +299,7 @@
               {:classes {:c1 {:build/schema-properties [:p1]}
                          :c2 {:build/schema-properties [:p2 :p3]}}
                :pages-and-blocks
-               [{:page {:block/original-name "p1"}
+               [{:page {:block/title "p1"}
                  :blocks [{:block/content "o1"
                            :build/tags [:c1 :c2]}]}]})
         block (find-block-by-content conn "o1")]

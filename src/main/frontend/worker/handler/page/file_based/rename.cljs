@@ -114,13 +114,13 @@
   [db config page new-name]
   ;; update all pages which have references to this page
   (let [to-page (ldb/get-page db new-name)
-        old-original-name (:block/original-name page)
+        old-title (:block/title page)
         blocks (:block/_refs (d/entity db (:db/id page)))
         tx     (->> (map (fn [{:block/keys [uuid content properties format] :as block}]
-                           (let [content    (let [content' (replace-old-page! config content old-original-name new-name format)]
+                           (let [content    (let [content' (replace-old-page! config content old-title new-name format)]
                                               (when-not (= content' content)
                                                 content'))
-                                 properties (let [properties' (walk-replace-old-page! config properties old-original-name new-name format)]
+                                 properties (let [properties' (walk-replace-old-page! config properties old-title new-name format)]
                                               (when-not (= properties' properties)
                                                 properties'))]
                              (when (or content properties)
@@ -138,8 +138,8 @@
 
 (defn rename-update-namespace!
   "update :block/namespace of the renamed block"
-  [repo conn config page old-original-name new-name]
-  (let [old-namespace? (text/namespace-page? old-original-name)
+  [repo conn config page old-title new-name]
+  (let [old-namespace? (text/namespace-page? old-title)
         new-namespace? (text/namespace-page? new-name)]
     (cond
       new-namespace?
@@ -224,12 +224,12 @@
         new-page-name       (common-util/page-name-sanity-lc new-name)
         page                (d/pull @conn '[*] [:block/name old-page-name])]
     (when (and repo page)
-      (let [old-original-name   (:block/original-name page)
+      (let [old-title   (:block/title page)
             page-txs            (when-not merge?
                                   [{:db/id               (:db/id page)
                                     :block/uuid          (:block/uuid page)
                                     :block/name          new-page-name
-                                    :block/original-name new-name}])
+                                    :block/title new-name}])
             {:keys [old-path new-path tx-data]} (update-file-tx db old-page-name new-name)
             txs (concat page-txs
                         other-tx
@@ -250,7 +250,7 @@
                                          (merge {:old-path old-path
                                                  :new-path new-path}))})
 
-        (rename-update-namespace! repo conn config page old-original-name new-name)))))
+        (rename-update-namespace! repo conn config page old-title new-name)))))
 
 (defn- rename-namespace-pages!
   "Original names (unsanitized only)"
@@ -258,8 +258,8 @@
   (let [pages (ldb/get-namespace-pages @conn old-name {})
         page (d/pull @conn '[*] [:block/name (common-util/page-name-sanity-lc old-name)])
         pages (cons page pages)]
-    (doseq [{:block/keys [name original-name]} pages]
-      (let [old-page-title (or original-name name)
+    (doseq [{:block/keys [name title]} pages]
+      (let [old-page-title (or title name)
             ;; only replace one time, for the case that the namespace is a sub-string of the sub-namespace page name
             ;; Example: has pages [[work]] [[work/worklog]],
             ;; we want to rename [[work/worklog]] to [[work1/worklog]] when rename [[work]] to [[work1]],
@@ -279,8 +279,8 @@
         nested-pages-ns (ldb/get-pages-by-name-partition @conn ns-prefix)]
     (when nested-pages
       ;; rename page "[[obsidian]] is a tool" to "[[logseq]] is a tool"
-      (doseq [{:block/keys [name original-name]} nested-pages]
-        (let [old-page-title (or original-name name)
+      (doseq [{:block/keys [name title]} nested-pages]
+        (let [old-page-title (or title name)
               new-page-title (string/replace
                               old-page-title
                               (page-ref/->page-ref old-ns-name)
@@ -290,8 +290,8 @@
             (println "Renamed " old-page-title " to " new-page-title)))))
     (when nested-pages-ns
       ;; rename page "[[obsidian/page1]] is a tool" to "[[logseq/page1]] is a tool"
-      (doseq [{:block/keys [name original-name]} nested-pages-ns]
-        (let [old-page-title (or original-name name)
+      (doseq [{:block/keys [name title]} nested-pages-ns]
+        (let [old-page-title (or title name)
               new-page-title (string/replace
                               old-page-title
                               (common-util/format ns-prefix-format-str old-ns-name)
@@ -305,7 +305,7 @@
                                          :or {persist-op? true}}]
   (let [db @conn
         page-e        (d/entity db [:block/uuid page-uuid])
-        old-name      (:block/original-name page-e)
+        old-name      (:block/title page-e)
         new-name      (string/trim new-name)
         old-page-name (common-util/page-name-sanity-lc old-name)
         new-page-name (common-util/page-name-sanity-lc new-name)
@@ -329,7 +329,7 @@
           (= old-page-name new-page-name) ; case changed
           (ldb/transact! conn
                          [{:db/id (:db/id page-e)
-                           :block/original-name new-name}]
+                           :block/title new-name}]
                          {:persist-op? persist-op?
                           :outliner-op :rename-page})
 

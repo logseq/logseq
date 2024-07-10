@@ -139,7 +139,7 @@
                             (if (> (count content) 48)
                               (str (subs content 0 48) "...")
                               content))))
-          block-name (:block/original-name page)
+          block-name (:block/title page)
           block-name' (when block-name
                         (if (common-util/uuid-string? block-name)
                           "Untitled"

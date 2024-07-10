@@ -64,8 +64,8 @@
   (let [content (:block/content block)
         content' (if (some :block/name (:block/refs block))
                    (reduce
-                    (fn [content {:block/keys [original-name uuid]}]
-                      (replace-page-ref-with-id content original-name uuid))
+                    (fn [content {:block/keys [title uuid]}]
+                      (replace-page-ref-with-id content title uuid))
                     content
                     (filter :block/name (:block/refs block)))
                    content)]

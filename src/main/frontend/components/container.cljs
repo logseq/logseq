@@ -76,9 +76,9 @@
   [page icon recent?]
   (let [repo (state/get-current-repo)
         page (or (db/get-alias-source-page repo (:db/id page)) page)
-        original-name (:block/original-name page)
+        title (:block/title page)
         whiteboard-page? (db-model/whiteboard-page? page)
-        untitled? (db-model/untitled-page? original-name)
+        untitled? (db-model/untitled-page? title)
         name (:block/name page)
         file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
         ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
@@ -92,7 +92,7 @@
                            [:<>
                             (when-not recent?
                               (x-menu-item
-                               {:on-click #(page-handler/<unfavorite-page! original-name)}
+                               {:on-click #(page-handler/<unfavorite-page! title)}
                                (ctx-icon "star-off")
                                (t :page/unfavorite)
                                (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
@@ -133,7 +133,7 @@
      [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
      [:span.page-title {:class (when untitled? "opacity-50")}
       (if untitled? (t :untitled)
-          (pdf-utils/fix-local-asset-pagename original-name))]
+          (pdf-utils/fix-local-asset-pagename title))]
 
      ;; dots trigger
      (shui/button
@@ -194,7 +194,7 @@
       (for [page pages]
         [:li.recent-item.select-none
          {:key (str "recent-" (:db/id page))
-          :title (:block/original-name page)
+          :title (:block/title page)
           :draggable true
           :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
           :data-ref name}

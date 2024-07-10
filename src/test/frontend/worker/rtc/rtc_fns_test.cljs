@@ -294,7 +294,7 @@
 ;;         (d/transact! conn [{:block/uuid tag1-uuid
 ;;                             :block/type #{"class"},
 ;;                             :block/name "task",
-;;                             :block/original-name "Task"}])
+;;                             :block/title "Task"}])
 ;;         (is (rtc-const/data-from-ws-validator data-from-ws))
 ;;         (#'r.remote/apply-remote-update-ops repo conn date-formatter update-ops)
 ;;         (is (= #{tag1-uuid} (set (map :block/uuid (:block/tags (d/entity @conn [:block/uuid uuid1-remote]))))))))))
@@ -419,7 +419,7 @@ result:
                           {page1-uuid {:op :update-page
                                        :self page1-uuid
                                        :page-name (str page1-uuid)
-                                       :block/original-name (str page1-uuid)}}}
+                                       :block/title (str page1-uuid)}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
@@ -433,7 +433,7 @@ result:
                           {page1-uuid {:op :update-page
                                        :self page1-uuid
                                        :page-name (str page1-uuid "-rename")
-                                       :block/original-name (str page1-uuid "-rename")}}}
+                                       :block/title (str page1-uuid "-rename")}}}
             update-page-ops (vals
                              (:update-page-ops-map
                               (#'r.remote/affected-blocks->diff-type-ops repo (:affected-blocks data-from-ws))))]
@@ -487,7 +487,7 @@ result:
                           {page2-uuid {:op :update-page
                                        :self page2-uuid
                                        :page-name page-name
-                                       :block/original-name page-name}
+                                       :block/title page-name}
                            uuid1-remote {:op :move
                                          :self uuid1-remote
                                          :parents [page2-uuid]

@@ -632,7 +632,7 @@
         [list-ready? set-list-ready?] (rum/use-state false)
         [content-ready? set-content-ready?] (rum/use-state false)
         *ref-contents      (rum/use-ref (atom {}))
-        original-page-name (or (:block/original-name page-entity) page-name)]
+        original-page-name (or (:block/title page-entity) page-name)]
 
     (rum/use-effect!
      #(when selected-page

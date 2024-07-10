@@ -42,7 +42,7 @@
    the hidden page and closed value blocks as needed"
   [db-ident prop-name property {:keys [property-attributes]}]
   (let [property-schema (:block/schema property)
-        property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:original-name prop-name
+        property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:title prop-name
                                                                                      :ref-type? true})
                            property-attributes)]
     (into [property-tx]

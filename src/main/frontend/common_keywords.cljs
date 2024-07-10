@@ -11,7 +11,7 @@
   "block name, lowercase, only page-blocks have this attr"
   :string)
 
-(sr/defkeyword :block/original-name
+(sr/defkeyword :block/title
   "like `:block/name`, but not unified into lowercase"
   :string)
 

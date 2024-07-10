@@ -79,7 +79,7 @@
         block-uuid                   (:block/uuid (d/entity db-after e))
         a->add?->v->t                (e->a->add?->v->t e)
         {add?->block-name->t          :block/name
-         add?->block-original-name->t :block/original-name
+         add?->block-title->t :block/title
          add?->block-uuid->t          :block/uuid
          add?->block-parent->t        :block/parent
          add?->block-order->t         :block/order}
@@ -87,7 +87,7 @@
         [retract-block-uuid t1]      (some-> add?->block-uuid->t (get false) first)
         [retract-block-name _]       (some-> add?->block-name->t (get false) first)
         [add-block-name t2]          (some-> add?->block-name->t latest-add?->v->t (get-first-vt true))
-        [add-block-original-name t3] (some-> add?->block-original-name->t
+        [add-block-title t3] (some-> add?->block-title->t
                                              latest-add?->v->t
                                              (get-first-vt true))
         [add-block-parent t4]        (some-> add?->block-parent->t latest-add?->v->t (get-first-vt true))
@@ -105,7 +105,7 @@
                   (or add-block-parent add-block-order)
                   (conj [:move (or t4 t5) {:block-uuid block-uuid}])
 
-                  (or add-block-name add-block-original-name)
+                  (or add-block-name add-block-title)
                   (conj [:update-page (or t2 t3) {:block-uuid block-uuid}]))
             update-op (when-let [av-coll (not-empty (update-op-av-coll db-before db-after a->add?->v->t*))]
                         (let [t (max-t a->add?->v->t*)]

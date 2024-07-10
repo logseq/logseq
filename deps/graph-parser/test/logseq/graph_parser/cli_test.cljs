@@ -110,7 +110,7 @@
           (into [(merge page
                         {:db/id page-id
                          :block/uuid page-uuid
-                         :block/original-name (string/capitalize (:block/name page))
+                         :block/title (string/capitalize (:block/name page))
                          :block/created-at created-at
                          :block/updated-at created-at})]
                 (mapv #(merge %

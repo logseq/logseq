@@ -24,22 +24,22 @@
            {:properties {:foo {:block/schema {:type :default}}
                          :foo2 {:block/schema {:type :default}}}
             :pages-and-blocks
-            [{:page {:block/original-name "Page"
+            [{:page {:block/title "Page"
                      :build/properties {:foo "bar"}}}]})]
-        
+
     (is (= ["Page"]
-           (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (has-page-property ?b :user.property/foo)]
+           (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (has-page-property ?b :user.property/foo)]
                               @conn)
-                (map (comp :block/original-name first))))
+                (map (comp :block/title first))))
         "has-page-property returns result when page has property")
     (is (= []
-           (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (has-page-property ?b :user.property/foo2)]
+           (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (has-page-property ?b :user.property/foo2)]
                               @conn)
-                (map (comp :block/original-name first))))
+                (map (comp :block/title first))))
         "has-page-property returns no result when page doesn't have property")
     (is (= [:user.property/foo]
            (q-with-rules '[:find [?p ...]
-                           :where (has-page-property ?b ?p) [?b :block/original-name "Page"]]
+                           :where (has-page-property ?b ?p) [?b :block/title "Page"]]
                          @conn))
         "has-page-property can bind to property arg")))
 
@@ -52,42 +52,42 @@
                          :number-many {:block/schema {:type :number :cardinality :many}}
                          :page-many {:block/schema {:type :page :cardinality :many}}}
             :pages-and-blocks
-            [{:page {:block/original-name "Page"
+            [{:page {:block/title "Page"
                      :build/properties {:foo "bar" :number-many #{5 10} :page-many #{[:page "Page A"]}}}}
-             {:page {:block/original-name "Page A"
+             {:page {:block/title "Page A"
                      :build/properties {:foo "bar A"}}}]})]
     (testing "cardinality :one property"
         (is (= ["Page"]
-               (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/foo "bar")]
+               (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (page-property ?b :user.property/foo "bar")]
                                   @conn)
-                    (map (comp :block/original-name first))))
+                    (map (comp :block/title first))))
             "page-property returns result when page has property")
         (is (= []
-               (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/foo "baz")]
+               (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (page-property ?b :user.property/foo "baz")]
                                   @conn)
-                    (map (comp :block/original-name first))))
+                    (map (comp :block/title first))))
             "page-property returns no result when page doesn't have property value")
         (is (= #{:user.property/foo}
                (->> (q-with-rules '[:find [?p ...]
-                                    :where (page-property ?b ?p "bar") [?b :block/original-name "Page"]]
+                                    :where (page-property ?b ?p "bar") [?b :block/title "Page"]]
                                   @conn)
                     set))
             "page-property can bind to property arg with bound property value"))
 
     (testing "cardinality :many property"
       (is (= ["Page"]
-             (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/number-many 5)]
+             (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (page-property ?b :user.property/number-many 5)]
                                 @conn)
-                  (map (comp :block/original-name first))))
+                  (map (comp :block/title first))))
           "page-property returns result when page has property")
       (is (= []
-             (->> (q-with-rules '[:find (pull ?b [:block/original-name]) :where (page-property ?b :user.property/number-many 20)]
+             (->> (q-with-rules '[:find (pull ?b [:block/title]) :where (page-property ?b :user.property/number-many 20)]
                                 @conn)
-                  (map (comp :block/original-name first))))
+                  (map (comp :block/title first))))
           "page-property returns no result when page doesn't have property value")
       (is (= #{:user.property/number-many}
              (->> (q-with-rules '[:find [?p ...]
-                                  :where (page-property ?b ?p 5) [?b :block/original-name "Page"]]
+                                  :where (page-property ?b ?p 5) [?b :block/title "Page"]]
                                 @conn)
                   set))
           "page-property can bind to property arg with bound property value"))
@@ -95,22 +95,22 @@
     ;; NOTE: Querying a ref's name is different than before and requires more than just the rule
     (testing ":ref property"
         (is (= ["Page"]
-               (->> (q-with-rules '[:find (pull ?b [:block/original-name])
+               (->> (q-with-rules '[:find (pull ?b [:block/title])
                                     :where (page-property ?b :user.property/page-many "Page A")]
                                   @conn)
-                    (map (comp :block/original-name first))))
+                    (map (comp :block/title first))))
             "page-property returns result when page has property")
         (is (= []
-               (->> (q-with-rules '[:find (pull ?b [:block/original-name])
-                                    :where [?b :user.property/page-many ?pv] [?pv :block/original-name "Page B"]]
+               (->> (q-with-rules '[:find (pull ?b [:block/title])
+                                    :where [?b :user.property/page-many ?pv] [?pv :block/title "Page B"]]
                                   @conn)
-                    (map (comp :block/original-name first))))
+                    (map (comp :block/title first))))
             "page-property returns no result when page doesn't have property value"))
 
     (testing "bindings with property value"
         (is (= #{:user.property/foo :user.property/number-many :user.property/page-many}
                (->> (q-with-rules '[:find [?p ...]
-                                    :where (page-property ?b ?p _) [?b :block/original-name "Page"]]
+                                    :where (page-property ?b ?p _) [?b :block/title "Page"]]
                                   @conn)
                     set))
             "page-property can bind to property arg with unbound property value")
@@ -119,16 +119,16 @@
                  [:user.property/foo "bar"]
                  [:user.property/page-many "Page A"]}
                (->> (q-with-rules '[:find ?p ?v
-                                    :where (page-property ?b ?p ?v) [?b :block/original-name "Page"]]
+                                    :where (page-property ?b ?p ?v) [?b :block/title "Page"]]
                                   @conn)
                     set))
             "page-property can bind to property and property value args")
         (is (= #{"Page"}
-               (->> (q-with-rules '[:find (pull ?b [:block/original-name])
+               (->> (q-with-rules '[:find (pull ?b [:block/title])
                                     :where
                                     [?b :user.property/page-many ?pv]
                                     (page-property ?pv :user.property/foo "bar A")]
                                   @conn)
-                    (map (comp :block/original-name first))
+                    (map (comp :block/title first))
                     set))
             "page-property can be used multiple times to query a property value's property"))))

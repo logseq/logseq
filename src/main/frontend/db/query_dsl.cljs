@@ -652,7 +652,7 @@ Some bindings in this fn:
   "Like ldb/block-attrs but for query dsl an db graphs"
   ;; '*' needed as we need to pull user properties and don't know their names in advance
   '[*
-    {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
     {:block/_parent ...}])
 
 (defn query

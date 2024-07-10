@@ -559,7 +559,7 @@
         page-name (:block/name page-entity)
         breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
-        untitled? (when page-name (model/untitled-page? (:block/original-name page-entity)))
+        untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
         display-close-button? (and (not (:hide-close-button? config))
                                    (not config/publishing?))
         hide-icon? (:hide-icon? config)]
@@ -621,7 +621,7 @@
           (->elem :span (map-inline config label))
 
           :else
-          (let [original-name (:block/original-name page-entity)
+          (let [title (:block/title page-entity)
                 s (cond untitled?
                         (t :untitled)
 
@@ -629,11 +629,11 @@
                         (pdf-utils/hls-file? page-name)
                         (pdf-utils/fix-local-asset-pagename page-name)
 
-                        (not= (util/safe-page-name-sanity-lc original-name) page-name)
+                        (not= (util/safe-page-name-sanity-lc title) page-name)
                         page-name                  ;; page-name-in-block might be overridden (legacy))
 
-                        original-name
-                        (util/trim-safe original-name)
+                        title
+                        (util/trim-safe title)
 
                         :else
                         (util/trim-safe page-name))
@@ -1511,7 +1511,7 @@
   [:ul
    (for [child children]
      [:li {:key (str "namespace-" namespace "-" (:db/id child))}
-      (let [shorten-name (some-> (or (:block/original-name child) (:block/name child))
+      (let [shorten-name (some-> (or (:block/title child) (:block/name child))
                                  (string/split "/")
                                  last)]
         (page-cp {:label shorten-name} child))
@@ -2228,7 +2228,7 @@
                                                   util/caret-range)
                              {:block/keys [content format]} block
                              content (if (config/db-based-graph? (state/get-current-repo))
-                                       (or (:block/original-name block) content)
+                                       (or (:block/title block) content)
                                        (->> content
                                             (property-file/remove-built-in-properties-when-file-based
                                              (state/get-current-repo) format)
@@ -2328,7 +2328,7 @@
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
   [config {:block/keys [uuid content properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [repo (state/get-current-repo)
-        content (or (:block/original-name block)
+        content (or (:block/title block)
                     (if (config/db-based-graph? (state/get-current-repo))
                       (:block/content block)
                       (property-util/remove-built-in-properties format content)))
@@ -2508,7 +2508,7 @@
            (ui/block-error "Block Render Error:"
                            {:content (:block/content block)
                             :section-attrs
-                            {:on-click #(let [content (or (:block/original-name block)
+                            {:on-click #(let [content (or (:block/title block)
                                                           (:block/content block))]
                                           (editor-handler/clear-selection!)
                                           (editor-handler/unhighlight-blocks!)
@@ -2630,7 +2630,7 @@
           page (or (db/get-block-page repo block-id) ;; only return for block uuid
                    (model/query-block-by-uuid block-id)) ;; return page entity when received page uuid
           page-name (:block/name page)
-          page-original-name (:block/original-name page)
+          page-title (:block/title page)
           show? (or (seq parents) show-page? page-name)
           parents (if (= page-name (:block/name (first parents)))
                     (rest parents)
@@ -2642,7 +2642,7 @@
         (let [page-name-props (when show-page?
                                 [page
                                  (page-cp (dissoc config :breadcrumb? true) page)
-                                 {:block/name (or page-original-name page-name)}])
+                                 {:block/name (or page-title page-name)}])
               parents-props (doall
                              (for [{:block/keys [uuid name content] :as block} parents]
                                (if name

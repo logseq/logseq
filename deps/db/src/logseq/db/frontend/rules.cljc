@@ -173,7 +173,7 @@
       [?p ?prop ?pv]
       (or [?pv :block/content ?val]
           [?pv :property.value/content ?val]
-          [?pv :block/original-name ?val])
+          [?pv :block/title ?val])
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -189,7 +189,7 @@
       [?b ?prop ?pv]
       (or [?pv :block/content ?val]
           [?pv :property.value/content ?val]
-          [?pv :block/original-name ?val])
+          [?pv :block/title ?val])
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]

@@ -45,7 +45,7 @@
                   ops)]
         (is (= [[:update-page {:block-uuid page1-uuid
                                :page-name page1-name
-                               :original-name page1-name}]
+                               :title page1-name}]
                 [:update {:block-uuid page1-uuid
                           :pos [nil nil]
                           :av-coll-keys [:block/created-at :block/updated-at :block/type]}]] ops*)

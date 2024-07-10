@@ -63,7 +63,7 @@
         inverted-renamed-classes (set/map-invert renamed-classes)
         class-name (strip-schema-prefix (class-m "@id"))
         url (str "https://schema.org/" (get inverted-renamed-classes class-name class-name))]
-    (cond-> {:block/original-name class-name
+    (cond-> {:block/title class-name
              :build/properties (cond-> {:url url}
                                  (class-m "rdfs:comment")
                                  (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
@@ -241,7 +241,7 @@
                                    (->class-page % class-to-properties options)))
                      (into {}))]
     (assert (= ["Thing"] (keep #(when-not (:build/class-parent %)
-                                  (:block/original-name %))
+                                  (:block/title %))
                                (vals classes)))
             "Thing is the only class that doesn't have a schema.org parent class")
     classes))
@@ -355,10 +355,10 @@
 (defn- write-debug-file [db]
   (let [ents (remove #(db-malli-schema/internal-ident? (:db/ident %))
                      (d/q '[:find [(pull ?b [*
-                                             {:class/schema.properties [:block/original-name]}
-                                             {:property/schema.classes [:block/original-name]}
-                                             {:class/parent [:block/original-name]}
-                                             {:block/refs [:block/original-name]}]) ...]
+                                             {:class/schema.properties [:block/title]}
+                                             {:property/schema.classes [:block/title]}
+                                             {:class/parent [:block/title]}
+                                             {:block/refs [:block/title]}]) ...]
                             :in $
                             :where [?b :db/ident ?ident]]
                           db))]
@@ -367,7 +367,7 @@
                        (->> ents
                             (map (fn [m]
                                    (let [props (db-property/properties m)]
-                                     (cond-> (select-keys m [:block/name :block/type :block/original-name :block/schema :db/ident
+                                     (cond-> (select-keys m [:block/name :block/type :block/title :block/schema :db/ident
                                                              :class/schema.properties :class/parent
                                                              :db/cardinality :property/schema.classes :block/refs])
                                        (seq props)
@@ -377,13 +377,13 @@
                                                                                      (db-property/property-value-content (d/entity db (:db/id v)))
                                                                                      v)))))
                                        (seq (:class/schema.properties m))
-                                       (update :class/schema.properties #(set (map :block/original-name %)))
+                                       (update :class/schema.properties #(set (map :block/title %)))
                                        (some? (:class/parent m))
-                                       (update :class/parent :block/original-name)
+                                       (update :class/parent :block/title)
                                        (seq (:property/schema.classes m))
-                                       (update :property/schema.classes #(set (map :block/original-name %)))
+                                       (update :property/schema.classes #(set (map :block/title %)))
                                        (seq (:block/refs m))
-                                       (update :block/refs #(set (map :block/original-name %)))))))
+                                       (update :block/refs #(set (map :block/title %)))))))
                             set)))))
 
 (defn -main [args]

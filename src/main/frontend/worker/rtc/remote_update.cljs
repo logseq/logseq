@@ -497,10 +497,10 @@
   [repo conn update-page-ops]
   (let [config (worker-state/get-config repo)]
     (doseq [{:keys [self _page-name]
-             original-name :block/original-name
+             title :block/title
              :as op-value} update-page-ops]
       (let [create-opts {:uuid self}
-            [_ page-name page-uuid] (worker-page/rtc-create-page! conn config (ldb/read-transit-str original-name) create-opts)]
+            [_ page-name page-uuid] (worker-page/rtc-create-page! conn config (ldb/read-transit-str title) create-opts)]
         ;; TODO: current page-create fn is buggy, even provide :uuid option, it will create-page with different uuid,
         ;; if there's already existing same name page
         (assert (= page-uuid self) {:page-name page-name :page-uuid page-uuid :should-be self})

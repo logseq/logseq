@@ -155,7 +155,7 @@
                               (or (db/entity ident) property))]
                {:id ident
                 :name (or (:name property)
-                          (:block/original-name property))
+                          (:block/title property))
                 :header (or (:header property)
                             header-cp)
                 :cell (or (:cell property)
@@ -226,7 +226,7 @@
   (case (:id column)
     :select 32
     :add-property 160
-    (:object/name :block/original-name :block/name :block/content) 360
+    (:object/name :block/title :block/name :block/content) 360
     (:block/created-at :block/updated-at) 160
     180))
 
@@ -429,7 +429,7 @@
                              (let [id (:id column)
                                    property (db/entity id)
                                    internal-property {:db/ident (:id column)
-                                                      :block/original-name (:name column)
+                                                      :block/title (:name column)
                                                       :block/schema {:type (:type column)}}]
                                (if (or property
                                        (= :db.cardinality/many (:db/cardinality (get schema id)))
@@ -447,7 +447,7 @@
                  timestamp?
                  (merge option
                         {:items timestamp-options
-                         :input-default-placeholder (if property (:block/original-name property) "Select")
+                         :input-default-placeholder (if property (:block/title property) "Select")
                          :on-chosen (fn [value]
                                       (shui/popup-hide!)
                                       (let [filters' (conj filters [(:db/ident property) :after value])]
@@ -458,14 +458,14 @@
                                 {:value false :label "false"}]]
                      (merge option
                             {:items items
-                             :input-default-placeholder (if property (:block/original-name property) "Select")
+                             :input-default-placeholder (if property (:block/title property) "Select")
                              :on-chosen (fn [value]
                                           (let [filters' (conj filters [(:db/ident property) :is value])]
                                             (set-filters! filters')))}))
                    (let [items (get-property-values (:data table) property)]
                      (merge option
                             {:items items
-                             :input-default-placeholder (if property (:block/original-name property) "Select")
+                             :input-default-placeholder (if property (:block/title property) "Select")
                              :multiple-choices? true
                              :on-chosen (fn [_value _selected? selected]
                                           (let [selected-value (if (de/entity? (first selected))
@@ -627,7 +627,7 @@
                 false
                 true)
         option (cond->
-                {:input-default-placeholder (:block/original-name property)
+                {:input-default-placeholder (:block/title property)
                  :input-opts {:class "!px-3 !py-1"}
                  :items items
                  :extract-fn :label
@@ -715,18 +715,18 @@
           (let [[property-ident operator value] filter
                 property (if (= property-ident :object/name)
                            {:db/ident property-ident
-                            :block/original-name "Name"}
+                            :block/title "Name"}
                            (or (db/entity property-ident)
                                (some (fn [column] (when (= (:id column) property-ident)
                                                     {:db/ident (:id column)
-                                                     :block/original-name (:name column)})) columns)))]
+                                                     :block/title (:name column)})) columns)))]
             [:div.flex.flex-row.items-center.border.rounded
              (shui/button
               {:class "!px-2 rounded-none border-r"
                :variant "ghost"
                :size :sm
                :disabled true}
-              [:span.text-xs (:block/original-name property)])
+              [:span.text-xs (:block/title property)])
              (filter-operator property operator filters set-filters! idx)
              (filter-value table property operator value filters set-filters! idx)
              (shui/button

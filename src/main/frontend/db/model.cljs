@@ -33,7 +33,7 @@
   (d/q '[:find ?page-name ?tag
          :where
          [?page :block/tags ?e]
-         [?e :block/original-name ?tag]
+         [?e :block/title ?tag]
          [?page :block/name ?page-name]]
        (conn/get-db repo)))
 
@@ -42,10 +42,10 @@
   (let [db (conn/get-db repo)]
     (ldb/get-all-pages db)))
 
-(defn get-all-page-original-names
+(defn get-all-page-titles
   [repo]
   (->> (get-all-pages repo)
-       (map :block/original-name)))
+       (map :block/title)))
 
 (defn get-page-alias
   [repo page-name]
@@ -210,14 +210,14 @@ independent of format as format specific heading characters are stripped"
         alias-ids (->> (page-alias-set repo page-id)
                        (remove #{page-id}))]
     (when (seq alias-ids)
-      (map (fn [id] (:block/original-name (db-utils/entity id))) alias-ids))))
+      (map (fn [id] (:block/title (db-utils/entity id))) alias-ids))))
 
 (defn with-pages
   [blocks]
   (let [pages-ids (->> (map (comp :db/id :block/page) blocks)
                        (remove nil?))
         pages (when (seq pages-ids)
-                (db-utils/pull-many '[:db/id :block/name :block/original-name :block/journal-day] pages-ids))
+                (db-utils/pull-many '[:db/id :block/name :block/title :block/journal-day] pages-ids))
         pages-map (reduce (fn [acc p] (assoc acc (:db/id p) p)) {} pages)
         blocks (map
                 (fn [block]
@@ -416,18 +416,18 @@ independent of format as format specific heading characters are stripped"
 (defn get-file-page
   ([file-path]
    (get-file-page file-path true))
-  ([file-path original-name?]
+  ([file-path title?]
    (when-let [repo (state/get-current-repo)]
      (when-let [db (conn/get-db repo)]
        (some->
         (d/q
-         (if original-name?
+         (if title?
            '[:find ?page-name
              :in $ ?path
              :where
              [?file :file/path ?path]
              [?page :block/file ?file]
-             [?page :block/original-name ?page-name]]
+             [?page :block/title ?page-name]]
            '[:find ?page-name
              :in $ ?path
              :where
@@ -736,7 +736,7 @@ independent of format as format specific heading characters are stripped"
     '[:find [(pull ?page [:db/id
                           :block/uuid
                           :block/name
-                          :block/original-name
+                          :block/title
                           :block/created-at
                           :block/updated-at]) ...]
       :where
@@ -765,7 +765,7 @@ independent of format as format specific heading characters are stripped"
    '[:find ?name ?id
      :where
      [?page :block/type "class"]
-     [?page :block/original-name ?name]
+     [?page :block/title ?name]
      [?page :block/uuid ?id]]
     (conn/get-db repo)))
 
@@ -808,7 +808,7 @@ independent of format as format specific heading characters are stripped"
          :where
          [?page :block/name ?page-name]
          [?page :block/namespace ?e]
-         [?e :block/original-name ?parent]]
+         [?e :block/title ?parent]]
     (conn/get-db repo)))
 
 (defn get-all-namespace-parents
@@ -929,7 +929,7 @@ independent of format as format specific heading characters are stripped"
                        (map :e)))]
         (when (seq ids)
           (db-utils/pull-many repo
-                              '[:db/id :block/name :block/original-name
+                              '[:db/id :block/name :block/title
                                 {:block/file [:db/id :file/path]}]
                               ids))))))
 

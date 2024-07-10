@@ -28,11 +28,11 @@
                                 page-ref-special-chars
                                 (:block/uuid ref)
                                 page-ref/right-brackets)
-                           (:block/original-name ref))
+                           (:block/title ref))
            (string/replace
                 (str "#" page-ref-special-chars
                      (:block/uuid ref))
-                (str "#" (:block/original-name ref))))
+                (str "#" (:block/title ref))))
        content))
    content
    refs))
@@ -53,12 +53,12 @@
                      page-ref-special-chars
                      (:block/uuid ref)
                      page-ref/right-brackets)
-                (page-ref/->page-ref (:block/original-name ref)))
+                (page-ref/->page-ref (:block/title ref)))
                ;; Replace tags
                (string/replace
                 (str "#" page-ref-special-chars
                      (:block/uuid ref))
-                (str "#" (:block/original-name ref))))
+                (str "#" (:block/title ref))))
 
            content))
        content
@@ -80,7 +80,7 @@
    (fn [content ref]
      (string/replace content
                      (str page-ref/left-brackets
-                          (:block/original-name ref)
+                          (:block/title ref)
                           page-ref/right-brackets)
                      (str page-ref/left-brackets
                           page-ref-special-chars
@@ -122,10 +122,10 @@
    (fn [content tag]
      (common-util/replace-ignore-case
       content
-      (str "#" (:block/original-name tag))
+      (str "#" (:block/title tag))
       (str page-ref/left-brackets
            page-ref-special-chars
            (:block/uuid tag)
            page-ref/right-brackets)))
    content
-   (sort-by :block/original-name > tags)))
+   (sort-by :block/title > tags)))

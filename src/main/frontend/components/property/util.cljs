@@ -4,7 +4,7 @@
 
 (defn update-property!
   [property property-name property-schema]
-  (when (or (not= (:block/original-name property) property-name)
+  (when (or (not= (:block/title property) property-name)
             (not= (:block/schema property) property-schema))
     (db-property-handler/upsert-property!
      (:db/ident property)

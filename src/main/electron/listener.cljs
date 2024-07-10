@@ -76,7 +76,7 @@
   (safe-api-call "redirectWhenExists"
                  ;;  Redirect to the given page or block when the provided page or block exists.
                  ;;  Either :page-name or :block-id is required.
-                 ;;  :page-name : the original-name of the page.
+                 ;;  :page-name : the title of the page.
                  ;;  :block-id : uuid.
                  (fn [data]
                    (let [{:keys [page-name block-id file]} (bean/->clj data)]

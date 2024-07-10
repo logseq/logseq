@@ -74,7 +74,7 @@
    (when q
      (p/let [q (fuzzy/clean-str q)
              properties* (db-async/<get-all-properties)
-             properties (map :block/original-name properties*)]
+             properties (map :block/title properties*)]
        (when (seq properties)
          (if (string/blank? q)
            properties
@@ -128,7 +128,7 @@
     (p/let [page (db/entity page-id)
             alias-names (conj (set (map util/safe-page-name-sanity-lc
                                         (db/get-page-alias-names repo page-id)))
-                              (:block/original-name page))
+                              (:block/title page))
             q (string/join " " alias-names)
             result (block-search repo q {:limit 100})
             eids (map (fn [b] [:block/uuid (:block/uuid b)]) result)

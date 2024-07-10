@@ -293,6 +293,6 @@
          (ui/button (t :export-save-to-file)
                     :on-click #(let [file-name (if (uuid? root-block-uuids-or-page-uuid)
                                                  (-> (db/get-page root-block-uuids-or-page-uuid)
-                                                     (util/get-page-original-name))
+                                                     (util/get-page-title))
                                                  (t/now))]
                                  (utils/saveToFile (js/Blob. [@*content]) (str "logseq_" file-name) (if (= tp :text) "txt" (name tp)))))])]]))

@@ -77,7 +77,7 @@
              (if-let [parent-class (some-> (:db/id (:class/parent page))
                                            db/entity)]
                [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid parent-class))}
-                (:block/original-name parent-class)]
+                (:block/title parent-class)]
                "None")]
             [:div.col-span-3
              (let [parent (some-> (:db/id (:class/parent page))
@@ -95,8 +95,8 @@
               [:div.col-span-2 "Ancestor classes:"]
               [:div.col-span-3
                (interpose [:span.opacity-50.text-sm " > "]
-                          (map (fn [{class-name :block/original-name :as ancestor}]
-                                 (if (= class-name (:block/original-name page))
+                          (map (fn [{class-name :block/title :as ancestor}]
+                                 (if (= class-name (:block/title page))
                                    [:span class-name]
                                    [:a {:on-click #(route-handler/redirect-to-page! (:block/uuid ancestor))} class-name]))
                                class-ancestors))]])))])))
@@ -106,8 +106,8 @@
   (let [children (:class/_parent class)]
     (when (seq children)
       [:ul
-       (for [child (sort-by :block/original-name children)]
-         (let [title [:li.ml-2 (block/page-reference false (:block/original-name child) {:show-brackets? false} nil)]]
+       (for [child (sort-by :block/title children)]
+         (let [title [:li.ml-2 (block/page-reference false (:block/title child) {:show-brackets? false} nil)]]
            (if (seq (:class/_parent child))
              (ui/foldable
               title

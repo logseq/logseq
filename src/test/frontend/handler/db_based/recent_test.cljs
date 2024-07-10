@@ -21,7 +21,7 @@
       (doseq [page pages]
         (test-helper/create-page! page {:redirect? false :create-first-block? false :class? true})
         (db-recent-handler/add-page-to-recent! (:db/id (db/get-page page)) false))
-      (is (= (map :block/original-name (db-recent-handler/get-recent-pages)) (reverse pages)))
+      (is (= (map :block/title (db-recent-handler/get-recent-pages)) (reverse pages)))
       (testing "Click existing recent item shouldn't update its position"
         (db-recent-handler/add-page-to-recent! (:db/id (db/get-page "Page 10")) true)
-        (is (= (map :block/original-name (db-recent-handler/get-recent-pages)) (reverse pages)))))))
+        (is (= (map :block/title (db-recent-handler/get-recent-pages)) (reverse pages)))))))
