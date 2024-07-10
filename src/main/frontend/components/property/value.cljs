@@ -46,7 +46,7 @@
                                                (db-property-handler/set-block-property!
                                                 (:db/id block)
                                                 :logseq.property/icon
-                                                (select-keys icon [:type :id])))})
+                                                (select-keys icon [:type :id :color])))})
      (when (and icon-value (not config/publishing?))
        [:a.fade-link.flex {:on-click (fn [_e]
                                        (db-property-handler/remove-block-property!

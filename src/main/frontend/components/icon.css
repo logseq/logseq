@@ -1,6 +1,6 @@
 .cp__emoji-icon-picker {
   @apply w-[380px] max-h-[396px] relative flex flex-col overflow-hidden;
-  @apply pt-14 pb-12;
+  @apply pt-14 pb-[40px];
 
   > .hd {
     @apply absolute w-full pt-3 pb-1 px-3 top-0 left-0;
@@ -51,7 +51,7 @@
     }
   }
 
-  .pane-block {
+  .pane-section {
     @apply pl-2 overflow-y-scroll h-full;
 
     > .its, .icons-row {
@@ -85,10 +85,36 @@
       overflow-ellipsis overflow-hidden mr-2;
     }
   }
+
+  .color-picker {
+    @apply rounded-full w-[24px] h-[24px] overflow-hidden flex relative p-0;
+
+    > strong {
+      @apply w-[18px] h-[18px] rounded-full absolute opacity-90
+      hover:opacity-100 font-normal text-sm;
+
+      .ui__icon {
+        @apply opacity-90 scale-90;
+      }
+    }
+  }
+}
+
+.color-picker-presets {
+  @apply flex flex-row gap-[2px];
+
+  .it {
+    @apply w-[18px] h-[18px] overflow-hidden p-0
+    opacity-90 hover:opacity-100 active:opacity-80;
+  }
 }
 
 .dropdown-wrapper .cp__emoji-icon-picker {
   @apply -m-4;
+}
+
+.ui__dropdown-menu-content:has(> .cp__emoji-icon-picker) {
+  @apply flex;
 }
 
 .ui__dropdown-menu-content .cp__emoji-icon-picker {

@@ -624,12 +624,13 @@
                                   (shui/popup-hide! id))))}))]
 
          (shui/trigger-as :button
-                          (-> (when-not config/publishing?
-                                {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
-                              (assoc :class "flex items-center"))
-                          (if icon
-                            (icon-component/icon icon {:size 15})
-                            (property-icon property nil)))))
+           (-> (when-not config/publishing?
+                 {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
+             (assoc :class "flex items-center"))
+           (if-let [color (some-> icon :color)]
+             [:span.flex.items-center {:style {:color (or color "inherit")}}
+              (icon-component/icon icon {:size 15})]
+             (property-icon property nil)))))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
