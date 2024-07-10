@@ -174,7 +174,7 @@
               :update-icon
               (fn [icon]
                 (property-handler/set-block-property! (state/get-current-repo) (:block/uuid block) :logseq.property/icon
-                                                      (select-keys icon [:id :type]))))
+                                                      (select-keys icon [:id :type :color]))))
        parent-opts))))
 
 (rum/defc add-existing-values

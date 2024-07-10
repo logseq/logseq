@@ -355,12 +355,12 @@
               {:on-pointer-down util/stop-propagation}
               (if (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
-                                            {:on-chosen (fn [_e icon]
-                                                          (db-property-handler/set-block-property!
-                                                           (:db/id page)
-                                                           (pu/get-pid :logseq.property/icon)
-                                                           (select-keys icon [:id :type])))
-                                             :icon-props {:size 38}})
+                  {:on-chosen (fn [_e icon]
+                                (db-property-handler/set-block-property!
+                                  (:db/id page)
+                                  (pu/get-pid :logseq.property/icon)
+                                  (select-keys icon [:id :type :color])))
+                   :icon-props {:size 38}})
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")
