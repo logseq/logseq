@@ -105,9 +105,10 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
-  (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
-        files' (mapv #(hash-map :path %) files)]
-    (gp-exporter/export-doc-files conn files' <read-file doc-options)))
+  (p/let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
+          files' (mapv #(hash-map :path %) files)
+          _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
+    {:import-state (:import-state doc-options)}))
 
 (defn- readable-properties
   [db query-ent]
@@ -144,13 +145,12 @@
       (is (= 14 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 5
+      (is (= 4
              (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...]
                                 :where [?b :block/original-name] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
           "Correct number of pages with block content")
-      (is (= 2 (count @(:ignored-properties import-state)))
-          "Only ignored properties should be related to :icon")
+      (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -222,10 +222,6 @@
       (is (= [(:db/id (find-block-by-content @conn "original block"))]
              (mapv :db/id (:block/refs (find-block-by-content @conn #"ref to"))))
           "block with a block-ref has correct :block/refs")
-
-      (is (= 2
-             (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
-          "icon properties are visibly ignored in order to not fail import")
 
       (let [b (find-block-by-content @conn #"MEETING TITLE")]
         (is (= {}
@@ -349,3 +345,13 @@
       (is (= [:user.class/Property]
              (:block/tags (readable-properties @conn (find-page-by-name @conn "url"))))
           "tagged page has configured tag imported as a class"))))
+
+(deftest-async export-file-with-ignored-properties
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
+          conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          {:keys [import-state]} (import-files-to-db files conn {})]
+    (is (= 2
+           (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
+        "icon properties are visibly ignored in order to not fail import")))
