@@ -137,7 +137,7 @@
 
     (testing "whole graph"
 
-      (is (nil? (:errors (db-validate/validate-db! @conn)))
+      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
           "Created graph has no validation errors")
 
       ;; Counts
@@ -169,7 +169,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 15
+      (is (= 16
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/type "property"]])
@@ -274,16 +274,31 @@
       (is (= :page
              (get-in (d/entity @conn :user.property/participants) [:block/schema :type]))
           ":page property to :date value remains :page")
-      (is (= :default
-             (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
-          ":number property to :default value changes to :default")
 
       (is (= :default
              (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
           ":default property to :page (or any non :default value) remains :default")
       (is (= "[[Jakob]]"
              (:user.property/description (readable-properties @conn (find-block-by-content @conn #":default to :page"))))
-          ":page property value correctly saved as :default with full text"))
+          ":default to :page property saves :default property value default with full text")
+
+      (testing "with changes to upstream/existing property value"
+        (is (= :default
+               (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
+            ":number property to :default value changes to :default")
+        (is (= "20"
+               (:user.property/duration (readable-properties @conn (find-block-by-content @conn "existing :number to :default"))))
+            "existing :number property value correctly saved as :default")
+
+        (is (= {:block/schema {:type :default} :db/cardinality :db.cardinality/many}
+               (select-keys (d/entity @conn :user.property/people) [:block/schema :db/cardinality]))
+            ":page property to :default value changes to :default and keeps existing cardinality")
+        (is (= #{"[[Jakob]] [[Gabriel]]"}
+               (:user.property/people (readable-properties @conn (find-block-by-content @conn ":page people"))))
+            "existing :page property value correctly saved as :default with full text")
+        (is (= #{"[[Gabriel]] [[Jakob]]"}
+               (:user.property/people (readable-properties @conn (find-block-by-content @conn #"pending block for :page"))))
+            "pending :page property value correctly saved as :default with full text")))
 
     (testing "replacing refs in :block/content"
       (is (= 2
