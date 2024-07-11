@@ -692,7 +692,7 @@
 
 (defn- build-upstream-properties-tx-for-default
   "Builds upstream-properties-tx for properties that change to :default type"
-  [db prop property-ident block-properties-text-values blocks-tx]
+  [db prop property-ident block-properties-text-values]
   (let [get-pvalue-content (fn get-pvalue-content [block-uuid prop']
                              (or (get-in block-properties-text-values [block-uuid prop'])
                                  (throw (ex-info (str "No :block/text-properties-values found when changing property values: " (pr-str block-uuid))
@@ -709,56 +709,41 @@
                   (rules/extract-rules rules/db-query-dsl-rules)))
         existing-blocks-tx
         (mapcat (fn [m]
-                  (let [prop-value-id (or (:db/id (get m property-ident))
-                                          (throw (ex-info (str "No property value found when changing property values: " (pr-str property-ident))
-                                                          {:property-ident property-ident
-                                                           :block-uuid (:block-uuid m)})))
-                        prop-value-content (get-pvalue-content (:block/uuid m) prop)]
-                    ;; Switch to :block/content since :default is stored differently
-                    [[:db/retract prop-value-id :property.value/content]
-                     [:db/add prop-value-id :block/content prop-value-content]]))
-                existing-blocks)
-        ;; Look up blocks about to be transacted for current file a.k.a. pending
-        ;; Map of property value uuids to their original block uuids
-        ;; original block uuid needed to look up property's text value
-        pending-pvalue-uuids (->> blocks-tx
-                                  (keep #(when-let [prop-value (get % property-ident)]
-                                           [(or (second prop-value)
-                                                (throw (ex-info (str "No property value found when changing property values: " (pr-str property-ident))
-                                                                {:property-ident property-ident
-                                                                 :block-uuid (:block-uuid %)})))
-                                            (:block/uuid %)]))
-                                  (into {}))
-        pending-blocks-tx
-        (mapcat (fn [m]
-                  (when-let [original-block-uuid (get pending-pvalue-uuids (:block/uuid m))]
-                    (let [prop-value-content (get-pvalue-content original-block-uuid prop)
-                          prop-value-id [:block/uuid (:block/uuid m)]]
-                      [[:db/retract prop-value-id :property.value/content]
-                       [:db/add prop-value-id :block/content prop-value-content]])))
-                blocks-tx)]
-    (concat existing-blocks-tx pending-blocks-tx)))
+                  (let [prop-value (get m property-ident)
+                        prop-value-content (get-pvalue-content (:block/uuid m) prop)
+                        new-value (db-property-build/build-property-value-block
+                                   m {:db/ident property-ident} prop-value-content)]
+                    (into (mapv #(vector :db/retractEntity (:db/id %))
+                                (if (sequential? prop-value) prop-value [prop-value]))
+                          [new-value
+                           {:block/uuid (:block/uuid m)
+                            property-ident [:block/uuid (:block/uuid new-value)]}])))
+                existing-blocks)]
+    existing-blocks-tx))
 
 (defn- build-upstream-properties-tx
   "Builds tx for upstream properties that have changed and any instances of its
   use in db or in given blocks-tx. Upstream properties can be properties that
   already exist in the DB from another file or from earlier uses of a property
   in the same file"
-  [db page-names-to-uuids upstream-properties import-state blocks-tx log-fn]
+  [db upstream-properties import-state log-fn]
   (if (seq upstream-properties)
     (let [block-properties-text-values @(:block-properties-text-values import-state)
-          all-idents @(:all-idents import-state)]
-      (log-fn :props-upstream-to-change upstream-properties)
-      (mapcat
-       (fn [[prop {:keys [schema]}]]
-         ;; property schema change
-         (let [prop-uuid (get-page-uuid page-names-to-uuids (name prop))]
-           (into [{:block/uuid prop-uuid :block/schema schema}]
-                 ;; handle changes to specific types
-                 (when (= :default (:type schema))
-                   (let [prop-ident (get-ident all-idents prop)]
-                     (build-upstream-properties-tx-for-default db prop prop-ident block-properties-text-values blocks-tx))))))
-       upstream-properties))
+          all-idents @(:all-idents import-state)
+          _ (log-fn :props-upstream-to-change upstream-properties)
+          txs
+          (mapcat
+           (fn [[prop {:keys [schema]}]]
+             (let [prop-ident (get-ident all-idents prop)
+                   upstream-tx
+                   (when (= :default (:type schema))
+                     (build-upstream-properties-tx-for-default db prop prop-ident block-properties-text-values))
+                   property-pages-tx [{:db/ident prop-ident :block/schema schema}]]
+               ;; If we handle cardinality changes we would need to return these separately
+               ;; as property-pages would need to be transacted separately
+               (concat property-pages-tx upstream-tx)))
+           upstream-properties)]
+      txs)
     []))
 
 (defn new-import-state
@@ -886,15 +871,8 @@
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-        _ (d/transact! conn property-pages-tx)
+        main-props-tx-report (d/transact! conn property-pages-tx)
 
-        upstream-properties-tx (build-upstream-properties-tx
-                                @conn
-                                page-names-to-uuids
-                                @(:upstream-properties tx-options)
-                                (select-keys (:import-state tx-options) [:block-properties-text-values :all-idents])
-                                blocks-tx
-                                log-fn)
         ;; Build indices
         pages-index (map #(select-keys % [:block/uuid]) pages-tx')
         block-ids (map (fn [block] {:block/uuid (:block/uuid block)}) blocks-tx)
@@ -907,12 +885,17 @@
         blocks-index (set/union (set block-ids) (set block-refs-ids))
         ;; Order matters. pages-index and blocks-index needs to come before their corresponding tx for
         ;; uuids to be valid. Also upstream-properties-tx comes after blocks-tx to possibly override blocks
-        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx'
-                   blocks-index blocks-tx upstream-properties-tx)
+        tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' blocks-index blocks-tx)
         tx' (common-util/fast-remove-nils tx)
         ;; _ (cljs.pprint/pprint {:tx tx'})
-        result (d/transact! conn tx')]
-    result))
+        main-tx-report (d/transact! conn tx')
+
+        upstream-properties-tx
+        (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
+        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx))]
+
+    ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
+    [main-props-tx-report main-tx-report upstream-tx-report]))
 
 ;; Higher level export fns
 ;; =======================
