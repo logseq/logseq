@@ -170,6 +170,7 @@
 (defn get-priorities
   []
   (let [db-based? (config/db-based-graph? (state/get-current-repo))
+        with-no-priority #(if db-based? (cons ["No priority" (->priority nil) "" :icon/priorityLvlNone] %) %)
         result (->>
                 (if db-based?
                   (db-based-priorities)
@@ -178,8 +179,11 @@
                         (let [command (if db-based?
                                         [:div.flex.flex-row.items-center.gap-2 item [:div.text-xs.opacity-50 "Priority"]]
                                         item)]
-                          [command (->priority item) (str "Set priority to " item) (str "priorityLvl" item)])))
-                 (cons ["No priority" (->priority nil) "" :icon/priorityLvlNone])
+                          [command (->priority item) (str "Set priority to " item)
+                           (if db-based?
+                             (str "priorityLvl" item)
+                             (str "circle-letter-" (util/safe-lower-case item)))])))
+                 (with-no-priority)
                  (vec))]
     (when (seq result)
       (update result 0 (fn [v] (conj v "PRIORITY"))))))
@@ -308,7 +312,7 @@
                     [:editor/set-deadline]] "" :icon/calendar-stats]
        (when-not db?
          ["Scheduled" [[:editor/clear-current-slash]
-                       [:editor/set-scheduled]]])]
+                       [:editor/set-scheduled]] "" :icon/calendar-month])]
 
       ;; priority
       (get-priorities)
@@ -344,7 +348,7 @@
         :icon/query
         "ADVANCED"]
        (when-not db?
-         ["Zotero" (zotero-steps) "Import Zotero journal article"])
+         ["Zotero" (zotero-steps) "Import Zotero journal article" :icon/circle-letter-z])
        ["Query function" [[:editor/input "{{function }}" {:backward-pos 2}]] "Create a query function" :icon/queryCode]
        ["Calculator" [[:editor/input "```calc\n\n```" {:type "block"
                                                        :backward-pos 4}]

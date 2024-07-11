@@ -55,7 +55,7 @@
                plugin-id (get-in item [1 1 1 :pid])
                doc (when (state/show-command-doc?) command-doc)
                options (some-> item (get 3))
-               icon-name (some-> (if (map? options) :icon options) (name))
+               icon-name (some-> (if (map? options) (:icon options) options) (name))
                command-name (if icon-name
                               [:span.flex.items-center.gap-1
                                (shui/tabler-icon icon-name)
