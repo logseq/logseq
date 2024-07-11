@@ -306,7 +306,7 @@
                         (js/console.error "Translating query properties failed with:" e)
                         []))
                     :query-sort-by
-                    (if (#{:page :block :created-at :updated-at} val) val (get-ident @all-idents (keyword val)))
+                    (if (#{:page :block :created-at :updated-at} (keyword val)) (keyword val) (get-ident @all-idents (keyword val)))
                     :filters
                     (try (edn/read-string val)
                          (catch :default e
