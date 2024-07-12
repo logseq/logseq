@@ -285,13 +285,16 @@
 (def built-in-property-names
   "Set of all built-in property names as keywords. Using in-memory property
   names because these are legacy names already in a user's file graph"
-  (->> built-in-property-name-to-idents keys set))
+  (-> built-in-property-name-to-idents keys set
+      ;; :filters is not in built-in-properties because it maps to 2 new properties
+      (conj :filters)))
 
 (defn- update-built-in-property-values
   [props {:keys [ignored-properties all-idents]} {:block/keys [content name]}]
   (->> props
        (keep (fn [[prop val]]
-               (if (= :icon prop)
+               ;; FIXME: Migrate :filters to :logseq.property.linked-references/* properties
+               (if (#{:icon :filters} prop)
                  (do (swap! ignored-properties
                             conj
                             {:property prop :value val :location (if name {:page name} {:block content})})
@@ -307,11 +310,6 @@
                         []))
                     :query-sort-by
                     (if (#{:page :block :created-at :updated-at} (keyword val)) (keyword val) (get-ident @all-idents (keyword val)))
-                    :filters
-                    (try (edn/read-string val)
-                         (catch :default e
-                           (js/console.error "Translating filters failed with:" e)
-                           {}))
                     val)])))
        (into {})))
 
@@ -634,14 +632,20 @@
     ;; Order matters as properties are referenced in block
     (concat properties-tx deadline-properties-tx [block'])))
 
+(defn- update-page-alias
+  [m page-names-to-uuids]
+  (update m :block/alias (fn [aliases]
+                           (map #(vector :block/uuid (get-page-uuid page-names-to-uuids (:block/name %)))
+                                aliases))))
+
 (defn- build-new-page
   [m db tag-classes page-names-to-uuids]
-  (-> m
-      ;; Fix pages missing :block/original-name. Shouldn't happen
-      ((fn [m']
-         (if-not (:block/original-name m')
-           (assoc m' :block/original-name (:block/name m'))
-           m')))
+  (-> (cond-> m
+        ;; Fix pages missing :block/original-name. Shouldn't happen
+        (not (:block/original-name m))
+        (assoc :block/original-name (:block/name m))
+        (seq (:block/alias m))
+        (update-page-alias page-names-to-uuids))
       add-missing-timestamps
       ;; TODO: org-mode content needs to be handled
       (assoc :block/format :markdown)
@@ -681,6 +685,8 @@
                                                        ignored-attrs)}))
                              (when (seq block-changes)
                                (cond-> (merge block-changes {:block/uuid page-uuid})
+                                 (seq (:block/alias m))
+                                 (update-page-alias page-names-to-uuids)
                                  (:block/tags m)
                                  (update-page-tags @conn tag-classes page-names-to-uuids))))
                            (build-new-page m @conn tag-classes page-names-to-uuids)))

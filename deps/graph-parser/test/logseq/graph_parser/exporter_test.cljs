@@ -148,12 +148,12 @@
       (is (= 16 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 4
+      (is (= 5
              (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...]
                                 :where [?b :block/original-name] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
           "Correct number of pages with block content")
-      (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")
+      (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -172,7 +172,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 16
+      (is (= 17
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/type "property"]])
@@ -259,6 +259,9 @@
              (readable-properties @conn (find-block-by-content @conn "list one")))
           "numered block has correct property")
 
+      (is (= #{"gpt"}
+             (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
+
       (is (= {:logseq.property/query-sort-by :user.property/prop-num
               :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
               :logseq.property/query-table true}
@@ -333,7 +336,10 @@
 
         (is (= {:logseq.property/page-tags #{"Movie"}}
                (readable-properties @conn tagged-page))
-            "tagged page has tags imported as page-tags property by default")))))
+            "tagged page has existing page imported as a tag to page-tags")
+        (is (= #{"LargeLanguageModel" "fun" "ai"}
+               (:logseq.property/page-tags (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
+            "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
 
 (deftest-async export-file-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
