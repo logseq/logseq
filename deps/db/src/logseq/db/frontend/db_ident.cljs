@@ -39,6 +39,8 @@
               (string/replace-first #"^\d+" "")
               (string/replace " " "-")
               (string/replace "#" "")
+              ;; '/' cannot be in name - https://clojure.org/reference/reader
+              (string/replace "/" "-")
               (string/trim))]
     (assert (seq n) "name is not empty")
     (keyword user-namespace n)))

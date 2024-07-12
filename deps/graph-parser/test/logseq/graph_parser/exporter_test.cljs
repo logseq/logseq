@@ -348,6 +348,10 @@
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+
     (let [block (find-block-by-content @conn #"Inception")
           tag-page (find-page-by-name @conn "Movie")
           another-tag-page (find-page-by-name @conn "p0")]
@@ -372,6 +376,10 @@
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (import-files-to-db files conn {:property-classes ["type"]})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+
     (let [block (find-block-by-content @conn #"The Creator")
           tag-page (find-page-by-name @conn "Movie")]
       (is (= (:block/content block) "The Creator")
