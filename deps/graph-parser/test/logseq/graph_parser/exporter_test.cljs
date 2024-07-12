@@ -153,6 +153,7 @@
                                 :where [?b :block/original-name] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
           "Correct number of pages with block content")
+      (is (= 3 (count (d/datoms @conn :avet :block/type "whiteboard"))))
       (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
       (is (= 1 (count @assets))))
 

@@ -479,9 +479,9 @@
 
 (defn- handle-page-and-block-properties
   "Returns a map of :block with updated block and :properties-tx with any properties tx.
-   Handles modifying :block/properties, updating classes from property-classes
+   Handles modifying block properties, updating classes from property-classes
   and removing any deprecated property related attributes. Before updating most
-  :block/properties, their property schemas are inferred as that can affect how
+  block properties, their property schemas are inferred as that can affect how
   a property is updated. Only infers property schemas on user properties as
   built-in ones must not change"
   [{:block/keys [properties] :as block} db page-names-to-uuids refs
@@ -626,6 +626,8 @@
                    (update-block-marker options)
                    (update-block-priority options)
                    add-missing-timestamps
+                   ;; old whiteboards may have this
+                   (dissoc :block/left)
                    ;; ((fn [x] (prn :block-out x) x))
                    ;; TODO: org-mode content needs to be handled
                    (assoc :block/format :markdown))]
@@ -865,8 +867,7 @@
                               (map (fn [page-block]
                                      (-> page-block
                                          (assoc :block/format :markdown
-                                                 ;; fixme: missing properties
-                                                :block/properties {(get-pid @conn :ls-type) :whiteboard-page})))))
+                                                :logseq.property/ls-type :whiteboard-page)))))
         pre-blocks (->> blocks (keep #(when (:block/pre-block? %) (:block/uuid %))) set)
         blocks-tx (->> blocks
                        (remove :block/pre-block?)
