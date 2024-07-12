@@ -418,16 +418,8 @@
   updated properties in :block-properties and any property values tx in :pvalues-tx"
   [props _db page-names-to-uuids
    {:block/keys [properties-text-values] :as block}
-   {:keys [_whiteboard? import-state] :as options}]
-  (let [;; FIXME: Whiteboard
-        ;; prop-name->uuid (if whiteboard?
-        ;;                   (fn prop-name->uuid [k]
-        ;;                     (or (get-pid db k)
-        ;;                         (throw (ex-info (str "No uuid found for page " (pr-str k))
-        ;;                                         {:page k}))))
-        ;;                   (fn prop-name->uuid [k]
-        ;;                     (get-page-uuid page-names-to-uuids k)))
-        {:keys [all-idents property-schemas]} import-state
+   {:keys [import-state] :as options}]
+  (let [{:keys [all-idents property-schemas]} import-state
         get-ident' #(get-ident @all-idents %)
         user-properties (apply dissoc props built-in-property-names)]
     (when (seq user-properties)
@@ -873,7 +865,8 @@
         {:keys [pages-tx page-properties-tx page-names-to-uuids existing-pages]} (build-pages-tx conn pages blocks tx-options)
         whiteboard-pages (->> pages-tx
                               ;; support old and new whiteboards
-                              (filter #(#{"whiteboard" ["whiteboard"]} (:block/type %)))
+                              (filter #(or (contains? (set (:block/type %)) "whiteboard")
+                                           (= "whiteboard" (:block/type %))))
                               (map (fn [page-block]
                                      (-> page-block
                                          (assoc :block/format :markdown
