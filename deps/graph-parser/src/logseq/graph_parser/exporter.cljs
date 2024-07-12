@@ -290,7 +290,7 @@
       (conj :filters)))
 
 (defn- update-built-in-property-values
-  [props {:keys [ignored-properties all-idents]} {:block/keys [content name]}]
+  [props {:keys [ignored-properties all-idents]} {:block/keys [content name]} options]
   (->> props
        (keep (fn [[prop val]]
                ;; FIXME: Migrate :filters to :logseq.property.linked-references/* properties
@@ -302,12 +302,21 @@
                  [(built-in-property-name-to-idents prop)
                   (case prop
                     :query-properties
-                    (try
-                      (mapv #(if (#{:page :block :created-at :updated-at} %) % (get-ident @all-idents %))
-                            (edn/read-string val))
-                      (catch :default e
-                        (js/console.error "Translating query properties failed with:" e)
-                        []))
+                    (let [property-classes (set (map keyword (:property-classes options)))]
+                      (try
+                        (mapv #(cond (#{:page :block :created-at :updated-at} %)
+                                    %
+                                    (property-classes %)
+                                    :block/tags
+                                    (= :tags %)
+                                     ;; This could also be :logseq.property/page-tags
+                                    :block/tags
+                                    :else
+                                    (get-ident @all-idents %))
+                              (edn/read-string val))
+                        (catch :default e
+                          (js/console.error "Translating query properties failed with:" e)
+                          [])))
                     :query-sort-by
                     (if (#{:page :block :created-at :updated-at} (keyword val)) (keyword val) (get-ident @all-idents (keyword val)))
                     val)])))
@@ -433,7 +442,8 @@
       (let [props' (-> (update-built-in-property-values
                         (select-keys props built-in-property-names)
                         (select-keys import-state [:ignored-properties :all-idents])
-                        (select-keys block [:block/name :block/content]))
+                        (select-keys block [:block/name :block/content])
+                        (select-keys options [:property-classes]))
                        (merge (update-user-property-values user-properties page-names-to-uuids properties-text-values import-state options)))
             pvalue-tx-m (->property-value-tx-m block props' #(get @property-schemas %) @all-idents)
             block-properties (-> (merge props' (db-property-build/build-properties-with-ref-values pvalue-tx-m))
