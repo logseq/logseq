@@ -150,10 +150,12 @@
                         (let [command (if db-based?
                                         [:div.flex.flex-row.items-center.gap-2 m [:div.text-xs.opacity-50 "Status"]]
                                         m)
-                              icon (case m
-                                     "Canceled" "Cancelled"
-                                     "Doing" "InProgress50"
-                                     m)]
+                              icon (if db-based?
+                                     (case m
+                                       "Canceled" "Cancelled"
+                                       "Doing" "InProgress50"
+                                       m)
+                                     "square-asterisk")]
                           [command (->marker m) (str "Set status to " m) icon]))))]
     (when (seq result)
       (update result 0 (fn [v] (conj v "TASK"))))))
