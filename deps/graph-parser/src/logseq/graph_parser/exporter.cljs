@@ -680,7 +680,7 @@
                            (let [;; These attributes are not allowed to be transacted because they must not change across files
                                  disallowed-attributes [:block/name :block/uuid :block/format :block/original-name :block/journal-day
                                                         :block/created-at :block/updated-at]
-                                 allowed-attributes (into [:block/tags :block/alias :class/parent :block/type :block/namespace]
+                                 allowed-attributes (into [:block/tags :block/alias :class/parent :block/type]
                                                           (keep #(when (db-malli-schema/user-property? (key %)) (key %))
                                                                 m))
                                  block-changes (select-keys m allowed-attributes)]
@@ -991,30 +991,29 @@
 
 (defn- export-class-properties
   [conn repo-or-conn]
-  (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :block/name])
+  (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :db/ident])
                                  :where [?b :block/type "class"]] @conn)
                           (map first)
-                          (remove #(db-class/built-in-classes (keyword (:block/name %)))))
+                          (remove #(db-class/built-in-classes (:db/ident %))))
         class-to-prop-uuids
-        (->> (d/q '[:find ?t ?prop-name ?prop-uuid #_?class
+        (->> (d/q '[:find ?t ?prop #_?class
                     :in $ ?user-classes
                     :where
                     [?b :block/tags ?t]
-                    [?t :block/name ?class]
+                    [?t :db/ident ?class]
                     [(contains? ?user-classes ?class)]
-                    [?b :block/properties ?bp]
-                    [?prop-b :block/name ?prop-name]
-                    [?prop-b :block/uuid ?prop-uuid]
-                    [(get ?bp ?prop-uuid) ?_v]]
+                    [?b ?prop _]
+                    [?prop-e :db/ident ?prop]
+                    [?prop-e :block/type "property"]]
                   @conn
-                  (set (map :block/name user-classes)))
-             (remove #(ldb/built-in? (ldb/get-page @conn (second %))))
-             (reduce (fn [acc [class-id _prop-name prop-uuid]]
-                       (update acc class-id (fnil conj #{}) prop-uuid))
+                  (set (map :db/ident user-classes)))
+             (remove #(ldb/built-in? (d/entity @conn (second %))))
+             (reduce (fn [acc [class-id prop-ident]]
+                       (update acc class-id (fnil conj #{}) prop-ident))
                      {}))
         tx (mapv (fn [[class-id prop-ids]]
                    {:db/id class-id
-                    :block/schema {:properties (vec prop-ids)}})
+                    :class/schema.properties (vec prop-ids)})
                  class-to-prop-uuids)]
     (ldb/transact! repo-or-conn tx)))
 

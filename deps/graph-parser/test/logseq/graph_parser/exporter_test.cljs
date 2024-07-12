@@ -375,10 +375,25 @@
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-          _ (import-files-to-db files conn {:property-classes ["type"]})]
+          _ (import-files-to-db files conn {:property-classes ["type"]})
+          _ (@#'gp-exporter/export-class-properties conn conn)]
 
     (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
         "Created graph has no validation errors")
+
+    (is (= #{:user.class/Property :user.class/Movie}
+           (->> @conn
+                (d/q '[:find [?ident ...]
+                       :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                set))
+        "All classes are correctly defined by :type")
+
+    (is (= #{:user.property/url :user.property/sameas :user.property/rangeincludes}
+           (->> (d/entity @conn :user.class/Property)
+                :class/schema.properties
+                (map :db/ident)
+                set))
+        "Properties are correctly inferred for a class")
 
     (let [block (find-block-by-content @conn #"The Creator")
           tag-page (find-page-by-name @conn "Movie")]
