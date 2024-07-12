@@ -202,7 +202,7 @@
            (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
            (update :block/refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
            (update :block/path-refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
-           (dissoc :block/deadline :block/scheduled))
+           (dissoc :block/deadline :block/scheduled :block/repeated?))
        :properties-tx (when-not existing-journal-page [deadline-page])})
     {:block block :properties-tx []}))
 
