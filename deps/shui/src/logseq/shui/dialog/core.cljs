@@ -71,6 +71,10 @@
   (when-let [[index] (get-modal id)]
     (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
 
+(defn has-modal?
+  []
+  (some-> @*modals (last) :open?))
+
 ;; apis
 (declare close!)
 
