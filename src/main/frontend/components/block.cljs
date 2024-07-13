@@ -62,6 +62,7 @@
             [frontend.template :as template]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
+            [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.drawer :as drawer]
@@ -602,7 +603,9 @@
                            (open-page-ref config page-entity e page-name contents-page?)))}
      (when-not hide-icon?
        (when-let [icon (get page-entity (pu/get-pid :logseq.property/icon))]
-         [:span.mr-1.inline-flex.items-center (icon/icon icon)]))
+         [:span.mr-1.inline-flex.items-center
+          {:style {:color (or (:color icon) "inherit")}}
+          (icon/icon icon)]))
      [:span
       (if (and (coll? children) (seq children))
         (for [child children]
@@ -729,7 +732,7 @@
                           (:block/name page))
             whiteboard-page? (model/whiteboard-page? page-name)
             inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) page-entity children label)
-            modal? (:modal/show? @state/state)]
+            modal? (shui-dialog/has-modal?)]
         (if (and (not (util/mobile?))
                  (not= page-name (:id config))
                  (not (false? preview?))

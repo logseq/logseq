@@ -239,7 +239,6 @@
 (rum/defc color-picker
   [*color]
   (let [[color, set-color!] (rum/use-state @*color)
-        _ (prn "==>>" color)
         *el (rum/use-ref nil)
         content-fn (fn []
                      (let [colors ["#6e7b8b" "#5e69d2" "#00b5ed" "#00b55b"
