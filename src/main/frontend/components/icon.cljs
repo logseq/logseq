@@ -34,7 +34,8 @@
         page-icon (get page-entity (pu/get-pid :logseq.property/icon))]
     (or
      (when-not (string/blank? page-icon)
-       (icon page-icon opts))
+       [:span {:style {:color (or (:color page-icon ) "inherit")}}
+        (icon page-icon opts)])
      default-icon)))
 
 (defn- search-emojis
