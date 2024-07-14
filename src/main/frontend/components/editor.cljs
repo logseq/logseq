@@ -843,9 +843,9 @@
       (= :input action)
       nil
 
+      ;; exit editing mode
       :else
-      (let [select? (and (= type :esc)
-                         (not (string/includes? value "```")))]
+      (let [select? (= type :esc)]
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!
