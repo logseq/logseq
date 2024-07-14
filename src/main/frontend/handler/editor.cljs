@@ -3293,17 +3293,14 @@
 (defn open-selected-block!
   [direction e]
   (let [selected-blocks (state/get-selection-blocks)
-        f (case direction
-            :left first
-            :right last)]
-    (when-let [block-id (some-> selected-blocks
-                                f
-                                (dom/attr "blockid")
-                                uuid)]
+        f (case direction :left first :right last)
+        node (some-> selected-blocks f)]
+    (when-let [block-id (some-> node (dom/attr "blockid") uuid)]
       (util/stop e)
-      (let [block    {:block/uuid block-id}
-            left?    (= direction :left)]
-        (edit-block! block (if left? 0 :max))))))
+      (let [block {:block/uuid block-id}
+            left? (= direction :left)
+            opts {:container-id (some-> node (dom/attr "containerid") (parse-long))}]
+        (edit-block! block (if left? 0 :max) opts)))))
 
 (defn shortcut-left-right [direction]
   (fn [e]
