@@ -407,7 +407,7 @@
                                                                                            (:block/format page))))
                        :else title))])]
 
-           (when (and db-based? @*hover?)
+           (when (and db-based? @*hover? (not preview?))
              (page-title-configure *show-page-info?))])))))
 
 (defn- page-mouse-over
@@ -565,7 +565,7 @@
               (page-blocks-cp repo page (merge option {:sidebar? sidebar?
                                                        :whiteboard? whiteboard?}))])])
 
-         (when @(::main-ready? state)
+         (when (and (not preview?) @(::main-ready? state))
            [:div {:style {:padding-left 9}}
             (when today?
               (today-queries repo today? sidebar?))
