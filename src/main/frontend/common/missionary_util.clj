@@ -1,4 +1,5 @@
 (ns frontend.common.missionary-util
+  "Macros for missionary"
   (:require [missionary.core :as m]))
 
 (defmacro <?
