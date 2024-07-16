@@ -665,8 +665,8 @@
   (let [page-name (when page-name (util/page-name-sanity-lc page-name))
         *el-trigger (rum/use-ref nil)
         [visible? set-visible!] (rum/use-state nil)
-        *timer (rum/use-ref nil)                            ;; enter
-        *timer1 (rum/use-ref nil)                           ;; leave
+        *timer (rum/use-ref nil)                            ;; show
+        *timer1 (rum/use-ref nil)                           ;; hide
         _  #_:clj-kondo/ignore (rum/defc html-template []
                                  (let [*el-popup (rum/use-ref nil)]
 
@@ -696,7 +696,13 @@
                                          :style {:width 600
                                                  :text-align "left"
                                                  :font-weight 500
-                                                 :padding-bottom 64}}
+                                                 :padding-bottom 64}
+                                         :on-mouse-enter (fn []
+                                                           (when-let [timer1 (rum/deref *timer1)]
+                                                             (js/clearTimeout timer1)))
+                                         :on-mouse-leave (fn []
+                                                           (rum/set-ref! *timer1
+                                                             (js/setTimeout #(set-visible! false) 500)))}
                                         (let [page-cp (state/get-page-blocks-cp)]
                                           (page-cp {:repo (state/get-current-repo)
                                                     :page-name redirect-page-name
@@ -708,7 +714,8 @@
         (when (true? visible?)
           (shui/popup-show!
             (rum/deref *el-trigger) html-template
-            {:root-props {:onOpenChange (fn [v] (set-visible! v))}
+            {:root-props {:onOpenChange (fn [v] (set-visible! v))
+                          :modal false}
              :content-props {:class "ls-preview-popup"
                              :onEscapeKeyDown (fn [^js e] (.preventDefault e))}
              :as-dropdown? false}))
@@ -732,15 +739,14 @@
                               (js/clearTimeout timer1)
                               (rum/set-ref! *timer1 nil))))
         :on-mouse-leave (fn []
-                          (when (not visible?)
-                            (let [timer (rum/deref *timer)
-                                  timer1 (rum/deref *timer1)]
-                              (when timer
-                                (js/clearTimeout timer)
-                                (rum/set-ref! *timer nil))
-                              (when-not timer1
-                                (rum/set-ref! *timer1
-                                  (js/setTimeout #(set-visible! false) 200))))))}
+                          (let [timer (rum/deref *timer)
+                                timer1 (rum/deref *timer1)]
+                            (when timer
+                              (js/clearTimeout timer)
+                              (rum/set-ref! *timer nil))
+                            (when-not timer1
+                              (rum/set-ref! *timer1
+                                (js/setTimeout #(set-visible! false) 500)))))}
        children] children)))
 
 (rum/defcs page-cp < db-mixins/query rum/reactive
