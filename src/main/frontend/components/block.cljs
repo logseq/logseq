@@ -3645,7 +3645,7 @@
                 page (db/entity (:db/id page))
                 blocks (tree/non-consecutive-blocks->vec-tree blocks)
                 parent-blocks (group-by :block/parent blocks)]
-            [:div.custom-query-page-result.color-level {:key (str "page-" (:db/id page))}
+            [:div.custom-query-page-result {:key (str "page-" (:db/id page))}
              (ui/foldable
               [:div
                (page-cp config page)

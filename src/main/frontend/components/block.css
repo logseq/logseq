@@ -825,6 +825,8 @@ html.is-mac {
 }
 
 .references-blocks {
+  @apply mb-3;
+
   &-wrap {
     .foldable-title {
       @apply ml-3;
