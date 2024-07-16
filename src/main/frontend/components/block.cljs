@@ -661,37 +661,41 @@
           (ui/icon "x" {:size 15})]))]))
 
 (rum/defc page-preview-trigger
-  [{:keys [children sidebar? tippy-position tippy-distance fixed-position? open? manual?] :as config} page-name]
-  (let [*tippy-ref (rum/create-ref)
-        page-name (when page-name (util/page-name-sanity-lc page-name))
+  [{:keys [children sidebar? open? manual?] :as config} page-name]
+  (let [page-name (when page-name (util/page-name-sanity-lc page-name))
+        *el-trigger (rum/use-ref nil)
+        [visible? set-visible!] (rum/use-state nil)
+        *timer (rum/use-ref nil)                            ;; enter
+        *timer1 (rum/use-ref nil)                           ;; leave
         _  #_:clj-kondo/ignore (rum/defc html-template []
                                  (let [*el-popup (rum/use-ref nil)]
 
                                    (rum/use-effect!
-                                    (fn []
-                                      (let [el-popup (rum/deref *el-popup)
-                                            cb (fn [^js e]
-                                                 (when-not (state/editing?)
-                                                   ;; Esc
-                                                   (and (= e.which 27)
-                                                        (when-let [tp (rum/deref *tippy-ref)]
-                                                          (.hideTooltip tp)))))]
+                                     (fn []
+                                       (let [el-popup (rum/deref *el-popup)
+                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))
+                                             cb (fn [^js e]
+                                                  ;; Esc
+                                                  (when (= (.-which e) 27)
+                                                    (if-not (state/editing?)
+                                                      (set-visible! false) (focus!))))]
 
-                                        (js/setTimeout #(.focus el-popup))
-                                        (.addEventListener el-popup "keyup" cb)
-                                        #(.removeEventListener el-popup "keyup" cb)))
-                                    [])
+                                         (focus!)
+                                         (.addEventListener el-popup "keydown" cb)
+                                         (fn []
+                                           (.removeEventListener el-popup "keydown" cb)
+                                           (set-visible! false))))
+                                     [])
 
                                    (let [redirect-page-name (or (and page-name (model/get-redirect-page-name page-name (:block/alias? config)))
-                                                                page-name)]
+                                                              page-name)]
                                      (when redirect-page-name
-                                       [:div.tippy-wrapper.overflow-y-auto.p-4.outline-none.rounded-md
-                                        {:ref   *el-popup
+                                       [:div.tippy-wrapper.p-4.outline-none.rounded-md
+                                        {:ref *el-popup
                                          :tab-index -1
-                                         :style {:width          600
-                                                 :text-align     "left"
-                                                 :font-weight    500
-                                                 :max-height     600
+                                         :style {:width 600
+                                                 :text-align "left"
+                                                 :font-weight 500
                                                  :padding-bottom 64}}
                                         (let [page-cp (state/get-page-blocks-cp)]
                                           (page-cp {:repo (state/get-current-repo)
@@ -699,32 +703,57 @@
                                                     :sidebar? sidebar?
                                                     :preview? true}))]))))]
 
+    (rum/use-effect!
+      (fn []
+        (when (true? visible?)
+          (shui/popup-show!
+            (rum/deref *el-trigger) html-template
+            {:root-props {:onOpenChange (fn [v] (set-visible! v))}
+             :content-props {:class "ls-preview-popup"
+                             :onEscapeKeyDown (fn [^js e] (.preventDefault e))}
+             :as-dropdown? false}))
+
+        (when (false? visible?)
+          (shui/popup-hide!))
+        (rum/set-ref! *timer nil)
+        (rum/set-ref! *timer1 nil))
+      [visible?])
+
     (if (or (not manual?) open?)
-      (ui/tippy {:ref             *tippy-ref
-                 :in-editor?      true
-                 :html            html-template
-                 :interactive     true
-                 :delay           [1000, 100]
-                 :fixed-position? fixed-position?
-                 :position        (or tippy-position "top")
-                 :distance        (or tippy-distance 10)
-                 :popperOptions   {:modifiers {:preventOverflow
-                                               {:enabled           true
-                                                :boundariesElement "viewport"}}}}
-                children)
-      children)))
+      [:span
+       {:ref *el-trigger
+        :on-mouse-enter (fn []
+                          (let [timer (rum/deref *timer)
+                                timer1 (rum/deref *timer1)]
+                            (when-not timer
+                              (rum/set-ref! *timer
+                                (js/setTimeout #(set-visible! true) 1000)))
+                            (when timer1
+                              (js/clearTimeout timer1)
+                              (rum/set-ref! *timer1 nil))))
+        :on-mouse-leave (fn []
+                          (when (not visible?)
+                            (let [timer (rum/deref *timer)
+                                  timer1 (rum/deref *timer1)]
+                              (when timer
+                                (js/clearTimeout timer)
+                                (rum/set-ref! *timer nil))
+                              (when-not timer1
+                                (rum/set-ref! *timer1
+                                  (js/setTimeout #(set-visible! false) 200))))))}
+       children] children)))
 
 (rum/defcs page-cp < db-mixins/query rum/reactive
-  {:init (fn [state]
-           (let [page (last (:rum/args state))]
-             (assoc state ::page-entity
-                    (if (e/entity? page)
-                      page
-                      ;; Use uuid when available to uniquely identify case sensitive contexts
-                      (db/get-page (or (:block/uuid page) (:block/name page)))))))}
-  "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
-   Keys for `config`:
-   - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
+                     {:init (fn [state]
+                              (let [page (last (:rum/args state))]
+                                (assoc state ::page-entity
+                                  (if (e/entity? page)
+                                    page
+                                    ;; Use uuid when available to uniquely identify case sensitive contexts
+                                    (db/get-page (or (:block/uuid page) (:block/name page)))))))}
+                     "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
+                      Keys for `config`:
+                      - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview?] :as config} page]
   (let [page-entity (::page-entity state)]
     (when-let [page-entity (when page-entity (db/sub-block (:db/id page-entity)))]
