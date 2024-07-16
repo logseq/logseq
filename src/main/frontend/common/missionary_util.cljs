@@ -1,5 +1,6 @@
 (ns frontend.common.missionary-util
   "Utils based on missionary."
+  (:require-macros [frontend.common.missionary-util])
   (:require [clojure.core.async :as a]
             [missionary.core :as m])
   ;; (:import [missionary Cancelled])
@@ -70,7 +71,6 @@
   "Return a task that takes from given channel,
   completing with value when take is accepted, or nil if port was closed."
   [c] (doto (m/dfv) (->> (a/take! c))))
-
 
 (defn await-promise
   "Returns a task completing with the result of given promise"
