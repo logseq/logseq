@@ -1146,7 +1146,7 @@
          [:div.flex.flex-row.items-center.gap-2 {:key (str "user-" user-name)}
           [:div user-name]
           (when user-email [:div.opacity-50.text-sm user-email])
-          (when graph<->user-user-type [:div.opacity-50.text-sm graph<->user-user-type])])]
+          (when graph<->user-user-type [:div.opacity-50.text-sm (name graph<->user-user-type)])])]
       [:div.flex.flex-col.gap-4.mt-4
        (shui/input
         {:placeholder   "Email address"
