@@ -82,7 +82,13 @@
                                                      :graph<->user-user-type
                                                      :graph<->user-grant-by-user])))
                       graph-list)))))}
-       (shui/tabler-icon "download") "graph-list")]
+       (shui/tabler-icon "download") "graph-list")
+      (shui/button
+       {:size :sm
+        :on-click #(c.m/run-task
+                    (user/new-task--upload-user-avatar "TEST_AVATAR")
+                    :upload-test-avatar)}
+       (shui/tabler-icon "upload") "upload-test-avatar")]
 
      [:div.pb-4
       [:pre.select-text

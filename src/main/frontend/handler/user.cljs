@@ -6,6 +6,7 @@
             [cljs-time.core :as t]
             [cljs.core.async :as async :refer [<! go]]
             [clojure.string :as string]
+            [frontend.common.missionary-util :as c.m]
             [frontend.config :as config]
             [frontend.debug :as debug]
             [frontend.handler.config :as config-handler]
@@ -13,7 +14,8 @@
             [frontend.state :as state]
             [goog.crypt :as crypt]
             [goog.crypt.Hmac]
-            [goog.crypt.Sha256]))
+            [goog.crypt.Sha256]
+            [missionary.core :as m]))
 
 (defn set-preferred-format!
   [format]
@@ -289,6 +291,23 @@
 #_(defn member?
     [repo]
     (= (get-user-type repo) "member"))
+
+(defn new-task--upload-user-avatar
+  [avatar-str]
+  (m/sp
+    (when-let [token (state/get-auth-id-token)]
+      (let [{:keys [status body] :as resp}
+            (c.m/<?
+             (http/post
+              (str "https://" config/API-DOMAIN "/logseq/get_presigned_user_avatar_put_url")
+              {:oauth-token token
+               :with-credentials? false}))]
+        (when-not (http/unexceptional-status? status)
+          (throw (ex-info "failed to get presigned url" {:resp resp})))
+        (let [presigned-url (:presigned-url body)
+              {:keys [status]} (c.m/<? (http/put presigned-url {:body avatar-str :with-credentials? false}))]
+          (when-not (http/unexceptional-status? status)
+            (throw (ex-info "failed to upload avatar" {:resp resp}))))))))
 
 (comment
   ;; We probably need this for some new features later
