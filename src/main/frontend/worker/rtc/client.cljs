@@ -61,8 +61,9 @@
                 (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
                 (register-graph-updates get-ws-create-task graph-uuid repo)))
           (let [t (op-mem-layer/get-local-tx repo)]
-            (when (or (nil? @*last-calibrate-t)
-                      (< 500 (- t @*last-calibrate-t)))
+            (when (and (zero? (op-mem-layer/get-unpushed-block-update-count repo))
+                       (or (nil? @*last-calibrate-t)
+                           (< 500 (- t @*last-calibrate-t))))
               (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
               (reset! *last-calibrate-t t)))
           (swap! *sent assoc ws true))
