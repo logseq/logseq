@@ -177,7 +177,7 @@
           message (assoc message :req-id req-id)
           resp (m/? (send&recv* mws message :timeout-ms timeout-ms))]
       (if-let [s3-presign-url (:s3-presign-url resp)]
-        (let [{:keys [status body]} (m/? (c.m/<! (http/get s3-presign-url {:with-credentials? false})))]
+        (let [{:keys [status body]} (c.m/<? (http/get s3-presign-url {:with-credentials? false}))]
           (if (http/unexceptional-status? status)
             (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
             {:req-id req-id

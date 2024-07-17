@@ -63,12 +63,12 @@
         (doseq [[asset-uuid put-url] asset-uuid->url]
           (assert (uuid? asset-uuid) asset-uuid)
           (let [{:keys [status] :as r}
-                (m/? (c.m/<! (http/put put-url {:headers {"x-amz-meta-checksum" "TEST-CHECKSUM"}
-                                                :body (js/JSON.stringify
-                                                       (clj->js {:TEST-ASSET true
-                                                                 :asset-uuid (str asset-uuid)
-                                                                 :graph-uuid (str graph-uuid)}))
-                                                :with-credentials? false})))]
+                (c.m/<? (http/put put-url {:headers {"x-amz-meta-checksum" "TEST-CHECKSUM"}
+                                           :body (js/JSON.stringify
+                                                  (clj->js {:TEST-ASSET true
+                                                            :asset-uuid (str asset-uuid)
+                                                            :graph-uuid (str graph-uuid)}))
+                                           :with-credentials? false}))]
             (if (not= 200 status)
               (prn :debug-failed-upload-asset {:resp r :asset-uuid asset-uuid :graph-uuid graph-uuid})
 
@@ -88,7 +88,7 @@
                  :asset-uuid->url)]
         (doseq [[asset-uuid get-url] asset-uuid->url]
           (assert (uuid? asset-uuid) asset-uuid)
-          (let [{:keys [status _body] :as r} (m/? (c.m/<! (http/get get-url {:with-credentials? false})))]
+          (let [{:keys [status _body] :as r} (c.m/<? (http/get get-url {:with-credentials? false}))]
             (if (not= 200 status)
               (prn :debug-failed-download-asset {:resp r :asset-uuid asset-uuid :graph-uuid graph-uuid})
               (when (d/entity @conn [:block/uuid asset-uuid])
