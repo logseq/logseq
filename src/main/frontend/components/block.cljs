@@ -746,7 +746,7 @@
                               (rum/set-ref! *timer nil))
                             (when-not timer1
                               (rum/set-ref! *timer1
-                                (js/setTimeout #(set-visible! false) 500)))))}
+                                (js/setTimeout #(set-visible! false) 200)))))}
        children] children)))
 
 (rum/defcs page-cp < db-mixins/query rum/reactive
