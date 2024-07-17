@@ -121,7 +121,7 @@
                 (ldb/write-transit-str all-blocks)))))]
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-data
                                                   :message "uploading data"})
-      (m/? (c.m/<! (http/put url {:body all-blocks-str :with-credentials? false})))
+      (c.m/<? (http/put url {:body all-blocks-str :with-credentials? false}))
       (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :request-upload-graph
                                                   :message "requesting upload-graph"})
       (let [upload-resp
@@ -314,7 +314,7 @@
                                                   :message "downloading graph data"
                                                   :graph-uuid graph-uuid})
     (let [^js worker-obj              (:worker/object @worker-state/*state)
-          {:keys [status body] :as r} (m/? (c.m/<! (http/get s3-url {:with-credentials? false})))
+          {:keys [status body] :as r} (c.m/<? (http/get s3-url {:with-credentials? false}))
           repo                        (str sqlite-util/db-version-prefix graph-name)]
       (if (not= 200 status)
         (throw (ex-info "download-graph from s3 failed" {:resp r}))
