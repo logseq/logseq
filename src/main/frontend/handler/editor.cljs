@@ -3250,10 +3250,17 @@
   (some-> (first (dom/by-class "reveal"))
           (dom/has-class? "focused")))
 
+(defn- in-page-preview?
+  []
+  (some-> js/document.activeElement
+    (.closest ".ls-preview-popup")
+    (nil?) (not)))
+
 (defn shortcut-up-down [direction]
   (fn [e]
     (when (and (not (auto-complete?))
-               (not (in-shui-popup?))
+               (or (in-page-preview?)
+                 (not (in-shui-popup?)))
                (not (slide-focused?))
                (not (state/get-timestamp-block)))
       (util/stop e)
