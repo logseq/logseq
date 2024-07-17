@@ -660,14 +660,59 @@
                                                          (:db/id page-entity)))}
           (ui/icon "x" {:size 15})]))]))
 
+(rum/defc popup-preview-impl
+  [children {:keys [*timer *timer1 visible? set-visible! render]}]
+  (let [*el-trigger (rum/use-ref nil)]
+    (rum/use-effect!
+      (fn []
+        (when (true? visible?)
+          (shui/popup-show!
+            (rum/deref *el-trigger) render
+            {:root-props {:onOpenChange (fn [v] (set-visible! v))
+                          :modal false}
+             :content-props {:class "ls-preview-popup"
+                             :onEscapeKeyDown (fn [^js e] (.preventDefault e))}
+             :as-dropdown? false}))
+
+        (when (false? visible?)
+          (shui/popup-hide!))
+        (rum/set-ref! *timer nil)
+        (rum/set-ref! *timer1 nil)
+        ;; teardown
+        (fn []
+          (when visible?
+            (shui/popup-hide!))))
+      [visible?])
+
+    [:span
+     {:ref *el-trigger
+      :on-mouse-enter (fn []
+                        (let [timer (rum/deref *timer)
+                              timer1 (rum/deref *timer1)]
+                          (when-not timer
+                            (rum/set-ref! *timer
+                              (js/setTimeout #(set-visible! true) 1000)))
+                          (when timer1
+                            (js/clearTimeout timer1)
+                            (rum/set-ref! *timer1 nil))))
+      :on-mouse-leave (fn []
+                        (let [timer (rum/deref *timer)
+                              timer1 (rum/deref *timer1)]
+                          (when timer
+                            (js/clearTimeout timer)
+                            (rum/set-ref! *timer nil))
+                          (when-not timer1
+                            (rum/set-ref! *timer1
+                              (js/setTimeout #(set-visible! false) 200)))))}
+     children]))
+
 (rum/defc page-preview-trigger
   [{:keys [children sidebar? open? manual?] :as config} page-name]
   (let [page-name (when page-name (util/page-name-sanity-lc page-name))
-        *el-trigger (rum/use-ref nil)
-        [visible? set-visible!] (rum/use-state nil)
         *timer (rum/use-ref nil)                            ;; show
         *timer1 (rum/use-ref nil)                           ;; hide
-        _  #_:clj-kondo/ignore (rum/defc html-template []
+        [visible? set-visible!] (rum/use-state nil)
+        _  #_:clj-kondo/ignore (rum/defc preview-render []
                                  (let [*el-popup (rum/use-ref nil)]
 
                                    (rum/use-effect!
@@ -709,45 +754,12 @@
                                                     :sidebar? sidebar?
                                                     :preview? true}))]))))]
 
-    (rum/use-effect!
-      (fn []
-        (when (true? visible?)
-          (shui/popup-show!
-            (rum/deref *el-trigger) html-template
-            {:root-props {:onOpenChange (fn [v] (set-visible! v))
-                          :modal false}
-             :content-props {:class "ls-preview-popup"
-                             :onEscapeKeyDown (fn [^js e] (.preventDefault e))}
-             :as-dropdown? false}))
-
-        (when (false? visible?)
-          (shui/popup-hide!))
-        (rum/set-ref! *timer nil)
-        (rum/set-ref! *timer1 nil))
-      [visible?])
-
     (if (or (not manual?) open?)
-      [:span
-       {:ref *el-trigger
-        :on-mouse-enter (fn []
-                          (let [timer (rum/deref *timer)
-                                timer1 (rum/deref *timer1)]
-                            (when-not timer
-                              (rum/set-ref! *timer
-                                (js/setTimeout #(set-visible! true) 1000)))
-                            (when timer1
-                              (js/clearTimeout timer1)
-                              (rum/set-ref! *timer1 nil))))
-        :on-mouse-leave (fn []
-                          (let [timer (rum/deref *timer)
-                                timer1 (rum/deref *timer1)]
-                            (when timer
-                              (js/clearTimeout timer)
-                              (rum/set-ref! *timer nil))
-                            (when-not timer1
-                              (rum/set-ref! *timer1
-                                (js/setTimeout #(set-visible! false) 200)))))}
-       children] children)))
+       (popup-preview-impl children
+         {:visible? visible? :set-visible! set-visible!
+          :*timer *timer :*timer1 *timer1
+          :render preview-render})
+       children)))
 
 (rum/defcs page-cp < db-mixins/query rum/reactive
                      {:init (fn [state]
@@ -944,6 +956,32 @@
 (declare block-content)
 (declare breadcrumb)
 
+(rum/defc block-reference-preview
+  [children {:keys [repo config id]}]
+  (let [*timer (rum/use-ref nil)                            ;; show
+        *timer1 (rum/use-ref nil)                           ;; hide
+        [visible? set-visible!] (rum/use-state nil)
+        _ #_:clj-kondo/ignore (rum/defc render []
+                                [:div.tippy-wrapper.overflow-y-auto.p-4
+                                 {:style {:width 600
+                                          :font-weight 500
+                                          :text-align "left"}
+                                  :on-mouse-enter (fn []
+                                                    (when-let [timer1 (rum/deref *timer1)]
+                                                      (js/clearTimeout timer1)))
+
+                                  :on-mouse-leave (fn []
+                                                    (rum/set-ref! *timer1
+                                                      (js/setTimeout #(set-visible! false) 500)))}
+                                 [(breadcrumb config repo id {:indent? true})
+                                  (blocks-container
+                                    (assoc config :id (str id) :preview? true)
+                                    (db/get-block-and-children repo id))]])]
+    (popup-preview-impl children
+      {:visible? visible? :set-visible! set-visible!
+       :*timer *timer :*timer1 *timer1
+       :render render})))
+
 (rum/defc block-reference < rum/reactive db-mixins/query
   {:init (fn [state]
            (let [block-id (second (:rum/args state))]
@@ -1012,18 +1050,8 @@
                       (not (:preview? config))
                       (not (:modal/show? @state/state))
                       (nil? block-type))
-               (ui/tippy {:html        (fn []
-                                         [:div.tippy-wrapper.overflow-y-auto.p-4
-                                          {:style {:width      735
-                                                   :text-align "left"
-                                                   :max-height 600}}
-                                          [(breadcrumb config repo block-id {:indent? true})
-                                           (blocks-container
-                                            (assoc config :id (str id) :preview? true)
-                                            (db/get-block-and-children repo block-id))]])
-                          :interactive true
-                          :in-editor?  true
-                          :delay       [1000, 100]} inner)
+               (block-reference-preview inner
+                 {:repo repo :config config :id block-id})
                inner)])
           [:span.warning.mr-1 {:title "Block ref invalid"}
            (block-ref/->block-ref id)])))
