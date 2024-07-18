@@ -54,3 +54,25 @@
     width: auto !important;
   }
 }
+
+.query-table {
+  @apply my-2 rounded;
+
+  table {
+    @apply w-full border-none;
+  }
+
+  th {
+    @apply bg-gray-03;
+  }
+
+  tr {
+    &:nth-child(even) {
+      @apply bg-gray-02;
+    }
+  }
+
+  th, td {
+    @apply p-1.5 border border-collapse;
+  }
+}
