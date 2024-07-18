@@ -127,48 +127,52 @@
       (restore-data-from-addr repo addr))))
 
 (defn- close-db-aux!
-  [repo ^Object db ^Object search]
+  [repo ^Object db ^Object search ^Object client-ops-db]
   (swap! *sqlite-conns dissoc repo)
   (swap! *datascript-conns dissoc repo)
   (when db (.close db))
   (when search (.close search))
+  (when client-ops-db (.close client-ops-db))
   (when-let [^js pool (worker-state/get-opfs-pool repo)]
     (.releaseAccessHandles pool))
   (swap! *opfs-pools dissoc repo))
 
 (defn- close-other-dbs!
   [repo]
-  (doseq [[r {:keys [db search]}] @*sqlite-conns]
+  (doseq [[r {:keys [db search client-ops-db]}] @*sqlite-conns]
     (when-not (= repo r)
-      (close-db-aux! r db search))))
+      (close-db-aux! r db search client-ops-db))))
 
 (defn close-db!
   [repo]
-  (let [{:keys [db search]} (@*sqlite-conns repo)]
-    (close-db-aux! repo db search)))
+  (let [{:keys [db search client-ops-db]} (@*sqlite-conns repo)]
+    (close-db-aux! repo db search client-ops-db)))
 
-(defn- get-db-and-search-db
+(defn- get-dbs
+  "Return [db search-db client-ops-db]"
   [repo]
   (if @*publishing?
     (p/let [^object DB (.-DB ^object (.-oo1 ^object @*sqlite))
             db (new DB "/db.sqlite" "c")
             search-db (new DB "/search-db.sqlite" "c")]
-      [db search-db])
+      [db search-db nil])
     (p/let [^js pool (<get-opfs-pool repo)
             capacity (.getCapacity pool)
             _ (when (zero? capacity)   ; file handle already releases since pool will be initialized only once
                 (.acquireAccessHandles pool))
             db (new (.-OpfsSAHPoolDb pool) repo-path)
-            search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))]
-      [db search-db])))
+            search-db (new (.-OpfsSAHPoolDb pool) (str "search" repo-path))
+            client-ops-db (new (.-OpfsSAHPoolDb pool) (str "client-ops--" repo-path))]
+      [db search-db client-ops-db])))
 
 (defn- create-or-open-db!
   [repo {:keys [config]}]
   (when-not (worker-state/get-sqlite-conn repo)
-    (p/let [[db search-db] (get-db-and-search-db repo)
+    (p/let [[db search-db client-ops-db] (get-dbs repo)
             storage (new-sqlite-storage repo {})]
       (swap! *sqlite-conns assoc repo {:db db
-                                       :search search-db})
+                                       :search search-db
+                                       :client-ops-db client-ops-db})
       (.exec db "PRAGMA locking_mode=exclusive")
       (sqlite-common-db/create-kvs-table! db)
       (search/create-tables-and-triggers! search-db)
@@ -255,7 +259,7 @@
 
 (defn- get-search-db
   [repo]
-  (worker-state/get-sqlite-conn repo {:search? true}))
+  (worker-state/get-sqlite-conn repo :search))
 
 (defn- with-write-transit-str
   [p]
