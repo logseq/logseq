@@ -1,11 +1,11 @@
 (ns frontend.worker.rtc.db-listener
   "listen datascript changes, infer operations from the db tx-report"
-  (:require [datascript.core :as d]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [frontend.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
-            [logseq.db :as ldb]
-            [clojure.string :as string]))
+            [logseq.db :as ldb]))
 
 (defn- latest-add?->v->t
   [add?->v->t]
@@ -112,33 +112,10 @@
                           [:update t {:block-uuid block-uuid :av-coll av-coll}]))]
         (cond-> ops update-op (conj update-op))))))
 
-(defn- entity-datoms=>asset-op
-  [db-after id->attr->datom entity-datoms]
-  (when-let [e (ffirst entity-datoms)]
-    (let [attr->datom (id->attr->datom e)]
-      (when (seq attr->datom)
-        (let [{[_e _a asset-uuid _t add1?] :asset/uuid
-               [_e _a asset-meta _t add2?] :asset/meta}
-              attr->datom
-              op (cond
-                   (or (and add1? asset-uuid)
-                       (and add2? asset-meta))
-                   [:update-asset]
-
-                   (and (not add1?) asset-uuid)
-                   [:remove-asset asset-uuid])]
-          (when op
-            (let [asset-uuid (some-> (d/entity db-after e) :asset/uuid str)]
-              (case (first op)
-                :update-asset (when asset-uuid ["update-asset" {:asset-uuid asset-uuid}])
-                :remove-asset ["remove-asset" {:asset-uuid (str (second op))}]))))))))
-
 (defn- generate-rtc-ops
-  [repo db-before db-after same-entity-datoms-coll id->attr->datom e->a->v->add?->t]
-  (let [asset-ops (keep (partial entity-datoms=>asset-op db-after id->attr->datom) same-entity-datoms-coll)
-        ops (when (empty asset-ops)
-              (mapcat (partial entity-datoms=>ops db-before db-after e->a->v->add?->t)
-                      same-entity-datoms-coll))]
+  [repo db-before db-after same-entity-datoms-coll e->a->v->add?->t]
+  (let [ops (mapcat (partial entity-datoms=>ops db-before db-after e->a->v->add?->t)
+                    same-entity-datoms-coll)]
     (when (seq ops)
       (op-mem-layer/add-ops! repo ops))))
 
@@ -147,7 +124,7 @@
 
 (defmethod db-listener/listen-db-changes :gen-rtc-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
-             repo id->attr->datom e->a->add?->v->t same-entity-datoms-coll]}]
+             repo _id->attr->datom e->a->add?->v->t same-entity-datoms-coll]}]
   (when (and (op-mem-layer/rtc-db-graph? repo)
              (:persist-op? tx-meta true))
-    (generate-rtc-ops repo db-before db-after same-entity-datoms-coll id->attr->datom e->a->add?->v->t)))
+    (generate-rtc-ops repo db-before db-after same-entity-datoms-coll e->a->add?->v->t)))
