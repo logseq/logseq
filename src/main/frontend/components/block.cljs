@@ -732,7 +732,7 @@
                                  (let [redirect-page-name (or (and page-name (model/get-redirect-page-name page-name (:block/alias? config)))
                                                             page-name)]
                                    (when redirect-page-name
-                                     [:div.tippy-wrapper.p-4.outline-none.rounded-md
+                                     [:div.tippy-wrapper.as-page
                                       {:ref *el-popup
                                        :tab-index -1
                                        :style {:width 600
@@ -963,7 +963,7 @@
         *timer1 (rum/use-ref nil)                           ;; hide
         [visible? set-visible!] (rum/use-state nil)
         _ #_:clj-kondo/ignore (rum/defc render []
-                                [:div.tippy-wrapper
+                                [:div.tippy-wrapper.as-block
                                  {:style {:width 600
                                           :font-weight 500
                                           :text-align "left"}
