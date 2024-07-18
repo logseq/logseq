@@ -661,7 +661,7 @@
           (ui/icon "x" {:size 15})]))]))
 
 (rum/defc popup-preview-impl
-  [children {:keys [*timer *timer1 visible? set-visible! render]}]
+  [children {:keys [*timer *timer1 visible? set-visible! render *el-popup]}]
   (let [*el-trigger (rum/use-ref nil)]
     (rum/use-effect!
       (fn []
@@ -671,11 +671,16 @@
             {:root-props {:onOpenChange (fn [v] (set-visible! v))
                           :modal false}
              :content-props {:class "ls-preview-popup"
-                             :onEscapeKeyDown (fn [^js e] (.preventDefault e))}
+                             :onEscapeKeyDown (fn [^js e]
+                                                (when (state/editing?)
+                                                  (.preventDefault e)
+                                                  (some-> (rum/deref *el-popup) (.focus))))}
              :as-dropdown? false}))
 
         (when (false? visible?)
-          (shui/popup-hide!))
+          (shui/popup-hide!)
+          (when (state/get-edit-block)
+            (state/clear-edit!)))
         (rum/set-ref! *timer nil)
         (rum/set-ref! *timer1 nil)
         ;; teardown
@@ -711,54 +716,44 @@
   (let [page-name (when page-name (util/page-name-sanity-lc page-name))
         *timer (rum/use-ref nil)                            ;; show
         *timer1 (rum/use-ref nil)                           ;; hide
+        *el-popup (rum/use-ref nil)
         [visible? set-visible!] (rum/use-state nil)
         _  #_:clj-kondo/ignore (rum/defc preview-render []
-                                 (let [*el-popup (rum/use-ref nil)]
+                                 (rum/use-effect!
+                                   (fn []
+                                     (let [el-popup (rum/deref *el-popup)
+                                           focus! #(js/setTimeout (fn [] (.focus el-popup)))]
+                                       (focus!)
+                                       #(set-visible! false)))
+                                   [])
 
-                                   (rum/use-effect!
-                                     (fn []
-                                       (let [el-popup (rum/deref *el-popup)
-                                             focus! #(js/setTimeout (fn [] (.focus el-popup)))
-                                             cb (fn [^js e]
-                                                  ;; Esc
-                                                  (when (= (.-which e) 27)
-                                                    (if-not (state/editing?)
-                                                      (set-visible! false) (focus!))))]
-
-                                         (focus!)
-                                         (.addEventListener el-popup "keydown" cb)
-                                         (fn []
-                                           (.removeEventListener el-popup "keydown" cb)
-                                           (set-visible! false))))
-                                     [])
-
-                                   (let [redirect-page-name (or (and page-name (model/get-redirect-page-name page-name (:block/alias? config)))
-                                                              page-name)]
-                                     (when redirect-page-name
-                                       [:div.tippy-wrapper.p-4.outline-none.rounded-md
-                                        {:ref *el-popup
-                                         :tab-index -1
-                                         :style {:width 600
-                                                 :text-align "left"
-                                                 :font-weight 500
-                                                 :padding-bottom 64}
-                                         :on-mouse-enter (fn []
-                                                           (when-let [timer1 (rum/deref *timer1)]
-                                                             (js/clearTimeout timer1)))
-                                         :on-mouse-leave (fn []
-                                                           (rum/set-ref! *timer1
-                                                             (js/setTimeout #(set-visible! false) 500)))}
-                                        (let [page-cp (state/get-page-blocks-cp)]
-                                          (page-cp {:repo (state/get-current-repo)
-                                                    :page-name redirect-page-name
-                                                    :sidebar? sidebar?
-                                                    :preview? true}))]))))]
+                                 (let [redirect-page-name (or (and page-name (model/get-redirect-page-name page-name (:block/alias? config)))
+                                                            page-name)]
+                                   (when redirect-page-name
+                                     [:div.tippy-wrapper.p-4.outline-none.rounded-md
+                                      {:ref *el-popup
+                                       :tab-index -1
+                                       :style {:width 600
+                                               :text-align "left"
+                                               :font-weight 500
+                                               :padding-bottom 64}
+                                       :on-mouse-enter (fn []
+                                                         (when-let [timer1 (rum/deref *timer1)]
+                                                           (js/clearTimeout timer1)))
+                                       :on-mouse-leave (fn []
+                                                         (rum/set-ref! *timer1
+                                                           (js/setTimeout #(set-visible! false) 500)))}
+                                      (let [page-cp (state/get-page-blocks-cp)]
+                                        (page-cp {:repo (state/get-current-repo)
+                                                  :page-name redirect-page-name
+                                                  :sidebar? sidebar?
+                                                  :preview? true}))])))]
 
     (if (or (not manual?) open?)
        (popup-preview-impl children
          {:visible? visible? :set-visible! set-visible!
           :*timer *timer :*timer1 *timer1
-          :render preview-render})
+          :render preview-render :*el-popup *el-popup})
        children)))
 
 (rum/defcs page-cp < db-mixins/query rum/reactive
