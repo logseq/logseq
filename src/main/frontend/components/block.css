@@ -245,19 +245,16 @@
   }
 }
 
-.block-control, .block-control:hover {
-  text-decoration: none;
-  cursor: default;
-  font-size: 14px;
-  min-width: 22px;
-  min-height: 22px;
-  padding: 2px;
-  color: var(--ls-secondary-text-color);
-  user-select: none;
-  opacity: .4;
+.block-control {
+  @apply decoration-0 text-sm cursor-default
+  min-w-[22px] min-h-[22px] p-0.5 select-none opacity-40;
 
   .control-hide {
-    display: none;
+    @apply hidden;
+  }
+
+  &:active {
+    @apply opacity-30;
   }
 }
 
