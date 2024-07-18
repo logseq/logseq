@@ -242,6 +242,18 @@ html.is-native-ios {
   @apply focus:ring-0 focus:ring-offset-0;
 }
 
+.ls-dummy-block {
+  @apply pb-[27px];
+
+  .bullet {
+    @apply relative top-[4px] left-[-2px];
+  }
+
+  .text {
+    @apply relative top-[3px];
+  }
+}
+
 .ls-preview-popup {
   @apply pl-6;
 }
