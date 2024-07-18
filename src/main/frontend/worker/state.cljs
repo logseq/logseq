@@ -40,11 +40,11 @@
 (defonce *opfs-pools (atom nil))
 
 (defn get-sqlite-conn
-  "which-db: enum of [:db :search :client-ops-db], default :db"
-  ([repo] (get-sqlite-conn repo :db))
-  ([repo which-db]
-   (assert (contains? #{:db :search :client-ops-db} which-db) which-db)
-   (get-in @*sqlite-conns [repo which-db])))
+  [repo & {:keys [search?]
+           :or {search? false}
+           :as _opts}]
+  (let [k (if search? :search :db)]
+    (get-in @*sqlite-conns [repo k])))
 
 (defn get-datascript-conn
   [repo]
