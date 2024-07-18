@@ -63,6 +63,7 @@
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
             [logseq.shui.dialog.core :as shui-dialog]
+            [logseq.shui.popup.core :as shui-popups]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.drawer :as drawer]
@@ -671,6 +672,7 @@
             {:root-props {:onOpenChange (fn [v] (set-visible! v))
                           :modal false}
              :content-props {:class "ls-preview-popup"
+                             :onInteractOutside (fn [^js e] (.preventDefault e))
                              :onEscapeKeyDown (fn [^js e]
                                                 (when (state/editing?)
                                                   (.preventDefault e)
@@ -708,7 +710,7 @@
                             (rum/set-ref! *timer nil))
                           (when-not timer1
                             (rum/set-ref! *timer1
-                              (js/setTimeout #(set-visible! false) 200)))))}
+                              (js/setTimeout #(set-visible! false) 300)))))}
      children]))
 
 (rum/defc page-preview-trigger
@@ -741,20 +743,24 @@
                                                          (when-let [timer1 (rum/deref *timer1)]
                                                            (js/clearTimeout timer1)))
                                        :on-mouse-leave (fn []
-                                                         (rum/set-ref! *timer1
-                                                           (js/setTimeout #(set-visible! false) 500)))}
+                                                         ;; check the top popup whether is the preview popup
+                                                         (when (= "ls-preview-popup"
+                                                                 (some-> (shui-popups/get-last-popup) :content-props :class))
+                                                           (rum/set-ref! *timer1
+                                                             (js/setTimeout #(set-visible! false) 500))))}
                                       (let [page-cp (state/get-page-blocks-cp)]
                                         (page-cp {:repo (state/get-current-repo)
                                                   :page-name redirect-page-name
                                                   :sidebar? sidebar?
                                                   :preview? true}))])))]
 
-    (if (or (not manual?) open?)
-       (popup-preview-impl children
-         {:visible? visible? :set-visible! set-visible!
-          :*timer *timer :*timer1 *timer1
-          :render preview-render :*el-popup *el-popup})
-       children)))
+    (if (and (not (:preview? config))
+          (or (not manual?) open?))
+      (popup-preview-impl children
+        {:visible? visible? :set-visible! set-visible!
+         :*timer *timer :*timer1 *timer1
+         :render preview-render :*el-popup *el-popup})
+      children)))
 
 (rum/defcs page-cp < db-mixins/query rum/reactive
                      {:init (fn [state]
@@ -957,7 +963,7 @@
         *timer1 (rum/use-ref nil)                           ;; hide
         [visible? set-visible!] (rum/use-state nil)
         _ #_:clj-kondo/ignore (rum/defc render []
-                                [:div.tippy-wrapper.overflow-y-auto.p-4
+                                [:div.tippy-wrapper
                                  {:style {:width 600
                                           :font-weight 500
                                           :text-align "left"}

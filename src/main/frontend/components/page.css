@@ -256,4 +256,8 @@ html.is-native-ios {
 
 .ls-preview-popup {
   @apply pl-6;
+
+  .tippy-wrapper {
+    @apply -ml-5;
+  }
 }
