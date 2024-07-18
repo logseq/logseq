@@ -42,6 +42,7 @@
       (filter #(= id (:id (second %)))) (first))))
 
 (defn get-popups [] @*popups)
+(defn get-last-popup [] (last @*popups))
 
 (defn upsert-popup!
   [config]
