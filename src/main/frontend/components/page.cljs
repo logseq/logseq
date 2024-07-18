@@ -129,14 +129,14 @@
                                 (js/setTimeout #(let [target-block page]
                                                   (dnd/move-blocks event blocks target-block nil :sibling))
                                                0)))]
-        [:div.ls-block.flex-1.flex-col.rounded-sm
+        [:div.ls-dummy-block
          {:style {:width "100%"
                 ;; The same as .dnd-separator
                   :border-top (if hover
                                 "3px solid #ccc"
                                 nil)}}
-         [:div.flex.flex-row
-          [:div.flex.flex-row.items-center.mr-2.ml-1 {:style {:height 24}}
+         [:div.flex.items-center
+          [:div.flex.items-center.mx-1.pr-1 {:style {:height 24}}
            [:span.bullet-container.cursor
             [:span.bullet]]]
           (shui/trigger-as :div.flex.flex-1
@@ -146,7 +146,7 @@
                             :on-drag-over #(util/stop %)
                             :on-drop drop-handler-fn
                             :on-drag-leave #(set-hover! false)}
-                           [:span.opacity-70
+                           [:span.opacity-70.text
                             "Click here to edit..."])]]))))
 
 (rum/defc add-button
@@ -516,7 +516,7 @@
 
          (if (and whiteboard-page? (not sidebar?))
            [:div ((state/get-component :whiteboard/tldraw-preview) (:block/uuid page))] ;; FIXME: this is not reactive
-           [:div.relative.grid.gap-2
+           [:div.relative.grid.gap-2.page-inner
             (when (and (not sidebar?) (not block?))
               [:div.flex.flex-row.space-between
                (when (or (mobile-util/native-platform?) (util/mobile?))
