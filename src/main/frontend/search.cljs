@@ -7,11 +7,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [frontend.search.browser :as search-browser]
             [frontend.search.fuzzy :as fuzzy]
             [logseq.common.config :as common-config]
             [frontend.db.async :as db-async]
-            [cljs-bean.core :as bean]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
@@ -30,12 +28,6 @@
     (let [q (util/search-normalize q (state/enable-search-remove-accents?))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
-
-(defn page-search
-  ([q]
-   (page-search q {}))
-  ([q option]
-   (when-not (string/blank? q) (block-search (state/get-current-repo) q option))))
 
 (defn file-search
   ([q]

@@ -114,7 +114,7 @@
     snippet))
 
 (defn- search-blocks-aux
-  [db sql input page limit]
+  [db sql input page limit enable-snippet?]
   (try
     (p/let [result (if page
                      (.exec db #js {:sql sql
@@ -125,7 +125,9 @@
                                     :rowMode "array"}))
             blocks (bean/->clj result)]
       (map (fn [block]
-             (let [[id page title snippet] (update block 3 get-snippet-result)]
+             (let [[id page title snippet] (if enable-snippet?
+                                             (update block 3 get-snippet-result)
+                                             block)]
                {:id id
                 :page page
                 :title title
@@ -255,7 +257,8 @@
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
    * :built-in?  - Whether to return built-in pages for db graphs. Defaults to true"
-  [repo conn search-db q {:keys [limit page] :as option}]
+  [repo conn search-db q {:keys [limit page enable-snippet?] :as option
+                          :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (p/let [match-input (get-match-input q)
             limit  (or limit 100)
@@ -264,12 +267,14 @@
             ;; pfts_2lqh is a key for retrieval
             ;; highlight and snippet only works for some matching with high rank
             snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 32)"
-            select (str "select id, page, title, " snippet-aux " from blocks_fts where ")
+            select (if enable-snippet?
+                     (str "select id, page, title, " snippet-aux " from blocks_fts where ")
+                     "select id, page, title from blocks_fts where ")
             pg-sql (if page "page = ? and" "")
             match-sql (str select
                            pg-sql
                            " title match ? order by rank limit ?")
-            matched-result (search-blocks-aux search-db match-sql match-input page limit)
+            matched-result (search-blocks-aux search-db match-sql match-input page limit enable-snippet?)
             fuzzy-result (when-not page (fuzzy-search repo @conn q option))
             all-result (->> (concat fuzzy-result matched-result)
                             (map (fn [result]

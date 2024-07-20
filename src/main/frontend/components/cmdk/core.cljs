@@ -814,7 +814,7 @@
                               filter-group (:group @(::filter state))
                               slash? (= (util/ekey e) "/")
                               namespace-pages (when (and slash? (contains? #{:whiteboards} filter-group))
-                                                (search/page-search (str value "/")))
+                                                (search/block-search (state/get-current-repo) (str value "/") {}))
                               namespace-page-matched? (some #(string/includes? % "/") namespace-pages)]
                         (when (and filter-group
                                 (or (and slash? (not namespace-page-matched?))
