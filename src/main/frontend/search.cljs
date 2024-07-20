@@ -34,10 +34,8 @@
 (defn page-search
   ([q]
    (page-search q {}))
-  ([q options]
-   (when-let [^js sqlite @search-browser/*sqlite]
-     (p/let [result (.page-search sqlite (state/get-current-repo) q (clj->js (merge {:limit 100} options)))]
-       (bean/->clj result)))))
+  ([q option]
+   (when-not (string/blank? q) (block-search (state/get-current-repo) q option))))
 
 (defn file-search
   ([q]

@@ -69,7 +69,7 @@
 
 (defn search-handler
   [q filters]
-  (let [{:keys [pages? blocks?]} (js->clj filters {:keywordize-keys true})
+  (let [{:keys [blocks?]} (js->clj filters {:keywordize-keys true})
         repo (state/get-current-repo)
         limit 100]
     (p/let [blocks (when blocks? (search/block-search repo q {:limit limit}))
@@ -77,9 +77,8 @@
                           (-> b
                               (update :block/uuid str)
                               (update :block/title #(->> (text-util/cut-by % "$pfts_2lqh>$" "$<pfts_2lqh$")
-                                                           (apply str))))) blocks)
-            pages (when pages? (search/page-search q))]
-      (clj->js {:pages pages :blocks blocks}))))
+                                                           (apply str))))) blocks)]
+      (clj->js {:blocks blocks}))))
 
 (defn save-asset-handler
   [file]

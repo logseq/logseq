@@ -23,6 +23,7 @@
    [goog.functions :as gfun]
    [goog.object :as gobj]
    [logseq.shui.ui :as shui]
+   [logseq.db :as ldb]
    [promesa.core :as p]
    [rum.core :as rum]
    [frontend.mixins :as mixins]
@@ -46,8 +47,7 @@
 (def GROUP-LIMIT 5)
 
 (def search-actions
-  [{:filter {:group :pages :mode "search"} :text "Search only pages" :info "Add filter to search" :icon-theme :gray :icon "page"}
-   {:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
+  [{:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
    {:filter {:group :blocks} :text "Search only blocks" :info "Add filter to search" :icon-theme :gray :icon "block"}
    {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
    {:filter {:group :whiteboards} :text "Search only whiteboards" :info "Add filter to search" :icon-theme :gray :icon "whiteboard"}
@@ -61,7 +61,6 @@
   {:commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
-   :pages          {:status :success :show :less :items nil}
    :blocks         {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
@@ -108,17 +107,13 @@
         page-exists? (when-not (string/blank? input)
                        (db/get-page (string/trim input)))
         include-slash? (or (string/includes? input "/")
-                         (string/starts-with? input "/"))
+                           (string/starts-with? input "/"))
         order* (cond
                  (= search-mode :graph)
-                 [["Pages"          :pages          (visible-items :pages)]]
+                 []
 
                  include-slash?
-                 [
-                  (when page-exists?
-                    ["Pages" :pages (visible-items :pages)])
-
-                  (when-not page-exists?
+                 [(when-not page-exists?
                     ["Create"         :create         (create-items input)])
 
                   ["Current page"   :current-page   (visible-items :current-page)]
@@ -132,21 +127,19 @@
                   [(if (= filter-group :current-page) "Current page" (name filter-group))
                    filter-group
                    (visible-items filter-group)]
-                  (when (= filter-group :pages)
-                    (when-not page-exists?
-                      ["Create"         :create         (create-items input)]))]
+                  (when-not page-exists?
+                    ["Create"         :create         (create-items input)])]
 
                  :else
                  (->>
-                   [["Pages"          :pages          (visible-items :pages)]
-                    (when-not page-exists?
-                      ["Create"         :create       (create-items input)])
-                    ["Commands"       :commands       (visible-items :commands)]
-                    ["Current page"   :current-page   (visible-items :current-page)]
-                    ["Blocks"         :blocks         (visible-items :blocks)]
-                    ["Files"          :files          (visible-items :files)]
-                    ["Filters"        :filters        (visible-items :filters)]]
-                   (remove nil?)))
+                  [(when-not page-exists?
+                     ["Create"         :create       (create-items input)])
+                   ["Current page"   :current-page   (visible-items :current-page)]
+                   ["Blocks"         :blocks         (visible-items :blocks)]
+                   ["Commands"       :commands       (visible-items :commands)]
+                   ["Files"          :files          (visible-items :files)]
+                   ["Filters"        :filters        (visible-items :filters)]]
+                  (remove nil?)))
         order (remove nil? order*)]
     (for [[group-name group-key group-items] order]
       [group-name
@@ -207,27 +200,6 @@
         (hash-map :status :success :items)
         (swap! !results update group merge)))))
 
-;; The pages search action uses an existing handler
-(defmethod load-results :pages [group state]
-  (let [!input (::input state)
-        !results (::results state)
-        repo (state/get-current-repo)]
-    (swap! !results assoc-in [group :status] :loading)
-    (p/let [pages (search/page-search @!input)
-            items (->> pages
-                       (map
-                        (fn [page]
-                          (let [entity (db/entity [:block/uuid (uuid (:id page))])
-                                whiteboard? (contains? (:block/type entity) "whiteboard")
-                                source-page (model/get-alias-source-page repo (:db/id entity))]
-                            (hash-map :icon (if whiteboard? "whiteboard" "page")
-                                      :icon-theme :gray
-                                      :text (:title page)
-                                      :source-page (if source-page
-                                                     (:block/title source-page)
-                                                     (:title page)))))))]
-      (swap! !results update group merge {:status :success :items items}))))
-
 (defmethod load-results :whiteboards [group state]
   (let [!input (::input state)
         !results (::results state)]
@@ -258,13 +230,35 @@
                   hiccups-add [(when-not (string/blank? b-cut)
                                  [:span b-cut])
                                (when-not (string/blank? hl-cut)
-                                 (let [hl-cut' (string/trimr hl-cut)]
-                                   [:mark.p-0.rounded-none hl-cut']))]
+                                 [:mark.p-0.rounded-none hl-cut])]
                   hiccups-add (remove nil? hiccups-add)
                   new-result (concat result hiccups-add)]
               (if-not (string/blank? e-cut)
                 (recur e-cut new-result)
                 new-result)))]))
+
+(defn- page-item
+  [repo page]
+  (let [entity (db/entity [:block/uuid (:block/uuid page)])
+        whiteboard? (contains? (:block/type entity) "whiteboard")
+        source-page (model/get-alias-source-page repo (:db/id entity))]
+    (hash-map :icon (if whiteboard? "whiteboard" "page")
+              :icon-theme :gray
+              :text (:block/title page)
+              :source-page (if source-page
+                             (:block/title source-page)
+                             (:block/title page)))))
+
+(defn- block-item
+  [repo block current-page !input]
+  (let [id (:block/uuid block)]
+    {:icon "block"
+     :icon-theme :gray
+     :text (highlight-content-query (:block/title block) @!input)
+     :header (block/breadcrumb {:search? true} repo id {})
+     :current-page? (when-let [page-id (:block/page block)]
+                      (= page-id (:block/uuid current-page)))
+     :source-block block}))
 
 ;; The blocks search action uses an existing handler
 (defmethod load-results :blocks [group state]
@@ -278,15 +272,10 @@
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)
             blocks (remove nil? blocks)
-            items (map (fn [block]
-                         (let [id (:block/uuid block)]
-                           {:icon "block"
-                            :icon-theme :gray
-                            :text (highlight-content-query (:block/title block) @!input)
-                            :header (block/breadcrumb {:search? true} repo id {})
-                            :current-page? (when-let [page-id (:block/page block)]
-                                             (= page-id (:block/uuid current-page)))
-                            :source-block block})) blocks)
+            items (keep (fn [block]
+                          (if (:page? block)
+                            (page-item repo block)
+                            (block-item repo block current-page !input))) blocks)
             items-on-other-pages (remove :current-page? items)
             items-on-current-page (filter :current-page? items)]
       (swap! !results update group         merge {:status :success :items items-on-other-pages})
@@ -387,7 +376,6 @@
         (do
           (load-results :commands state)
           (load-results :blocks state)
-          (load-results :pages state)
           (load-results :filters state)
           (load-results :files state)
           ;; (load-results :recents state)
@@ -825,7 +813,7 @@
                               backspace? (= (util/ekey e) "Backspace")
                               filter-group (:group @(::filter state))
                               slash? (= (util/ekey e) "/")
-                              namespace-pages (when (and slash? (contains? #{:pages :whiteboards} filter-group))
+                              namespace-pages (when (and slash? (contains? #{:whiteboards} filter-group))
                                                 (search/page-search (str value "/")))
                               namespace-page-matched? (some #(string/includes? % "/") namespace-pages)]
                         (when (and filter-group
@@ -1010,7 +998,7 @@
                                              (or (= group-filter group-key)
                                                (and (= group-filter :blocks)
                                                  (= group-key :current-page))
-                                               (and (contains? #{:pages :create} group-filter)
+                                               (and (contains? #{:create} group-filter)
                                                  (= group-key :create))))))
                     results-ordered)]
         (if (seq items)
