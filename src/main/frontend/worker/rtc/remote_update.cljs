@@ -6,9 +6,9 @@
             [datascript.core :as d]
             [frontend.schema-register :as sr]
             [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
             [logseq.clj-fractional-indexing :as index]
@@ -252,7 +252,7 @@
   these updates maybe not needed or need to update, because this client just updated some of these blocks,
   so we need to update these remote-data by local-ops"
   [affected-blocks-map local-unpushed-ops]
-  (assert (op-mem-layer/ops-coercer local-unpushed-ops) local-unpushed-ops)
+  (assert (client-op/ops-coercer local-unpushed-ops) local-unpushed-ops)
   (reduce
    (fn [affected-blocks-map local-op]
      (let [local-op-value (last local-op)]
@@ -283,7 +283,7 @@
 
 (defn- affected-blocks->diff-type-ops
   [repo affected-blocks]
-  (let [unpushed-ops (op-mem-layer/get-all-ops repo)
+  (let [unpushed-ops (client-op/get-all-ops repo)
         affected-blocks-map* (if unpushed-ops
                                (update-remote-data-by-local-unpushed-ops
                                 affected-blocks unpushed-ops)
@@ -530,7 +530,7 @@
     (assert (rtc-const/data-from-ws-validator remote-update-data) remote-update-data)
     (let [remote-t (:t remote-update-data)
           remote-t-before (:t-before remote-update-data)
-          local-tx (op-mem-layer/get-local-tx repo)]
+          local-tx (client-op/get-local-tx repo)]
       (rtc-log-and-state/update-remote-t graph-uuid remote-t)
       (cond
         (not (and (pos? remote-t)
@@ -569,7 +569,7 @@
           (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
           (js/console.groupEnd)
 
-          (op-mem-layer/update-local-tx! repo remote-t)
+          (client-op/update-local-tx repo remote-t)
           (rtc-log-and-state/update-local-t graph-uuid remote-t))
         :else (throw (ex-info "unreachable" {:remote-t remote-t
                                              :remote-t-before remote-t-before

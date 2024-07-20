@@ -4,7 +4,7 @@
             [datascript.core :as d]
             [frontend.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+            [frontend.worker.rtc.client-op :as client-op]
             [logseq.db :as ldb]))
 
 (defn- latest-add?->v->t
@@ -117,7 +117,7 @@
   (let [ops (mapcat (partial entity-datoms=>ops db-before db-after e->a->v->add?->t)
                     same-entity-datoms-coll)]
     (when (seq ops)
-      (op-mem-layer/add-ops! repo ops))))
+      (client-op/add-ops repo ops))))
 
 (sr/defkeyword :persist-op?
   "tx-meta option, generate rtc ops when not nil (default true)")
@@ -125,6 +125,6 @@
 (defmethod db-listener/listen-db-changes :gen-rtc-ops
   [_ {:keys [_tx-data tx-meta db-before db-after
              repo _id->attr->datom e->a->add?->v->t same-entity-datoms-coll]}]
-  (when (and (op-mem-layer/rtc-db-graph? repo)
+  (when (and (client-op/rtc-db-graph? repo)
              (:persist-op? tx-meta true))
     (generate-rtc-ops repo db-before db-after same-entity-datoms-coll e->a->add?->v->t)))

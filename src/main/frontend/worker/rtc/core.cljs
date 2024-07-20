@@ -3,10 +3,10 @@
   (:require [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client :as r.client]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
@@ -49,7 +49,7 @@
         merge-flow (m/latest vector auto-push-flow clock-flow)]
     (m/eduction (filter first)
                 (map second)
-                (filter (fn [v] (when (pos? (op-mem-layer/get-unpushed-block-update-count repo)) v)))
+                (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
                 merge-flow)))
 
 (defn- create-mixed-flow
@@ -305,7 +305,7 @@
                  :auto-push? rtc-auto-push?
                  :online-users online-users})
               rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock) (m/watch *online-users)
-              (op-mem-layer/create-pending-ops-count-flow repo)
+              (client-op/create-pending-ops-count-flow repo)
               (rtc-log-and-state/create-local-t-flow graph-uuid)
               (rtc-log-and-state/create-remote-t-flow graph-uuid))))
           (catch Cancelled _))))))
