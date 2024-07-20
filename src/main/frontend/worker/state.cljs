@@ -32,23 +32,30 @@
 (defonce *rtc-ws-url (atom nil))
 
 (defonce *sqlite (atom nil))
-;; repo -> {:db conn :search conn}
+;; repo -> {:db conn :search conn :client-ops conn}
 (defonce *sqlite-conns (atom nil))
 ;; repo -> conn
 (defonce *datascript-conns (atom nil))
+
+;; repo -> conn
+(defonce *client-ops-conns (atom nil))
+
 ;; repo -> pool
 (defonce *opfs-pools (atom nil))
 
 (defn get-sqlite-conn
-  [repo & {:keys [search?]
-           :or {search? false}
-           :as _opts}]
-  (let [k (if search? :search :db)]
-    (get-in @*sqlite-conns [repo k])))
+  ([repo] (get-sqlite-conn repo :db))
+  ([repo which-db]
+   (assert (contains? #{:db :search :client-ops} which-db) which-db)
+   (get-in @*sqlite-conns [repo which-db])))
 
 (defn get-datascript-conn
   [repo]
   (get @*datascript-conns repo))
+
+(defn get-client-ops-conn
+  [repo]
+  (get @*client-ops-conns repo))
 
 (defn get-opfs-pool
   [repo]

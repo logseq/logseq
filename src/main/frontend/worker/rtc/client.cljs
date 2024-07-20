@@ -1,13 +1,12 @@
 (ns frontend.worker.rtc.client
   "Fns about push local updates"
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.exception :as r.ex]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.remote-update :as r.remote-update]
             [frontend.worker.rtc.skeleton :as r.skeleton]
             [frontend.worker.rtc.ws :as ws]
@@ -22,8 +21,8 @@
             (m/? (ws-util/send&recv get-ws-create-task {:action "register-graph-updates"
                                                         :graph-uuid graph-uuid}))]
         (rtc-log-and-state/update-remote-t graph-uuid remote-t)
-        (when-not (op-mem-layer/get-local-tx repo)
-          (op-mem-layer/update-local-tx! repo remote-t)))
+        (when-not (client-op/get-local-tx repo)
+          (client-op/update-local-tx repo remote-t)))
       (catch :default e
         (if (= :rtc.exception/remote-graph-not-ready (:type (ex-data e)))
           (throw (ex-info "remote graph is still creating" {:missionary/retry true} e))
@@ -60,8 +59,8 @@
           (m/? (c.m/backoff
                 (take 5 (drop 2 c.m/delays)) ;retry 5 times if remote-graph is creating (4000 8000 16000 32000 64000)
                 (register-graph-updates get-ws-create-task graph-uuid repo)))
-          (let [t (op-mem-layer/get-local-tx repo)]
-            (when (and (zero? (op-mem-layer/get-unpushed-block-update-count repo))
+          (let [t (client-op/get-local-tx repo)]
+            (when (and (zero? (client-op/get-unpushed-ops-count repo))
                        (or (nil? @*last-calibrate-t)
                            (< 500 (- t @*last-calibrate-t))))
               (m/? (r.skeleton/new-task--calibrate-graph-skeleton get-ws-create-task graph-uuid conn t))
@@ -241,40 +240,13 @@
      :depend-on-block-uuids @*depend-on-block-uuid-set}))
 
 (defn- gen-block-uuid->remote-ops
-  [repo conn & {:keys [n] :or {n 50}}]
-  (loop [current-handling-block-ops nil
-         current-handling-block-uuid nil
-         depend-on-block-uuid-coll nil
-         r {}]
-    (cond
-      (and (empty? current-handling-block-ops)
-           (empty? depend-on-block-uuid-coll)
-           (>= (count r) n))
-      r
-
-      (and (empty? current-handling-block-ops)
-           (empty? depend-on-block-uuid-coll))
-      (if-let [{min-t-block-ops :ops block-uuid :block-uuid} (op-mem-layer/get-min-t-block-ops repo)]
-        (do (assert (not (contains? r block-uuid)) {:r r :block-uuid block-uuid})
-            (op-mem-layer/remove-block-ops! repo block-uuid)
-            (recur min-t-block-ops block-uuid depend-on-block-uuid-coll r))
-        ;; finish
-        r)
-
-      (and (empty? current-handling-block-ops)
-           (seq depend-on-block-uuid-coll))
-      (let [[block-uuid & other-block-uuids] depend-on-block-uuid-coll
-            block-ops (op-mem-layer/get-block-ops repo block-uuid)]
-        (op-mem-layer/remove-block-ops! repo block-uuid)
-        (recur block-ops block-uuid other-block-uuids r))
-
-      (seq current-handling-block-ops)
-      (let [{:keys [remote-ops depend-on-block-uuids]}
-            (local-block-ops->remote-ops @conn current-handling-block-ops)]
-        (recur nil nil
-               (set/union (set depend-on-block-uuid-coll)
-                          (op-mem-layer/intersection-block-uuids repo depend-on-block-uuids))
-               (assoc r current-handling-block-uuid (into {} remote-ops)))))))
+  [db block-ops-map-coll]
+  (into {}
+        (map
+         (fn [block-ops-map]
+           [(:block/uuid block-ops-map)
+            (:remote-ops (local-block-ops->remote-ops db block-ops-map))]))
+        block-ops-map-coll))
 
 (defn- merge-remove-remove-ops
   [remote-remove-ops]
@@ -333,52 +305,59 @@
                          block-uuid->remote-ops)]
     (concat update-schema-ops update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
 
+(defn- rollback
+  [repo block-ops-map-coll]
+  (let [ops (map (fn [m]
+                   (keep (fn [[k op]]
+                           (when (not= :block/uuid k)
+                             op))
+                         m))
+                 block-ops-map-coll)]
+    (client-op/add-ops repo ops)
+    nil))
+
 (defn new-task--push-local-ops
   "Return a task: push local updates"
   [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
   (m/sp
-    (op-mem-layer/new-branch! repo)
-    (if-let [remote-ops (not-empty (gen-block-uuid->remote-ops repo conn))]
-      (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
-                                 (sort-remote-ops
-                                  remote-ops))]
-        (let [local-tx (op-mem-layer/get-local-tx repo)
-              r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
-                                                            :ops ops-for-remote :t-before (or local-tx 1)}))]
-          (if-let [remote-ex (:ex-data r)]
-            (do (add-log-fn :rtc.log/push-local-update remote-ex)
-                (case (:type remote-ex)
-                  ;; - :graph-lock-failed
-                  ;;   conflict-update remote-graph, keep these local-pending-ops
-                  ;;   and try to send ops later
-                  :graph-lock-failed
-                  (do (op-mem-layer/rollback! repo)
-                      nil)
-                  ;; - :graph-lock-missing
-                  ;;   this case means something wrong in remote-graph data,
-                  ;;   nothing to do at client-side
-                  :graph-lock-missing
-                  (do (op-mem-layer/rollback! repo)
-                      (throw r.ex/ex-remote-graph-lock-missing))
+    (let [block-ops-map-coll (client-op/get&remove-all-ops repo)]
+      (when-let [block-uuid->remote-ops (not-empty (gen-block-uuid->remote-ops @conn block-ops-map-coll))]
+        (when-let [ops-for-remote (rtc-const/to-ws-ops-decoder
+                                   (sort-remote-ops
+                                    block-uuid->remote-ops))]
+          (let [local-tx (client-op/get-local-tx repo)
+                r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
+                                                              :ops ops-for-remote :t-before (or local-tx 1)}))]
+            (if-let [remote-ex (:ex-data r)]
+              (do (add-log-fn :rtc.log/push-local-update remote-ex)
+                  (case (:type remote-ex)
+                    ;; - :graph-lock-failed
+                    ;;   conflict-update remote-graph, keep these local-pending-ops
+                    ;;   and try to send ops later
+                    :graph-lock-failed
+                    (rollback repo block-ops-map-coll)
+                    ;; - :graph-lock-missing
+                    ;;   this case means something wrong in remote-graph data,
+                    ;;   nothing to do at client-side
+                    :graph-lock-missing
+                    (do (rollback repo block-ops-map-coll)
+                        (throw r.ex/ex-remote-graph-lock-missing))
 
-                  :rtc.exception/get-s3-object-failed
-                  (do (op-mem-layer/rollback! repo)
-                      nil)
-                  ;; else
-                  (do (op-mem-layer/rollback! repo)
-                      (throw (ex-info "Unavailable" {:remote-ex remote-ex})))))
+                    :rtc.exception/get-s3-object-failed
+                    (rollback repo block-ops-map-coll)
+                    ;; else
+                    (do (rollback repo block-ops-map-coll)
+                        (throw (ex-info "Unavailable" {:remote-ex remote-ex})))))
 
-            (do (assert (pos? (:t r)) r)
-                (op-mem-layer/commit! repo)
-                (r.remote-update/apply-remote-update
-                 graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
-                (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)})))))
-      (op-mem-layer/rollback! repo))))
+              (do (assert (pos? (:t r)) r)
+                  (r.remote-update/apply-remote-update
+                   graph-uuid repo conn date-formatter {:type :remote-update :value r} add-log-fn)
+                  (add-log-fn :rtc.log/push-local-update {:remote-t (:t r)})))))))))
 
 (defn new-task--pull-remote-data
   [repo conn graph-uuid date-formatter get-ws-create-task add-log-fn]
   (m/sp
-    (let [local-tx (op-mem-layer/get-local-tx repo)
+    (let [local-tx (client-op/get-local-tx repo)
           r (m/? (ws-util/send&recv get-ws-create-task {:action "apply-ops" :graph-uuid graph-uuid
                                                         :ops [] :t-before (or local-tx 1)}))]
       (if-let [remote-ex (:ex-data r)]
