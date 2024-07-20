@@ -1643,16 +1643,16 @@
   "Return matched page names that are not built-in pages"
   [q]
   (p/let [block (state/get-edit-block)
-          editing-page (and block
+          editing-page-id (and block
                             (when-let [page-id (:db/id (:block/page block))]
-                              (:block/name (db/entity page-id))))
-          pages (search/page-search q {:built-in? false})]
-    (->> (if editing-page
+                              (:block/uuid (db/entity page-id))))
+          pages (search/block-search (state/get-current-repo) q {:built-in? false
+                                                                 :enable-snippet? false})]
+    (->> (if editing-page-id
            ;; To prevent self references
-           (remove (fn [p] (= (util/safe-page-name-sanity-lc (:title p))
-                              (util/safe-page-name-sanity-lc editing-page))) pages)
+           (remove (fn [p] (= editing-page-id (:block/uuid p))) pages)
            pages)
-         (map :title))))
+         (map :block/title))))
 
 (defn get-matched-blocks
   [q block-id]

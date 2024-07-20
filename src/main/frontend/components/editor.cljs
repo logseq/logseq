@@ -143,9 +143,7 @@
     (let [matched-pages (cond
                           (contains? (set (map util/page-name-sanity-lc matched-pages))
                                      (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
-                          (sort-by (fn [m]
-                                     [(count m) m])
-                                   matched-pages)
+                          (sort-by (fn [m] [(count m) m]) matched-pages)
 
                           (string/blank? q)
                           nil
@@ -168,8 +166,12 @@
                                                matched-pages)]
                             (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
                               (cons (first matched-pages)
-                                    (cons q (rest matched-pages)))
-                              (cons q matched-pages))))]
+                                    (if (db/page-exists? q)
+                                      (rest matched-pages)
+                                      (cons (str (t :new-page) " " q) (rest matched-pages))))
+                              (if (db/page-exists? q)
+                                matched-pages
+                                (cons (str (t :new-page) " " q) matched-pages)))))]
       (ui/auto-complete
        matched-pages
        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
