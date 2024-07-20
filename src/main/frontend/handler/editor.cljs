@@ -1654,14 +1654,6 @@
            pages)
          (map :title))))
 
-(comment
-  (defn get-matched-classes
-    "Return matched class names"
-    [q]
-    (let [classes (->> (db-model/get-all-classes (state/get-current-repo))
-                       (map first))]
-      (search/fuzzy-search classes q {:limit 100}))))
-
 (defn get-matched-blocks
   [q block-id]
   ;; remove current block
