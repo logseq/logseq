@@ -201,12 +201,12 @@
       ;; It could slow down the search indexing, also it can be confusing
       ;; if the showing properties are not useful to users.
       ;; (let [content (if (and db-based? (seq (:block/properties block)))
-    ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
+      ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
       ;;                 content)])
     (when uuid
       {:id (str uuid)
        :page (str (or (:block/uuid page) uuid))
-       :title (sanitize title)
+       :title (if (page-or-object? block) title (sanitize title))
        :built-in? (ldb/built-in? block)
        :format format})))
 
