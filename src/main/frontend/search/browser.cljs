@@ -16,10 +16,10 @@
     (if-let [^js sqlite @*sqlite]
       (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))
               result (bean/->clj result)]
-        (keep (fn [{:keys [content page] :as block}]
+        (keep (fn [{:keys [title page] :as block}]
                 {:page? (= (:uuid block) page)
                  :block/uuid (uuid (:uuid block))
-                 :block/title content
+                 :block/title title
                  :block/page (uuid page)}) result))
       (p/resolved nil)))
   (rebuild-pages-indice! [_this]

@@ -27,15 +27,15 @@
                   ;; insert
                   "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
                   BEGIN
-                      INSERT INTO blocks_fts (id, content, page)
-                      VALUES (new.id, new.content, new.page);
+                      INSERT INTO blocks_fts (id, title, page)
+                      VALUES (new.id, new.title, new.page);
                   END;"
                   ;; update
                   "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
                   BEGIN
                       DELETE from blocks_fts where id = old.id;
-                      INSERT INTO blocks_fts (id, content, page)
-                      VALUES (new.id, new.content, new.page);
+                      INSERT INTO blocks_fts (id, title, page)
+                      VALUES (new.id, new.title, new.page);
                   END;"]]
     (doseq [trigger triggers]
       (.exec db trigger))))
@@ -45,12 +45,14 @@
   ;; id -> block uuid, page -> page uuid
   (.exec db "CREATE TABLE IF NOT EXISTS blocks (
                         id TEXT NOT NULL PRIMARY KEY,
-                        content TEXT NOT NULL,
+                        title TEXT NOT NULL,
                         page TEXT)"))
 
 (defn- create-blocks-fts-table!
   [db]
-  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, content, page)"))
+  ;; The trigram tokenizer extends FTS5 to support substring matching in general, instead of the usual token matching. When using the trigram tokenizer, a query or phrase token may match any sequence of characters within a row, not just a complete token.
+  ;; Check https://www.sqlite.org/fts5.html#the_experimental_trigram_tokenizer.
+  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"))
 
 (defn create-tables-and-triggers!
   "Open a SQLite db for search index"
@@ -84,9 +86,9 @@
                      (doseq [item blocks]
                        (if (and (common-util/uuid-string? (.-id item))
                                 (common-util/uuid-string? (.-page item)))
-                         (.exec tx #js {:sql "INSERT INTO blocks (id, content, page) VALUES ($id, $content, $page) ON CONFLICT (id) DO UPDATE SET (content, page) = ($content, $page)"
+                         (.exec tx #js {:sql "INSERT INTO blocks (id, title, page) VALUES ($id, $title, $page) ON CONFLICT (id) DO UPDATE SET (title, page) = ($title, $page)"
                                         :bind #js {:$id (.-id item)
-                                                   :$content (.-content item)
+                                                   :$title (.-title item)
                                                    :$page (.-page item)}})
                          (throw (ex-info "Search upsert-blocks wrong data: "
                                          (bean/->clj item))))))))
@@ -138,40 +140,34 @@
                         (string/replace " not " " NOT "))]
     (if (not= q match-input)
       (string/replace match-input "," "")
-      (str "\"" match-input "\""))))
+      (str "\"" match-input "\"*"))))
 
 (defn search-blocks
   ":page - the page to specifically search on"
   [db q {:keys [limit page]}]
   (when-not (string/blank? q)
     (p/let [match-input (get-match-input q)
-            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
-            limit  (or limit 20)
+            limit  (or limit 100)
             ;; https://www.sqlite.org/fts5.html#the_highlight_function
             ;; the 2nd column in blocks_fts (content)
             ;; pfts_2lqh is a key for retrieval
             ;; highlight and snippet only works for some matching with high rank
             snippet-aux "snippet(blocks_fts, 1, ' $pfts_2lqh>$ ', ' $<pfts_2lqh$ ', '...', 32)"
-            select (str "select id, page, content, " snippet-aux " from blocks_fts where ")
+            select (str "select id, page, title, " snippet-aux " from blocks_fts where ")
             pg-sql (if page "page = ? and" "")
             match-sql (str select
                            pg-sql
-                           " content match ? order by rank limit ?")
-            non-match-sql (str select
-                               pg-sql
-                               " content like ? limit ?")
+                           " title match ? order by rank limit ?")
             matched-result (search-blocks-aux db match-sql match-input page limit)
-            non-match-result (search-blocks-aux db non-match-sql non-match-input page limit)
-            all-result (->> (concat matched-result non-match-result)
+            all-result (->> matched-result
                             (map (fn [result]
-                                   (let [[id page _content snippet] result]
+                                   (let [[id page _title snippet] result]
                                      {:uuid id
-                                      :content snippet
+                                      :title snippet
                                       :page page}))))]
       (->>
        all-result
-       (common-util/distinct-by :uuid)
-       (take limit)))))
+       (common-util/distinct-by :uuid)))))
 
 (defn truncate-table!
   [db]
@@ -225,7 +221,6 @@
   "Convert a block to the index for searching"
   [{:block/keys [uuid page title format] :as block}]
   (when-not (or
-             (:block/name block)
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
              (string/blank? title))        ; empty page or block
@@ -238,7 +233,7 @@
     (when uuid
       {:id (str uuid)
        :page (str (or (:block/uuid page) uuid))
-       :content (sanitize title)
+       :title (sanitize title)
        :format format})))
 
 
