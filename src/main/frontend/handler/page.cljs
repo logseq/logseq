@@ -42,7 +42,9 @@
             [logseq.graph-parser.db :as gp-db]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [datascript.impl.entity :as de]
+            [logseq.common.util.block-ref :as block-ref]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -333,10 +335,11 @@
              (common-util/safe-subs edit-content pos current-pos)))
         db-based? (config/db-based-graph? (state/get-current-repo))]
     (if hashtag?
-      (fn [chosen e]
+      (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [class? (and db-based? hashtag?
+        (let [chosen (:block/title chosen-result)
+              class? (and db-based? hashtag?
                           (or (string/includes? chosen (str (t :new-class) " "))
                               (ldb/class? (db/get-page chosen))))
               chosen (-> chosen
@@ -358,16 +361,14 @@
              (let [tag (string/trim chosen)
                    edit-block (state/get-edit-block)
                    get-page-fn (if class? db/get-case-page db/get-page)]
-               (when (and (not (string/blank? tag)) (:block/uuid edit-block))
-                 (p/let [tag-entity (get-page-fn tag)
-                         _ (prn :debug :class? class?)
-                         _ (when-not tag-entity
+               (when (:block/uuid edit-block)
+                 (p/let [_ (when-not (de/entity? chosen-result) ; page not exists yet
                              (if class?
                                (<create-class! tag {:redirect? false
                                                     :create-first-block? false})
                                (<create! tag {:redirect? false
                                               :create-first-block? false})))
-                         tag-entity (get-page-fn tag)]
+                         tag-entity (or (when (de/entity? chosen-result) chosen-result) (get-page-fn tag))]
                    (when class?
                      (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))
            (editor-handler/insert-command! id
@@ -378,13 +379,16 @@
                                             :command :page-ref})
 
            (when input (.focus input)))))
-      (fn [chosen e]
+      (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [chosen' (string/replace-first chosen (str (t :new-page) " ") "")
-              page-ref-text (get-page-ref-text chosen')]
+        (let [chosen (:block/title chosen-result)
+              chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+              ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
+                         (block-ref/->block-ref (:block/uuid chosen-result))
+                         (get-page-ref-text chosen'))]
           (editor-handler/insert-command! id
-                                          page-ref-text
+                                          ref-text
                                           format
                                           {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
                                            :end-pattern page-ref/right-brackets

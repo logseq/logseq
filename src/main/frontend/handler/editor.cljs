@@ -1644,15 +1644,17 @@
   [q]
   (p/let [block (state/get-edit-block)
           editing-page-id (and block
-                            (when-let [page-id (:db/id (:block/page block))]
-                              (:block/uuid (db/entity page-id))))
+                               (when-let [page-id (:db/id (:block/page block))]
+                                 (:block/uuid (db/entity page-id))))
           pages (search/block-search (state/get-current-repo) q {:built-in? false
                                                                  :enable-snippet? false})]
     (->> (if editing-page-id
            ;; To prevent self references
            (remove (fn [p] (= editing-page-id (:block/uuid p))) pages)
            pages)
-         (map :block/title))))
+         (keep (fn [b]
+                 (when-let [id (:block/uuid b)]
+                   (db/entity [:block/uuid id])))))))
 
 (defn get-matched-blocks
   [q block-id]
