@@ -258,7 +258,8 @@
                   hiccups-add [(when-not (string/blank? b-cut)
                                  [:span b-cut])
                                (when-not (string/blank? hl-cut)
-                                 [:mark.p-0.rounded-none hl-cut])]
+                                 (let [hl-cut' (string/trimr hl-cut)]
+                                   [:mark.p-0.rounded-none hl-cut']))]
                   hiccups-add (remove nil? hiccups-add)
                   new-result (concat result hiccups-add)]
               (if-not (string/blank? e-cut)
@@ -573,7 +574,7 @@
 
 (rum/defcs result-group
   < rum/reactive
-    (rum/local false ::mouse-active?)
+  (rum/local false ::mouse-active?)
   [state' state title group visible-items first-item sidebar?]
   (let [{:keys [show items]} (some-> state ::results deref group)
         highlighted-item (or @(::highlighted-item state) first-item)
@@ -605,9 +606,9 @@
        [:div {:class "flex-1"}]
 
        (when (and (= group highlighted-group)
-               (or can-show-more? can-show-less?)
-               (empty? filter)
-               (not sidebar?))
+                  (or can-show-more? can-show-less?)
+                  (empty? filter)
+                  (not sidebar?))
          [:a.text-link.select-node.opacity-50.hover:opacity-90
           {:on-click (if (= show :more) show-less show-more)}
           (if (= show :more)
@@ -649,12 +650,12 @@
                              :on-highlight (fn [ref]
                                              (reset! (::highlighted-group state) group)
                                              (when (and ref (.-current ref)
-                                                     (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                                        (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
                                                (scroll-into-view-when-invisible state (.-current ref)))))
                       nil)]
-           (if (= group :blocks)
-             (ui/lazy-visible (fn [] item) {:trigger-once? true})
-             item)))]]]))
+            (if (= group :blocks)
+              (ui/lazy-visible (fn [] item) {:trigger-once? true})
+              item)))]]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
