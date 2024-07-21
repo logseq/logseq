@@ -73,6 +73,7 @@
    [:local-tx {:optional true} :int]
    [:block-uuid->ops [:map-of :uuid
                       [:map-of [:enum :move :remove :update :update-page :remove-page] :any]]]
+   ;; TODO: remove :asset-uuid->ops
    [:asset-uuid->ops [:map-of :uuid
                       [:map-of [:enum :update-asset :remove-asset] :any]]]
    [:t+block-uuid-sorted-set [:set [:cat :int :uuid]]]])

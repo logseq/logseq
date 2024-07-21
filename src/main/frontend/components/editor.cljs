@@ -54,7 +54,8 @@
                command-doc (get item 2)
                plugin-id (get-in item [1 1 1 :pid])
                doc (when (state/show-command-doc?) command-doc)
-               icon-name (some-> item (get 3) (name))
+               options (some-> item (get 3))
+               icon-name (some-> (if (map? options) (:icon options) options) (name))
                command-name (if icon-name
                               [:span.flex.items-center.gap-1
                                (shui/tabler-icon icon-name)
@@ -837,9 +838,9 @@
       (= :input action)
       nil
 
+      ;; exit editing mode
       :else
-      (let [select? (and (= type :esc)
-                         (not (string/includes? value "```")))]
+      (let [select? (= type :esc)]
         (when-let [container (gdom/getElement "app-container")]
           (dom/remove-class! container "blocks-selection-mode"))
         (p/do!

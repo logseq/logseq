@@ -6,6 +6,7 @@
             [frontend.search :as search]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [promesa.core :as p]
             [rum.core :as rum]
             [frontend.config :as config]
             [frontend.state :as state]
@@ -84,11 +85,12 @@
       [:input.cp__filters-input.w-full.bg-transparent
        {:placeholder (t :linked-references/filter-search)
         :autofocus true
+        :ref (fn [^js el] (-> (p/delay 32) (p/then #(.focus el))))
         :on-change (fn [e]
                      (reset! filter-search (util/evalue e)))}]]
      (let [all-filters (set
-                        (concat (map :block/name included)
-                                (map :block/name excluded)))
+                         (concat (map :block/name included)
+                           (map :block/name excluded)))
            refs (remove (fn [[page _]] (all-filters (util/page-name-sanity-lc page)))
                         filtered-references)]
        (when (seq refs)

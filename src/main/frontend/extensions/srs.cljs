@@ -771,12 +771,14 @@
 (commands/register-slash-command ["Cards"
                                   [[:editor/input "{{cards }}" {:backward-pos 2}]]
                                   "Create a cards query"
-                                  {:db-graph? false}])
+                                  {:db-graph? false
+                                   :icon :icon/cards}])
 
 (commands/register-slash-command ["Cloze"
                                   [[:editor/input "{{cloze }}" {:backward-pos 2}]]
                                   "Create a cloze"
-                                  {:db-graph? false}])
+                                  {:db-graph? false
+                                   :icon :icon/eye-question}])
 
 ;; handlers
 (defn add-card-tag-to-block

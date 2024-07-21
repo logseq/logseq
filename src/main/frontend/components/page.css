@@ -241,3 +241,31 @@ html.is-native-ios {
 .no-ring {
   @apply focus:ring-0 focus:ring-offset-0;
 }
+
+.ls-dummy-block {
+  @apply pb-[27px];
+
+  .bullet {
+    @apply relative top-[4px] left-[-2px];
+  }
+
+  .text {
+    @apply relative top-[3px];
+  }
+}
+
+.ls-preview-popup {
+  @apply pl-6;
+
+  .tippy-wrapper {
+    @apply p-2;
+
+    &.as-page {
+      @apply -ml-5 pl-7 outline-none;
+    }
+
+    &.as-block {
+      @apply -ml-5;
+    }
+  }
+}

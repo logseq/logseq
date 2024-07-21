@@ -42,18 +42,19 @@
 
 (defn- notify-user [m]
   (println (:msg m))
-  (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
-  (println "Stacktrace:")
-  (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
-    (println (string/join
-              "\n"
-              (map
-               #(str (:file %)
-                     (when (:line %) (str ":" (:line %)))
-                     (when (:sci.impl/f-meta %)
-                       (str " calls #'" (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name]))))
-               (reverse stack))))
-    (println (some-> (get-in m [:ex-data :error]) .-stack)))
+  (when (:ex-data m)
+    (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
+    (println "Stacktrace:")
+    (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
+      (println (string/join
+                "\n"
+                (map
+                 #(str (:file %)
+                       (when (:line %) (str ":" (:line %)))
+                       (when (:sci.impl/f-meta %)
+                         (str " calls #'" (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name]))))
+                 (reverse stack))))
+      (println (some-> (get-in m [:ex-data :error]) .-stack))))
   (when (= :error (:level m))
     (js/process.exit 1)))
 
