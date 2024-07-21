@@ -116,7 +116,9 @@ pre {
 
 .cp__commands-slash {
   .ui__icon {
-    @apply opacity-80;
+    opacity: .7;
+    margin-right: 1px;
+    color: inherit !important;
 
     &.ls-icon-queryCode {
       @apply relative left-[1px];

@@ -204,6 +204,7 @@
              [:code [:small (str id')]]]]))]])])
 
 (rum/defc ^:large-vars/cleanup-todo customize-shortcut-dialog-inner
+  "user-binding: empty vector is for the unset state, nil is for the default binding"
   [k action-name binding user-binding {:keys [saved-cb modal-id]}]
   (let [*ref-el (rum/use-ref nil)
         [modal-life _] (r/use-atom *customize-modal-life-sentry)
@@ -214,7 +215,6 @@
         handler-id (rum/use-memo #(dh/get-group k))
         dirty? (not= (or user-binding binding) current-binding)
         keypressed? (not= "" keystroke)
-
         save-keystroke-fn!
         (fn []
           ;; parse current binding conflicts
@@ -323,11 +323,11 @@
 
      [:div.action-btns.text-right.mt-6.flex.justify-between.items-center
       ;; restore default
-      (if (and dirty? (or user-binding binding))
+      (if (and (not= current-binding binding) (seq binding))
         [:a.flex.items-center.space-x-1.text-sm.fade-link
-         {:on-click #(set-current-binding! (or user-binding binding))}
+         {:on-click #(set-current-binding! binding)}
          (t :keymap/restore-to-default)
-         (for [it (some->> (or binding user-binding) (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
+         (for [it (some->> binding (map #(some->> % (dh/mod-key) (shortcut-utils/decorate-binding))))]
            [:span.keyboard-shortcut.ml-1 [:code it]])]
         [:div])
 

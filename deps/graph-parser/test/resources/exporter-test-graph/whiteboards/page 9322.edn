@@ -1,0 +1,67 @@
+{:blocks ({:block/title "fix/published-embeds"
+           :block/format :markdown
+           :block/left
+           {:block/uuid #uuid "64551487-ffab-406c-adcf-a4e8f00db19c"}
+           :block/parent
+           {:block/uuid #uuid "64551487-ffab-406c-adcf-a4e8f00db19c"}
+           :block/uuid #uuid "645514a0-85c2-43db-ac08-12836ae3d147"}
+          {:block/created-at 1683639741650
+           :block/properties
+           {:ls-type :whiteboard-shape
+            :logseq.tldraw.shape
+            {:index 0
+             :scale [1 1]
+             :type "youtube"
+             :size [853 480]
+             :id "e694caf0-eb52-11ed-a877-89e9886a62fe"
+             :url "https://www.youtube.com/watch?v=C5m5dIiJMD0"
+             :isLocked false
+             :point [475.04503224455124 300.94676141866057]
+             :parentId "64551487-ffab-406c-adcf-a4e8f00db19c"
+             :nonce 1683297680671}}
+           :block/updated-at 1683639741650}
+          {:block/created-at 1683639741650
+           :block/properties
+           {:ls-type :whiteboard-shape
+            :logseq.tldraw.shape
+            {:isSizeLocked true
+             :stroke ""
+             :borderRadius 0
+             :index 1
+             :scale [1 1]
+             :scaleLevel "md"
+             :fill ""
+             :type "text"
+             :size [78 34]
+             :fontFamily "var(--ls-font-family)"
+             :strokeType "line"
+             :strokeWidth 2
+             :opacity 1
+             :id "51851490-ee6f-11ed-9c5e-21b9b3de5563"
+             :padding 4
+             :fontWeight 400
+             :noFill true
+             :point [719.5019628453911 862.2621018969135]
+             :lineHeight 1.2
+             :fontSize 20
+             :parentId "64551487-ffab-406c-adcf-a4e8f00db19c"
+             :nonce 1683639739496
+             :italic false
+             :text "fsdfsdf"}}
+           :block/updated-at 1683639741650})
+ :pages ({:block/uuid #uuid "64551487-ffab-406c-adcf-a4e8f00db19c"
+          :block/properties
+          {:ls-type :whiteboard-page
+           :logseq.tldraw.page
+           {:id "64551487-ffab-406c-adcf-a4e8f00db19c"
+            :name "page 9322"
+            :bindings
+            {}
+            :nonce 1
+            :assets []
+            :shapes-index ("e694caf0-eb52-11ed-a877-89e9886a62fe" "51851490-ee6f-11ed-9c5e-21b9b3de5563")}}
+          :block/updated-at 1683639741650
+          :block/created-at 1683297415382
+          :block/type "whiteboard"
+          :block/name "page 9322"
+          :block/title "page 9322"})}

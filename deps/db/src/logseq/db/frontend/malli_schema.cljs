@@ -29,7 +29,7 @@
 (def internal-property-ident
   [:or logseq-property-ident db-attribute-ident])
 
-(defn- user-property?
+(defn user-property?
   "Determines if keyword/ident is a user property"
   [kw]
   (db-property/user-property-namespace? (namespace kw)))

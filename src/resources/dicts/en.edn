@@ -620,7 +620,7 @@
  :keymap/keystroke-filter "Keystroke filter"
  :keymap/keystroke-record-desc "Press any sequence of keys to filter shortcuts"
  :keymap/keystroke-record-setup-label "Press any sequence of keys to set a shortcut"
- :keymap/restore-to-default "Restore to system default"
+ :keymap/restore-to-default "Restore to the default"
  :keymap/customize-for-label "Customize shortcuts"
  :keymap/conflicts-for-label "Keymap conflicts for"
 

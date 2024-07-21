@@ -34,7 +34,8 @@
         page-icon (get page-entity (pu/get-pid :logseq.property/icon))]
     (or
      (when-not (string/blank? page-icon)
-       (icon page-icon opts))
+       [:span {:style {:color (or (:color page-icon ) "inherit")}}
+        (icon page-icon opts)])
      default-icon)))
 
 (defn- search-emojis
@@ -252,9 +253,9 @@
                             (if c "" (shui/tabler-icon "minus" {:class "scale-75 opacity-70"}))))]))]
     (rum/use-effect!
       (fn []
-        (when-let [^js section (some-> (rum/deref *el) (.closest ".cp__emoji-icon-picker") (.querySelector ".pane-section"))]
+        (when-let [^js picker (some-> (rum/deref *el) (.closest ".cp__emoji-icon-picker"))]
           (let [color (if (string/blank? color) "inherit" color)]
-            (set! (. (.-style section) -color) color)
+            (.setProperty (.-style picker) "--ls-color-icon-preset" color)
             (storage/set :ls-icon-color-preset color)))
         (reset! *color color))
       [color])
@@ -272,8 +273,9 @@
   (rum/local nil ::result)
   (rum/local false ::select-mode?)
   (rum/local :all ::tab)
-  (rum/local (storage/get :ls-icon-color-preset) ::color)
   (rum/local nil ::hover)
+  {:init (fn [s]
+           (assoc s ::color (atom (storage/get :ls-icon-color-preset))))}
   [state {:keys [on-chosen] :as opts}]
   (let [*q (::q state)
         *result (::result state)
@@ -370,7 +372,7 @@
                  :class (util/classnames [{:active active?} "tab-item"])
                  :on-click #(reset! *tab id)}
                 label)))]
-         (when (= :icon @*tab)
+         (when (not= :emoji @*tab)
            (color-picker *color))]
 
         ;; preview

@@ -63,18 +63,21 @@
 
 (defn- notify-user [m]
   (println (:msg m))
-  (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
-  (println "Stacktrace:")
-  (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
-    (println (string/join
-              "\n"
-              (map
-               #(str (:file %)
-                     (when (:line %) (str ":" (:line %)))
-                     (when (:sci.impl/f-meta %)
-                       (str " calls #'" (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name]))))
-               (reverse stack))))
-    (println (some-> (get-in m [:ex-data :error]) .-stack))))
+  (when (:ex-data m)
+    (println "Ex-data:" (pr-str (dissoc (:ex-data m) :error)))
+    (println "Stacktrace:")
+    (if-let [stack (some-> (get-in m [:ex-data :error]) ex-data :sci.impl/callstack deref)]
+      (println (string/join
+                "\n"
+                (map
+                 #(str (:file %)
+                       (when (:line %) (str ":" (:line %)))
+                       (when (:sci.impl/f-meta %)
+                         (str " calls #'" (get-in % [:sci.impl/f-meta :ns]) "/" (get-in % [:sci.impl/f-meta :name]))))
+                 (reverse stack))))
+      (println (some-> (get-in m [:ex-data :error]) .-stack))))
+  (when (= :error (:level m))
+    (js/process.exit 1)))
 
 (def default-export-options
   {;; common options
@@ -105,9 +108,10 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
-  (let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
-        files' (mapv #(hash-map :path %) files)]
-    (gp-exporter/export-doc-files conn files' <read-file doc-options)))
+  (p/let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
+          files' (mapv #(hash-map :path %) files)
+          _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
+    {:import-state (:import-state doc-options)}))
 
 (defn- readable-properties
   [db query-ent]
@@ -136,12 +140,12 @@
 
     (testing "whole graph"
 
-      (is (nil? (:errors (db-validate/validate-db! @conn)))
+      (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
           "Created graph has no validation errors")
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 14 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 16 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 5
@@ -149,8 +153,8 @@
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
           "Correct number of pages with block content")
-      (is (= 2 (count @(:ignored-properties import-state)))
-          "Only ignored properties should be related to :icon")
+      (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
+      (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
       (is (= 1 (count @assets))))
 
     (testing "logseq files"
@@ -169,7 +173,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 14
+      (is (= 17
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/type "property"]])
@@ -216,16 +220,16 @@
               :user.property/prop-num 5
               :user.property/prop-string "yeehaw"}
              (readable-properties @conn (find-page-by-name @conn "some page")))
-          "Existing page has correct properties"))
+          "Existing page has correct properties")
+
+      (is (= {:user.property/rating 5.5}
+             (readable-properties @conn (find-block-by-content @conn ":rating float")))
+          "Block with float property imports as a float"))
 
     (testing "built-in properties"
       (is (= [(:db/id (find-block-by-content @conn "original block"))]
              (mapv :db/id (:block/refs (find-block-by-content @conn #"ref to"))))
           "block with a block-ref has correct :block/refs")
-
-      (is (= 2
-             (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
-          "icon properties are visibly ignored in order to not fail import")
 
       (let [b (find-block-by-content @conn #"MEETING TITLE")]
         (is (= {}
@@ -256,6 +260,9 @@
              (readable-properties @conn (find-block-by-content @conn "list one")))
           "numered block has correct property")
 
+      (is (= #{"gpt"}
+             (:block/alias (readable-properties @conn (find-page-by-name @conn "chat-gpt")))))
+
       (is (= {:logseq.property/query-sort-by :user.property/prop-num
               :logseq.property/query-properties [:block :page :user.property/prop-string :user.property/prop-num]
               :logseq.property/query-table true}
@@ -274,16 +281,48 @@
       (is (= :page
              (get-in (d/entity @conn :user.property/participants) [:block/schema :type]))
           ":page property to :date value remains :page")
-      (is (= :default
-             (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
-          ":number property to :default value changes to :default")
 
       (is (= :default
              (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
           ":default property to :page (or any non :default value) remains :default")
       (is (= "[[Jakob]]"
              (:user.property/description (readable-properties @conn (find-block-by-content @conn #":default to :page"))))
-          ":page property value correctly saved as :default with full text"))
+          ":default to :page property saves :default property value default with full text")
+
+      (testing "with changes to upstream/existing property value"
+        (is (= :default
+               (get-in (d/entity @conn :user.property/duration) [:block/schema :type]))
+            ":number property to :default value changes to :default")
+        (is (= "20"
+               (:user.property/duration (readable-properties @conn (find-block-by-content @conn "existing :number to :default"))))
+            "existing :number property value correctly saved as :default")
+
+        (is (= {:block/schema {:type :default} :db/cardinality :db.cardinality/many}
+               (select-keys (d/entity @conn :user.property/people) [:block/schema :db/cardinality]))
+            ":page property to :default value changes to :default and keeps existing cardinality")
+        (is (= #{"[[Jakob]] [[Gabriel]]"}
+               (:user.property/people (readable-properties @conn (find-block-by-content @conn ":page people"))))
+            "existing :page property value correctly saved as :default with full text")
+        (is (= #{"[[Gabriel]] [[Jakob]]"}
+               (:user.property/people (readable-properties @conn (find-block-by-content @conn #"pending block for :page"))))
+            "pending :page property value correctly saved as :default with full text")))
+
+    (testing "replacing refs in :block/title"
+      (is (= 2
+             (->> (find-block-by-content @conn #"replace with same start string")
+                  :block/title
+                  (re-seq #"\[\[~\^\S+\]\]")
+                  distinct
+                  count))
+          "A block with ref names that start with same string has 2 distinct refs")
+
+      (is (= 1
+             (->> (find-block-by-content @conn #"replace case insensitive")
+                  :block/title
+                  (re-seq #"\[\[~\^\S+\]\]")
+                  distinct
+                  count))
+          "A block with different case of same ref names has 1 distinct ref"))
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
@@ -298,7 +337,10 @@
 
         (is (= {:logseq.property/page-tags #{"Movie"}}
                (readable-properties @conn tagged-page))
-            "tagged page has tags imported as page-tags property by default")))))
+            "tagged page has existing page imported as a tag to page-tags")
+        (is (= #{"LargeLanguageModel" "fun" "ai"}
+               (:logseq.property/page-tags (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
+            "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
 
 (deftest-async export-file-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
@@ -306,6 +348,10 @@
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (import-files-to-db files conn {:tag-classes ["movie"]})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+
     (let [block (find-block-by-content @conn #"Inception")
           tag-page (find-page-by-name @conn "Movie")
           another-tag-page (find-page-by-name @conn "p0")]
@@ -329,7 +375,26 @@
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-          _ (import-files-to-db files conn {:property-classes ["type"]})]
+          _ (import-files-to-db files conn {:property-classes ["type"]})
+          _ (@#'gp-exporter/export-class-properties conn conn)]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+
+    (is (= #{:user.class/Property :user.class/Movie}
+           (->> @conn
+                (d/q '[:find [?ident ...]
+                       :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                set))
+        "All classes are correctly defined by :type")
+
+    (is (= #{:user.property/url :user.property/sameas :user.property/rangeincludes}
+           (->> (d/entity @conn :user.class/Property)
+                :class/schema.properties
+                (map :db/ident)
+                set))
+        "Properties are correctly inferred for a class")
+
     (let [block (find-block-by-content @conn #"The Creator")
           tag-page (find-page-by-name @conn "Movie")]
       (is (= (:block/title block) "The Creator")
@@ -349,3 +414,13 @@
       (is (= [:user.class/Property]
              (:block/tags (readable-properties @conn (find-page-by-name @conn "url"))))
           "tagged page has configured tag imported as a class"))))
+
+(deftest-async export-file-with-ignored-properties
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
+          conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          {:keys [import-state]} (import-files-to-db files conn {})]
+    (is (= 2
+           (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
+        "icon properties are visibly ignored in order to not fail import")))

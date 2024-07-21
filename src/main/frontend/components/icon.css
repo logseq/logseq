@@ -1,4 +1,6 @@
 .cp__emoji-icon-picker {
+  --ls-color-icon-preset: "inherit";
+
   @apply w-[380px] max-h-[396px] relative flex flex-col overflow-hidden;
   @apply pt-14 pb-[40px];
 
@@ -53,6 +55,8 @@
 
   .pane-section {
     @apply pl-2 overflow-y-scroll h-full;
+
+    color: var(--ls-color-icon-preset);
 
     > .its, .icons-row {
       @apply flex gap-1 py-1 flex-wrap;
