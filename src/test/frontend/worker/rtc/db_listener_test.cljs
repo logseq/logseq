@@ -1,9 +1,16 @@
 (ns frontend.worker.rtc.db-listener-test
   (:require [cljs.test :as t :refer [deftest is testing]]
             [datascript.core :as d]
+            [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
             [frontend.worker.rtc.db-listener :as subject]
+            [frontend.worker.rtc.fixture :as r.fixture]
             [logseq.db.frontend.schema :as db-schema]))
+
+
+(t/use-fixtures :each
+  test-helper/db-based-start-and-destroy-db-map-fixture
+  r.fixture/listen-test-db-to-gen-rtc-ops-fixture)
 
 (def empty-db (d/empty-db db-schema/schema-for-db-based-graph))
 
@@ -13,6 +20,7 @@
         id->same-entity-datoms (group-by first datom-vec-coll)]
     (update-vals id->same-entity-datoms #'worker-db-listener/entity-datoms=>a->add?->v->t)))
 
+;;; TODO: add more cases
 (deftest entity-datoms=>ops-test
   (testing "remove whiteboard page-block"
     (let [conn (d/conn-from-db empty-db)
