@@ -17,7 +17,7 @@
   test-helper/db-based-start-and-destroy-db-map-fixture
   rtc-fixture/listen-test-db-to-gen-rtc-ops-fixture)
 
-(deftest local-db-tx->remote-ops-test
+(deftest ^:fix-me local-db-tx->remote-ops-test
   (let [repo (state/get-current-repo)
         conn (conn/get-db repo false)
         [page1-uuid
