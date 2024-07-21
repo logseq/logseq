@@ -21,7 +21,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.db :as ldb]))
 
 (rum/defc toggle
   []
@@ -96,14 +97,15 @@
 
     :page
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])
-          page (db/entity repo lookup)
-          page-name (:block/name page)]
-      [[:.flex.items-center.page-title
-        (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
-          [:.text-md.mr-2 icon]
-          (ui/icon (if (contains? (:block/type page) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
-        [:span.overflow-hidden.text-ellipsis (:block/title page)]]
-       (page-cp repo page-name)])
+          page (db/entity repo lookup)]
+      (if (ldb/page? page)
+        [[:.flex.items-center.page-title
+          (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
+            [:.text-md.mr-2 icon]
+            (ui/icon (if (contains? (:block/type page) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
+          [:span.overflow-hidden.text-ellipsis (:block/title page)]]
+         (page-cp repo (str (:block/uuid page)))]
+        (block-with-breadcrumb repo page idx [repo db-id block-type] false)))
 
     :search
     [[:.flex.items-center.page-title

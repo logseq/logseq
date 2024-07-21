@@ -62,12 +62,12 @@
 (defn- replace-page-refs-with-ids
   [block]
   (let [content (:block/title block)
-        content' (if (some :block/name (:block/refs block))
+        content' (if (some :block/title (:block/refs block))
                    (reduce
                     (fn [content {:block/keys [title uuid]}]
                       (replace-page-ref-with-id content title uuid))
                     content
-                    (filter :block/name (:block/refs block)))
+                    (filter :block/title (:block/refs block)))
                    content)]
     (assoc block :block/title content')))
 

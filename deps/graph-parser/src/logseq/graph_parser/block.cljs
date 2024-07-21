@@ -414,10 +414,19 @@
                                      (swap! *name->id assoc page-name (:block/uuid result)))
                                    (if id
                                      (assoc result :block/uuid id)
-                                     result))))) col)))]
+                                     result))))) col)))
+          refs (->> (ref->map-fn *refs false)
+                    (map (fn [ref]
+                           (if-let [page (ldb/get-case-page db (:block/title ref))]
+                             (if (ldb/page? page)
+                               page
+                               {:block/uuid (:block/uuid page)
+                                :block/title (:block/title page)})
+                             ref))))
+          tags (ref->map-fn *structured-tags true)]
       (assoc block
-             :refs (ref->map-fn *refs false)
-             :tags (ref->map-fn *structured-tags true)))))
+             :refs refs
+             :tags tags))))
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]

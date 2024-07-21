@@ -556,7 +556,7 @@
   (let [*hover? (::hover? state)
         *mouse-down? (::mouse-down? state)
         tag? (:tag? config)
-        page-name (:block/name page-entity)
+        page-name (util/page-name-sanity-lc (:block/title page-entity))
         breadcrumb? (:breadcrumb? config)
         config (assoc config :whiteboard-page? whiteboard-page?)
         untitled? (when page-name (model/untitled-page? (:block/title page-entity)))
@@ -722,12 +722,11 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview?] :as config} page]
+  [state {:keys [label children preview? disable-preview?] :as config} _page]
   (let [page-entity (::page-entity state)]
     (when-let [page-entity (when page-entity (db/sub-block (:db/id page-entity)))]
-      (let [page-name (or (:block/name page-entity)
-                          (:block/name page))
-            whiteboard-page? (model/whiteboard-page? page-name)
+      (let [page-name (some-> (:block/title page-entity) util/page-name-sanity-lc)
+            whiteboard-page? (model/whiteboard-page? page-entity)
             inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) page-entity children label)
             modal? (:modal/show? @state/state)]
         (if (and (not (util/mobile?))
@@ -2328,11 +2327,11 @@
              (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive
-  [config {:block/keys [uuid title properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
+  [config {:block/keys [uuid properties scheduled deadline format pre-block?] :as block} edit-input-id block-id slide?]
   (let [repo (state/get-current-repo)
         content (if (config/db-based-graph? (state/get-current-repo))
-                  (:block/title block)
-                  (property-util/remove-built-in-properties format title))
+                  (:block/raw-title block)
+                  (property-util/remove-built-in-properties format (:block/raw-title block)))
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
         ;; _ (prn :debug :block block
         ;;        :parsed-result (block/parse-title-and-body uuid format pre-block? content))
