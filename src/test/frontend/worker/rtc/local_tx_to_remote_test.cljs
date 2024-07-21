@@ -15,8 +15,7 @@
 
 (use-fixtures :each
   test-helper/db-based-start-and-destroy-db-map-fixture
-  rtc-fixture/listen-test-db-to-gen-rtc-ops-fixture
-  rtc-fixture/clear-op-mem-stores-fixture)
+  rtc-fixture/listen-test-db-to-gen-rtc-ops-fixture)
 
 (deftest local-db-tx->remote-ops-test
   (let [repo (state/get-current-repo)

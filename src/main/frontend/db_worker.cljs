@@ -191,10 +191,11 @@
                                        :client-ops client-ops-db})
       (.exec db "PRAGMA locking_mode=exclusive")
       (sqlite-common-db/create-kvs-table! db)
+      (sqlite-common-db/create-kvs-table! client-ops-db)
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
-            client-ops-conn (sqlite-common-db/get-storage-conn storage client-op/schema-in-db)
+            client-ops-conn (sqlite-common-db/get-storage-conn client-ops-storage client-op/schema-in-db)
             initial-data-exists? (d/entity @conn :logseq.class/Root)]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
