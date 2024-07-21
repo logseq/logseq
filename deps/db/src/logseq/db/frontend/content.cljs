@@ -45,7 +45,7 @@
             (string/includes? content (str "#" page-ref-special-chars)))
       (reduce
        (fn [content ref]
-         (if (:block/name ref)
+         (if (:block/title ref)
            (-> content
                ;; Replace page refs
                (string/replace
