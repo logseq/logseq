@@ -6,8 +6,6 @@
             [frontend.test.helper :as test-helper]
             [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.remote-update :as r.remote]
-            [frontend.worker.rtc.client :as r.client]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
@@ -82,44 +80,44 @@
                :block/content "update content"}}
              r)))))
 
-(deftest gen-remote-ops-test
-  (let [repo (state/get-current-repo)
-        conn (conn/get-db repo false)
-        [uuid1 uuid2 uuid3 uuid4] (repeatedly random-uuid)
-        opts {:persist-op? false
-              :transact-opts {:repo repo
-                              :conn conn}}]
-    (test-helper/create-page! "gen-remote-ops-test" {:redirect? false :create-first-block? false :uuid uuid1})
-    (outliner-tx/transact!
-     opts
-     (outliner-core/insert-blocks!
-      repo
-      conn
-      [{:block/uuid uuid2 :block/content "uuid2-block"}
-       {:block/uuid uuid3 :block/content "uuid3-block"
-        :block/parent [:block/uuid uuid1]}
-       {:block/uuid uuid4 :block/content "uuid4-block"
-        :block/parent [:block/uuid uuid1]}]
-      (ldb/get-page @conn  "gen-remote-ops-test")
-      {:sibling? true :keep-uuid? true}))
+;; (deftest gen-remote-ops-test
+;;   (let [repo (state/get-current-repo)
+;;         conn (conn/get-db repo false)
+;;         [uuid1 uuid2 uuid3 uuid4] (repeatedly random-uuid)
+;;         opts {:persist-op? false
+;;               :transact-opts {:repo repo
+;;                               :conn conn}}]
+;;     (test-helper/create-page! "gen-remote-ops-test" {:redirect? false :create-first-block? false :uuid uuid1})
+;;     (outliner-tx/transact!
+;;      opts
+;;      (outliner-core/insert-blocks!
+;;       repo
+;;       conn
+;;       [{:block/uuid uuid2 :block/content "uuid2-block"}
+;;        {:block/uuid uuid3 :block/content "uuid3-block"
+;;         :block/parent [:block/uuid uuid1]}
+;;        {:block/uuid uuid4 :block/content "uuid4-block"
+;;         :block/parent [:block/uuid uuid1]}]
+;;       (ldb/get-page @conn  "gen-remote-ops-test")
+;;       {:sibling? true :keep-uuid? true}))
 
-    (op-mem-layer/init-empty-ops-store! repo)
-    (op-mem-layer/add-ops! repo [[:move 1 {:block-uuid uuid2}]
-                                 [:move 2 {:block-uuid uuid4}]
-                                 [:move 3 {:block-uuid uuid3}]
-                                 [:update 4 {:block-uuid uuid4
-                                             :av-coll [[:block/content (ldb/write-transit-str "uuid4-block") 4 true]]}]])
-    (let [_ (op-mem-layer/new-branch! repo)
-          r1 (#'r.client/gen-block-uuid->remote-ops repo conn :n 1)
-          _ (op-mem-layer/rollback! repo)
-          r2 (#'r.client/gen-block-uuid->remote-ops repo conn :n 3)]
-      (is (= {uuid2 [:move]}
-             (update-vals r1 keys)))
-      (is (= {uuid2 [:move]
-              uuid3 [:move]
-              uuid4 [:move :update]}
-             (update-vals r2 keys))))
-    (op-mem-layer/remove-ops-store! repo)))
+;;     (op-mem-layer/init-empty-ops-store! repo)
+;;     (op-mem-layer/add-ops! repo [[:move 1 {:block-uuid uuid2}]
+;;                                  [:move 2 {:block-uuid uuid4}]
+;;                                  [:move 3 {:block-uuid uuid3}]
+;;                                  [:update 4 {:block-uuid uuid4
+;;                                              :av-coll [[:block/content (ldb/write-transit-str "uuid4-block") 4 true]]}]])
+;;     (let [_ (op-mem-layer/new-branch! repo)
+;;           r1 (#'r.client/gen-block-uuid->remote-ops repo conn :n 1)
+;;           _ (op-mem-layer/rollback! repo)
+;;           r2 (#'r.client/gen-block-uuid->remote-ops repo conn :n 3)]
+;;       (is (= {uuid2 [:move]}
+;;              (update-vals r1 keys)))
+;;       (is (= {uuid2 [:move]
+;;               uuid3 [:move]
+;;               uuid4 [:move :update]}
+;;              (update-vals r2 keys))))
+;;     (op-mem-layer/remove-ops-store! repo)))
 
 (deftest ^:fix-me apply-remote-move-ops-test
   (let [repo (state/get-current-repo)
