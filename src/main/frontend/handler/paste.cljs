@@ -219,10 +219,11 @@
   (when id
     (let [clipboard-data (gobj/get e "clipboardData")
           files (.-files clipboard-data)]
-      (when-let [file (first files)]
-        (when-let [block (state/get-edit-block)]
-          (editor-handler/upload-asset id #js[file] (:block/format block)
-                                       editor-handler/*asset-uploading? true)))
+      (loop [files files]
+        (when-let [file (first files)]
+          (when-let [block (state/get-edit-block)]
+            (editor-handler/upload-asset id #js[file] (:block/format block) editor-handler/*asset-uploading? true))
+          (recur (rest files))))
       (util/stop e))))
 
 (defn editor-on-paste!
