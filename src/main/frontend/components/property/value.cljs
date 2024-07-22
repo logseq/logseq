@@ -110,7 +110,7 @@
           (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
           (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
       (when exit-edit?
-        (shui/popup-hide-all!)
+        (ui/hide-popups-until-preview-popup!)
         (shui/dialog-close!))
       (when-not (or many? checkbox?)
         (when-let [input (state/get-input)]
