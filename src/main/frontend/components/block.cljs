@@ -762,10 +762,12 @@
          :render preview-render :*el-popup *el-popup})
       children)))
 
+(declare block-reference)
+
 (rum/defcs page-cp < db-mixins/query rum/reactive
   {:init (fn [state]
            (let [page (last (:rum/args state))]
-             (assoc state ::page-entity
+             (assoc state ::entity
                     (if (e/entity? page)
                       page
                       ;; Use uuid when available to uniquely identify case sensitive contexts
@@ -774,19 +776,21 @@
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
   [state {:keys [label children preview? disable-preview?] :as config} _page]
-  (let [page-entity (::page-entity state)]
-    (when-let [page-entity (when page-entity (db/sub-block (:db/id page-entity)))]
-      (let [page-name (some-> (:block/title page-entity) util/page-name-sanity-lc)
-            whiteboard-page? (model/whiteboard-page? page-entity)
-            inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) page-entity children label)
-            modal? (shui-dialog/has-modal?)]
-        (if (and (not (util/mobile?))
-                 (not= page-name (:id config))
-                 (not (false? preview?))
-                 (not disable-preview?)
-                 (not modal?))
-          (page-preview-trigger (assoc config :children inner) page-name)
-          inner)))))
+  (let [entity (::entity state)]
+    (when-let [entity (when entity (db/sub-block (:db/id entity)))]
+      (if (or (ldb/page? entity) (:block/tags entity))
+        (let [page-name (some-> (:block/title entity) util/page-name-sanity-lc)
+              whiteboard-page? (model/whiteboard-page? entity)
+              inner (page-inner (assoc config :whiteboard-page? whiteboard-page?) entity children label)
+              modal? (shui-dialog/has-modal?)]
+          (if (and (not (util/mobile?))
+                   (not= page-name (:id config))
+                   (not (false? preview?))
+                   (not disable-preview?)
+                   (not modal?))
+            (page-preview-trigger (assoc config :children inner) page-name)
+            inner))
+        (block-reference config (:block/uuid entity) nil)))))
 
 (rum/defc asset-reference
   [config title path]
@@ -838,31 +842,42 @@
 (rum/defc page-reference < rum/reactive
   "Component for page reference"
   [html-export? s {:keys [nested-link? show-brackets? id] :as config} label]
-  (let [show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
-        block-uuid (:block/uuid config)
-        contents-page? (= "contents" (string/lower-case (str id)))]
-    (if (string/ends-with? s ".excalidraw")
-      [:div.draw {:on-click (fn [e]
-                              (.stopPropagation e))}
-       (excalidraw s block-uuid)]
-      [:span.page-reference
-       {:data-ref s}
-       (when (and (or show-brackets? nested-link?)
-                  (not html-export?)
-                  (not contents-page?))
-         [:span.text-gray-500.bracket page-ref/left-brackets])
-       (let [s (string/trim s)
-             s (if (string/starts-with? s db-content/page-ref-special-chars)
-                 (common-util/safe-subs s 2)
-                 s)]
+  (when s
+    (let [s (string/trim s)
+          s (if (string/starts-with? s db-content/page-ref-special-chars)
+              (common-util/safe-subs s 2)
+              s)
+          show-brackets? (if (some? show-brackets?) show-brackets? (state/show-brackets?))
+          block-uuid (:block/uuid config)
+          contents-page? (= "contents" (string/lower-case (str id)))
+          block (db/get-page s)]
+      (cond
+        (string/ends-with? s ".excalidraw")
+        [:div.draw {:on-click (fn [e]
+                                (.stopPropagation e))}
+         (excalidraw s block-uuid)]
+
+        (or (ldb/page? block) (:block/tags block))
+        [:span.page-reference
+         {:data-ref s}
+         (when (and (or show-brackets? nested-link?)
+                    (not html-export?)
+                    (not contents-page?))
+           [:span.text-gray-500.bracket page-ref/left-brackets])
          (page-cp (assoc config
                          :label (mldoc/plain->text label)
                          :contents-page? contents-page?)
-                  {:block/name s}))
-       (when (and (or show-brackets? nested-link?)
-                  (not html-export?)
-                  (not contents-page?))
-         [:span.text-gray-500.bracket page-ref/right-brackets])])))
+                  {:block/name s})
+         (when (and (or show-brackets? nested-link?)
+                    (not html-export?)
+                    (not contents-page?))
+           [:span.text-gray-500.bracket page-ref/right-brackets])]
+
+        :else
+        (page-cp (assoc config
+                        :label (mldoc/plain->text label)
+                        :contents-page? contents-page?)
+                 {:block/name s})))))
 
 (defn- latex-environment-content
   [name option content]
@@ -2400,8 +2415,6 @@
                   (:block/raw-title block)
                   (property-util/remove-built-in-properties format (:block/raw-title block)))
         block (merge block (block/parse-title-and-body uuid format pre-block? content))
-        ;; _ (prn :debug :block block
-        ;;        :parsed-result (block/parse-title-and-body uuid format pre-block? content))
         ast-body (:block.temp/ast-body block)
         ast-title (:block.temp/ast-title block)
         collapsed? (util/collapsed? block)
