@@ -176,7 +176,7 @@
                         (when (db-model/whiteboard-page? block) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
                         (search-handler/highlight-exact-query (:block/title block) q)])
         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                   "Search for a page or a class"
+                                                                   "Search for a class or a page"
                                                                    "Search for a block")]
         :class       "black"}))))
 
