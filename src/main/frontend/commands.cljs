@@ -287,9 +287,10 @@
         :icon/pageRef
         "BASIC"]
        ["Page embed" (embed-page) "Embed a page here" :icon/pageEmbed]
-       ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
-                           [:editor/search-block :reference]]
-        "Create a backlink to a block" :icon/blockRef]
+       (when-not db?
+         ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
+                             [:editor/search-block :reference]]
+          "Create a backlink to a block" :icon/blockRef])
        ["Block embed" (embed-block) "Embed a block here" :icon/blockEmbed]]
 
         ;; format
@@ -400,9 +401,9 @@
 ;; Allow user to modify or extend, should specify how to extend.
 
       (state/get-commands)
-       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
-                                         (mapv #(vec (concat % [nil :icon/puzzle])))))]
-         (-> plugin-commands (vec) (update 0 (fn [v] (conj v "PLUGINS"))))))
+      (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
+                                               (mapv #(vec (concat % [nil :icon/puzzle])))))]
+        (-> plugin-commands (vec) (update 0 (fn [v] (conj v "PLUGINS"))))))
      (remove nil?)
      (util/distinct-by-last-wins first))))
 
