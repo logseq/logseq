@@ -146,7 +146,6 @@
                            (.focus)) 0)
                  state)
    :will-unmount (fn [state]
-                   (shui/popup-hide!)
                    (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
@@ -168,7 +167,7 @@
                  (when (fn? on-change)
                    (on-change (db/get-case-page journal)))
                  (shui/popup-hide! id)
-                 (shui/popup-hide!)
+                 (ui/hide-popups-until-preview-popup!)
                  (shui/dialog-close!))))))]
     (shui/calendar
      (cond->
