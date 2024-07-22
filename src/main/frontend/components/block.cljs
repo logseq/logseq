@@ -763,6 +763,7 @@
       children)))
 
 (declare block-reference)
+(declare block-reference-preview)
 
 (rum/defcs page-cp < db-mixins/query rum/reactive
   {:init (fn [state]
@@ -788,7 +789,11 @@
                    (not (false? preview?))
                    (not disable-preview?)
                    (not modal?))
-            (page-preview-trigger (assoc config :children inner) page-name)
+            (if (ldb/page? entity)
+              (page-preview-trigger (assoc config :children inner) page-name)
+              (block-reference-preview inner {:repo (state/get-current-repo)
+                                            :config config
+                                            :id (:block/uuid entity)}))
             inner))
         (block-reference config (:block/uuid entity) nil)))))
 
