@@ -169,6 +169,7 @@
              logseq.outliner.pipeline outliner-pipeline
              logseq.outliner.datascript-report ds-report
              logseq.shui.ui shui
+             logseq.shui.popup.core shui-popup
              medley.core medley
              "path" node-path
              promesa.core p}}
