@@ -2,10 +2,12 @@
   "Delete refs/macros when deleting blocks"
   (:require [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
             [clojure.string :as string]
             [logseq.db.frontend.entity-plus :as entity-plus]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn- build-retracted-tx [retracted-blocks]
   (->> (for [block retracted-blocks]
@@ -13,10 +15,18 @@
            (mapcat (fn [ref]
                      (let [id (:db/id ref)
                            block-content (:block/title block)
-                           new-content (some-> (:block/title ref)
+                           new-content (some-> (:block/raw-title ref)
                                                (string/replace (re-pattern (common-util/format "(?i){{embed \\(\\(%s\\)\\)\\s?}}" (str (:block/uuid block))))
                                                                block-content)
+
                                                (string/replace (block-ref/->block-ref (str (:block/uuid block)))
+                                                               block-content)
+
+                                               ;; Replace object
+                                               (string/replace (db-content/block-id->special-id-ref (:block/uuid block))
+                                                               block-content)
+                                               ;; Replace non-object
+                                               (string/replace (page-ref/->page-ref (str (:block/uuid block)))
                                                                block-content))
                            tx (cond->
                                [[:db/retract (:db/id ref) :block/refs (:db/id block)]
