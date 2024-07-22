@@ -739,6 +739,24 @@
                                        :data-editor-popup-ref "commands"}
                        :force-popover? true})
 
+                    (:block-search :page-search :page-search-hashtag)
+                    (shui/popup-show!
+                      pos (if (= :block-search action)
+                            (block-search id format)
+                            (page-search id format))
+                      {:id :editor.commands/block-search
+                       :align :start
+                       :root-props {:onOpenChange
+                                    #(when-not %
+                                       (when (contains?
+                                               #{:block-search :page-search :page-search-hashtag}
+                                               (state/get-editor-action))
+                                         (state/clear-editor-action!)))}
+                       :content-props {:onOpenAutoFocus #(.preventDefault %)
+                                       :onCloseAutoFocus #(.preventDefault %)
+                                       :data-editor-popup-ref (name action)}
+                       :force-popover? true})
+
                     :datepicker
                     (shui/popup-show!
                       pos (datetime-comp/date-picker id format nil)
@@ -793,10 +811,10 @@
        (= action :block-commands-classic)
        (animated-modal "block-commands" (block-commands id format) true)
 
-       (contains? #{:page-search :page-search-hashtag} action)
+       (contains? #{:page-search-classic :page-search-hashtag-classic} action)
        (animated-modal "page-search" (page-search id format) true)
 
-       (= :block-search action)
+       (= :block-search-classic action)
        (animated-modal "block-search" (block-search id format) true)
 
        (= :template-search action)

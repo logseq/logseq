@@ -32,7 +32,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.shui.icon.v2 :as shui.icon.v2]
-            [logseq.shui.popup.core :as shui-popups]
+            [logseq.shui.popup.core :as shui-popup]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -55,11 +55,11 @@
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
 
-(defn shui-popups? [] (some-> (shui-popups/get-popups) (count) (> 0)))
+(defn shui-popups? [] (some-> (shui-popup/get-popups) (count) (> 0)))
 (defn last-shui-preview-popup?
   []
   (= "ls-preview-popup"
-    (some-> (shui-popups/get-last-popup) :content-props :class)))
+    (some-> (shui-popup/get-last-popup) :content-props :class)))
 (defn hide-popups-until-preview-popup!
   []
   (while (and (shui-popups?)
