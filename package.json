@@ -93,7 +93,7 @@
         "@capacitor/status-bar": "^5.0.0",
         "@capawesome/capacitor-background-task": "^5.0.0",
         "@capgo/capacitor-navigation-bar": "^6.0.0",
-        "@excalidraw/excalidraw": "0.16.1",
+        "@excalidraw/excalidraw": "0.16.4",
         "@highlightjs/cdn-assets": "10.4.1",
         "@isomorphic-git/lightning-fs": "^4.6.0",
         "@logseq/capacitor-file-sync": "5.0.2",
