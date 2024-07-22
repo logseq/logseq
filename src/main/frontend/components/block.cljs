@@ -720,6 +720,7 @@
         *timer1 (rum/use-ref nil)                           ;; hide
         *el-popup (rum/use-ref nil)
         [visible? set-visible!] (rum/use-state nil)
+        ;; set-visible! (fn debug-visible [v] (js/console.warn "debug: visible" v) (set-visible! v))
         _  #_:clj-kondo/ignore (rum/defc preview-render []
                                  (rum/use-effect!
                                    (fn []
@@ -744,8 +745,7 @@
                                                            (js/clearTimeout timer1)))
                                        :on-mouse-leave (fn []
                                                          ;; check the top popup whether is the preview popup
-                                                         (when (= "ls-preview-popup"
-                                                                 (some-> (shui-popups/get-last-popup) :content-props :class))
+                                                         (when (ui/last-shui-preview-popup?)
                                                            (rum/set-ref! *timer1
                                                              (js/setTimeout #(set-visible! false) 500))))}
                                       (let [page-cp (state/get-page-blocks-cp)]
