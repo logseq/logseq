@@ -204,7 +204,7 @@
                    (shui/dialog-close!)
                    (and block (= type :checkbox))
                    (p/do!
-                    (shui/popup-hide-all!)
+                    (ui/hide-popups-until-preview-popup!)
                     (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
                    (and block (= type :default)
                         (not (seq (:property/closed-values property))))
@@ -469,7 +469,7 @@
 
             (= :checkbox type)
             (p/do!
-             (shui/popup-hide-all!)
+             (ui/hide-popups-until-preview-popup!)
              (shui/dialog-close!)
              (pv/<add-property! block (:db/ident property) false {:exit-edit? true}))
 
@@ -495,7 +495,7 @@
       state
       :on-hide (fn [_state _e type]
                  (when (= type :esc)
-                   (shui/popup-hide-all!)
+                   (shui/popup-hide!)
                    (shui/dialog-close!)
                    (when-let [^js input (state/get-input)]
                      (.focus input)))))))
@@ -627,8 +627,8 @@
            (-> (when-not config/publishing?
                  {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
              (assoc :class "flex items-center"))
-           (if-let [color (some-> icon :color)]
-             [:span.flex.items-center {:style {:color (or color "inherit")}}
+           (if icon
+             [:span.flex.items-center {:style {:color (or (some-> icon :color) "inherit")}}
               (icon-component/icon icon {:size 15})]
              (property-icon property nil)))))
 

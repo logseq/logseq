@@ -110,7 +110,7 @@
           (<create-new-block! block (db/entity property-id) property-value' {:edit-block? false})
           (property-handler/set-block-property! repo (:block/uuid block) property-id property-value')))
       (when exit-edit?
-        (shui/popup-hide-all!)
+        (ui/hide-popups-until-preview-popup!)
         (shui/dialog-close!))
       (when-not (or many? checkbox?)
         (when-let [input (state/get-input)]
@@ -146,7 +146,6 @@
                            (.focus)) 0)
                  state)
    :will-unmount (fn [state]
-                   (shui/popup-hide!)
                    (shui/dialog-close!)
                    (state/set-editor-action! nil)
                    state)}
@@ -168,7 +167,7 @@
                  (when (fn? on-change)
                    (on-change (db/get-case-page journal)))
                  (shui/popup-hide! id)
-                 (shui/popup-hide!)
+                 (ui/hide-popups-until-preview-popup!)
                  (shui/dialog-close!))))))]
     (shui/calendar
      (cond->

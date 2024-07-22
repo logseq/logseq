@@ -32,6 +32,7 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [logseq.shui.icon.v2 :as shui.icon.v2]
+            [logseq.shui.popup.core :as shui-popups]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
@@ -53,6 +54,17 @@
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
+
+(defn shui-popups? [] (some-> (shui-popups/get-popups) (count) (> 0)))
+(defn last-shui-preview-popup?
+  []
+  (= "ls-preview-popup"
+    (some-> (shui-popups/get-last-popup) :content-props :class)))
+(defn hide-popups-until-preview-popup!
+  []
+  (while (and (shui-popups?)
+           (not (last-shui-preview-popup?)))
+    (shui/popup-hide!)))
 
 (def built-in-colors
   ["yellow"

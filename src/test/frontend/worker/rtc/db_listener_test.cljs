@@ -1,9 +1,22 @@
 (ns frontend.worker.rtc.db-listener-test
   (:require [cljs.test :as t :refer [deftest is testing]]
             [datascript.core :as d]
+            [frontend.db.conn :as conn]
+            [frontend.state :as state]
+            [frontend.test.helper :as test-helper]
             [frontend.worker.db-listener :as worker-db-listener]
+            [frontend.worker.handler.page :as worker-page]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.db-listener :as subject]
-            [logseq.db.frontend.schema :as db-schema]))
+            [frontend.worker.rtc.fixture :as r.fixture]
+            [frontend.worker.state :as worker-state]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.outliner.batch-tx :as batch-tx]
+            [logseq.outliner.core :as outliner-core]))
+
+(t/use-fixtures :each
+  test-helper/db-based-start-and-destroy-db-map-fixture
+  r.fixture/listen-test-db-to-gen-rtc-ops-fixture)
 
 (def empty-db (d/empty-db db-schema/schema-for-db-based-graph))
 
@@ -99,3 +112,46 @@
                              (:av-coll op-value)
                              (assoc :av-coll (map #(take 2 %) (:av-coll op-value))))])
                 ops))))))
+
+(deftest listen-db-changes-and-validate-generated-rtc-ops
+  (letfn [(ops-coll=>block-uuid->op-types [ops-coll]
+            (into {}
+                  (map (fn [m]
+                         [(:block/uuid m) (set (keys (dissoc m :block/uuid)))]))
+                  ops-coll))]
+    (let [repo (state/get-current-repo)
+          conn (conn/get-db repo false)
+          [page-uuid block-uuid1 block-uuid2] (repeatedly random-uuid)]
+      (testing "add page"
+        (worker-page/create! repo conn (worker-state/get-config repo)
+                             "TEST-PAGE"
+                             {:uuid page-uuid
+                              :create-first-block? false})
+        (is (some? (d/pull @conn '[*] [:block/uuid page-uuid])))
+        (is (= {page-uuid #{:update-page :update}}
+               (ops-coll=>block-uuid->op-types (client-op/get&remove-all-ops repo)))))
+      (testing "add blocks to this page"
+        (let [target-entity (d/entity @conn [:block/uuid page-uuid])]
+          (batch-tx/with-batch-tx-mode conn
+            {:persist-op? true}
+            (outliner-core/insert-blocks! repo conn [{:block/uuid block-uuid1
+                                                      :block/title "block1"
+                                                      :block/format :markdown}
+                                                     {:block/uuid block-uuid2
+                                                      :block/title "block2"
+                                                      :block/format :markdown}]
+                                          target-entity
+                                          {:sibling? false :keep-uuid? true}))
+          (is (=
+               {block-uuid1 #{:move :update}
+                block-uuid2 #{:move :update}}
+               (ops-coll=>block-uuid->op-types (client-op/get&remove-all-ops repo))))))
+
+      (testing "delete a block"
+        (batch-tx/with-batch-tx-mode conn
+          {:persist-op? true}
+          (outliner-core/delete-blocks! repo conn nil [(d/entity @conn [:block/uuid block-uuid1])] {}))
+
+        (is (=
+             {block-uuid1 #{:remove}}
+             (ops-coll=>block-uuid->op-types (client-op/get&remove-all-ops repo))))))))

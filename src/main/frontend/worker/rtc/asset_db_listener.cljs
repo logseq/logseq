@@ -4,7 +4,7 @@
             [frontend.schema-register :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.asset :as r.asset]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]))
+            [frontend.worker.rtc.client-op :as client-op]))
 
 (defn entity-datoms=>action+asset-uuid
   [db-after entity-datoms]
@@ -33,6 +33,6 @@
 (defmethod db-listener/listen-db-changes :gen-asset-change-events
   [_ {:keys [_tx-data tx-meta _db-before db-after
              repo _id->attr->datom _e->a->add?->v->t same-entity-datoms-coll]}]
-  (when (and (op-mem-layer/rtc-db-graph? repo)
+  (when (and (client-op/rtc-db-graph? repo)
              (:generate-asset-change-events? tx-meta true))
     (generate-asset-change-events db-after same-entity-datoms-coll)))
