@@ -1349,13 +1349,18 @@
                          (str "&page=" page)))
 
                   :else
-                  url)]
-        (if (and (coll? src)
-                 (= (first src) "youtube-player"))
-          (let [t (re-find #"&t=(\d+)" url)
-                opts (when (seq t)
-                       {:start (nth t 1)})]
-            (youtube/youtube-video (last src) opts))
+                  ["video-file" url])]
+        (if
+         (coll? src)
+          (cond
+            (= (first src) "youtube-player")
+            (let [t (re-find #"&t=(\d+)" url)
+                  opts (when (seq t)
+                         {:start (nth t 1)})]
+              (youtube/youtube-video (last src) opts))
+            
+             (= (first src) "video-file")
+            (asset-reference nil nil (last src)))
           (when src
             (let [width (min (- (util/get-width) 96) 560)
                   height (int (* width (/ (if (string/includes? src "player.bilibili.com")
