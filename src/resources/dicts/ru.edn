@@ -226,7 +226,7 @@
  :settings-page/filename-format                        "Формат имени файла"
  :settings-page/alpha-features                         "Альфа-функции"
  :settings-page/beta-features                          "Бета-функции"
- :settings-page/login-prompt                           "Чтобы получить доступ к новым функциям раньше других, вы должны быть открытым коллективным спонсором или сторонником Logseq и, следовательно, войти в систему первым."
+ :settings-page/login-prompt                           "Чтобы получить доступ к новым функциям раньше других, вы должны быть открытым коллективным спонсором или сторонником Logseq и, следовательно, сначала войти в систему."
  :settings-page/sync                                   "Синхронизация"
  :settings-page/enable-whiteboards                     "Интерактивные доски"
  :settings-page/native-titlebar                        "Встроенная строка заголовка"
