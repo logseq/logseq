@@ -5,8 +5,8 @@
             [clojure.set :as set]
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
+            [frontend.worker.rtc.client-op :as client-op]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
             [frontend.worker.util :as worker-util]
@@ -134,9 +134,7 @@
                            [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                             {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
             (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
-            (op-mem-layer/init-empty-ops-store! repo)
-            (op-mem-layer/update-graph-uuid! repo graph-uuid)
-            (m/? (op-mem-layer/new-task--sync-to-idb repo))
+            (client-op/update-graph-uuid repo graph-uuid)
             (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
                                                         :message "upload-graph completed"})
             nil)
@@ -246,7 +244,7 @@
                              schema-blocks)
         ^js worker-obj (:worker/object @worker-state/*state)]
     (m/sp
-      (op-mem-layer/update-local-tx! repo t)
+      (client-op/update-local-tx repo t)
       (rtc-log-and-state/update-local-t graph-uuid t)
       (rtc-log-and-state/update-remote-t graph-uuid t)
       (m/?
@@ -324,10 +322,8 @@
                                                         :graph-uuid graph-uuid})
           (let [all-blocks (ldb/read-transit-str body)]
             (worker-state/set-rtc-downloading-graph! true)
-            (op-mem-layer/init-empty-ops-store! repo)
             (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
-            (op-mem-layer/update-graph-uuid! repo graph-uuid)
-            (m/? (op-mem-layer/new-task--sync-to-idb repo))
+            (client-op/update-graph-uuid repo graph-uuid)
             (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
             (worker-state/set-rtc-downloading-graph! false)
             (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed

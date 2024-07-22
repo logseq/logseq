@@ -281,6 +281,10 @@ div[data-radix-popper-content-wrapper] {
   &[data-side=bottom] {
     max-height: calc(var(--radix-dropdown-menu-content-available-height) - 20px);
   }
+
+  &.text-popover-foreground {
+    color: inherit;
+  }
 }
 
 .ui__popover-content {
