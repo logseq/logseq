@@ -874,6 +874,10 @@
          (when section
            (gdom/getElement section "id"))))))
 
+(defn get-elem-idx
+  [nodes node]
+  (first (filter number? (map-indexed (fn [idx b] (when (= node b) idx)) nodes))))
+
 #?(:cljs
    (defn get-prev-block-non-collapsed
      "Gets previous non-collapsed block. If given a container
@@ -883,51 +887,43 @@
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (let [block-id (.-id block)
-              block-ids (mapv #(.-id %) blocks)]
-          (when-let [index (.indexOf block-ids block-id)]
-            (let [idx (dec index)]
-              (when (>= idx 0)
-                (nth-safe blocks idx)))))))))
+        (when-let [index (get-elem-idx blocks block)]
+          (let [idx (dec index)]
+            (when (>= idx 0)
+              (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
+       (when-let [index (get-elem-idx blocks block)]
            (let [idx (dec index)]
              (when (>= idx 0)
-               (nth-safe blocks idx))))))))
+               (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
      [block]
      (when-let [blocks (and block (get-blocks-noncollapse))]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (let [idx (inc index)]
-             (when (>= (count blocks) idx)
-               (nth-safe blocks idx))))))))
+       (when-let [index (get-elem-idx blocks block)]
+         (let [idx (inc index)]
+           (when (>= (count blocks) idx)
+             (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (loop [idx (inc index)]
-             (when (>= (count blocks) idx)
-               (let [block (nth-safe blocks idx)
-                     nested? (->> (array-seq (gdom/getElementsByClass "selected"))
-                                  (some (fn [dom] (.contains dom block))))]
-                 (if nested?
-                   (recur (inc idx))
-                   block)))))))))
+       (when-let [index (get-elem-idx blocks block)]
+         (loop [idx (inc index)]
+           (when (>= (count blocks) idx)
+             (let [block (nth-safe blocks idx)
+                   nested? (->> (array-seq (gdom/getElementsByClass "selected"))
+                                (some (fn [dom] (.contains dom block))))]
+               (if nested?
+                 (recur (inc idx))
+                 block))))))))
 
 (defn rand-str
   [n]
