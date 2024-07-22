@@ -912,7 +912,7 @@
   (op-transact! (fn [_repo conn blocks]
                   (let [{:keys [tx-data]} (#'delete-blocks conn blocks)]
                     {:tx-data tx-data
-                     :tx-meta (select-keys opts [:outliner-op :ref-replace-prev-block-id])})) repo conn blocks opts))
+                     :tx-meta (select-keys opts [:outliner-op])})) repo conn blocks opts))
 
 (defn move-blocks!
   [repo conn blocks target-block sibling?]

@@ -835,10 +835,7 @@
                                       (util/get-prev-block-non-collapsed-non-embed block-parent))
                       {:keys [prev-block new-content edit-block-f]} (move-to-prev-block repo sibling-block format value)
                       concat-prev-block? (boolean (and prev-block new-content))
-                      transact-opts (cond-> {:outliner-op :delete-blocks}
-                                      (and concat-prev-block? (seq (:block/_refs block-e)))
-                                      ;; Replace existing block refs with prev-block
-                                      (assoc :ref-replace-prev-block-id (:db/id prev-block)))]
+                      transact-opts {:outliner-op :delete-blocks}]
                   (cond
                     (and prev-block (:block/name prev-block)
                          (not= (:db/id prev-block) (:db/id (:block/parent block)))
@@ -848,7 +845,10 @@
                     concat-prev-block?
                     (let [children (:block/_parent (db/entity (:db/id block)))
                           db-based? (config/db-based-graph? repo)
-                          delete-prev-block? (and db-based? (seq (:block/properties block)) (empty? (:block/properties prev-block)))]
+                          delete-prev-block? (and db-based?
+                                                  (empty? (:block/tags block))
+                                                  (seq (:block/properties block))
+                                                  (empty? (:block/properties prev-block)))]
                       (if delete-prev-block?
                         (p/do!
                          (ui-outliner-tx/transact!
