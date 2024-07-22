@@ -243,8 +243,7 @@
                                          :undo? undo?})))
 
               ;; block has been moved or target got deleted by another client
-              (and (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?)
-                   (not (:ref-replace-prev-block-id tx-meta)))
+              (and (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?))
               (throw (ex-info "This block has been moved or its target has been deleted"
                               (merge op {:error :block-moved-or-target-deleted
                                          :undo? undo?})))
