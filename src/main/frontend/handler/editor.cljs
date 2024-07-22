@@ -1609,10 +1609,9 @@
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
                                             :selected selected}))
 
-          (and (= prefix block-ref/left-parens)
-               (not (config/db-based-graph? (state/get-current-repo))))
-          (do
-            (commands/handle-step [:editor/search-block :reference])
+          (= prefix block-ref/left-parens)
+          (let [db-based? (config/db-based-graph? (state/get-current-repo))]
+            (commands/handle-step [:editor/search-block (if db-based? :embed :reference)])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
                                             :selected selected})))))))
 
