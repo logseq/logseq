@@ -1034,11 +1034,13 @@
           block (db/entity [:block/uuid (:id first-block)])
           copy-str (some->> adjusted-blocks
                             (map (fn [{:keys [id level]}]
-                                   (condp = (:block/format block)
-                                     :org
-                                     (str (string/join (repeat level "*")) " " (block-ref/->block-ref id))
-                                     :markdown
-                                     (str (string/join (repeat (dec level) "\t")) "- " (block-ref/->block-ref id)))))
+                                   (if (config/db-based-graph? (state/get-current-repo))
+                                     (str (string/join (repeat (dec level) "\t")) "- " (page-ref/->page-ref id))
+                                     (condp = (:block/format block)
+                                      :org
+                                      (str (string/join (repeat level "*")) " " (block-ref/->block-ref id))
+                                      :markdown
+                                      (str (string/join (repeat (dec level) "\t")) "- " (block-ref/->block-ref id))))))
                             (string/join "\n\n"))]
       (set-blocks-id! (map :id blocks))
       (util/copy-to-clipboard! copy-str))))
@@ -1049,9 +1051,13 @@
     (let [ids (->> (distinct (map #(when-let [id (dom/attr % "blockid")]
                                      (uuid id)) blocks))
                    (remove nil?))
-          ids-str (some->> ids
-                           (map (fn [id] (util/format "{{embed ((%s))}}" id)))
-                           (string/join "\n\n"))]
+          ids-str (if (config/db-based-graph? (state/get-current-repo))
+                    (some->> ids
+                             (map (fn [id] (block-ref/->block-ref id)))
+                             (string/join "\n\n"))
+                    (some->> ids
+                             (map (fn [id] (util/format "{{embed ((%s))}}" id)))
+                             (string/join "\n\n")))]
       (set-blocks-id! ids)
       (util/copy-to-clipboard! ids-str))))
 
@@ -3145,9 +3151,16 @@
   [format]
   (when-let [current-block (state/get-edit-block)]
     (when-let [block-id (:block/uuid current-block)]
-      (if (= format "embed")
-        (copy-block-ref! block-id #(str "{{embed ((" % "))}}"))
-        (copy-block-ref! block-id block-ref/->block-ref)))))
+      (let [db? (config/db-based-graph? (state/get-current-repo))]
+        (if (= format "embed")
+          (copy-block-ref! block-id
+                           (if db?
+                             block-ref/->block-ref
+                             #(str "{{embed ((" % "))}}")))
+          (copy-block-ref! block-id
+                           (if db?
+                             page-ref/->page-ref
+                             block-ref/->block-ref)))))))
 
 (defn copy-current-block-embed []
   (copy-current-block-ref "embed"))
