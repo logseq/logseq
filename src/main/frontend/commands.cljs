@@ -280,13 +280,14 @@
     (->>
      (concat
         ;; basic
-      [["Page reference"
+      [[(if db? "Block reference" "Page reference")
         [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
          [:editor/search-page]]
-        "Create a backlink to a page"
+        (if db? "Create a backlink to a page"
+            "Create a backlink to a BLOCK")
         :icon/pageRef
         "BASIC"]
-       ["Page embed" (embed-page) "Embed a page here" :icon/pageEmbed]
+       (when-not db? ["Page embed" (embed-page) "Embed a page here" :icon/pageEmbed])
        (when-not db?
          ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                              [:editor/search-block :reference]]
@@ -785,7 +786,9 @@
 (defmethod handle-step :editor/search-page-hashtag [[_]]
   (state/set-editor-action! :page-search-hashtag))
 
-(defmethod handle-step :editor/search-block [[_ _type]]
+(defmethod handle-step :editor/search-block [[_ type]]
+  (when (and (= type :embed) (config/db-based-graph? (state/get-current-repo)))
+    (reset! *current-command "Block embed"))
   (state/set-editor-action! :block-search))
 
 (defmethod handle-step :editor/search-template [[_]]
