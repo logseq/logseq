@@ -15,8 +15,8 @@
 (use-fixtures :each test-helper/start-and-destroy-db)
 
 (deftest ^:integration parse-and-load-files-to-db
-  (let [graph-dir "src/test/docs-0.9.2"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
+  (let [graph-dir "src/test/docs-0.10.9"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.10.9")
         repo-config (edn/read-string (str (fs/readFileSync (node-path/join graph-dir "logseq/config.edn"))))
         files (#'gp-cli/build-graph-files graph-dir repo-config)
         _ (test-helper/with-config repo-config
@@ -25,9 +25,9 @@
 
     (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))
     (testing "Additional Counts"
-      (is (= 64477 (count (d/datoms db :eavt))) "Correct datoms count")
+      (is (= 77137 (count (d/datoms db :eavt))) "Correct datoms count")
 
-      (is (= 5946
+      (is (= 7047
              (ffirst
               (d/q '[:find (count ?b)
                      :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
