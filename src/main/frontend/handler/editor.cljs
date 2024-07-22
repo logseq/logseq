@@ -1665,7 +1665,7 @@
                                                       {:depth 99})
                                 (map (comp str :block/uuid))))
         current-and-parents (set/union #{(str (:block/uuid current-block))} block-parents)]
-    (p/let [result (search/block-search (state/get-current-repo) q {:limit 20})]
+    (p/let [result (search/block-search (state/get-current-repo) q {:built-in? false})]
       (remove
        (fn [h]
          (contains? current-and-parents (:block/uuid h)))
@@ -3110,7 +3110,7 @@
   [block id search-timeout]
   (fn [e]
     (if (= :block-search (state/sub :editor/action))
-      (let [timeout 300]
+      (let [timeout 50]
         (when @search-timeout
           (js/clearTimeout @search-timeout))
         (reset! search-timeout
