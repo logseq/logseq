@@ -6,6 +6,7 @@
             [frontend.rum :refer [adapt-class]]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.user :as user]
+            [frontend.handler.route :as route-handler]
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -44,7 +45,9 @@
         (when session
           (user/login-callback session)
           (notification/show! (str "Hi, " username " :)") :success)
-          (shui/dialog-close!)))
+          (shui/dialog-close!)
+          (when (= :user-login (state/get-current-route))
+            (route-handler/redirect! {:to :home}))))
       [])
 
     nil))
@@ -75,15 +78,19 @@
                  user'          (bean/->clj user)]
              (user-pane sign-out! user')))))]))
 
-(rum/defcs page <
+(rum/defcs modal-inner <
   shortcut/disable-all-shortcuts
   [_state]
   (page-impl))
 
+(rum/defc page
+  []
+  [:div.pt-10 (page-impl)])
+
 (defn open-login-modal!
   []
   (shui/dialog-open!
-    (fn [_close] (page))
+    (fn [_close] (modal-inner))
     {:label "user-login"
      :content-props {:onPointerDownOutside #(let [inputs (sel "form[data-amplify-form] input:not([type=checkbox])")
                                                   inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]
