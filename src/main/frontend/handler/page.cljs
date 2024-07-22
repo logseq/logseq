@@ -43,8 +43,7 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.property.util :as pu]
-            [datascript.impl.entity :as de]
-            [logseq.common.util.block-ref :as block-ref]))
+            [datascript.impl.entity :as de]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)

@@ -23,7 +23,6 @@
    [goog.functions :as gfun]
    [goog.object :as gobj]
    [logseq.shui.ui :as shui]
-   [logseq.db :as ldb]
    [promesa.core :as p]
    [rum.core :as rum]
    [frontend.mixins :as mixins]
