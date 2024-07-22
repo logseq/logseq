@@ -35,22 +35,6 @@
   &[data-modal-name] {
     @apply bg-popover border overflow-x-hidden overflow-y-auto rounded-lg py-1;
   }
-
-  &[data-modal-name="commands"],
-  &[data-modal-name="select-code-block-mode"] {
-    @screen sm {
-      width: 380px !important;
-      max-width: 90vw !important;
-    }
-  }
-
-  &[data-modal-name="date-picker"] {
-    @apply py-0;
-
-    .rc-datepicker {
-      @apply my-0;
-    }
-  }
 }
 
 .is-mobile {
@@ -107,6 +91,12 @@ pre {
     &[data-side=bottom] {
       max-height: min(calc(var(--radix-popover-content-available-height) - 20px), 480px);
     }
+  }
+
+  &[data-editor-popup-ref=page-search],
+  &[data-editor-popup-ref=block-search],
+  &[data-editor-popup-ref=page-search-hashtag] {
+    @apply px-1 py-1 w-96;
   }
 
   &[data-editor-popup-ref=datepicker] {
