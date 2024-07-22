@@ -17,17 +17,21 @@
     common-util/uuid-pattern
     ")")))
 
+(defn block-id->special-id-ref
+  [id]
+  (str page-ref/left-brackets
+       page-ref-special-chars
+       id
+       page-ref/right-brackets))
+
 (defn special-id-ref->page
   "Convert special id ref backs to page name using refs."
   [content refs]
   (reduce
    (fn [content ref]
-     (if (:block/name ref)
+     (if (:block/title ref)
        (-> content
-           (string/replace (str page-ref/left-brackets
-                                page-ref-special-chars
-                                (:block/uuid ref)
-                                page-ref/right-brackets)
+           (string/replace (block-id->special-id-ref (:block/uuid ref))
                            (:block/title ref))
            (string/replace
                 (str "#" page-ref-special-chars
