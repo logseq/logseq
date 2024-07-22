@@ -63,7 +63,6 @@
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
             [logseq.shui.dialog.core :as shui-dialog]
-            [logseq.shui.popup.core :as shui-popups]
             [frontend.util :as util]
             [frontend.extensions.pdf.utils :as pdf-utils]
             [frontend.util.drawer :as drawer]
