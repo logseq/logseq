@@ -1,6 +1,7 @@
 (ns ^:node-only logseq.graph-parser.exporter-test
   (:require [cljs.test :refer [testing is]]
             [logseq.graph-parser.test.helper :as test-helper :include-macros true :refer [deftest-async]]
+            [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [datascript.core :as d]
             [clojure.string :as string]
             ["path" :as node-path]
@@ -129,6 +130,19 @@
 
 ;; Tests
 ;; =====
+
+(deftest-async ^:integration export-docs-graph
+  (p/let [file-graph-dir "test/resources/docs-0.10.9"
+          _ (docs-graph-helper/clone-docs-repo-if-not-exists file-graph-dir "v0.10.9")
+          conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          assets (atom [])
+          {:keys [import-state]}
+          (import-file-graph-to-db file-graph-dir conn {:assets assets})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+    (is (= 0 (count @(:ignored-properties import-state))) "No ignored properties")))
 
 (deftest-async export-basic-graph
   ;; This graph will contain basic examples of different features to import
