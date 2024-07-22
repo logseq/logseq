@@ -61,7 +61,7 @@
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
-    [[:.flex.items-center {:class (when ref? "ml-8")}
+    [[:.flex.items-center {:class (when ref? "ml-2")}
       (ui/icon "block" {:class "text-md mr-2"})
       (block/breadcrumb {:id     "block-parent"
                          :block? true
@@ -259,8 +259,6 @@
                     :aria-labelledby (str "sidebar-panel-header-" idx)
                     :class           (util/classnames [{:hidden  collapsed?
                                                         :initial (not collapsed?)
-                                                        :p-4     (not (contains? #{:page :block :contents :search :shortcut-settings} block-type))
-                                                        :pt-4    (not (contains? #{:search :shortcut-settings} block-type))
                                                         :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]
