@@ -196,20 +196,19 @@
         embed? (and db? (= @commands/*current-command "Page embed"))
         tag? (= action :page-search-hashtag)
         db-tag? (and db? tag?)]
-    (when (contains? #{:page-search :page-search-hashtag} action)
-      (let [pos (state/get-editor-last-pos)
-            input (gdom/getElement id)]
-        (when input
-          (let [current-pos (cursor/pos input)
-                edit-content (state/sub-edit-content)
-                q (or
-                   (editor-handler/get-selected-text)
-                   (when (= action :page-search-hashtag)
-                     (common-util/safe-subs edit-content pos current-pos))
-                   (when (> (count edit-content) current-pos)
-                     (common-util/safe-subs edit-content pos current-pos))
-                   "")]
-            (page-search-aux id format embed? db-tag? q current-pos input pos)))))))
+    (let [pos (state/get-editor-last-pos)
+          input (gdom/getElement id)]
+      (when input
+        (let [current-pos (cursor/pos input)
+              edit-content (state/sub-edit-content)
+              q (or
+                  (editor-handler/get-selected-text)
+                  (when (= action :page-search-hashtag)
+                    (common-util/safe-subs edit-content pos current-pos))
+                  (when (> (count edit-content) current-pos)
+                    (common-util/safe-subs edit-content pos current-pos))
+                  "")]
+          (page-search-aux id format embed? db-tag? q current-pos input pos))))))
 
 (defn- search-blocks!
   [state result]
@@ -277,20 +276,19 @@
                    (state/clear-search-result!)
                    state)}
   [state id _format]
-  (when (= :block-search (state/sub :editor/action))
-    (let [pos (state/get-editor-last-pos)
-          input (gdom/getElement id)
-          [id format] (:rum/args state)
-          current-pos (cursor/pos input)
-          edit-content (state/sub-edit-content)
-          edit-block (state/get-edit-block)
-          selected-text (editor-handler/get-selected-text)
-          q (or
-             selected-text
-             (when (> (count edit-content) current-pos)
-               (subs edit-content pos current-pos)))]
-      (when input
-        (block-search-auto-complete edit-block input id q format selected-text)))))
+  (let [pos (state/get-editor-last-pos)
+        input (gdom/getElement id)
+        [id format] (:rum/args state)
+        current-pos (cursor/pos input)
+        edit-content (state/sub-edit-content)
+        edit-block (state/get-edit-block)
+        selected-text (editor-handler/get-selected-text)
+        q (or
+            selected-text
+            (when (> (count edit-content) current-pos)
+              (subs edit-content pos current-pos)))]
+    (when input
+      (block-search-auto-complete edit-block input id q format selected-text))))
 
 (rum/defc template-search-aux
   [id q]
