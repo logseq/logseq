@@ -251,7 +251,8 @@
                       namespace-pages)
                      ;; remove block references
                      (remove vector?)
-                     (remove nil?))
+                     (remove nil?)
+                     (filter :block/name))
           pages (common-util/distinct-by :block/name pages)
           pages (remove nil? pages)
           pages (map (fn [page]
