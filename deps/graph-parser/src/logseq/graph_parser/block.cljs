@@ -416,6 +416,7 @@
                                      (assoc result :block/uuid id)
                                      result))))) col)))
           refs (->> (ref->map-fn *refs false)
+                    (remove nil?)
                     (map (fn [ref]
                            (if-let [entity (ldb/get-case-page db (:block/title ref))]
                              (select-keys entity [:block/uuid :block/title :block/name])
