@@ -829,6 +829,13 @@
               (editor-handler/expand-block! block-uuid))
           nil)))))
 
+(defn convert?to-built-in-property-name
+  [property-name]
+  (if (and (not (qualified-keyword? property-name))
+        (contains? #{:background-color} property-name))
+    (keyword :logseq.property property-name)
+    property-name))
+
 ;; FIXME: This ns should not be creating idents. This allows for ident conflicts
 ;; and assumes that names directly map to idents which is incorrect and breaks for multiple
 ;; cases e.g. a property that has been renamed or sanitized. Instead it should
@@ -837,7 +844,8 @@
   "Finds a property :db/ident for a given property name"
   [property-name]
   (let [property-name' (if (string? property-name)
-                         (keyword property-name) property-name)]
+                         (keyword property-name) property-name)
+        property-name' (convert?to-built-in-property-name property-name')]
     (if (qualified-keyword? property-name')
       property-name'
       (db-property/create-user-property-ident-from-name property-name))))
