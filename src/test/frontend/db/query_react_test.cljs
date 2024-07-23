@@ -24,6 +24,8 @@ adds rules that users often use"
                        :query '[:find (pull ?b [*])
                                 :in $ ?start ?end
                                 :where
+                                ;; exclude pages because pages don't have parents
+                                [?b :block/parent ?p]
                                 [?b :block/title]
                                 [?b :block/created-at ?timestamp]
                                 [(>= ?timestamp ?start)]
