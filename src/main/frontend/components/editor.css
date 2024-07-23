@@ -96,7 +96,7 @@ pre {
   &[data-editor-popup-ref=page-search],
   &[data-editor-popup-ref=block-search],
   &[data-editor-popup-ref=page-search-hashtag] {
-    @apply px-1 py-1 w-96;
+    @apply px-1 py-1 w-full sm:w-128;
   }
 
   &[data-editor-popup-ref=datepicker] {
