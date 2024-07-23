@@ -335,6 +335,7 @@
     (state/set-state! :graph/importing nil)
     (state/set-state! :graph/importing-state nil)
     (validate-imported-data @db-conn import-state files)
+    (state/pub-event! [:graph/ready (state/get-current-repo)])
     (finished-cb)))
 
 (defn import-file-to-db-handler
