@@ -383,6 +383,7 @@ prop-d:: [[nada]]"}])
     (is (= (if js/process.env.DB_GRAPH #{"bar" "DONE b1" "DONE b2Z"} #{"foo:: bar" "DONE b1" "DONE b2Z"})
            (->> (dsl-query (str "(not (and " task-filter " (or [[page 1]] [[page 2]])))"))
                 (keep testable-content)
+                (remove (fn [s] (db/page? (db/get-page s))))
                 set)))
 
     (is (= #{"DONE b2Z" "LATER b4Z"}

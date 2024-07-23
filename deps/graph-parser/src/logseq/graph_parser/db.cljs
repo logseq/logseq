@@ -23,7 +23,8 @@
   [title]
   {:block/name (string/lower-case title)
    :block/title title
-   :block/uuid (random-uuid)})
+   :block/uuid (random-uuid)
+   :block/type "page"})
 
 (def built-in-pages
   (mapv page-title->block built-in-pages-names))

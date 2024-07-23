@@ -417,11 +417,8 @@
                                      result))))) col)))
           refs (->> (ref->map-fn *refs false)
                     (map (fn [ref]
-                           (if-let [page (ldb/get-case-page db (:block/title ref))]
-                             (if (ldb/page? page)
-                               page
-                               {:block/uuid (:block/uuid page)
-                                :block/title (:block/title page)})
+                           (if-let [entity (ldb/get-case-page db (:block/title ref))]
+                             entity
                              ref))))
           tags (ref->map-fn *structured-tags true)]
       (assoc block

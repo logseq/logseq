@@ -261,7 +261,7 @@
                          (assoc page :block/uuid page-id)))
                      pages)
           blocks (->> (remove nil? blocks)
-                      (map (fn [b] (dissoc b :block/title :block.temp/ast-body :block/level :block/children :block/meta))))]
+                      (map (fn [b] (dissoc b :block.temp/ast-title :block.temp/ast-body :block/level :block/children :block/meta))))]
       [pages blocks])
     (catch :default e
       (log/error :exception e))))
