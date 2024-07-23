@@ -12,11 +12,11 @@
     (string/trim "
 - 1
   id:: 61506710-484c-46d5-9983-3d1651ec02c8
-        - 2
-          id:: 61506711-5638-4899-ad78-187bdc2eaffc
-                - 3
-                  id:: 61506712-3007-407e-b6d3-d008a8dfa88b
-                - ((61506712-3007-407e-b6d3-d008a8dfa88b))
+	- 2
+	  id:: 61506711-5638-4899-ad78-187bdc2eaffc
+		- 3
+		  id:: 61506712-3007-407e-b6d3-d008a8dfa88b
+		- ((61506712-3007-407e-b6d3-d008a8dfa88b))
 - 4
   id:: 61506712-b8a7-491d-ad84-b71651c3fdab")}
    {:file/path "pages/page2.md"
@@ -24,7 +24,7 @@
     (string/trim "
 - 3
   id:: 97a00e55-48c3-48d8-b9ca-417b16e3a616
-        - {{embed [[page1]]}}")}])
+	- {{embed [[page1]]}}")}])
 
 (use-fixtures :once
   {:before (fn []
@@ -41,18 +41,18 @@
                                                               {:remove-options #{:property}})))
     (string/trim "
 - 1
-        - 2
-                - 3
-                - 3")
+	- 2
+		- 3
+		- 3")
     "61506710-484c-46d5-9983-3d1651ec02c8"
 
     (string/trim "
 - 3
-        - 1
-                - 2
-                        - 3
-                        - 3
-        - 4")
+	- 1
+		- 2
+			- 3
+			- 3
+	- 4")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
 
 
@@ -62,25 +62,25 @@
     (string/trim "
 - 1
   id:: 61506710-484c-46d5-9983-3d1651ec02c8
-        - 2
-          id:: 61506711-5638-4899-ad78-187bdc2eaffc
-                - 3
-                  id:: 61506712-3007-407e-b6d3-d008a8dfa88b
-                - 3")
+	- 2
+	  id:: 61506711-5638-4899-ad78-187bdc2eaffc
+		- 3
+		  id:: 61506712-3007-407e-b6d3-d008a8dfa88b
+		- 3")
     "61506710-484c-46d5-9983-3d1651ec02c8"
 
     (string/trim "
 - 3
   id:: 97a00e55-48c3-48d8-b9ca-417b16e3a616
-        - 1
-          id:: 61506710-484c-46d5-9983-3d1651ec02c8
-                - 2
-                  id:: 61506711-5638-4899-ad78-187bdc2eaffc
-                        - 3
-                          id:: 61506712-3007-407e-b6d3-d008a8dfa88b
-                        - 3
-        - 4
-          id:: 61506712-b8a7-491d-ad84-b71651c3fdab")
+	- 1
+	  id:: 61506710-484c-46d5-9983-3d1651ec02c8
+		- 2
+		  id:: 61506711-5638-4899-ad78-187bdc2eaffc
+			- 3
+			  id:: 61506712-3007-407e-b6d3-d008a8dfa88b
+			- 3
+	- 4
+	  id:: 61506712-b8a7-491d-ad84-b71651c3fdab")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
 
 (deftest export-blocks-as-markdown-level<N
@@ -90,13 +90,13 @@
                                                                       :other-options {:keep-only-level<=N 2}})))
     (string/trim "
 - 1
-        - 2")
+	- 2")
     "61506710-484c-46d5-9983-3d1651ec02c8"
 
     (string/trim "
 - 3
-        - 1
-        - 4")
+	- 1
+	- 4")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
 
 (deftest export-blocks-as-markdown-newline-after-block
@@ -107,24 +107,24 @@
     (string/trim "
 - 1
 
-        - 2
+	- 2
 
-                - 3
+		- 3
 
-                - 3")
+		- 3")
     "61506710-484c-46d5-9983-3d1651ec02c8"
     (string/trim "
 - 3
 
-        - 1
+	- 1
 
-                - 2
+		- 2
 
-                        - 3
+			- 3
 
-                        - 3
+			- 3
 
-        - 4")
+	- 4")
     "97a00e55-48c3-48d8-b9ca-417b16e3a616"))
 
 
