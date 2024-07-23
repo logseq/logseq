@@ -438,7 +438,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const blockContent = React.useMemo(() => {
       if (pageId && this.props.blockType === 'B') {
-        return handlers?.queryBlockByUUID(pageId)?.content
+        return handlers?.queryBlockByUUID(pageId)?.title
       }
     }, [handlers?.queryBlockByUUID, pageId])
 
