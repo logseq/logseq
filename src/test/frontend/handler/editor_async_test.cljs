@@ -68,7 +68,10 @@
       (delete-block @conn block
                     {:on-delete (fn []
                                   (let [updated-blocks (->> (d/q '[:find (pull ?b [*])
-                                                                   :where [?b :block/title] [(missing? $ ?b :block/pre-block?)]]
+                                                                   :where
+                                                                   [?b :block/parent]
+                                                                   [?b :block/title]
+                                                                   [(missing? $ ?b :block/pre-block?)]]
                                                                  @conn)
                                                             (map (comp :block/title first)))]
                                     (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))})))
@@ -92,7 +95,10 @@
                     {:embed? true
                      :on-delete (fn []
                                   (let [updated-blocks (->> (d/q '[:find (pull ?b [*])
-                                                                   :where [?b :block/title] [(missing? $ ?b :block/pre-block?)]]
+                                                                   :where
+                                                                   [?b :block/parent]
+                                                                   [?b :block/title]
+                                                                   [(missing? $ ?b :block/pre-block?)]]
                                                                  @conn)
                                                             (map (comp :block/title first)))]
                                     (is (= ["b1" "b2"] updated-blocks) "Block is deleted")))}))))
