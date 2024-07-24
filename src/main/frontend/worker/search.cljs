@@ -206,9 +206,7 @@
     (when uuid
       {:id (str uuid)
        :page (str (or (:block/uuid page) uuid))
-       :title (if (page-or-object? block) title (sanitize title))
-       :built-in? (ldb/built-in? block)
-       :format format})))
+       :title (if (page-or-object? block) title (sanitize title))})))
 
 (defn build-fuzzy-search-indice
   "Build a block title indice from scratch.
@@ -257,7 +255,7 @@
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
    * :built-in?  - Whether to return built-in pages for db graphs. Defaults to true"
-  [repo conn search-db q {:keys [limit page enable-snippet?] :as option
+  [repo conn search-db q {:keys [limit page enable-snippet? built-in?] :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (p/let [match-input (get-match-input q)
@@ -275,14 +273,21 @@
                            pg-sql
                            " title match ? order by rank limit ?")
             matched-result (search-blocks-aux search-db match-sql match-input page limit enable-snippet?)
-            fuzzy-result (when-not page (fuzzy-search repo @conn q option))
-            all-result (->> (concat fuzzy-result matched-result)
-                            (map (fn [result]
-                                   (let [{:keys [id page title snippet]} result]
-                                     {:uuid id
-                                      :title (or snippet title)
-                                      :page page}))))]
-      (common-util/distinct-by :uuid all-result))))
+            fuzzy-result (when-not page (fuzzy-search repo @conn q option))]
+      (->> (concat fuzzy-result matched-result)
+           (common-util/distinct-by :id)
+           (keep (fn [result]
+                   (let [{:keys [id page title snippet]} result
+                         block-id (uuid id)]
+                     (when-let [block (d/entity @conn [:block/uuid block-id])]
+                       (when-not (and (not built-in?) (ldb/built-in? block))
+                         {:block/uuid block-id
+                          :block/title (or snippet title)
+                          :block/page (if (common-util/uuid-string? page)
+                                        (uuid page)
+                                        nil)
+                          :block/tags (map :db/id (:block/tags block))
+                          :page? (ldb/page? block)})))))))))
 
 (defn truncate-table!
   [db]
