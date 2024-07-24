@@ -225,11 +225,22 @@
 
 (defn- block-item
   [repo block current-page !input]
-  (let [id (:block/uuid block)]
-    {:icon "block"
+  (let [id (:block/uuid block)
+        object? (seq (:block/tags block))
+        text (if object?
+               (str (:block/title block)
+                    " "
+                    (string/join
+                     ", "
+                     (keep (fn [id]
+                             (when-let [title (:block/title (db/entity id))]
+                               (str "#" title)))
+                           (:block/tags block))))
+               (:block/title block))]
+    {:icon (if object? "topology-star" "block")
      :icon-theme :gray
-     :text (highlight-content-query (:block/title block) @!input)
-     :header (block/breadcrumb {:search? true} repo id {})
+     :text (highlight-content-query text @!input)
+     :header (when-not object? (block/breadcrumb {:search? true} repo id {}))
      :current-page? (when-let [page-id (:block/page block)]
                       (= page-id (:block/uuid current-page)))
      :source-block block}))

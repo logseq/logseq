@@ -508,7 +508,7 @@
    (p/let [search-db (get-search-db repo)
            conn (worker-state/get-datascript-conn repo)
            result (search/search-blocks repo conn search-db q (bean/->clj option))]
-     (bean/->js result)))
+     (ldb/write-transit-str result)))
 
   (search-upsert-blocks
    [this repo blocks]
