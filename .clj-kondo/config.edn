@@ -198,4 +198,5 @@
            frontend.react/defc clojure.core/defn
            frontend.schema-register/defkeyword cljs.spec.alpha/def}
  :skip-comments true
- :output {:progress true}}
+ :output {:progress true
+          :exclude-files ["src/test/docs-0.10.9/"]}}
