@@ -19,14 +19,14 @@
                                    :block/type ["class"],
                                    :block/name "yyy",
                                    :block/original-name "yyy"}])]
-      (is (= [[:update
-               {:block-uuid block-uuid
-                :db/ident :user.class/yyy
-                :pos [nil nil],
-                :av-coll
-                [[:block/name "[\"~#'\",\"yyy\"]" 1 true]
-                 [:block/original-name "[\"~#'\",\"yyy\"]" 1 true]
-                 [:block/type "[\"~#'\",\"class\"]" 1 true]]}]]
+      (is (= {:update
+              {:block-uuid block-uuid
+               :db/ident :user.class/yyy
+               :pos [nil nil],
+               :av-coll
+               [[:block/name "[\"~#'\",\"yyy\"]" 1 true]
+                [:block/original-name "[\"~#'\",\"yyy\"]" 1 true]
+                [:block/type "[\"~#'\",\"class\"]" 1 true]]}}
              (:remote-ops
               (#'subject/local-block-ops->remote-ops
                db
@@ -55,20 +55,20 @@
                                    :block/name "xxx",
                                    :block/original-name "xxx"}])]
       (is (=
-           [[:update
-             {:block-uuid block-uuid,
-              :db/ident :user.property/xxx
-              :pos [nil block-order],
-              :av-coll
-              [[:block/name "[\"~#'\",\"xxx\"]" 1 true]
-               [:block/original-name "[\"~#'\",\"xxx\"]" 1 true]
-               [:block/type "[\"~#'\",\"property\"]" 1 true]]}]
-            [:update-schema
-             {:block-uuid block-uuid
-              :db/ident :user.property/xxx,
-              :db/cardinality :db.cardinality/one,
-              :db/valueType :db.type/ref,
-              :db/index true}]]
+           {:update
+            {:block-uuid block-uuid,
+             :db/ident :user.property/xxx
+             :pos [nil block-order],
+             :av-coll
+             [[:block/name "[\"~#'\",\"xxx\"]" 1 true]
+              [:block/original-name "[\"~#'\",\"xxx\"]" 1 true]
+              [:block/type "[\"~#'\",\"property\"]" 1 true]]}
+            :update-schema
+            {:block-uuid block-uuid
+             :db/ident :user.property/xxx,
+             :db/cardinality :db.cardinality/one,
+             :db/valueType :db.type/ref,
+             :db/index true}}
            (:remote-ops
             (#'subject/local-block-ops->remote-ops
              db
