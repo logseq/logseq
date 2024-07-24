@@ -162,7 +162,7 @@
       (is (= 16 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 5
+      (is (= 6
              (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...]
                                 :where [?b :block/original-name] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
@@ -356,7 +356,7 @@
                (:logseq.property/page-tags (readable-properties @conn (find-page-by-name @conn "chat-gpt"))))
             "tagged page has new page and other pages marked with '#' and '[[]]` imported as tags to page-tags")))))
 
-(deftest-async export-file-with-tag-classes-option
+(deftest-async export-files-with-tag-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_07.md" "pages/Interstellar.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
@@ -384,7 +384,7 @@
              (readable-properties @conn (find-page-by-name @conn "Interstellar")))
           "tagged page has configured tag imported as a class"))))
 
-(deftest-async export-file-with-property-classes-option
+(deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["journals/2024_02_23.md" "pages/url.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
@@ -429,7 +429,7 @@
              (:block/tags (readable-properties @conn (find-page-by-name @conn "url"))))
           "tagged page has configured tag imported as a class"))))
 
-(deftest-async export-file-with-ignored-properties
+(deftest-async export-files-with-ignored-properties
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           files (mapv #(node-path/join file-graph-dir %) ["ignored/icon-page.md"])
           conn (d/create-conn db-schema/schema-for-db-based-graph)
@@ -438,3 +438,25 @@
     (is (= 2
            (count (filter #(= :icon (:property %)) @(:ignored-properties import-state))))
         "icon properties are visibly ignored in order to not fail import")))
+
+(deftest-async export-files-with-property-parent-classes-option
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["pages/CreativeWork.md" "pages/Movie.md"])
+          conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          _ (import-files-to-db files conn {:property-parent-classes ["parent"]})]
+
+    (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
+        "Created graph has no validation errors")
+
+    (is (= #{:user.class/Movie :user.class/CreativeWork :user.class/Thing}
+           (->> @conn
+                (d/q '[:find [?ident ...]
+                       :where [?b :block/type "class"] [?b :db/ident ?ident] (not [?b :logseq.property/built-in?])])
+                set))
+        "All classes are correctly defined by :type")
+
+    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:class/parent :block/original-name]))
+        "Existing page correctly set as class parent")
+    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:class/parent :block/original-name]))
+        "New page correctly set as class parent")))
