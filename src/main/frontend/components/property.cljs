@@ -62,8 +62,9 @@
                                   (when (fn? on-hide) (on-hide))
                                   (shui/popup-hide! id))
                      classes (model/get-all-classes (state/get-current-repo) {:except-root-class? true})
-                     options (map (fn [[name id]]
-                                    {:label name :value id})
+                     options (map (fn [class]
+                                    {:label (:block/title class)
+                                     :value (:block/uuid class)})
                                   classes)
                      opts {:items options
                            :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
