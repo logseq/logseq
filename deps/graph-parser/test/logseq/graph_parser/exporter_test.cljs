@@ -99,8 +99,8 @@
   (let [*files (build-graph-files file-graph-dir)
         config-file (first (filter #(string/ends-with? (:path %) "logseq/config.edn") *files))
         _ (assert config-file "No 'logseq/config.edn' found for file graph dir")
-        options' (-> (merge options
-                            default-export-options
+        options' (-> (merge default-export-options
+                            options
                             ;; asset file options
                             {:<copy-asset #(swap! assets conj %)})
                      (dissoc :assets))]
@@ -109,7 +109,7 @@
 (defn- import-files-to-db
   "Import specific doc files for dev purposes"
   [files conn options]
-  (p/let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge options default-export-options))
+  (p/let [doc-options (gp-exporter/build-doc-options {:macros {}} (merge default-export-options options))
           files' (mapv #(hash-map :path %) files)
           _ (gp-exporter/export-doc-files conn files' <read-file doc-options)]
     {:import-state (:import-state doc-options)}))
@@ -159,7 +159,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 16 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 17 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 6
@@ -383,6 +383,22 @@
       (is (= {:block/tags [:user.class/Movie]}
              (readable-properties @conn (find-page-by-name @conn "Interstellar")))
           "tagged page has configured tag imported as a class"))))
+
+(deftest-async export-files-with-invalid-class-and-property-display-notifications
+  (p/let [file-graph-dir "test/resources/exporter-test-graph"
+          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_07_24.md" "ignored/invalid-property-page.md"])
+          conn (d/create-conn db-schema/schema-for-db-based-graph)
+          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          notifications (atom [])
+          _ (import-files-to-db files conn {:tag-classes ["123"]
+                                            :notify-user #(swap! notifications conj %)})]
+
+    (is (= [:error :error] (map :level @notifications))
+        "Error notifications for both invalid property and class")
+    (is (some #(re-find #"invalid class" %) (map :msg @notifications))
+        "Helpful message for invalid class")
+    (is (some #(re-find #"invalid property" %) (map :msg @notifications))
+        "Helpful message for invalid property")))
 
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
