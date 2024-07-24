@@ -138,7 +138,9 @@
   (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
-                         (p/let [result (editor-handler/<get-matched-pages q)]
+                         (p/let [result (if db-tag?
+                                          (editor-handler/get-matched-classes q)
+                                          (editor-handler/<get-matched-blocks q))]
                            (set-matched-pages! result))))
                      [q])
     (let [matched-pages (when-not (string/blank? q)
@@ -150,8 +152,7 @@
                                                            (string/lower-case (:block/title p)))) matched-pages))
                                     partial-matched-pages
                                     (if db-tag?
-                                      (concat [{:block/title (str (t :new-class) " " q)}
-                                               {:block/title (str (t :new-page) " " q)}]
+                                      (concat [{:block/title (str (t :new-class) " " q)}]
                                               partial-matched-pages)
                                       (cons {:block/title (str (t :new-page) " " q)}
                                             partial-matched-pages))))]
@@ -167,30 +168,33 @@
                        (page-handler/page-not-exists-handler input id q current-pos))
         :item-render (fn [block _chosen?]
                        [:div.flex.flex-row.items-center.gap-1
-                        (cond
-                          (db-model/whiteboard-page? block)
-                          [:div (ui/icon "whiteboard" {:extension? true})]
-                          (db/page? block)
-                          [:div (ui/icon "page" {:extension? true})]
-                          (seq (:block/tags block))
-                          [:div.flex (ui/icon "topology-star" {:size 14})]
-                          (or (string/starts-with? (:block/title block) (t :new-class))
-                              (string/starts-with? (:block/title block) (t :new-page)))
-                          nil
-                          :else
-                          [:div (ui/icon "block" {:extension? true})])
+                        (when-not db-tag?
+                          (cond
+                            (db-model/whiteboard-page? block)
+                            [:div (ui/icon "whiteboard" {:extension? true})]
+                            (db/page? block)
+                            [:div (ui/icon "page" {:extension? true})]
+                            (seq (:block/tags block))
+                            [:div.flex (ui/icon "topology-star" {:size 14})]
+                            (or (string/starts-with? (:block/title block) (t :new-class))
+                                (string/starts-with? (:block/title block) (t :new-page)))
+                            nil
+                            :else
+                            [:div (ui/icon "block" {:extension? true})]))
 
-                        (let [title (str (:block/title block)
-                                         " "
-                                         (string/join
-                                          ", "
-                                          (keep (fn [block]
-                                                  (when-let [title (:block/title block)]
-                                                    (str "#" title)))
-                                                (:block/tags block))))]
+                        (let [title (if db-tag?
+                                      (:block/title block)
+                                      (str (:block/title block)
+                                          " "
+                                          (string/join
+                                           ", "
+                                           (keep (fn [block]
+                                                   (when-let [title (:block/title block)]
+                                                     (str "#" title)))
+                                                 (:block/tags block)))))]
                           (search-handler/highlight-exact-query title q))])
         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                   "Search for a class or a page"
+                                                                   "Search for a class"
                                                                    "Search for a block")]
         :class       "black"}))))
 
@@ -222,9 +226,9 @@
 
 (defn- search-blocks!
   [state result]
-  (let [[edit-block _ _ q] (:rum/args state)]
+  (let [[_edit-block _ _ q] (:rum/args state)]
     (p/let [matched-blocks (when-not (string/blank? q)
-                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+                             (editor-handler/<get-matched-blocks q))]
       (reset! result matched-blocks))))
 
 (defn- block-on-chosen-handler

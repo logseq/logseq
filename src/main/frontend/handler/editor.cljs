@@ -68,7 +68,8 @@
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.outliner.property :as outliner-property]))
+            [logseq.outliner.property :as outliner-property]
+            [frontend.db.model :as model]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1645,37 +1646,37 @@
       (when (>= pos 0)
         (text-util/wrapped-by? value pos before end)))))
 
-(defn <get-matched-pages
-  "Return matched page names that are not built-in pages"
+(defn get-matched-classes
+  "Return matched classes except the root class"
+  [q]
+  (let [classes (->> (model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                     (map (fn [e] (select-keys e [:block/uuid :block/title]))))]
+    (search/fuzzy-search classes q {:extract-fn :block/title})))
+
+(defn <get-matched-blocks
+  "Return matched blocks that are not built-in"
   [q]
   (p/let [block (state/get-edit-block)
           editing-page-id (and block
                                (when-let [page-id (:db/id (:block/page block))]
                                  (:block/uuid (db/entity page-id))))
+          block-parents (when block
+                          (set (->> (db/get-block-parents (state/get-current-repo)
+                                                          (:block/uuid block)
+                                                          {:depth 99})
+                                    (map :block/uuid))))
+          current-and-parents (set/union #{(:block/uuid block)} block-parents)
           pages (search/block-search (state/get-current-repo) q {:built-in? false
                                                                  :enable-snippet? false})]
     (->> (if editing-page-id
            ;; To prevent self references
-           (remove (fn [p] (= editing-page-id (:block/uuid p))) pages)
+           (remove (fn [b]
+                     (or (= editing-page-id (:block/uuid b))
+                         (contains? current-and-parents (:block/uuid b)))) pages)
            pages)
          (keep (fn [b]
                  (when-let [id (:block/uuid b)]
                    (db/entity [:block/uuid id])))))))
-
-(defn get-matched-blocks
-  [q block-id]
-  ;; remove current block
-  (let [current-block (state/get-edit-block)
-        block-parents (set (->> (db/get-block-parents (state/get-current-repo)
-                                                      block-id
-                                                      {:depth 99})
-                                (map (comp str :block/uuid))))
-        current-and-parents (set/union #{(str (:block/uuid current-block))} block-parents)]
-    (p/let [result (search/block-search (state/get-current-repo) q {:built-in? false})]
-      (remove
-       (fn [h]
-         (contains? current-and-parents (:block/uuid h)))
-       result))))
 
 (defn <get-matched-templates
   [q]

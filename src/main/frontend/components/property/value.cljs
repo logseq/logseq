@@ -332,11 +332,7 @@
            (mapcat
             (fn [class]
               (if (= :logseq.class/Root (:db/ident class))
-                (->> (model/get-all-classes repo)
-                     (keep (fn [[_ id]]
-                             (let [e (db/entity [:block/uuid id])]
-                               (when-not (= :logseq.class/Root (:db/ident e))
-                                 e)))))
+                (model/get-all-classes repo {:except-root-class? true})
                 (model/get-class-objects repo (:db/id class))))
             classes)
 

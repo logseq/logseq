@@ -760,14 +760,15 @@ independent of format as format specific heading characters are stripped"
                     :nonce (:nonce shape)}))))))
 
 (defn get-all-classes
-  [repo]
-  (d/q
-   '[:find ?name ?id
-     :where
-     [?page :block/type "class"]
-     [?page :block/title ?name]
-     [?page :block/uuid ?id]]
-    (conn/get-db repo)))
+  [repo & {:keys [except-root-class?]
+           :or {except-root-class? false}}]
+  (let [db (conn/get-db repo)
+        classes (->> (d/datoms db :avet :block/type "class")
+                     (map (fn [d]
+                            (db-utils/entity db (:e d)))))]
+    (if except-root-class?
+      (keep (fn [e] (when-not (= :logseq.class/Root (:db/ident e)) e)) classes)
+      classes)))
 
 (defn get-class-children
   [repo eid]
