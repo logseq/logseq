@@ -255,7 +255,8 @@
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
    * :built-in?  - Whether to return built-in pages for db graphs. Defaults to true"
-  [repo conn search-db q {:keys [limit page enable-snippet? built-in?] :as option
+  [repo conn search-db q {:keys [limit page enable-snippet?
+                                 built-in?] :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (p/let [match-input (get-match-input q)
@@ -287,9 +288,10 @@
                                                      (uuid page)
                                                      nil)
                                        :block/tags (seq (map :db/id (:block/tags block)))
-                                       :page? (ldb/page? block)}))))))]
+                                       :page? (ldb/page? block)}))))))
+            page-or-object-result (filter (fn [b] (or (:page? b) (:block/tags result))) result)]
         (->>
-         (concat (filter (fn [b] (or (:page? b) (:block/tags result))) result)
+         (concat page-or-object-result
                  (remove (fn [b] (or (:page? b) (:block/tags result))) result))
          (common-util/distinct-by :block/uuid))))))
 

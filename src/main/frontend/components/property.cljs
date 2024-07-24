@@ -61,7 +61,7 @@
                (let [toggle-fn #(do
                                   (when (fn? on-hide) (on-hide))
                                   (shui/popup-hide! id))
-                     classes (model/get-all-classes (state/get-current-repo))
+                     classes (model/get-all-classes (state/get-current-repo) {:except-root-class? true})
                      options (map (fn [[name id]]
                                     {:label name :value id})
                                   classes)
