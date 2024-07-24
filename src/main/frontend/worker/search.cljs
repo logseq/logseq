@@ -274,20 +274,24 @@
                            " title match ? order by rank limit ?")
             matched-result (search-blocks-aux search-db match-sql match-input page limit enable-snippet?)
             fuzzy-result (when-not page (fuzzy-search repo @conn q option))]
-      (->> (concat fuzzy-result matched-result)
-           (common-util/distinct-by :id)
-           (keep (fn [result]
-                   (let [{:keys [id page title snippet]} result
-                         block-id (uuid id)]
-                     (when-let [block (d/entity @conn [:block/uuid block-id])]
-                       (when-not (and (not built-in?) (ldb/built-in? block))
-                         {:block/uuid block-id
-                          :block/title (or snippet title)
-                          :block/page (if (common-util/uuid-string? page)
-                                        (uuid page)
-                                        nil)
-                          :block/tags (map :db/id (:block/tags block))
-                          :page? (ldb/page? block)})))))))))
+      (let [result (->> (concat fuzzy-result matched-result)
+                        (common-util/distinct-by :id)
+                        (keep (fn [result]
+                                (let [{:keys [id page title snippet]} result
+                                      block-id (uuid id)]
+                                  (when-let [block (d/entity @conn [:block/uuid block-id])]
+                                    (when-not (and (not built-in?) (ldb/built-in? block))
+                                      {:block/uuid block-id
+                                       :block/title (or snippet title)
+                                       :block/page (if (common-util/uuid-string? page)
+                                                     (uuid page)
+                                                     nil)
+                                       :block/tags (seq (map :db/id (:block/tags block)))
+                                       :page? (ldb/page? block)}))))))]
+        (->>
+         (concat (filter (fn [b] (or (:page? b) (:block/tags result))) result)
+                 (remove (fn [b] (or (:page? b) (:block/tags result))) result))
+         (common-util/distinct-by :block/uuid))))))
 
 (defn truncate-table!
   [db]
