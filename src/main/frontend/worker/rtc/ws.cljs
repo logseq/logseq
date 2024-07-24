@@ -5,6 +5,7 @@
   (:require [cljs-http.client :as http]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.exception :as r.ex]
             [missionary.core :as m]))
 
 (defn- get-state
@@ -137,10 +138,15 @@
       (m/? ((:send mws) message-str)))))
 
 (defn recv-flow
+  "Throw if recv `Internal server error`"
   [m-ws]
   (assert (some? (:recv-flow m-ws)) m-ws)
   (m/eduction
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
+   (map (fn [m]
+          (if (= "Internal server error" (:message m))
+            (throw r.ex/ex-unknown-server-error)
+            m)))
    (map rtc-const/data-from-ws-coercer)
    (:recv-flow m-ws)))
 
