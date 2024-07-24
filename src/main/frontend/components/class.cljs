@@ -19,9 +19,9 @@
         classes (->> (model/get-all-classes repo {:except-root-class? true})
                      (remove (fn [e] (contains? exclude-ids (:block/uuid e)))))
         options (sort-by :label
-                         (map (fn [[name id]] {:label name
-                                               :value id
-                                               :selected (= class id)})
+                         (map (fn [entity] {:label (:block/title entity)
+                                            :value (:block/uuid entity)
+                                            :selected (= class (:block/uuid entity))})
                               classes))
         options (cons (if class
                         {:label "Choose parent class"
