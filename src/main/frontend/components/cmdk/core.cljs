@@ -49,7 +49,6 @@
   [{:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
    {:filter {:group :blocks} :text "Search only blocks" :info "Add filter to search" :icon-theme :gray :icon "block"}
    {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
-   {:filter {:group :whiteboards} :text "Search only whiteboards" :info "Add filter to search" :icon-theme :gray :icon "whiteboard"}
    {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
    {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}])
 
@@ -77,11 +76,7 @@
              :info (if class?
                      (str "Create class called '" (get-class-from-input q) "'")
                      (str "Create page called '" q "'"))
-             :source-create :page}
-            (when-not class?
-              {:text "Create whiteboard" :icon "new-whiteboard"
-               :icon-theme :gray
-               :info (str "Create whiteboard called '" q "'") :source-create :whiteboard})]
+             :source-create :page}]
         (remove nil?)))))
 
 ;; Take the results, decide how many items to show, and order the results appropriately
@@ -198,26 +193,6 @@
                 :source-command %))
         (hash-map :status :success :items)
         (swap! !results update group merge)))))
-
-(defmethod load-results :whiteboards [group state]
-  (let [!input (::input state)
-        !results (::results state)]
-    (swap! !results assoc-in [group :status] :loading)
-    (p/let [whiteboards (->> (model/get-all-whiteboards (state/get-current-repo))
-                          (map :block/title))
-            pages (search/fuzzy-search whiteboards @!input {:limit 100})
-            items (->> pages
-                    (remove nil?)
-                    (keep
-                      (fn [page]
-                        (let [entity (db/get-page page)
-                              whiteboard? (contains? (:block/type entity) "whiteboard")]
-                          (when whiteboard?
-                            (hash-map :icon "whiteboard"
-                              :icon-theme :gray
-                              :text page
-                              :source-page page))))))]
-      (swap! !results update group        merge {:status :success :items items}))))
 
 (defn highlight-content-query
   "Return hiccup of highlighted content FTS result"
@@ -378,7 +353,7 @@
           (load-results :filters state)
           (load-results :files state)
           ;; (load-results :recents state)
-          (load-results :whiteboards state))))))
+          )))))
 
 (defn- copy-block-ref [state]
   (when-let [block-uuid (some-> state state->highlighted-item :source-block :block/uuid)]
@@ -574,37 +549,40 @@
         show-more #(swap! (::results state) assoc-in [group :show] :more)]
     [:<>
      (mouse-active-effect! *mouse-active? [highlighted-item])
-     [:div {:class         "border-b border-gray-06 pb-1 last:border-b-0"
+     [:div {:class         (if (= title "Create")
+                             "border-b border-gray-06 last:border-b-0"
+                             "border-b border-gray-06 pb-1 last:border-b-0")
             :on-mouse-move #(reset! *mouse-active? true)}
-      [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
-       [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
-              :on-click (fn [_e]
+      (when-not (= title "Create")
+        [:div {:class "text-xs py-1.5 px-3 flex justify-between items-center gap-2 text-gray-11 bg-gray-02 h-8"}
+         [:div {:class "font-bold text-gray-11 pl-0.5 cursor-pointer select-none"
+                :on-click (fn [_e]
                           ;; change :less to :more or :more to :less
-                          (swap! (::results state) update-in [group :show] {:more :less
-                                                                            :less :more}))}
-        title]
-       (when (not= group :create)
-         [:div {:class "pl-1.5 text-gray-12 rounded-full"
-                :style {:font-size "0.7rem"}}
-          (if (<= 100 (count items))
-            (str "99+")
-            (count items))])
+                            (swap! (::results state) update-in [group :show] {:more :less
+                                                                              :less :more}))}
+          title]
+         (when (not= group :create)
+           [:div {:class "pl-1.5 text-gray-12 rounded-full"
+                  :style {:font-size "0.7rem"}}
+            (if (<= 100 (count items))
+              (str "99+")
+              (count items))])
 
-       [:div {:class "flex-1"}]
+         [:div {:class "flex-1"}]
 
-       (when (and (= group highlighted-group)
-                  (or can-show-more? can-show-less?)
-                  (empty? filter)
-                  (not sidebar?))
-         [:a.text-link.select-node.opacity-50.hover:opacity-90
-          {:on-click (if (= show :more) show-less show-more)}
-          (if (= show :more)
-            [:div.flex.flex-row.gap-1.items-center
-             "Show less"
-             (shui/shortcut "mod up" nil)]
-            [:div.flex.flex-row.gap-1.items-center
-             "Show more"
-             (shui/shortcut "mod down" nil)])])]
+         (when (and (= group highlighted-group)
+                    (or can-show-more? can-show-less?)
+                    (empty? filter)
+                    (not sidebar?))
+           [:a.text-link.select-node.opacity-50.hover:opacity-90
+            {:on-click (if (= show :more) show-less show-more)}
+            (if (= show :more)
+              [:div.flex.flex-row.gap-1.items-center
+               "Show less"
+               (shui/shortcut "mod up" nil)]
+              [:div.flex.flex-row.gap-1.items-center
+               "Show more"
+               (shui/shortcut "mod down" nil)])])])
 
       [:div.search-results
        (for [item visible-items
@@ -614,35 +592,35 @@
                    source-page (some-> item :source-page)
                    hls-page? (and page? (pdf-utils/hls-file? source-page))]]
          (let [item (list-item/root
-                      (assoc item
-                             :group group
-                             :query (when-not (= group :create) @(::input state))
-                             :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
-                             :hls-page? hls-page?
-                             :compact true
-                             :rounded false
-                             :hoverable @*mouse-active?
-                             :highlighted highlighted?
+                     (assoc item
+                            :group group
+                            :query (when-not (= group :create) @(::input state))
+                            :text (if hls-page? (pdf-utils/fix-local-asset-pagename text) text)
+                            :hls-page? hls-page?
+                            :compact true
+                            :rounded false
+                            :hoverable @*mouse-active?
+                            :highlighted highlighted?
                              ;; for some reason, the highlight effect does not always trigger on a
                              ;; boolean value change so manually pass in the dep
-                             :on-highlight-dep highlighted-item
-                             :on-click (fn [e]
-                                         (reset! (::highlighted-item state) item)
-                                         (handle-action :default state item)
-                                         (when-let [on-click (:on-click item)]
-                                           (on-click e)))
+                            :on-highlight-dep highlighted-item
+                            :on-click (fn [e]
+                                        (reset! (::highlighted-item state) item)
+                                        (handle-action :default state item)
+                                        (when-let [on-click (:on-click item)]
+                                          (on-click e)))
                              ;; :on-mouse-enter (fn [e]
                              ;;                   (when (not highlighted?)
                              ;;                     (reset! (::highlighted-item state) (assoc item :mouse-enter-triggered-highlight true))))
-                             :on-highlight (fn [ref]
-                                             (reset! (::highlighted-group state) group)
-                                             (when (and ref (.-current ref)
-                                                        (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
-                                               (scroll-into-view-when-invisible state (.-current ref)))))
-                      nil)]
-            (if (= group :blocks)
-              (ui/lazy-visible (fn [] item) {:trigger-once? true})
-              item)))]]]))
+                            :on-highlight (fn [ref]
+                                            (reset! (::highlighted-group state) group)
+                                            (when (and ref (.-current ref)
+                                                       (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
+                                              (scroll-into-view-when-invisible state (.-current ref)))))
+                     nil)]
+           (if (= group :blocks)
+             (ui/lazy-visible (fn [] item) {:trigger-once? true})
+             item)))]]]))
 
 (defn move-highlight [state n]
   (let [items (mapcat last (state->results-ordered state (:search/mode @state/state)))
