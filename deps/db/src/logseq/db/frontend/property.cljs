@@ -1,8 +1,9 @@
 (ns logseq.db.frontend.property
   "Property related fns for DB graphs and frontend/datascript usage"
-  (:require [datascript.core :as d]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [flatland.ordered.map :refer [ordered-map]]
+            [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.db-ident :as db-ident]))
 
 ;; Main property vars
@@ -105,7 +106,7 @@
     (mapv (fn [[db-ident value icon]]
             {:db-ident db-ident
              :value value
-             :uuid (random-uuid)
+             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
              :icon {:type :tabler-icon :id icon}})
           [[:logseq.task/status.backlog "Backlog" "Backlog"]
            [:logseq.task/status.todo "Todo" "Todo"]
@@ -123,7 +124,7 @@
     (mapv (fn [[db-ident value icon]]
             {:db-ident db-ident
              :value value
-             :uuid (random-uuid)
+             :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
              :icon {:type :tabler-icon :id icon}})
           [[:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]
            [:logseq.task/priority.high "High" "priorityLvlHigh"]

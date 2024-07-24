@@ -183,12 +183,14 @@
         classes-tx (vec
                     (mapcat
                      (fn [[class-name {:build/keys [class-parent schema-properties] :as class-m}]]
-                       (let [new-block
+                       (let [db-ident (get-ident all-idents class-name)
+                             new-block
                              (sqlite-util/build-new-class
                               {:block/name (common-util/page-name-sanity-lc (name class-name))
                                :block/original-name (name class-name)
-                               :block/uuid (or (:block/uuid class-m) (d/squuid))
-                               :db/ident (get-ident all-idents class-name)
+                               :block/uuid (or (:block/uuid class-m)
+                                               (common-uuid/gen-uuid :db-ident-block-uuid db-ident))
+                               :db/ident db-ident
                                :db/id (or (class-db-ids class-name)
                                           (throw (ex-info "No :db/id for class" {:class class-name})))})
                              pvalue-tx-m (->property-value-tx-m new-block (:build/properties class-m) properties-config all-idents)]
@@ -461,7 +463,8 @@
                                        (-> (dissoc page :build/journal)
                                            (merge {:block/journal-day date-int
                                                    :block/original-name page-name
-                                                   :block/uuid (common-uuid/gen-uuid date-int)
+                                                   :block/uuid
+                                                   (common-uuid/gen-uuid :journal-page-uuid date-int)
                                                    :block/type #{"journal" "page"}})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way

@@ -1,16 +1,17 @@
 (ns logseq.db.sqlite.util
   "Utils fns for backend sqlite db"
-  (:require [clojure.string :as string]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.common.util :as common-util]
+  (:require [cljs-bean.transit]
+            [clojure.string :as string]
             [cognitect.transit :as transit]
-            [datascript.transit :as dt]
-            [datascript.impl.entity :as de]
             [datascript.core :as d]
-            [cljs-bean.transit]
-            [logseq.db.frontend.property.type :as db-property-type]
+            [datascript.impl.entity :as de]
+            [datascript.transit :as dt]
+            [logseq.common.util :as common-util]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.db.frontend.schema :as db-schema]))
 
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
@@ -93,7 +94,7 @@
         :block/format :markdown
         :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
-        :block/uuid (or block-uuid (d/squuid))
+        :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
         :block/original-name (name prop-name)
         :db/index true
         :db/cardinality (if (= :many (:cardinality prop-schema))
