@@ -143,13 +143,7 @@
                      [q])
     (let [matched-pages (when-not (string/blank? q)
                           ;; reorder, shortest and starts-with first.
-                          (let [matched-pages
-                                (->> matched-pages
-                                     (sort-by
-                                      (fn [block]
-                                        (let [m (:block/title block)]
-                                          [(not (gstring/caseInsensitiveStartsWith m q)) (count m) m]))))
-                                matched-pages-with-new-page
+                          (let [matched-pages-with-new-page
                                 (fn [partial-matched-pages]
                                   (if (or (db/page-exists? q)
                                           (some (fn [p] (= (string/lower-case q)
@@ -172,9 +166,29 @@
         :on-enter    (fn []
                        (page-handler/page-not-exists-handler input id q current-pos))
         :item-render (fn [block _chosen?]
-                       [:div.flex
-                        (when (db-model/whiteboard-page? block) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                        (search-handler/highlight-exact-query (:block/title block) q)])
+                       [:div.flex.flex-row.items-center.gap-1
+                        (cond
+                          (db-model/whiteboard-page? block)
+                          [:div (ui/icon "whiteboard" {:extension? true})]
+                          (db/page? block)
+                          [:div (ui/icon "page" {:extension? true})]
+                          (seq (:block/tags block))
+                          [:div.flex (ui/icon "topology-star" {:size 14})]
+                          (or (string/starts-with? (:block/title block) (t :new-class))
+                              (string/starts-with? (:block/title block) (t :new-page)))
+                          nil
+                          :else
+                          [:div (ui/icon "block" {:extension? true})])
+
+                        (let [title (str (:block/title block)
+                                         " "
+                                         (string/join
+                                          ", "
+                                          (keep (fn [block]
+                                                  (when-let [title (:block/title block)]
+                                                    (str "#" title)))
+                                                (:block/tags block))))]
+                          (search-handler/highlight-exact-query title q))])
         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                    "Search for a class or a page"
                                                                    "Search for a block")]
