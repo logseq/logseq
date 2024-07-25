@@ -5,6 +5,7 @@
   (:require [cljs-http.client :as http]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
+            [frontend.worker.rtc.exception :as r.ex]
             [missionary.core :as m]))
 
 (defn- get-state
@@ -136,13 +137,34 @@
           message-str (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message)))]
       (m/? ((:send mws) message-str)))))
 
-(defn recv-flow
+(defn- recv-flow*
+  "Throw if recv `Internal server error`"
   [m-ws]
   (assert (some? (:recv-flow m-ws)) m-ws)
   (m/eduction
    (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
+   (map (fn [m]
+          (if (= "Internal server error" (:message m))
+            (throw r.ex/ex-unknown-server-error)
+            m)))
    (map rtc-const/data-from-ws-coercer)
    (:recv-flow m-ws)))
+
+(defn recv-flow
+  "Throw if recv `Internal server error`.
+  Also take care of :s3-presign-url.(when response is too huge, it's stored in s3)"
+  [m-ws]
+  (let [f (recv-flow* m-ws)]
+    (m/ap
+      (let [resp (m/?> f)]
+        (if-let [s3-presign-url (:s3-presign-url resp)]
+          (let [{:keys [status body]} (c.m/<? (http/get s3-presign-url {:with-credentials? false}))]
+            (if (http/unexceptional-status? status)
+              (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
+              {:req-id (:req-id resp)
+               :ex-message "get s3 object failed"
+               :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
+          resp)))))
 
 (defn- send&recv*
   "Return a task: send message wait to recv its response and return it.
@@ -167,20 +189,10 @@
       result)))
 
 (defn send&recv
-  "Return a task that send the message then wait to recv its response,
-  if the response has kv `:s3-presign-url`, fetch the response from s3,
-  else just return the response.
+  "Return a task that send the message then wait to recv its response.
   Throw if timeout"
   [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
   (m/sp
     (let [req-id (str (random-uuid))
-          message (assoc message :req-id req-id)
-          resp (m/? (send&recv* mws message :timeout-ms timeout-ms))]
-      (if-let [s3-presign-url (:s3-presign-url resp)]
-        (let [{:keys [status body]} (c.m/<? (http/get s3-presign-url {:with-credentials? false}))]
-          (if (http/unexceptional-status? status)
-            (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
-            {:req-id req-id
-             :ex-message "get s3 object failed"
-             :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
-        resp))))
+          message (assoc message :req-id req-id)]
+      (m/? (send&recv* mws message :timeout-ms timeout-ms)))))

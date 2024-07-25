@@ -59,6 +59,8 @@
     [:div.ls-all-pages.w-full
      (views/view view-entity {:data data
                               :set-data! set-data!
+                              :title (let [data-count (count data)]
+                                       (str data-count (if (> data-count 1) " Pages" " Page")))
                               :columns columns
                               :on-delete-rows (fn [table selected-rows]
                                                 (shui/dialog-open!

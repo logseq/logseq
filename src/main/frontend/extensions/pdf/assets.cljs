@@ -8,6 +8,7 @@
             [frontend.db.utils :as db-utils]
             [frontend.db.async :as db-async]
             [frontend.fs :as fs]
+            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
@@ -56,15 +57,106 @@
     (-> (str common-config/local-assets-dir "/" key "/")
         (str (util/format "%s_%s_%s.png" page id img-stamp)))))
 
+(defn ensure-ref-page!
+  [pdf-current]
+  (when-let [page-name (util/trim-safe (:key pdf-current))]
+    (p/let [page-name (str "hls__" page-name)
+            repo (state/get-current-repo)
+            page (db-async/<get-block repo page-name)
+            file-path (:original-path pdf-current)
+            format (state/get-preferred-format)
+            repo-dir (config/get-repo-dir repo)
+            asset-dir (util/node-path.join repo-dir common-config/local-assets-dir)
+            url (if (string/includes? file-path asset-dir)
+                  (str ".." (last (string/split file-path repo-dir)))
+                  file-path)]
+      (if-not page
+        (let [label (:filename pdf-current)]
+          (p/do!
+            (page-handler/<create! page-name {:redirect?        false :create-first-block? false
+                                              :split-namespace? false
+                                              :format           format
+                                              :properties       {(pu/get-pid :logseq.property.pdf/file)
+                                                                 (case format
+                                                                   :markdown
+                                                                   (util/format "[%s](%s)" label url)
+
+                                                                   :org
+                                                                   (util/format "[[%s][%s]]" url label)
+
+                                                                   url)
+                                                                 (pu/get-pid :logseq.property.pdf/file-path)
+                                                                 url}})
+            (db-model/get-page page-name)))
+
+        (do
+          ;; try to update file path
+          (when (nil? (some-> page
+                        (:block/properties)
+                        (get (pu/get-pid :logseq.property.pdf/file-path))))
+            (property-handler/add-page-property!
+              page-name (pu/get-pid :logseq.property.pdf/file-path) url))
+          page)))))
+
+(defn ensure-ref-block!
+  ([pdf hl] (ensure-ref-block! pdf hl nil))
+  ([pdf-current {:keys [id content page properties] :as hl} insert-opts]
+   (p/let [ref-page (when pdf-current (ensure-ref-page! pdf-current))]
+     (when ref-page
+       (let [ref-block (db-model/query-block-by-uuid id)]
+         (if-not (nil? (:block/title ref-block))
+           (do
+             (println "[existed ref block]" ref-block)
+             ref-block)
+           (let [text       (:text content)
+                 wrap-props #(if-let [stamp (:image content)]
+                               (assoc %
+                                 (pu/get-pid :logseq.property/hl-type) :area
+                                 (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
+                               %)
+                 props (cond->
+                         {(pu/get-pid :logseq.property/ls-type)  :annotation
+                          (pu/get-pid :logseq.property.pdf/hl-page)  page
+                          (pu/get-pid :logseq.property/hl-color) (:color properties)
+                          (pu/get-pid :logseq.property.pdf/hl-value) (pr-str hl)}
+                         (not (config/db-based-graph? (state/get-current-repo)))
+                         ;; force custom uuid
+                         (assoc :id (if (string? id) (uuid id) id)))
+                 properties (wrap-props props)]
+             (when (string? text)
+               (editor-handler/api-insert-new-block!
+                 text (merge {:page        (:block/name ref-page)
+                              :custom-uuid id
+                              :properties properties}
+                        insert-opts))))))))))
+
+(defn construct-highlights-from-hls-page
+  [hls-page]
+  (p/let [blocks (db-async/<get-page-all-blocks (:block/name hls-page))]
+    (let [hls (volatile! [])
+          blocks (->> (for [block blocks]
+                        (do (when-let [hl-value (:logseq.property.pdf/hl-value block)]
+                              (vswap! hls conj hl-value))
+                          (when (:logseq.property/created-from-property block)
+                            [(:db/id block) block]))) (into {}))
+          hls (some->> @hls (map #(when-let [id (:db/id %)]
+                                    (some-> (get blocks id) :block/title (common-handler/safe-read-string nil))))
+                (remove nil?))]
+      {:highlights hls})))
+
 (defn load-hls-data$
   [{:keys [hls-file]}]
   (when hls-file
-    (let [repo-cur (state/get-current-repo)
-          repo-dir (config/get-repo-dir repo-cur)]
-      (p/let [_    (fs/create-if-not-exists repo-cur repo-dir hls-file "{:highlights []}")
+    (let [repo(state/get-current-repo)
+          repo-dir (config/get-repo-dir repo)
+          db-base? (config/db-based-graph? repo)]
+      (p/let [_    (fs/create-if-not-exists repo repo-dir hls-file "{:highlights []}")
               res  (fs/read-file repo-dir hls-file)
               data (if res (reader/read-string res) {})]
-        data))))
+        (if db-base?
+          (p/let [hls-page (ensure-ref-page! (state/get-current-pdf))]
+            (construct-highlights-from-hls-page hls-page))
+          data)))))
 
 (defn persist-hls-data$
   [{:keys [hls-file]} highlights extra]
@@ -154,84 +246,10 @@
 
       (fs/unlink! repo-cur fpath {}))))
 
-(defn ensure-ref-page!
-  [pdf-current]
-  (when-let [page-name (util/trim-safe (:key pdf-current))]
-    (p/let [page-name (str "hls__" page-name)
-            repo (state/get-current-repo)
-            page (db-async/<get-block repo page-name)
-            file-path (:original-path pdf-current)
-            format (state/get-preferred-format)
-            repo-dir (config/get-repo-dir repo)
-            asset-dir (util/node-path.join repo-dir common-config/local-assets-dir)
-            url (if (string/includes? file-path asset-dir)
-                  (str ".." (last (string/split file-path repo-dir)))
-                  file-path)]
-      (if-not page
-        (let [label (:filename pdf-current)]
-          (p/do!
-           (page-handler/<create! page-name {:redirect?        false :create-first-block? false
-                                             :split-namespace? false
-                                             :format           format
-                                             :properties       {(pu/get-pid :logseq.property.pdf/file)
-                                                                (case format
-                                                                  :markdown
-                                                                  (util/format "[%s](%s)" label url)
-
-                                                                  :org
-                                                                  (util/format "[[%s][%s]]" url label)
-
-                                                                  url)
-                                                                (pu/get-pid :logseq.property.pdf/file-path)
-                                                                url}})
-           (db-model/get-page page-name)))
-
-        (do
-          ;; try to update file path
-          (when (nil? (some-> page
-                              (:block/properties)
-                              (get (pu/get-pid :logseq.property.pdf/file-path))))
-            (property-handler/add-page-property!
-             page-name (pu/get-pid :logseq.property.pdf/file-path) url))
-          page)))))
-
-(defn ensure-ref-block!
-  ([pdf hl] (ensure-ref-block! pdf hl nil))
-  ([pdf-current {:keys [id content page properties]} insert-opts]
-   (p/let [ref-page (when pdf-current (ensure-ref-page! pdf-current))]
-     (when ref-page
-       (let [ref-block (db-model/query-block-by-uuid id)]
-         (if-not (nil? (:block/title ref-block))
-           (do
-             (println "[existed ref block]" ref-block)
-             ref-block)
-           (let [text       (:text content)
-                 wrap-props #(if-let [stamp (:image content)]
-                               (assoc %
-                                      (pu/get-pid :logseq.property/hl-type) :area
-                                      (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
-                               %)
-                 props (cond->
-                        {(pu/get-pid :logseq.property/ls-type)  :annotation
-                         (pu/get-pid :logseq.property.pdf/hl-page)  page
-                         (pu/get-pid :logseq.property/hl-color) (:color properties)}
-                         (not (config/db-based-graph? (state/get-current-repo)))
-                          ;; force custom uuid
-                         (assoc :id (if (string? id) (uuid id) id)))
-                 properties (wrap-props props)]
-             (when (string? text)
-               (editor-handler/api-insert-new-block!
-                text (merge {:page        (:block/name ref-page)
-                             :custom-uuid id
-                             :properties properties}
-                            insert-opts))))))))))
-
 (defn del-ref-block!
   [{:keys [id]}]
-  #_:clj-kondo/ignore
-  (when-let [repo (state/get-current-repo)]
-    (when-let [block (db-model/get-block-by-uuid id)]
-      (editor-handler/delete-block-aux! block))))
+  (when-let [block (db-model/get-block-by-uuid id)]
+    (editor-handler/delete-block-aux! block)))
 
 (defn copy-hl-ref!
   [highlight ^js viewer]

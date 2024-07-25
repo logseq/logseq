@@ -18,8 +18,11 @@
   "Return a task: throw exception if recv ex-data response"
   [get-ws-create-task message]
   (m/sp
-    (let [ws (m/? get-ws-create-task)]
-      (handle-remote-ex (m/? (ws/send&recv ws message))))))
+    (let [ws (m/? get-ws-create-task)
+          opts (when (and (= "apply-ops" (:action message))
+                          (< 400 (count (:ops message))))
+                 {:timeout-ms 20000})]
+      (handle-remote-ex (m/? (ws/send&recv ws message opts))))))
 
 (defn get-ws-url
   [token]

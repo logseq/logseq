@@ -163,6 +163,18 @@
         (state/update-state! :db/async-query-loading (fn [s] (disj s (str block-id "-parents"))))
         result))))
 
+(defn <get-page-all-blocks
+  [page-name]
+  (when-let [page (some-> page-name (db-model/get-page))]
+    (when-let [^Object worker @db-browser/*worker]
+      (p/let [result (.get-block-and-children worker
+                       (state/get-current-repo)
+                       (str (:block/uuid page))
+                       (ldb/write-transit-str
+                         {:children? true
+                          :nested-children? false}))]
+        (some-> result (ldb/read-transit-str) (:children))))))
+
 (defn <get-block-refs
   [graph eid]
   (assert (integer? eid))

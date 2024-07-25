@@ -97,7 +97,7 @@
            (get-journal-page-count db))
         "Journal page count on disk equals count in db")
 
-    (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5 "TODO" 22}
+    (is (= {"CANCELED" 2 "DONE" 6 "LATER" 4 "NOW" 5 "WAIT" 1 "IN-PROGRESS" 1 "CANCELLED" 1 "TODO" 19}
            (->> (d/q '[:find (pull ?b [*]) :where [?b :block/marker]]
                      db)
                 (map first)
@@ -106,30 +106,30 @@
                 (into {})))
         "Task marker counts")
 
-    (is (= {:markdown 6080 :org 500} (get-block-format-counts db))
+    (is (= {:markdown 7325 :org 500} (get-block-format-counts db))
         "Block format counts")
 
-    (is (= {:description 81, :updated-at 46, :tags 5,
-            :logseq.tldraw.shape 79, :card-last-score 6, :card-repeats 6,
-            :card-next-schedule 6, :ls-type 79, :card-last-interval 6, :type 107,
-            :template 5, :title 114, :alias 41, :supports 5, :id 145, :url 5,
-            :card-ease-factor 6, :created-at 46,
-            :card-last-reviewed 6, :platforms 51, :initial-version 8, :heading 226
-            :logseq.macro-arguments 109, :logseq.macro-name 109}
+    (is (= {:rangeincludes 13, :description 137, :updated-at 46, :tags 5,
+            :logseq.order-list-type 16, :query-table 8, :logseq.macro-arguments 105,
+            :parent 14, :logseq.tldraw.shape 79, :card-last-score 5, :card-repeats 5,
+            :name 16, :card-next-schedule 5, :ls-type 79, :card-last-interval 5, :type 166,
+            :template 5, :domainincludes 7, :title 114, :alias 62, :supports 6, :id 145,
+            :url 30, :card-ease-factor 5, :logseq.macro-name 105, :created-at 46,
+            :card-last-reviewed 5, :platforms 79, :initial-version 16, :heading 315}
            (get-top-block-properties db))
         "Counts for top block properties")
 
-    (is (= {:description 77, :tags 5, :permalink 1, :ls-type 1, :type 104,
-            :related 1, :source 1, :title 113, :author 1, :sample 1, :alias 41,
-            :logseq.tldraw.page 1, :supports 5, :url 5, :platforms 50,
-            :initial-version 7, :full-title 1}
+    (is (= {:rangeincludes 13, :description 117, :tags 5, :unique 2, :meta 2, :parent 14,
+            :ls-type 1, :type 147, :source 1, :domainincludes 7, :sameas 4, :title 113, :author 1,
+            :alias 62, :logseq.tldraw.page 1, :supports 6, :url 30, :platforms 78,
+            :initial-version 15, :full-title 1}
            (get-all-page-properties db))
         "Counts for all page properties")
 
     (is (= {:block/scheduled 2
             :block/priority 4
             :block/deadline 1
-            :block/collapsed? 80
+            :block/collapsed? 90
             :block/repeated? 1}
            (get-counts-for-common-attributes db))
         "Counts for blocks with common block attributes")
@@ -141,9 +141,8 @@
           all-namespaces (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                               (map (comp :block/title first))
                               set)]
-      (is (= #{"term" "setting" "book" "templates" "Query table" "page"
-               "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object"
-               "Whiteboard/Property" "Community" "Tweet"}
+      (is (= #{"term" "setting" "book" "templates" "page" "Community" "Tweet"
+               "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object" "Whiteboard/Action Bar"}
              all-namespaces)
           (str "Has correct namespaces: " no-name)))
 
@@ -161,8 +160,8 @@
   ;; Counts assertions help check for no major regressions. These counts should
   ;; only increase over time as the docs graph rarely has deletions
   (testing "Counts"
-    (is (= 303 (count files)) "Correct file count")
-    (is (= 23
+    (is (= 340 (count files)) "Correct file count")
+    (is (= 33
            (ffirst
             (d/q '[:find (count ?b)
                    :where [?b :block/title ?content]
