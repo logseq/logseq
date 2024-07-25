@@ -76,7 +76,7 @@
         [:block/uuid existing-tag-uuid]
         ;; Creates or updates page within same tx
         (-> (merge tag-block
-                   (find-or-create-class db (:block/original-name tag-block) all-idents))
+                   (find-or-create-class db (:block/title tag-block) all-idents))
             ;; override with imported timestamps
             (dissoc :block/created-at :block/updated-at)
             (merge (add-missing-timestamps
@@ -555,7 +555,7 @@
                                                     distinct)]
             (cond-> block
               (seq parent-classes-from-properties)
-              (merge (find-or-create-class db (:block/original-name block) (:all-idents import-state)))
+              (merge (find-or-create-class db (:block/title block) (:all-idents import-state)))
               (seq parent-classes-from-properties)
               (assoc :class/parent
                      (let [new-class (first parent-classes-from-properties)]
