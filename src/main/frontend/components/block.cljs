@@ -2853,7 +2853,7 @@
     (when (and
            (state/in-selection-mode?)
            (non-dragging? e))
-      (when-let [container (gdom/getElement "app-container")]
+      (when-let [container (gdom/getElement "app-container-wrapper")]
         (dom/add-class! container "blocks-selection-mode"))
       (editor-handler/highlight-selection-area! block-id {:append? true}))))
 
