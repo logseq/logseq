@@ -771,7 +771,12 @@
                     (if (e/entity? page)
                       page
                       ;; Use uuid when available to uniquely identify case sensitive contexts
-                      (db/get-page (or (:block/uuid page) (:block/name page)))))))}
+                      (db/get-page (or (:block/uuid page)
+                                       (let [s (string/trim (:block/name page))
+                                             s (if (string/starts-with? s db-content/page-ref-special-chars)
+                                                 (common-util/safe-subs s 2)
+                                                 s)]
+                                         s)))))))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
@@ -791,8 +796,8 @@
             (if (ldb/page? entity)
               (page-preview-trigger (assoc config :children inner) page-name)
               (block-reference-preview inner {:repo (state/get-current-repo)
-                                            :config config
-                                            :id (:block/uuid entity)}))
+                                              :config config
+                                              :id (:block/uuid entity)}))
             inner))
         (block-reference config (:block/uuid entity) nil)))))
 
