@@ -2855,7 +2855,7 @@
            (non-dragging? e))
       (when-let [container (gdom/getElement "app-container-wrapper")]
         (dom/add-class! container "blocks-selection-mode"))
-      (editor-handler/highlight-selection-area! block-id {:append? true}))))
+      (editor-handler/highlight-selection-area! block-id {:append? false}))))
 
 (defn- block-mouse-leave
   [e *control-show? block-id doc-mode?]
@@ -3041,7 +3041,7 @@
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-cancel (fn [_e]
                           (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
-       :on-mouse-over (fn [e]
+       :on-mouse-enter (fn [e]
                         (block-mouse-over e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
