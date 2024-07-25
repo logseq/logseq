@@ -1232,14 +1232,12 @@
   [end-block & {:keys [append?]}]
   (when-let [start-block (state/get-selection-start-block-or-first)]
     (let [node (gdom/getElement start-block)
-          visible? (and node (util/el-visible-in-viewport? node))
           selected-blocks (state/get-selection-blocks)
-          latest-visible-block (if visible?
-                                 node
-                                 (or (when-let [node (last selected-blocks)]
-                                       (gdom/getElement (.-id ^js node)))
-                                     (when-let [node (first selected-blocks)]
-                                       (gdom/getElement (.-id ^js node)))))]
+          latest-visible-block (or node
+                                 (when-let [node (first selected-blocks)]
+                                   (.-id ^js node))
+                                 (when-let [node (last selected-blocks)]
+                                   (.-id ^js node)))]
       (when latest-visible-block
         (let [blocks (util/get-nodes-between-two-nodes latest-visible-block end-block "ls-block")
               direction (util/get-direction-between-two-nodes latest-visible-block end-block "ls-block")
