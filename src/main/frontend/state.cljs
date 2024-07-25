@@ -1227,9 +1227,8 @@ Similar to re-frame subscriptions"
 (defn conj-selection-block!
   [block-or-blocks direction]
   (let [selection-blocks (get-unsorted-selection-blocks)
-        blocks (-> (if (sequential? block-or-blocks)
-                     (concat selection-blocks block-or-blocks)
-                     (conj selection-blocks block-or-blocks))
+        block-or-blocks (if (sequential? block-or-blocks) block-or-blocks [block-or-blocks])
+        blocks (-> (concat selection-blocks block-or-blocks)
                    distinct)]
     (set-selection-blocks! blocks direction)))
 
