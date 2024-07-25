@@ -236,7 +236,7 @@
                                        :remove-page-op remove-page-op
                                        :*remote-ops *remote-ops))
 
-    {:remote-ops @*remote-ops
+    {:remote-ops (into {} @*remote-ops)
      :depend-on-block-uuids @*depend-on-block-uuid-set}))
 
 (defn- gen-block-uuid->remote-ops

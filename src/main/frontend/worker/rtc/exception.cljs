@@ -43,6 +43,9 @@ the server will put it to s3 and return its presigned-url to clients.")
 (def ex-local-not-rtc-graph
   (ex-info "RTC is not supported for this local-graph" {:type :rtc.exception/not-rtc-graph}))
 
+(def ex-unknown-server-error
+  (ex-info "Unknown server error" {:type :rtc.exception/unknown-server-error}))
+
 
 (defn ->map
   [e]
