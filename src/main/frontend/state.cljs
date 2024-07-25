@@ -161,9 +161,9 @@
       ;; Warning: blocks order is determined when setting this attribute
       :selection/blocks                      (atom [])
       :selection/start-block                 (atom nil)
-      ;; either :up or :down, defaults to down
+      ;; nil, :up or :down
       ;; used to determine selection direction when two or more blocks are selected
-      :selection/direction                   (atom :down)
+      :selection/direction                   (atom nil)
       :selection/selected-all?               (atom false)
       :custom-context-menu/show?             false
       :custom-context-menu/links             nil
@@ -1137,9 +1137,21 @@ Similar to re-frame subscriptions"
   [start-block]
   (set-state! :selection/start-block start-block))
 
+(defn get-selection-direction
+  []
+  @(:selection/direction @state))
+
+(defn get-unsorted-selection-blocks
+  []
+  @(:selection/blocks @state))
+
 (defn get-selection-blocks
   []
-  (util/sort-by-height @(:selection/blocks @state)))
+  (let [result (get-unsorted-selection-blocks)
+        direction (get-selection-direction)]
+    (if (= direction :up)
+      (vec (reverse result))
+      result)))
 
 (defn get-selection-block-ids
   []
@@ -1172,13 +1184,13 @@ Similar to re-frame subscriptions"
 
 (defn set-selection-blocks!
   ([blocks]
-   (set-selection-blocks! blocks :down))
+   (set-selection-blocks! blocks nil))
   ([blocks direction]
    (when (seq blocks)
-     (let [blocks (vec (util/sort-by-height (remove nil? blocks)))]
+     (let [blocks (vec (remove nil? blocks))]
        (set-state! :selection/mode true)
        (set-selection-blocks-aux! blocks)
-       (set-state! :selection/direction direction)))))
+       (when direction (set-state! :selection/direction direction))))))
 
 (defn into-selection-mode!
   []
@@ -1188,7 +1200,7 @@ Similar to re-frame subscriptions"
   []
   (set-state! :selection/mode false)
   (set-state! :selection/blocks nil)
-  (set-state! :selection/direction :down)
+  (set-state! :selection/direction nil)
   (set-state! :selection/start-block nil)
   (set-state! :selection/selected-all? false))
 
@@ -1214,9 +1226,9 @@ Similar to re-frame subscriptions"
 
 (defn conj-selection-block!
   [block-or-blocks direction]
-  (let [selection-blocks (get-selection-blocks)
+  (let [selection-blocks (get-unsorted-selection-blocks)
         blocks (-> (if (sequential? block-or-blocks)
-                     (apply conj selection-blocks block-or-blocks)
+                     (concat selection-blocks block-or-blocks)
                      (conj selection-blocks block-or-blocks))
                    distinct)]
     (set-selection-blocks! blocks direction)))
@@ -1224,9 +1236,17 @@ Similar to re-frame subscriptions"
 (defn drop-selection-block!
   [block]
   (set-state! :selection/mode true)
-  (set-selection-blocks-aux! (-> (remove #(= block %) (get-selection-blocks))
-                                 util/sort-by-height
+  (set-selection-blocks-aux! (-> (remove #(= block %) (get-unsorted-selection-blocks))
                                  vec)))
+
+(defn drop-selection-blocks-starts-with!
+  [block]
+  (set-state! :selection/mode true)
+  (let [blocks (get-unsorted-selection-blocks)
+        blocks' (-> (take-while (fn [b] (not= (.-id b) (.-id block))) blocks)
+                    vec
+                    (conj block))]
+    (set-selection-blocks-aux! blocks')))
 
 (defn drop-last-selection-block!
   []
@@ -1239,15 +1259,10 @@ Similar to re-frame subscriptions"
         blocks' (-> (if up?
                       (rest blocks)
                       (pop (vec blocks)))
-                    util/sort-by-height
                     vec)]
     (set-state! :selection/mode true)
     (set-selection-blocks-aux! blocks')
     last-block))
-
-(defn get-selection-direction
-  []
-  @(:selection/direction @state))
 
 (defn hide-custom-context-menu!
   []
@@ -2010,7 +2025,7 @@ Similar to re-frame subscriptions"
 
 (defn exit-editing-and-set-selected-blocks!
   ([blocks]
-   (exit-editing-and-set-selected-blocks! blocks :down))
+   (exit-editing-and-set-selected-blocks! blocks nil))
   ([blocks direction]
    (clear-edit!)
    (set-selection-blocks! blocks direction)))
