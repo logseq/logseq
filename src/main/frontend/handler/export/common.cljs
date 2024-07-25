@@ -54,7 +54,7 @@
     :newline-after-block false}})
 
 ;;; internal utils
-(defn- get-blocks-contents
+(defn get-blocks-contents
   [repo root-block-uuid]
   (->
    (db/get-block-and-children repo root-block-uuid)
