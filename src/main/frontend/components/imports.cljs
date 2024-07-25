@@ -263,7 +263,9 @@
                      (if (:page location)
                        (str "Page icons can't be imported. Go to the page " (pr-str (:page location)) " to manually import it.")
                        (str "Block icons can't be imported. Manually import it at the block: " (pr-str (:block location))))
-                     (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from])))]))
+                     (if (not= (get-in schema [:type :to]) (get-in schema [:type :from]))
+                       (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from]))
+                       (str "Property should be imported manually")))]))
            (map (fn [[k v]]
                   [:dl.my-2.mb-0
                    [:dt.m-0 [:strong (str k)]]
