@@ -8,7 +8,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.db.async :as db-async]
             [frontend.fs :as fs]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
