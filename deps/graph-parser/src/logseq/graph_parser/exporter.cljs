@@ -25,7 +25,8 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]))
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -60,9 +61,9 @@
   (if-let [new-class (:block.temp/new-class tag-block)]
     (let [class-m (find-or-create-class db new-class all-idents)]
       (merge class-m
-            (if-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
-              {:block/uuid existing-tag-uuid}
-              {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))})))
+             (if-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
+               {:block/uuid existing-tag-uuid}
+               {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))})))
     (when (contains? tag-classes (:block/name tag-block))
       (if-let [existing-tag-uuid (first
                                   (d/q '[:find [?uuid ...]
@@ -321,14 +322,14 @@
                     (let [property-classes (set (map keyword (:property-classes options)))]
                       (try
                         (mapv #(cond (#{:page :block :created-at :updated-at} %)
-                                    %
-                                    (property-classes %)
-                                    :block/tags
-                                    (= :tags %)
+                                     %
+                                     (property-classes %)
+                                     :block/tags
+                                     (= :tags %)
                                      ;; This could also be :logseq.property/page-tags
-                                    :block/tags
-                                    :else
-                                    (get-ident @all-idents %))
+                                     :block/tags
+                                     :else
+                                     (get-ident @all-idents %))
                               (edn/read-string val))
                         (catch :default e
                           (js/console.error "Translating query properties failed with:" e)
@@ -839,6 +840,13 @@
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
      :property-page-properties-tx property-page-properties-tx}))
 
+(defn- update-whiteboard-blocks [blocks format]
+  (map (fn [b]
+         (if (seq (:block/properties b))
+           (update b :block/content #(gp-property/remove-properties format %))
+           b))
+       blocks))
+
 (defn- extract-pages-and-blocks
   [db file content {:keys [extract-options notify-user]}]
   (let [format (common-util/get-format file)
@@ -853,7 +861,8 @@
           (extract/extract file content extract-options')
 
           (common-config/whiteboard? file)
-          (extract/extract-whiteboard-edn file content extract-options')
+          (-> (extract/extract-whiteboard-edn file content extract-options')
+              (update :blocks update-whiteboard-blocks format))
 
           :else
           (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))))

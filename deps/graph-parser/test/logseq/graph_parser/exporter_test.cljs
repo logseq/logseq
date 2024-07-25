@@ -338,6 +338,12 @@
                   count))
           "A block with different case of same ref names has 1 distinct ref"))
 
+    (testing "whiteboards"
+      (let [block-with-props (find-block-by-content @conn #"block with props")]
+        (is (= {:user.property/prop-num 10}
+               (readable-properties @conn block-with-props)))
+        (is (= "block with props" (:block/content block-with-props)))))
+
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
             tag-page (find-page-by-name @conn "Movie")
