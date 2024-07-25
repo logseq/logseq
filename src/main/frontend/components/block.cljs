@@ -310,21 +310,8 @@
             metadata)]
          (when-not breadcrumb?
            [:<>
-            [:.asset-overlay]
             (let [image-src (fs/asset-path-normalize src)]
               [:.asset-action-bar {:aria-hidden "true"}
-               ;; the image path bar
-               (when (util/electron?)
-                 [:button.asset-action-btn.text-left
-                  {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
-                   :tabIndex "-1"
-                   :on-pointer-down util/stop
-                   :on-click (fn [e]
-                               (util/stop e)
-                               (if local?
-                                 (ipc/ipc "openFileInFolder" image-src)
-                                 (js/window.apis.openExternal image-src)))}
-                  image-src])
                [:.flex
                 (when-not config/publishing?
                   [:button.asset-action-btn
@@ -374,7 +361,20 @@
                   :on-pointer-down util/stop
                   :on-click open-lightbox}
 
-                 (ui/icon "maximize")]]])])]))))
+                 (ui/icon "maximize")]
+
+                (when (util/electron?)
+                  [:button.asset-action-btn
+                   {:title (t (if local? :asset/show-in-folder :asset/open-in-browser))
+                    :tabIndex "-1"
+                    :on-pointer-down util/stop
+                    :on-click (fn [e]
+                                (util/stop e)
+                                (if local?
+                                  (ipc/ipc "openFileInFolder" image-src)
+                                  (js/window.apis.openExternal image-src)))}
+                   (shui/tabler-icon "folder-pin")])
+                ]])])]))))
 
 (rum/defc audio-cp [src]
   ;; Change protocol to allow media fragment uris to play
