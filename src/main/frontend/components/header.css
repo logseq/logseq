@@ -328,7 +328,7 @@ html.is-zoomed-native-ios {
 }
 
 /* TODO: remote for prod */
-.theme-inner:not(.ls-left-sidebar-open) {
+.theme-container-inner:not(.ls-left-sidebar-open) {
   .cp__header > .l {
     min-width: auto;
   }
