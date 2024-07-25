@@ -73,7 +73,7 @@
    :logseq.property/hl-color {:schema {:type :default :hide? true}}
    :logseq.property.pdf/hl-page {:schema {:type :number :hide? true}}
    :logseq.property.pdf/hl-stamp {:schema {:type :number :hide? true}}
-   :logseq.property.pdf/hl-value {:schema {:type :default :hide? true}}
+   :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
    :logseq.property.pdf/file
    {:schema {:type :default :hide? true :public? true :view-context :page}}
    :logseq.property.pdf/file-path
