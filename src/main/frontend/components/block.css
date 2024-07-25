@@ -27,47 +27,21 @@
   }
 
   .asset-container {
-    @apply relative inline-block;
-
-    margin-top: 0.5rem;
-
-    .asset-overlay {
-      @apply inset-0 absolute p-2;
-
-      opacity: 0;
-      transition: opacity 300ms;
-      background-image: linear-gradient(var(--ls-primary-background-color), transparent);
-      pointer-events: none;
-    }
+    @apply relative inline-block mt-2;
 
     .asset-action-bar {
-      @apply top-0 left-0 w-full flex absolute items-start justify-between px-1;
-
-      transition: opacity 300ms;
-      opacity: 0;
-      color: var(--ls-primary-text-color);
+      @apply top-0.5 right-0.5 absolute flex items-center
+      border bg-gray-02 rounded opacity-0 transition-opacity;
     }
 
     .asset-action-btn {
-      @apply m-1 p-1 rounded truncate;
-
-      opacity: 0.8;
-      user-select: none;
-
-      &:hover,
-      &:active {
-        opacity: 1;
-      }
+      @apply m-1 p-0.5 truncate flex items-center opacity-70 select-none
+      hover:opacity-90 active:opacity-60;
     }
 
-    &:hover,
-    &:focus {
-      .asset-overlay {
-        opacity: 0.9;
-      }
-
+    &:hover, &:active {
       .asset-action-bar {
-        opacity: 1;
+        @apply opacity-100;
       }
     }
   }
