@@ -1242,20 +1242,24 @@
                           node)))
           latest-visible-block (or last-node (when visible? node))
           latest-block-id (when latest-visible-block (.-id latest-visible-block))]
-      (when latest-visible-block
-        (let [blocks (util/get-nodes-between-two-nodes latest-block-id end-block-id "ls-block")
-              direction (if (= latest-block-id end-block-id)
-                          select-direction
-                          (util/get-direction-between-two-nodes latest-block-id end-block-id "ls-block"))
-              blocks (if (= direction :up)
-                       (reverse (util/sort-by-height blocks))
-                       (util/sort-by-height blocks))]
-          (if append?
-            (do (state/clear-edit!)
-                (if (and select-direction (not= direction select-direction))
-                  (state/drop-selection-blocks-starts-with! end-block-node)
-                  (state/conj-selection-block! blocks direction)))
-            (state/exit-editing-and-set-selected-blocks! blocks direction)))))))
+      (if (and visible? (util/el-visible-in-viewport? end-block-node))
+        (let [blocks (util/get-nodes-between-two-nodes start-block end-block-id "ls-block")
+              direction (util/get-direction-between-two-nodes start-block end-block-id "ls-block")]
+          (state/exit-editing-and-set-selected-blocks! blocks direction))
+        (when latest-visible-block
+          (let [blocks (util/get-nodes-between-two-nodes latest-block-id end-block-id "ls-block")
+                direction (if (= latest-block-id end-block-id)
+                            select-direction
+                            (util/get-direction-between-two-nodes latest-block-id end-block-id "ls-block"))
+                blocks (if (= direction :up)
+                         (reverse (util/sort-by-height blocks))
+                         (util/sort-by-height blocks))]
+            (if append?
+              (do (state/clear-edit!)
+                  (if (and select-direction (not= direction select-direction))
+                    (state/drop-selection-blocks-starts-with! end-block-node)
+                    (state/conj-selection-block! blocks direction)))
+              (state/exit-editing-and-set-selected-blocks! blocks direction))))))))
 
 (defn- select-block-up-down
   [direction]
