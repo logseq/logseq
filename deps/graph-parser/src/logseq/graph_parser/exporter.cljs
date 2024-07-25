@@ -27,11 +27,6 @@
             [logseq.db.frontend.property.build :as db-property-build]
             [logseq.db.frontend.malli-schema :as db-malli-schema]))
 
-(defn- get-pid
-  "Get a property's id (name or uuid) given its name. For db graphs"
-  [db property-name]
-  (:block/uuid (ldb/get-page db property-name)))
-
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
   [block]
@@ -63,9 +58,11 @@
    because it has been moved"
   [db tag-block page-names-to-uuids tag-classes all-idents]
   (if-let [new-class (:block.temp/new-class tag-block)]
-    (merge (find-or-create-class db new-class all-idents)
-           (when-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
-             {:block/uuid existing-tag-uuid}))
+    (let [class-m (find-or-create-class db new-class all-idents)]
+      (merge class-m
+            (if-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
+              {:block/uuid existing-tag-uuid}
+              {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))})))
     (when (contains? tag-classes (:block/name tag-block))
       (if-let [existing-tag-uuid (first
                                   (d/q '[:find [?uuid ...]
@@ -537,9 +534,7 @@
              ;; Add a map of {:block.temp/new-class TAG} to be processed later
              (update :block/tags
                      (fnil into [])
-                     (map #(hash-map :block.temp/new-class %
-                                     :block/uuid (or (get-pid db %) (d/squuid)))
-                          classes-from-properties)))
+                     (map #(hash-map :block.temp/new-class %) classes-from-properties)))
            :properties-tx pvalues-tx})
         {:block block :properties-tx []})
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
@@ -558,13 +553,14 @@
               (merge (find-or-create-class db (:block/original-name block) (:all-idents import-state)))
               (seq parent-classes-from-properties)
               (assoc :class/parent
-                     (let [new-class (first parent-classes-from-properties)]
+                     (let [new-class (first parent-classes-from-properties)
+                           class-m (find-or-create-class db new-class (:all-idents import-state))]
                        (when (> (count parent-classes-from-properties) 1)
                          (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
-                       (merge (find-or-create-class db new-class (:all-idents import-state))
+                       (merge class-m
                               (if-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
                                 {:block/uuid existing-tag-uuid}
-                                {:block/uuid (d/squuid)}))))))
+                                {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}))))))
           (dissoc block* :block/properties))]
     {:block block' :properties-tx properties-tx}))
 
