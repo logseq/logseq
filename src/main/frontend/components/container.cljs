@@ -942,13 +942,19 @@
                        (editor-handler/unhighlight-blocks!)
                        (util/fix-open-external-with-shift! e))}
 
-     [:main.theme-inner
-      {:class (util/classnames [{:ls-left-sidebar-open    left-sidebar-open?
-                                 :ls-right-sidebar-open   sidebar-open?
-                                 :ls-wide-mode            wide-mode?
-                                 :ls-window-controls      window-controls?
-                                 :ls-fold-button-on-right fold-button-on-right?
-                                 :ls-hl-colored           ls-block-hl-colored?}])}
+     [:main.theme-container-inner#app-container-wrapper
+      {:class (util/classnames
+                [{:ls-left-sidebar-open left-sidebar-open?
+                  :ls-right-sidebar-open sidebar-open?
+                  :ls-wide-mode wide-mode?
+                  :ls-window-controls window-controls?
+                  :ls-fold-button-on-right fold-button-on-right?
+                  :ls-hl-colored ls-block-hl-colored?}])
+       :on-pointer-up (fn []
+                        (when-let [container (gdom/getElement "app-container-wrapper")]
+                          (d/remove-class! container "blocks-selection-mode")
+                          (when (> (count (state/get-selection-blocks)) 1)
+                            (util/clear-selection!))))}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))
@@ -956,11 +962,7 @@
                      (when (= "Enter" (.-key e))
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
-      [:div.#app-container {:on-pointer-up (fn []
-                                             (when-let [container (gdom/getElement "app-container")]
-                                               (d/remove-class! container "blocks-selection-mode")
-                                               (when (> (count (state/get-selection-blocks)) 1)
-                                                 (util/clear-selection!))))}
+      [:div.#app-container
        [:div#left-container
         {:class (if (state/sub :ui/sidebar-open?) "overflow-hidden" "w-full")}
         (header/header {:open-fn        open-fn

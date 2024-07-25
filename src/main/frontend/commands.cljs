@@ -366,10 +366,11 @@
                        (println "draw file created, " path))
                      text)) "Draw a graph with Excalidraw"])
 
-       (cond
-         (and (util/electron?) (config/local-file-based-graph? (state/get-current-repo)))
-
-         ["Upload an asset" [[:editor/click-hidden-file-input :id]] "Upload file types like image, pdf, docx, etc.)" :icon/upload])
+       (when (util/electron?)
+         ["Upload an asset"
+          [[:editor/click-hidden-file-input :id]]
+          "Upload file types like image, pdf, docx, etc.)"
+          :icon/upload])
 
        (when-not db?
          ["Template" [[:editor/input command-trigger nil]

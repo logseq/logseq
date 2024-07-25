@@ -207,7 +207,7 @@
                             (let [page-m (sqlite-util/build-new-page
                                           (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))]
                               (assoc page-m
-                                     :block/uuid (common-uuid/gen-uuid date-int)
+                                     :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
                                      :block/type (conj (:block/type page-m) "journal")
                                      :block/journal-day date-int)))]
       {:block

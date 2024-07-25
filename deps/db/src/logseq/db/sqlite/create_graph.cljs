@@ -1,12 +1,14 @@
 (ns logseq.db.sqlite.create-graph
   "Helper fns for creating a DB graph"
-  (:require [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.schema :as db-schema]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.db.frontend.class :as db-class]
-            [logseq.db.frontend.property.build :as db-property-build]
+  (:require [clojure.string :as string]
+            [datascript.core :as d]
             [logseq.common.util :as common-util]
-            [datascript.core :as d]))
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.build :as db-property-build]
+            [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 (defn- mark-block-as-built-in [block built-in-prop-value]
   (assoc block :logseq.property/built-in? [:block/uuid (:block/uuid built-in-prop-value)]))
@@ -55,10 +57,13 @@
                    (map mark-block-as-built-in' properties)
                    (keep #(when (= #{"closed value"} (:block/type %)) (mark-block-as-built-in' %))
                          properties))]
+    (doseq [m tx]
+      (when-let [block-uuid (and (:db/ident m) (:block/uuid m))]
+        (assert (string/starts-with? (str block-uuid) "00000002") m)))
+
     {:tx tx
      :properties (filter #(contains? (:block/type %) "property") properties)
      :built-in-prop-value built-in-prop-value}))
-
 
 (defn kv
   "Creates a key-value pair tx with the key and value respectively stored under
@@ -98,7 +103,7 @@
             {:block/title title'
              :block/name (common-util/page-name-sanity-lc title')
              :db/ident db-ident
-             :block/uuid (d/squuid)}
+             :block/uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)}
              (seq properties)
              (assoc :class/schema.properties properties))))
         built-in-prop-value)))
