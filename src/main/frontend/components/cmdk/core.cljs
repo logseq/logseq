@@ -98,8 +98,13 @@
 
                             :else
                             (take 5 items))))
-        page-exists? (when-not (string/blank? input)
-                       (db/get-page (string/trim input)))
+        node-exists? (let [blocks-result (keep :source-block (get-in results [:blocks :items]))]
+                       (when-not (string/blank? input)
+                         (or (db/get-page (string/trim input))
+                             (some (fn [block]
+                                     (and
+                                      (:block/tags block)
+                                      (= input (util/page-name-sanity-lc (:block/title block))))) blocks-result))))
         include-slash? (or (string/includes? input "/")
                            (string/starts-with? input "/"))
         order* (cond
@@ -107,7 +112,7 @@
                  []
 
                  include-slash?
-                 [(when-not page-exists?
+                 [(when-not node-exists?
                     ["Create"         :create         (create-items input)])
 
                   ["Current page"   :current-page   (visible-items :current-page)]
@@ -121,12 +126,12 @@
                   [(if (= filter-group :current-page) "Current page" (name filter-group))
                    filter-group
                    (visible-items filter-group)]
-                  (when-not page-exists?
+                  (when-not node-exists?
                     ["Create"         :create         (create-items input)])]
 
                  :else
                  (->>
-                  [(when-not page-exists?
+                  [(when-not node-exists?
                      ["Create"         :create       (create-items input)])
                    ["Current page"   :current-page   (visible-items :current-page)]
                    ["Blocks"         :blocks         (visible-items :blocks)]
@@ -260,11 +265,11 @@
             items (keep (fn [block]
                           (if (:page? block)
                             (page-item repo block)
-                            (block-item repo block current-page !input))) blocks)
-            items-on-other-pages (remove :current-page? items)
-            items-on-current-page (filter :current-page? items)]
-      (swap! !results update group         merge {:status :success :items items-on-other-pages})
-      (swap! !results update :current-page merge {:status :success :items items-on-current-page}))))
+                            (block-item repo block current-page !input))) blocks)]
+      (if (= group :current-page)
+        (let [items-on-current-page (filter :current-page? items)]
+          (swap! !results update group         merge {:status :success :items items-on-current-page}))
+        (swap! !results update group         merge {:status :success :items items})))))
 
 (defmethod load-results :files [group state]
   (let [!input (::input state)
