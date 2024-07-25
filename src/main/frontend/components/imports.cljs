@@ -374,7 +374,8 @@
 
 
   (rum/defc importer < rum/reactive
-    [{:keys [query-params]}]
+  [{:keys [query-params]}]
+  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
     (if (state/sub :graph/importing)
       (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
             left-label (if (and current-idx total (= current-idx total))
@@ -396,63 +397,67 @@
          [:h1 (t :on-boarding/importing-title)]
          [:h2 (t :on-boarding/importing-desc)]]
         [:section.d.md:flex.flex-col
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center [:i (svg/logo 28)]]
-          [:span.flex.flex-col
-           [[:strong "SQLite"]
-            [:small (t :on-boarding/importing-sqlite-desc)]]]
-          [:input.absolute.hidden
-           {:id        "import-sqlite-db"
-            :type      "file"
-            :on-change (fn [e]
-                         (shui/dialog-open!
-                          #(set-graph-name-dialog e {:sqlite? true})))}]]
+         (when db-based?
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center [:i (svg/logo 28)]]
+            [:span.flex.flex-col
+             [[:strong "SQLite"]
+              [:small (t :on-boarding/importing-sqlite-desc)]]]
+            [:input.absolute.hidden
+             {:id        "import-sqlite-db"
+              :type      "file"
+              :on-change (fn [e]
+                           (shui/dialog-open!
+                            #(set-graph-name-dialog e {:sqlite? true})))}]])
 
-         (when (or util/electron? util/web-platform?)
-          [:label.action-input.flex.items-center.mx-2.my-2
-           [:span.as-flex-center [:i (svg/logo 28)]]
-           [:span.flex.flex-col
-            [[:strong "File to DB graph"]
-             [:small  "Import a file-based Logseq graph folder into a new DB graph"]]]
-           [:input.absolute.hidden
-            {:id        "import-file-graph"
-             :type      "file"
-             :webkitdirectory "true"
-             :on-change (debounce (fn [e]
-                                    (import-file-to-db-handler e {}))
-                                  1000)}]])
+         (when (and db-based? (or util/electron? util/web-platform?))
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center [:i (svg/logo 28)]]
+            [:span.flex.flex-col
+             [[:strong "File to DB graph"]
+              [:small  "Import a file-based Logseq graph folder into a new DB graph"]]]
+            [:input.absolute.hidden
+             {:id        "import-file-graph"
+              :type      "file"
+              :webkitdirectory "true"
+              :on-change (debounce (fn [e]
+                                     (import-file-to-db-handler e {}))
+                                   1000)}]])
 
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center [:i (svg/logo 28)]]
-          [:span.flex.flex-col
-           [[:strong "EDN / JSON"]
-            [:small (t :on-boarding/importing-lsq-desc)]]]
-          [:input.absolute.hidden
-           {:id        "import-lsq"
-            :type      "file"
-            :on-change lsq-import-handler}]]
+         (when-not db-based?
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center [:i (svg/logo 28)]]
+            [:span.flex.flex-col
+             [[:strong "EDN / JSON"]
+              [:small (t :on-boarding/importing-lsq-desc)]]]
+            [:input.absolute.hidden
+             {:id        "import-lsq"
+              :type      "file"
+              :on-change lsq-import-handler}]])
 
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center [:i (svg/roam-research 28)]]
-          [:div.flex.flex-col
-           [[:strong "RoamResearch"]
-            [:small (t :on-boarding/importing-roam-desc)]]]
-          [:input.absolute.hidden
-           {:id        "import-roam"
-            :type      "file"
-            :on-change roam-import-handler}]]
+         (when-not db-based?
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center [:i (svg/roam-research 28)]]
+            [:div.flex.flex-col
+             [[:strong "RoamResearch"]
+              [:small (t :on-boarding/importing-roam-desc)]]]
+            [:input.absolute.hidden
+             {:id        "import-roam"
+              :type      "file"
+              :on-change roam-import-handler}]])
 
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
-          [:span.flex.flex-col
-           [[:strong "OPML"]
-            [:small (t :on-boarding/importing-opml-desc)]]]
+         (when-not db-based?
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
+            [:span.flex.flex-col
+             [[:strong "OPML"]
+              [:small (t :on-boarding/importing-opml-desc)]]]
 
-          [:input.absolute.hidden
-           {:id        "import-opml"
-            :type      "file"
-            :on-change opml-import-handler}]]]
+            [:input.absolute.hidden
+             {:id        "import-opml"
+              :type      "file"
+              :on-change opml-import-handler}]])]
 
         (when (= "picker" (:from query-params))
           [:section.e
-           [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])])))
+           [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])]))))

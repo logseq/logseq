@@ -18,44 +18,48 @@
 (rum/defc export
   []
   (when-let [current-repo (state/get-current-repo)]
-    [:div.export
-     [:h1.title (t :export)]
-     [:ul.mr-1
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
-        (t :export-edn)]]
-      [:li.mb-4
-       [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
-        (t :export-json)]]
-      (when (config/db-based-graph? current-repo)
-       [:li.mb-4
-        [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
-         (t :export-sqlite-db)]])
-      (when (util/electron?)
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
-          (t :export-public-pages)]])
-      (when-not (mobile-util/native-platform?)
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
-          (t :export-markdown)]])
-      (when-not (mobile-util/native-platform?)
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
-          (t :export-opml)]])
-      (when-not (mobile-util/native-platform?)
-        [:li.mb-4
-         [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
-          (t :export-roam-json)]])]
-     [:a#download-as-edn-v2.hidden]
-     [:a#download-as-json-v2.hidden]
-     [:a#download-as-sqlite-db.hidden]
-     [:a#download-as-roam-json.hidden]
-     [:a#download-as-html.hidden]
-     [:a#download-as-zip.hidden]
-     [:a#export-as-markdown.hidden]
-     [:a#export-as-opml.hidden]
-     [:a#convert-markdown-to-unordered-list-or-heading.hidden]]))
+    (let [db-based? (config/db-based-graph? current-repo)]
+      [:div.export
+       [:h1.title (t :export)]
+       [:ul.mr-1
+        (when-not db-based?
+          [:li.mb-4
+           [:a.font-medium {:on-click #(export/export-repo-as-edn! current-repo)}
+            (t :export-edn)]])
+        (when-not db-based?
+          [:li.mb-4
+           [:a.font-medium {:on-click #(export/export-repo-as-json! current-repo)}
+            (t :export-json)]])
+        (when (config/db-based-graph? current-repo)
+          [:li.mb-4
+           [:a.font-medium {:on-click #(export/export-repo-as-sqlite-db! current-repo)}
+            (t :export-sqlite-db)]])
+        (when-not db-based?
+          (when (util/electron?)
+            [:li.mb-4
+             [:a.font-medium {:on-click #(export/download-repo-as-html! current-repo)}
+              (t :export-public-pages)]]))
+        (when-not (or (mobile-util/native-platform?) db-based?)
+          [:li.mb-4
+           [:a.font-medium {:on-click #(export-text/export-repo-as-markdown! current-repo)}
+            (t :export-markdown)]])
+        (when-not (or (mobile-util/native-platform?) db-based?)
+          [:li.mb-4
+           [:a.font-medium {:on-click #(export-opml/export-repo-as-opml! current-repo)}
+            (t :export-opml)]])
+        (when-not (or (mobile-util/native-platform?) db-based?)
+          [:li.mb-4
+           [:a.font-medium {:on-click #(export/export-repo-as-roam-json! current-repo)}
+            (t :export-roam-json)]])]
+       [:a#download-as-edn-v2.hidden]
+       [:a#download-as-json-v2.hidden]
+       [:a#download-as-sqlite-db.hidden]
+       [:a#download-as-roam-json.hidden]
+       [:a#download-as-html.hidden]
+       [:a#download-as-zip.hidden]
+       [:a#export-as-markdown.hidden]
+       [:a#export-as-opml.hidden]
+       [:a#convert-markdown-to-unordered-list-or-heading.hidden]])))
 
 
 (def *export-block-type (atom :text))
