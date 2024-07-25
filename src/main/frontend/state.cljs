@@ -1250,19 +1250,11 @@ Similar to re-frame subscriptions"
 
 (defn drop-last-selection-block!
   []
-  (let [direction @(:selection/direction @state)
-        up? (= direction :up)
-        blocks @(:selection/blocks @state)
-        last-block (if up?
-                     (first blocks)
-                     (peek (vec blocks)))
-        blocks' (-> (if up?
-                      (rest blocks)
-                      (pop (vec blocks)))
-                    vec)]
+  (let [blocks @(:selection/blocks @state)
+        blocks' (vec (butlast blocks))]
     (set-state! :selection/mode true)
     (set-selection-blocks-aux! blocks')
-    last-block))
+    (last blocks)))
 
 (defn hide-custom-context-menu!
   []
