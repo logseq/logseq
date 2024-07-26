@@ -223,7 +223,13 @@
         source-page (model/get-alias-source-page repo (:db/id entity))]
     (hash-map :icon (if whiteboard? "whiteboard" "page")
               :icon-theme :gray
-              :text (:block/title page)
+              :text (str (:block/title page)
+                         " "
+                         (string/join
+                          ", "
+                          (keep (fn [tag]
+                                  (str "#" (:block/title tag)))
+                                (:block/tags entity))))
               :source-page (if source-page
                              (:block/title source-page)
                              (:block/title page)))))
