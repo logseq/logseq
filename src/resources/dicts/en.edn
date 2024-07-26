@@ -346,11 +346,11 @@
  :type "Type"
  :host "Host"
  :port "Port"
- :re-index "Re-index"
+ :re-index "Re-index current graph"
  :re-index-detail "Rebuild the graph"
  :re-index-multiple-windows-warning "You need to close the other windows before re-index this graph."
  :re-index-discard-unsaved-changes-warning "Re-index will discard the current graph, and then processes all the files again as they are currently stored on disk. You will lose unsaved changes and it might take a while. Continue?"
- :sync-from-local-files "Refresh"
+ :sync-from-local-files "Refresh local files"
  :sync-from-local-files-detail "Import changes from local files"
  :sync-from-local-changes-detected "Refresh detects and processes files modified on your disk that have diverged from the current Logseq page content. Continue?"
 

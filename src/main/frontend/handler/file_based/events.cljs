@@ -26,13 +26,14 @@
       [:div {:style {:max-width 700}}
        (when (not (nil? ui)) ui)
        [:p (t :re-index-discard-unsaved-changes-warning)]
-       (ui/button
-         (t :yes)
-         :autoFocus "on"
-         :class "ui__modal-enter"
-         :on-click (fn []
-                     (shui/dialog-close!)
-                     (state/pub-event! [:graph/re-index])))])))
+       [:div.flex.justify-end.pt-2
+        (ui/button
+          (t :yes)
+          :autoFocus "on"
+          :class "ui__modal-enter"
+          :on-click (fn []
+                      (shui/dialog-close!)
+                      (state/pub-event! [:graph/re-index])))]])))
 
 (defmethod events/handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance
