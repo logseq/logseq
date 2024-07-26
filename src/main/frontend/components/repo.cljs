@@ -5,6 +5,7 @@
             [frontend.db :as db]
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -239,35 +240,8 @@
 
                                                             :else
                                                             (state/pub-event! [:graph/pull-down-remote-graph graph])))))}})))
-                    switch-repos)
-        refresh-link (let [nfs-repo? (config/local-file-based-graph? current-repo)]
-                       (when (and nfs-repo?
-                                  (not= current-repo config/demo-repo)
-                                  (or (nfs-handler/supported?)
-                                      (mobile-util/native-platform?)))
-                         {:title (t :sync-from-local-files)
-                          :hover-detail (t :sync-from-local-files-detail)
-                          :options {:on-click #(state/pub-event! [:graph/ask-for-re-fresh])}}))
-        reindex-link {:title        (t :re-index)
-                      :hover-detail (t :re-index-detail)
-                      :options (cond->
-                                {:on-click
-                                 (fn []
-                                   (state/pub-event! [:graph/ask-for-re-index *multiple-windows? nil]))})}]
-    (->>
-     (concat repo-links
-             [(when (seq repo-links) {:hr true})
-              (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
-                {:title (t :new-graph) :options {:on-click #(state/pub-event! [:graph/setup-a-repo])}}
-                {:title (t :new-graph) :options {:href (rfe/href :repos)}}) ;; Brings to the repos page for showing fallback message
-              (when config/db-graph-enabled?
-                {:title (str (t :new-graph) " - DB version")
-                 :options {:on-click #(state/pub-event! [:graph/new-db-graph])}})
-              {:title (t :all-graphs) :options {:href (rfe/href :repos)}}
-              refresh-link
-              (when-not (config/db-based-graph? current-repo)
-                reindex-link)])
-     (remove nil?))))
+                    switch-repos)]
+    (->> repo-links (remove nil?))))
 
 (rum/defcs repos-dropdown < rum/reactive
   (rum/local false ::electron-multiple-windows?)
@@ -276,83 +250,115 @@
         current-repo (state/sub :git/current-repo)
         login? (boolean (state/sub :auth/id-token))
         remotes-loading? (state/sub [:file-sync/remote-graphs :loading])]
-    (when (or login? current-repo)
-      (let [repos (state/sub [:me :repos])
-            remotes (state/sub [:file-sync/remote-graphs :graphs])
-            rtc-graphs (state/sub :rtc/graphs)
-            downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
-            repos (sort-repos-with-metadata-local repos)
-            repos (distinct
-                   (if (and (or (seq remotes) (seq rtc-graphs)) login?)
-                     (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
-            items-fn #(repos-dropdown-links repos current-repo downloading-graph-id multiple-windows? opts)
-            header-fn #(when (> (count repos) 1)            ; show switch to if there are multiple repos
-                         [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
-                          [:div (t :left-side-bar/switch)]
+    (let [repos (state/sub [:me :repos])
+          remotes (state/sub [:file-sync/remote-graphs :graphs])
+          rtc-graphs (state/sub :rtc/graphs)
+          downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
+          repos (sort-repos-with-metadata-local repos)
+          repos (distinct
+                  (if (and (or (seq remotes) (seq rtc-graphs)) login?)
+                    (repo-handler/combine-local-&-remote-graphs repos (concat remotes rtc-graphs)) repos))
+          items-fn #(repos-dropdown-links repos current-repo downloading-graph-id multiple-windows? opts)
+          header-fn #(when (> (count repos) 1)              ; show switch to if there are multiple repos
+                       [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
+                        [:div (t :left-side-bar/switch)]
 
-                          (when (and (file-sync/enable-sync?) login?)
-                            (if remotes-loading?
-                              (ui/loading "")
-                              (shui/button
-                               {:variant :ghost
-                                :size :sm
-                                :title "Refresh remote graphs"
-                                :class "!h-6 !px-1 relative right-[-4px]"
-                                :on-click (fn []
-                                            (file-sync/load-session-graphs)
-                                            (rtc-handler/<get-remote-graphs))}
-                               (ui/icon "refresh" {:size 15}))))])]
-        (when (seq repos)
-          (let [remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
-                repo-name (when current-repo (db/get-repo-name current-repo))
-                short-repo-name (if current-repo
-                                  (db/get-short-repo-name repo-name)
-                                  "Select a Graph")]
-            (shui/trigger-as :a
-                             {:tab-index 0
-                              :class "item cp__repos-select-trigger"
-                              :on-pointer-down
-                              (fn [^js e]
-                                (check-multiple-windows? state)
-                                (some-> (.-target e)
-                                        (.closest "a.item")
-                                        (shui/popup-show!
-                                         (fn [{:keys [id]}]
-                                           [:<>
-                                            (header-fn)
-                                            (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
-                                              (let [on-click' (:on-click options)
-                                                    href' (:href options)]
-                                                (if hr
-                                                  (shui/dropdown-menu-separator)
-                                                  (shui/dropdown-menu-item
-                                                   (assoc options
-                                                          :title hover-detail
-                                                          :on-click (fn [^js e]
-                                                                      (when on-click'
-                                                                        (when-not (false? (on-click' e))
-                                                                          (shui/popup-hide! id)))))
-                                                   (or item
-                                                       (if href'
-                                                         [:a.flex.items-center.w-full
-                                                          {:href href' :on-click #(shui/popup-hide! id)
-                                                           :style {:color "inherit"}} title]
-                                                         [:span.flex.items-center.gap-1.w-full
-                                                          icon [:div title]]))))))])
-                                         {:as-dropdown? true
-                                          :auto-focus? false
-                                          :align "start"
-                                          :content-props {:class "repos-list"}})))
-                              :title repo-name}                            ;; show full path on hover
-                             [:div.flex.relative.graph-icon.rounded
-                              (shui/tabler-icon "database" {:size 15})]
+                        (when (and (file-sync/enable-sync?) login?)
+                          (if remotes-loading?
+                            (ui/loading "")
+                            (shui/button
+                              {:variant :ghost
+                               :size :sm
+                               :title "Refresh remote graphs"
+                               :class "!h-6 !px-1 relative right-[-4px]"
+                               :on-click (fn []
+                                           (file-sync/load-session-graphs)
+                                           (rtc-handler/<get-remote-graphs))}
+                              (ui/icon "refresh" {:size 15}))))])
+          footer-fn (fn []
+                      [:div.cp__repos-quick-actions
+                       {:on-click #(shui/popup-hide!)}
 
-                             [:div.repo-switch.pr-2.whitespace-nowrap
-                              [:span.repo-name.font-medium
-                               [:span.repo-text.overflow-hidden.text-ellipsis
-                                (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
-                               (when remote? [:span.pl-1 (ui/icon "cloud")])]
-                              [:span.dropdown-caret]])))))))
+                       (when-not (config/db-based-graph? current-repo)
+                         [:<>
+                          (shui/button {:size :sm :variant :ghost
+                                        :on-click (fn []
+                                                    (state/pub-event! [:graph/ask-for-re-fresh]))}
+                            (shui/tabler-icon "file-report") [:span (t :sync-from-local-files)])
+
+                          (shui/button {:size :sm :variant :ghost
+                                        :on-click (fn []
+                                                    (state/pub-event! [:graph/ask-for-re-index multiple-windows? nil]))}
+                            (shui/tabler-icon "folder-bolt") [:span (t :re-index)])])
+
+                       (shui/button {:size :sm :variant :ghost
+                                     :on-click (fn []
+                                                 (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
+                                                   (state/pub-event! [:graph/setup-a-repo])
+                                                   (route-handler/redirect-to-all-graphs)))}
+                         (shui/tabler-icon "folder-plus")
+                         [:span "Add new graph"])
+
+                       (shui/button {:size :sm :variant :ghost
+                                     :on-click #(state/pub-event! [:graph/new-db-graph])}
+                         (shui/tabler-icon "cylinder-plus") [:span "Add new graph (DB version)"])
+
+                       (shui/button {:size :sm :variant :ghost
+                                     :on-click #(route-handler/redirect-to-all-graphs)}
+                         (shui/tabler-icon "layout-2") [:span "All graphs"])
+                       ])]
+      (when (seq repos)
+        (let [remote? (and current-repo (:remote? (first (filter #(= current-repo (:url %)) repos))))
+              repo-name (when current-repo (db/get-repo-name current-repo))
+              short-repo-name (if current-repo
+                                (db/get-short-repo-name repo-name)
+                                "Select a Graph")]
+          (shui/trigger-as :a
+            {:tab-index 0
+             :class "item cp__repos-select-trigger"
+             :on-pointer-down
+             (fn [^js e]
+               (check-multiple-windows? state)
+               (some-> (.-target e)
+                 (.closest "a.item")
+                 (shui/popup-show!
+                   (fn [{:keys [id]}]
+                     [:<>
+                      (header-fn)
+                      (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
+                        (let [on-click' (:on-click options)
+                              href' (:href options)]
+                          (if hr
+                            (shui/dropdown-menu-separator)
+                            (shui/dropdown-menu-item
+                              (assoc options
+                                :title hover-detail
+                                :on-click (fn [^js e]
+                                            (when on-click'
+                                              (when-not (false? (on-click' e))
+                                                (shui/popup-hide! id)))))
+                              (or item
+                                (if href'
+                                  [:a.flex.items-center.w-full
+                                   {:href href' :on-click #(shui/popup-hide! id)
+                                    :style {:color "inherit"}} title]
+                                  [:span.flex.items-center.gap-1.w-full
+                                   icon [:div title]]))))))
+                      (footer-fn)])
+                   {:as-dropdown? true
+                    :auto-focus? false
+                    :align "start"
+                    :content-props {:class "repos-list"}})))
+             :title repo-name}                              ;; show full path on hover
+            [:div.flex.relative.graph-icon.rounded
+             (shui/tabler-icon "database" {:size 15})]
+
+            [:div.repo-switch.pr-2.whitespace-nowrap
+             [:span.repo-name.font-medium
+              [:span.repo-text.overflow-hidden.text-ellipsis
+               (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
+              (when remote? [:span.pl-1 (ui/icon "cloud")])]
+             [:span.dropdown-caret]]))))))
 
 (defn invalid-graph-name-warning
   []
