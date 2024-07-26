@@ -144,12 +144,13 @@
 (defn db-rebuild-block-refs
   "Rebuild block refs for DB graphs"
   [db block]
-  (let [built-in-props (set (keys db-property/built-in-properties))
+  (let [private-built-in-props (set (keep (fn [[k v]] (when-not (get-in v [:schema :public?]) k))
+                                          db-property/built-in-properties))
         ;; explicit lookup in order to be nbb compatible
         properties (->> (entity-plus/lookup-kv-then-entity (d/entity db (:db/id block)) :block/properties)
                         (into {}))
         property-key-refs (->> (keys properties)
-                               (remove built-in-props))
+                               (remove private-built-in-props))
         page-or-object? (fn [block] (and (de/entity? block)
                                          (or (ldb/page? block)
                                              (seq (:block/tags block)))))
