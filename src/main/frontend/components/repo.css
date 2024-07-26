@@ -16,11 +16,11 @@
 
 .ui__dropdown-menu-content {
   &.repos-list {
-    @apply px-2 pb-[210px] relative;
-    @apply min-w-[260px] sm:max-w-[320px] max-h-[60vh];
+    @apply px-2 pb-[210px];
+    @apply min-w-[280px] sm:max-w-[320px] max-h-[66vh];
 
     &[data-mode=db] {
-      @apply pb-[140px];
+      @apply pb-[130px];
     }
 
     .ui__dropdown-menu-item {
