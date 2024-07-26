@@ -19,7 +19,8 @@
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [promesa.core :as p]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [frontend.db :as db]))
 
 (defn- safe-api-call
   "Force the callback result to be nil, otherwise, ipc calls could lead to
@@ -82,13 +83,8 @@
                    (let [{:keys [page-name block-id file]} (bean/->clj data)]
                      (cond
                        page-name
-                       (let [db-page-name (db-model/get-redirect-page-name page-name)
-                             whiteboard? (db-model/whiteboard-page? db-page-name)]
-                         ;; No error handling required, as a page name is always valid
-                         ;; Open new page if the page does not exist
-                         (if whiteboard?
-                           (route-handler/redirect-to-page! page-name {:block-id block-id})
-                           (editor-handler/insert-first-page-block-if-not-exists! db-page-name)))
+                       (when (db/get-page page-name)
+                         (route-handler/redirect-to-page! page-name {:block-id block-id}))
 
                        block-id
                        (if-let [block (db-model/get-block-by-uuid block-id)]

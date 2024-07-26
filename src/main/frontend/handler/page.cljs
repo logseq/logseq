@@ -472,11 +472,15 @@
     (notification/show! "No file found" :warning)))
 
 (defn copy-page-url
-  ([] (copy-page-url (page-util/get-current-page-name)))
-  ([page-name]
-   (if page-name
+  ([]
+   (let [id (if (config/db-based-graph? (state/get-current-repo))
+              (page-util/get-current-page-uuid)
+              (page-util/get-current-page-name))]
+     (copy-page-url id)))
+  ([page-uuid]
+   (if page-uuid
      (util/copy-to-clipboard!
-      (url-util/get-logseq-graph-page-url nil (state/get-current-repo) page-name))
+      (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
      (notification/show! "No page found to copy" :warning))))
 
 (defn toggle-properties!
