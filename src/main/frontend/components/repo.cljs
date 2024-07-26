@@ -254,6 +254,7 @@
           remotes (state/sub [:file-sync/remote-graphs :graphs])
           rtc-graphs (state/sub :rtc/graphs)
           downloading-graph-id (state/sub :rtc/downloading-graph-uuid)
+          db-based? (config/db-based-graph? current-repo)
           repos (sort-repos-with-metadata-local repos)
           repos (distinct
                   (if (and (or (seq remotes) (seq rtc-graphs)) login?)
@@ -279,7 +280,7 @@
                       [:div.cp__repos-quick-actions
                        {:on-click #(shui/popup-hide!)}
 
-                       (when-not (config/db-based-graph? current-repo)
+                       (when-not db-based?
                          [:<>
                           (shui/button {:size :sm :variant :ghost
                                         :on-click (fn []
@@ -348,7 +349,8 @@
                    {:as-dropdown? true
                     :auto-focus? false
                     :align "start"
-                    :content-props {:class "repos-list"}})))
+                    :content-props {:class "repos-list"
+                                    :data-mode (when db-based? "db")}})))
              :title repo-name}                              ;; show full path on hover
             [:div.flex.relative.graph-icon.rounded
              (shui/tabler-icon "database" {:size 15})]

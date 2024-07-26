@@ -19,6 +19,10 @@
     @apply px-2 pb-[220px];
     @apply min-w-[260px] sm:max-w-[320px] max-h-[60vh];
 
+    &[data-mode=db] {
+      @apply pb-[140px];
+    }
+
     .ui__dropdown-menu-item {
       @apply overflow-hidden overflow-ellipsis;
     }
