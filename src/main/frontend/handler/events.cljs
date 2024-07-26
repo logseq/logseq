@@ -679,13 +679,14 @@
   (shui/dialog-open!
     [:div {:style {:max-width 700}}
      [:p (t :sync-from-local-changes-detected)]
-     (ui/button
-       (t :yes)
-       :autoFocus "on"
-       :class "ui__modal-enter"
-       :on-click (fn []
-                   (state/close-modal!)
-                   (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]))
+     [:div.flex.justify-end
+      (ui/button
+        (t :yes)
+        :autoFocus "on"
+        :class "ui__modal-enter"
+        :on-click (fn []
+                    (shui/dialog-close!)
+                    (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
 (defmethod handle :sync/create-remote-graph [[_ current-repo]]
   (let [graph-name (js/decodeURI (util/node-path.basename current-repo))]
@@ -1031,10 +1032,11 @@
         word word)]
      [:div.text-lg
       [:p "Switch to another repo: "]
-      (repo/repos-dropdown {:on-click (fn [e]
-                                        (util/stop e)
-                                        (state/set-state! :error/multiple-tabs-access-opfs? false)
-                                        (state/close-modal!))})]]))
+      [:div.border.rounded.bg-gray-01.overflow-hidden.w-60
+       (repo/repos-dropdown {:on-click (fn [e]
+                                         (util/stop e)
+                                         (state/set-state! :error/multiple-tabs-access-opfs? false)
+                                         (shui/dialog-close!))})]]]))
 
 (defmethod handle :show/multiple-tabs-error-dialog [_]
   (state/set-state! :error/multiple-tabs-access-opfs? true)

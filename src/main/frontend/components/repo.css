@@ -16,8 +16,8 @@
 
 .ui__dropdown-menu-content {
   &.repos-list {
-    @apply px-2;
-    @apply min-w-[260px] sm:max-w-[380px] max-h-[70vh];
+    @apply px-2 pb-[220px];
+    @apply min-w-[260px] sm:max-w-[320px] max-h-[60vh];
 
     .ui__dropdown-menu-item {
       @apply overflow-hidden overflow-ellipsis;
@@ -44,5 +44,15 @@
     .dropdown-caret {
       @apply relative border-t-gray-09 left-1.5 top-[2px];
     }
+  }
+}
+
+.cp__repos-quick-actions {
+  @apply absolute left-[1px] bottom-[1px] w-[calc(100%-2px)] bg-gray-01 px-2 py-3 border-t
+  flex flex-col gap-1 rounded-b overflow-hidden;
+
+  .ui__button {
+    @apply w-full !py-4 !justify-start opacity-70 font-medium hover:opacity-90
+    items-center gap-1.5;
   }
 }
