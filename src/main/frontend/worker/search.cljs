@@ -90,8 +90,11 @@
                                         :bind #js {:$id (.-id item)
                                                    :$title (.-title item)
                                                    :$page (.-page item)}})
-                         (throw (ex-info "Search upsert-blocks wrong data: "
-                                         (bean/->clj item))))))))
+                         (do
+                           (js/console.error "Upsert blocks wrong data: ")
+                           (js/console.dir item)
+                           (throw (ex-info "Search upsert-blocks wrong data: "
+                                          (bean/->clj item)))))))))
 
 (defn delete-blocks!
   [db ids]
