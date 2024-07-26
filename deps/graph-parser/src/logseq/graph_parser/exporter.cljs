@@ -159,12 +159,10 @@
           (assoc :logseq.task/status status-ident)
           (update :block/content string/replace-first (re-pattern (str marker "\\s*")) "")
           (update :block/tags (fnil conj []) :logseq.class/task)
+          ;; FIXME: block/refs property calculation should be handled by a listener
           (update :block/refs (fn [refs]
                                 (into (remove #(= marker (:block/original-name %)) refs)
-                                      [:logseq.class/task :logseq.task/status status-ident])))
-          (update :block/path-refs (fn [refs]
-                                     (into (remove #(= marker (:block/original-name %)) refs)
-                                           [:logseq.class/task :logseq.task/status status-ident])))
+                                      [:logseq.class/task :logseq.task/status])))
           (dissoc :block/marker)))
     block))
 
@@ -181,12 +179,10 @@
       (-> block
           (assoc :logseq.task/priority priority-value)
           (update :block/content string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
+          ;; FIXME: block/refs property calculation should be handled by a listener
           (update :block/refs (fn [refs]
                                 (into (remove #(= priority (:block/original-name %)) refs)
-                                      [:logseq.task/priority priority-value])))
-          (update :block/path-refs (fn [refs]
-                                     (into (remove #(= priority (:block/original-name %)) refs)
-                                           [:logseq.task/priority priority-value])))
+                                      [:logseq.task/priority])))
           (dissoc :block/priority)))
     block))
 
@@ -212,7 +208,6 @@
        (-> block
            (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
            (update :block/refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
-           (update :block/path-refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
            (dissoc :block/deadline :block/scheduled :block/repeated?))
        :properties-tx (when-not existing-journal-page [deadline-page])})
     {:block block :properties-tx []}))
@@ -573,10 +568,7 @@
      (cond-> block
        (and (seq property-classes) (seq (:block/refs block*)))
        ;; remove unused, nonexistent property page
-       (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))
-       (and (seq property-classes) (seq (:block/path-refs block*)))
-       ;; remove unused, nonexistent property page
-       (update :block/path-refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
+       (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
      :properties-tx properties-tx}))
 
 (defn- update-block-refs
@@ -905,7 +897,7 @@
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-        main-props-tx-report (d/transact! conn property-pages-tx)
+        main-props-tx-report (d/transact! conn property-pages-tx {:new-graph? true})
 
         ;; Build indices
         pages-index (map #(select-keys % [:block/uuid]) pages-tx')
@@ -922,11 +914,12 @@
         tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' blocks-index blocks-tx)
         tx' (common-util/fast-remove-nils tx)
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {:tx tx'}))
-        main-tx-report (d/transact! conn tx')
+        ;; :new-graph? needed for :block/path-refs to be calculated
+        main-tx-report (d/transact! conn tx' {:new-graph? true})
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
-        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx))]
+        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {:new-graph? true}))]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
     [main-props-tx-report main-tx-report upstream-tx-report]))
