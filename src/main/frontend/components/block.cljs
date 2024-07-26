@@ -2453,7 +2453,6 @@
           (cond
             (:block/name block)
             [:div.flex.flex-row.items-center.gap-1
-             (when-not (:table? config) (icon/get-page-icon block {}))
              (page-cp config block)]
 
             :else
