@@ -230,9 +230,7 @@
                           (keep (fn [tag]
                                   (str "#" (:block/title tag)))
                                 (:block/tags entity))))
-              :source-page (if source-page
-                             (:block/title source-page)
-                             (:block/title page)))))
+              :source-page (or source-page page))))
 
 (defn- block-item
   [repo block current-page !input]
@@ -388,9 +386,7 @@
   [state]
   (let [highlighted-item (some-> state state->highlighted-item)]
     (or (:block/uuid (:source-block highlighted-item))
-      (or (:block/uuid (db/get-case-page (:source-page highlighted-item)))
-        ;; fallback for file graphs
-        (:source-page highlighted-item)))))
+        (:block/uuid (:source-page highlighted-item)))))
 
 (defmethod handle-action :open-page [_ state _event]
   (when-let [page-name (get-highlighted-page-uuid-or-name state)]
@@ -612,7 +608,7 @@
                    page? (= "page" (some-> item :icon))
                    text (some-> item :text)
                    source-page (some-> item :source-page)
-                   hls-page? (and page? (pdf-utils/hls-file? source-page))]]
+                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-page)))]]
          (let [item (list-item/root
                      (assoc item
                             :group group
