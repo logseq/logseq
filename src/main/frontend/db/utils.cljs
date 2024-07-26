@@ -28,15 +28,19 @@
    (when eid
      (assert (or (number? eid)
                  (sequential? eid)
-                 (keyword? eid))
-             (str "Invalid entity eid: " (pr-str eid)))
-     (when-let [db (if (string? repo-or-db)
+                 (keyword? eid)
+                 (uuid? eid))
+             (do
+               (js/console.trace)
+               (str "Invalid entity eid: " (pr-str eid))))
+     (let [eid (if (uuid? eid) [:block/uuid eid] eid)]
+       (when-let [db (if (string? repo-or-db)
                      ;; repo
-                     (let [repo (or repo-or-db (state/get-current-repo))]
-                       (conn/get-db repo))
+                      (let [repo (or repo-or-db (state/get-current-repo))]
+                        (conn/get-db repo))
                      ;; db
-                     repo-or-db)]
-       (d/entity db eid)))))
+                      repo-or-db)]
+        (d/entity db eid))))))
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
