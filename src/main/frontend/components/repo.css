@@ -16,7 +16,7 @@
 
 .ui__dropdown-menu-content {
   &.repos-list {
-    @apply px-2 pb-[210px];
+    @apply px-2 pb-[210px] relative;
     @apply min-w-[280px] sm:max-w-[320px] max-h-[66vh];
 
     &[data-mode=db] {
@@ -25,6 +25,10 @@
 
     .ui__dropdown-menu-item {
       @apply overflow-hidden overflow-ellipsis;
+    }
+
+    .cp__repos-list-wrap {
+      @apply max-h-96 overflow-scroll m-[-8px] px-2 pb-2;
     }
   }
 }

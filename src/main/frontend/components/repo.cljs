@@ -295,7 +295,7 @@
           items-fn #(repos-dropdown-links repos current-repo downloading-graph-id opts)
           header-fn #(when (> (count repos) 1)              ; show switch to if there are multiple repos
                        [:div.font-medium.text-sm.opacity-50.px-1.py-1.flex.flex-row.justify-between.items-center
-                        [:div (t :left-side-bar/switch)]
+                        [:h4.pb-1 (t :left-side-bar/switch)]
 
                         (when (and (file-sync/enable-sync?) login?)
                           (if remotes-loading?
@@ -327,25 +327,26 @@
                    (fn [{:keys [id]}]
                      [:<>
                       (header-fn)
-                      (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
-                        (let [on-click' (:on-click options)
-                              href' (:href options)]
-                          (if hr
-                            (shui/dropdown-menu-separator)
-                            (shui/dropdown-menu-item
-                             (assoc options
-                                    :title hover-detail
-                                    :on-click (fn [^js e]
-                                                (when on-click'
-                                                  (when-not (false? (on-click' e))
-                                                    (shui/popup-hide! id)))))
-                             (or item
+                      [:div.cp__repos-list-wrap
+                       (for [{:keys [hr item hover-detail title options icon]} (items-fn)]
+                         (let [on-click' (:on-click options)
+                               href' (:href options)]
+                           (if hr
+                             (shui/dropdown-menu-separator)
+                             (shui/dropdown-menu-item
+                               (assoc options
+                                 :title hover-detail
+                                 :on-click (fn [^js e]
+                                             (when on-click'
+                                               (when-not (false? (on-click' e))
+                                                 (shui/popup-hide! id)))))
+                               (or item
                                  (if href'
                                    [:a.flex.items-center.w-full
                                     {:href href' :on-click #(shui/popup-hide! id)
                                      :style {:color "inherit"}} title]
                                    [:span.flex.items-center.gap-1.w-full
-                                    icon [:div title]]))))))
+                                    icon [:div title]]))))))]
                       (repos-footer multiple-windows? db-based?)])
                    {:as-dropdown? true
                     :auto-focus? false
