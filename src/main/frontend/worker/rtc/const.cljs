@@ -239,7 +239,6 @@
       [:schema-version :int]
       [:db-ident-blocks [:sequential
                          [:map
-                          [:block/uuid :uuid]
                           [:db/ident :keyword]
                           [::m/default extra-attr-map-schema]]]]]]
 
