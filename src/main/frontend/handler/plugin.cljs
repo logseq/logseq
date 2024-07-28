@@ -476,7 +476,7 @@
 
 (defn load-unpacked-plugin
   []
-  (when util/electron?
+  (when (or util/electron? util/browser?)
     (p/let [path (ipc/ipc "openDialog")]
       (when-not (:plugin/selected-unpacked-pkg @state/state)
         (state/set-state! :plugin/selected-unpacked-pkg path)))))
@@ -527,7 +527,9 @@
 
 (defn get-ls-dotdir-root
   []
-  (ipc/ipc "getLogseqDotDirRoot"))
+  (if util/browser?
+    (str (string/replace (state/get-current-repo) (config/get-local-repo "") "") "/" (config/config-local-path))
+    (ipc/ipc "getLogseqDotDirRoot")))
 
 (defn make-fn-to-load-dotdir-json
   [dirname default]

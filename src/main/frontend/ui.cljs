@@ -373,6 +373,7 @@
     (when util/win32? (.add cl "is-win32"))
     (when util/linux? (.add cl "is-linux"))
     (when (util/electron?) (.add cl "is-electron"))
+    (when (util/browser?) (.add cl "is-browser"))
     (when (util/ios?) (.add cl "is-ios"))
     (when (util/mobile?) (.add cl "is-mobile"))
     (when (util/safari?) (.add cl "is-safari"))

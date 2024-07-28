@@ -42,7 +42,8 @@
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
             [promesa.core :as p]
-            [frontend.mobile.core :as mobile]))
+            [frontend.mobile.core :as mobile]
+            [frontend.handler.plugin :as plugin-handler]))
 
 (defn- set-global-error-notification!
   []
@@ -243,7 +244,9 @@
    (when config/dev?
      (enable-datalog-console))
    (persist-var/load-vars)
-   (js/setTimeout instrument! (* 60 1000))))
+   (js/setTimeout instrument! (* 60 1000))
+   (when (config/plugin-local-enabled?)
+     (plugin-handler/setup! ""))))
 
 (defn stop! []
   (prn "stop!"))
