@@ -18,24 +18,51 @@ Open the browser and go to <http://localhost:3001>.
 
 ## With plugins enabled
 
+Current implementation ships plugins alongside the graph files.
+
+You need to prepare this directory so that when LogSeq web access the local directory it can parse the plugins to be loaded from a `preferences.json` file. The plugins are served from the container's web server. The graph's plugins directory needs to be mounted on the container to let LogSeq side load them.
+
 ### Prepare the local folder
 
 Prepare your logseq's repo. Copy the `$HOME/.logseq/plugins` to `path/to/logseq-repo/dot-logseq`
 ```shell
 cd path/to/logseq-repo
-cp -r $HOME/.logseq/plugins dot-logseq
+mkdir dot-logseq
+cp -r $HOME/.logseq/plugins dot-logseq/.
 ```
 
-Edit `dot-logseq/preferences.json` and list the plugins you want to enable under the `externals` key. Make sure the paths in the list are relative to the `path/to/logseq-repo` directory an    d start with `./`:
+Edit `dot-logseq/preferences.json` and list the plugins you want to enable under the `externals` key.
+Make sure the paths in the list are relative to the `path/to/logseq-repo` directory and start with `./`:
 
 ```json
 {
-  ...
+  "theme": null,
+  "themes": {
+    "mode": "light",
+    "light": null,
+    "dark": null
+  },
   "externals": [
     "./plugins/logseq-todo-plugin",
     "./plugins/logseq-excalidraw"
   ]
 }
+```
+
+The final structure should be similar to the following one:
+```
+logseq-repo
+├── dot-logseq
+│   ├── preferences.json
+│   ├── plugins
+│   │   └── logseq-todo-plugin
+│   │   └── logseq-excalidraw
+│   └── settings
+├── journals
+├── logseq
+│   ├── config.edn
+│   └── custom.css
+└── pages
 ```
 
 ### Build the image
@@ -48,6 +75,10 @@ docker build -f Dockerfile.local . -t logseq-webapp-local:latest
 ```shell
 docker run -d --rm -p 127.0.0.1:3001:80 -v path/to/logseq-repo/dot-logseq/plugins:/usr/share/nginx/html/plugins:ro logseq-webapp-local:latest
 ```
+
+Browse http://127.0.0.1:3001. Click on "Add a graph" and open `path/to/logseq-repo` directory, grant `Edit files` permission.
+
+**Note**: If plugins are not loaded the first time you open the directory, reload the page.
 
 ## Remote(non-local) access
 

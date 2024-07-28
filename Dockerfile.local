@@ -45,6 +45,7 @@ COPY --from=builder /data/static /usr/share/nginx/html
 # bind mount custom plugins directory here
 RUN mkdir /usr/share/nginx/html/plugins
 
-# Usage:
-# docker build -f Dockerfile.local . -t logseg-local
-# docker run --rm -v $HOME/.logseq/plugins:/usr/share/nginx/html/plugins:ro -p 3000:80 logseg-local
+# Detailed instructions at ./docs/docker-web-app-guide.md
+# Quick usage guide:
+# docker build -f Dockerfile.local . -t logseq-webapp-local:latest
+# docker run -d --rm -p 127.0.0.1:3001:80 -v path/to/logseq-repo/dot-logseq/plugins:/usr/share/nginx/html/plugins:ro logseq-webapp-local:latest
