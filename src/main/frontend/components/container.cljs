@@ -17,6 +17,7 @@
             [frontend.components.handbooks :as handbooks]
             [dommy.core :as d]
             [frontend.components.content :as cp-content]
+            [frontend.components.title :as title]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -119,7 +120,8 @@
 
     ;; TODO: move to standalone component
     [:a.flex.items-center.justify-between.relative.group
-     {:on-click
+     {:title (title/block-unique-title page)
+      :on-click
       (fn [e]
         (if (gobj/get e "shiftKey")
           (open-in-sidebar)
@@ -194,7 +196,7 @@
       (for [page pages]
         [:li.recent-item.select-none
          {:key (str "recent-" (:db/id page))
-          :title (:block/title page)
+          :title (title/block-unique-title page)
           :draggable true
           :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
           :data-ref name}
