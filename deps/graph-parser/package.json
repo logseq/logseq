@@ -3,13 +3,13 @@
   "version": "1.0.0",
   "private": true,
   "devDependencies": {
-    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v14",
+    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v15",
     "better-sqlite3": "9.3.0"
   },
   "dependencies": {
     "mldoc": "^1.5.8"
   },
   "scripts": {
-    "test": "nbb-logseq -cp test -m nextjournal.test-runner"
+    "test": "nbb-logseq -cp test:../outliner/src -m nextjournal.test-runner"
   }
 }

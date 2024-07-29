@@ -23,7 +23,7 @@ the remaining chars for data of this type"
   "00000002-<hash-of-db-ident>-<padding-with-0>"
   [db-ident]
   {:pre [(keyword? db-ident)]}
-  (let [hash-num (str (abs (hash db-ident)))
+  (let [hash-num (str (Math/abs (hash db-ident)))
         part1 (fill-with-0 (subs hash-num 0 4) 4)
         part2 (fill-with-0 (subs hash-num 4 8) 4)
         part3 (fill-with-0 (subs hash-num 8 12) 4)

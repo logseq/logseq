@@ -79,7 +79,9 @@
    [:t-before {:optional true} :int]
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
-   [:diff-data {:optional true} [:map-of :keyword :any]]
+   [:server-schema-version {:optional true} :int]
+   [:server-only-db-ident-blocks {:optional true} :string ;;transit
+    ]
    [:users {:optional true} [:sequential
                              [:map {:closed true}
                               [:user/uuid :uuid]
@@ -233,14 +235,11 @@
       [:action :string]
       [:graph-uuid :string]
       [:t :int]
+      [:schema-version :int]
       [:db-ident-blocks [:sequential
                          [:map
-                          [:block/uuid :uuid]
                           [:db/ident :keyword]
-                          [:block/parent {:optional true} :uuid]
-                          [:block/type {:optional true} [:set :string]]
-                          [:block/order {:optional true} :string]
-                          [:block/title {:optional true} :string]]]]]]
+                          [::m/default extra-attr-map-schema]]]]]]
 
     ["get-assets-upload-urls"
      [:map

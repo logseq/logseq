@@ -2984,7 +2984,7 @@
         edit-input-id (str "edit-block-" (:block/uuid block))
         container-id (:container-id config*)
         editing? (or (state/sub-editing? [container-id (:block/uuid block)])
-                  (state/sub-editing? [:unknown-container (:block/uuid block)]))
+                     (state/sub-editing? [:unknown-container (:block/uuid block)]))
         table? (:table? config*)
         custom-query? (boolean (:custom-query? config*))
         ref-or-custom-query? (or ref? custom-query?)
@@ -3069,8 +3069,8 @@
                        (block-handler/on-touch-end event block uuid *show-left-menu? *show-right-menu?))
        :on-touch-cancel (fn [_e]
                           (block-handler/on-touch-cancel *show-left-menu? *show-right-menu?))
-       :on-mouse-over (fn [e]
-                        (block-mouse-over e *control-show? block-id doc-mode?))
+       :on-mouse-enter (fn [e]
+                         (block-mouse-over e *control-show? block-id doc-mode?))
        :on-mouse-leave (fn [e]
                          (block-mouse-leave e *control-show? block-id doc-mode?))}
       (when (and (not slide?) (not in-whiteboard?) (not table?))
@@ -3092,7 +3092,7 @@
         [:div.flex.flex-col.w-full
          (let [block (merge block (block/parse-title-and-body uuid (:block/format block) pre-block? title))
                hide-block-refs-count? (or (and (:embed? config)
-                                           (= (:block/uuid block) (:embed-id config)))
+                                               (= (:block/uuid block) (:embed-id config)))
                                           table?)]
            (block-content-or-editor config block
                                     {:edit-input-id edit-input-id

@@ -25,12 +25,8 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.db-ident :as db-ident]
             [logseq.db.frontend.property.build :as db-property-build]
-            [logseq.db.frontend.malli-schema :as db-malli-schema]))
-
-(defn- get-pid
-  "Get a property's id (name or uuid) given its name. For db graphs"
-  [db property-name]
-  (:block/uuid (ldb/get-page db property-name)))
+            [logseq.db.frontend.malli-schema :as db-malli-schema]
+            [logseq.graph-parser.property :as gp-property]))
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist"
@@ -63,9 +59,11 @@
    because it has been moved"
   [db tag-block page-names-to-uuids tag-classes all-idents]
   (if-let [new-class (:block.temp/new-class tag-block)]
-    (merge (find-or-create-class db new-class all-idents)
-           (when-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
-             {:block/uuid existing-tag-uuid}))
+    (let [class-m (find-or-create-class db new-class all-idents)]
+      (merge class-m
+             (if-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
+               {:block/uuid existing-tag-uuid}
+               {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))})))
     (when (contains? tag-classes (:block/name tag-block))
       (if-let [existing-tag-uuid (first
                                   (d/q '[:find [?uuid ...]
@@ -161,12 +159,10 @@
           (assoc :logseq.task/status status-ident)
           (update :block/title string/replace-first (re-pattern (str marker "\\s*")) "")
           (update :block/tags (fnil conj []) :logseq.class/task)
+          ;; FIXME: block/refs property calculation should be handled by a listener
           (update :block/refs (fn [refs]
                                 (into (remove #(= marker (:block/title %)) refs)
-                                      [:logseq.class/task :logseq.task/status status-ident])))
-          (update :block/path-refs (fn [refs]
-                                     (into (remove #(= marker (:block/title %)) refs)
-                                           [:logseq.class/task :logseq.task/status status-ident])))
+                                      [:logseq.class/task :logseq.task/status])))
           (dissoc :block/marker)))
     block))
 
@@ -183,12 +179,10 @@
       (-> block
           (assoc :logseq.task/priority priority-value)
           (update :block/title string/replace-first (re-pattern (str "\\[#" priority "\\]" "\\s*")) "")
+          ;; FIXME: block/refs property calculation should be handled by a listener
           (update :block/refs (fn [refs]
                                 (into (remove #(= priority (:block/title %)) refs)
-                                      [:logseq.task/priority priority-value])))
-          (update :block/path-refs (fn [refs]
-                                     (into (remove #(= priority (:block/title %)) refs)
-                                           [:logseq.task/priority priority-value])))
+                                      [:logseq.task/priority])))
           (dissoc :block/priority)))
     block))
 
@@ -214,7 +208,6 @@
        (-> block
            (assoc :logseq.task/deadline [:block/uuid (:block/uuid deadline-page)])
            (update :block/refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
-           (update :block/path-refs (fnil into []) [:logseq.task/deadline [:block/uuid (:block/uuid deadline-page)]])
            (dissoc :block/deadline :block/scheduled :block/repeated?))
        :properties-tx (when-not existing-journal-page [deadline-page])})
     {:block block :properties-tx []}))
@@ -324,14 +317,14 @@
                     (let [property-classes (set (map keyword (:property-classes options)))]
                       (try
                         (mapv #(cond (#{:page :block :created-at :updated-at} %)
-                                    %
-                                    (property-classes %)
-                                    :block/tags
-                                    (= :tags %)
+                                     %
+                                     (property-classes %)
+                                     :block/tags
+                                     (= :tags %)
                                      ;; This could also be :logseq.property/page-tags
-                                    :block/tags
-                                    :else
-                                    (get-ident @all-idents %))
+                                     :block/tags
+                                     :else
+                                     (get-ident @all-idents %))
                               (edn/read-string val))
                         (catch :default e
                           (js/console.error "Translating query properties failed with:" e)
@@ -537,9 +530,7 @@
              ;; Add a map of {:block.temp/new-class TAG} to be processed later
              (update :block/tags
                      (fnil into [])
-                     (map #(hash-map :block.temp/new-class %
-                                     :block/uuid (or (get-pid db %) (d/squuid)))
-                          classes-from-properties)))
+                     (map #(hash-map :block.temp/new-class %) classes-from-properties)))
            :properties-tx pvalues-tx})
         {:block block :properties-tx []})
       (update :block dissoc :block/properties :block/properties-text-values :block/properties-order :block/invalid-properties)))
@@ -558,13 +549,14 @@
               (merge (find-or-create-class db (:block/title block) (:all-idents import-state)))
               (seq parent-classes-from-properties)
               (assoc :class/parent
-                     (let [new-class (first parent-classes-from-properties)]
+                     (let [new-class (first parent-classes-from-properties)
+                           class-m (find-or-create-class db new-class (:all-idents import-state))]
                        (when (> (count parent-classes-from-properties) 1)
                          (log-fn :skipped-parent-classes "Only one parent class is allowed so skipped ones after the first one" :classes parent-classes-from-properties))
-                       (merge (find-or-create-class db new-class (:all-idents import-state))
+                       (merge class-m
                               (if-let [existing-tag-uuid (get page-names-to-uuids (common-util/page-name-sanity-lc new-class))]
                                 {:block/uuid existing-tag-uuid}
-                                {:block/uuid (d/squuid)}))))))
+                                {:block/uuid (common-uuid/gen-uuid :db-ident-block-uuid (:db/ident class-m))}))))))
           (dissoc block* :block/properties))]
     {:block block' :properties-tx properties-tx}))
 
@@ -576,10 +568,7 @@
      (cond-> block
        (and (seq property-classes) (seq (:block/refs block*)))
        ;; remove unused, nonexistent property page
-       (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs)))
-       (and (seq property-classes) (seq (:block/path-refs block*)))
-       ;; remove unused, nonexistent property page
-       (update :block/path-refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
+       (update :block/refs (fn [refs] (remove #(property-classes (keyword (:block/name %))) refs))))
      :properties-tx properties-tx}))
 
 (defn- update-block-refs
@@ -843,6 +832,13 @@
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
      :property-page-properties-tx property-page-properties-tx}))
 
+(defn- update-whiteboard-blocks [blocks format]
+  (map (fn [b]
+         (if (seq (:block/properties b))
+           (update b :block/title #(gp-property/remove-properties format %))
+           b))
+       blocks))
+
 (defn- extract-pages-and-blocks
   [db file content {:keys [extract-options notify-user]}]
   (let [format (common-util/get-format file)
@@ -857,7 +853,8 @@
           (extract/extract file content extract-options')
 
           (common-config/whiteboard? file)
-          (extract/extract-whiteboard-edn file content extract-options')
+          (-> (extract/extract-whiteboard-edn file content extract-options')
+              (update :blocks update-whiteboard-blocks format))
 
           :else
           (notify-user {:msg (str "Skipped file since its format is not supported: " file)}))))
@@ -900,7 +897,7 @@
         {:keys [property-pages-tx property-page-properties-tx] pages-tx' :pages-tx}
         (split-pages-and-properties-tx pages-tx old-properties existing-pages (:import-state options))
         ;; Necessary to transact new property entities first so that block+page properties can be transacted next
-        main-props-tx-report (d/transact! conn property-pages-tx)
+        main-props-tx-report (d/transact! conn property-pages-tx {:new-graph? true})
 
         ;; Build indices
         pages-index (map #(select-keys % [:block/uuid]) pages-tx')
@@ -917,11 +914,12 @@
         tx (concat whiteboard-pages pages-index page-properties-tx property-page-properties-tx pages-tx' blocks-index blocks-tx)
         tx' (common-util/fast-remove-nils tx)
         ;; _ (when (not (seq whiteboard-pages)) (cljs.pprint/pprint {:tx tx'}))
-        main-tx-report (d/transact! conn tx')
+        ;; :new-graph? needed for :block/path-refs to be calculated
+        main-tx-report (d/transact! conn tx' {:new-graph? true})
 
         upstream-properties-tx
         (build-upstream-properties-tx @conn @(:upstream-properties tx-options) (:import-state options) log-fn)
-        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx))]
+        upstream-tx-report (when (seq upstream-properties-tx) (d/transact! conn upstream-properties-tx {:new-graph? true}))]
 
     ;; Return all tx-reports that occurred in this fn as UI needs to know what changed
     [main-props-tx-report main-tx-report upstream-tx-report]))
