@@ -5,6 +5,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.svg :as svg]
             [frontend.components.search :as search]
+            [frontend.components.title :as title]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -184,14 +185,7 @@
 
                         (let [title (if db-tag?
                                       (:block/title block)
-                                      (str (:block/title block)
-                                          " "
-                                          (string/join
-                                           ", "
-                                           (keep (fn [block]
-                                                   (when-let [title (:block/title block)]
-                                                     (str "#" title)))
-                                                 (:block/tags block)))))]
+                                      (title/block-unique-title block))]
                           (search-handler/highlight-exact-query title q))])
         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                    "Search for a class"

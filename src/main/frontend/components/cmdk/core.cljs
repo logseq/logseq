@@ -4,6 +4,7 @@
    [clojure.string :as string]
    [frontend.components.block :as block]
    [frontend.components.cmdk.list-item :as list-item]
+   [frontend.components.title :as title]
    [frontend.extensions.pdf.utils :as pdf-utils]
    [frontend.context.i18n :refer [t]]
    [frontend.db :as db]
@@ -223,29 +224,14 @@
         source-page (model/get-alias-source-page repo (:db/id entity))]
     (hash-map :icon (if whiteboard? "whiteboard" "page")
               :icon-theme :gray
-              :text (str (:block/title page)
-                         " "
-                         (string/join
-                          ", "
-                          (keep (fn [tag]
-                                  (str "#" (:block/title tag)))
-                                (:block/tags entity))))
+              :text (title/block-unique-title page)
               :source-page (or source-page page))))
 
 (defn- block-item
   [repo block current-page !input]
   (let [id (:block/uuid block)
         object? (seq (:block/tags block))
-        text (if object?
-               (str (:block/title block)
-                    " "
-                    (string/join
-                     ", "
-                     (keep (fn [id]
-                             (when-let [title (:block/title (db/entity id))]
-                               (str "#" title)))
-                           (:block/tags block))))
-               (:block/title block))]
+        text (title/block-unique-title block)]
     {:icon (if object? "topology-star" "block")
      :icon-theme :gray
      :text (highlight-content-query text @!input)
