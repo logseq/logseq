@@ -29,6 +29,16 @@
                         (nil? (db/entity x)))
                    (nil? x))) refs))
 
+(defn- use-cached-refs!
+  [refs]
+  (let [cached-refs @(:editor/block-refs @state/state)
+        title->ref (zipmap (map :block/title cached-refs) cached-refs)]
+    (map (fn [x]
+           (if-let [ref (and (map? x) (title->ref (:block/title x)))]
+             ref
+             x))
+         refs)))
+
 (defn- replace-tag-ref
   [content page-name id]
   (let [id' (str db-content/page-ref-special-chars id)
@@ -88,7 +98,11 @@
                                                             (or ({:heading :logseq.property/heading} k)
                                                                 (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))
                       block' (merge block parsed-block' {:block/title title})]
-                  (update block' :block/refs remove-non-existed-refs!)))
+                  (update block' :block/refs
+                          (fn [refs]
+                            (-> refs
+                                remove-non-existed-refs!
+                                use-cached-refs!)))))
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]
