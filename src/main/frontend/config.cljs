@@ -344,7 +344,8 @@
   ([]
    (demo-graph? (state/get-current-repo)))
   ([repo-url]
-   (or (nil? repo-url) (= repo-url demo-repo))))
+   (or (nil? repo-url) (= repo-url demo-repo)
+     (string/ends-with? repo-url demo-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
