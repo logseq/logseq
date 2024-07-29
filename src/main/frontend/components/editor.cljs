@@ -189,7 +189,7 @@
                           (search-handler/highlight-exact-query title q))])
         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
                                                                    "Search for a class"
-                                                                   "Search for a block")]
+                                                                   "Search for a node")]
         :class       "black"}))))
 
 (rum/defc page-search < rum/reactive

@@ -48,7 +48,7 @@
 
 (def search-actions
   [{:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
-   {:filter {:group :blocks} :text "Search only blocks" :info "Add filter to search" :icon-theme :gray :icon "block"}
+   {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "block"}
    {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
    {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
    {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}])
@@ -60,7 +60,7 @@
   {:commands       {:status :success :show :less :items nil}
    :favorites      {:status :success :show :less :items nil}
    :current-page   {:status :success :show :less :items nil}
-   :blocks         {:status :success :show :less :items nil}
+   :nodes         {:status :success :show :less :items nil}
    :files          {:status :success :show :less :items nil}
    :themes         {:status :success :show :less :items nil}
    :filters        {:status :success :show :less :items nil}})
@@ -99,7 +99,7 @@
 
                             :else
                             (take 5 items))))
-        node-exists? (let [blocks-result (keep :source-block (get-in results [:blocks :items]))]
+        node-exists? (let [blocks-result (keep :source-block (get-in results [:nodes :items]))]
                        (when-not (string/blank? input)
                          (or (db/get-page (string/trim input))
                              (some (fn [block]
@@ -117,12 +117,12 @@
                     ["Create"         :create         (create-items input)])
 
                   ["Current page"   :current-page   (visible-items :current-page)]
-                  ["Blocks"         :blocks         (visible-items :blocks)]
+                  ["Nodes"         :nodes         (visible-items :nodes)]
                   ["Files"          :files          (visible-items :files)]
                   ["Filters" :filters (visible-items :filters)]]
 
                  filter-group
-                 [(when (= filter-group :blocks)
+                 [(when (= filter-group :nodes)
                     ["Current page"   :current-page   (visible-items :current-page)])
                   [(if (= filter-group :current-page) "Current page" (name filter-group))
                    filter-group
@@ -135,7 +135,7 @@
                   [(when-not node-exists?
                      ["Create"         :create       (create-items input)])
                    ["Current page"   :current-page   (visible-items :current-page)]
-                   ["Blocks"         :blocks         (visible-items :blocks)]
+                   ["Nodes"         :nodes         (visible-items :nodes)]
                    ["Commands"       :commands       (visible-items :commands)]
                    ["Files"          :files          (visible-items :files)]
                    ["Filters"        :filters        (visible-items :filters)]]
@@ -241,7 +241,7 @@
      :source-block block}))
 
 ;; The blocks search action uses an existing handler
-(defmethod load-results :blocks [group state]
+(defmethod load-results :nodes [group state]
   (let [!input (::input state)
         !results (::results state)
         repo (state/get-current-repo)
@@ -355,7 +355,7 @@
         (load-results filter-group state)
         (do
           (load-results :commands state)
-          (load-results :blocks state)
+          (load-results :nodes state)
           (load-results :filters state)
           (load-results :files state)
           ;; (load-results :recents state)
@@ -622,7 +622,7 @@
                                                        (not (:mouse-enter-triggered-highlight @(::highlighted-item state))))
                                               (scroll-into-view-when-invisible state (.-current ref)))))
                      nil)]
-           (if (= group :blocks)
+           (if (= group :nodes)
              (ui/lazy-visible (fn [] item) {:trigger-once? true})
              item)))]]]))
 
@@ -977,7 +977,7 @@
                       (and (not= 0 group-count)
                         (if-not group-filter true
                                              (or (= group-filter group-key)
-                                               (and (= group-filter :blocks)
+                                               (and (= group-filter :nodes)
                                                  (= group-key :current-page))
                                                (and (contains? #{:create} group-filter)
                                                  (= group-key :create))))))
