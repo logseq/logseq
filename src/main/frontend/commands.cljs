@@ -280,10 +280,10 @@
     (->>
      (concat
         ;; basic
-      [[(if db? "Block reference" "Page reference")
+      [[(if db? "Node reference" "Page reference")
         [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
          [:editor/search-page]]
-        (if db? "Create a backlink to a page"
+        (if db? "Create a backlink to a node (a page or a block)"
             "Create a backlink to a BLOCK")
         :icon/pageRef
         "BASIC"]
@@ -292,7 +292,10 @@
          ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
                              [:editor/search-block :reference]]
           "Create a backlink to a block" :icon/blockRef])
-       ["Block embed" (embed-block) "Embed a block here" :icon/blockEmbed]]
+       [(if db? "Node embed" "Block embed")
+        (embed-block)
+        (if db? "Embed a node here" "Embed a block here")
+        :icon/blockEmbed]]
 
         ;; format
       [["Link" (link-steps) "Create a HTTP link" :icon/link "FORMAT"]
