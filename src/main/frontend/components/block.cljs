@@ -773,11 +773,12 @@
                       page
                       ;; Use uuid when available to uniquely identify case sensitive contexts
                       (db/get-page (or (:block/uuid page)
-                                       (let [s (string/trim (:block/name page))
-                                             s (if (string/starts-with? s db-content/page-ref-special-chars)
-                                                 (common-util/safe-subs s 2)
-                                                 s)]
-                                         s)))))))}
+                                       (when-let [s (:block/name page)]
+                                         (let [s (string/trim s)
+                                               s (if (string/starts-with? s db-content/page-ref-special-chars)
+                                                   (common-util/safe-subs s 2)
+                                                   s)]
+                                           s))))))))}
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"

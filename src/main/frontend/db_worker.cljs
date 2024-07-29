@@ -206,7 +206,7 @@
         (when-not (ldb/page-exists? @conn common-config/views-page-name)
           (ldb/create-views-page! conn))
 
-        (db-migrate/migrate conn)
+        (db-migrate/migrate conn search-db)
 
         (db-listener/listen-db-changes! repo conn)))))
 
