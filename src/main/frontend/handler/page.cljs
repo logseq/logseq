@@ -31,6 +31,7 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
             [electron.ipc :as ipc]
@@ -384,10 +385,16 @@
         (let [chosen (:block/title chosen-result)
               chosen' (string/replace-first chosen (str (t :new-page) " ") "")
               ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
-                         (if (seq (:block/tags chosen-result))
+                         (cond
+                           (and db-based? (seq (:block/tags chosen-result)))
                            (page-ref/->page-ref (:block/title chosen-result))
-                           (page-ref/->page-ref (:block/uuid chosen-result)))
+                           db-based?
+                           (page-ref/->page-ref (:block/uuid chosen-result))
+                           :else
+                           (block-ref/->block-ref (:block/uuid chosen-result)))
                          (get-page-ref-text chosen'))]
+          (when (de/entity? chosen-result)
+            (state/conj-block-ref! chosen-result))
           (editor-handler/insert-command! id
                                           ref-text
                                           format
