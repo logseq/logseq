@@ -71,6 +71,16 @@
       ;;     (js/console.error "cannot unlink search db:" e)))
       )))
 
+(defn drop-tables-and-triggers!
+  [db]
+  (.exec db "
+DROP TABLE IF EXISTS blocks;
+DROP TABLE IF EXISTS blocks_fts;
+DROP TRIGGER IF EXISTS blocks_ad;
+DROP TRIGGER IF EXISTS blocks_ai;
+DROP TRIGGER IF EXISTS blocks_au;
+"))
+
 (defn- clj-list->sql
   "Turn clojure list into SQL list
    '(1 2 3 4)
@@ -300,8 +310,8 @@
 
 (defn truncate-table!
   [db]
-  (.exec db "delete from blocks")
-  (.exec db "delete from blocks_fts"))
+  (drop-tables-and-triggers! db)
+  (create-tables-and-triggers! db))
 
 (comment
   (defn- property-value-when-closed
