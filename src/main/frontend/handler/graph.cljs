@@ -12,7 +12,8 @@
             [logseq.graph-parser.db :as gp-db]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.components.title :as title]))
 
 (defn- build-links
   [links]
@@ -99,7 +100,7 @@
             tags (set (map second tagged-pages))
             full-pages (db/get-all-pages repo)
             full-pages-map (into {} (map (juxt :block/name identity) full-pages))
-            all-pages (map common-util/get-page-title full-pages)
+            all-pages (map title/block-unique-title full-pages)
             page-name->title (zipmap (map :block/name full-pages) all-pages)
             created-ats (map :block/created-at full-pages)
 
