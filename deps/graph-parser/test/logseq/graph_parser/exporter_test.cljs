@@ -4,6 +4,7 @@
             [logseq.graph-parser.test.docs-graph-helper :as docs-graph-helper]
             [datascript.core :as d]
             [clojure.string :as string]
+            [clojure.set :as set]
             ["path" :as node-path]
             ["fs" :as fs]
             [logseq.common.graph :as common-graph]
@@ -16,7 +17,8 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
             [logseq.common.config :as common-config]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [logseq.outliner.db-pipeline :as db-pipeline]))
 
 ;; Helpers
 ;; =======
@@ -149,6 +151,8 @@
   (p/let [file-graph-dir "test/resources/exporter-test-graph"
           conn (d/create-conn db-schema/schema-for-db-based-graph)
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+          ;; Simulate frontend path-refs being calculated
+          _ (db-pipeline/add-listener conn)
           assets (atom [])
           {:keys [import-state]} (import-file-graph-to-db file-graph-dir conn {:assets assets})]
 
@@ -337,6 +341,29 @@
                   distinct
                   count))
           "A block with different case of same ref names has 1 distinct ref"))
+
+    (testing "block refs and path-refs"
+      (let [block (find-block-by-content @conn "old todo block")]
+        (is (set/subset?
+             #{:logseq.task/status :logseq.class/task}
+             (->> block
+                  :block/path-refs
+                  (map #(:db/ident (d/entity @conn (:db/id %))))
+                  set))
+            "Correct :block/refs")
+        (is (set/subset?
+             #{:logseq.task/status :logseq.class/task}
+             (->> block
+                  :block/path-refs
+                  (map #(:db/ident (d/entity @conn (:db/id %))))
+                  set))
+            "Correct :block/path-refs")))
+
+    (testing "whiteboards"
+      (let [block-with-props (find-block-by-content @conn #"block with props")]
+        (is (= {:user.property/prop-num 10}
+               (readable-properties @conn block-with-props)))
+        (is (= "block with props" (:block/title block-with-props)))))
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")

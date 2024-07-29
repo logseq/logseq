@@ -55,14 +55,30 @@
 (rum/defc page-impl
   []
   (let [[ready?, set-ready?] (rum/use-state false)
+        [tab, set-tab!] (rum/use-state :login)
         *ref-el (rum/use-ref nil)]
 
     (rum/use-effect!
       (fn [] (setup-configure!)
         (set-ready? true)
+        (js/setTimeout
+          (fn []
+            (when-let [^js el (some-> (rum/deref *ref-el) (.querySelector ".amplify-tabs"))]
+              (let [btn1 (.querySelector el "button")]
+                (.addEventListener el "pointerdown"
+                  (fn [^js e]
+                    (if (= (.-target e) btn1)
+                      (set-tab! :login)
+                      (set-tab! :create-account)))))))))
+      [])
+
+    (rum/use-effect!
+      (fn []
         (when-let [^js el (rum/deref *ref-el)]
-          (js/setTimeout #(some-> (.querySelector el "input[name=username]")
-                                  (.focus)) 100))) [])
+          (js/setTimeout
+            #(some-> (.querySelector el (str "input[name=" (if (= tab :login) "username" "email") "]"))
+               (.focus)) 100)))
+      [tab])
 
     [:div.cp__user-login
      {:ref *ref-el}
