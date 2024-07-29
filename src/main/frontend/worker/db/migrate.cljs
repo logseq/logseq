@@ -8,6 +8,25 @@
 
 ;; TODO: fixes/rollback
 
+(defn- replace-original-name-content-with-title
+  [conn]
+  (d/transact! conn
+    [{:db/ident :block/title
+      :db/cardinaity :db.cardinality/one
+      :db/index true}])
+  (let [datoms (d/datoms @conn :avet :block/uuid)
+        tx-data (mapcat
+                 (fn [d]
+                   (let [e (d/entity @conn (:e d))]
+                     (concat
+                      (when (:block/content e)
+                        [[:db/retract (:e d) :block/content]
+                         [:db/add (:e d) :block/title (:block/content e)]])
+                      (when (:block/original-name e)
+                        [[:db/retract (:e d) :block/original-name]
+                         [:db/add (:e d) :block/title (:block/original-name e)]])))) datoms)]
+    tx-data))
+
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
@@ -20,7 +39,8 @@
                 tx-data))}]
    [5 {:properties [:logseq.property/view-for]
        :classes    []}]
-   [6 {:properties [:logseq.property.asset/remote-metadata]}]])
+   [6 {:properties [:logseq.property.asset/remote-metadata]}]
+   [7 {:fix replace-original-name-content-with-title}]])
 
 ;; Question: do we need to assign persist UUIDs for later added built-in classes & properties?
 ;; @zhiyuan will this affect RTC?
