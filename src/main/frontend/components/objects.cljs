@@ -98,7 +98,9 @@
   (when class
     (let [class (db/sub-block (:db/id class))
           config {:container-id (:container-id state)}
-          properties (outliner-property/get-class-properties class)
+          properties (cond->> (outliner-property/get-class-properties class)
+                       (= :logseq.class/Root (:db/ident class))
+                       (concat [(db/entity :block/tags)]))
           repo (state/get-current-repo)
           objects (->> (db-model/sub-class-objects repo (:db/id class))
                        (map (fn [row] (assoc row :id (:db/id row)))))]
