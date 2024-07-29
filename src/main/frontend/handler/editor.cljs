@@ -68,8 +68,7 @@
             [logseq.outliner.core :as outliner-core]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.outliner.property :as outliner-property]
-            [frontend.db.model :as model]))
+            [logseq.outliner.property :as outliner-property]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -1654,7 +1653,7 @@
 (defn get-matched-classes
   "Return matched classes except the root class"
   [q]
-  (let [classes (->> (model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+  (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
                      (map (fn [e] (select-keys e [:block/uuid :block/title]))))]
     (search/fuzzy-search classes q {:extract-fn :block/title})))
 

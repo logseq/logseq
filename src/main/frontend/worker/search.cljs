@@ -195,7 +195,7 @@
 
 (defn block->index
   "Convert a block to the index for searching"
-  [{:block/keys [uuid page title format] :as block}]
+  [{:block/keys [uuid page title] :as block}]
   (when-not (or
              (ldb/closed-value? block)
              (and (string? title) (> (count title) 10000))
