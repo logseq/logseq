@@ -125,6 +125,8 @@
 
   (let [*el (rum/use-ref nil)
         ^js cnt (.-container viewer)
+        ^js body (some-> (.-ownerDocument cnt) (.-body))
+        key-alt? (= (some-> body (.-dataset) (.-activeKeystroke)) "Alt")
         head-height 0                                       ;; 48 temp
         top (- (+ (:y point) (.-scrollTop cnt)) head-height)
         left (+ (:x point) (.-scrollLeft cnt))
@@ -132,7 +134,7 @@
         new? (nil? id)
         new-&-highlight-mode? (and @*highlight-mode? new?)
         show-ctx-menu? (and (not new-&-highlight-mode?)
-                            (or (not selection) (and selection (state/sub :pdf/auto-open-ctx-menu?))))
+                            (or (not selection) (and selection (or (state/sub :pdf/auto-open-ctx-menu?) key-alt?))))
         content (:content highlight)
         area? (not (string/blank? (:image content)))
         action-fn! (fn [action clear?]
@@ -692,13 +694,13 @@
      ;; hl context tip menu
      (when-let [_hl (:highlight ctx-menu-state)]
        (js/ReactDOM.createPortal
-        (pdf-highlights-ctx-menu viewer ctx-menu-state
-                                 {:clear-ctx-menu! clear-ctx-menu!
-                                  :add-hl!         add-hl!
-                                  :del-hl!         del-hl!
-                                  :upd-hl!         upd-hl!})
+         (pdf-highlights-ctx-menu viewer ctx-menu-state
+           {:clear-ctx-menu! clear-ctx-menu!
+            :add-hl! add-hl!
+            :del-hl! del-hl!
+            :upd-hl! upd-hl!})
 
-        (.querySelector el ".pp-holder")))
+         (.querySelector el ".pp-holder")))
 
      ;; debug highlights anchor
      ;;(if (seq highlights)
