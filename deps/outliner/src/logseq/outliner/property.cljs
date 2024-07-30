@@ -327,12 +327,9 @@
               fv (first current-val)]
           (if (and (= 1 (count current-val)) (or (= property-value fv) (= property-value (:db/id fv))))
             (remove-block-property! conn (:db/id block) property-id)
-            (do
-              (prn :debug :tx-data
-                   [[:db/retract (:db/id block) property-id property-value]])
-              (ldb/transact! conn
-                             [[:db/retract (:db/id block) property-id property-value]]
-                             {:outliner-op :save-block}))))))))
+            (ldb/transact! conn
+                           [[:db/retract (:db/id block) property-id property-value]]
+                           {:outliner-op :save-block})))))))
 
 (defn ^:api get-class-parents
   [tags]
