@@ -29,13 +29,15 @@
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?pattern
-                :where [?b :block/title ?content] [(re-find ?pattern ?content)]]
+                :where [?b :block/title ?content]
+                [(missing? $ ?b :block/type)]
+                [(re-find ?pattern ?content)]]
               db)
          first)
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?content
-                :where [?b :block/title ?content]]
+                :where [?b :block/title ?content] [(missing? $ ?b :block/type)]]
               db)
          first)))
 
@@ -202,7 +204,7 @@
                {:db/ident :user.property/prop-string :block/schema {:type :default}}
                {:db/ident :user.property/prop-num :block/schema {:type :number}}
                {:db/ident :user.property/sameas :block/schema {:type :url}}
-               {:db/ident :user.property/rangeincludes :block/schema {:type :page}}
+               {:db/ident :user.property/rangeincludes :block/schema {:type :node}}
                {:db/ident :user.property/startedat :block/schema {:type :date}}}
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident :block/schema]) ...]
@@ -293,19 +295,19 @@
           "Collapsed blocks are imported"))
 
     (testing "property :type changes"
-      (is (= :page
+      (is (= :node
              (get-in (d/entity @conn :user.property/finishedat) [:block/schema :type]))
-          ":date property to :page value changes to :page")
-      (is (= :page
+          ":date property to :node value changes to :node")
+      (is (= :node
              (get-in (d/entity @conn :user.property/participants) [:block/schema :type]))
-          ":page property to :date value remains :page")
+          ":node property to :date value remains :node")
 
       (is (= :default
              (get-in (d/entity @conn :user.property/description) [:block/schema :type]))
-          ":default property to :page (or any non :default value) remains :default")
+          ":default property to :node (or any non :default value) remains :default")
       (is (= "[[Jakob]]"
-             (:user.property/description (readable-properties @conn (find-block-by-content @conn #":default to :page"))))
-          ":default to :page property saves :default property value default with full text")
+             (:user.property/description (readable-properties @conn (find-block-by-content @conn #":default to :node"))))
+          ":default to :node property saves :default property value default with full text")
 
       (testing "with changes to upstream/existing property value"
         (is (= :default
@@ -317,13 +319,13 @@
 
         (is (= {:block/schema {:type :default} :db/cardinality :db.cardinality/many}
                (select-keys (d/entity @conn :user.property/people) [:block/schema :db/cardinality]))
-            ":page property to :default value changes to :default and keeps existing cardinality")
+            ":node property to :default value changes to :default and keeps existing cardinality")
         (is (= #{"[[Jakob]] [[Gabriel]]"}
-               (:user.property/people (readable-properties @conn (find-block-by-content @conn ":page people"))))
-            "existing :page property value correctly saved as :default with full text")
+               (:user.property/people (readable-properties @conn (find-block-by-content @conn ":node people"))))
+            "existing :node property value correctly saved as :default with full text")
         (is (= #{"[[Gabriel]] [[Jakob]]"}
-               (:user.property/people (readable-properties @conn (find-block-by-content @conn #"pending block for :page"))))
-            "pending :page property value correctly saved as :default with full text")))
+               (:user.property/people (readable-properties @conn (find-block-by-content @conn #"pending block for :node"))))
+            "pending :node property value correctly saved as :default with full text")))
 
     (testing "replacing refs in :block/title"
       (is (= 2
