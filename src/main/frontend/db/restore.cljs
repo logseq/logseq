@@ -1,7 +1,6 @@
 (ns frontend.db.restore
   "Fns for DB restore(from text or sqlite)"
   (:require [frontend.db.conn :as db-conn]
-            [frontend.db.react :as react]
             [frontend.state :as state]
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]

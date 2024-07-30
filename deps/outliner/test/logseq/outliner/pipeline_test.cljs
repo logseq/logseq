@@ -11,7 +11,9 @@
 (defn- get-blocks [db]
   (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])
               :in $
-              :where [?b :block/title] [(missing? $ ?b :logseq.property/built-in?)]]
+              :where [?b :block/title]
+              [(missing? $ ?b :logseq.property/built-in?)]
+              [(missing? $ ?b :block/type)]]
             db)
        (map first)))
 
