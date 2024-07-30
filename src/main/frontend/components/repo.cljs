@@ -351,7 +351,7 @@
                    {:as-dropdown? true
                     :auto-focus? false
                     :align "start"
-                    :content-props {:class "repos-list"
+                    :content-props {:class (str "repos-list " (when (<= (count repos) 1) " no-repos"))
                                     :data-mode (when db-based? "db")}})))
              :title repo-name}                              ;; show full path on hover
             [:div.flex.relative.graph-icon.rounded
@@ -388,18 +388,18 @@
   "Returns boolean indicating if DB graph name is invalid. Must be kept in sync with invalid-graph-name-warning"
   [graph-name]
   (or (fs-util/include-reserved-chars? graph-name)
-      (string/includes? graph-name "+")))
+    (string/includes? graph-name "+")))
 
 (rum/defcs new-db-graph < rum/reactive
-  (rum/local "" ::graph-name)
-  (rum/local false ::cloud?)
-  (rum/local false ::creating-db?)
-  (rum/local (rum/create-ref) ::input-ref)
-  {:did-mount (fn [s]
-                (when-let [^js input (some-> @(::input-ref s)
-                                       (rum/deref))]
-                  (js/setTimeout #(.focus input) 32))
-                s)}
+                          (rum/local "" ::graph-name)
+                          (rum/local false ::cloud?)
+                          (rum/local false ::creating-db?)
+                          (rum/local (rum/create-ref) ::input-ref)
+                          {:did-mount (fn [s]
+                                        (when-let [^js input (some-> @(::input-ref s)
+                                                               (rum/deref))]
+                                          (js/setTimeout #(.focus input) 32))
+                                        s)}
   [state]
   (let [*creating-db? (::creating-db? state)
         *graph-name (::graph-name state)
