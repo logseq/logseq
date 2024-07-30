@@ -111,21 +111,22 @@
   (when-let [engine (get-engine repo)]
     (protocol/transact-blocks! engine data)))
 
-(defn get-page-unlinked-refs
+(defn get-unlinked-refs
   "Get matched result from search first, and then filter by worker db"
-  [page-id]
+  [eid]
   (when-let [repo (state/get-current-repo)]
-    (p/let [page (db/entity page-id)
+    (p/let [entity (db/entity eid)
             alias-names (conj (set (map util/safe-page-name-sanity-lc
-                                        (db/get-page-alias-names repo page-id)))
-                              (:block/title page))
+                                        (db/get-page-alias-names repo eid)))
+                              (:block/title entity))
             q (string/join " " alias-names)
             result (block-search repo q {:limit 100})
             eids (->> result
                       (remove :page?)
+                      (remove (fn [b] (= (:block/uuid b) (:block/uuid entity))))
                       (map (fn [b] [:block/uuid (:block/uuid b)])))
             result (when (seq eids)
-                     (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id page) (ldb/write-transit-str eids)))
+                     (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id entity) (ldb/write-transit-str eids)))
             result' (when result (ldb/read-transit-str result))]
       (when result' (d/transact! (db/get-db repo false) result'))
       (some->> result'

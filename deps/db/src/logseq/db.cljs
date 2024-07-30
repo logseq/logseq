@@ -383,22 +383,22 @@
       ;; only return the first result for idiot-proof
     (first (:block/_alias (d/entity db alias-id)))))
 
-(defn get-page-alias
-  [db page-id]
+(defn get-block-alias
+  [db eid]
   (->>
    (d/q
     '[:find [?e ...]
-      :in $ ?page %
+      :in $ ?eid %
       :where
-      (alias ?page ?e)]
+      (alias ?eid ?e)]
     db
-    page-id
+    eid
     (:alias rules/rules))
    distinct))
 
-(defn get-page-refs
+(defn get-block-refs
   [db id]
-  (let [alias (->> (get-page-alias db id)
+  (let [alias (->> (get-block-alias db id)
                    (cons id)
                    distinct)
         refs (->> (mapcat (fn [id] (:block/_path-refs (d/entity db id))) alias)
@@ -406,14 +406,6 @@
     (when (seq refs)
       (d/pull-many db '[*] (map :db/id refs)))))
 
-(defn get-block-refs
-  [db id]
-  (let [block (d/entity db id)]
-    (if (:block/name block)
-      (get-page-refs db id)
-      (let [refs (:block/_refs (d/entity db id))]
-        (when (seq refs)
-          (d/pull-many db '[*] (map :db/id refs)))))))
 
 (defn get-block-refs-count
   [db id]
@@ -424,7 +416,7 @@
 (defn get-page-unlinked-refs
   "Get unlinked refs from search result"
   [db page-id search-result-eids]
-  (let [alias (->> (get-page-alias db page-id)
+  (let [alias (->> (get-block-alias db page-id)
                    (cons page-id)
                    set)
         eids (remove

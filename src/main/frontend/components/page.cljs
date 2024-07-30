@@ -580,19 +580,17 @@
               (class-component/class-children page))
 
             ;; referenced blocks
-            (when-not block-or-whiteboard?
-              (when (and page (not (false? linked-refs?)))
-                [:div {:key "page-references"}
-                 (rum/with-key
-                   (reference/references page)
-                   (str route-page-name "-refs"))]))
+            (when-not (or whiteboard? linked-refs?)
+              [:div {:key "page-references"}
+               (rum/with-key
+                 (reference/references page)
+                 (str route-page-name "-refs"))])
 
             (when-not block-or-whiteboard?
               (when (and (not journal?) (not db-based?))
                 (hierarchy/structures route-page-name)))
 
-            (when (and (not (false? unlinked-refs?))
-                       (not (or block-or-whiteboard? sidebar? home?)))
+            (when-not (or whiteboard? unlinked-refs? sidebar? home?)
               [:div {:key "page-unlinked-references"}
                (reference/unlinked-references page)])])]))))
 

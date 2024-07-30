@@ -2637,7 +2637,10 @@
        (when-not (:table? config)
          (block-refs-count block refs-count *hide-block-refs?))]
 
-      (when (and (not (:table? config)) (not hide-block-refs?) (> refs-count 0))
+      (when (and (not (:table? config))
+                 (not hide-block-refs?)
+                 (> refs-count 0)
+                 (not= (str (:id config)) (str (:block/uuid block))))
         (when-let [refs-cp (state/get-component :block/linked-references)]
           (refs-cp uuid)))]]))
 

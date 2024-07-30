@@ -200,7 +200,7 @@ independent of format as format specific heading characters are stripped"
 (defn page-alias-set
   [repo-url page-id]
   (->>
-   (ldb/get-page-alias (conn/get-db repo-url) page-id)
+   (ldb/get-block-alias (conn/get-db repo-url) page-id)
    (set)
    (set/union #{page-id})))
 
@@ -603,22 +603,23 @@ independent of format as format specific heading characters are stripped"
                            k)]
                    [k blocks])))))))))
 
-(defn get-page-referenced-blocks
-  ([page-id]
-   (get-page-referenced-blocks (state/get-current-repo) page-id nil))
-  ([page-id options]
-   (get-page-referenced-blocks (state/get-current-repo) page-id options))
-  ([repo page-id options]
+(defn get-referenced-blocks
+  ([eid]
+   (get-referenced-blocks (state/get-current-repo) eid nil))
+  ([eid options]
+   (get-referenced-blocks (state/get-current-repo) eid options))
+  ([repo eid options]
    (when repo
      (when (conn/get-db repo)
-       (let [page (db-utils/entity page-id)
-             pages (page-alias-set repo page-id)]
+       (let [entity (db-utils/entity eid)
+             page? (ldb/page? entity)
+             ids (page-alias-set repo eid)]
          (->>
           (react/q repo
-                   [:frontend.worker.react/refs page-id]
+                   [:frontend.worker.react/refs eid]
                    {:query-fn (fn []
                                 (let [entities (mapcat (fn [id]
-                                                         (:block/_path-refs (db-utils/entity id))) pages)
+                                                         (:block/_path-refs (db-utils/entity id))) ids)
                                       blocks (map (fn [e]
                                                     {:block/parent (:block/parent e)
                                                      :block/order (:block/order e)
@@ -630,33 +631,23 @@ independent of format as format specific heading characters are stripped"
           react
           :entities
           (remove (fn [block]
-                    (or (= page-id (:db/id (:block/page block)))
-                        (ldb/hidden-page? (:block/page block))
-                        (contains? (set (map :db/id (:block/tags block))) (:db/id page)))))
+                    (or
+                     (= (:db/id (:block/link block)) eid)
+                     (= (:db/id block) eid)
+                     (= eid (:db/id (:block/page block)))
+                     (ldb/hidden-page? (:block/page block))
+                     (contains? (set (map :db/id (:block/tags block))) (:db/id entity)))))
           (util/distinct-by :db/id)))))))
 
-;; TODO: no need to use datalog query, `:block/_refs`
 (defn get-block-referenced-blocks
   ([block-id]
    (get-block-referenced-blocks block-id {}))
   ([block-id options]
    (when-let [repo (state/get-current-repo)]
      (when (conn/get-db repo)
-       (let [block (db-utils/entity block-id)
-             query-result (->> (react/q repo [:frontend.worker.react/refs
-                                              (:db/id block)]
-                                        {}
-                                        '[:find [(pull ?ref-block ?block-attrs) ...]
-                                          :in $ ?block-id ?block-attrs
-                                          :where
-                                          [?ref-block :block/refs ?block-id]
-                                          [?ref-block :block/page ?p]
-                                          (not [?p :block/type "hidden"])]
-                                        block-id
-                                        block-attrs)
-                               react
-                               (sort-by-order-recursive))]
-         (db-utils/group-by-page query-result))))))
+       (->> (get-referenced-blocks repo block-id options)
+            (sort-by-order-recursive)
+            db-utils/group-by-page)))))
 
 (defn journal-page?
   "sanitized page-name only"
