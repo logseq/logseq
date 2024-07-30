@@ -16,7 +16,7 @@
         ;; Disallows cyclic hierarchies
         exclude-ids (-> (set (map (fn [id] (:block/uuid (db/entity id))) children-pages))
                         (conj (:block/uuid page))) ; break cycle
-        classes (->> (model/get-all-classes repo {:except-root-class? true})
+        classes (->> (model/get-all-classes repo)
                      (remove (fn [e] (contains? exclude-ids (:block/uuid e)))))
         options (sort-by :label
                          (map (fn [entity] {:label (:block/title entity)
