@@ -117,7 +117,7 @@
   [state item {:keys [toggle-fn delete-choice update-icon]} parent-opts]
   (let [*hover? (::hover? state)
         value (db-property/closed-value-content item)
-        page? (:block/title item)
+        page? (db/page? item)
         property-block? (db-property/property-created-block? item)]
     [:div.flex.flex-1.flex-row.items-center.gap-2.justify-between
      {:on-mouse-over #(reset! *hover? true)
