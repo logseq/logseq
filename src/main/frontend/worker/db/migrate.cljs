@@ -44,8 +44,10 @@
    [6 {:properties [:logseq.property.asset/remote-metadata]}]
    [7 {:fix replace-original-name-content-with-title}]])
 
-;; Question: do we need to assign persist UUIDs for later added built-in classes & properties?
-;; @zhiyuan will this affect RTC?
+(let [max-schema-version (apply max (map first schema-version->updates))]
+  (assert (<= db-schema/version max-schema-version))
+  (when (< db-schema/version max-schema-version)
+    (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-verison is " max-schema-version))))
 
 (defn migrate
   [conn search-db]
@@ -55,7 +57,7 @@
       (= version-in-db db-schema/version)
       nil
 
-      (< db-schema/version version-in-db)     ; outdated client, db version could be synced from server
+      (< db-schema/version version-in-db) ; outdated client, db version could be synced from server
       ;; FIXME: notify users to upgrade to the latest version asap
       nil
 
@@ -63,7 +65,7 @@
       (let [db-based? (ldb/db-based-graph? @conn)
             built-in-value (:db/id (get (d/entity db :logseq.class/Root) :logseq.property/built-in?))
             updates (keep (fn [[v updates]]
-                            (when (> v version-in-db)
+                            (when (and (< version-in-db v) (<= v db-schema/version))
                               updates))
                           schema-version->updates)
             properties (mapcat :properties updates)
