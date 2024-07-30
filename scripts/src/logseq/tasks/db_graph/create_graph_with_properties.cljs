@@ -38,10 +38,6 @@
    (mapv #(hash-map :value %
                     :uuid (random-uuid))
          [10 42 (rand 100)])
-   :page-closed
-   (mapv #(hash-map :value %
-                    :uuid (random-uuid))
-         ["Page 1" "Page 2" "Page 3"])
    ;; If this is enabled again, :uuid translation support would need to be added for :build/closed-values
    :date-closed
    {}})
@@ -52,9 +48,6 @@
         yesterday (subtract-days today 1)
         two-days-ago (subtract-days today 2)
         closed-values-config (build-closed-values-config {:dates [today yesterday two-days-ago]})
-        page-values-tx (mapv #(hash-map :page
-                                        {:block/uuid (:uuid %) :block/title (:value %)})
-                             (:page-closed closed-values-config))
         ;; Stores random closed values for use with queries
         closed-values (atom {})
         random-closed-value #(let [val (-> closed-values-config % rand-nth)]
@@ -66,7 +59,7 @@
      (vec
       (concat
        ;; Page property values needs to be before b/c they are referenced by everything else
-       page-values-tx
+       [{:page {:block/title "Page 1"}}]
 
        ;; Objects
        [{:page {:block/title "Page object"
@@ -100,15 +93,13 @@
           {:block/title "number property block" :build/properties {:number 5}}
           {:block/title "number-many property block" :build/properties {:number-many #{5 10}}}
           {:block/title "number-closed property block" :build/properties {:number-closed (random-closed-value :number-closed)}}
-          {:block/title "object property block" :build/properties {:node [:block/uuid object-uuid]}}
-          {:block/title "object-many property block" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}
-          {:block/title "page property block" :build/properties {:page [:page "Page 1"]}}
-          {:block/title "page-many property block" :build/properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}
-          ;;  ;; :page-closed and :date-closed disabled for now since they're not supported
-          ;;  #_{:block/title "page-closed property block" :build/properties {:page-closed (random-closed-value :page-closed)}}
+          {:block/title "node property block" :build/properties {:node [:block/uuid object-uuid]}}
+          {:block/title "node without classes property block" :build/properties {:node-without-classes [:page "Page 1"]}}
+          {:block/title "node-many property block" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}
+          ;;  ;; :date-closed disabled for now since they're not supported
           {:block/title "date property block" :build/properties {:date [:page (date-journal-title today)]}}
           {:block/title "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
-                                                                                     [:page (date-journal-title yesterday)]}}}
+                                                                                   [:page (date-journal-title yesterday)]}}}
           #_{:block/title "date-closed property block" :build/properties {:date-closed (random-closed-value :date-closed)}}]}
         {:page {:block/title "Block Property Queries"}
          :blocks
@@ -123,10 +114,8 @@
           {:block/title "{{query (property :number-many 10)}}"}
           {:block/title (str "{{query (property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
           {:block/title "{{query (property :node \"block object\")}}"}
+          {:block/title "{{query (property :node-without-classes [[Page 1]])}}"}
           {:block/title "{{query (property :node-many [[Page object]])}}"}
-          {:block/title "{{query (property :page [[Page 1]])}}"}
-          {:block/title "{{query (property :page-many [[Page 2]])}}"}
-          #_{:block/title (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
           {:block/title (str "{{query (property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
           {:block/title (str "{{query (property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
           #_{:block/title (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
@@ -142,14 +131,12 @@
         {:page {:block/title "number page" :build/properties {:number 5}}}
         {:page {:block/title "number-many page" :build/properties {:number-many #{5 10}}}}
         {:page {:block/title "number-closed page" :build/properties {:number-closed (random-closed-value :number-closed)}}}
-        {:page {:block/title "object page" :build/properties {:node [:block/uuid object-uuid]}}}
-        {:page {:block/title "object-many page" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}}
-        {:page {:block/title "page page" :build/properties {:page [:page "Page 1"]}}}
-        {:page {:block/title "page-many page" :build/properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}}
-      ;;  #_{:page {:block/title "page-closed page" :build/properties {:page-closed (random-closed-value :page-closed)}}}
+        {:page {:block/title "node page" :build/properties {:node [:block/uuid object-uuid]}}}
+        {:page {:block/title "node without classes page" :build/properties {:node-without-classes [:page "Page 1"]}}}
+        {:page {:block/title "node-many page" :build/properties {:node-many #{[:block/uuid object-uuid] [:page "Page object"]}}}}
         {:page {:block/title "date page" :build/properties {:date [:page (date-journal-title today)]}}}
         {:page {:block/title "date-many page" :build/properties {:date-many #{[:page (date-journal-title today)]
-                                                                                      [:page (date-journal-title yesterday)]}}}}
+                                                                              [:page (date-journal-title yesterday)]}}}}
         #_{:page {:block/title "date-closed page" :build/properties {:date-closed (random-closed-value :date-closed)}}}
         {:page {:block/title "Page Property Queries"}
          :blocks
@@ -164,10 +151,8 @@
           {:block/title "{{query (page-property :number-many 10)}}"}
           {:block/title (str "{{query (page-property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
           {:block/title "{{query (page-property :node \"block object\")}}"}
+          {:block/title "{{query (page-property :node-without-classes [[Page 1]])}}"}
           {:block/title "{{query (page-property :node-many [[Page object]])}}"}
-          {:block/title "{{query (page-property :page [[Page 1]])}}"}
-          {:block/title "{{query (page-property :page-many [[Page 2]])}}"}
-          #_{:block/title (str "{{query (page-property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
           {:block/title (str "{{query (page-property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
           {:block/title (str "{{query (page-property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
           #_{:block/title (str "{{query (page-property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}]))
@@ -176,19 +161,20 @@
 
      ;; Properties
      :properties
-     (->> [:default :url :checkbox :number :page :date :node]
-          (mapcat #(cond-> [[% (cond-> {:block/schema {:type %}}
-                                 (= :node %)
-                                 (assoc :build/schema-classes [:TestClass]))]]
+     (->> db-property-type/user-built-in-property-types
+          (mapcat #(cond-> (if (= :node %)
+                             [[% {:block/schema {:type %} :build/schema-classes [:TestClass]}]
+                              [:node-without-classes {:block/schema {:type %}}]]
+                             [[% {:block/schema {:type %}}]])
                      (db-property-type/property-type-allows-schema-attribute? % :cardinality)
                      (conj [(keyword (str (name %) "-many"))
                             (cond-> {:block/schema {:type % :cardinality :many}}
-                                 (= :node %)
-                                 (assoc :build/schema-classes [:TestClass]))])))
+                              (= :node %)
+                              (assoc :build/schema-classes [:TestClass]))])))
           (into (mapv #(vector (keyword (str (name %) "-closed"))
                                {:block/schema {:type %}
                                 :build/closed-values (closed-values-config (keyword (str (name %) "-closed")))})
-                      [:default :url :number #_:page #_:date]))
+                      [:default :url :number #_:date]))
           (into {}))}))
 
 (def spec
