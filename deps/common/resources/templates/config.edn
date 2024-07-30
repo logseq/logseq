@@ -55,6 +55,11 @@
  ;; Default value: true
  :ui/auto-expand-block-refs? true
 
+ ;; Hide empty block properties
+ ;; This is _only_ for DB graphs.
+ ;; Default value: false
+ ;; :ui/hide-empty-properties? false
+
  ;; Disable accent marks when searching.
  ;; After changing this setting, rebuild the search index by pressing (^C ^S).
  ;; Default value: true

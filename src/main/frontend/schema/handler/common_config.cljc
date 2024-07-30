@@ -42,6 +42,7 @@
     [:ui/show-command-doc? :boolean]
     [:ui/show-empty-bullets? :boolean]
     [:ui/show-full-blocks? :boolean]
+    [:ui/hide-empty-properties? :boolean]
     [:ui/auto-expand-block-refs? :boolean]
     [:query/views [:map-of
                    :keyword

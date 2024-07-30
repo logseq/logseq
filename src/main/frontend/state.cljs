@@ -424,7 +424,8 @@
                       [(< ?d ?next)]]
              :inputs [:today :7d-after]
              :group-by-page? false
-             :collapsed? false}]}}))
+             :collapsed? false}]}
+          :ui/hide-empty-properties? false}))
 
 ;; State that most user config is dependent on
 (declare get-current-repo sub set-state!)
