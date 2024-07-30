@@ -29,7 +29,6 @@
     (println ::restore-graph! "loads" (count initial-data) "datoms in" (t/in-millis (t/interval start-time end-time)) "ms")
 
     (state/set-state! :graph/loading? false)
-    (react/clear-query-state!)
     (state/pub-event! [:ui/re-render-root])
     ;; (async/go
     ;;   (async/<! (async/timeout 100))

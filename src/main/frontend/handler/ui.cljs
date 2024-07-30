@@ -81,8 +81,11 @@
 (defn re-render-root!
   ([]
    (re-render-root! {}))
-  ([_opts]
+  ([{:keys [clear-query-state?]
+     :or {clear-query-state? true}}]
    {:post [(nil? %)]}
+   (when clear-query-state?
+     (react/clear-query-state!))
    (doseq [component (keys @react/query-components)]
      (rum/request-render component))
    (when-let [component (state/get-root-component)]

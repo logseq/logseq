@@ -40,7 +40,7 @@
   []
   (route-handler/redirect-to-home!)
   (notification/show! "Import finished!" :success)
-  (ui-handler/re-render-root!))
+  (js/setTimeout ui-handler/re-render-root! 100))
 
 (defn- roam-import-handler
   [e]
