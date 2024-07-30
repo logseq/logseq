@@ -14,7 +14,6 @@
   (search/truncate-table! search-db)
   (d/transact! conn
     [{:db/ident :block/title
-      :db/cardinaity :db.cardinality/one
       :db/index true}])
   (let [datoms (d/datoms @conn :avet :block/uuid)
         tx-data (mapcat
