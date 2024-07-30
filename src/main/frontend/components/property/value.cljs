@@ -768,7 +768,7 @@
   (let [type (get schema :type :default)
         date? (= type :date)
         *el (rum/use-ref nil)
-        items v]
+        items (if (de/entity? v) #{v} v)]
     (rum/use-effect!
      (fn []
        (when editing?
