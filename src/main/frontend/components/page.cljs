@@ -580,7 +580,7 @@
               (class-component/class-children page))
 
             ;; referenced blocks
-            (when-not (or whiteboard? linked-refs?)
+            (when-not (or whiteboard? linked-refs? (and block? (not db-based?)))
               [:div {:key "page-references"}
                (rum/with-key
                  (reference/references page)
@@ -590,7 +590,7 @@
               (when (and (not journal?) (not db-based?))
                 (hierarchy/structures route-page-name)))
 
-            (when-not (or whiteboard? unlinked-refs? sidebar? home?)
+            (when-not (or whiteboard? unlinked-refs? sidebar? home? (and block? (not db-based?)))
               [:div {:key "page-unlinked-references"}
                (reference/unlinked-references page)])])]))))
 
