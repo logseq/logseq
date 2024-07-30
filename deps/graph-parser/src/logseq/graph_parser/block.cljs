@@ -668,7 +668,7 @@
                body []]
           (if (seq blocks)
             (let [[block pos-meta] (first blocks)
-                  ;; in db-graph-mode, property part is not included in block/content
+                  ;; in db-graph-mode, property part is not included in block/title
                   pos-meta (if db-graph-mode?
                              pos-meta
                              (assoc pos-meta :end_pos

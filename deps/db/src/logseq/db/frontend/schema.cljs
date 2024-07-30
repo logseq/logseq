@@ -147,7 +147,7 @@
     :block/invalid-properties
     :block/warning})
 
-;; If only block/content changes
+;; If only block/title changes
 (def db-version-retract-attributes
   #{:block/refs
     :block/warning})

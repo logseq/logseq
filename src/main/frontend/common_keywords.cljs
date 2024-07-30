@@ -31,7 +31,7 @@ in db-version, page-references(e.g. [[page-name]]) are stored as [[~^uuid]]."
 
 (sr/defkeyword :block/raw-title
   "like `:block/title`,
-but when eval `(:block/raw-content block-entity)`, return raw-content of this block"
+but when eval `(:block/raw-title block-entity)`, return raw title of this block"
   :string)
 
 (sr/defkeyword :kv/value
