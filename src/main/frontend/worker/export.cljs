@@ -35,7 +35,7 @@
   (->> (d/q '[:find (pull ?b [*])
               :in $
               :where
-              [?b :block/original-name]
+              [?b :block/title]
               [?b :block/name]] db)
 
        (map (fn [[page]]
@@ -45,7 +45,7 @@
                               blocks
                               (map (fn [b]
                                      (let [b' (if (seq (:block/properties b))
-                                                (update b :block/content
+                                                (update b :block/title
                                                         (fn [content]
                                                           (gp-property/remove-properties (:block/format b) content)))
                                                 b)]
@@ -61,5 +61,5 @@
   (->> (d/datoms db :avet :block/name)
        (map (fn [d]
               (let [e (d/entity db (:e d))]
-                [(:block/original-name e)
+                [(:block/title e)
                  (block->content repo db (:block/uuid e) {} {})])))))

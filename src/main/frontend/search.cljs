@@ -7,11 +7,9 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [frontend.search.browser :as search-browser]
             [frontend.search.fuzzy :as fuzzy]
             [logseq.common.config :as common-config]
             [frontend.db.async :as db-async]
-            [cljs-bean.core :as bean]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
             [frontend.db.utils :as db-utils]
@@ -30,14 +28,6 @@
     (let [q (util/search-normalize q (state/enable-search-remove-accents?))]
       (when-not (string/blank? q)
         (protocol/query engine q option)))))
-
-(defn page-search
-  ([q]
-   (page-search q {}))
-  ([q options]
-   (when-let [^js sqlite @search-browser/*sqlite]
-     (p/let [result (.page-search sqlite (state/get-current-repo) q (clj->js (merge {:limit 100} options)))]
-       (bean/->clj result)))))
 
 (defn file-search
   ([q]
@@ -74,7 +64,7 @@
    (when q
      (p/let [q (fuzzy/clean-str q)
              properties* (db-async/<get-all-properties)
-             properties (map :block/original-name properties*)]
+             properties (map :block/title properties*)]
        (when (seq properties)
          (if (string/blank? q)
            properties
@@ -128,7 +118,7 @@
     (p/let [page (db/entity page-id)
             alias-names (conj (set (map util/safe-page-name-sanity-lc
                                         (db/get-page-alias-names repo page-id)))
-                              (:block/original-name page))
+                              (:block/title page))
             q (string/join " " alias-names)
             result (block-search repo q {:limit 100})
             eids (map (fn [b] [:block/uuid (:block/uuid b)]) result)

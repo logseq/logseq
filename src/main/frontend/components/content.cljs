@@ -28,6 +28,7 @@
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
+            [logseq.common.util.page-ref :as page-ref]
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.db :as ldb]))
@@ -36,7 +37,8 @@
 
 (rum/defc custom-context-menu-content
   []
-  (let [repo (state/get-current-repo)]
+  (let [repo (state/get-current-repo)
+        db-based? (config/db-based-graph? repo)]
     [:<>
      (ui/menu-background-color #(property-handler/batch-set-block-property! repo
                                                                             (state/get-selection-block-ids)
@@ -74,11 +76,11 @@
      (shui/dropdown-menu-item
       {:key "copy as"
        :on-pointer-down (fn [e]
-                   (util/stop-propagation e)
-                   (let [block-uuids (state/get-selection-block-ids)]
-                     (shui/popup-hide!)
-                     (shui/dialog-open!
-                      #(export/export-blocks block-uuids {:whiteboard? false}))))}
+                          (util/stop-propagation e)
+                          (let [block-uuids (state/get-selection-block-ids)]
+                            (shui/popup-hide!)
+                            (shui/dialog-open!
+                             #(export/export-blocks block-uuids {:whiteboard? false}))))}
       (t :content/copy-export-as))
 
      (shui/dropdown-menu-item
@@ -86,10 +88,11 @@
        :on-click editor-handler/copy-block-refs}
       (t :content/copy-block-ref))
 
-     (shui/dropdown-menu-item
-      {:key "copy block embeds"
-       :on-click editor-handler/copy-block-embeds}
-      (t :content/copy-block-emebed))
+     (when-not db-based?
+       (shui/dropdown-menu-item
+        {:key "copy block embeds"
+         :on-click editor-handler/copy-block-embeds}
+        (t :content/copy-block-emebed)))
 
      (shui/dropdown-menu-separator)
 
@@ -226,14 +229,19 @@
          (shui/dropdown-menu-item
           {:key      "Copy block ref"
            :on-click (fn [_e]
-                       (editor-handler/copy-block-ref! block-id block-ref/->block-ref))}
+                       (editor-handler/copy-block-ref! block-id
+                                                       (if db? page-ref/->page-ref block-ref/->block-ref)))}
           (t :content/copy-block-ref))
 
-         (shui/dropdown-menu-item
-          {:key      "Copy block embed"
-           :on-click (fn [_e]
-                       (editor-handler/copy-block-ref! block-id #(util/format "{{embed ((%s))}}" %)))}
-          (t :content/copy-block-emebed))
+         (when-not db?
+           (shui/dropdown-menu-item
+            {:key      "Copy block embed"
+             :on-click (fn [_e]
+                         (editor-handler/copy-block-ref! block-id
+                                                         (if db?
+                                                           block-ref/->block-ref
+                                                           #(util/format "{{embed ((%s))}}" %))))}
+            (t :content/copy-block-emebed)))
 
          ;; TODO Logseq protocol mobile support
          (when (util/electron?)
@@ -250,7 +258,7 @@
           {:key      "Copy as"
            :on-click (fn [_]
                        (shui/dialog-open!
-                         #(export/export-blocks [block-id] {:whiteboard? false})))}
+                        #(export/export-blocks [block-id] {:whiteboard? false})))}
           (t :content/copy-export-as))
 
          (shui/dropdown-menu-item
@@ -332,7 +340,7 @@
                {:key "(Dev) Show block AST"
                 :on-click (fn []
                             (let [block (db/pull [:block/uuid block-id])]
-                              (dev-common-handler/show-content-ast (:block/content block) (:block/format block))))}
+                              (dev-common-handler/show-content-ast (:block/title block) (:block/format block))))}
                (t :dev/show-block-ast))
               (shui/dropdown-menu-item
                {:key "(Dev) Show block content history"

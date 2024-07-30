@@ -6,7 +6,8 @@
             [frontend.persist-db.browser :as browser]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.handler.file-based.property.util :as property-util]))
+            [frontend.handler.file-based.property.util :as property-util]
+            [logseq.db :as ldb]))
 
 (defonce *sqlite browser/*worker)
 
@@ -14,13 +15,8 @@
   protocol/Engine
   (query [_this q option]
     (if-let [^js sqlite @*sqlite]
-      (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))
-              result (bean/->clj result)]
-        (keep (fn [{:keys [content page] :as block}]
-                {:page? (= (:uuid block) page)
-                 :block/uuid (uuid (:uuid block))
-                 :block/content content
-                 :block/page (uuid page)}) result))
+      (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))]
+        (ldb/read-transit-str result))
       (p/resolved nil)))
   (rebuild-pages-indice! [_this]
     (if-let [^js sqlite @*sqlite]

@@ -86,7 +86,7 @@
            (or preview?
                (not (contains? #{:home :all-journals} (state/get-current-route))))
            (not sidebar?))
-      (when (and (string/blank? (:block/content block))
+      (when (and (string/blank? (:block/title block))
                  (not preview?))
         (editor-handler/edit-block! block :max))))
   state)
@@ -229,7 +229,7 @@
              (str repo "-custom-query-" (:query query))))]))))
 
 (rum/defc tagged-pages
-  [repo tag tag-original-name]
+  [repo tag tag-title]
   (let [[pages set-pages!] (rum/use-state nil)]
     (rum/use-effect!
      (fn []
@@ -240,9 +240,9 @@
       [:div.references.page-tags.mt-6.flex-1.flex-row
        [:div.content
         (ui/foldable
-         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-original-name)]
+         [:h2.font-bold.opacity-50 (util/format "Pages tagged with \"%s\"" tag-title)]
          [:ul.mt-2
-          (for [page (sort-by :block/original-name pages)]
+          (for [page (sort-by :block/title pages)]
             [:li {:key (str "tagged-page-" (:db/id page))}
              (component-block/page-cp {} page)])]
          {:default-collapsed? false})]])))
@@ -318,18 +318,18 @@
      :on-click #(swap! *show-page-info? not)}
     "Configure")])
 
-(rum/defcs ^:large-vars/cleanup-todo page-title < rum/reactive
+(rum/defcs ^:large-vars/cleanup-todo page-title-cp < rum/reactive
   (rum/local false ::edit?)
   (rum/local "" ::input-value)
   {:init (fn [state]
            (let [page (first (:rum/args state))
-                 original-name (:block/original-name page)
-                 *title-value (atom original-name)]
+                 title (:block/title page)
+                 *title-value (atom title)]
              (assoc state ::title-value *title-value)))}
   [state page {:keys [fmt-journal? preview? *hover? *show-page-info?]}]
   (when page
     (let [page (db/sub-block (:db/id page))
-          title (:block/original-name page)]
+          title (:block/title page)]
       (when title
         (let [journal? (ldb/journal-page? page)
               icon (get page (pu/get-pid :logseq.property/icon))
@@ -366,7 +366,7 @@
             {:class (when-not whiteboard-page? "title")
              :on-pointer-down (fn [e]
                                 (when (util/right-click? e)
-                                  (state/set-state! :page-title/context {:page (:block/original-name page)
+                                  (state/set-state! :page-title/context {:page (:block/title page)
                                                                          :page-entity page})))
              :on-click (fn [e]
                          (when-not (= (.-nodeName (.-target e)) "INPUT")
@@ -388,7 +388,7 @@
               (page-title-editor page {:*title-value *title-value
                                        :*edit? *edit?
                                        :*input-value *input-value
-                                       :page-name (:block/original-name page)
+                                       :page-name (:block/title page)
                                        :old-name old-name
                                        :untitled? untitled?
                                        :whiteboard-page? whiteboard-page?
@@ -398,7 +398,7 @@
                             (when (and (state/home?) (not preview?))
                               (route-handler/redirect-to-page! (:block/uuid page))))
                 :data-value @*input-value
-                :data-ref   (:block/original-name page)
+                :data-ref   (:block/title page)
                 :style      {:opacity (when @*edit? 0)}}
                (let [nested? (and (string/includes? title page-ref/left-brackets)
                                   (string/includes? title page-ref/right-brackets))]
@@ -494,8 +494,8 @@
           whiteboard-page? (model/whiteboard-page? page) ;; is this page a whiteboard?
           route-page-name path-page-name
           page-name (:block/name page)
-          page-original-name (:block/original-name page)
-          title (or page-original-name page-name)
+          page-title (:block/title page)
+          title (or page-title page-name)
           today? (and
                   journal?
                   (= page-name (util/page-name-sanity-lc (date/journal-name))))
@@ -506,7 +506,7 @@
       (when (or page-name block-or-whiteboard?)
         [:div.flex-1.page.relative
          (merge (if (seq (:block/tags page))
-                  (let [page-names (map :block/original-name (:block/tags page))]
+                  (let [page-names (map :block/title (:block/tags page))]
                     (when (seq page-names)
                       {:data-page-tags (text-util/build-data-value page-names)}))
                   {})
@@ -528,11 +528,11 @@
                                      (page-mouse-leave e *control-show?))}
                   (page-blocks-collapse-control title *control-show? *all-collapsed?)])
                (when (and (not whiteboard?) (ldb/page? page))
-                 (page-title page {:journal? journal?
-                                   :fmt-journal? fmt-journal?
-                                   :preview? preview?
-                                   :*hover? (::hover-title? state)
-                                   :*show-page-info? (::show-page-info? state)}))
+                 (page-title-cp page {:journal? journal?
+                                      :fmt-journal? fmt-journal?
+                                      :preview? preview?
+                                      :*hover? (::hover-title? state)
+                                      :*show-page-info? (::show-page-info? state)}))
                (when (not config/publishing?)
                  (when config/lsp-enabled?
                    [:div.flex.flex-row
@@ -555,15 +555,15 @@
 
             (when-not (and db-based? (ldb/class? page))
               [:div
-              (when (and block? (not sidebar?) (not whiteboard?))
-                (let [config (merge config {:id "block-parent"
-                                            :block? true})]
-                  [:div.mb-4
-                   (component-block/breadcrumb config repo block-id {:level-limit 3})]))
+               (when (and block? (not sidebar?) (not whiteboard?))
+                 (let [config (merge config {:id "block-parent"
+                                             :block? true})]
+                   [:div.mb-4
+                    (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
              ;; blocks
-              (page-blocks-cp repo page (merge option {:sidebar? sidebar?
-                                                       :whiteboard? whiteboard?}))])])
+               (page-blocks-cp repo page (merge option {:sidebar? sidebar?
+                                                        :whiteboard? whiteboard?}))])])
 
          (when (and (not preview?) @(::main-ready? state))
            [:div {:style {:padding-left 9}}
@@ -574,7 +574,7 @@
               (scheduled/scheduled-and-deadlines page-name))
 
             (when (and (not block?) (not db-based?))
-              (tagged-pages repo page page-original-name))
+              (tagged-pages repo page page-title))
 
             (when (contains? (:block/type page) "class")
               (class-component/class-children page))

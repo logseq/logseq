@@ -29,13 +29,13 @@
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?pattern
-                :where [?b :block/content ?content] [(re-find ?pattern ?content)]]
+                :where [?b :block/title ?content] [(re-find ?pattern ?content)]]
               db)
          first)
     (->> content
          (d/q '[:find [(pull ?b [*]) ...]
                 :in $ ?content
-                :where [?b :block/content ?content]]
+                :where [?b :block/title ?content]]
               db)
          first)))
 
@@ -43,7 +43,7 @@
   (->> name
        (d/q '[:find [(pull ?b [*]) ...]
               :in $ ?name
-              :where [?b :block/original-name ?name]]
+              :where [?b :block/title ?name]]
             db)
        first))
 
@@ -167,8 +167,8 @@
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 6
-             (count (->> (d/q '[:find [(pull ?b [:block/original-name :block/type]) ...]
-                                :where [?b :block/original-name] [_ :block/page ?b]] @conn)
+             (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
+                                :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter #(= ["page"] (:block/type %))))))
           "Correct number of pages with block content")
       (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
@@ -186,8 +186,8 @@
              (->>
               (ldb/get-page-blocks @conn
                                    (:db/id (ldb/get-page @conn common-config/favorites-page-name))
-                                   {:pull-keys '[* {:block/link [:block/original-name]}]})
-              (map #(get-in % [:block/link :block/original-name]))
+                                   {:pull-keys '[* {:block/link [:block/title]}]})
+              (map #(get-in % [:block/link :block/title]))
               set))))
 
     (testing "user properties"
@@ -227,7 +227,7 @@
       (is (= #{"prop-num" "prop-string" "prop-bool"}
              (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))
                   :block/refs
-                  (map :block/original-name)
+                  (map :block/title)
                   set))
           "Block with properties has correct refs")
 
@@ -325,10 +325,10 @@
                (:user.property/people (readable-properties @conn (find-block-by-content @conn #"pending block for :page"))))
             "pending :page property value correctly saved as :default with full text")))
 
-    (testing "replacing refs in :block/content"
+    (testing "replacing refs in :block/title"
       (is (= 2
              (->> (find-block-by-content @conn #"replace with same start string")
-                  :block/content
+                  :block/title
                   (re-seq #"\[\[~\^\S+\]\]")
                   distinct
                   count))
@@ -336,7 +336,7 @@
 
       (is (= 1
              (->> (find-block-by-content @conn #"replace case insensitive")
-                  :block/content
+                  :block/title
                   (re-seq #"\[\[~\^\S+\]\]")
                   distinct
                   count))
@@ -363,13 +363,13 @@
       (let [block-with-props (find-block-by-content @conn #"block with props")]
         (is (= {:user.property/prop-num 10}
                (readable-properties @conn block-with-props)))
-        (is (= "block with props" (:block/content block-with-props)))))
+        (is (= "block with props" (:block/title block-with-props)))))
 
     (testing "tags without tag options"
       (let [block (find-block-by-content @conn #"Inception")
             tag-page (find-page-by-name @conn "Movie")
             tagged-page (find-page-by-name @conn "Interstellar")]
-        (is (string/starts-with? (str (:block/content block)) "Inception [[")
+        (is (string/starts-with? (str (:block/title block)) "Inception [[")
             "tagged block tag converts tag to page ref")
         (is (= [(:db/id tag-page)] (map :db/id (:block/refs block)))
             "tagged block has correct refs")
@@ -396,7 +396,7 @@
     (let [block (find-block-by-content @conn #"Inception")
           tag-page (find-page-by-name @conn "Movie")
           another-tag-page (find-page-by-name @conn "p0")]
-      (is (= (:block/content block) "Inception")
+      (is (= (:block/title block) "Inception")
           "tagged block with configured tag strips tag from content")
       (is (= [:user.class/Movie]
              (:block/tags (readable-properties @conn block)))
@@ -454,7 +454,7 @@
 
     (let [block (find-block-by-content @conn #"The Creator")
           tag-page (find-page-by-name @conn "Movie")]
-      (is (= (:block/content block) "The Creator")
+      (is (= (:block/title block) "The Creator")
           "tagged block with configured tag strips tag from content")
       (is (= [:user.class/Movie]
              (:block/tags (readable-properties @conn block)))
@@ -499,7 +499,7 @@
                 set))
         "All classes are correctly defined by :type")
 
-    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:class/parent :block/original-name]))
+    (is (= "CreativeWork" (get-in (d/entity @conn :user.class/Movie) [:class/parent :block/title]))
         "Existing page correctly set as class parent")
-    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:class/parent :block/original-name]))
+    (is (= "Thing" (get-in (d/entity @conn :user.class/CreativeWork) [:class/parent :block/title]))
         "New page correctly set as class parent")))

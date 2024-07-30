@@ -92,7 +92,7 @@
                         ;; Hardcode journal name until more are added
                         (path/join graph-dir "journals" "2023_07_20.md")
                         (path/join graph-dir "pages" (str (:block/name page) ".md")))
-                      (string/join "\n" (map #(str "- " (:block/content %)) blocks))))
+                      (string/join "\n" (map #(str "- " (:block/title %)) blocks))))
   (let [{:keys [conn]} (gp-cli/parse-graph graph-dir {:verbose false})] @conn))
 
 (defn- create-frontend-blocks
@@ -110,7 +110,7 @@
           (into [(merge page
                         {:db/id page-id
                          :block/uuid page-uuid
-                         :block/original-name (string/capitalize (:block/name page))
+                         :block/title (string/capitalize (:block/name page))
                          :block/created-at created-at
                          :block/updated-at created-at})]
                 (mapv #(merge %
@@ -151,28 +151,28 @@
         ;; pages and their blocks which are being tested
         pages-to-blocks
         {{:block/name "page1" :block/type ["page"]}
-         [{:block/content "block 1"} {:block/content "block 2"}]
+         [{:block/title "block 1"} {:block/title "block 2"}]
          {:block/name "jul 20th, 2023" :block/type #{"journal"} :block/journal-day 20230720}
-         [{:block/content "b1"} {:block/content "b2"}]}
+         [{:block/title "b1"} {:block/title "b2"}]}
         file-db (create-file-db graph-dir pages-to-blocks)
         graph-db (create-graph-db "tmp" "file-and-db-graph" pages-to-blocks)
         ;; Only test meaningful differences like content, name and set of block attributes.
         ;; Most attribute values won't be the same as they are random e.g. timestamps and db ids.
         file-ents (->> (d/datoms file-db :eavt)
                        datoms->entity-maps
-                       (map #(assoc (or (not-empty (select-keys % [:block/content :block/name]))
+                       (map #(assoc (or (not-empty (select-keys % [:block/title :block/name]))
                                         %)
                                     :attributes (disj (set (keys %)) :block/file :block/format)))
                        set)
         db-ents (->> (d/datoms graph-db :eavt)
                      datoms->entity-maps
-                     (map #(assoc (or (not-empty (select-keys % [:block/content :block/name]))
+                     (map #(assoc (or (not-empty (select-keys % [:block/title :block/name]))
                                       %)
                                   :attributes (cond-> (disj (set (keys %))
                                                             ;; Don't compare :block/format as db graphs
                                                             ;; are purposely different
                                                             :block/format)
-                                                (seq (:block/content %))
+                                                (seq (:block/title %))
                                                 (set/difference #{:block/created-at :block/updated-at}))))
                      set)]
     (println "Datom counts for file and db graphs are" (count (d/datoms file-db :eavt)) "and" (count (d/datoms graph-db :eavt)))

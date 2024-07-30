@@ -136,10 +136,10 @@
 
     (let [no-name (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
                        (filter (fn [x]
-                                 (when-not (:block/original-name (first x))
+                                 (when-not (:block/title (first x))
                                    x))))
           all-namespaces (->> (d/q '[:find (pull ?n [*]) :where [?b :block/namespace ?n]] db)
-                              (map (comp :block/original-name first))
+                              (map (comp :block/title first))
                               set)]
       (is (= #{"term" "setting" "book" "templates" "page" "Community" "Tweet"
                "Whiteboard" "Whiteboard/Tool" "Whiteboard/Tool/Shape" "Whiteboard/Object" "Whiteboard/Action Bar"}
@@ -164,7 +164,7 @@
     (is (= 33
            (ffirst
             (d/q '[:find (count ?b)
-                   :where [?b :block/content ?content]
+                   :where [?b :block/title ?content]
                    [(clojure.string/includes? ?content "+BEGIN_QUERY")]]
                  db)))
         "Advanced query count"))

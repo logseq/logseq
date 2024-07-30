@@ -106,7 +106,7 @@
              blocks (db/sort-by-order children)
              last-block (last blocks)
              snd-last-block (last (butlast blocks))
-             [target-block sibling?] (if (and last-block (seq (:block/content last-block)))
+             [target-block sibling?] (if (and last-block (seq (:block/title last-block)))
                                        [last-block true]
                                        (if snd-last-block
                                          [snd-last-block true]

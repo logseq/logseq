@@ -19,7 +19,7 @@
          distinct
          sort
          (map name)
-         (map #(hash-map :block/original-name %)))))
+         (map #(hash-map :block/title %)))))
 
 (defn- property-value-for-refs-and-text
   "Given a property value's refs and full text, determines the value to

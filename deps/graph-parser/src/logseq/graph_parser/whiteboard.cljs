@@ -58,7 +58,7 @@
 (defn- with-whiteboard-content
   "Main purpose of this function is to populate contents when shapes are used as references in outliner."
   [shape]
-  {:block/content (case (:type shape)
+  {:block/title (case (:type shape)
                     "text" (:text shape)
                     "logseq-portal" ""
                     "line" (str "whiteboard arrow" (when-let [label (:label shape)] (str ": " label)))
@@ -84,7 +84,7 @@
         properties {(db-property-util/get-pid repo :logseq.property/ls-type) :whiteboard-shape
                     (db-property-util/get-pid repo :logseq.property.tldraw/shape) shape}
         block {:block/uuid block-uuid
-               :block/content ""
+               :block/title ""
                :block/page page-id
                :block/parent page-id}
         block' (if (sqlite-util/db-based-graph? repo)

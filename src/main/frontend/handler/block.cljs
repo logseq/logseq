@@ -35,7 +35,7 @@
        (if (check? x)
          (reset! result (transform x))
          x))
-     (:block/body block))
+     (:block.temp/ast-body block))
     @result))
 
 (defn get-timestamp
@@ -81,7 +81,7 @@
             (when (:block/name ref)
               {:db/id (:db/id ref)
                :block/name (:block/name ref)
-               :block/original-name (:block/original-name ref)})) refs)))
+               :block/title (:block/title ref)})) refs)))
 
 (defn filter-blocks
   [ref-blocks filters]
@@ -199,8 +199,8 @@
              db-graph? (config/db-based-graph? repo)
              block (or (db/entity [:block/uuid block-id]) block)
              content (if (and db-graph? (:block/name block))
-                       (:block/original-name block)
-                       (or custom-content (:block/content block) ""))
+                       (:block/title block)
+                       (or custom-content (:block/title block) ""))
              content-length (count content)
              text-range (cond
                           (vector? pos)

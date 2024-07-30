@@ -1,7 +1,7 @@
 (ns query
   "An example script that queries any db graph from the commandline e.g.
 
-  $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/content]) :where [?b :block/created-at]]'"
+  $ yarn -s nbb-logseq script/query.cljs db-name '[:find (pull ?b [:block/name :block/title]) :where [?b :block/created-at]]'"
   (:require [datascript.core :as d]
             [clojure.edn :as edn]
             [logseq.db.sqlite.cli :as sqlite-cli]

@@ -8,7 +8,7 @@
 (defn get-property-name
   "Get a property's name given its id"
   [id]
-  (:block/original-name (db-utils/entity id)))
+  (:block/title (db-utils/entity id)))
 
 (defn get-property-value
   "Get a property's name given its id"
@@ -38,7 +38,7 @@
    (->> properties
      (map (fn [[k v]]
             (let [prop-ent (db-utils/entity k)]
-              [(if original-key? k (-> prop-ent :block/original-name keyword))
+              [(if original-key? k (-> prop-ent :block/title keyword))
                (cond
                  (set? v)
                  (set (map db-property/property-value-content v))

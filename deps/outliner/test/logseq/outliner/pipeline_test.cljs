@@ -11,7 +11,7 @@
 (defn- get-blocks [db]
   (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name :db/id]}])
               :in $
-              :where [?b :block/content] [(missing? $ ?b :logseq.property/built-in?)]]
+              :where [?b :block/title] [(missing? $ ?b :logseq.property/built-in?)]]
             db)
        (map first)))
 
@@ -23,17 +23,17 @@
           _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
           _ (sqlite-build/create-blocks
              conn
-             [{:page {:block/original-name "bar"}}
-              {:page {:block/original-name "page1"}
-               :blocks [{:block/content "parent [[foo]]"
+             [{:page {:block/title "bar"}}
+              {:page {:block/title "page1"}
+               :blocks [{:block/title "parent [[foo]]"
                          :build/children
-                         [{:block/content "child [[baz]]"
+                         [{:block/title "child [[baz]]"
                            :build/children
-                           [{:block/content "grandchild [[bing]]"}]}]}]}])
+                           [{:block/title "grandchild [[bing]]"}]}]}]}])
           blocks (get-blocks @conn)
           ;; Update parent block to replace 'foo' with 'bar' ref
-          new-tag-id (ffirst (d/q '[:find ?b :where [?b :block/original-name "bar"]] @conn))
-          modified-blocks (map #(if (string/starts-with? (:block/content %) "parent")
+          new-tag-id (ffirst (d/q '[:find ?b :where [?b :block/title "bar"]] @conn))
+          modified-blocks (map #(if (string/starts-with? (:block/title %) "parent")
                                   (assoc %
                                          :block/refs [{:db/id new-tag-id}]
                                          :block/path-refs [{:db/id new-tag-id}])
@@ -43,13 +43,12 @@
           _ (d/transact! conn refs-tx {:pipeline-replace? true})
           updated-blocks (->> (get-blocks @conn)
                               ;; Only keep enough of content to uniquely identify block
-                              (map #(hash-map :block/content (re-find #"\w+" (:block/content %))
+                              (map #(hash-map :block/title (re-find #"\w+" (:block/title %))
                                               :path-ref-names (set (map :block/name (:block/path-refs %))))))]
-      (is (= [{:block/content "parent"
+      (is (= [{:block/title "parent"
                :path-ref-names #{"page1" "bar"}}
-              {:block/content "child"
+              {:block/title "child"
                :path-ref-names #{"page1" "bar" "baz"}}
-              {:block/content "grandchild"
+              {:block/title "grandchild"
                :path-ref-names #{"page1" "bar" "baz" "bing"}}]
              updated-blocks)))))
-

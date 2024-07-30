@@ -28,7 +28,7 @@
     :block/path-refs
     :block/tags
     :block/link
-    :block/content
+    :block/title
     :block/marker
     :block/priority
     :block/properties
@@ -44,7 +44,7 @@
     :block/heading-level
     :block/file
     :class/parent
-    {:block/page [:db/id :block/name :block/original-name :block/journal-day]}
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
     {:block/_parent ...}])
 
 (defonce *transact-fn (atom nil))
@@ -60,7 +60,7 @@
    (let [tx-data (map (fn [m]
                         (if (map? m)
                           (dissoc m :block/children :block/meta :block/top? :block/bottom? :block/anchor
-                                  :block/title :block/body :block/level :block/container :db/other-tx
+                                  :block.temp/ast-title :block.temp/ast-body :block/level :block/container :db/other-tx
                                   :block/unordered)
                           m)) tx-data)
          tx-data (->> (common-util/fast-remove-nils tx-data)
@@ -176,10 +176,10 @@
 (defn get-pages
   [db]
   (->> (d/q
-        '[:find ?page-original-name
+        '[:find ?page-title
           :where
           [?page :block/name ?page-name]
-          [(get-else $ ?page :block/original-name ?page-name) ?page-original-name]]
+          [(get-else $ ?page :block/title ?page-name) ?page-title]]
         db)
        (map first)
        (remove hidden-page?)))
@@ -208,7 +208,7 @@
     (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
                     (parse-uuid page-name-or-uuid))]
       (d/entity db [:block/uuid id])
-      (d/entity db (sqlite-common-db/get-first-page-by-original-name db page-name-or-uuid)))))
+      (d/entity db (sqlite-common-db/get-first-page-by-title db page-name-or-uuid)))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
@@ -245,7 +245,7 @@
                                    (and
                                     first-child
                                     (= 1 (count children))
-                                    (contains? #{"" "-" "*"} (string/trim (:block/content first-child))))))
+                                    (contains? #{"" "-" "*"} (string/trim (:block/title first-child))))))
                                 (not (contains? built-in-pages name))
                                 (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
@@ -432,7 +432,7 @@
                 (when-let [e (d/entity db eid)]
                   (or (some alias (map :db/id (:block/refs e)))
                       (:block/link e)
-                      (nil? (:block/content e)))))
+                      (nil? (:block/title e)))))
               search-result-eids)]
     (when (seq eids)
       (d/pull-many db '[*] eids))))
@@ -473,7 +473,7 @@
    [(sqlite-util/block-with-timestamps
      {:block/uuid (common-uuid/gen-uuid)
       :block/name common-config/favorites-page-name
-      :block/original-name common-config/favorites-page-name
+      :block/title common-config/favorites-page-name
       :block/type #{"page" "hidden"}
       :block/format :markdown})]))
 
@@ -481,7 +481,7 @@
   "Builds tx for a favorite block in favorite page"
   [favorite-uuid]
   {:block/link [:block/uuid favorite-uuid]
-   :block/content ""
+   :block/title ""
    :block/format :markdown})
 
 (defn create-views-page!
@@ -493,12 +493,12 @@
      [(sqlite-util/block-with-timestamps
        {:block/uuid page-id
         :block/name common-config/views-page-name
-        :block/original-name common-config/views-page-name
+        :block/title common-config/views-page-name
         :block/type #{"page" "hidden"}
         :block/format :markdown})
       (sqlite-util/block-with-timestamps
        {:block/uuid (common-uuid/gen-uuid)
-        :block/content ""
+        :block/title ""
         :block/format :markdown
         :block/parent [:block/uuid page-id]
         :block/order (db-order/gen-key nil)
@@ -530,7 +530,7 @@
   [db namespace {:keys [db-graph?]}]
   (assert (string? namespace))
   (let [namespace (common-util/page-name-sanity-lc namespace)
-        pull-attrs  (cond-> [:db/id :block/name :block/original-name :block/namespace]
+        pull-attrs  (cond-> [:db/id :block/name :block/title :block/namespace]
                       (not db-graph?)
                       (conj {:block/file [:db/id :file/path]}))]
     (d/q
@@ -554,7 +554,7 @@
                    (map :e))]
       (when (seq ids)
         (d/pull-many db
-                     '[:db/id :block/name :block/original-name]
+                     '[:db/id :block/name :block/title]
                      ids)))))
 
 (defn get-all-properties

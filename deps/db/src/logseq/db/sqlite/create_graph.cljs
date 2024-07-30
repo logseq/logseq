@@ -16,8 +16,8 @@
 (defn build-initial-properties*
   [built-in-properties]
   (mapcat
-   (fn [[db-ident {:keys [schema original-name closed-values] :as m}]]
-     (let [prop-name (or original-name (name (:name m)))
+   (fn [[db-ident {:keys [schema title closed-values] :as m}]]
+     (let [prop-name (or title (name (:name m)))
            blocks (if closed-values
                     (db-property-build/build-closed-values
                      db-ident
@@ -27,7 +27,7 @@
                     [(sqlite-util/build-new-property
                       db-ident
                       schema
-                      {:original-name prop-name})])]
+                      {:title prop-name})])]
        blocks))
    (dissoc built-in-properties :logseq.property/built-in?)))
 
@@ -39,7 +39,7 @@
         built-in-property (sqlite-util/build-new-property
                            :logseq.property/built-in?
                            built-in-property-schema
-                           {:original-name (name :logseq.property/built-in?)})
+                           {:title (name :logseq.property/built-in?)})
         built-in-prop-value (db-property-build/build-property-value-block
                              {:db/id [:block/uuid (:block/uuid built-in-property)]}
                              {:db/ident :logseq.property/built-in?
@@ -89,8 +89,8 @@
 
 (defn- build-initial-classes [db-ident->properties built-in-prop-value]
   (map
-   (fn [[db-ident {:keys [schema original-name]}]]
-     (let [original-name' (or original-name (name db-ident))]
+   (fn [[db-ident {:keys [schema title]}]]
+     (let [title' (or title (name db-ident))]
        (mark-block-as-built-in
         (sqlite-util/build-new-class
          (let [properties (mapv
@@ -100,8 +100,8 @@
                                db-ident))
                            (:properties schema))]
            (cond->
-            {:block/original-name original-name'
-             :block/name (common-util/page-name-sanity-lc original-name')
+            {:block/title title'
+             :block/name (common-util/page-name-sanity-lc title')
              :db/ident db-ident
              :block/uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)}
              (seq properties)

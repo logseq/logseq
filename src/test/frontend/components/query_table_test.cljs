@@ -22,8 +22,8 @@
 
   (testing "sort by block column"
     (are [sort-state result sorted-result]
-         (= (mapv #(hash-map :block/content %) sorted-result)
-            (#'query-table/sort-result (mapv #(hash-map :block/content %) result) sort-state))
+         (= (mapv #(hash-map :block/title %) sorted-result)
+            (#'query-table/sort-result (mapv #(hash-map :block/title %) result) sort-state))
          {:sort-desc? true :sort-by-column :block}
          ["abc" "cde"] ["cde" "abc"]
 

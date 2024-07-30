@@ -25,7 +25,7 @@
     (map-indexed
      (fn [idx id]
        {:block/uuid id
-        :block/original-name (str "Page-" (+ start-idx idx))})
+        :block/title (str "Page-" (+ start-idx idx))})
      ids)))
 
 (defn build-blocks
@@ -34,7 +34,7 @@
                    (fn []
                      (let [id (get-next-id)]
                        {:block/uuid id
-                        :block/content (str id)})))))
+                        :block/title (str id)})))))
 
 (defn- create-init-data
   [options]
@@ -69,15 +69,15 @@
         conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         _ (println "Building tx ...")
         {:keys [init-tx]} (outliner-cli/build-blocks-tx (create-init-data options))]
-    (println "Built" (count init-tx) "tx," (count (filter :block/original-name init-tx)) "pages and"
-             (count (filter :block/content init-tx)) "blocks ...")
+    (println "Built" (count init-tx) "tx," (count (filter :block/title init-tx)) "pages and"
+             (count (filter :block/title init-tx)) "blocks ...")
     ;; Vary the chunking with page size up to a max to avoid OOM
     (let [tx-chunks (partition-all (min (:pages options) 30000) init-tx)]
       (loop [chunks tx-chunks
              chunk-num 1]
         (when-let [chunk (first chunks)]
           (println "Transacting chunk" chunk-num  "of" (count tx-chunks)
-                   "starting with block:" (pr-str (select-keys (first chunk) [:block/content :block/original-name])))
+                   "starting with block:" (pr-str (select-keys (first chunk) [:block/title :block/title])))
           (d/transact! conn chunk)
           (recur (rest chunks) (inc chunk-num)))))
     #_(d/transact! conn blocks-tx)

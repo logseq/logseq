@@ -839,7 +839,7 @@
 ;; FIXME: This ns should not be creating idents. This allows for ident conflicts
 ;; and assumes that names directly map to idents which is incorrect and breaks for multiple
 ;; cases e.g. a property that has been renamed or sanitized. Instead it should
-;; find a property's ident by looking up the property in the db by its original-name
+;; find a property's ident by looking up the property in the db by its title
 (defn get-db-ident-for-property-name
   "Finds a property :db/ident for a given property name"
   [property-name]

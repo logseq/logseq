@@ -76,15 +76,15 @@
 (defn build-new-property
   "Build a standard new property so that it is is consistent across contexts. Takes
    an optional map with following keys:
-   * :original-name - Case sensitive property name. Defaults to deriving this from db-ident
+   * :title - Case sensitive property name. Defaults to deriving this from db-ident
    * :block-uuid - :block/uuid for property"
   ([db-ident prop-schema] (build-new-property db-ident prop-schema {}))
-  ([db-ident prop-schema {:keys [original-name block-uuid ref-type?]}]
+  ([db-ident prop-schema {:keys [title block-uuid ref-type?]}]
    (assert (keyword? db-ident))
    (let [db-ident' (if (qualified-keyword? db-ident)
                      db-ident
                      (db-property/create-user-property-ident-from-name (name db-ident)))
-         prop-name (or original-name (name db-ident'))
+         prop-name (or title (name db-ident'))
          classes (:classes prop-schema)
          prop-schema (assoc prop-schema :type (get prop-schema :type :default))]
      (block-with-timestamps
@@ -95,7 +95,7 @@
         :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
         :block/uuid (or block-uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident'))
-        :block/original-name (name prop-name)
+        :block/title (name prop-name)
         :db/index true
         :db/cardinality (if (= :many (:cardinality prop-schema))
                           :db.cardinality/many
@@ -122,7 +122,7 @@
   [page-name]
   (block-with-timestamps
    {:block/name (common-util/page-name-sanity-lc page-name)
-    :block/original-name page-name
+    :block/title page-name
     :block/uuid (d/squuid)
     :block/format :markdown
     :block/type #{"page"}}))

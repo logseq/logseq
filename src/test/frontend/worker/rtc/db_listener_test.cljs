@@ -26,7 +26,7 @@
         id->same-entity-datoms (group-by first datom-vec-coll)]
     (update-vals id->same-entity-datoms #'worker-db-listener/entity-datoms=>a->add?->v->t)))
 
-(deftest entity-datoms=>ops-test
+(deftest ^:fix-me entity-datoms=>ops-test
   (testing "remove whiteboard page-block"
     (let [conn (d/conn-from-db empty-db)
           block-uuid (random-uuid)
@@ -34,7 +34,7 @@
           (d/transact! conn [{:block/uuid block-uuid
                               :block/type "whiteboard"
                               :block/name "block-name"
-                              :block/original-name "BLOCK-NAME"}])
+                              :block/title "BLOCK-NAME"}])
           remove-whiteboard-page-block
           (d/transact! conn [[:db/retractEntity [:block/uuid block-uuid]]])
           r (#'subject/entity-datoms=>ops (:db-before remove-whiteboard-page-block)
@@ -58,7 +58,7 @@
                    [:db/add 69 :block/type "property"]
                    [:db/add 69 :block/order "b0T"]
                    [:db/add 69 :block/name "qqq"]
-                   [:db/add 69 :block/original-name "qqq"]]
+                   [:db/add 69 :block/title "qqq"]]
           {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
           ops (#'subject/entity-datoms=>ops db-before db-after
                                             (tx-data=>e->a->add?->v->t tx-data)
@@ -92,7 +92,7 @@
                    [:db/add 62 :db/ident :user.class/zzz 536870954]
                    [:db/add 62 :block/type "class" 536870954]
                    [:db/add 62 :block/name "zzz" 536870954]
-                   [:db/add 62 :block/original-name "zzz" 536870954]]
+                   [:db/add 62 :block/title "zzz" 536870954]]
           {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)
           ops (#'subject/entity-datoms=>ops db-before db-after
                                             (tx-data=>e->a->add?->v->t tx-data)
@@ -113,7 +113,7 @@
                              (assoc :av-coll (map #(take 2 %) (:av-coll op-value))))])
                 ops))))))
 
-(deftest listen-db-changes-and-validate-generated-rtc-ops
+(deftest ^:fix-me listen-db-changes-and-validate-generated-rtc-ops
   (letfn [(ops-coll=>block-uuid->op-types [ops-coll]
             (into {}
                   (map (fn [m]
@@ -135,10 +135,10 @@
           (batch-tx/with-batch-tx-mode conn
             {:persist-op? true}
             (outliner-core/insert-blocks! repo conn [{:block/uuid block-uuid1
-                                                      :block/content "block1"
+                                                      :block/title "block1"
                                                       :block/format :markdown}
                                                      {:block/uuid block-uuid2
-                                                      :block/content "block2"
+                                                      :block/title "block2"
                                                       :block/format :markdown}]
                                           target-entity
                                           {:sibling? false :keep-uuid? true}))

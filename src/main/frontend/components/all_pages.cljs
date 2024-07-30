@@ -16,7 +16,7 @@
 (defn- columns
   [db]
   (let [db-based? (ldb/db-based-graph? db)]
-    (->> [{:id :block/original-name
+    (->> [{:id :block/title
            :name (t :block/name)
            :cell (fn [_table row _column]
                    (component-block/page-cp {} row))

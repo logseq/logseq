@@ -213,7 +213,7 @@
                           (nil? (d/entity @conn before-parent)))))))))))
 
 (defn get-reversed-datoms
-  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} tx-meta]
+  [conn undo? {:keys [tx-data added-ids retracted-ids] :as op} _tx-meta]
   (try
     (let [redo? (not undo?)
           e->datoms (->> (if redo? tx-data (reverse tx-data))
@@ -243,8 +243,7 @@
                                          :undo? undo?})))
 
               ;; block has been moved or target got deleted by another client
-              (and (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?)
-                   (not (:ref-replace-prev-block-id tx-meta)))
+              (moved-block-or-target-deleted? conn e->datoms e moved-blocks redo?)
               (throw (ex-info "This block has been moved or its target has been deleted"
                               (merge op {:error :block-moved-or-target-deleted
                                          :undo? undo?})))
@@ -295,7 +294,7 @@
               ((if undo? push-redo-op push-undo-op) repo op)
               (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) op)
                                         (map second))
-                    block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid
+                    block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid
                                                                                 (if undo?
                                                                                   (first editor-cursors)
                                                                                   (last editor-cursors)))]))]

@@ -68,19 +68,19 @@ and handles unexpected failure."
        (first)))
 
 (defn parse-block
-  [{:block/keys [uuid content format] :as block}]
-  (when-not (string/blank? content)
+  [{:block/keys [uuid title format] :as block}]
+  (when-not (string/blank? title)
     (let [block (dissoc block :block/pre-block?)
           format (or format :markdown)
           parse-config (mldoc/get-default-config format)
-          ast (format/to-edn content format parse-config)
-          blocks (extract-blocks ast content format {})
+          ast (format/to-edn title format parse-config)
+          blocks (extract-blocks ast title format {})
           new-block (first blocks)
           block (cond->
                  (merge block new-block)
                   (> (count blocks) 1)
                   (assoc :block/warning :multiple-blocks))
-          block (dissoc block :block/title :block/body :block/level)]
+          block (dissoc block :block.temp/ast-body :block/level)]
       (if uuid (assoc block :block/uuid uuid) block))))
 
 (defn parse-title-and-body
@@ -90,7 +90,7 @@ and handles unexpected failure."
             (parse-title-and-body (:block/uuid block)
                                   (:block/format block)
                                   (:block/pre-block? block)
-                                  (:block/content block)))))
+                                  (:block/title block)))))
   ([block-uuid format pre-block? content]
    (when-not (string/blank? content)
      (let [content (if pre-block? content
@@ -105,9 +105,9 @@ and handles unexpected failure."
                body (vec (if title (rest ast) ast))
                body (drop-while gp-property/properties-ast? body)
                result (cond->
-                       (if (seq body) {:block/body body} {})
+                       (if (seq body) {:block.temp/ast-body body} {})
                         title
-                        (assoc :block/title title))]
+                        (assoc :block.temp/ast-title title))]
            (state/add-block-ast-cache! block-uuid content result)
            result))))))
 

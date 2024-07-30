@@ -365,7 +365,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
   ```sh
   $ bb dev:db-query woot '[:find (pull ?b [*]) :where (block-content ?b "Dogma")]'
   DB contains 833 datoms
-  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/content "Dogma #~^65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d", :db/id 100090, :block/path-refs [#:db{:id 100051} #:db{:id 100064}], :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
+  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #~^65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d", :db/id 100090, :block/path-refs [#:db{:id 100051} #:db{:id 100064}], :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
   ```
 
 * `dev:db-transact` - Run a `d/transact!` against the queried results of a DB graph
@@ -413,7 +413,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
   # This snapshot correctly shows an added block with content "b7" and a property using a closed :default value
   $  bb dev:diff-datoms w2.edn w3.edn
   [[]
-  [[162 :block/content "b7" 536871039 true]
+  [[162 :block/title "b7" 536871039 true]
     [162 :block/created-at 1703004379103 536871037 true]
     [162 :block/format :markdown 536871037 true]
     [162 :block/page 149 536871037 true]
@@ -450,7 +450,7 @@ These tasks are specific to database graphs. For these tasks there is a one time
     [nil nil 1703004380918 536871039]
     [nil nil 162 536871037]
     [nil nil 536871037 536871038]
-    [162 :block/content "b7" 536871039 true]
+    [162 :block/title "b7" 536871039 true]
     [162 :block/created-at 1703004379103 536871037 true]
     [162 :block/format :markdown 536871037 true]
     [162 :block/order "a0" 536871037 true]

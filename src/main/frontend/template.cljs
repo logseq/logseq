@@ -21,7 +21,7 @@
                           page (if block-uuid
                                  (:block/page (db-utils/entity [:block/uuid block-uuid]))
                                  (ldb/get-page (conn/get-db) current-page))
-                          current-page' (:block/original-name page)]
+                          current-page' (:block/title page)]
                       (page-ref/->page-ref current-page')))})
 
 ;; TODO: programmable

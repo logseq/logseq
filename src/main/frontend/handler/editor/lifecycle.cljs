@@ -52,10 +52,10 @@
 ;;            (= (:block/uuid new-block)
 ;;               (:block/uuid edit-block))
 ;;            (not= (some-> edit-block string/trim)
-;;                  (some-> (:block/content new-block) string/trim)))
+;;                  (some-> (:block/title new-block) string/trim)))
 ;;       (when-let [input (state/get-input)]
 ;;         (util/set-change-value input
-;;                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/content new-block))))))
+;;                                (block-handler/sanity-block-content repo (get new-block :block/format :markdown) (:block/title new-block))))))
 ;;   state)
 
 

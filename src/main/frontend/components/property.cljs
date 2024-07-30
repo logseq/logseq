@@ -61,9 +61,10 @@
                (let [toggle-fn #(do
                                   (when (fn? on-hide) (on-hide))
                                   (shui/popup-hide! id))
-                     classes (model/get-all-classes (state/get-current-repo))
-                     options (map (fn [[name id]]
-                                    {:label name :value id})
+                     classes (model/get-all-classes (state/get-current-repo) {:except-root-class? true})
+                     options (map (fn [class]
+                                    {:label (:block/title class)
+                                     :value (:block/uuid class)})
                                   classes)
                      opts {:items options
                            :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
@@ -99,7 +100,7 @@
           (if (seq schema-classes)
             [:div.flex.flex-1.flex-row.items-center.flex-wrap.gap-2
              (for [class schema-classes]
-               [:a.text-sm (str "#" (:block/original-name class))])]
+               [:a.text-sm (str "#" (:block/title class))])]
             (pv/property-empty-btn-value))])])))
 
 (defn- property-type-label
@@ -160,7 +161,7 @@
                           *show-class-select?
                           default-open? page-configure? class-schema?]
                    :as opts}]
-  (let [property-name (or (and *property-name @*property-name) (:block/original-name property))
+  (let [property-name (or (and *property-name @*property-name) (:block/title property))
         property-schema (or (and *property-schema @*property-schema) (:block/schema property))
         schema-types (->> (concat db-property-type/user-built-in-property-types
                                   (when built-in?
@@ -245,7 +246,7 @@
              (assoc state ::values *values)))
    :will-mount (fn [state]
                  (let [[property _opts] (:rum/args state)]
-                   (reset! (::property-name state) (:block/original-name property))
+                   (reset! (::property-name state) (:block/title property))
                    (reset! (::property-schema state) (:block/schema property))
                    (state/set-state! :editor/property-configure? true)
                    state))
@@ -412,14 +413,14 @@
          (set-properties! (remove exclude-properties properties))
          (set-excluded-properties! (->> properties
                                         (filter exclude-properties)
-                                        (map :block/original-name)
+                                        (map :block/title)
                                         set))))
      [])
     [:div.ls-property-add.flex.flex-row.items-center.property-key
      [:div.ls-property-key
       (select/select (merge
                       {:items (map (fn [x]
-                                     {:label (:block/original-name x)
+                                     {:label (:block/title x)
                                       :value (:block/uuid x)}) properties)
                        :extract-fn :label
                        :dropdown? false
@@ -523,10 +524,10 @@
         *property-schema (::property-schema state)
         existing-tag-alias (->> db-property/db-attribute-properties
                                 (map db-property/built-in-properties)
-                                (keep #(when (get block (:attribute %)) (:original-name %)))
+                                (keep #(when (get block (:attribute %)) (:title %)))
                                 set)
         exclude-properties (fn [m]
-                             (or (and (not page?) (contains? existing-tag-alias (:block/original-name m)))
+                             (or (and (not page?) (contains? existing-tag-alias (:block/title m)))
                                  ;; Filters out properties from being in wrong :view-context
                                  (and (not page?) (= :page (get-in m [:block/schema :view-context])))
                                  (and page? (= :block (get-in m [:block/schema :view-context])))))
@@ -589,7 +590,7 @@
   [state block property {:keys [class-schema? page-cp inline-text other-position?]}]
   (let [*hover? (::hover? state)
         icon (:logseq.property/icon property)
-        property-name (:block/original-name property)]
+        property-name (:block/title property)]
     [:div.flex.flex-row.items-center.gap-1
      {:on-mouse-over   #(reset! *hover? true)
       :on-mouse-leave  #(reset! *hover? false)
@@ -635,11 +636,11 @@
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger
         {:on-click #(route-handler/redirect-to-page! (:block/uuid property))}
-        (:block/original-name property)]
+        (:block/title property)]
 
        (shui/trigger-as :a
                         {:tabIndex 0
-                         :title (str "Configure property: " (:block/original-name property))
+                         :title (str "Configure property: " (:block/title property))
                          :class "property-k flex select-none jtrigger w-full"
                          :on-pointer-down (fn [^js e]
                                             (when (util/meta-key? e)
@@ -666,7 +667,7 @@
                                        :align "start"
                                        :auto-side? true
                                        :auto-focus? true}))}
-                        (:block/original-name property)))]))
+                        (:block/title property)))]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
