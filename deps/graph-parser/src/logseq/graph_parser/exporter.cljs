@@ -269,7 +269,7 @@
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
                         :default
                         (coll? prop-val)
-                        :page
+                        :node
                         :else
                         (db-property-type/infer-property-type-from-value
                          (macro-util/expand-value-if-macro prop-val macros)))
@@ -335,7 +335,7 @@
        (into {})))
 
 (defn- update-page-or-date-values
-  "Converts :page or :date names to entity values"
+  "Converts :node or :date names to entity values"
   [page-names-to-uuids property-values]
   (set (map #(vector :block/uuid
                      ;; assume for now a ref's :block/name can always be translated by lc helper
@@ -358,11 +358,11 @@
       (= :default (:from type-change))
       (or (get properties-text-values prop) (str val))
 
-      ;; treat it the same as a :page
+      ;; treat it the same as a :node
       (= {:from :node :to :date} type-change)
       (update-page-or-date-values page-names-to-uuids val)
 
-      ;; Change to :page as dates can be pages but pages can't be dates
+      ;; Change to :node as dates can be pages but pages can't be dates
       (= {:from :date :to :node} type-change)
       (do
         (swap! property-schemas assoc-in [prop :type] :node)
@@ -835,8 +835,11 @@
 (defn- update-whiteboard-blocks [blocks format]
   (map (fn [b]
          (if (seq (:block/properties b))
-           (update b :block/title #(gp-property/remove-properties format %))
-           b))
+           (-> (dissoc b :block/content)
+               (update :block/title #(gp-property/remove-properties format %)))
+           (cond-> (dissoc b :block/content)
+             (:block/content b)
+             (assoc :block/title (:block/content b)))))
        blocks))
 
 (defn- extract-pages-and-blocks
@@ -854,6 +857,12 @@
 
           (common-config/whiteboard? file)
           (-> (extract/extract-whiteboard-edn file content extract-options')
+              (update :pages (fn [pages]
+                               (->> pages
+                                    ;; migrate previous attribute for :block/title
+                                    (map #(-> %
+                                              (assoc :block/title (:block/original-name %))
+                                              (dissoc :block/original-name))))))
               (update :blocks update-whiteboard-blocks format))
 
           :else
