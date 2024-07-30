@@ -315,7 +315,7 @@
                  (not custom-home-page?))
         (home-button))
 
-      (when sync-enabled?
+      (when (and (or (util/electron?) (state/developer-mode?)) sync-enabled?)
         (login))
 
       (when config/lsp-enabled?
@@ -345,8 +345,8 @@
          (t :graph)])
 
       (toolbar-dots-menu {:t            t
-                      :current-repo current-repo
-                      :default-home default-home})
+                          :current-repo current-repo
+                          :default-home default-home})
 
       (sidebar/toggle)
 
