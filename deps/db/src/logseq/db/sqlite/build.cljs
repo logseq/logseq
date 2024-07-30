@@ -555,7 +555,7 @@
    * :pages-and-blocks - This is a vector of maps containing a :page key and optionally a :blocks
      key when defining a page's blocks. More about each key:
      * :page - This is a datascript attribute map for pages with
-       :block/title required e.g. `{:block/original/name \"foo\"}`. Additional keys available:
+       :block/title required e.g. `{:block/title \"foo\"}`. Additional keys available:
        * :build/journal - Define a journal pages as an integer e.g. 20240101 is Jan 1, 2024. :block/title
          is not required if using this since it generates one
        * :build/properties - Defines properties on a page
