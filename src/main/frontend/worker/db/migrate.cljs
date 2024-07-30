@@ -57,7 +57,7 @@
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
   (when (< db-schema/version max-schema-version)
-    (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-verison is " max-schema-version))))
+    (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))
 
 (defn migrate
   [conn search-db]
