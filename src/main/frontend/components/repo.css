@@ -16,11 +16,19 @@
 
 .ui__dropdown-menu-content {
   &.repos-list {
-    @apply px-2 pb-[210px] relative;
+    @apply px-2 pb-[210px] relative overflow-hidden;
     @apply min-w-[280px] sm:max-w-[320px] max-h-[66vh];
 
+    &.no-repos {
+      @apply pb-[180px];
+    }
+
     &[data-mode=db] {
-      @apply pb-[130px];
+      @apply pb-[114px];
+
+      &.no-repos {
+        @apply pb-[109px];
+      }
     }
 
     .ui__dropdown-menu-item {
@@ -28,7 +36,7 @@
     }
 
     .cp__repos-list-wrap {
-      @apply max-h-96 overflow-scroll m-[-8px] px-2 pb-2;
+      @apply max-h-96 overflow-scroll m-[-8px] px-2 pb-6;
     }
   }
 }

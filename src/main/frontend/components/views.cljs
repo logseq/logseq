@@ -894,7 +894,7 @@
            (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-ordered-columns ids))))}))
 
 (rum/defc view-inner < rum/static
-  [view-entity {:keys [data set-data! columns add-new-object! create-view! title] :as option}]
+  [view-entity {:keys [data set-data! columns add-new-object! create-view! title-key] :as option}]
   (let [[input set-input!] (rum/use-state "")
         sorting (:logseq.property/table-sorting view-entity)
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
@@ -943,10 +943,9 @@
 
     [:div.flex.flex-col.gap-2.grid
      [:div.flex.items-center.justify-between
-      (let [data-count (count (:data table))]
-        [:div.flex.flex-row.items-center.gap-2
-         [:div.font-medium (or title
-                               (str data-count (if (> data-count 1) " Objects" " Object")))]])
+      [:div.flex.flex-row.items-center.gap-2
+       [:div.font-medium (t (or title-key :views.table/default-title)
+                            (count (:rows table)))]]
       [:div.flex.items-center.gap-1
 
        (filter-properties columns table)
