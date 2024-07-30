@@ -52,7 +52,7 @@
       (let [type (cond
                    (boolean? value) :checkbox
                    (number? value) :number
-                   (coll? value) :page
+                   (coll? value) :node
                    :else :default)
             schema {:type type :cardinality (if multi? :many :one)}]
         (p/chain

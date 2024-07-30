@@ -16,7 +16,7 @@
 
 (def user-built-in-property-types
   "Valid property types for users in order they appear in the UI"
-  [:default :number :date :checkbox :url :page :object])
+  [:default :number :date :checkbox :url :node])
 
 (def closed-value-property-types
   "Valid property :type for closed values"
@@ -24,7 +24,7 @@
 
 (def position-property-types
   "Valid property :type for position"
-  #{:default :number :date :checkbox :url :page :object})
+  #{:default :number :date :checkbox :url :node})
 
 (assert (set/subset? closed-value-property-types (set user-built-in-property-types))
         "All closed value types are valid property types")
@@ -45,7 +45,7 @@
   "User facing ref types. Property values that users see are stored in either
   :property.value/content, :block/title.
   :block/title is for all the page related types"
-  (into #{:page :date :object} value-ref-property-types))
+  (into #{:date :node} value-ref-property-types))
 
 (assert (set/subset? ref-property-types
                      (set user-built-in-property-types))
@@ -60,8 +60,7 @@
                :number #{:cardinality}
                :date #{:cardinality}
                :url #{:cardinality}
-               :page #{:cardinality :classes}
-               :object #{:cardinality :classes}
+               :node #{:cardinality :classes}
                :checkbox #{}}))
 
 (assert (= (set user-built-in-property-types) (set (keys user-built-in-allowed-schema-attributes)))
@@ -117,15 +116,11 @@
     (when-let [ent (d/entity db s)]
       (string? (:block/title ent)))))
 
-(defn- page?
+(defn- node-entity?
   [db val]
   (when-let [ent (d/entity db val)]
-    (some? (:block/title ent))))
-
-(defn- object-entity?
-  [db val]
-  (when-let [ent (d/entity db val)]
-    (seq (:block/tags ent))))
+    ;; (seq (:block/tags ent))
+    (some? ent)))
 
 (defn- date?
   [db val]
@@ -149,12 +144,9 @@
    :url      [:fn
               {:error/message "should be a URL"}
               url-entity?]
-   :page     [:fn
-              {:error/message "should be a page"}
-              page?]
-   :object   [:fn
-              {:error/message "should be a page/block with tags"}
-              object-entity?]
+   :node   [:fn
+            {:error/message "should be a page/block with tags"}
+            node-entity?]
 
    ;; Internal usage
    ;; ==============
@@ -173,7 +165,7 @@
 
 (def property-types-with-db
   "Property types whose validation fn requires a datascript db"
-  #{:default :checkbox :url :number :date :page :object :entity})
+  #{:default :checkbox :url :number :date :node :entity})
 
 ;; Helper fns
 ;; ==========

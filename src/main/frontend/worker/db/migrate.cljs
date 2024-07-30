@@ -29,6 +29,16 @@
                          [:db/add (:e d) :block/title (:block/original-name e)]])))) datoms)]
     tx-data))
 
+(defn- replace-object-and-page-type-with-node
+  [conn _search-db]
+  (->> (ldb/get-all-properties @conn)
+       (filter (fn [p]
+                 (contains? #{:object :page} (:type (:block/schema p)))))
+       (map
+        (fn [p]
+          {:db/id (:db/id p)
+           :block/schema (assoc (:block/schema p) :type :node)}))))
+
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
@@ -42,7 +52,8 @@
    [5 {:properties [:logseq.property/view-for]
        :classes    []}]
    [6 {:properties [:logseq.property.asset/remote-metadata]}]
-   [7 {:fix replace-original-name-content-with-title}]])
+   [7 {:fix replace-original-name-content-with-title}]
+   [8 {:fix replace-object-and-page-type-with-node}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

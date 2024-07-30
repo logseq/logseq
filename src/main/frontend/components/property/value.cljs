@@ -25,7 +25,9 @@
             [datascript.impl.entity :as de]
             [frontend.handler.property.util :as pu]
             [logseq.db.frontend.property.type :as db-property-type]
-            [dommy.core :as d]))
+            [dommy.core :as d]
+            [frontend.search :as search]
+            [goog.functions :refer [debounce]]))
 
 (rum/defc property-empty-btn-value
   [& {:as opts}]
@@ -57,7 +59,7 @@
 
 (defn- select-type?
   [property type]
-  (or (contains? #{:page :object :number :url :date} type)
+  (or (contains? #{:node :number :url :date} type)
       ;; closed values
       (seq (:property/closed-values property))))
 
@@ -306,16 +308,21 @@
     ;          {:id value :value label}) items') nil opts)
     ))
 
-(defn- get-title
-  [e]
-  (or (:block/title e)
-      (:block/title e)))
+(defn- get-node-icon
+  [node]
+  (cond
+    (db/page? node)
+    "page"
+    (seq (:block/tags node))
+    "topology-star"
+    :else
+    "block"))
 
-(rum/defc select-page < rum/reactive db-mixins/query
+(rum/defc select-node < rum/reactive db-mixins/query
   [property
-   {:keys [block multiple-choices? dropdown? input-opts] :as opts}]
+   {:keys [block multiple-choices? dropdown? input-opts on-input] :as opts}
+   *result]
   (let [repo (state/get-current-repo)
-        object? (= :object (get-in property [:block/schema :type]))
         classes (:property/schema.classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
@@ -325,7 +332,7 @@
                              (if (every? de/entity? v)
                                (map :db/id v)
                                [(:db/id v)])))
-        objects-or-pages
+        nodes
         (->>
          (cond
            (seq classes)
@@ -337,15 +344,30 @@
             classes)
 
            :else
-           (->> (model/get-all-pages repo)
-                (remove (fn [page]
-                          (or (ldb/built-in? page)
+           (let [result (rum/react *result)]
+             (if (empty? result)
+               (let [v (get block (:db/ident property))]
+                 (if (every? de/entity? v) v [v]))
+               (remove (fn [node]
+                         (or (= (:db/id block) (:db/id node))
                               ;; A page's alias can't be itself
-                              (and alias? (= (or (:db/id (:block/page block))
-                                                 (:db/id block))
-                                             (:db/id page)))))))))
-        options (map (fn [object] {:label (get-title object)
-                                   :value (:db/id object)}) objects-or-pages)
+                             (and alias? (= (or (:db/id (:block/page block))
+                                                (:db/id block))
+                                            (:db/id node)))))
+                       result)))))
+        options (map (fn [node]
+                       (let [id (or (:value node) (:db/id node))
+                             label (if (integer? id)
+                                     (let [title (subs (:block/title node) 0 256)
+                                           node (or (db/entity id) node)
+                                           icon (get-node-icon node)]
+                                       [:div.flex.flex-row.items-center.gap-1
+                                        (ui/icon icon {:size 14})
+                                        [:div title]])
+                                     (or (:label node) (:block/title node)))]
+                         (assoc node
+                                :label label
+                                :value id))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
         opts' (cond->
                (merge
@@ -360,18 +382,20 @@
                                               alias?
                                               "Set alias"
                                               multiple-choices?
-                                              (str "Choose " (if object? "objects" "pages"))
+                                              "Choose nodes"
                                               :else
-                                              (str "Choose " (if object? "object" "page")))
+                                              "Choose node")
                  :show-new-when-not-exact-match? true
                  :extract-chosen-fn :value
                  :extract-fn :label
-
                  :input-opts input-opts
+                 :on-input (debounce on-input 50)
                  :on-chosen (fn [chosen selected?]
                               (p/let [id (if (integer? chosen) chosen
                                              (when-not (string/blank? (string/trim chosen))
-                                               (<create-page-if-not-exists! property classes' chosen)))]
+                                               (<create-page-if-not-exists! property classes' chosen)))
+                                      _ (when (and (integer? id) (not (ldb/page? (db/entity id))))
+                                          (db-async/<get-block repo id))]
                                 (if id
                                   (add-or-remove-property-value block property id selected? {})
                                   (log/error :msg "No :db/id found or created for chosen" :chosen chosen))))})
@@ -393,10 +417,12 @@
                                    results))))]
     (select-aux block property opts')))
 
-(defn property-value-select-page
-  [block property opts
+(rum/defcs property-value-select-node <
+  (rum/local nil ::result)
+  [state block property opts
    {:keys [*show-new-property-config?]}]
-  (let [input-opts (fn [_]
+  (let [*result (::result state)
+        input-opts (fn [_]
                      {:on-click (fn []
                                   (when *show-new-property-config?
                                     (reset! *show-new-property-config? false)))
@@ -406,10 +432,17 @@
                           "Escape"
                           (when-let [f (:on-chosen opts)] (f))
                           nil))})
+
         opts' (assoc opts
                      :block block
-                     :input-opts input-opts)]
-    (select-page property opts')))
+                     :input-opts input-opts
+                     :on-input (fn [v]
+                                 (if (string/blank? v)
+                                   (reset! *result nil)
+                                   (p/let [result (search/block-search (state/get-current-repo) v {:enable-snippet? false
+                                                                                                   :built-in? false})]
+                                     (reset! *result result)))))]
+    (select-node property opts' *result)))
 
 (rum/defcs select < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -587,7 +620,7 @@
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value)
 
-       (ldb/page? value)
+       (or (ldb/page? value) (seq (:block/tags value)))
        (when value
          (rum/with-key
            (page-cp {:disable-preview? true
@@ -596,7 +629,7 @@
                      :meta-click? other-position?} value)
            (:db/id value)))
 
-       (= type :object)
+       (= type :node)
        (when-let [reference (state/get-component :block/reference)]
          (reference {} (:block/uuid value)))
 
@@ -631,8 +664,8 @@
                              (:number :url :default)
                              (select block property select-opts' opts)
 
-                             (:object :page :date)
-                             (property-value-select-page block property select-opts' opts))])
+                             (:node :date)
+                             (property-value-select-node block property select-opts' opts))])
           trigger-id (str "trigger-" (:container-id opts) "-" (:db/id block) "-" (:db/id property))
           show! (fn [e]
                   (let [target (.-target e)]
@@ -748,8 +781,8 @@
                                                select-opts
                                                {:dropdown? false})]
                         [:div.property-select
-                         (if (contains? #{:page :object} type)
-                           (property-value-select-page block property
+                         (if (= :node type)
+                           (property-value-select-node block property
                                                        select-opts
                                                        opts)
                            (select block property select-opts opts))]))]
