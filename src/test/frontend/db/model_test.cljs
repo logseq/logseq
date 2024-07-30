@@ -47,8 +47,8 @@
         a-aliases (model/page-alias-set test-helper/test-db aid)
         b-aliases (model/page-alias-set test-helper/test-db bid)
         alias-names (model/get-page-alias-names test-helper/test-db aid)
-        b-ref-blocks (model/get-page-referenced-blocks bid)
-        a-ref-blocks (model/get-page-referenced-blocks aid)]
+        b-ref-blocks (model/get-referenced-blocks bid)
+        a-ref-blocks (model/get-referenced-blocks aid)]
 
     (are [x y] (= x y)
       4 (count a-aliases)
@@ -67,7 +67,7 @@
   (let [page-id (:db/id (db/entity [:block/name "aa"]))
         a-aliases (model/page-alias-set test-helper/test-db page-id)
         alias-names (model/get-page-alias-names test-helper/test-db page-id)
-        a-ref-blocks (model/get-page-referenced-blocks page-id)]
+        a-ref-blocks (model/get-referenced-blocks page-id)]
     (are [x y] (= x y)
       3 (count a-aliases)
       2 (count a-ref-blocks)
