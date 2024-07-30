@@ -121,7 +121,9 @@
                               (:block/title page))
             q (string/join " " alias-names)
             result (block-search repo q {:limit 100})
-            eids (map (fn [b] [:block/uuid (:block/uuid b)]) result)
+            eids (->> result
+                      (remove :page?)
+                      (map (fn [b] [:block/uuid (:block/uuid b)])))
             result (when (seq eids)
                      (.get-page-unlinked-refs ^Object @state/*db-worker repo (:db/id page) (ldb/write-transit-str eids)))
             result' (when result (ldb/read-transit-str result))]
