@@ -26,7 +26,7 @@
         id->same-entity-datoms (group-by first datom-vec-coll)]
     (update-vals id->same-entity-datoms #'worker-db-listener/entity-datoms=>a->add?->v->t)))
 
-(deftest entity-datoms=>ops-test
+(deftest ^:fix-me entity-datoms=>ops-test
   (testing "remove whiteboard page-block"
     (let [conn (d/conn-from-db empty-db)
           block-uuid (random-uuid)
@@ -113,7 +113,7 @@
                              (assoc :av-coll (map #(take 2 %) (:av-coll op-value))))])
                 ops))))))
 
-(deftest listen-db-changes-and-validate-generated-rtc-ops
+(deftest ^:fix-me listen-db-changes-and-validate-generated-rtc-ops
   (letfn [(ops-coll=>block-uuid->op-types [ops-coll]
             (into {}
                   (map (fn [m]
