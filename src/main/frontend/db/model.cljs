@@ -647,7 +647,9 @@ independent of format as format specific heading characters are stripped"
                                         '[:find [(pull ?ref-block ?block-attrs) ...]
                                           :in $ ?block-id ?block-attrs
                                           :where
-                                          [?ref-block :block/refs ?block-id]]
+                                          [?ref-block :block/refs ?block-id]
+                                          [?ref-block :block/page ?p]
+                                          (not [?p :block/type "hidden"])]
                                         block-id
                                         block-attrs)
                                react
