@@ -14,7 +14,8 @@
             [goog.object :as gobj]
             [goog.functions :refer [debounce]]
             [frontend.config :as config]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.db :as ldb]))
 
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
@@ -28,14 +29,21 @@
     (and (= :tabler-icon (:type icon)) (:id icon))
     (ui/icon (:id icon) opts)))
 
-(defn get-page-icon
-  [page-entity opts]
-  (let [default-icon (ui/icon "page" (merge opts {:extension? true}))
-        page-icon (get page-entity (pu/get-pid :logseq.property/icon))]
+(defn get-node-icon
+  [node-entity opts]
+  (let [default-icon-id (cond
+                          (and (:block/tags node-entity) (not (ldb/page? node-entity)))
+                          "topology-star"
+                          (ldb/page? node-entity)
+                          "page"
+                          :else
+                          "block")
+        default-icon (ui/icon default-icon-id (assoc opts :size 14))
+        node-icon (get node-entity (pu/get-pid :logseq.property/icon))]
     (or
-     (when-not (string/blank? page-icon)
-       [:span {:style {:color (or (:color page-icon ) "inherit")}}
-        (icon page-icon opts)])
+     (when-not (string/blank? node-icon)
+       [:span {:style {:color (or (:color node-icon) "inherit")}}
+        (icon node-icon opts)])
      default-icon)))
 
 (defn- search-emojis
