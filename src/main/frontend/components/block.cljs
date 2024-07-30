@@ -2385,7 +2385,7 @@
 
 (rum/defc tags
   [config block]
-  (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/task)) (:block/tags block))]
+  (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) (:block/tags block))]
     (when (seq block-tags)
       [:div.flex.flex-row.flex-wrap.items-center.gap-1
        (for [tag block-tags]

@@ -268,7 +268,7 @@
              (readable-properties @conn (find-block-by-content @conn "high priority")))
           "priority block has correct property")
 
-      (is (= {:logseq.task/status "Doing" :logseq.task/priority "Medium" :block/tags [:logseq.class/task]}
+      (is (= {:logseq.task/status "Doing" :logseq.task/priority "Medium" :block/tags [:logseq.class/Task]}
              (readable-properties @conn (find-block-by-content @conn "status test")))
           "status block has correct task properties and class")
 
@@ -347,14 +347,14 @@
     (testing "block refs and path-refs"
       (let [block (find-block-by-content @conn "old todo block")]
         (is (set/subset?
-             #{:logseq.task/status :logseq.class/task}
+             #{:logseq.task/status :logseq.class/Task}
              (->> block
                   :block/path-refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))
                   set))
             "Correct :block/refs")
         (is (set/subset?
-             #{:logseq.task/status :logseq.class/task}
+             #{:logseq.task/status :logseq.class/Task}
              (->> block
                   :block/path-refs
                   (map #(:db/ident (d/entity @conn (:db/id %))))

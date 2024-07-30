@@ -34,7 +34,7 @@
                         property-id value)
            block-tx-data (cond-> block
                            status?
-                           (assoc :block/tags :logseq.class/task))]
+                           (assoc :block/tags :logseq.class/Task))]
        [(when multiple-values-empty?
           [:db/retract (:db/id block) property-id :logseq.property/empty-placeholder])
         block-tx-data]))))

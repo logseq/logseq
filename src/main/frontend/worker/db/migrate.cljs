@@ -13,8 +13,8 @@
   [conn search-db]
   (search/truncate-table! search-db)
   (d/transact! conn
-    [{:db/ident :block/title
-      :db/index true}])
+               [{:db/ident :block/title
+                 :db/index true}])
   (let [datoms (d/datoms @conn :avet :block/uuid)
         tx-data (mapcat
                  (fn [d]
@@ -38,6 +38,11 @@
           {:db/id (:db/id p)
            :block/schema (assoc (:block/schema p) :type :node)}))))
 
+(defn- update-task-ident
+  [conn _search-db]
+  [{:db/id (:db/id (d/entity @conn :logseq.class/task))
+    :db/ident :logseq.class/Task}])
+
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
@@ -52,7 +57,8 @@
        :classes    []}]
    [6 {:properties [:logseq.property.asset/remote-metadata]}]
    [7 {:fix replace-original-name-content-with-title}]
-   [8 {:fix replace-object-and-page-type-with-node}]])
+   [8 {:fix replace-object-and-page-type-with-node}]
+   [9 {:fix update-task-ident}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
