@@ -115,7 +115,7 @@
         (mapv #(if-let [status (some-> (second (re-find status/bare-marker-pattern (:block/title %)))
                                        file-to-db-statuses)]
                  (-> %
-                     (assoc :block/tags [{:db/ident :logseq.class/task}])
+                     (assoc :block/tags [{:db/ident :logseq.class/Task}])
                      (update :build/properties merge {:logseq.task/status status}))
                  %)
               blocks*)]

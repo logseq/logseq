@@ -158,11 +158,11 @@
       (-> block
           (assoc :logseq.task/status status-ident)
           (update :block/title string/replace-first (re-pattern (str marker "\\s*")) "")
-          (update :block/tags (fnil conj []) :logseq.class/task)
+          (update :block/tags (fnil conj []) :logseq.class/Task)
           ;; FIXME: block/refs property calculation should be handled by a listener
           (update :block/refs (fn [refs]
                                 (into (remove #(= marker (:block/title %)) refs)
-                                      [:logseq.class/task :logseq.task/status])))
+                                      [:logseq.class/Task :logseq.task/status])))
           (dissoc :block/marker)))
     block))
 
