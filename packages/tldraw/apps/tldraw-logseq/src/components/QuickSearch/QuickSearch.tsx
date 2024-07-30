@@ -278,8 +278,8 @@ export const LogseqQuickSearch = observer(
       if ((!searchFilter || searchFilter === 'B') && searchResult && searchResult.blocks) {
         options.push(
           ...searchResult.blocks
-            .filter(block => block.content && block.uuid)
-            .map(({ content, uuid }) => {
+            .filter(block => block.title && block.uuid)
+            .map(({ title, uuid }) => {
               const block = handlers.queryBlockByUUID(uuid)
               return {
                 actionIcon: 'search' as 'search',
@@ -296,7 +296,7 @@ export const LogseqQuickSearch = observer(
                   <>
                     <div className="tl-quick-search-option-row">
                       <LogseqTypeTag type="B" />
-                      {highlightedJSX(content, q)}
+                      {highlightedJSX(title, q)}
                     </div>
                   </>
                 ),

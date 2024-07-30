@@ -53,7 +53,7 @@
         two-days-ago (subtract-days today 2)
         closed-values-config (build-closed-values-config {:dates [today yesterday two-days-ago]})
         page-values-tx (mapv #(hash-map :page
-                                        {:block/uuid (:uuid %) :block/original-name (:value %)})
+                                        {:block/uuid (:uuid %) :block/title (:value %)})
                              (:page-closed closed-values-config))
         ;; Stores random closed values for use with queries
         closed-values (atom {})
@@ -69,11 +69,11 @@
        page-values-tx
 
        ;; Objects
-       [{:page {:block/original-name "Page object"
+       [{:page {:block/title "Page object"
                 :build/tags [:TestClass]}}
-        {:page {:block/original-name "Blocks"}
+        {:page {:block/title "Blocks"}
          :blocks
-         [{:block/content "block object"
+         [{:block/title "block object"
            :block/uuid object-uuid
            :build/tags [:TestClass]}]}]
 
@@ -81,96 +81,96 @@
        [{:page
          {:build/journal (date-time-util/date->int today)}
          :blocks
-         [{:block/content "[[Block Properties]]"}
-          {:block/content "[[Block Property Queries]]"}
-          {:block/content "[[Page Property Queries]]"}]}
+         [{:block/title "[[Block Properties]]"}
+          {:block/title "[[Block Property Queries]]"}
+          {:block/title "[[Page Property Queries]]"}]}
         {:page {:build/journal (date-time-util/date->int yesterday)}}
         {:page {:build/journal (date-time-util/date->int two-days-ago)}}
 
         ;; Block property blocks and queries
-        {:page {:block/original-name "Block Properties"}
+        {:page {:block/title "Block Properties"}
          :blocks
-         [{:block/content "default property block" :build/properties {:default "haha"}}
-          {:block/content "default property block" :build/properties {:default-many #{"yee" "haw" "sir"}}}
-          {:block/content "default-closed property block" :build/properties {:default-closed (random-closed-value :default-closed)}}
-          {:block/content "url property block" :build/properties {:url "https://logseq.com"}}
-          {:block/content "url-many property block" :build/properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
-          {:block/content "url-closed property block" :build/properties {:url-closed (random-closed-value :url-closed)}}
-          {:block/content "checkbox property block" :build/properties {:checkbox true}}
-          {:block/content "number property block" :build/properties {:number 5}}
-          {:block/content "number-many property block" :build/properties {:number-many #{5 10}}}
-          {:block/content "number-closed property block" :build/properties {:number-closed (random-closed-value :number-closed)}}
-          {:block/content "object property block" :build/properties {:object [:block/uuid object-uuid]}}
-          {:block/content "object-many property block" :build/properties {:object-many #{[:block/uuid object-uuid] [:page "Page object"]}}}
-          {:block/content "page property block" :build/properties {:page [:page "Page 1"]}}
-          {:block/content "page-many property block" :build/properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}
+         [{:block/title "default property block" :build/properties {:default "haha"}}
+          {:block/title "default property block" :build/properties {:default-many #{"yee" "haw" "sir"}}}
+          {:block/title "default-closed property block" :build/properties {:default-closed (random-closed-value :default-closed)}}
+          {:block/title "url property block" :build/properties {:url "https://logseq.com"}}
+          {:block/title "url-many property block" :build/properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}
+          {:block/title "url-closed property block" :build/properties {:url-closed (random-closed-value :url-closed)}}
+          {:block/title "checkbox property block" :build/properties {:checkbox true}}
+          {:block/title "number property block" :build/properties {:number 5}}
+          {:block/title "number-many property block" :build/properties {:number-many #{5 10}}}
+          {:block/title "number-closed property block" :build/properties {:number-closed (random-closed-value :number-closed)}}
+          {:block/title "object property block" :build/properties {:object [:block/uuid object-uuid]}}
+          {:block/title "object-many property block" :build/properties {:object-many #{[:block/uuid object-uuid] [:page "Page object"]}}}
+          {:block/title "page property block" :build/properties {:page [:page "Page 1"]}}
+          {:block/title "page-many property block" :build/properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}
           ;;  ;; :page-closed and :date-closed disabled for now since they're not supported
-          ;;  #_{:block/content "page-closed property block" :build/properties {:page-closed (random-closed-value :page-closed)}}
-          {:block/content "date property block" :build/properties {:date [:page (date-journal-title today)]}}
-          {:block/content "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
+          ;;  #_{:block/title "page-closed property block" :build/properties {:page-closed (random-closed-value :page-closed)}}
+          {:block/title "date property block" :build/properties {:date [:page (date-journal-title today)]}}
+          {:block/title "date-many property block" :build/properties {:date-many #{[:page (date-journal-title today)]
                                                                                      [:page (date-journal-title yesterday)]}}}
-          #_{:block/content "date-closed property block" :build/properties {:date-closed (random-closed-value :date-closed)}}]}
-        {:page {:block/original-name "Block Property Queries"}
+          #_{:block/title "date-closed property block" :build/properties {:date-closed (random-closed-value :date-closed)}}]}
+        {:page {:block/title "Block Property Queries"}
          :blocks
-         [{:block/content "{{query (property :default \"haha\")}}"}
-          {:block/content "{{query (property :default-many \"haw\")}}"}
-          {:block/content (str "{{query (property :default-closed " (pr-str (get-closed-value :default-closed)) ")}}")}
-          {:block/content "{{query (property :url \"https://logseq.com\")}}"}
-          {:block/content "{{query (property :url-many \"https://logseq.com\")}}"}
-          {:block/content (str "{{query (property :url-closed " (pr-str (get-closed-value :url-closed)) ")}}")}
-          {:block/content "{{query (property :checkbox true)}}"}
-          {:block/content "{{query (property :number 5)}}"}
-          {:block/content "{{query (property :number-many 10)}}"}
-          {:block/content (str "{{query (property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
-          {:block/content "{{query (property :object \"block object\")}}"}
-          {:block/content "{{query (property :object-many [[Page object]])}}"}
-          {:block/content "{{query (property :page [[Page 1]])}}"}
-          {:block/content "{{query (property :page-many [[Page 2]])}}"}
-          #_{:block/content (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
-          {:block/content (str "{{query (property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
-          {:block/content (str "{{query (property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
-          #_{:block/content (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
+         [{:block/title "{{query (property :default \"haha\")}}"}
+          {:block/title "{{query (property :default-many \"haw\")}}"}
+          {:block/title (str "{{query (property :default-closed " (pr-str (get-closed-value :default-closed)) ")}}")}
+          {:block/title "{{query (property :url \"https://logseq.com\")}}"}
+          {:block/title "{{query (property :url-many \"https://logseq.com\")}}"}
+          {:block/title (str "{{query (property :url-closed " (pr-str (get-closed-value :url-closed)) ")}}")}
+          {:block/title "{{query (property :checkbox true)}}"}
+          {:block/title "{{query (property :number 5)}}"}
+          {:block/title "{{query (property :number-many 10)}}"}
+          {:block/title (str "{{query (property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
+          {:block/title "{{query (property :object \"block object\")}}"}
+          {:block/title "{{query (property :object-many [[Page object]])}}"}
+          {:block/title "{{query (property :page [[Page 1]])}}"}
+          {:block/title "{{query (property :page-many [[Page 2]])}}"}
+          #_{:block/title (str "{{query (property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
+          {:block/title (str "{{query (property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
+          {:block/title (str "{{query (property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
+          #_{:block/title (str "{{query (property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}
 
         ;; Page property pages and queries
-        {:page {:block/original-name "default page" :build/properties {:default "yolo"}}}
-        {:page {:block/original-name "default-many page" :build/properties {:default-many #{"yee" "haw" "sir"}}}}
-        {:page {:block/original-name "default-closed page" :build/properties {:default-closed (random-closed-value :default-closed)}}}
-        {:page {:block/original-name "url page" :build/properties {:url "https://logseq.com"}}}
-        {:page {:block/original-name "url-many page" :build/properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}}
-        {:page {:block/original-name "url-closed page" :build/properties {:url-closed (random-closed-value :url-closed)}}}
-        {:page {:block/original-name "checkbox page" :build/properties {:checkbox true}}}
-        {:page {:block/original-name "number page" :build/properties {:number 5}}}
-        {:page {:block/original-name "number-many page" :build/properties {:number-many #{5 10}}}}
-        {:page {:block/original-name "number-closed page" :build/properties {:number-closed (random-closed-value :number-closed)}}}
-        {:page {:block/original-name "object page" :build/properties {:object [:block/uuid object-uuid]}}}
-        {:page {:block/original-name "object-many page" :build/properties {:object-many #{[:block/uuid object-uuid] [:page "Page object"]}}}}
-        {:page {:block/original-name "page page" :build/properties {:page [:page "Page 1"]}}}
-        {:page {:block/original-name "page-many page" :build/properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}}
-      ;;  #_{:page {:block/original-name "page-closed page" :build/properties {:page-closed (random-closed-value :page-closed)}}}
-        {:page {:block/original-name "date page" :build/properties {:date [:page (date-journal-title today)]}}}
-        {:page {:block/original-name "date-many page" :build/properties {:date-many #{[:page (date-journal-title today)]
+        {:page {:block/title "default page" :build/properties {:default "yolo"}}}
+        {:page {:block/title "default-many page" :build/properties {:default-many #{"yee" "haw" "sir"}}}}
+        {:page {:block/title "default-closed page" :build/properties {:default-closed (random-closed-value :default-closed)}}}
+        {:page {:block/title "url page" :build/properties {:url "https://logseq.com"}}}
+        {:page {:block/title "url-many page" :build/properties {:url-many #{"https://logseq.com" "https://docs.logseq.com"}}}}
+        {:page {:block/title "url-closed page" :build/properties {:url-closed (random-closed-value :url-closed)}}}
+        {:page {:block/title "checkbox page" :build/properties {:checkbox true}}}
+        {:page {:block/title "number page" :build/properties {:number 5}}}
+        {:page {:block/title "number-many page" :build/properties {:number-many #{5 10}}}}
+        {:page {:block/title "number-closed page" :build/properties {:number-closed (random-closed-value :number-closed)}}}
+        {:page {:block/title "object page" :build/properties {:object [:block/uuid object-uuid]}}}
+        {:page {:block/title "object-many page" :build/properties {:object-many #{[:block/uuid object-uuid] [:page "Page object"]}}}}
+        {:page {:block/title "page page" :build/properties {:page [:page "Page 1"]}}}
+        {:page {:block/title "page-many page" :build/properties {:page-many #{[:page "Page 1"] [:page "Page 2"]}}}}
+      ;;  #_{:page {:block/title "page-closed page" :build/properties {:page-closed (random-closed-value :page-closed)}}}
+        {:page {:block/title "date page" :build/properties {:date [:page (date-journal-title today)]}}}
+        {:page {:block/title "date-many page" :build/properties {:date-many #{[:page (date-journal-title today)]
                                                                                       [:page (date-journal-title yesterday)]}}}}
-        #_{:page {:block/original-name "date-closed page" :build/properties {:date-closed (random-closed-value :date-closed)}}}
-        {:page {:block/original-name "Page Property Queries"}
+        #_{:page {:block/title "date-closed page" :build/properties {:date-closed (random-closed-value :date-closed)}}}
+        {:page {:block/title "Page Property Queries"}
          :blocks
-         [{:block/content "{{query (page-property :default \"yolo\")}}"}
-          {:block/content "{{query (page-property :default-many \"haw\")}}"}
-          {:block/content (str "{{query (page-property :default-closed " (pr-str (get-closed-value :default-closed)) ")}}")}
-          {:block/content "{{query (page-property :url \"https://logseq.com\")}}"}
-          {:block/content "{{query (page-property :url-many \"https://logseq.com\")}}"}
-          {:block/content (str "{{query (page-property :url-closed " (pr-str (get-closed-value :url-closed)) ")}}")}
-          {:block/content "{{query (page-property :checkbox true)}}"}
-          {:block/content "{{query (page-property :number 5)}}"}
-          {:block/content "{{query (page-property :number-many 10)}}"}
-          {:block/content (str "{{query (page-property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
-          {:block/content "{{query (page-property :object \"block object\")}}"}
-          {:block/content "{{query (page-property :object-many [[Page object]])}}"}
-          {:block/content "{{query (page-property :page [[Page 1]])}}"}
-          {:block/content "{{query (page-property :page-many [[Page 2]])}}"}
-          #_{:block/content (str "{{query (page-property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
-          {:block/content (str "{{query (page-property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
-          {:block/content (str "{{query (page-property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
-          #_{:block/content (str "{{query (page-property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}]))
+         [{:block/title "{{query (page-property :default \"yolo\")}}"}
+          {:block/title "{{query (page-property :default-many \"haw\")}}"}
+          {:block/title (str "{{query (page-property :default-closed " (pr-str (get-closed-value :default-closed)) ")}}")}
+          {:block/title "{{query (page-property :url \"https://logseq.com\")}}"}
+          {:block/title "{{query (page-property :url-many \"https://logseq.com\")}}"}
+          {:block/title (str "{{query (page-property :url-closed " (pr-str (get-closed-value :url-closed)) ")}}")}
+          {:block/title "{{query (page-property :checkbox true)}}"}
+          {:block/title "{{query (page-property :number 5)}}"}
+          {:block/title "{{query (page-property :number-many 10)}}"}
+          {:block/title (str "{{query (page-property :number-closed " (pr-str (get-closed-value :number-closed)) ")}}")}
+          {:block/title "{{query (page-property :object \"block object\")}}"}
+          {:block/title "{{query (page-property :object-many [[Page object]])}}"}
+          {:block/title "{{query (page-property :page [[Page 1]])}}"}
+          {:block/title "{{query (page-property :page-many [[Page 2]])}}"}
+          #_{:block/title (str "{{query (page-property :page-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :page-closed))) ")}}")}
+          {:block/title (str "{{query (page-property :date " (page-ref/->page-ref (string/capitalize (date-journal-title today))) ")}}")}
+          {:block/title (str "{{query (page-property :date-many " (page-ref/->page-ref (string/capitalize (date-journal-title yesterday))) ")}}")}
+          #_{:block/title (str "{{query (page-property :date-closed " (page-ref/->page-ref (string/capitalize (get-closed-value :date-closed))) ")}}")}]}]))
 
      :classes {:TestClass {}}
 
@@ -212,14 +212,14 @@
         conn (outliner-cli/init-conn dir db-name {:additional-config (:config options)
                                                   :classpath (cp/get-classpath)})
         {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx (create-init-data))
-        existing-names (set (map :v (d/datoms @conn :avet :block/original-name)))
-        conflicting-names (set/intersection existing-names (set (keep :block/original-name init-tx)))]
+        existing-names (set (map :v (d/datoms @conn :avet :block/title)))
+        conflicting-names (set/intersection existing-names (set (keep :block/title init-tx)))]
     (when (seq conflicting-names)
       (println "Error: Following names conflict -" (string/join "," conflicting-names))
       (js/process.exit 1))
     (println "DB dir: " (node-path/join dir db-name))
     (println "Generating" (count (filter :block/name init-tx)) "pages and"
-             (count (filter :block/content init-tx)) "blocks ...")
+             (count (filter :block/title init-tx)) "blocks ...")
     (d/transact! conn init-tx)
     (d/transact! conn block-props-tx)
     (println "Created graph" (str db-name " with " (count (d/datoms @conn :eavt)) " datoms!"))))

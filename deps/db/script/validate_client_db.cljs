@@ -80,7 +80,7 @@
     (println "Read graph" (str db-name " with " (count datoms) " datoms, "
                                (count ent-maps) " entities, "
                                (count (filter :block/name ent-maps)) " pages, "
-                               (count (filter :block/content ent-maps)) " blocks, "
+                               (count (filter :block/title ent-maps)) " blocks, "
                                (count (filter #(contains? (:block/type %) "class") ent-maps)) " classes, "
                                (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
                                (count (filter #(contains? (:block/type %) "property") ent-maps)) " properties and "

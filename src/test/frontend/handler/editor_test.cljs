@@ -56,7 +56,7 @@
   (let [actual-content (atom nil)]
     (with-redefs [editor/save-block-if-changed! (fn [_ content]
                                                   (reset! actual-content content))]
-      (editor/set-marker {:block/marker marker :block/content content :block/format format})
+      (editor/set-marker {:block/marker marker :block/title content :block/format format})
       @actual-content)))
 
 (deftest set-marker-org
@@ -227,7 +227,7 @@
   (testing "updating block's content changes content and preserves path-refs"
    (let [conn (db/get-db test-helper/test-db false)
          block (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name]}])
-                           :where [?b :block/content "b1 #foo"]]
+                           :where [?b :block/title "b1 #foo"]]
                          @conn)
                     ffirst)
          prev-path-refs (set (map :block/name (:block/path-refs block)))
@@ -236,7 +236,7 @@
          ;; Use same options as edit-box-on-change!
          _ (editor/save-block-aux! block "b12 #foo" {:skip-properties? true})
          updated-block (d/pull @conn '[* {:block/path-refs [:block/name]}] [:block/uuid (:block/uuid block)])]
-     (is (= "b12 #foo" (:block/content updated-block)) "Content updated correctly")
+     (is (= "b12 #foo" (:block/title updated-block)) "Content updated correctly")
      (is (= prev-path-refs
             (set (map :block/name (:block/path-refs updated-block))))
          "Path-refs remain the same"))))
@@ -249,10 +249,10 @@
           page-uuid (:block/uuid (db/get-page "foo"))
           block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid))))
+      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid))))
 
       (editor/save-block! repo block-uuid "# foo" {:properties {:foo "bar"}})
-      (is (= "# foo\nfoo:: bar" (:block/content (model/query-block-by-uuid block-uuid))))
+      (is (= "# foo\nfoo:: bar" (:block/title (model/query-block-by-uuid block-uuid))))
 
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid)))))))
+      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid)))))))

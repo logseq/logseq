@@ -5,6 +5,7 @@
             [frontend.components.datetime :as datetime-comp]
             [frontend.components.svg :as svg]
             [frontend.components.search :as search]
+            [frontend.components.title :as title]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
@@ -138,51 +139,57 @@
   (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
-                         (p/let [result (editor-handler/<get-matched-pages q)]
+                         (p/let [result (if db-tag?
+                                          (editor-handler/get-matched-classes q)
+                                          (editor-handler/<get-matched-blocks q))]
                            (set-matched-pages! result))))
                      [q])
-    (let [matched-pages (cond
-                          (contains? (set (map util/page-name-sanity-lc matched-pages))
-                                     (util/page-name-sanity-lc (string/trim q)))  ;; if there's a page name fully matched
-                          (sort-by (fn [m]
-                                     [(count m) m])
-                                   matched-pages)
-
-                          (string/blank? q)
-                          nil
-
-                          (empty? matched-pages)
-                          (when-not (db/page-exists? q)
-                            (if db-tag?
-                              (concat [(str (t :new-class) " " q)
-                                       (str (t :new-page) " " q)]
-                                      matched-pages)
-                              (cons (str (t :new-page) " " q)
-                                    matched-pages)))
-
+    (let [matched-pages (when-not (string/blank? q)
                           ;; reorder, shortest and starts-with first.
-                          :else
-                          (let [matched-pages (remove nil? matched-pages)
-                                matched-pages (sort-by
-                                               (fn [m]
-                                                 [(not (gstring/caseInsensitiveStartsWith m q)) (count m) m])
-                                               matched-pages)]
-                            (if (gstring/caseInsensitiveStartsWith (first matched-pages) q)
+                          (let [matched-pages-with-new-page
+                                (fn [partial-matched-pages]
+                                  (if (or (db/page-exists? q)
+                                          (some (fn [p] (= (string/lower-case q)
+                                                           (string/lower-case (:block/title p)))) matched-pages))
+                                    partial-matched-pages
+                                    (if db-tag?
+                                      (concat [{:block/title (str (t :new-class) " " q)}]
+                                              partial-matched-pages)
+                                      (cons {:block/title (str (t :new-page) " " q)}
+                                            partial-matched-pages))))]
+                            (if (and (seq matched-pages)
+                                     (gstring/caseInsensitiveStartsWith (:block/title (first matched-pages)) q))
                               (cons (first matched-pages)
-                                    (cons q (rest matched-pages)))
-                              (cons q matched-pages))))]
+                                    (matched-pages-with-new-page (rest matched-pages)))
+                              (matched-pages-with-new-page matched-pages))))]
       (ui/auto-complete
        matched-pages
        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
         :on-enter    (fn []
                        (page-handler/page-not-exists-handler input id q current-pos))
-        :item-render (fn [page-name _chosen?]
-                       [:div.flex
-                        (when (db-model/whiteboard-page? page-name) [:span.mr-1 (ui/icon "whiteboard" {:extension? true})])
-                        (search-handler/highlight-exact-query page-name q)])
+        :item-render (fn [block _chosen?]
+                       [:div.flex.flex-row.items-center.gap-1
+                        (when-not db-tag?
+                          (cond
+                            (db-model/whiteboard-page? block)
+                            [:div (ui/icon "whiteboard" {:extension? true})]
+                            (db/page? block)
+                            [:div (ui/icon "page" {:extension? true})]
+                            (seq (:block/tags block))
+                            [:div.flex (ui/icon "topology-star" {:size 14})]
+                            (or (string/starts-with? (:block/title block) (t :new-class))
+                                (string/starts-with? (:block/title block) (t :new-page)))
+                            nil
+                            :else
+                            [:div (ui/icon "block" {:extension? true})]))
+
+                        (let [title (if db-tag?
+                                      (:block/title block)
+                                      (title/block-unique-title block))]
+                          (search-handler/highlight-exact-query title q))])
         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                   "Search for a page or a class"
-                                                                   "Search for a page")]
+                                                                   "Search for a class"
+                                                                   "Search for a node")]
         :class       "black"}))))
 
 (rum/defc page-search < rum/reactive
@@ -212,9 +219,9 @@
 
 (defn- search-blocks!
   [state result]
-  (let [[edit-block _ _ q] (:rum/args state)]
+  (let [[_edit-block _ _ q] (:rum/args state)]
     (p/let [matched-blocks (when-not (string/blank? q)
-                             (editor-handler/get-matched-blocks q (:block/uuid edit-block)))]
+                             (editor-handler/<get-matched-blocks q))]
       (reset! result matched-blocks))))
 
 (defn- block-on-chosen-handler
@@ -250,7 +257,7 @@
                  state)}
   [state _edit-block input id q format selected-text]
   (let [result (->> (rum/react (get state ::result))
-                    (remove (fn [b] (string/blank? (:block/content (db-model/query-block-by-uuid (:block/uuid b)))))))
+                    (remove (fn [b] (string/blank? (:block/title (db-model/query-block-by-uuid (:block/uuid b)))))))
         db? (config/db-based-graph? (state/get-current-repo))
         embed? (and db? (= @commands/*current-command "Block embed"))
         chosen-handler (block-on-chosen-handler embed? input id q format selected-text)
@@ -265,7 +272,7 @@
                            repo (state/sub :git/current-repo)
                            format (get page-entity :block/format :markdown)
                            block (db-model/query-block-by-uuid uuid)
-                           content (:block/content block)]
+                           content (:block/title block)]
                        (when-not (string/blank? content)
                          [:.py-2 (search/block-search-result-item repo uuid format content q :block)])))
       :class       "ac-block-search"})))

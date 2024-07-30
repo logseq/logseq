@@ -20,7 +20,7 @@
                             set)
         exported-blocks (->> (d/q '[:find (pull ?p [*])
                                     :where
-                                    [?b :block/content]
+                                    [?b :block/title]
                                     [?b :block/page ?p]]
                                   filtered-db)
                              (map (comp :block/name first))
@@ -47,7 +47,7 @@
                             set)
         exported-block-pages (->> (d/q '[:find (pull ?p [*])
                                          :where
-                                         [?b :block/content]
+                                         [?b :block/title]
                                          [?b :block/page ?p]]
                                        filtered-db)
                                   (map (comp :block/name first))

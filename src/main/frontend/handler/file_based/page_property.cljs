@@ -61,11 +61,11 @@
     (if pre-block
       (let [properties (:block/properties pre-block)
             new-properties (assoc properties key value)
-            content (:block/content pre-block)
+            content (:block/title pre-block)
             new-content (insert-property format content key value)
             block {:db/id (:db/id pre-block)
                    :block/properties new-properties
-                   :block/content new-content
+                   :block/title new-content
                    :block/page page-id}
             tx [(assoc page-id :block/properties new-properties)
                 block]]
@@ -73,7 +73,7 @@
       (let [block {:block/uuid (db/new-block-id)
                    :block/parent page-id
                    :block/page page-id
-                   :block/content (if org?
+                   :block/title (if org?
                                     (str "#+" (string/upper-case (name key)) ": " value)
                                     (str (name key) ":: " value))
                    :block/format format

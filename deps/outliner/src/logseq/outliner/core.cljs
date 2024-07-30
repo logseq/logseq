@@ -163,7 +163,7 @@
                                               :block/tags (:block/tags m)
                                               :block/format :markdown)
                                        {:db/id (:db/id block-entity)
-                                        :block/content ""
+                                        :block/title ""
                                         :block/refs []
                                         :block/link [:block/uuid (:block/uuid page-m)]}]
                                       merge-tx))))))
@@ -194,7 +194,7 @@
                            (map (fn [id-or-map] (if (uuid? id-or-map) {:block/uuid id-or-map} id-or-map)))
                            (remove (fn [b] (nil? (d/entity db [:block/uuid (:block/uuid b)])))))
 
-        content-refs (when-let [content (:block/content block)]
+        content-refs (when-let [content (:block/title block)]
                        (gp-block/extract-refs-from-text repo db content date-formatter))]
     (concat property-refs content-refs)))
 
@@ -238,7 +238,7 @@
                   (dissoc :block/properties))
           m* (-> data'
                  (dissoc :block/children :block/meta :block.temp/top? :block.temp/bottom? :block/unordered
-                         :block/title :block/body :block/level :block.temp/fully-loaded?)
+                         :block.temp/ast-title :block.temp/ast-body :block/level :block.temp/fully-loaded?)
                  common-util/remove-nils
                  block-with-updated-at
                  fix-tag-ids)
@@ -263,7 +263,7 @@
 
       (when eid
         ;; Retract attributes to prepare for tx which rewrites block attributes
-        (when (or (and retract-attributes? (:block/content m))
+        (when (or (and retract-attributes? (:block/title m))
                   (seq retract-attributes))
           (let [retract-attributes (concat
                                     (if db-based?
@@ -280,7 +280,7 @@
         ;; Update block's page attributes
         (update-page-when-save-block txs-state block-entity m)
         ;; Remove orphaned refs from block
-        (when (and (:block/content m) (not= (:block/content m) (:block/content block-entity)))
+        (when (and (:block/title m) (not= (:block/title m) (:block/title block-entity)))
           (remove-orphaned-refs-when-save @conn txs-state block-entity m {:db-graph? db-based?})))
 
       ;; handle others txs
@@ -293,7 +293,7 @@
 
       ;; delete heading property for db-based-graphs
       (when (and db-based? (integer? (:logseq.property/heading block-entity))
-                 (not (some-> (:block/content data) (string/starts-with? "#"))))
+                 (not (some-> (:block/title data) (string/starts-with? "#"))))
         (swap! txs-state (fn [txs] (conj (vec txs) [:db/retract (:db/id block-entity) :logseq.property/heading]))))
 
       this))
@@ -368,7 +368,7 @@
     ;; replace existing block
     (and (contains? #{:paste :insert-blocks} outliner-op)
          replace-empty-target?
-         (string/blank? (:block/content target-block))
+         (string/blank? (:block/title target-block))
          (zero? idx))
     (get-id (:block/parent target-block))
 
@@ -431,7 +431,7 @@
         db-based? (sqlite-util/db-based-graph? repo)]
     (if-let [list-type (and target-block (list-type-fn target-block))]
       (mapv
-       (fn [{:block/keys [content format] :as block}]
+       (fn [{:block/keys [title format] :as block}]
          (let [list? (and (some? (:block/uuid block))
                           (nil? (list-type-fn block)))]
            (cond-> block
@@ -442,7 +442,7 @@
                   (update b :block/properties assoc (db-property-util/get-pid repo :logseq.property/order-list-type) list-type))))
 
              (not db-based?)
-             (assoc :block/content (gp-property/insert-property repo format content :logseq.order-list-type list-type)))))
+             (assoc :block/title (gp-property/insert-property repo format title :logseq.order-list-type list-type)))))
        blocks)
       blocks)))
 
@@ -604,12 +604,12 @@
         _ (assert (some? target-block) (str "Invalid target: " target-block))
         sibling? (if (ldb/page? target-block) false sibling?)
         replace-empty-target? (if (and (some? replace-empty-target?)
-                                       (:block/content target-block)
-                                       (string/blank? (:block/content target-block)))
+                                       (:block/title target-block)
+                                       (string/blank? (:block/title target-block)))
                                 replace-empty-target?
                                 (and sibling?
-                                     (:block/content target-block)
-                                     (string/blank? (:block/content target-block))
+                                     (:block/title target-block)
+                                     (string/blank? (:block/title target-block))
                                      (> (count blocks) 1)))
         blocks' (let [blocks' (blocks-with-level blocks)]
                   (cond->> (blocks-with-ordered-list-props repo blocks' target-block sibling?)
@@ -912,7 +912,7 @@
   (op-transact! (fn [_repo conn blocks]
                   (let [{:keys [tx-data]} (#'delete-blocks conn blocks)]
                     {:tx-data tx-data
-                     :tx-meta (select-keys opts [:outliner-op :ref-replace-prev-block-id])})) repo conn blocks opts))
+                     :tx-meta (select-keys opts [:outliner-op])})) repo conn blocks opts))
 
 (defn move-blocks!
   [repo conn blocks target-block sibling?]

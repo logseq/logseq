@@ -21,7 +21,8 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [frontend.handler.property.util :as pu]))
+            [frontend.handler.property.util :as pu]
+            [logseq.db :as ldb]))
 
 (rum/defc toggle
   []
@@ -60,7 +61,7 @@
 (defn- block-with-breadcrumb
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
-    [[:.flex.items-center {:class (when ref? "ml-8")}
+    [[:.flex.items-center {:class (when ref? "ml-2")}
       (ui/icon "block" {:class "text-md mr-2"})
       (block/breadcrumb {:id     "block-parent"
                          :block? true
@@ -96,14 +97,15 @@
 
     :page
     (let [lookup (if (integer? db-id) db-id [:block/uuid db-id])
-          page (db/entity repo lookup)
-          page-name (:block/name page)]
-      [[:.flex.items-center.page-title
-        (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
-          [:.text-md.mr-2 icon]
-          (ui/icon (if (contains? (:block/type page) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
-        [:span.overflow-hidden.text-ellipsis (:block/original-name page)]]
-       (page-cp repo page-name)])
+          page (db/entity repo lookup)]
+      (if (ldb/page? page)
+        [[:.flex.items-center.page-title
+          (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
+            [:.text-md.mr-2 icon]
+            (ui/icon (if (contains? (:block/type page) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
+          [:span.overflow-hidden.text-ellipsis (:block/title page)]]
+         (page-cp repo (str (:block/uuid page)))]
+        (block-with-breadcrumb repo page idx [repo db-id block-type] false)))
 
     :search
     [[:.flex.items-center.page-title
@@ -124,7 +126,7 @@
     :page-slide-view
     (let [page (db/entity db-id)]
       [[:a.page-title {:href (rfe/href :page {:name (str (:block/uuid page))})}
-        (:block/original-name page)]
+        (:block/title page)]
        [:div.ml-2.slide.mt-2
         (slide/slide page)]])
 
@@ -257,8 +259,6 @@
                     :aria-labelledby (str "sidebar-panel-header-" idx)
                     :class           (util/classnames [{:hidden  collapsed?
                                                         :initial (not collapsed?)
-                                                        :p-4     (not (contains? #{:page :block :contents :search :shortcut-settings} block-type))
-                                                        :pt-4    (not (contains? #{:search :shortcut-settings} block-type))
                                                         :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]

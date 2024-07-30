@@ -58,7 +58,7 @@
       (let [block-uuid (random-uuid)]
         [:insert-blocks
          [[{:block/uuid block-uuid
-            :block/content content
+            :block/title content
             :block/format :markdown}]
           (:db/id (d/entity db [:block/uuid target-block-uuid]))
           opts]]))))

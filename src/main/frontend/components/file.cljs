@@ -103,7 +103,7 @@
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))
         rel-path (when (string/starts-with? path repo-dir)
                    (path/trim-dir-prefix repo-dir path))
-        original-name (db/get-file-page (or path rel-path))
+        title (db/get-file-page (or path rel-path))
         in-db? (when-not (path/absolute? path)
                  (boolean (db/get-file (or path rel-path))))
         file-path (cond
@@ -120,22 +120,22 @@
     [:div.file {:id (str "file-edit-wrapper-" random-id)
                 :key path}
      [:h1.title
-      [:bdi (or original-name rel-path path)]]
-     (when original-name
+      [:bdi (or title rel-path path)]]
+     (when title
        [:div.text-sm.mb-4.ml-1 "Page: "
         [:a.bg-base-2.p-1.ml-1 {:style {:border-radius 4}
-                                :href (rfe/href :page {:name original-name})
+                                :href (rfe/href :page {:name title})
                                 :on-click (fn [e]
                                             (when (gobj/get e "shiftKey")
-                                              (when-let [page (db/get-page original-name)]
+                                              (when-let [page (db/get-page title)]
                                                 (state/sidebar-add-block!
                                                  (state/get-current-repo)
                                                  (:db/id page)
                                                  :page))
                                               (util/stop e)))}
-         original-name]])
+         title]])
 
-     (when (and original-name (not (string/starts-with? original-name "logseq/")))
+     (when (and title (not (string/starts-with? title "logseq/")))
        [:p.text-sm.ml-1.mb-4
         (svg/warning {:style {:width "1em"
                               :display "inline-block"}})

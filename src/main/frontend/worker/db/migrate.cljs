@@ -4,15 +4,36 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.property :as db-property]
             [logseq.db :as ldb]
-            [logseq.db.frontend.schema :as db-schema]))
+            [logseq.db.frontend.schema :as db-schema]
+            [frontend.worker.search :as search]))
 
 ;; TODO: fixes/rollback
+
+(defn- replace-original-name-content-with-title
+  [conn search-db]
+  (search/truncate-table! search-db)
+  (d/transact! conn
+    [{:db/ident :block/title
+      :db/cardinaity :db.cardinality/one
+      :db/index true}])
+  (let [datoms (d/datoms @conn :avet :block/uuid)
+        tx-data (mapcat
+                 (fn [d]
+                   (let [e (d/entity @conn (:e d))]
+                     (concat
+                      (when (:block/content e)
+                        [[:db/retract (:e d) :block/content]
+                         [:db/add (:e d) :block/title (:block/content e)]])
+                      (when (:block/original-name e)
+                        [[:db/retract (:e d) :block/original-name]
+                         [:db/add (:e d) :block/title (:block/original-name e)]])))) datoms)]
+    tx-data))
 
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
        :classes    []}]
-   [4 {:fix (fn [conn]
+   [4 {:fix (fn [conn _search-db]
               (let [pages (d/datoms @conn :avet :block/name)
                     tx-data (map (fn [d]
                                    {:db/id (:e d)
@@ -20,13 +41,14 @@
                 tx-data))}]
    [5 {:properties [:logseq.property/view-for]
        :classes    []}]
-   [6 {:properties [:logseq.property.asset/remote-metadata]}]])
+   [6 {:properties [:logseq.property.asset/remote-metadata]}]
+   [7 {:fix replace-original-name-content-with-title}]])
 
 ;; Question: do we need to assign persist UUIDs for later added built-in classes & properties?
 ;; @zhiyuan will this affect RTC?
 
 (defn migrate
-  [conn]
+  [conn search-db]
   (let [db @conn
         version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
     (cond
@@ -59,7 +81,7 @@
                    (fn [update]
                      (when-let [fix (:fix update)]
                        (when (fn? fix)
-                         (fix conn)))) updates)
+                         (fix conn search-db)))) updates)
             tx-data' (if db-based? (concat new-properties fixes) fixes)]
         (when (seq tx-data')
           (let [tx-data' (concat tx-data' [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)])]

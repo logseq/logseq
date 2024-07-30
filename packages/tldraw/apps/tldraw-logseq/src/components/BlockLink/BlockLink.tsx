@@ -25,7 +25,7 @@ export const BlockLink = ({
       return <span className="p-2">Invalid reference. Did you remove it?</span>
     }
 
-    blockContent = block.content
+    blockContent = block.title
 
     if (block.properties?.['ls-type'] === 'whiteboard-shape') {
       iconName = 'link-to-whiteboard'

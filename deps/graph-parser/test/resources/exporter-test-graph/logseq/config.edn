@@ -176,10 +176,10 @@
  ;; Default value: false
  :shortcut/doc-mode-enter-for-new-block? false
 
- ;; Block content larger than `block/content-max-length` will not be searchable
+ ;; Block content larger than `block/title-max-length` will not be searchable
  ;; or editable for performance.
  ;; Default value: 10000
- :block/content-max-length 10000
+ :block/title-max-length 10000
 
  ;; Display command documentation on hover.
  ;; Default value: true

@@ -34,7 +34,7 @@
                              (into {})))
                  (seq (:block/refs result*))
                  (assoc :block.debug/refs
-                        (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))
+                        (mapv #(or (:block/title (db/entity (:db/id %))) %) (:block/refs result*))))
         pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
@@ -70,8 +70,8 @@
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-block-ast []
-  (if-let [{:block/keys [content format]} (:block (first (state/get-editor-args)))]
-    (show-content-ast content format)
+  (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
+    (show-content-ast title format)
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-page-data []

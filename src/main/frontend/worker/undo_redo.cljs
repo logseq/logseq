@@ -78,7 +78,7 @@ when undo this op, this original entity-map will be transacted back into db")
          [:block/uuid :uuid]
          [:block/left :uuid]
          [:block/parent :uuid]
-         [:block/content :string]
+         [:block/title :string]
          [:block/created-at {:optional true} :int]
          [:block/updated-at {:optional true} :int]
          [:block/format {:optional true} :any]
@@ -112,7 +112,7 @@ when undo this op, this original entity-map will be transacted back into db")
   [:block/uuid
    {:block/left [:block/uuid]}
    {:block/parent [:block/uuid]}
-   :block/content
+   :block/title
    :block/created-at
    :block/updated-at
    :block/format
@@ -161,7 +161,7 @@ when undo this op, this original entity-map will be transacted back into db")
       (let [value-keys             (set (keys (second op)))
             block-entity           (d/entity db [:block/uuid block-uuid])
             block-origin-content   (when (contains? value-keys :block-origin-content)
-                                     (:block/content block-entity))
+                                     (:block/title block-entity))
             block-origin-tags      (when (contains? value-keys :block-origin-tags)
                                      (mapv :block/uuid (:block/tags block-entity)))
             block-origin-collapsed (when (contains? value-keys :block-origin-collapsed)
@@ -272,7 +272,7 @@ when undo this op, this original entity-map will be transacted back into db")
                             :conn conn}}
            (outliner-core/insert-blocks! repo conn
                                          [(cond-> {:block/uuid block-uuid
-                                                   :block/content (:block/content block-entity-map)
+                                                   :block/title (:block/title block-entity-map)
                                                    :block/format :markdown}
                                             (:block/created-at block-entity-map)
                                             (assoc :block/created-at (:block/created-at block-entity-map))
@@ -357,7 +357,7 @@ when undo this op, this original entity-map will be transacted back into db")
                   (ldb/transact! conn retract-attrs-tx-data {:gen-undo-ops? false}))
               new-block (cond-> block-entity
                           (some? block-origin-content)
-                          (assoc :block/content block-origin-content)
+                          (assoc :block/title block-origin-content)
                           (some? block-origin-tags)
                           (assoc :block/tags (some->> block-origin-tags
                                                       (map (partial vector :block/uuid))
@@ -420,7 +420,7 @@ when undo this op, this original entity-map will be transacted back into db")
       (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) ops)
                                 (map second)
                                 (reverse))
-            block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (first editor-cursors))]))]
+            block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid (first editor-cursors))]))]
         {:undo? true
          :editor-cursors editor-cursors
          :block-content block-content}))
@@ -445,7 +445,7 @@ when undo this op, this original entity-map will be transacted back into db")
         (push-undo-ops repo page-block-uuid (vec (cons boundary rev-ops))))
       (let [editor-cursors (->> (filter #(= ::record-editor-info (first %)) ops)
                                 (map second))
-            block-content (:block/content (d/entity @conn [:block/uuid (:block-uuid (last editor-cursors))]))]
+            block-content (:block/title (d/entity @conn [:block/uuid (:block-uuid (last editor-cursors))]))]
         {:redo? true
          :editor-cursors editor-cursors
          :block-content block-content}))
@@ -499,15 +499,15 @@ when undo this op, this original entity-map will be transacted back into db")
               other-ops
               (let [updated-attrs (seq (set/intersection
                                         updated-key-set
-                                        #{:block/content :block/tags :block/collapsed? :block/link}))]
+                                        #{:block/title :block/tags :block/collapsed? :block/link}))]
                 (when-let [update-block-op-value
                            (when (normal-block? entity-after)
                              (some->> updated-attrs
                                       (keep
                                        (fn [attr-name]
                                          (case attr-name
-                                           :block/content
-                                           (when-let [origin-content (:block/content entity-before)]
+                                           :block/title
+                                           (when-let [origin-content (:block/title entity-before)]
                                              [:block-origin-content origin-content])
 
                                            :block/tags

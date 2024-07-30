@@ -46,12 +46,12 @@
     (let [refs (:block/_refs page-entity)
           id-ref->page #(db-content/special-id-ref->page % [page-entity])]
       (when (seq refs)
-        (let [tx-data (mapcat (fn [{:block/keys [raw-content] :as ref}]
+        (let [tx-data (mapcat (fn [{:block/keys [raw-title] :as ref}]
                                 ;; block content
-                                (let [content' (id-ref->page raw-content)
-                                      content-tx (when (not= raw-content content')
+                                (let [content' (id-ref->page raw-title)
+                                      content-tx (when (not= raw-title content')
                                                    {:db/id (:db/id ref)
-                                                    :block/content content'})
+                                                    :block/title content'})
                                       tx content-tx]
                                   (concat
                                    [[:db/retract (:db/id ref) :block/refs (:db/id page-entity)]]

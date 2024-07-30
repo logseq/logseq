@@ -17,22 +17,26 @@
     common-util/uuid-pattern
     ")")))
 
+(defn block-id->special-id-ref
+  [id]
+  (str page-ref/left-brackets
+       page-ref-special-chars
+       id
+       page-ref/right-brackets))
+
 (defn special-id-ref->page
   "Convert special id ref backs to page name using refs."
   [content refs]
   (reduce
    (fn [content ref]
-     (if (:block/name ref)
+     (if (:block/title ref)
        (-> content
-           (string/replace (str page-ref/left-brackets
-                                page-ref-special-chars
-                                (:block/uuid ref)
-                                page-ref/right-brackets)
-                           (:block/original-name ref))
+           (string/replace (block-id->special-id-ref (:block/uuid ref))
+                           (:block/title ref))
            (string/replace
                 (str "#" page-ref-special-chars
                      (:block/uuid ref))
-                (str "#" (:block/original-name ref))))
+                (str "#" (:block/title ref))))
        content))
    content
    refs))
@@ -45,7 +49,7 @@
             (string/includes? content (str "#" page-ref-special-chars)))
       (reduce
        (fn [content ref]
-         (if (:block/name ref)
+         (if (:block/title ref)
            (-> content
                ;; Replace page refs
                (string/replace
@@ -53,12 +57,12 @@
                      page-ref-special-chars
                      (:block/uuid ref)
                      page-ref/right-brackets)
-                (page-ref/->page-ref (:block/original-name ref)))
+                (page-ref/->page-ref (:block/title ref)))
                ;; Replace tags
                (string/replace
                 (str "#" page-ref-special-chars
                      (:block/uuid ref))
-                (str "#" (:block/original-name ref))))
+                (str "#" (:block/title ref))))
 
            content))
        content
@@ -80,7 +84,7 @@
    (fn [content ref]
      (string/replace content
                      (str page-ref/left-brackets
-                          (:block/original-name ref)
+                          (:block/title ref)
                           page-ref/right-brackets)
                      (str page-ref/left-brackets
                           page-ref-special-chars
@@ -93,9 +97,9 @@
   "Replace `[[internal-id]]` with `[[page name]]`"
   [repo db item eid]
   (if (sqlite-util/db-based-graph? repo)
-    (if-let [content (:block/content item)]
+    (if-let [content (:block/title item)]
       (let [refs (:block/refs (d/entity db eid))]
-        (assoc item :block/content (special-id-ref->page-ref content refs)))
+        (assoc item :block/title (special-id-ref->page-ref content refs)))
       item)
     item))
 
@@ -122,10 +126,10 @@
    (fn [content tag]
      (common-util/replace-ignore-case
       content
-      (str "#" (:block/original-name tag))
+      (str "#" (:block/title tag))
       (str page-ref/left-brackets
            page-ref-special-chars
            (:block/uuid tag)
            page-ref/right-brackets)))
    content
-   (sort-by :block/original-name > tags)))
+   (sort-by :block/title > tags)))

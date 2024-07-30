@@ -33,7 +33,7 @@
          ;; These keyword aliases should be the same as those used in the query-table for sorting
          (case f
            :block
-           :block/content
+           :block/title
 
            :page
            :block/name

@@ -142,6 +142,7 @@
       :editor/last-key-code                  (atom nil)
       :ui/global-last-key-code               (atom nil)
       :editor/block-op-type                  nil             ;; :cut, :copy
+      :editor/block-refs                     (atom #{})
 
       ;; Stores deleted refed blocks, indexed by repo
       :editor/last-replace-ref-content-tx    nil
@@ -772,7 +773,10 @@ Similar to re-frame subscriptions"
 
 (defn block-content-max-length
   [repo]
-  (or (:block/content-max-length (sub-config repo)) 10000))
+  (or (:block/title-max-length (sub-config repo))
+      ;; backward compatible
+      (:block/content-max-length (sub-config repo))
+      10000))
 
 (defn mobile?
   []
@@ -1367,7 +1371,8 @@ Similar to re-frame subscriptions"
   (clear-editor-last-pos!)
   (clear-cursor-range!)
   (set-state! :editor/content {})
-  (set-state! :ui/select-query-cache {}))
+  (set-state! :ui/select-query-cache {})
+  (set-state! :editor/block-refs #{}))
 
 (defn into-code-editor-mode!
   []
@@ -2044,6 +2049,7 @@ Similar to re-frame subscriptions"
                 content (string/trim (or content ""))]
             (assert (and container-id (:block/uuid block))
                     "container-id or block uuid is missing")
+            (set-state! :editor/block-refs #{})
             (if property-block
               (set-editing-block-id! [container-id (:block/uuid property-block) (:block/uuid block)])
               (set-editing-block-id! [container-id (:block/uuid block)]))
@@ -2430,3 +2436,8 @@ Similar to re-frame subscriptions"
      :container-id (or @(:editor/container-id @state) :unknown-container)
      :start-pos @(:editor/start-pos @state)
      :end-pos (get-edit-pos)}))
+
+(defn conj-block-ref!
+  [ref-entity]
+  (let [refs! (:editor/block-refs @state)]
+    (swap! refs! conj ref-entity)))

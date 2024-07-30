@@ -15,7 +15,7 @@
   :attendee {:block/schema {:type :object :cardinality :many}
              :build/schema-classes [:Person]}}
  :pages-and-blocks
- [{:page {:block/original-name "Matt-Damon" :build/tags [:Person]}}
-  {:page {:block/original-name "Ben-Affleck" :build/tags [:Person]}}
-  {:page {:block/original-name "Tienson" :build/tags [:Person]}}
-  {:page {:block/original-name "Zhiyuan" :build/tags [:Person]}}]}
+ [{:page {:block/title "Matt-Damon" :build/tags [:Person]}}
+  {:page {:block/title "Ben-Affleck" :build/tags [:Person]}}
+  {:page {:block/title "Tienson" :build/tags [:Person]}}
+  {:page {:block/title "Zhiyuan" :build/tags [:Person]}}]}

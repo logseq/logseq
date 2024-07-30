@@ -124,7 +124,7 @@
 
 (defn db-based-statuses
   []
-  (map (fn [e] (:block/content e))
+  (map (fn [e] (:block/title e))
        (db-pu/get-closed-property-values :logseq.task/status)))
 
 (defn db-based-embed-page
@@ -166,7 +166,7 @@
 
 (defn db-based-priorities
   []
-  (map (fn [e] (:block/content e))
+  (map (fn [e] (:block/title e))
     (db-pu/get-closed-property-values :logseq.task/priority)))
 
 (defn get-priorities
@@ -280,17 +280,22 @@
     (->>
      (concat
         ;; basic
-      [["Page reference"
+      [[(if db? "Node reference" "Page reference")
         [[:editor/input page-ref/left-and-right-brackets {:backward-pos 2}]
          [:editor/search-page]]
-        "Create a backlink to a page"
+        (if db? "Create a backlink to a node (a page or a block)"
+            "Create a backlink to a BLOCK")
         :icon/pageRef
         "BASIC"]
-       ["Page embed" (embed-page) "Embed a page here" :icon/pageEmbed]
-       ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
-                           [:editor/search-block :reference]]
-        "Create a backlink to a block" :icon/blockRef]
-       ["Block embed" (embed-block) "Embed a block here" :icon/blockEmbed]]
+       (when-not db? ["Page embed" (embed-page) "Embed a page here" :icon/pageEmbed])
+       (when-not db?
+         ["Block reference" [[:editor/input block-ref/left-and-right-parens {:backward-pos 2}]
+                             [:editor/search-block :reference]]
+          "Create a backlink to a block" :icon/blockRef])
+       [(if db? "Node embed" "Block embed")
+        (embed-block)
+        (if db? "Embed a node here" "Embed a block here")
+        :icon/blockEmbed]]
 
         ;; format
       [["Link" (link-steps) "Create a HTTP link" :icon/link "FORMAT"]
@@ -401,9 +406,9 @@
 ;; Allow user to modify or extend, should specify how to extend.
 
       (state/get-commands)
-       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
-                                         (mapv #(vec (concat % [nil :icon/puzzle])))))]
-         (-> plugin-commands (vec) (update 0 (fn [v] (conj v "PLUGINS"))))))
+      (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
+                                               (mapv #(vec (concat % [nil :icon/puzzle])))))]
+        (-> plugin-commands (vec) (update 0 (fn [v] (conj v "PLUGINS"))))))
      (remove nil?)
      (util/distinct-by-last-wins first))))
 
@@ -785,7 +790,9 @@
 (defmethod handle-step :editor/search-page-hashtag [[_]]
   (state/set-editor-action! :page-search-hashtag))
 
-(defmethod handle-step :editor/search-block [[_ _type]]
+(defmethod handle-step :editor/search-block [[_ type]]
+  (when (and (= type :embed) (config/db-based-graph? (state/get-current-repo)))
+    (reset! *current-command "Block embed"))
   (state/set-editor-action! :block-search))
 
 (defmethod handle-step :editor/search-template [[_]]

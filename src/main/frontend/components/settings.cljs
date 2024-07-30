@@ -1037,6 +1037,7 @@
         enable-flashcards? (state/enable-flashcards? current-repo)
         enable-sync? (state/enable-sync?)
         enable-sync-diff-merge? (state/enable-sync-diff-merge?)
+        db-based? (config/db-based-graph? current-repo)
         enable-whiteboards? (state/enable-whiteboards? current-repo)
         logged-in? (user-handler/logged-in?)]
     [:div.panel-wrap.is-features.mb-8
@@ -1054,13 +1055,13 @@
             :on-key-press  (fn [e]
                              (when (= "Enter" (util/ekey e))
                                (update-home-page e)))}]]]])
-     (whiteboards-switcher-row enable-whiteboards?)
+     (when-not db-based? (whiteboards-switcher-row enable-whiteboards?))
      (when (and (util/electron?) config/feature-plugin-system-on?)
        (plugin-system-switcher-row))
      (when (util/electron?)
        (http-server-switcher-row))
-     (flashcards-switcher-row enable-flashcards?)
-     (zotero-settings-row)
+     (when-not db-based? (flashcards-switcher-row enable-flashcards?))
+     (when-not db-based? (zotero-settings-row))
      (when (config/db-based-graph? current-repo)
        ;; FIXME: Wire this up again to RTC init calls
        (rtc-switcher-row (state/enable-rtc? current-repo)))

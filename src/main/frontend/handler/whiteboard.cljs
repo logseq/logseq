@@ -41,7 +41,7 @@
                 (if-let [page-id (:pageId shape)]
                   (let [page (db/get-page page-id)]
                     ;; Used in page preview
-                    (assoc shape :pageName (:block/original-name page)))
+                    (assoc shape :pageName (:block/title page)))
                   shape))))))
 
 (defn- whiteboard-clj->tldr [page-block blocks]
@@ -67,7 +67,7 @@
                      :nonce (get-k "nonce")
                      :assets (js->clj-keywordize assets)}]
     {:db/id (:db/id page-entity)
-     :block/original-name page-name
+     :block/title page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type #{"page" "whiteboard"}
      :block/format :markdown
@@ -80,7 +80,7 @@
 (defn file-build-page-block
   [page-entity page-name tldraw-page assets]
   (let [get-k #(gobj/get tldraw-page %)]
-    {:block/original-name page-name
+    {:block/title page-name
      :block/name (util/page-name-sanity-lc page-name)
      :block/type #{"page" "whiteboard"}
      :block/properties {(pu/get-pid :logseq.property/ls-type)
@@ -137,7 +137,7 @@
                                     (if-let [new-order (when new-id->order (get new-id->order (str (:block/uuid block))))]
                                       (assoc block :block/order new-order)
                                       block))))
-        page-name (or (:block/original-name page-entity) (str page-uuid))
+        page-name (or (:block/title page-entity) (str page-uuid))
         page-block (build-page-block page-entity page-name tl-page assets)]
     (when (or (seq upserted-blocks)
               (seq deleted-shapes-tx)
@@ -252,7 +252,7 @@
                     (pu/get-pid :logseq.property.tldraw/page) tldraw-page}
         m #:block{:uuid id
                   :name (util/page-name-sanity-lc page-name),
-                  :original-name page-name
+                  :title page-name
                   :type #{"whiteboard" "page"},
                   :format :markdown
                   :updated-at (util/time-ms),
@@ -321,7 +321,7 @@
           page-entity (model/get-page page-uuid)
           tx (sqlite-util/block-with-timestamps
               {:block/uuid new-block-id
-               :block/content (or content "")
+               :block/title (or content "")
                :block/format :markdown
                :block/page (:db/id page-entity)
                :block/parent (:db/id page-entity)})

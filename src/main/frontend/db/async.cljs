@@ -54,10 +54,10 @@
   [graph]
   (p/let [result (<q graph
                      {:transact-db? false}
-                     '[:find [(pull ?e [:block/uuid :db/ident :block/original-name :block/schema]) ...]
+                     '[:find [(pull ?e [:block/uuid :db/ident :block/title :block/schema]) ...]
                        :where
                        [?e :block/type "property"]
-                       [?e :block/original-name]])]
+                       [?e :block/title]])]
     (->> result
          ;; remove private built-in properties
          (remove #(and (:db/ident %)
@@ -66,15 +66,15 @@
 
 (defn <get-all-properties
   "Returns all public properties as property maps including their
-  :block/original-name and :db/ident. For file graphs the map only contains
-  :block/original-name"
+  :block/title and :db/ident. For file graphs the map only contains
+  :block/title"
   []
   (when-let [graph (state/get-current-repo)]
     (if (config/db-based-graph? graph)
       (<db-based-get-all-properties graph)
       (p/let [properties (file-async/<file-based-get-all-properties graph)
               hidden-properties (set (map name (property-util/hidden-properties)))]
-        (remove #(hidden-properties (:block/original-name %)) properties)))))
+        (remove #(hidden-properties (:block/title %)) properties)))))
 
 (defn <file-get-property-values
   "For file graphs, returns property value names for given property name"
@@ -106,9 +106,8 @@
                          [?b ?property-id ?vid]
                          [(not= ?vid :logseq.property/empty-placeholder)]
                          (or
-                          [?vid :block/content ?value]
                           [?vid :property.value/content ?value]
-                          [?vid :block/original-name ?value])]
+                          [?vid :block/title ?value])]
                        property-id
                        value)]
       (db/entity (:db/id (first result))))))
@@ -247,7 +246,7 @@
 (defn <get-tag-pages
   [graph tag-id]
   (<q graph {:transact-db? true}
-      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/original-name :block/created-at :block/updated-at])]
+      '[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at])]
         :in $ ?tag-id
         :where
         [?page :block/tags ?tag-id]
@@ -278,7 +277,7 @@
 (defn <get-tags
   [graph]
   (<q graph {:transact-db? false}
-      '[:find [(pull ?tag [:db/id :block/original-name])]
+      '[:find [(pull ?tag [:db/id :block/title])]
         :where
         [?tag :block/type "class"]]))
 

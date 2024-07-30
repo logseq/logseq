@@ -987,7 +987,7 @@
                         :edit-original-block
                         (fn [{:keys [editing-default-property?]}]
                           (when editing-block
-                            (let [content (:block/content (db/entity (:db/id editing-block)))
+                            (let [content (:block/title (db/entity (:db/id editing-block)))
                                   esc? (= "Escape" (state/get-ui-last-key-code))
                                   [content' pos] (cond
                                                    esc?

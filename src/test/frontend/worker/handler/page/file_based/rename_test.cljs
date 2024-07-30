@@ -31,12 +31,12 @@
   (testing "Case change"
     (let [page (db/get-page "test")]
       (page-rename (:block/uuid page) "Test")
-      (is (= "Test" (:block/original-name (db/entity (:db/id page)))))))
+      (is (= "Test" (:block/title (db/entity (:db/id page)))))))
 
   (testing "Name changed"
     (let [page (db/get-page "Test")]
       (page-rename (:block/uuid page) "New name")
-      (is (= "New name" (:block/original-name (db/entity (:db/id page)))))))
+      (is (= "New name" (:block/title (db/entity (:db/id page)))))))
 
   (testing "Merge existing page"
     (test-helper/create-page! "Existing page" {:redirect? false :create-first-block? true})
@@ -73,7 +73,7 @@
       ;; Blocks from both pages have been merged
       (is (= (count (:block/_page e2)) (+ 1 (dec (count init-data)))))
       ;; Content updated
-      (is (= "Block 1 [[Existing page]]" (:block/content (db/entity [:block/uuid fbid])))))))
+      (is (= "Block 1 [[Existing page]]" (:block/title (db/entity [:block/uuid fbid])))))))
 
 (defn- replace-page-ref!
   [content old-name new-name]

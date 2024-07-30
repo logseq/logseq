@@ -8,7 +8,6 @@
             [frontend.db.utils :as db-utils]
             [frontend.db.async :as db-async]
             [frontend.fs :as fs]
-            [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
             [frontend.handler.page :as page-handler]
@@ -104,45 +103,36 @@
    (p/let [ref-page (when pdf-current (ensure-ref-page! pdf-current))]
      (when ref-page
        (let [ref-block (db-model/query-block-by-uuid id)]
-         (if-not (nil? (:block/content ref-block))
+         (if-not (nil? (:block/title ref-block))
            (do
              (println "[existed ref block]" ref-block)
              ref-block)
            (let [text       (:text content)
                  wrap-props #(if-let [stamp (:image content)]
                                (assoc %
-                                 (pu/get-pid :logseq.property/hl-type) :area
-                                 (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
+                                      (pu/get-pid :logseq.property/hl-type) :area
+                                      (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
                                %)
                  props (cond->
-                         {(pu/get-pid :logseq.property/ls-type)  :annotation
-                          (pu/get-pid :logseq.property.pdf/hl-page)  page
-                          (pu/get-pid :logseq.property/hl-color) (:color properties)
-                          (pu/get-pid :logseq.property.pdf/hl-value) (pr-str hl)}
+                        {(pu/get-pid :logseq.property/ls-type)  :annotation
+                         (pu/get-pid :logseq.property.pdf/hl-page)  page
+                         (pu/get-pid :logseq.property/hl-color) (:color properties)
+                         (pu/get-pid :logseq.property.pdf/hl-value) hl}
                          (not (config/db-based-graph? (state/get-current-repo)))
                          ;; force custom uuid
                          (assoc :id (if (string? id) (uuid id) id)))
                  properties (wrap-props props)]
              (when (string? text)
                (editor-handler/api-insert-new-block!
-                 text (merge {:page        (:block/name ref-page)
-                              :custom-uuid id
-                              :properties properties}
-                        insert-opts))))))))))
+                text (merge {:page        (:block/name ref-page)
+                             :custom-uuid id
+                             :properties properties}
+                            insert-opts))))))))))
 
 (defn construct-highlights-from-hls-page
   [hls-page]
-  (p/let [blocks (db-async/<get-page-all-blocks (:block/name hls-page))]
-    (let [hls (volatile! [])
-          blocks (->> (for [block blocks]
-                        (do (when-let [hl-value (:logseq.property.pdf/hl-value block)]
-                              (vswap! hls conj hl-value))
-                          (when (:logseq.property/created-from-property block)
-                            [(:db/id block) block]))) (into {}))
-          hls (some->> @hls (map #(when-let [id (:db/id %)]
-                                    (some-> (get blocks id) :block/content (common-handler/safe-read-string nil))))
-                (remove nil?))]
-      {:highlights hls})))
+  (p/let [blocks (db-async/<get-page-all-blocks (:block/uuid hls-page))]
+    {:highlights (keep :logseq.property.pdf/hl-value blocks)}))
 
 (defn load-hls-data$
   [{:keys [hls-file]}]
@@ -263,7 +253,7 @@
   [block]
   (let [id (:block/uuid block)
         page (db/entity (:db/id (:block/page block)))
-        page-name (:block/original-name page)
+        page-name (:block/title page)
         file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
         db-base? (config/db-based-graph? (state/get-current-repo))]

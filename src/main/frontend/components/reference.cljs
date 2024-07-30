@@ -158,7 +158,7 @@
         filtered-ref-blocks' (map first result)
         ref-pages (->>
                    (mapcat second result)
-                   (map :block/original-name)
+                   (map :block/title)
                    frequencies)]
     (reset! *ref-pages ref-pages)
     (when (or (seq (:included filters)) (seq (:excluded filters)) (> filter-n 0))
@@ -207,7 +207,7 @@
     (when (seq ref-blocks)
       [:div.references-blocks
        (let [ref-hiccup (block/->hiccup ref-blocks
-                                        {:id (str (:block/original-name page) "-unlinked-")
+                                        {:id (str (:block/title page) "-unlinked-")
                                          :ref? true
                                          :group-by-page? true
                                          :editor-box editor/box}

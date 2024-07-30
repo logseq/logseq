@@ -187,7 +187,7 @@
   [value {:keys [on-change editing? multiple-values? other-position?]}]
   (let [*trigger-ref (rum/use-ref nil)
         page value
-        title (when page (:block/original-name page))
+        title (when page (:block/title page))
         value' (when title
                  (js/Date. (date/journal-title->long title)))
         content-fn (fn [{:keys [id]}] (calendar-inner id on-change value'))
@@ -275,7 +275,7 @@
   (let [selected-choices (->> selected-choices
                               (remove nil?)
                               (remove #(= :logseq.property/empty-placeholder %)))
-        clear-value (str "No " (:block/original-name property))
+        clear-value (str "No " (:block/title property))
         clear-value-label [:div.flex.flex-row.items-center.gap-2
                            (ui/icon "x")
                            [:div clear-value]]
@@ -308,8 +308,8 @@
 
 (defn- get-title
   [e]
-  (or (:block/original-name e)
-      (:block/content e)))
+  (or (:block/title e)
+      (:block/title e)))
 
 (rum/defc select-page < rum/reactive db-mixins/query
   [property
@@ -332,11 +332,7 @@
            (mapcat
             (fn [class]
               (if (= :logseq.class/Root (:db/ident class))
-                (->> (model/get-all-classes repo)
-                     (keep (fn [[_ id]]
-                             (let [e (db/entity [:block/uuid id])]
-                               (when-not (= :logseq.class/Root (:db/ident e))
-                                 e)))))
+                (model/get-all-classes repo {:except-root-class? true})
                 (model/get-class-objects repo (:db/id class))))
             classes)
 
@@ -390,10 +386,10 @@
                                                                  (mapcat #(model/get-class-children repo (:db/id %)))
                                                                  (map #(db/entity repo %)))]
                                      (->> (concat classes' descendent-classes)
-                                          (filter #(string/includes? (:block/original-name %) class-input))
+                                          (filter #(string/includes? (:block/title %) class-input))
                                           (mapv (fn [p]
-                                                  {:value (str new-page "#" (:block/original-name p))
-                                                   :label (str new-page "#" (:block/original-name p))}))))
+                                                  {:value (str new-page "#" (:block/title p))
+                                                   :label (str new-page "#" (:block/title p))}))))
                                    results))))]
     (select-aux block property opts')))
 
@@ -463,7 +459,7 @@
                                    :value value})))
                          (distinct)))
             items (->> (if (= :date type)
-                         (map (fn [m] (let [label (:block/original-name (db/entity (:value m)))]
+                         (map (fn [m] (let [label (:block/title (db/entity (:value m)))]
                                         (when label
                                           (assoc m :label label)))) items)
                          items)
@@ -611,7 +607,7 @@
        (when-some [content (if (some? (:property.value/content value))
                              ;; content needs to be a string for display purposes
                              (str (:property.value/content value))
-                             (:block/content value))]
+                             (:block/title value))]
          (inline-text-cp content))
 
        :else
@@ -681,7 +677,7 @@
                   (when (and (= type :default) (nil? value))
                     (<create-new-block! block property "")))}
      (cond
-       (and (= type :default) (nil? (:block/content value)))
+       (and (= type :default) (nil? (:block/title value)))
        [:div.jtrigger (property-empty-btn-value)]
 
        (= type :default)
@@ -847,5 +843,5 @@
            (shui/tooltip-trigger
              {:onFocusCapture #(util/stop-propagation %)} value-cp)
            (shui/tooltip-content
-             (str "Change " (:block/original-name property)))))
+             (str "Change " (:block/title property)))))
        value-cp))))

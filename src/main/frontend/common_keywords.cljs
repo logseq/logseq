@@ -11,10 +11,6 @@
   "block name, lowercase, only page-blocks have this attr"
   :string)
 
-(sr/defkeyword :block/original-name
-  "like `:block/name`, but not unified into lowercase"
-  :string)
-
 (sr/defkeyword :block/type
   "block type"
   [:set [:enum "page" "property" "class" "whiteboard" "hidden"]])
@@ -28,13 +24,13 @@
 - some no-order blocks don't have this attr too,
   TODO: list these types")
 
-(sr/defkeyword :block/content
-  "content string of the blocks.
+(sr/defkeyword :block/title
+  "Title or content string of the blocks.
 in db-version, page-references(e.g. [[page-name]]) are stored as [[~^uuid]]."
   :string)
 
-(sr/defkeyword :block/raw-content
-  "like `:block/content`,
+(sr/defkeyword :block/raw-title
+  "like `:block/title`,
 but when eval `(:block/raw-content block-entity)`, return raw-content of this block"
   :string)
 

@@ -318,10 +318,10 @@
                                    (if class?
                                      (ldb/get-case-page db original-page-name)
                                      (ldb/get-page db original-page-name)))
-                     original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
+                     original-page-name (or from-page (:block/title page-entity) original-page-name)]
                  (merge
                   {:block/name page-name
-                   :block/original-name original-page-name}
+                   :block/title original-page-name}
                   (let [new-uuid* (if (uuid? page-uuid)
                                     page-uuid
                                     (if journal-day
@@ -393,7 +393,7 @@
                               children-pages (when-not db-based?
                                                (->> (mapcat (fn [p]
                                                               (let [p (if (map? p)
-                                                                        (:block/original-name p)
+                                                                        (:block/title p)
                                                                         p)]
                                                                 (when (string? p)
                                                                   (let [p (or (text/get-nested-page-name p) p)]
@@ -416,10 +416,17 @@
                                      (swap! *name->id assoc page-name (:block/uuid result)))
                                    (if id
                                      (assoc result :block/uuid id)
-                                     result))))) col)))]
+                                     result))))) col)))
+          refs (->> (ref->map-fn *refs false)
+                    (remove nil?)
+                    (map (fn [ref]
+                           (if-let [entity (ldb/get-case-page db (:block/title ref))]
+                             (select-keys entity [:block/uuid :block/title :block/name])
+                             ref))))
+          tags (ref->map-fn *structured-tags true)]
       (assoc block
-             :refs (ref->map-fn *refs false)
-             :tags (ref->map-fn *structured-tags true)))))
+             :refs refs
+             :tags tags))))
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]
@@ -522,10 +529,10 @@
                          property-refs (->> (get-page-refs-from-properties
                                              properties db date-formatter
                                              user-config)
-                                            (map :block/original-name))
+                                            (map :block/title))
                          pre-block? (if (:heading properties) false true)
                          block {:block/uuid id
-                                :block/content content
+                                :block/title content
                                 :block/level 1
                                 :block/properties properties
                                 :block/properties-order (vec properties-order)
@@ -533,7 +540,7 @@
                                 :block/invalid-properties invalid-properties
                                 :block/pre-block? pre-block?
                                 :block/macros (extract-macros-from-ast body)
-                                :block/body body}
+                                :block.temp/ast-body body}
                          {:keys [tags refs]}
                          (with-page-block-refs {:body body :refs property-refs} db date-formatter)]
                      (cond-> block
@@ -585,7 +592,7 @@
                     (update :properties-order (fn [keys] (vec (remove #{:collapsed} keys)))))
                 block)
         block (assoc block
-                     :content (get-block-content encoded-content block format pos-meta block-pattern))
+                     :block/title (get-block-content encoded-content block format pos-meta block-pattern))
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))
                 block)
@@ -606,13 +613,13 @@
 
 (defn fix-duplicate-id
   [block]
-  (println "Logseq will assign a new id for block with content:" (pr-str (:block/content block)))
+  (println "Logseq will assign a new id for block with content:" (pr-str (:block/title block)))
   (-> block
       (assoc :block/uuid (d/squuid))
       (update :block/properties dissoc :id)
       (update :block/properties-text-values dissoc :id)
       (update :block/properties-order #(vec (remove #{:id} %)))
-      (update :block/content (fn [c]
+      (update :block/title (fn [c]
                          (let [replace-str (re-pattern
                                             (str
                                              "\n*\\s*"

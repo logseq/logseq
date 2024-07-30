@@ -206,7 +206,7 @@
         (when-not (ldb/page-exists? @conn common-config/views-page-name)
           (ldb/create-views-page! conn))
 
-        (db-migrate/migrate conn)
+        (db-migrate/migrate conn search-db)
 
         (db-listener/listen-db-changes! repo conn)))))
 
@@ -505,9 +505,10 @@
   ;; Search
   (search-blocks
    [this repo q option]
-   (p/let [db (get-search-db repo)
-           result (search/search-blocks db q (bean/->clj option))]
-     (bean/->js result)))
+   (p/let [search-db (get-search-db repo)
+           conn (worker-state/get-datascript-conn repo)
+           result (search/search-blocks repo conn search-db q (bean/->clj option))]
+     (ldb/write-transit-str result)))
 
   (search-upsert-blocks
    [this repo blocks]
@@ -530,18 +531,11 @@
   (search-build-blocks-indice
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
-     (search/build-blocks-indice @conn)))
+     (search/build-blocks-indice repo @conn)))
 
   (search-build-pages-indice
    [this repo]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (search/build-page-indice repo @conn)
-     nil))
-
-  (page-search
-   [this repo q options]
-   (when-let [conn (worker-state/get-datascript-conn repo)]
-     (search/page-search repo @conn q (bean/->clj options))))
+   nil)
 
   (apply-outliner-ops
    [this repo ops-str opts-str]

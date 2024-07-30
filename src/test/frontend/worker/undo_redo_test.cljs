@@ -73,7 +73,7 @@
       {:block/uuid block-uuid
        :block/left left
        :block/parent parent
-       :block/content content}}]))
+       :block/title content}}]))
 
 (defn- gen-update-block-op
   [db]

@@ -5,13 +5,13 @@
 
 (def ^:large-vars/data-var built-in-classes
   "Map of built-in classes for db graphs with their :db/ident as keys"
-  {:logseq.class/Root {:original-name "Root class"}
+  {:logseq.class/Root {:title "Root class"}
 
    :logseq.class/task
-   {:original-name "Task"
+   {:title "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
 
-   :logseq.class/Card {:original-name "Card"
+   :logseq.class/Card {:title "Card"
                        ;; :schema {:property []}
                        }
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
@@ -27,8 +27,8 @@
   "Builds a new class with a unique :db/ident. Also throws exception for user
   facing messages when name is invalid"
   [db page-m]
-  {:pre [(string? (:block/original-name page-m))]}
-  (let [db-ident (try (create-user-class-ident-from-name (:block/original-name page-m))
+  {:pre [(string? (:block/title page-m))]}
+  (let [db-ident (try (create-user-class-ident-from-name (:block/title page-m))
                       (catch :default e
                         (throw (ex-info (str e)
                                         {:type :notification

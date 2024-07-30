@@ -17,7 +17,7 @@
             :block/parent property-id}
            (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
              {:property.value/content value}
-             {:block/content value}))))
+             {:block/title value}))))
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
@@ -42,7 +42,7 @@
    the hidden page and closed value blocks as needed"
   [db-ident prop-name property {:keys [property-attributes]}]
   (let [property-schema (:block/schema property)
-        property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:original-name prop-name
+        property-tx (merge (sqlite-util/build-new-property db-ident property-schema {:title prop-name
                                                                                      :ref-type? true})
                            property-attributes)]
     (into [property-tx]
@@ -73,7 +73,7 @@
         :block/order (db-order/gen-key)}
        (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
          {:property.value/content value}
-         {:block/content value}))
+         {:block/title value}))
       sqlite-util/block-with-timestamps))
 
 (defn build-property-values-tx-m

@@ -92,8 +92,8 @@
         (cond-> {}
           (not= schema (:block/schema property))
           (assoc :block/schema schema)
-          (and (some? property-name) (not= property-name (:block/original-name property)))
-          (assoc :block/original-name property-name))
+          (and (some? property-name) (not= property-name (:block/title property)))
+          (assoc :block/title property-name))
         property-tx-data
         (cond-> []
           (seq changed-property-attrs)
@@ -143,7 +143,7 @@
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
         (ldb/transact! conn
-                       [(sqlite-util/build-new-property db-ident' schema {:original-name k-name})]
+                       [(sqlite-util/build-new-property db-ident' schema {:title k-name})]
                        {:outliner-op :new-property})
         (d/entity @conn db-ident')))))
 
@@ -158,7 +158,7 @@
 (defn- raw-set-block-property!
   "Adds the raw property pair (value not modified) to the given block if the property value is valid"
   [conn block property property-type new-value]
-  (let [k-name (:block/original-name property)
+  (let [k-name (:block/title property)
         property-id (:db/ident property)
         schema (get-property-value-schema @conn property-type property)]
     (if-let [msg (and
@@ -202,7 +202,7 @@
           :in $ ?property-id ?raw-value
           :where
           [?b ?property-id ?v]
-          (or [?v :block/content ?raw-value]
+          (or [?v :block/title ?raw-value]
               [?v :property.value/content ?raw-value])]
         db
         property-id
@@ -417,7 +417,7 @@
                                          (dissoc schema :description))}
                         (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
                           {:property.value/content resolved-value}
-                          {:block/content resolved-value})))
+                          {:block/title resolved-value})))
                        icon
                        (assoc :logseq.property/icon icon)))]
                   (let [max-order (:block/order (last (:property/closed-values property)))

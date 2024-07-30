@@ -254,7 +254,7 @@
   (when (string? s)
     (re-find pattern s)))
 
-(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
 
 (defn uuid-string?
@@ -285,9 +285,9 @@
   []
   (tc/to-long (t/now)))
 
-(defn get-page-original-name
+(defn get-page-title
   [page]
-  (or (:block/original-name page)
+  (or (:block/title page)
       (:block/name page)))
 
 (defn string-join-path

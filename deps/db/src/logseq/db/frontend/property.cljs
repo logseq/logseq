@@ -20,25 +20,25 @@
      * :view-context - Keyword to indicate which view contexts a property can be
        seen in when :public? is set. Valid values are :page and :block. Property can
        be viewed in any context if not set
-   * :original-name - Property's :block/original-name
+   * :title - Property's :block/title
    * :name - Property's :block/name as a keyword. If none given, one is derived from the db/ident
    * :attribute - Property keyword that is saved to a datascript attribute outside of :block/properties
    * :closed-values - Vec of closed-value maps for properties with choices. Map
      has keys :value, :db-ident, :uuid and :icon"
   (ordered-map
-   :block/alias           {:original-name "Alias"
+   :block/alias           {:title "Alias"
                            :attribute :block/alias
                            :schema {:type :page
                                     :cardinality :many
                                     :view-context :page
                                     :public? true}}
-   :block/tags           {:original-name "Tags"
+   :block/tags           {:title "Tags"
                           :attribute :block/tags
                           :schema {:type :page
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
-   :logseq.property/page-tags {:original-name "pageTags"
+   :logseq.property/page-tags {:title "pageTags"
                                :schema {:type :page
                                         :public? true
                                         :view-context :page
@@ -73,7 +73,7 @@
    :logseq.property/hl-color {:schema {:type :default :hide? true}}
    :logseq.property.pdf/hl-page {:schema {:type :number :hide? true}}
    :logseq.property.pdf/hl-stamp {:schema {:type :number :hide? true}}
-   :logseq.property.pdf/hl-value {:schema {:type :default :hide? true}}
+   :logseq.property.pdf/hl-value {:schema {:type :map :hide? true}}
    :logseq.property.pdf/file
    {:schema {:type :default :hide? true :public? true :view-context :page}}
    :logseq.property.pdf/file-path
@@ -97,7 +97,7 @@
 
    ;; Task props
    :logseq.task/status
-   {:original-name "Status"
+   {:title "Status"
     :schema
     {:type :default
      :public? true
@@ -115,7 +115,7 @@
            [:logseq.task/status.done "Done" "Done"]
            [:logseq.task/status.canceled "Canceled" "Cancelled"]])}
    :logseq.task/priority
-   {:original-name "Priority"
+   {:title "Priority"
     :schema
     {:type :default
      :public? true
@@ -131,14 +131,14 @@
            [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
            [:logseq.task/priority.low "Low" "priorityLvlLow"]])}
    :logseq.task/deadline
-   {:original-name "Deadline"
+   {:title "Deadline"
     :schema {:type :date
              :public? true
              :position :block-below}}
 
    ;; TODO: Add more props :Assignee, :Estimate, :Cycle, :Project
 
-   :logseq.property/icon {:original-name "Icon"
+   :logseq.property/icon {:title "Icon"
                           :schema {:type :map}}
    :logseq.property/public {:schema
                             {:type :checkbox
@@ -247,17 +247,15 @@
 (defn closed-value-content
   "Gets content/value of a given closed value ent/map. Works for all closed value types"
   [ent]
-  (or (:block/content ent)
+  (or (:block/title ent)
       (:property.value/content ent)))
 
 (defn property-value-content
   "Given an entity, gets the content for the property value of a ref type
   property i.e. what the user sees. For page types the content is the page name"
   [ent]
-  (or (:block/content ent)
-      (if-some [content (:property.value/content ent)]
-        content
-        (:block/original-name ent))))
+  (or (:block/title ent)
+      (:property.value/content ent)))
 
 (defn ref->property-value-content
   "Given a ref from a pulled query e.g. `{:db/id X}`, gets a readable name for
@@ -315,6 +313,6 @@
   [db block]
   (->> (properties block)
        (map (fn [[k v]]
-              [(:block/original-name (d/entity db k))
+              [(:block/title (d/entity db k))
                (ref->property-value-contents db v)]))
        (into {})))

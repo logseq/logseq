@@ -89,10 +89,10 @@
        conn
        {:properties {:url {:block/schema {:type :url}}}
         :pages-and-blocks
-        [{:page {:block/original-name "page1"}
-          :blocks [{:block/content "b1" :build/properties {:url "https://logseq.com"}}
+        [{:page {:block/title "page1"}
+          :blocks [{:block/title "b1" :build/properties {:url "https://logseq.com"}}
                    ;; :url macros are used for consistently building urls with the same hostname e.g. docs graph
-                   {:block/content "b2" :build/properties {:url "{{docs-base-url test}}"}}]}]})
+                   {:block/title "b2" :build/properties {:url "{{docs-base-url test}}"}}]}]})
 
       (is (empty? (map :entity (:errors (db-validate/validate-db! @conn))))
           "Graph with different :url blocks has no validation errors"))))
