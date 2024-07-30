@@ -517,7 +517,7 @@
     (concat
      [:is :is-not]
      (case (get-in property [:block/schema :type])
-       (:default :url :page :object)
+       (:default :url :node)
        [:text-contains :text-not-contains]
        :date
        [:date-before :date-after]

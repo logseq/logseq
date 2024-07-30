@@ -28,18 +28,18 @@
   (ordered-map
    :block/alias           {:title "Alias"
                            :attribute :block/alias
-                           :schema {:type :page
+                           :schema {:type :node
                                     :cardinality :many
                                     :view-context :page
                                     :public? true}}
    :block/tags           {:title "Tags"
                           :attribute :block/tags
-                          :schema {:type :page
+                          :schema {:type :node
                                    :cardinality :many
                                    :public? true
                                    :classes #{:logseq.class/Root}}}
    :logseq.property/page-tags {:title "pageTags"
-                               :schema {:type :page
+                               :schema {:type :node
                                         :public? true
                                         :view-context :page
                                         :cardinality :many}}
@@ -82,10 +82,10 @@
                                      :schema {:type :default
                                               :hide? true}}
    :logseq.property.linked-references/includes {:schema {; could be :entity to support blocks(objects) in the future
-                                                         :type :page
+                                                         :type :node
                                                          :cardinality :many
                                                          :hide? true}}
-   :logseq.property.linked-references/excludes {:schema {:type :page
+   :logseq.property.linked-references/excludes {:schema {:type :node
                                                          :cardinality :many
                                                          :hide? true}}
    :logseq.property.tldraw/page {:name :logseq.tldraw.page

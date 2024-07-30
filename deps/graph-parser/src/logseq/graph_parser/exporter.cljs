@@ -278,7 +278,7 @@
     (when-not (get @property-schemas prop)
       (create-property-ident db all-idents prop)
       (let [schema (cond-> {:type prop-type}
-                     (#{:page :date} prop-type)
+                     (#{:node :date} prop-type)
                      ;; Assume :many for now as detecting that detecting property values across files are consistent
                      ;; isn't possible yet
                      (assoc :cardinality :many))]
@@ -359,13 +359,13 @@
       (or (get properties-text-values prop) (str val))
 
       ;; treat it the same as a :page
-      (= {:from :page :to :date} type-change)
+      (= {:from :node :to :date} type-change)
       (update-page-or-date-values page-names-to-uuids val)
 
       ;; Change to :page as dates can be pages but pages can't be dates
-      (= {:from :date :to :page} type-change)
+      (= {:from :date :to :node} type-change)
       (do
-        (swap! property-schemas assoc-in [prop :type] :page)
+        (swap! property-schemas assoc-in [prop :type] :node)
         (update-page-or-date-values page-names-to-uuids val))
 
       ;; Unlike the other property changes, this one changes all the previous values of a property

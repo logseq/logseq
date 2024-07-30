@@ -6,10 +6,10 @@
      * Some classes are renamed due to naming conflicts
    * All properties with their property type, url, description
      * Property type is determined by looking for the first range value that is
-       a subclass of https://schema.org/DataType and then falling back to :page.
+       a subclass of https://schema.org/DataType and then falling back to :node.
      * Some properties are skipped because they are superseded/deprecated or because they have a property
        type logseq doesnt' support yet
-     * schema.org assumes no cardinality. For now, only :page properties are given a :cardinality :many"
+     * schema.org assumes no cardinality. For now, only :node properties are given a :cardinality :many"
   (:require [logseq.outliner.cli :as outliner-cli]
             [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
@@ -95,7 +95,7 @@
 
 (defn- get-schema-type [range-includes class-map]
   (some #(or (schema->logseq-data-types %)
-             (when (class-map %) :page))
+             (when (class-map %) :node))
         range-includes))
 
 (defn- ->property-page [property-m class-map {:keys [verbose renamed-pages renamed-properties]}]
@@ -106,25 +106,25 @@
             (println "Picked property type:"
                      {:property (property-m "@id") :type schema-type :range-includes (vec range-includes)}))
         _ (assert schema-type (str "No schema found for property " (property-m "@id")))
-        _ (when (= schema-type :page)
+        _ (when (= schema-type :node)
             (when-let [datatype-classes (not-empty (set/intersection (set range-includes)
                                                                      (set (keys schema->logseq-data-types))))]
               (throw (ex-info (str "property " (pr-str (property-m "@id"))
-                                   " with type :page has DataType class values which aren't supported: " datatype-classes) {}))))
+                                   " with type :node has DataType class values which aren't supported: " datatype-classes) {}))))
 
         inverted-renamed-properties (set/map-invert renamed-properties)
         class-name (strip-schema-prefix (property-m "@id"))
         url (str "https://schema.org/" (get inverted-renamed-properties class-name class-name))
         schema (cond-> {:type schema-type}
                  ;; This cardinality rule should be adjusted as we use schema.org more
-                 (= schema-type :page)
+                 (= schema-type :node)
                  (assoc :cardinality :many)
                  (property-m "rdfs:comment")
                  (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-pages)))]
     {(keyword (strip-schema-prefix (property-m "@id")))
      (cond-> {:block/schema schema
               :build/properties {:url url}}
-       (= schema-type :page)
+       (= schema-type :node)
        (assoc :build/schema-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
 
 (defn- get-class-to-properties
@@ -269,7 +269,7 @@
         all-properties* (get-all-properties schema-data options)
         property-tuples (map #(vector (% "@id") :property) all-properties*)
         class-tuples (map #(vector (% "@id") :class) all-classes*)
-        page-tuples (map #(vector (str "schema:" %) :page) existing-pages)
+        page-tuples (map #(vector (str "schema:" %) :node) existing-pages)
         renamed-classes (detect-id-conflicts-and-get-renamed-classes
                          property-tuples class-tuples page-tuples options)
         renamed-properties (detect-property-conflicts-and-get-renamed-properties

@@ -295,7 +295,8 @@ DROP TRIGGER IF EXISTS blocks_au;
                                       block-id (uuid id)]
                                   (when-let [block (d/entity @conn [:block/uuid block-id])]
                                     (when-not (and (not built-in?) (ldb/built-in? block))
-                                      {:block/uuid block-id
+                                      {:db/id (:db/id block)
+                                       :block/uuid block-id
                                        :block/title (or snippet title)
                                        :block/page (if (common-util/uuid-string? page)
                                                      (uuid page)

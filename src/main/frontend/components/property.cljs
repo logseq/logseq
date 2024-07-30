@@ -196,7 +196,7 @@
                 (when *property (reset! *property property))
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
-                 (when (= (:type schema) :object) (reset! *show-class-select? true))
+                 (when (= (:type schema) :node) (reset! *show-class-select? true))
                  (components-pu/update-property! property property-name schema)
                  (cond
                    (and *show-class-select? @*show-class-select?)
@@ -321,7 +321,7 @@
             (case (:type @*property-schema)
               ;; Question: 1. should we still support classes for `page` type?
               ;;           2. flexible query instead of classes? e.g. find all papers are related to either Clojure or OCaml `(and (tag :paper) (or (tag :clojure) (tag :ocaml)))`
-              :object
+              :node
               (when (empty? (:property/closed-values property))
                 [:div.grid.grid-cols-5.gap-1.items-center.leading-8
                  [:label.col-span-2 "Specify classes:"]
@@ -445,7 +445,7 @@
                  :checkbox "checkbox"
                  :url "link"
                  :page "page"
-                 :object "topology-star"
+                 :node "topology-star"
                  "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))

@@ -102,7 +102,7 @@
                              :title "Delete this icon"}
           (ui/icon "X")])]]
      ;; Disable description for types that can't edit them
-     (when-not (#{:page :date} property-type)
+     (when-not (#{:node :date} property-type)
        [:div.grid.grid-cols-5.gap-1.items-start.leading-8
         [:label.col-span-2 "Description:"]
         [:div.col-span-3
