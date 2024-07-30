@@ -80,7 +80,7 @@
    [:failed-ops {:optional true} [:sequential to-ws-op-schema]]
    [:s3-presign-url {:optional true} :string]
    [:server-schema-version {:optional true} :int]
-   [:server-only-db-ident-blocks {:optional true} :string ;;transit
+   [:server-only-db-ident-blocks {:optional true} [:maybe :string] ;;transit
     ]
    [:users {:optional true} [:sequential
                              [:map {:closed true}
