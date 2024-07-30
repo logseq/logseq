@@ -611,7 +611,8 @@ independent of format as format specific heading characters are stripped"
   ([repo page-id options]
    (when repo
      (when (conn/get-db repo)
-       (let [pages (page-alias-set repo page-id)]
+       (let [page (db-utils/entity page-id)
+             pages (page-alias-set repo page-id)]
          (->>
           (react/q repo
                    [:frontend.worker.react/refs page-id]
@@ -630,7 +631,8 @@ independent of format as format specific heading characters are stripped"
           :entities
           (remove (fn [block]
                     (or (= page-id (:db/id (:block/page block)))
-                        (ldb/hidden-page? (:block/page block)))))
+                        (ldb/hidden-page? (:block/page block))
+                        (contains? (set (map :db/id (:block/tags block))) (:db/id page)))))
           (util/distinct-by :db/id)))))))
 
 ;; TODO: no need to use datalog query, `:block/_refs`
