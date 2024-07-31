@@ -180,7 +180,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (when page
     (if (string? page)
       (string/starts-with? page "$$$")
-      (contains? (set (:block/type page)) "hidden"))))
+      (= (:block/type page) "hidden"))))
 
 (defn- page-or-object?
   [entity]
@@ -318,7 +318,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   (defn- property-value-when-closed
     "Returns property value if the given entity is type 'closed value' or nil"
     [ent]
-    (when (contains? (:block/type ent) "closed value")
+    (when (= (:block/type ent) "closed value")
       (:block/title ent))))
 
 (comment

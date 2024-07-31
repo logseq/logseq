@@ -52,9 +52,9 @@
   [state page *mode]
   (let [*mode *mode
         mode (rum/react *mode)
-        types (:block/type page)
-        class? (contains? types "class")
-        property? (contains? types "property")
+        type (:block/type page)
+        class? (= type "class")
+        property? (= type "property")
         page-opts {:configure? true}]
     (when (nil? mode)
       (reset! *mode (cond
@@ -74,10 +74,10 @@
        (page-properties page (assoc page-opts :mode mode)))]))
 
 (rum/defc mode-switch < rum/reactive
-  [types *mode]
+  [type *mode]
   (let [current-mode (rum/react *mode)
-        class? (contains? types "class")
-        property? (contains? types "property")
+        class? (= type "class")
+        property? (= type "property")
         modes (->
                (cond
                  property?
@@ -106,8 +106,8 @@
   (let [page (db/sub-block (:db/id page))
         *hover? (::hover? state)
         *mode (::mode state)
-        types (:block/type page)
-        class? (contains? types "class")
+        type (:block/type page)
+        class? (= type "class")
         collapsed? (not @*show-info?)
         has-properties? (or
                          (seq (:block/tags page))
@@ -118,7 +118,7 @@
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
             ;; as it creates a fair amount of empty vertical space
-            (some? types)
+            (some? type)
             show-info?)
       [:div.page-info
        {:class (util/classnames [{:is-collapsed collapsed?}])}
@@ -132,14 +132,14 @@
                                (reset! *hover? false))
             :on-click (if config/publishing?
                         (fn [_]
-                          (when (seq (set/intersection #{"class" "property"} types))
+                          (when (contains? #{"class" "property"} type)
                             (swap! *show-info? not)))
                         #(do
                            (swap! *show-info? not)
                            (swap! *hover? not)))}
            [:<>
             [:div.flex.flex-row.items-center.gap-1
-             (mode-switch types *mode)]
+             (mode-switch type *mode)]
             [:div.absolute.right-1.top-1
              (shui/button
               {:variant :ghost :size :sm

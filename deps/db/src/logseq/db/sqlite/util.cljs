@@ -90,7 +90,7 @@
      (block-with-timestamps
       (cond->
        {:db/ident db-ident'
-        :block/type #{"property" "page"}
+        :block/type "property"
         :block/format :markdown
         :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
@@ -112,7 +112,7 @@
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
    (cond-> (merge block
-                  {:block/type (set (concat (:block/type block) ["class" "page"]))
+                  {:block/type "class"
                    :block/format :markdown})
      (not= (:db/ident block) :logseq.class/Root)
      (assoc :class/parent :logseq.class/Root))))
@@ -125,8 +125,9 @@
     :block/title page-name
     :block/uuid (d/squuid)
     :block/format :markdown
-    :block/type #{"page"}}))
+    :block/type "page"}))
 
 (defn page?
   [block]
-  (contains? (:block/type block) "page"))
+  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
+             (:block/type block)))

@@ -99,7 +99,7 @@
             parent (:block/page (ffirst blocks))]
         (is (= {:block/name "foo"
                 :block/title "Foo"
-                :block/type ["page" "whiteboard"]
+                :block/type "whiteboard"
                 :block/file {:file/path "/whiteboards/foo.edn"}}
                parent)
             "parsed block in the whiteboard page has correct parent page"))))

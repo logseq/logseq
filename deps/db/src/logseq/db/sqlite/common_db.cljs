@@ -145,7 +145,7 @@
                              id))
         page? (sqlite-util/page? block)
         get-children (fn [block children page?]
-                       (let [long-page? (and (> (count children) 500) (not (contains? (:block/type block) "whiteboard")))]
+                       (let [long-page? (and (> (count children) 500) (not (= (:block/type block) "whiteboard")))]
                          (if long-page?
                            (->> (map (fn [e]
                                        (select-keys e [:db/id :block/uuid :block/page :block/order :block/parent :block/collapsed? :block/link]))

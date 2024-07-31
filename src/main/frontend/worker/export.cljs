@@ -39,7 +39,7 @@
               [?b :block/name]] db)
 
        (map (fn [[page]]
-              (let [whiteboard? (contains? (set (:block/type page)) "whiteboard")
+              (let [whiteboard? (= (:block/type page) "whiteboard")
                     blocks (ldb/get-page-blocks db (:db/id page))
                     blocks' (if whiteboard?
                               blocks

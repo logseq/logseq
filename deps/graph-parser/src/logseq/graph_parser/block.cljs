@@ -345,7 +345,7 @@
                         {:block/created-at current-ms
                          :block/updated-at current-ms}))
                     (if journal-day
-                      {:block/type #{"journal"}
+                      {:block/type "journal"
                        :block/journal-day journal-day}
                       {})))
 
@@ -358,12 +358,8 @@
                  :else
                  nil)]
       (when page
-        (let [type (:block/type page)
-              type' (if (string? type) [type] type)
-              type' (cons "page" type')
-              type' (if class? (cons "class" type') type')
-              types (set type')]
-          (assoc page :block/type types))))))
+        (let [type (if class? "class" (or (:block/type page) "page"))]
+          (assoc page :block/type type))))))
 
 (defn- with-page-refs-and-tags
   [{:keys [title body tags refs marker priority] :as block} db date-formatter]

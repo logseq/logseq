@@ -438,6 +438,6 @@
             :shapes-index ("665eeab0-ccca-11ed-8c36-cd64b4f8676b" "689db722-ccca-11ed-8c36-cd64b4f8676b" "08b11d80-cda0-11ed-8356-d36ee09ec21e" "a5ced1d0-d3cb-11ed-84d2-d9f3e7dd8e6d" "c80e4880-dad2-11ed-b0d8-ef9040ba205f" "cae02d30-dad2-11ed-b0d8-ef9040ba205f" "ce9d5c40-dad2-11ed-b0d8-ef9040ba205f" "d0eb6af0-dad2-11ed-b0d8-ef9040ba205f" "d51c4360-dad2-11ed-b0d8-ef9040ba205f" "17a61b70-dad3-11ed-b0d8-ef9040ba205f" "1ee6f300-dad3-11ed-b0d8-ef9040ba205f" "46999ba0-dad3-11ed-b0d8-ef9040ba205f" "4ac3e461-dad3-11ed-b0d8-ef9040ba205f" "3f1d1b80-cdaa-11ed-8356-d36ee09ec21e" "eb97f800-dfa0-11ed-8d23-dd2d2525f6dc")}}
           :block/updated-at 1707842737378
           :block/created-at 1679940473374
-          :block/type ["whiteboard"]
+          :block/type "whiteboard"
           :block/name "publishing test"
           :block/title "publishing test"})}

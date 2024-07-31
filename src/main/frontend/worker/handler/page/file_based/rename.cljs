@@ -319,8 +319,8 @@
       :invalid-empty-name
 
       (and page-e new-page-e
-           (or (contains? (:block/type page-e) "whiteboard")
-               (contains? (:block/type new-page-e) "whiteboard")))
+           (or (= (:block/type page-e) "whiteboard")
+               (= (:block/type new-page-e) "whiteboard")))
       :merge-whiteboard-pages
 
       (and old-name new-name name-changed?)

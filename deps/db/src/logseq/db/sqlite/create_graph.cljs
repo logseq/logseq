@@ -55,14 +55,14 @@
                    ;; Adding built-ins must come after initial properties and built-in-prop-value
                    [(mark-block-as-built-in' built-in-property)]
                    (map mark-block-as-built-in' properties)
-                   (keep #(when (= #{"closed value"} (:block/type %)) (mark-block-as-built-in' %))
+                   (keep #(when (= "closed value" (:block/type %)) (mark-block-as-built-in' %))
                          properties))]
     (doseq [m tx]
       (when-let [block-uuid (and (:db/ident m) (:block/uuid m))]
         (assert (string/starts-with? (str block-uuid) "00000002") m)))
 
     {:tx tx
-     :properties (filter #(contains? (:block/type %) "property") properties)
+     :properties (filter #(= (:block/type %) "property") properties)
      :built-in-prop-value built-in-prop-value}))
 
 (defn kv

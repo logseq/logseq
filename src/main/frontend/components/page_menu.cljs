@@ -50,7 +50,7 @@
   (when-let [page-name (and page (db/page? page) (:block/name page))]
     (let [repo (state/sub :git/current-repo)
           page-title (:block/title page)
-          whiteboard? (contains? (set (:block/type page)) "whiteboard")
+          whiteboard? (= (:block/type page) "whiteboard")
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           public? (pu/get-block-property-value page :logseq.property/public)

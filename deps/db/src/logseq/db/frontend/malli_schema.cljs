@@ -214,7 +214,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/title :string]
-   [:block/type [:set [:enum "page" "class" "property" "whiteboard" "journal" "hidden"]]]
+   [:block/type [:enum "page" "class" "property" "whiteboard" "journal" "hidden"]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]
@@ -366,7 +366,7 @@
   (vec
    (concat
     [:map]
-    [[:block/type [:= #{"closed value"}]]
+    [[:block/type [:= "closed value"]]
      ;; for built-in properties
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
@@ -429,24 +429,17 @@
    [:db/ident [:= :logseq.property/empty-placeholder]]
    [:block/tx-id {:optional true} :int]])
 
-(defn- type-set
-  [d]
-  (when-let [type (:block/type d)]
-    (if (coll? type)
-      (set type)
-      #{type})))
-
 (def Data
   (into
    [:multi {:dispatch (fn [d]
                         (cond
-                          (contains? (type-set d) "property")
+                          (= (:block/type d) "property")
                           :property
-                          (contains? (type-set d) "class")
+                          (= (:block/type d) "class")
                           :class
-                          (contains? (type-set d) "hidden")
+                          (= (:block/type d) "hidden")
                           :hidden
-                          (contains? (type-set d) "whiteboard")
+                          (= (:block/type d) "whiteboard")
                           :normal-page
                           (sqlite-util/page? d)
                           :normal-page

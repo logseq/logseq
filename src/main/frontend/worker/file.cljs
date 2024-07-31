@@ -61,7 +61,7 @@
   [repo conn page-db-id outliner-op context request-id]
   (let [page-block (d/pull @conn '[*] page-db-id)
         page-db-id (:db/id page-block)
-        whiteboard? (contains? (set (:block/type page-block)) "whiteboard")
+        whiteboard? (= (:block/type page-block) "whiteboard")
         blocks-count (ldb/get-page-blocks-count @conn page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
