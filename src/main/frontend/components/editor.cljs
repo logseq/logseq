@@ -714,7 +714,7 @@
     (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
 
 ;; TODO: [WIP]
-(rum/defc shui-models
+(rum/defc shui-modals
   [id format action _data]
   (rum/use-effect!
     (fn []
@@ -732,6 +732,7 @@
                                          (state/clear-editor-action!)))}
                        :content-props {:onOpenAutoFocus #(.preventDefault %)
                                        :onCloseAutoFocus #(.preventDefault %)
+                                       :withoutAnimation true
                                        :data-editor-popup-ref "commands"}
                        :force-popover? true})
 
@@ -746,6 +747,7 @@
                                          (state/clear-editor-action!)))}
                        :content-props {:onOpenAutoFocus #(.preventDefault %)
                                        :onCloseAutoFocus #(.preventDefault %)
+                                       :withoutAnimation true
                                        :data-editor-popup-ref "commands"}
                        :force-popover? true})
 
@@ -813,20 +815,8 @@
   [id format]
   (let [action (state/sub :editor/action)]
     [:<>
-     (shui-models id format action nil)
+     (shui-modals id format action nil)
      (cond
-       (= action :commands-classic)
-       (animated-modal "commands" (commands id format) true)
-
-       (= action :block-commands-classic)
-       (animated-modal "block-commands" (block-commands id format) true)
-
-       (contains? #{:page-search-classic :page-search-hashtag-classic} action)
-       (animated-modal "page-search" (page-search id format) true)
-
-       (= :block-search-classic action)
-       (animated-modal "block-search" (block-search id format) true)
-
        (= :template-search action)
        (animated-modal "template-search" (template-search id format) true)
 
