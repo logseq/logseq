@@ -75,24 +75,25 @@
 
 (defn- entity-datoms=>ops
   [db-before db-after e->a->add?->v->t entity-datoms]
-  (let [e                            (ffirst entity-datoms)
-        block-uuid                   (:block/uuid (d/entity db-after e))
-        a->add?->v->t                (e->a->add?->v->t e)
-        {add?->block-name->t          :block/name
-         add?->block-title->t :block/title
-         add?->block-uuid->t          :block/uuid
-         add?->block-parent->t        :block/parent
-         add?->block-order->t         :block/order}
+  (let [e                        (ffirst entity-datoms)
+        {block-uuid :block/uuid
+         block-type :block/type} (d/entity db-after e)
+        a->add?->v->t            (e->a->add?->v->t e)
+        {add?->block-name->t   :block/name
+         add?->block-title->t  :block/title
+         add?->block-uuid->t   :block/uuid
+         add?->block-parent->t :block/parent
+         add?->block-order->t  :block/order}
         a->add?->v->t
-        [retract-block-uuid t1]      (some-> add?->block-uuid->t (get false) first)
-        [retract-block-name _]       (some-> add?->block-name->t (get false) first)
-        [add-block-name t2]          (some-> add?->block-name->t latest-add?->v->t (get-first-vt true))
-        [add-block-title t3] (some-> add?->block-title->t
-                                             latest-add?->v->t
-                                             (get-first-vt true))
-        [add-block-parent t4]        (some-> add?->block-parent->t latest-add?->v->t (get-first-vt true))
-        [add-block-order t5]         (some-> add?->block-order->t latest-add?->v->t (get-first-vt true))
-        a->add?->v->t*               (into {} (filter (fn [[a _]] (watched-attr? a)) a->add?->v->t))]
+        [retract-block-uuid t1]  (some-> add?->block-uuid->t (get false) first)
+        [retract-block-name _]   (some-> add?->block-name->t (get false) first)
+        [add-block-name t2]      (some-> add?->block-name->t latest-add?->v->t (get-first-vt true))
+        [add-block-title t3]     (some-> add?->block-title->t
+                                         latest-add?->v->t
+                                         (get-first-vt true))
+        [add-block-parent t4]    (some-> add?->block-parent->t latest-add?->v->t (get-first-vt true))
+        [add-block-order t5]     (some-> add?->block-order->t latest-add?->v->t (get-first-vt true))
+        a->add?->v->t*           (into {} (filter (fn [[a _]] (watched-attr? a)) a->add?->v->t))]
     (cond
       (and retract-block-uuid retract-block-name)
       [[:remove-page t1 {:block-uuid retract-block-uuid}]]
@@ -105,7 +106,9 @@
                   (or add-block-parent add-block-order)
                   (conj [:move (or t4 t5) {:block-uuid block-uuid}])
 
-                  (or add-block-name add-block-title)
+                  (or add-block-name
+                      (and (contains? block-type "page")
+                           add-block-title))
                   (conj [:update-page (or t2 t3) {:block-uuid block-uuid}]))
             update-op (when-let [av-coll (not-empty (update-op-av-coll db-before db-after a->add?->v->t*))]
                         (let [t (max-t a->add?->v->t*)]
