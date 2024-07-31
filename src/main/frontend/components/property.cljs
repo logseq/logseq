@@ -445,7 +445,7 @@
                  :checkbox "checkbox"
                  :url "link"
                  :page "page"
-                 :node "topology-star"
+                 :node "letter-n"
                  "letter-t"))]
     (ui/icon icon {:class "opacity-50"
                    :size 15})))

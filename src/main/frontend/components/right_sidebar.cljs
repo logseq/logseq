@@ -62,7 +62,7 @@
   [repo block idx sidebar-key ref?]
   (when-let [block-id (:block/uuid block)]
     [[:.flex.items-center {:class (when ref? "ml-2")}
-      (ui/icon "block" {:class "text-md mr-2"})
+      (ui/icon "letter-n" {:class "text-md mr-2"})
       (block/breadcrumb {:id     "block-parent"
                          :block? true
                          :sidebar-key sidebar-key} repo block-id {:indent? false})]

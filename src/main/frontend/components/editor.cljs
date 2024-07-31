@@ -8,6 +8,7 @@
             [frontend.components.title :as title]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [logseq.db :as ldb]
             [frontend.db.model :as db-model]
             [frontend.extensions.zotero :as zotero]
             [frontend.handler.editor :as editor-handler :refer [get-state]]
@@ -171,17 +172,19 @@
                        [:div.flex.flex-row.items-center.gap-1
                         (when-not db-tag?
                           (cond
+                            (ldb/class? block)
+                            [:div (ui/icon "hash" {:size 14})]
+                            (ldb/property? block)
+                            [:div (ui/icon "letter-p" {:size 14})]
                             (db-model/whiteboard-page? block)
                             [:div (ui/icon "whiteboard" {:extension? true})]
                             (db/page? block)
                             [:div (ui/icon "page" {:extension? true})]
-                            (seq (:block/tags block))
-                            [:div.flex (ui/icon "topology-star" {:size 14})]
                             (or (string/starts-with? (:block/title block) (t :new-class))
                                 (string/starts-with? (:block/title block) (t :new-page)))
                             nil
                             :else
-                            [:div (ui/icon "block" {:extension? true})]))
+                            [:div (ui/icon "letter-n" {:size 14})]))
 
                         (let [title (if db-tag?
                                       (:block/title block)

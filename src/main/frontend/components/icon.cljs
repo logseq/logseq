@@ -32,12 +32,14 @@
 (defn get-node-icon
   [node-entity opts]
   (let [default-icon-id (cond
-                          (and (:block/tags node-entity) (not (ldb/page? node-entity)))
-                          "topology-star"
+                          (ldb/class? node-entity)
+                          "hash"
+                          (ldb/property? node-entity)
+                          "letter-p"
                           (ldb/page? node-entity)
                           "page"
                           :else
-                          "block")
+                          "letter-n")
         default-icon (ui/icon default-icon-id (assoc opts :size 14))
         node-icon (get node-entity (pu/get-pid :logseq.property/icon))]
     (or
