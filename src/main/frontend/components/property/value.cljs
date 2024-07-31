@@ -311,12 +311,14 @@
 (defn- get-node-icon
   [node]
   (cond
-    (db/page? node)
+    (ldb/class? node)
+    "hash"
+    (ldb/property? node)
+    "letter-p"
+    (ldb/page? node)
     "page"
-    (seq (:block/tags node))
-    "topology-star"
     :else
-    "block"))
+    "letter-n"))
 
 (rum/defc select-node < rum/reactive db-mixins/query
   [property

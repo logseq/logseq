@@ -638,8 +638,8 @@
  :header/go-back                     "Go back"
  :header/go-forward                  "Go forward"
 
- ;; E.g. 1 Object or 2 Objects
- :views.table/default-title (fn [total] (str total (if (= total 1) " Object" " Objects")))
+ ;; E.g. 1 node or 2 nodes
+ :views.table/default-title (fn [total] (str total (if (= total 1) " Node" " Nodes")))
 
  ;; Commands are nested for now to stay in sync with the shortcuts system.
  ;; Other languages should not nest keys under :commands

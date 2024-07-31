@@ -331,12 +331,20 @@
     (let [page (db/sub-block (:db/id page))
           title (:block/title page)]
       (when title
-        (let [journal? (ldb/journal-page? page)
-              icon (get page (pu/get-pid :logseq.property/icon))
+        (let [repo (state/get-current-repo)
+              db-based? (config/db-based-graph? repo)
+              journal? (ldb/journal-page? page)
+              icon (or (get page (pu/get-pid :logseq.property/icon))
+                       (when db-based?
+                         (or (when (ldb/class? page)
+                               {:type :tabler-icon
+                                :id "hash"})
+                             (when (ldb/property? page)
+                               {:type :tabler-icon
+                                :id "letter-p"}))))
               *title-value (get state ::title-value)
               *edit? (get state ::edit?)
               *input-value (get state ::input-value)
-              repo (state/get-current-repo)
               hls-page? (pdf-utils/hls-file? title)
               whiteboard-page? (model/whiteboard-page? page)
               untitled? (and whiteboard-page? (parse-uuid title)) ;; normal page cannot be untitled right?
@@ -345,22 +353,24 @@
                       (if fmt-journal?
                         (date/journal-title->custom-format title)
                         title))
-              old-name title
-              db-based? (config/db-based-graph? repo)]
+              old-name title]
           [:div.ls-page-title.flex.flex-1.flex-row.flex-wrap.w-full.relative.items-center.gap-2
            {:on-mouse-over #(when-not @*edit? (reset! *hover? true))
             :on-mouse-out #(reset! *hover? false)}
            (when icon
              [:div.page-icon
               {:on-pointer-down util/stop-propagation}
-              (if (and (map? icon) db-based?)
+              (cond
+                (and (map? icon) db-based?)
                 (icon-component/icon-picker icon
-                  {:on-chosen (fn [_e icon]
-                                (db-property-handler/set-block-property!
-                                  (:db/id page)
-                                  (pu/get-pid :logseq.property/icon)
-                                  (select-keys icon [:id :type :color])))
-                   :icon-props {:size 38}})
+                                            {:on-chosen (fn [_e icon]
+                                                          (db-property-handler/set-block-property!
+                                                           (:db/id page)
+                                                           (pu/get-pid :logseq.property/icon)
+                                                           (select-keys icon [:id :type :color])))
+                                             :icon-props {:size 38}})
+
+                :else
                 icon)])
            [:h1.page-title.flex-1.cursor-pointer.gap-1
             {:class (when-not whiteboard-page? "title")

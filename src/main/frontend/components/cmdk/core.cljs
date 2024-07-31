@@ -35,7 +35,8 @@
    [electron.ipc :as ipc]
    [frontend.util.text :as text-util]
    [goog.userAgent]
-   [frontend.db.async :as db-async]))
+   [frontend.db.async :as db-async]
+   [logseq.db :as ldb]))
 
 (defn translate [t {:keys [id desc]}]
   (when id
@@ -48,7 +49,7 @@
 
 (def search-actions
   [{:filter {:group :current-page} :text "Search only current page" :info "Add filter to search" :icon-theme :gray :icon "page"}
-   {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "block"}
+   {:filter {:group :nodes} :text "Search only nodes" :info "Add filter to search" :icon-theme :gray :icon "letter-n"}
    {:filter {:group :commands} :text "Search only commands" :info "Add filter to search" :icon-theme :gray :icon "command"}
    {:filter {:group :files} :text "Search only files" :info "Add filter to search" :icon-theme :gray :icon "file"}
    {:filter {:group :themes} :text "Search only themes" :info "Add filter to search" :icon-theme :gray :icon "palette"}])
@@ -220,9 +221,17 @@
 (defn- page-item
   [repo page]
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
-        whiteboard? (contains? (:block/type entity) "whiteboard")
-        source-page (model/get-alias-source-page repo (:db/id entity))]
-    (hash-map :icon (if whiteboard? "whiteboard" "page")
+        source-page (model/get-alias-source-page repo (:db/id entity))
+        icon (cond
+               (ldb/class? entity)
+               "hash"
+               (ldb/property? entity)
+               "letter-p"
+               (ldb/whiteboard-page? entity)
+               "whiteboard"
+               :else
+               "page")]
+    (hash-map :icon icon
               :icon-theme :gray
               :text (title/block-unique-title page)
               :source-page (or source-page page))))
@@ -231,8 +240,9 @@
   [repo block current-page !input]
   (let [id (:block/uuid block)
         object? (seq (:block/tags block))
-        text (title/block-unique-title block)]
-    {:icon (if object? "topology-star" "block")
+        text (title/block-unique-title block)
+        icon "letter-n"]
+    {:icon icon
      :icon-theme :gray
      :text (highlight-content-query text @!input)
      :header (when-not object? (block/breadcrumb {:search? true} repo id {}))
@@ -335,7 +345,7 @@
                            (let [id (if (uuid? (:block/uuid block))
                                       (:block/uuid block)
                                       (uuid (:block/uuid block)))]
-                             {:icon "block"
+                             {:icon "node"
                               :icon-theme :gray
                               :text (highlight-content-query (:block/title block) @!input)
                               :header (block/breadcrumb {:search? true} repo id {})
