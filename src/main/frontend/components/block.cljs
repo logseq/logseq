@@ -2479,7 +2479,7 @@
        (when-not plugin-slotted?
          [:div.block-head-wrap
           (cond
-            (:block/name block)
+            (ldb/page? block)
             [:div.flex.flex-row.items-center.gap-1
              (page-cp config block)]
 
