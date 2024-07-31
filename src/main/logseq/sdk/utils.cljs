@@ -22,7 +22,7 @@
                                                (entity->map %)
                                                %) input)
                    :else input)]
-       (walk/postwalk
+       (walk/prewalk
         (fn [a]
           (cond
             (keyword? a)
@@ -31,6 +31,11 @@
               (csk/->camelCase))
 
             (uuid? a) (str a)
+
+            ;; @FIXME compatible layer for classic APIs
+            (and (map? a) (:block/uuid a))
+            (some->> (:block/title a) (assoc a :block/content))
+
             :else a)) input)))))
 
 (defn uuid-or-throw-error

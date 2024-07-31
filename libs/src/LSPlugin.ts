@@ -183,7 +183,8 @@ export interface BlockEntity {
   order: string
   format: 'markdown' | 'org'
   parent: IEntityID
-  content: string
+  title: string
+  content?: string // @deprecated. Use :title instead!
   page: IEntityID
   createdAt: number
   updatedAt: number
@@ -198,7 +199,6 @@ export interface BlockEntity {
   file?: IEntityID
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
-  title?: Array<any>
   marker?: string
 
   [key: string]: unknown
