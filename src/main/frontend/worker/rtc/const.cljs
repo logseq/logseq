@@ -37,7 +37,7 @@
      [:map
       [:block-uuid :uuid]
       [:page-name :string]
-      [:title :string]]]]
+      [:block/title :string]]]]
    [:remove-page
     [:cat :keyword
      [:map

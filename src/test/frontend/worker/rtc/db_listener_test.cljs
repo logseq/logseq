@@ -26,7 +26,7 @@
         id->same-entity-datoms (group-by first datom-vec-coll)]
     (update-vals id->same-entity-datoms #'worker-db-listener/entity-datoms=>a->add?->v->t)))
 
-(deftest ^:fix-me entity-datoms=>ops-test
+(deftest entity-datoms=>ops-test
   (testing "remove whiteboard page-block"
     (let [conn (d/conn-from-db empty-db)
           block-uuid (random-uuid)
@@ -73,6 +73,7 @@
                        [:block/updated-at "[\"~#'\",1716882111476]"]
                        [:block/created-at "[\"~#'\",1716882111476]"]
                        [:block/schema "[\"^ \",\"~:type\",\"~:number\"]"]
+                       [:block/title "[\"~#'\",\"qqq\"]"]
                        [:db/cardinality "[\"~#'\",\"~:db.cardinality/one\"]"]
                        ;; [:db/ident "[\"~#'\",\"~:user.property/qqq\"]"]
                        [:block/type "[\"~#'\",\"property\"]"]]}]]
@@ -103,6 +104,7 @@
                       :av-coll
                       [[:block/updated-at "[\"~#'\",1720019497643]"]
                        [:block/created-at "[\"~#'\",1720019497643]"]
+                       [:block/title "[\"~#'\",\"zzz\"]"]
                        [:block/type "[\"~#'\",\"class\"]"]
                        ;;1. no :class/parent, because db/id 4 block doesn't exist in empty-db
                        ;;2. shouldn't have :db/ident, :db/ident is special, will be handled later
@@ -113,7 +115,7 @@
                              (assoc :av-coll (map #(take 2 %) (:av-coll op-value))))])
                 ops))))))
 
-(deftest ^:fix-me listen-db-changes-and-validate-generated-rtc-ops
+(deftest listen-db-changes-and-validate-generated-rtc-ops
   (letfn [(ops-coll=>block-uuid->op-types [ops-coll]
             (into {}
                   (map (fn [m]

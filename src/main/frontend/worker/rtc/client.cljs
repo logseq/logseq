@@ -173,7 +173,7 @@
     (swap! *remote-ops conj
            [:update-page {:block-uuid block-uuid
                           :page-name page-name
-                          :title (or title page-name)}])))
+                          :block/title (or title page-name)}])))
 
 (defmethod local-block-ops->remote-ops-aux :remove-op
   [_ & {:keys [db remove-op *remote-ops]}]
