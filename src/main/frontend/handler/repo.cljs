@@ -198,7 +198,8 @@
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])
            _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
-     (js/setTimeout ui-handler/re-render-root! 100)
+     (route-handler/redirect-to-home!)
+     (ui-handler/re-render-root!)
      (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)})
      (prn "New db created: " full-graph-name)
      full-graph-name)
