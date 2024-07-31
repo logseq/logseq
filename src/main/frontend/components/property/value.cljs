@@ -545,7 +545,10 @@
          (if (set? value-block)
            (blocks-container config (ldb/sort-by-order value-block))
            (block-container config value-block)))]
-      (property-empty-btn-value))))
+      [:div
+       {:tabIndex 0
+        :on-click (fn [] (<create-new-block! block property ""))}
+       (property-empty-btn-value)])))
 
 (rum/defcs property-block-value < rum/reactive db-mixins/query
   {:init (fn [state]
@@ -871,10 +874,10 @@
                                               :dom-id dom-id})))]]
      (if show-tooltip?
        (shui/tooltip-provider
-         (shui/tooltip
-           {:delayDuration 1200}
-           (shui/tooltip-trigger
-             {:onFocusCapture #(util/stop-propagation %)} value-cp)
-           (shui/tooltip-content
-             (str "Change " (:block/title property)))))
+        (shui/tooltip
+         {:delayDuration 1200}
+         (shui/tooltip-trigger
+          {:onFocusCapture #(util/stop-propagation %)} value-cp)
+         (shui/tooltip-content
+          (str "Change " (:block/title property)))))
        value-cp))))
