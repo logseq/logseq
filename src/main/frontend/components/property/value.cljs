@@ -349,7 +349,8 @@
            (let [result (rum/react *result)]
              (if (empty? result)
                (let [v (get block (:db/ident property))]
-                 (if (every? de/entity? v) v [v]))
+                 (remove #(= :logseq.property/empty-placeholder (:db/ident %))
+                         (if (every? de/entity? v) v [v])))
                (remove (fn [node]
                          (or (= (:db/id block) (:db/id node))
                               ;; A page's alias can't be itself
@@ -818,7 +819,9 @@
               (when date?
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
              (when-not editing?
-               (property-empty-text-value))))]))))
+               (if date?
+                 [(property-empty-text-value) (property-value-date-picker block property nil {:toggle-fn toggle-fn})]
+                 (property-empty-text-value)))))]))))
 
 (rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts schema]
