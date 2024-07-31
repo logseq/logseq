@@ -79,7 +79,7 @@
   validate-fn varies by property type"
   [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
-  ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
+  ;; (when (not (string/starts-with? (namespace (:db/ident property)) "logseq.")) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema))
                        (fn [value]
                          (validate-fn db value {:new-closed-value? new-closed-value?}))

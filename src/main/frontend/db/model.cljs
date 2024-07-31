@@ -797,6 +797,15 @@ independent of format as format specific heading characters are stripped"
                  nil)
         react)))
 
+(defn get-property-related-objects
+  [repo property-id]
+  (when-let [property (db-utils/entity repo property-id)]
+    (->> (d/q '[:find [?objects ...]
+                :in $ ?prop
+                :where [?objects ?prop]]
+              (conn/get-db repo)
+              (:db/ident property))
+         (map #(db-utils/entity repo %)))))
 
 (defn get-all-namespace-relation
   [repo]

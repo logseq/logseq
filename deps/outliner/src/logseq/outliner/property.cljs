@@ -221,8 +221,10 @@
   [conn property-id v property-type]
   (if (and (integer? v)
            (or (not= property-type :number)
-               ;; Allows :number property to use number as a ref (for closed value) or value. Number value maybe only used in tests
-               (and (= property-type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v)))))))
+               ;; Allows :number property to use number as a ref (for closed value) or value
+               (and (= property-type :number)
+                    (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
+                        (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
     v
     ;; only value-ref-property types should call this
     (find-or-create-property-value conn property-id v)))
