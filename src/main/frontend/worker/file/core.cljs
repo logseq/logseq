@@ -164,7 +164,7 @@
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (d/entity db file-db-id) :file/path)
         result (if (and (string? file-path) (not-empty file-path))
-                 (let [new-content (if (contains? (set (:block/type page-block)) "whiteboard")
+                 (let [new-content (if (= (:block/type page-block) "whiteboard")
                                      (->
                                       (wfu/ugly-pr-str {:blocks tree
                                                         :pages (list (remove-transit-ids page-block))})

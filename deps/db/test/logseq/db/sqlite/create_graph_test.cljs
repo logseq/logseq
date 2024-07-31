@@ -37,7 +37,7 @@
                                            (map #(keyword (namespace %) (string/replace (name %) #".[^.]+$" "")))
                                            set)]
           (is (= []
-                 (remove #(= ["closed value"] (:block/type %)) closed-value-ents))
+                 (remove #(= "closed value" (:block/type %)) closed-value-ents))
               "All property names that contain a '.' are closed values")
           (is (= #{}
                  (set/difference closed-value-properties (set default-idents)))
@@ -62,11 +62,11 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         task (d/entity @conn :logseq.class/Task)]
-    (is (contains? (:block/type task) "class")
+    (is (= (:block/type task) "class")
         "Task class has correct type")
     (is (= 3 (count (:class/schema.properties task)))
         "Has correct number of task properties")
-    (is (every? #(contains? (:block/type %) "property")
+    (is (every? #(= (:block/type %) "property")
                 (:class/schema.properties task))
         "Each task property has correct type")))
 

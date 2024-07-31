@@ -126,7 +126,7 @@
   [db val]
   (when-let [ent (d/entity db val)]
     (and (some? (:block/title ent))
-         (contains? (:block/type ent) "journal"))))
+         (= (:block/type ent) "journal"))))
 
 
 (def built-in-validation-schemas

@@ -103,12 +103,12 @@
 (defn whiteboard-page?
   "Given a page entity or map, check if it is a whiteboard page"
   [page]
-  (contains? (set (:block/type page)) "whiteboard"))
+  (= (:block/type page) "whiteboard"))
 
 (defn journal-page?
   "Given a page entity or map, check if it is a journal page"
   [page]
-  (contains? (set (:block/type page)) "journal"))
+  (= (:block/type page) "journal"))
 
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
@@ -171,7 +171,7 @@
     (if (string? page)
       (or (string/starts-with? page "$$$")
           (= common-config/favorites-page-name page))
-      (contains? (set (:block/type page)) "hidden"))))
+      (= (:block/type page) "hidden"))))
 
 (defn get-pages
   [db]
@@ -249,7 +249,7 @@
                                 (not (contains? built-in-pages name))
                                 (not (whiteboard-page? page))
                                 (not (:block/_namespace page))
-                                (not (contains? (:block/type page) "property"))
+                                (not (= (:block/type page) "property"))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
                                           (not (journal-page? page))))
@@ -448,7 +448,7 @@
   "Whether property a built-in property for the specific class"
   [class-entity property-entity]
   (and (built-in? class-entity)
-       (contains? (:block/type class-entity) "class")
+       (= (:block/type class-entity) "class")
        (built-in? property-entity)
        (contains? (set (map :db/ident (:class/schema.properties class-entity)))
                   (:db/ident property-entity))))
@@ -466,7 +466,7 @@
      {:block/uuid (common-uuid/gen-uuid)
       :block/name common-config/favorites-page-name
       :block/title common-config/favorites-page-name
-      :block/type #{"page" "hidden"}
+      :block/type "hidden"
       :block/format :markdown})]))
 
 (defn build-favorite-tx
@@ -486,7 +486,7 @@
        {:block/uuid page-id
         :block/name common-config/views-page-name
         :block/title common-config/views-page-name
-        :block/type #{"page" "hidden"}
+        :block/type "hidden"
         :block/format :markdown})
       (sqlite-util/block-with-timestamps
        {:block/uuid (common-uuid/gen-uuid)
@@ -506,13 +506,13 @@
 (def page? sqlite-util/page?)
 (defn class?
   [entity]
-  (contains? (:block/type entity) "class"))
+  (= (:block/type entity) "class"))
 (defn property?
   [entity]
-  (contains? (:block/type entity) "property"))
+  (= (:block/type entity) "property"))
 (defn closed-value?
   [entity]
-  (contains? (:block/type entity) "closed value"))
+  (= (:block/type entity) "closed value"))
 
 (def db-based-graph? entity-plus/db-based-graph?)
 
@@ -562,7 +562,7 @@
       (loop [current-parent parent]
         (when (and
                current-parent
-               (contains? (:block/type parent) "class")
+               (= (:block/type parent) "class")
                (not (contains? @*classes (:db/id parent))))
           (swap! *classes conj (:db/id current-parent))
           (recur (:class/parent current-parent)))))

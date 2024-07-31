@@ -333,7 +333,7 @@
 
 (defn ^:api get-class-parents
   [tags]
-  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)]
+  (let [tags' (filter (fn [tag] (= (:block/type tag) "class")) tags)]
     (set (mapcat ldb/get-class-parents tags'))))
 
 (defn ^:api get-class-properties
@@ -349,7 +349,7 @@
   (let [block (d/entity db eid)
         classes (->> (:block/tags block)
                      (sort-by :block/name)
-                     (filter (fn [tag] (contains? (:block/type tag) "class"))))
+                     (filter (fn [tag] (= (:block/type tag) "class"))))
         class-parents (get-class-parents classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
@@ -517,7 +517,7 @@
 (defn class-add-property!
   [conn class-id property-id]
   (when-let [class (d/entity @conn class-id)]
-    (if (contains? (:block/type class) "class")
+    (if (= (:block/type class) "class")
       (ldb/transact! conn
                      [[:db/add (:db/id class) :class/schema.properties property-id]]
                      {:outliner-op :save-block})
@@ -527,7 +527,7 @@
 (defn class-remove-property!
   [conn class-id property-id]
   (when-let [class (d/entity @conn class-id)]
-    (when (contains? (:block/type class) "class")
+    (when (= (:block/type class) "class")
       (when-let [property (d/entity @conn property-id)]
         (when-not (ldb/built-in-class-property? class property)
           (ldb/transact! conn [[:db/retract (:db/id class) :class/schema.properties property-id]]

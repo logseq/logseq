@@ -15,8 +15,7 @@
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
-    (let [page (update page :block/type
-                       (fn [types] (if whiteboard? (conj types "whiteboard") types)))
+    (let [page (assoc page :block/type (cond class? "class" whiteboard? "whiteboard" :else "page"))
           page' (merge page
                        (when tags {:block/tags (mapv #(hash-map :db/id
                                                                 (:db/id (d/entity @conn [:block/uuid %])))

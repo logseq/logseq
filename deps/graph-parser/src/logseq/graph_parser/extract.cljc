@@ -220,7 +220,7 @@
                       (vec))
           ref-pages (atom #{})
           blocks (map (fn [block]
-                        (if (contains? (:block/type block) "macro")
+                        (if (= (:block/type block) "macro")
                           block
                           (let [block-ref-pages (seq (:block/refs block))]
                             (when block-ref-pages
@@ -320,13 +320,13 @@
                           (filepath->page-name file))
                       (common-util/page-name-sanity-lc))
         title (or (:block/title serialized-page)
-                          page-name)
+                  page-name)
         page-block (merge {:block/name page-name
                            :block/title title
                            :block/file {:file/path (common-util/path-normalize file)}}
                           serialized-page
                           ;; Ensure old whiteboards have correct type
-                          {:block/type #{"whiteboard" "page"}})
+                          {:block/type "whiteboard"})
         page-block (gp-whiteboard/migrate-page-block page-block)
         blocks (->> blocks
                     (map gp-whiteboard/migrate-shape-block)

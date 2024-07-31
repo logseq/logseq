@@ -202,7 +202,7 @@
                                           (date-time-util/int->journal-title date-int (common-config/get-date-formatter user-config)))]
                               (assoc page-m
                                      :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                     :block/type (conj (:block/type page-m) "journal")
+                                     :block/type "journal"
                                      :block/journal-day date-int)))]
       {:block
        (-> block
@@ -263,7 +263,7 @@
   (let [prop-type (cond (and (coll? prop-val)
                              (seq prop-val)
                              (set/subset? prop-val
-                                          (set (keep #(when (contains? (:block/type %) "journal")
+                                          (set (keep #(when (= (:block/type %) "journal")
                                                         (:block/title %)) refs))))
                         :date
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
@@ -890,8 +890,7 @@
         {:keys [pages-tx page-properties-tx page-names-to-uuids existing-pages]} (build-pages-tx conn pages blocks tx-options)
         whiteboard-pages (->> pages-tx
                               ;; support old and new whiteboards
-                              (filter #(or (contains? (set (:block/type %)) "whiteboard")
-                                           (= "whiteboard" (:block/type %))))
+                              (filter #(= (:block/type %) "whiteboard"))
                               (map (fn [page-block]
                                      (-> page-block
                                          (assoc :block/format :markdown

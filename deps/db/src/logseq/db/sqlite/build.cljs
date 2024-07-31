@@ -342,7 +342,7 @@
                       {:db/id (or (:db/id page) (new-db-id))
                        :block/title (or (:block/title page) (string/capitalize (:block/name page)))
                        :block/name (or (:block/name page) (common-util/page-name-sanity-lc (:block/title page)))
-                       :block/type #{"page"}
+                       :block/type "page"
                        :block/format :markdown}
                       (dissoc page :build/properties :db/id :block/name :block/title :build/tags))
             pvalue-tx-m (->property-value-tx-m new-page (:build/properties page) properties all-idents)]
@@ -465,7 +465,7 @@
                                                    :block/title page-name
                                                    :block/uuid
                                                    (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                                   :block/type #{"journal" "page"}})))))
+                                                   :block/type "journal"})))))
                            m))]
     ;; Order matters as some steps depend on previous step having prepared blocks or pages in a certain way
     (->> pages-and-blocks

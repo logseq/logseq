@@ -76,8 +76,8 @@
 (defn- entity-datoms=>ops
   [db-before db-after e->a->add?->v->t entity-datoms]
   (let [e                        (ffirst entity-datoms)
-        {block-uuid :block/uuid
-         block-type :block/type} (d/entity db-after e)
+        entity                   (d/entity db-after e)
+        {block-uuid :block/uuid} entity
         a->add?->v->t            (e->a->add?->v->t e)
         {add?->block-name->t   :block/name
          add?->block-title->t  :block/title
@@ -107,8 +107,7 @@
                   (conj [:move (or t4 t5) {:block-uuid block-uuid}])
 
                   (or add-block-name
-                      (and (contains? block-type "page")
-                           add-block-title))
+                      (and (ldb/page? entity) add-block-title))
                   (conj [:update-page (or t2 t3) {:block-uuid block-uuid}]))
             update-op (when-let [av-coll (not-empty (update-op-av-coll db-before db-after a->add?->v->t*))]
                         (let [t (max-t a->add?->v->t*)]

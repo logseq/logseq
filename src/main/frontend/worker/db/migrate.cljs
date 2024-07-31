@@ -49,9 +49,11 @@
        :classes    []}]
    [4 {:fix (fn [conn _search-db]
               (let [pages (d/datoms @conn :avet :block/name)
-                    tx-data (map (fn [d]
-                                   {:db/id (:e d)
-                                    :block/type "page"}) pages)]
+                    tx-data (keep (fn [d]
+                                    (let [entity (d/entity @conn (:e d))]
+                                      (when-not (:block/type entity)
+                                        {:db/id (:e d)
+                                         :block/type "page"}))) pages)]
                 tx-data))}]
    [5 {:properties [:logseq.property/view-for]
        :classes    []}]
