@@ -229,20 +229,20 @@
 (defn import-from-sqlite-db!
   [buffer bare-graph-name finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
-    (-> (p/let [_ (persist-db/<import-db graph buffer)]
-          (state/add-repo! {:url graph})
-          (repo-handler/restore-and-setup-repo! graph))
-        (p/then
-         (fn [_result]
-           (state/set-current-repo! graph)
-           (persist-db/<export-db graph {})
-           (finished-ok-handler)))
-        (p/catch
-         (fn [e]
-           (js/console.error e)
-           (notification/show!
-            (str (.-message e))
-            :error))))))
+    (->
+     (p/do!
+      (persist-db/<import-db graph buffer)
+      (state/add-repo! {:url graph})
+      (repo-handler/restore-and-setup-repo! graph)
+      (state/set-current-repo! graph)
+      (persist-db/<export-db graph {})
+      (finished-ok-handler))
+     (p/catch
+      (fn [e]
+        (js/console.error e)
+        (notification/show!
+         (str (.-message e))
+         :error))))))
 
 (defn import-from-edn!
   [raw finished-ok-handler]

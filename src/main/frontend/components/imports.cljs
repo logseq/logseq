@@ -38,9 +38,9 @@
 
 (defn- finished-cb
   []
-  (route-handler/redirect-to-home!)
   (notification/show! "Import finished!" :success)
-  (js/setTimeout ui-handler/re-render-root! 100))
+  (ui-handler/re-render-root!)
+  (route-handler/redirect-to-home!))
 
 (defn- roam-import-handler
   [e]
