@@ -152,7 +152,6 @@
 (defn- convert-block-fields
   [block]
   (cond-> block
-    (:block/journal-day block) (assoc :block/type "journal")
     (:block/uuid block)        (assoc :block/format :markdown)))
 
 (defn- fill-block-fields
