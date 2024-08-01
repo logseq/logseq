@@ -79,7 +79,6 @@
 
       (> db-schema/version version-in-db)
       (let [db-based? (ldb/db-based-graph? @conn)
-            built-in-value (:db/id (get (d/entity db :logseq.class/Root) :logseq.property/built-in?))
             updates (keep (fn [[v updates]]
                             (when (and (< version-in-db v) (<= v db-schema/version))
                               updates))
@@ -94,7 +93,7 @@
                                             (assert (str "DB migration: property already exists " k)))))
                                 (into {})
                                 sqlite-create-graph/build-initial-properties*
-                                (map (fn [b] (assoc b :logseq.property/built-in? built-in-value))))
+                                (map (fn [b] (assoc b :logseq.property/built-in? true))))
             fixes (mapcat
                    (fn [update]
                      (when-let [fix (:fix update)]

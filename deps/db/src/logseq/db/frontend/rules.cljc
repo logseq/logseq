@@ -169,10 +169,12 @@
 
     :page-property
     '[(page-property ?p ?prop ?val)
-      [?p :block/name]
       [?p ?prop ?pv]
-      (or [?pv :block/title ?val]
-          [?pv :property.value/content ?val])
+      [?p :block/name]
+      (or
+       [?pv :block/title ?val]
+       [?pv :property.value/content ?val]
+       [(= ?pv ?val)])
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -186,8 +188,10 @@
     :property
     '[(property ?b ?prop ?val)
       [?b ?prop ?pv]
-      (or [?pv :block/title ?val]
-          [?pv :property.value/content ?val])
+      (or
+       [?pv :block/title ?val]
+       [?pv :property.value/content ?val]
+       [(= ?pv ?val)])
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]

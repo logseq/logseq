@@ -756,14 +756,12 @@
           (property-value-date-picker block property value (merge opts {:editing? editing?}))
 
           :checkbox
-          (let [add-property! (fn []
-                                (<add-property! block (:db/ident property)
-                                                (boolean (not (db-property/property-value-content value)))))]
+          (let [add-property! (fn [] (<add-property! block (:db/ident property) (boolean (not value))))]
             [:label.flex.w-full.as-scalar-value-wrap.cursor-pointer
              (shui/checkbox {:class "jtrigger flex flex-row items-center"
                              :disabled config/publishing?
                              :auto-focus editing?
-                             :checked (db-property/property-value-content value)
+                             :checked value
                              :on-checked-change add-property!
                              :on-key-down (fn [e]
                                             (when (= (util/ekey e) "Enter")
@@ -860,7 +858,7 @@
              (first v)
              :else
              v)
-         empty-value? (= :logseq.property/empty-placeholder (:db/ident (first v)))
+         empty-value? (when (coll? v) (= :logseq.property/empty-placeholder (:db/ident (first v))))
          closed-values? (seq (:property/closed-values property))
          value-cp [:div.property-value-inner
                    {:data-type type
