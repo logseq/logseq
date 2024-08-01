@@ -536,8 +536,11 @@
   [block property value-block opts]
   (let [multiple-values? (db-property/many? property)
         block-container (state/get-component :block/container)
-        blocks-container (state/get-component :block/blocks-container)]
-    (if value-block
+        blocks-container (state/get-component :block/blocks-container)
+        value-block (if (and (coll? value-block) (every? de/entity? value-block))
+                      (set (remove #(= (:db/ident %) :logseq.property/empty-placeholder) value-block))
+                      value-block)]
+    (if (seq value-block)
       [:div.property-block-container.content.w-full
        (let [config {:id (str (if multiple-values?
                                 (:block/uuid block)
@@ -848,7 +851,6 @@
          schema (:block/schema property)
          type (some-> schema (get :type :default))
          multiple-values? (db-property/many? property)
-         empty-value? (= :logseq.property/empty-placeholder v)
          v (cond
              (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
              v
@@ -858,6 +860,7 @@
              (first v)
              :else
              v)
+         empty-value? (= :logseq.property/empty-placeholder (:db/ident (first v)))
          closed-values? (seq (:property/closed-values property))
          value-cp [:div.property-value-inner
                    {:data-type type
