@@ -85,7 +85,7 @@
     (if (> t1 t2)
       (merge-update-ops update-op2 update-op1)
       (let [{av-coll1 :av-coll block-uuid :block-uuid} (last update-op1)
-            {av-coll2 :av-coll} (last update-op1)]
+            {av-coll2 :av-coll} (last update-op2)]
         [:update t2
          {:block-uuid block-uuid
           :av-coll (concat av-coll1 av-coll2)}]))))
