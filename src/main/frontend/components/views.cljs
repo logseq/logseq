@@ -95,7 +95,7 @@
   [block property]
   (let [type (get-in property [:block/schema :type])
         many? (= :db.cardinality/many (get property :db/cardinality))
-        ref-types (into db-property-type/value-ref-property-types #{:entity})
+        ref-types (into db-property-type/ref-property-types #{:entity})
         number-type? (= :number type)
         v (get block (:db/ident property))
         v' (if many? v [v])
