@@ -44,7 +44,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.property.util :as pu]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [logseq.db.frontend.property :as db-property]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -495,4 +496,5 @@
   (property-handler/set-block-property! (state/get-current-repo)
                                         (:block/uuid page-entity)
                                         :logseq.property/hide-properties?
-                                        (not (:logseq.property/hide-properties? page-entity))))
+                                        (not
+                                         (db-property/property-value-content (:logseq.property/hide-properties? page-entity)))))
