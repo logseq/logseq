@@ -241,7 +241,7 @@
       reset
       [state/preferred-pasting-file? (constantly true)
        ;; paste-file-if-exists mocks below
-       editor-handler/upload-asset (fn [_id file & _]
+       editor-handler/upload-asset! (fn [_id file & _]
                                      (reset! pasted-file file))
        util/stop (constantly nil)
        state/get-edit-block (constantly {})]

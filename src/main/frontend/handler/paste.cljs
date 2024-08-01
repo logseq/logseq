@@ -220,7 +220,7 @@
           files (.-files clipboard-data)]
       (when-let [file (first files)]
         (when-let [block (state/get-edit-block)]
-          (editor-handler/upload-asset id #js[file] (:block/format block)
+          (editor-handler/upload-asset! id #js[file] (:block/format block)
                                        editor-handler/*asset-uploading? true)))
       (util/stop e))))
 
