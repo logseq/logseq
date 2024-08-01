@@ -716,121 +716,94 @@
   (some->> (shui-popup/get-popups)
     (some #(some-> % (:id) (str) (string/starts-with? ":editor.commands")))))
 
-;; TODO: [WIP]
-(rum/defc shui-modals
+(defn- open-editor-popup!
+  [id content opts]
+  (let [{:keys [left top rect]} (cursor/get-caret-pos (state/get-input))
+        pos [(+ left (:left rect) -20) (+ top (:top rect) 20)]
+        {:keys [root-props content-props]} opts]
+    (shui/popup-show!
+      pos content
+      (merge
+        {:id (keyword :editor.commands id)
+         :align :start
+         :root-props (merge {:onOpenChange #(when-not % (state/clear-editor-action!))} root-props)
+         :content-props (merge {:onOpenAutoFocus #(.preventDefault %)
+                                :onCloseAutoFocus #(.preventDefault %)
+                                :data-editor-popup-ref (name id)} content-props)
+         :force-popover? true}
+        (dissoc opts :root-props :content-props)))))
+
+(rum/defc shui-editor-popups
   [id format action _data]
   (rum/use-effect!
     (fn []
-      (let [{:keys [left top rect]} (cursor/get-caret-pos (state/get-input))
-            pos [(+ left (:left rect) -20) (+ top (:top rect) 20)]]
-        (let [pid (case action
-                    :commands
-                    (shui/popup-show! pos
-                      (commands id format)
-                      {:id :editor.commands/commands
-                       :align :start
-                       :root-props {:onOpenChange
-                                    #(when-not %
-                                       (when (= :commands (state/get-editor-action))
-                                         (state/clear-editor-action!)))}
-                       :content-props {:onOpenAutoFocus #(.preventDefault %)
-                                       :onCloseAutoFocus #(.preventDefault %)
-                                       :withoutAnimation true
-                                       :data-editor-popup-ref "commands"}
-                       :force-popover? true})
+      (let [pid (case action
+                  :commands
+                  (open-editor-popup! :commands
+                    (commands id format)
+                    {:content-props {:withoutAnimation false}})
 
-                    :block-commands
-                    (shui/popup-show! pos
-                      (block-commands id format)
-                      {:id :editor.commands/block-commands
-                       :align :start
-                       :root-props {:onOpenChange
-                                    #(when-not %
-                                       (when (= :block-commands (state/get-editor-action))
-                                         (state/clear-editor-action!)))}
-                       :content-props {:onOpenAutoFocus #(.preventDefault %)
-                                       :onCloseAutoFocus #(.preventDefault %)
-                                       :withoutAnimation true
-                                       :data-editor-popup-ref "commands"}
-                       :force-popover? true})
+                  :block-commands
+                  (open-editor-popup! :block-commands
+                    (block-commands id format)
+                    {:content-props {:withoutAnimation true}})
 
-                    (:block-search :page-search :page-search-hashtag)
-                    (shui/popup-show!
-                      pos (if (= :block-search action)
-                            (block-search id format)
-                            (page-search id format))
-                      {:id :editor.commands/block-search
-                       :align :start
-                       :root-props {:onOpenChange
-                                    #(when-not %
-                                       (when (contains?
-                                               #{:block-search :page-search :page-search-hashtag}
-                                               (state/get-editor-action))
-                                         (state/clear-editor-action!)))}
-                       :content-props {:onOpenAutoFocus #(.preventDefault %)
-                                       :onCloseAutoFocus #(.preventDefault %)
-                                       :data-editor-popup-ref (name action)}
-                       :force-popover? true})
+                  (:block-search :page-search :page-search-hashtag)
+                  (open-editor-popup! action
+                    (if (= :block-search action)
+                      (block-search id format)
+                      (page-search id format))
+                    {:root-props {:onOpenChange
+                                  #(when-not %
+                                     (when (contains?
+                                             #{:block-search :page-search :page-search-hashtag}
+                                             (state/get-editor-action))
+                                       (state/clear-editor-action!)))}})
 
-                    :datepicker
-                    (shui/popup-show!
-                      pos (datetime-comp/date-picker id format nil)
-                      {:id :editor.commands/datepicker
-                       :align :start
-                       :root-props {:onOpenChange #(when-not % (state/clear-editor-action!))}
-                       :content-props {:onOpenAutoFocus #(.preventDefault %)
-                                       :data-editor-popup-ref "datepicker"}
-                       :force-popover? true})
+                  :datepicker
+                  (open-editor-popup! :datepicker
+                    (datetime-comp/date-picker id format nil) {})
 
-                    :input
-                    (shui/popup-show!
-                      pos (input id
-                            (fn [command m]
-                              (editor-handler/handle-command-input command id format m))
-                            (fn []
-                              (editor-handler/handle-command-input-close id)))
-                      {:id :editor.commands/input
-                       :align :start
-                       :root-props {:onOpenChange #(when-not % (state/clear-editor-action!))}
-                       :content-props {:onOpenAutoFocus #(.preventDefault %)
-                                       :onCloseAutoFocus #(.preventDefault %)
-                                       :data-editor-popup-ref "input"}})
+                  :input
+                  (open-editor-popup! :input
+                    (input id
+                      (fn [command m]
+                        (editor-handler/handle-command-input command id format m))
+                      (fn []
+                        (editor-handler/handle-command-input-close id))) {})
 
-                    :select-code-block-mode
-                    (shui/popup-show!
-                      pos (code-block-mode-picker id format)
-                      {:id :editor.commands/code-block-mode-picker
-                       :align :start
-                       :root-props {:onOpenChange #(when-not % (state/clear-editor-action!))}
-                       :content-props {:onOpenAutoFocus #(.preventDefault %)
-                                       :data-editor-popup-ref "code-block-mode-picker"}
-                       :force-popover? true})
+                  :select-code-block-mode
+                  (open-editor-popup! :code-block-mode-picker
+                    (code-block-mode-picker id format) {})
 
-                    ;; TODO: try remove local model state
-                    false)]
-          #(when pid
-             (shui/popup-hide! pid)))))
+                  :template-search
+                  (open-editor-popup! :template-search
+                    (template-search id format) {})
+
+                  :zotero
+                  (open-editor-popup! :zotero
+                    (zotero/zotero-search id) {})
+
+                  ;; TODO: try remove local model state
+                  false)]
+        #(when pid
+           (shui/popup-hide! pid))))
     [action])
   [:<>])
 
-(rum/defc modals < rum/reactive
-  "React to atom changes, find and render the correct modal"
+(rum/defc command-popups <
+  rum/reactive
+  "React to atom changes, find and render the correct popup"
   [id format]
   (let [action (state/sub :editor/action)]
     [:<>
-     (shui-modals id format action nil)
+     (shui-editor-popups id format action nil)
      (cond
-       (= :template-search action)
-       (animated-modal "template-search" (template-search id format) true)
-
        (= :property-search action)
        (animated-modal "property-search" (property-search id) true)
 
        (= :property-value-search action)
        (animated-modal "property-value-search" (property-value-search id) true)
-
-       (= :zotero action)
-       (animated-modal "zotero-search" (zotero/zotero-search id) false)
 
        :else
        nil)]))
@@ -918,7 +891,7 @@
      (ui/ls-textarea opts)
 
      (mock-textarea content)
-     (modals id format)
+     (command-popups id format)
 
      (when format
        (image-uploader id format))]))
