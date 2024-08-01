@@ -100,7 +100,7 @@
           (when-not (or contents?
                         config/publishing?
                         (and db-based?
-                             (db-property/property-value-content (:logseq.property/built-in? page))))
+                             (:logseq.property/built-in? page)))
             {:title   (t :page/delete)
              :options {:on-click #(delete-page-confirm! page)}})
 

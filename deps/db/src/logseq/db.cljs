@@ -442,7 +442,7 @@
 (defn built-in?
   "Built-in page or block"
   [entity]
-  (db-property/property-value-content (:logseq.property/built-in? entity)))
+  (:logseq.property/built-in? entity))
 
 (defn built-in-class-property?
   "Whether property a built-in property for the specific class"
