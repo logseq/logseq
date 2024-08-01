@@ -150,23 +150,23 @@
                                               :hide? true
                                               :view-context :page
                                               :public? true}}
-   :logseq.property/table-sorting {:schema
+   :logseq.property.table/sorting {:schema
                                    {:type :coll
                                     :hide? true
                                     :public? false}}
 
-   :logseq.property/table-filters {:schema
+   :logseq.property.table/filters {:schema
                                    {:type :coll
                                     :hide? true
                                     :public? false}}
 
-   :logseq.property/table-hidden-columns {:schema
+   :logseq.property.table/hidden-columns {:schema
                                           {:type :keyword
                                            :cardinality :many
                                            :hide? true
                                            :public? false}}
 
-   :logseq.property/table-ordered-columns {:schema
+   :logseq.property.table/ordered-columns {:schema
                                            {:type :coll
                                             :hide? true
                                             :public? false}}
@@ -201,7 +201,7 @@
 
 (def logseq-property-namespaces
   #{"logseq.property" "logseq.property.tldraw" "logseq.property.pdf" "logseq.task"
-    "logseq.property.linked-references" "logseq.property.asset"})
+    "logseq.property.linked-references" "logseq.property.asset" "logseq.property.table"})
 
 (defn logseq-property?
   "Determines if keyword is a logseq property"
