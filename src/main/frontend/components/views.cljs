@@ -871,13 +871,13 @@
      (fn [sorting]
        (set-sorting! sorting)
        (p/let [entity (or entity (create-view!))]
-         (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-sorting sorting)))
+         (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/sorting sorting)))
      :set-filters!
      (fn [filters]
        (let [filters (table-filters->persist-state filters)]
          (set-filters! filters)
          (p/let [entity (or entity (create-view!))]
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-filters filters))))
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/filters filters))))
      :set-visible-columns!
      (fn [columns]
        (let [hidden-columns (vec (keep (fn [[column visible?]]
@@ -885,24 +885,24 @@
                                            column)) columns))]
          (set-visible-columns! columns)
          (p/let [entity (or entity (create-view!))]
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-hidden-columns hidden-columns))))
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/hidden-columns hidden-columns))))
      :set-ordered-columns!
      (fn [ordered-columns]
        (let [ids (vec (remove #{:select} ordered-columns))]
          (set-ordered-columns! ordered-columns)
          (p/let [entity (or entity (create-view!))]
-           (property-handler/set-block-property! repo (:db/id entity) :logseq.property/table-ordered-columns ids))))}))
+           (property-handler/set-block-property! repo (:db/id entity) :logseq.property.table/ordered-columns ids))))}))
 
 (rum/defc view-inner < rum/static
   [view-entity {:keys [data set-data! columns add-new-object! create-view! title-key] :as option}]
   (let [[input set-input!] (rum/use-state "")
-        sorting (:logseq.property/table-sorting view-entity)
+        sorting (:logseq.property.table/sorting view-entity)
         [sorting set-sorting!] (rum/use-state (or sorting [{:id :block/updated-at, :asc? false}]))
-        filters (:logseq.property/table-filters view-entity)
+        filters (:logseq.property.table/filters view-entity)
         [filters set-filters!] (rum/use-state (or filters []))
-        hidden-columns (:logseq.property/table-hidden-columns view-entity)
+        hidden-columns (:logseq.property.table/hidden-columns view-entity)
         [visible-columns set-visible-columns!] (rum/use-state (zipmap hidden-columns (repeat false)))
-        ordered-columns (vec (concat [:select] (:logseq.property/table-ordered-columns view-entity)))
+        ordered-columns (vec (concat [:select] (:logseq.property.table/ordered-columns view-entity)))
         [ordered-columns set-ordered-columns!] (rum/use-state ordered-columns)
         {:keys [set-sorting! set-filters! set-visible-columns! set-ordered-columns!]}
         (db-set-table-state! view-entity {:set-sorting! set-sorting!
