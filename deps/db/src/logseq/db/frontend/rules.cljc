@@ -170,17 +170,18 @@
     :page-property
     '[(page-property ?p ?prop ?val)
       [?p :block/name]
-      [?p ?prop ?pv]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       (or
        ;; non-ref value
        (and
         [(missing? $ ?prop-e :db/valueType)]
-        [(= ?pv ?val)])
+        [?p ?prop ?val]
+        [?p ?prop ?pv])
        ;; ref value
        (and
         [?prop-e :db/valueType :db.type/ref]
+        [?p ?prop ?pv]
         (or [?pv :block/title ?val]
             [?pv :property.value/content ?val])))]
 
@@ -193,17 +194,18 @@
 
     :property
     '[(property ?b ?prop ?val)
-      [?b ?prop ?pv]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
       (or
        ;; non-ref value
        (and
         [(missing? $ ?prop-e :db/valueType)]
-        [(= ?pv ?val)])
+        [?b ?prop ?val]
+        [?b ?prop ?pv])
        ;; ref value
        (and
         [?prop-e :db/valueType :db.type/ref]
+        [?b ?prop ?pv]
         (or [?pv :block/title ?val]
             [?pv :property.value/content ?val])))
       [(missing? $ ?b :block/name)]]
