@@ -1535,7 +1535,7 @@
       (path/get-relative-path current-file-fpath file-path))
     file-path))
 
-(defn upload-asset
+(defn upload-asset!
   "Paste asset and insert link to current editing block"
   [id ^js files format uploading? drop-or-paste?]
   (let [repo (state/get-current-repo)]
