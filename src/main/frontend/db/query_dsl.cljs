@@ -268,7 +268,7 @@
             (subs v' 1)
             (or (page-ref/get-page-name v') v'))
           ;; Convert number pages to string
-          (and (double? v) (= :page (get-in (db-utils/entity k) [:block/schema :type])))
+          (and (double? v) (= :node (get-in (db-utils/entity k) [:block/schema :type])))
           (str v)
           :else
           v')))
