@@ -50,7 +50,7 @@
            {:properties {:foo {:block/schema {:type :default}}
                          :foo2 {:block/schema {:type :default}}
                          :number-many {:block/schema {:type :number :cardinality :many}}
-                         :page-many {:block/schema {:type :page :cardinality :many}}}
+                         :page-many {:block/schema {:type :node :cardinality :many}}}
             :pages-and-blocks
             [{:page {:block/title "Page"
                      :build/properties {:foo "bar" :number-many #{5 10} :page-many #{[:page "Page A"]}}}}
