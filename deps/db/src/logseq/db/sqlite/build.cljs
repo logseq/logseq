@@ -484,7 +484,7 @@
         prop-value' (if (coll? prop-value) (first prop-value) prop-value)
         prop-type (if prop-value'
                     (if (page-prop-value? prop-value')
-                      :page
+                      :node
                       (db-property-type/infer-property-type-from-value prop-value'))
                     :default)]
     (cond-> {:block/schema {:type prop-type}}
@@ -585,8 +585,8 @@
    The :build/properties in :pages-and-blocks, :properties and :classes is a map of
    property name keywords to property values.  Multiple property values for a many
    cardinality property are defined as a set. The following property types are
-   supported: :default, :url, :checkbox, :number, :page and :date. :checkbox and
-   :number values are written as booleans and integers/floats. :page references
+   supported: :default, :url, :checkbox, :number, :node and :date. :checkbox and
+   :number values are written as booleans and integers/floats. :node references
    are written as vectors e.g. `[:page \"PAGE NAME\"]`"
   [options]
   (validate-options options)
