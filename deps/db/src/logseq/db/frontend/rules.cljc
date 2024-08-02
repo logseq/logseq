@@ -169,14 +169,12 @@
 
     :page-property
     '[(page-property ?p ?prop ?val)
-      [?p ?prop ?pv]
       [?p :block/name]
+      [?p ?prop ?pv]
       (or
        [?pv :block/title ?val]
        [?pv :property.value/content ?val]
-       (and
-        [?p ?prop ?val]
-        [(missing? $ ?val :block/uuid)]))
+       [(= ?pv ?val)])
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -193,9 +191,20 @@
       (or
        [?pv :block/title ?val]
        [?pv :property.value/content ?val]
-       (and
-        [?b ?prop ?val]
-        [(missing? $ ?val :block/uuid)]))
+       [(= ?pv ?val)])
+      [(missing? $ ?b :block/name)]
+      [?prop-e :db/ident ?prop]
+      [?prop-e :block/type "property"]]
+
+    ;; This works only with ref-type values.
+    ;; The `task` rule depends on `property-ref-type` instead of `property`
+    ;; because `property` will throw error: insufficient bindings ?val
+    :property-ref-type
+    '[(property-ref-type ?b ?prop ?val)
+      [?b ?prop ?pv]
+      (or
+       [?pv :block/title ?val]
+       [?pv :property.value/content ?val])
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
@@ -203,21 +212,21 @@
     :task
     '[(task ?b ?statuses)
       ;; and needed to avoid binding error
-      (and (property ?b :logseq.task/status ?val)
+      (and (property-ref-type ?b :logseq.task/status ?val)
            [(contains? ?statuses ?val)])]
 
     :priority
     '[(priority ?b ?priorities)
       ;; and needed to avoid binding error
-      (and (property ?b :logseq.task/priority ?priority)
+      (and (property-ref-type ?b :logseq.task/priority ?priority)
            [(contains? ?priorities ?priority)])]}))
 
 (def rules-dependencies
   "For db graphs, a map of rule names and the rules they depend on. If this map
   becomes long or brittle, we could do scan rules for their deps with something
   like find-rules-in-where"
-  {:task #{:property}
-   :priority #{:property}})
+  {:task #{:property-ref-type}
+   :priority #{:property-ref-type}})
 
 (defn extract-rules
   "Given a rules map and the rule names to extract, returns a vector of rules to
