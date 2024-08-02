@@ -510,8 +510,8 @@
                                    [prop (infer-property-schema (get used-properties prop))]))
                             (into {}))
         properties' (merge new-properties properties)]
-    (when (seq new-properties) (prn :new-properties new-properties))
-    (when (seq new-classes) (prn :new-classes new-classes))
+    ;; (when (seq new-properties) (prn :new-properties new-properties))
+    ;; (when (seq new-classes) (prn :new-classes new-classes))
     {:classes classes' :properties properties'}))
 
 (defn- build-blocks-tx*
