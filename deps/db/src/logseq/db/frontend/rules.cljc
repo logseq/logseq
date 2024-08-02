@@ -172,16 +172,15 @@
       [?p :block/name]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
+      [?p ?prop ?pv]
       (or
        ;; non-ref value
        (and
         [(missing? $ ?prop-e :db/valueType)]
-        [?p ?prop ?val]
-        [?p ?prop ?pv])
+        [?p ?prop ?val])
        ;; ref value
        (and
         [?prop-e :db/valueType :db.type/ref]
-        [?p ?prop ?pv]
         (or [?pv :block/title ?val]
             [?pv :property.value/content ?val])))]
 
@@ -196,16 +195,15 @@
     '[(property ?b ?prop ?val)
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]
+      [?b ?prop ?pv]
       (or
        ;; non-ref value
        (and
         [(missing? $ ?prop-e :db/valueType)]
-        [?b ?prop ?val]
-        [?b ?prop ?pv])
+        [?b ?prop ?val])
        ;; ref value
        (and
         [?prop-e :db/valueType :db.type/ref]
-        [?b ?prop ?pv]
         (or [?pv :block/title ?val]
             [?pv :property.value/content ?val])))
       [(missing? $ ?b :block/name)]]
