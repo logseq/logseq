@@ -174,7 +174,9 @@
       (or
        [?pv :block/title ?val]
        [?pv :property.value/content ?val]
-       [(= ?pv ?val)])
+       (and
+        [?p ?prop ?val]
+        [(missing? $ ?val :block/uuid)]))
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
 
@@ -191,7 +193,9 @@
       (or
        [?pv :block/title ?val]
        [?pv :property.value/content ?val]
-       [(= ?pv ?val)])
+       (and
+        [?b ?prop ?val]
+        [(missing? $ ?val :block/uuid)]))
       [(missing? $ ?b :block/name)]
       [?prop-e :db/ident ?prop]
       [?prop-e :block/type "property"]]
