@@ -16,27 +16,15 @@
 
 .ui__dropdown-menu-content {
   &.repos-list {
-    @apply px-2 pb-[210px] relative overflow-hidden;
-    @apply min-w-[280px] sm:max-w-[320px] max-h-[66vh];
-
-    &.no-repos {
-      @apply pb-[180px];
-    }
-
-    &[data-mode=db] {
-      @apply pb-[114px];
-
-      &.no-repos {
-        @apply pb-[109px];
-      }
-    }
+    @apply px-2 relative overflow-hidden;
+    @apply min-w-[280px] sm:max-w-[320px];
 
     .ui__dropdown-menu-item {
       @apply overflow-hidden overflow-ellipsis;
     }
 
     .cp__repos-list-wrap {
-      @apply max-h-96 overflow-scroll m-[-8px] px-2 pb-6;
+      @apply max-h-80 overflow-scroll mx-[-8px] px-2 pb-2;
     }
   }
 }
@@ -64,8 +52,7 @@
 }
 
 .cp__repos-quick-actions {
-  @apply absolute left-[1px] right-[1px] bottom-[1px] bg-gray-01 px-2 py-3 border-t
-  flex flex-col rounded-b overflow-hidden;
+  @apply -mx-2 bg-gray-01 px-2 pb-1.5 pt-3 border-t flex flex-col rounded-b overflow-hidden;
 
   .ui__button {
     @apply w-full !py-4 !justify-start opacity-70 font-medium hover:opacity-90
