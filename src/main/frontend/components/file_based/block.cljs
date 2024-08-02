@@ -40,7 +40,7 @@
     (when class
       (ui/checkbox {:class class
                     :style {:margin-right 5}
-                    :value checked?
+                    :checked checked?
                     :on-pointer-down (fn [e]
                                        (util/stop-propagation e))
                     :on-change (fn [_e]
