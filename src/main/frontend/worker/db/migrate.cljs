@@ -43,6 +43,35 @@
   [{:db/id (:db/id (d/entity @conn :logseq.class/task))
     :db/ident :logseq.class/Task}])
 
+(defn- property-checkbox-type-non-ref
+  [conn _search-db]
+  (let [db @conn
+        properties (d/q
+                    '[:find [?ident ...]
+                      :where
+                      [?p :block/schema ?s]
+                      [(get ?s :type) ?t]
+                      [(= ?t :checkbox)]
+                      [?p :db/ident ?ident]]
+                    db)
+        datoms (mapcat #(d/datoms db :avet %) properties)
+        schema-tx-data (map
+                        (fn [ident]
+                          [:db/retract ident :db/valueType])
+                        properties)
+        value-tx-data (mapcat
+                       (fn [d]
+                         (let [e (:e d)
+                               a (:a d)
+                               v (:v d)
+                               ve (when (integer? v) (d/entity db v))
+                               ve-value (:property.value/content ve)]
+                           (when (some? ve-value)
+                             [[:db/add e a ve-value]
+                              [:db/retractEntity v]])))
+                       datoms)]
+    (concat schema-tx-data value-tx-data)))
+
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
@@ -58,7 +87,8 @@
    [6 {:properties [:logseq.property.asset/remote-metadata]}]
    [7 {:fix replace-original-name-content-with-title}]
    [8 {:fix replace-object-and-page-type-with-node}]
-   [9 {:fix update-task-ident}]])
+   [9 {:fix update-task-ident}]
+   [10 {:fix property-checkbox-type-non-ref}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
