@@ -204,6 +204,24 @@
 
   &.as-heading {
     @apply flex flex-1;
+
+    h1& {
+      .ui__icon.ti svg {
+        @apply w-8 h-7;
+      }
+    }
+
+    h2& {
+      .ui__icon.ti svg {
+        @apply w-7 h-6;
+      }
+    }
+
+    h3& {
+      .ui__icon.ti svg {
+        @apply w-5 h-5;
+      }
+    }
   }
 
   &:has(.dsl-query), &:has(.embed-page) {

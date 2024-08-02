@@ -70,14 +70,16 @@
           (if (and (= :default (get-in property [:block/schema :type]))
                    (not (db-property/many? property)))
             (p/let [existing-value (get block (:db/ident property))
-                    new-block-id (when-not existing-value (db/new-block-id))
-                    _ (when-not existing-value
+                    existing-value? (and (some? existing-value)
+                                         (not= (:db/ident existing-value) :logseq.property/empty-placeholder))
+                    new-block-id (when-not existing-value? (db/new-block-id))
+                    _ (when-not existing-value?
                         (db-property-handler/create-property-text-block!
                          (:db/id block)
                          (:db/id property)
                          value
                          {:new-block-id new-block-id}))]
-              (or existing-value (db/entity [:block/uuid new-block-id])))
+              (if existing-value? existing-value (db/entity [:block/uuid new-block-id])))
             (p/let [new-block-id (db/new-block-id)
                     _ (db-property-handler/create-property-text-block!
                        (:db/id block)

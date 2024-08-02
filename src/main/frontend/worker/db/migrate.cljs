@@ -72,6 +72,26 @@
                        datoms)]
     (concat schema-tx-data value-tx-data)))
 
+(defn- update-table-properties
+  [conn _search-db]
+  (let [old-new-props {:logseq.property/table-sorting :logseq.property.table/sorting
+                       :logseq.property/table-filters :logseq.property.table/filters
+                       :logseq.property/table-ordered-columns :logseq.property.table/ordered-columns
+                       :logseq.property/table-hidden-columns :logseq.property.table/hidden-columns}
+        props-tx (mapv (fn [[old new]]
+                         {:db/id (:db/id (d/entity @conn old))
+                          :db/ident new})
+                       old-new-props)]
+    ;; Property changes need to be in their own tx for subsequent uses of properties to take effect
+    (ldb/transact! conn props-tx {:db-migrate? true})
+
+    (mapcat (fn [[old new]]
+              (->> (d/q '[:find ?b ?prop-v :in $ ?prop :where [?b ?prop ?prop-v]] @conn old)
+                   (mapcat (fn [[id prop-value]]
+                             [[:db/retract id old]
+                              [:db/add id new prop-value]]))))
+            old-new-props)))
+
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
@@ -88,7 +108,8 @@
    [7 {:fix replace-original-name-content-with-title}]
    [8 {:fix replace-object-and-page-type-with-node}]
    [9 {:fix update-task-ident}]
-   [10 {:fix property-checkbox-type-non-ref}]])
+   [10 {:fix update-table-properties}]
+   [11 {:fix property-checkbox-type-non-ref}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))

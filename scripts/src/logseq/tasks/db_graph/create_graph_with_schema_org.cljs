@@ -11,7 +11,6 @@
        type logseq doesnt' support yet
      * schema.org assumes no cardinality. For now, only :node properties are given a :cardinality :many"
   (:require [logseq.outliner.cli :as outliner-cli]
-            [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [clojure.string :as string]
             [clojure.edn :as edn]
@@ -77,8 +76,8 @@
   {"schema:Integer" :number
    "schema:Float" :number
    "schema:Number" :number
-   "schema:Text_Class" :default
-   "schema:URL_Class" :url
+   "schema:Text" :default
+   "schema:URL" :url
    "schema:Boolean" :checkbox
    "schema:Date" :date})
 
@@ -158,11 +157,11 @@
 
 (defn- get-vector-conflicts
   "Given a seq of tuples returns a seq of tuples that conflict i.e. their first element
-   has a case insensitive conflict/duplicate with another. An example conflict:
-   [[\"schema:businessFunction\" :property] [\"schema:BusinessFunction\" :class]]"
+   has a case sensitive conflict/duplicate with another. An example conflict:
+   [[\"schema:status\" :property] [\"schema:status\" :node]]"
   [tuples-seq]
   (->> tuples-seq
-       (group-by (comp common-util/page-name-sanity-lc first))
+       (group-by first)
        (filter #(> (count (val %)) 1))
        vals))
 
@@ -190,7 +189,8 @@
     (if verbose
       (println "Renaming the following properties because they have names that conflict with Logseq's built in pages"
                (keys renamed-properties) "\n")
-      (println "Renaming" (count renamed-properties) "properties due to page name conflicts"))
+      (when (pos? (count renamed-properties))
+        (println "Renaming" (count renamed-properties) "properties due to page name conflicts")))
     renamed-properties))
 
 (defn- detect-id-conflicts-and-get-renamed-classes
@@ -219,7 +219,8 @@
     (if verbose
       (println "Renaming the following classes because they have property names that conflict with Logseq's case insensitive :block/name:"
                (keys renamed-classes) "\n")
-      (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))
+      (when (pos? (count renamed-classes))
+        (println "Renaming" (count renamed-classes) "classes due to page name conflicts")))
     renamed-classes))
 
 (defn- get-all-properties [schema-data {:keys [verbose]}]
@@ -308,7 +309,7 @@
         select-class-ids
         (if (:subset options)
           ["schema:Person" "schema:CreativeWorkSeries" "schema:Organization"
-           "schema:Movie" "schema:CreativeWork" "schema:Thing"]
+           "schema:Movie" "schema:CreativeWork" "schema:Thing" "schema:Comment"]
           (keys class-map))
         class-to-properties (get-class-to-properties select-class-ids all-properties)
         select-properties (set (mapcat val class-to-properties))

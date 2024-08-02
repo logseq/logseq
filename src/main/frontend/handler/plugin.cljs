@@ -252,10 +252,18 @@
 
     (js/window.apis.addListener channel listener)))
 
+(defn- normalize-plugin-metadata
+  [metadata]
+  (cond-> metadata
+    (not (string? (:author metadata)))
+    (assoc :author (or (get-in metadata [:author :name]) ""))))
+
 (defn register-plugin
   [plugin-metadata]
   (when-let [pid (keyword (:id plugin-metadata))]
-    (swap! state/state update-in [:plugin/installed-plugins] assoc pid plugin-metadata)))
+    (some->> plugin-metadata
+      (normalize-plugin-metadata)
+      (swap! state/state update-in [:plugin/installed-plugins] assoc pid))))
 
 (defn host-mounted!
   []

@@ -107,7 +107,7 @@
         (assoc :db/valueType :db.type/ref))))))
 
 (defn build-new-class
-  "Build a standard new class so that it is is consistent across contexts"
+  "Build a standard new class so that it is consistent across contexts"
   [block]
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps

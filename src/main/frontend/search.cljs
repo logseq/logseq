@@ -106,11 +106,6 @@
   (when-let [engine (get-engine repo)]
     (protocol/remove-db! engine)))
 
-(defn transact-blocks!
-  [repo data]
-  (when-let [engine (get-engine repo)]
-    (protocol/transact-blocks! engine data)))
-
 (defn get-unlinked-refs
   "Get matched result from search first, and then filter by worker db"
   [eid]
