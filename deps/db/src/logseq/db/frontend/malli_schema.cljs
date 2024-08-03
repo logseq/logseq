@@ -264,8 +264,7 @@
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
-  [[:hide? {:optional true} :boolean]
-   [:description {:optional true} :string]])
+  [[:hide? {:optional true} :boolean]])
 
 (def internal-property
   (vec
@@ -371,10 +370,7 @@
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
      [:property.value/content {:optional true} [:or :string :double]]
-     [:block/closed-value-property {:optional true} [:set :int]]
-     [:block/schema {:optional true}
-      [:map
-       [:description {:optional true} :string]]]]
+     [:block/closed-value-property {:optional true} [:set :int]] ]
     (remove #(#{:block/title} (first %)) block-attrs)
     page-or-block-attrs)))
 
