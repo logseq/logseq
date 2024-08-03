@@ -53,9 +53,7 @@
                     ;; they aren't user facing
                     (remove #(or (= "logseq.kv" (namespace (:db/ident %)))
                                  (= :logseq.property/empty-placeholder (:db/ident %)))))]
-    (is (= []
-           (remove #(->> % :logseq.property/built-in? (db-property/ref->property-value-content @conn))
-                   idents))
+    (is (= [] (remove :logseq.property/built-in? idents))
         "All entities with :db/ident have built-in property (except for kv idents)")))
 
 (deftest new-graph-creates-class

@@ -171,10 +171,9 @@
           block-uuid (:block/uuid (find-block-by-content conn "b2"))
           ;; Use same args as outliner.op
           _ (outliner-property/set-block-property! conn [:block/uuid block-uuid] :user.property/checkbox true)]
-      (is (some? (:db/id (:user.property/checkbox (find-block-by-content conn "b2"))))
+      (is (true? (:user.property/checkbox (find-block-by-content conn "b2")))
           "New block has property set")
-      (is (= (:db/id property-value)
-             (:db/id (:user.property/checkbox (find-block-by-content conn "b2"))))))))
+      (is (= property-value (:user.property/checkbox (find-block-by-content conn "b2")))))))
 
 (deftest remove-block-property!
   (let [conn (create-conn-with-blocks

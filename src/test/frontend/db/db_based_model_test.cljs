@@ -20,17 +20,6 @@
 
 (use-fixtures :each start-and-destroy-db)
 
-;; (deftest get-db-property-values-test-with-pages
-;;   (let [opts {:redirect? false :create-first-block? false}
-;;         _ (test-helper/create-page! "page1" opts)
-;;         _ (test-helper/create-page! "page2" opts)
-;;         p1id (:block/uuid (db/get-page "page1"))
-;;         p2id (:block/uuid (db/get-page "page2"))]
-;;     (outliner-property/upsert-property! repo "property-1" {:type :node} {})
-;;     (outliner-property/set-block-property! repo fbid "property-1" p1id {})
-;;     (outliner-property/set-block-property! repo sbid "property-1" p2id {})
-;;     (is (= '("[[page1]]" "[[page2]]") (model/get-db-property-values repo "property-1")))))
-
 (deftest get-all-classes-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
