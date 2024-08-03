@@ -65,7 +65,7 @@
     (cond-> {:block/title class-name
              :build/properties (cond-> {:url url}
                                  (class-m "rdfs:comment")
-                                 (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
+                                 (assoc :logseq.property/description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class'
       (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
       (seq properties)
@@ -117,12 +117,12 @@
         schema (cond-> {:type schema-type}
                  ;; This cardinality rule should be adjusted as we use schema.org more
                  (= schema-type :node)
-                 (assoc :cardinality :many)
-                 (property-m "rdfs:comment")
-                 (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-pages)))]
+                 (assoc :cardinality :many))]
     {(keyword (strip-schema-prefix (property-m "@id")))
      (cond-> {:block/schema schema
-              :build/properties {:url url}}
+              :build/properties (cond-> {:url url}
+                                  (property-m "rdfs:comment")
+                                  (assoc :logseq.property/description (get-comment-string (property-m "rdfs:comment") renamed-pages)))}
        (= schema-type :node)
        (assoc :build/schema-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
 
@@ -256,8 +256,13 @@
                           (get-schema-type (get-range-includes property-m) class-map)))
                   frequencies)
              "\n"))
-  (apply merge
-         (mapv #(->property-page % class-map options) select-properties)))
+  (assoc
+   (apply merge
+          (mapv #(->property-page % class-map options) select-properties))
+   ;; Have to update schema for now as validation doesn't take into account existing properties
+   :logseq.property/description {:block/schema {:public? true :type :default}
+                                 :build/properties {:url "https://schema.org/description"
+                                                    :logseq.property/description "A description of the item."}}))
 
 (defn- get-all-classes-and-properties
   "Get all classes and properties from raw json file"
@@ -267,7 +272,8 @@
                                                 (if (string? type') [type'] type')))
                                          "rdfs:Class")
                              schema-data)
-        all-properties* (get-all-properties schema-data options)
+        ;; Use built-in description
+        all-properties* (remove #(= "schema:description" (% "@id")) (get-all-properties schema-data options))
         property-tuples (map #(vector (% "@id") :property) all-properties*)
         class-tuples (map #(vector (% "@id") :class) all-classes*)
         page-tuples (map #(vector (str "schema:" %) :node) existing-pages)
@@ -276,6 +282,7 @@
         renamed-properties (detect-property-conflicts-and-get-renamed-properties
                             property-tuples page-tuples options)
         renamed-pages (merge renamed-classes renamed-properties)
+        ;; Note: schema:description refs don't get renamed but they aren't used
         ;; Updates keys like @id, @subClassOf
         rename-page-ids (fn [m]
                           (w/postwalk (fn [x]
