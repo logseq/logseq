@@ -63,7 +63,7 @@
            (let [block (second (:rum/args state))
                  value (or (str (db-property/closed-value-content block)) "")
                  icon (:logseq.property/icon block)
-                 description (or (get-in block [:block/schema :description]) "")]
+                 description (or (db-property/property-value-content (:logseq.property/description block)) "")]
              (assoc state
                     ::value (atom value)
                     ::icon (atom icon)
