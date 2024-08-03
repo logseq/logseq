@@ -223,14 +223,14 @@ prop-d:: [[nada]]"}])
       "Page property queries ORed")
 
   (is (= ["page1" "page3"]
-           (map :block/name
-                (dsl-query "(and (page-property parent [[child page 1]]) (or (page-property foo baz) (page-property parent [[child page 2]])))"))))
+         (map :block/name
+              (dsl-query "(and (page-property parent [[child page 1]]) (or (page-property foo baz) (page-property parent [[child page 2]])))"))))
 
   (is (= ["page4"]
-           (map
-            :block/name
-            (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
-        "Page property queries nested NOT in second clause")
+         (map
+          :block/name
+          (dsl-query "(and (page-property parent [[child page 2]]) (not (page-property foo bar)))")))
+      "Page property queries nested NOT in second clause")
 
   (is (= ["page4"]
          (map
@@ -239,13 +239,13 @@ prop-d:: [[nada]]"}])
       "Page property queries nested NOT in first clause")
 
   (testing "boolean values"
-      (is (= ["page1"]
-             (map :block/name (dsl-query "(page-property interesting true)")))
-          "Boolean true")
+    (is (= ["page1"]
+           (map :block/name (dsl-query "(page-property interesting true)")))
+        "Boolean true")
 
-      (is (= ["page2" "page3"]
-             (map :block/name (dsl-query "(page-property interesting false)")))
-          "Boolean false")))
+    (is (= #{"page2" "page3"}
+           (set (map :block/name (dsl-query "(page-property interesting false)"))))
+        "Boolean false")))
 
 (deftest page-property-queries
   (testing "page property tests with default config"

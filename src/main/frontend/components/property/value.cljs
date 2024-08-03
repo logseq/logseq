@@ -70,14 +70,16 @@
           (if (and (= :default (get-in property [:block/schema :type]))
                    (not (db-property/many? property)))
             (p/let [existing-value (get block (:db/ident property))
-                    new-block-id (when-not existing-value (db/new-block-id))
-                    _ (when-not existing-value
+                    existing-value? (and (some? existing-value)
+                                         (not= (:db/ident existing-value) :logseq.property/empty-placeholder))
+                    new-block-id (when-not existing-value? (db/new-block-id))
+                    _ (when-not existing-value?
                         (db-property-handler/create-property-text-block!
                          (:db/id block)
                          (:db/id property)
                          value
                          {:new-block-id new-block-id}))]
-              (or existing-value (db/entity [:block/uuid new-block-id])))
+              (if existing-value? existing-value (db/entity [:block/uuid new-block-id])))
             (p/let [new-block-id (db/new-block-id)
                     _ (db-property-handler/create-property-text-block!
                        (:db/id block)
@@ -349,7 +351,8 @@
            (let [result (rum/react *result)]
              (if (empty? result)
                (let [v (get block (:db/ident property))]
-                 (if (every? de/entity? v) v [v]))
+                 (remove #(= :logseq.property/empty-placeholder (:db/ident %))
+                         (if (every? de/entity? v) v [v])))
                (remove (fn [node]
                          (or (= (:db/id block) (:db/id node))
                               ;; A page's alias can't be itself
@@ -535,8 +538,11 @@
   [block property value-block opts]
   (let [multiple-values? (db-property/many? property)
         block-container (state/get-component :block/container)
-        blocks-container (state/get-component :block/blocks-container)]
-    (if value-block
+        blocks-container (state/get-component :block/blocks-container)
+        value-block (if (and (coll? value-block) (every? de/entity? value-block))
+                      (set (remove #(= (:db/ident %) :logseq.property/empty-placeholder) value-block))
+                      value-block)]
+    (if (seq value-block)
       [:div.property-block-container.content.w-full
        (let [config {:id (str (if multiple-values?
                                 (:block/uuid block)
@@ -818,7 +824,9 @@
               (when date?
                 [(property-value-date-picker block property nil {:toggle-fn toggle-fn})]))
              (when-not editing?
-               (property-empty-text-value))))]))))
+               (if date?
+                 [(property-empty-text-value) (property-value-date-picker block property nil {:toggle-fn toggle-fn})]
+                 (property-empty-text-value)))))]))))
 
 (rum/defc multiple-values < rum/reactive db-mixins/query
   [block property opts schema]
@@ -845,7 +853,6 @@
          schema (:block/schema property)
          type (some-> schema (get :type :default))
          multiple-values? (db-property/many? property)
-         empty-value? (= :logseq.property/empty-placeholder v)
          v (cond
              (and multiple-values? (or (set? v) (and (coll? v) (empty? v)) (nil? v)))
              v
@@ -855,6 +862,7 @@
              (first v)
              :else
              v)
+         empty-value? (= :logseq.property/empty-placeholder (:db/ident (first v)))
          closed-values? (seq (:property/closed-values property))
          value-cp [:div.property-value-inner
                    {:data-type type

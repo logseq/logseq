@@ -306,12 +306,13 @@
 
 (defn- rollback
   [repo block-ops-map-coll]
-  (let [ops (map (fn [m]
-                   (keep (fn [[k op]]
-                           (when (not= :block/uuid k)
-                             op))
-                         m))
-                 block-ops-map-coll)]
+  (let [ops (mapcat
+             (fn [m]
+               (keep (fn [[k op]]
+                       (when (not= :block/uuid k)
+                         op))
+                     m))
+             block-ops-map-coll)]
     (client-op/add-ops repo ops)
     nil))
 

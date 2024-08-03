@@ -221,8 +221,10 @@
   [conn property-id v property-type]
   (if (and (integer? v)
            (or (not= property-type :number)
-               ;; Allows :number property to use number as a ref (for closed value) or value. Number value maybe only used in tests
-               (and (= property-type :number) (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v)))))))
+               ;; Allows :number property to use number as a ref (for closed value) or value
+               (and (= property-type :number)
+                    (or (= property-id (:db/ident (:logseq.property/created-from-property (d/entity @conn v))))
+                        (= :logseq.property/empty-placeholder (:db/ident (d/entity @conn v)))))))
     v
     ;; only value-ref-property types should call this
     (find-or-create-property-value conn property-id v)))
@@ -395,32 +397,24 @@
      (seq properties))))
 
 (defn- build-closed-value-tx
-  [db property resolved-value {:keys [id icon description]
-                               :or {description ""}}]
+  [db property resolved-value {:keys [id icon]}]
   (let [block (when id (d/entity db [:block/uuid id]))
         block-id (or id (ldb/new-block-id))
         icon (when-not (and (string? icon) (string/blank? icon)) icon)
-        description (string/trim description)
-        description (when-not (string/blank? description) description)
         tx-data (if block
-                  [(let [schema (:block/schema block)]
-                     (cond->
-                      (outliner-core/block-with-updated-at
-                       (merge
-                        {:block/uuid id
-                         :block/closed-value-property (:db/id property)
-                         :block/schema (if description
-                                         (assoc schema :description description)
-                                         (dissoc schema :description))}
-                        (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
-                          {:property.value/content resolved-value}
-                          {:block/title resolved-value})))
-                       icon
-                       (assoc :logseq.property/icon icon)))]
+                  [(cond->
+                    (outliner-core/block-with-updated-at
+                     (merge
+                      {:block/uuid id
+                       :block/closed-value-property (:db/id property)}
+                      (if (db-property-type/original-value-ref-property-types (get-in property [:block/schema :type]))
+                        {:property.value/content resolved-value}
+                        {:block/title resolved-value})))
+                     icon
+                     (assoc :logseq.property/icon icon))]
                   (let [max-order (:block/order (last (:property/closed-values property)))
                         new-block (-> (db-property-build/build-closed-value-block block-id resolved-value
-                                                                                  property {:icon icon
-                                                                                            :description description})
+                                                                                  property {:icon icon})
                                       (assoc :block/order (db-order/gen-key max-order nil)))]
                     [new-block
                      (outliner-core/block-with-updated-at
@@ -432,7 +426,7 @@
 
 (defn upsert-closed-value!
   "id should be a block UUID or nil"
-  [conn property-id {:keys [id value] :as opts}]
+  [conn property-id {:keys [id value description] :as opts}]
   (assert (or (nil? id) (uuid? id)))
   (let [db @conn
         property (d/entity db property-id)
@@ -470,9 +464,20 @@
           nil
 
           :else
-          (ldb/transact! conn
-                         (build-closed-value-tx @conn property resolved-value opts)
-                         {:outliner-op :save-block}))))))
+          (let [tx-data (build-closed-value-tx @conn property resolved-value opts)]
+            (ldb/transact! conn tx-data {:outliner-op :save-block})
+
+            (when (seq description)
+              (if-let [desc-ent (and id (:logseq.property/description (d/entity db [:block/uuid id])))]
+                (ldb/transact! conn
+                               [(outliner-core/block-with-updated-at {:db/id (:db/id desc-ent)
+                                                                      :block/title description})]
+                               {:outliner-op :save-block})
+                (set-block-property! conn
+                                     ;; new closed value is first in tx-data
+                                     [:block/uuid (or id (:block/uuid (first tx-data)))]
+                                     :logseq.property/description
+                                     description)))))))))
 
 (defn add-existing-values-to-closed-values!
   "Adds existing values as closed values and returns their new block uuids"

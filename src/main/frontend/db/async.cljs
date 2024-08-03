@@ -253,6 +253,15 @@
         [?page :block/name]]
       tag-id))
 
+(defn <get-property-objects
+  [graph property-ident]
+  (<q graph {:transact-db? true}
+      '[:find [(pull ?b [*]) ...]
+        :in $ ?property-ident
+        :where
+        [?b ?property-ident]]
+      property-ident))
+
 (defn <get-tag-objects
   [graph class-id]
   (let [class-children (db-model/get-class-children graph class-id)
