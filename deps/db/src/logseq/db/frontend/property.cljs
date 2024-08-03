@@ -150,6 +150,10 @@
                                               :hide? true
                                               :view-context :page
                                               :public? true}}
+   :logseq.property/description {:schema
+                                 {:type :default
+                                  :public? true}}
+
    :logseq.property.table/sorting {:schema
                                    {:type :coll
                                     :hide? true
