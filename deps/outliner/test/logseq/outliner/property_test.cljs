@@ -256,7 +256,7 @@
                                                                                :description "choice 4"})
             updated-b (d/entity @conn [:block/uuid (:block/uuid b)])]
         (is (= 4 (db-property/closed-value-content updated-b)))
-        (is (= "choice 4" (:description (:block/schema updated-b))))))))
+        (is (= "choice 4" (db-property/property-value-content (:logseq.property/description updated-b))))))))
 
 (deftest delete-closed-value!
   (let [closed-value-uuid (random-uuid)

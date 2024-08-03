@@ -79,7 +79,7 @@
   validate-fn varies by property type"
   [db validate-fn [{:block/keys [schema] :as property} property-val] & {:keys [new-closed-value?]}]
   ;; For debugging
-  ;; (when (not= "logseq.property" (namespace (:db/ident property))) (prn :validate-val (dissoc property :property/closed-values) property-val))
+  ;; (when (not (string/starts-with? (namespace (:db/ident property)) "logseq.")) (prn :validate-val (dissoc property :property/closed-values) property-val))
   (let [validate-fn' (if (db-property-type/property-types-with-db (:type schema))
                        (fn [value]
                          (validate-fn db value {:new-closed-value? new-closed-value?}))
@@ -264,8 +264,7 @@
 
 (def property-common-schema-attrs
   "Property :schema attributes common to all properties"
-  [[:hide? {:optional true} :boolean]
-   [:description {:optional true} :string]])
+  [[:hide? {:optional true} :boolean]])
 
 (def internal-property
   (vec
@@ -371,10 +370,7 @@
      [:db/ident {:optional true} logseq-property-ident]
      [:block/title {:optional true} :string]
      [:property.value/content {:optional true} [:or :string :double]]
-     [:block/closed-value-property {:optional true} [:set :int]]
-     [:block/schema {:optional true}
-      [:map
-       [:description {:optional true} :string]]]]
+     [:block/closed-value-property {:optional true} [:set :int]] ]
     (remove #(#{:block/title} (first %)) block-attrs)
     page-or-block-attrs)))
 

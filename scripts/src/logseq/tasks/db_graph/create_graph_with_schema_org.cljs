@@ -11,7 +11,6 @@
        type logseq doesnt' support yet
      * schema.org assumes no cardinality. For now, only :node properties are given a :cardinality :many"
   (:require [logseq.outliner.cli :as outliner-cli]
-            [logseq.common.util :as common-util]
             [logseq.db.frontend.property :as db-property]
             [clojure.string :as string]
             [clojure.edn :as edn]
@@ -66,7 +65,7 @@
     (cond-> {:block/title class-name
              :build/properties (cond-> {:url url}
                                  (class-m "rdfs:comment")
-                                 (assoc :description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
+                                 (assoc :logseq.property/description (get-comment-string (class-m "rdfs:comment") renamed-pages)))}
       parent-class'
       (assoc :build/class-parent (keyword (strip-schema-prefix parent-class')))
       (seq properties)
@@ -77,8 +76,8 @@
   {"schema:Integer" :number
    "schema:Float" :number
    "schema:Number" :number
-   "schema:Text_Class" :default
-   "schema:URL_Class" :url
+   "schema:Text" :default
+   "schema:URL" :url
    "schema:Boolean" :checkbox
    "schema:Date" :date})
 
@@ -118,12 +117,12 @@
         schema (cond-> {:type schema-type}
                  ;; This cardinality rule should be adjusted as we use schema.org more
                  (= schema-type :node)
-                 (assoc :cardinality :many)
-                 (property-m "rdfs:comment")
-                 (assoc :description (get-comment-string (property-m "rdfs:comment") renamed-pages)))]
+                 (assoc :cardinality :many))]
     {(keyword (strip-schema-prefix (property-m "@id")))
      (cond-> {:block/schema schema
-              :build/properties {:url url}}
+              :build/properties (cond-> {:url url}
+                                  (property-m "rdfs:comment")
+                                  (assoc :logseq.property/description (get-comment-string (property-m "rdfs:comment") renamed-pages)))}
        (= schema-type :node)
        (assoc :build/schema-classes (mapv (comp keyword strip-schema-prefix) range-includes)))}))
 
@@ -158,11 +157,11 @@
 
 (defn- get-vector-conflicts
   "Given a seq of tuples returns a seq of tuples that conflict i.e. their first element
-   has a case insensitive conflict/duplicate with another. An example conflict:
-   [[\"schema:businessFunction\" :property] [\"schema:BusinessFunction\" :class]]"
+   has a case sensitive conflict/duplicate with another. An example conflict:
+   [[\"schema:status\" :property] [\"schema:status\" :node]]"
   [tuples-seq]
   (->> tuples-seq
-       (group-by (comp common-util/page-name-sanity-lc first))
+       (group-by first)
        (filter #(> (count (val %)) 1))
        vals))
 
@@ -190,7 +189,8 @@
     (if verbose
       (println "Renaming the following properties because they have names that conflict with Logseq's built in pages"
                (keys renamed-properties) "\n")
-      (println "Renaming" (count renamed-properties) "properties due to page name conflicts"))
+      (when (pos? (count renamed-properties))
+        (println "Renaming" (count renamed-properties) "properties due to page name conflicts")))
     renamed-properties))
 
 (defn- detect-id-conflicts-and-get-renamed-classes
@@ -219,7 +219,8 @@
     (if verbose
       (println "Renaming the following classes because they have property names that conflict with Logseq's case insensitive :block/name:"
                (keys renamed-classes) "\n")
-      (println "Renaming" (count renamed-classes) "classes due to page name conflicts"))
+      (when (pos? (count renamed-classes))
+        (println "Renaming" (count renamed-classes) "classes due to page name conflicts")))
     renamed-classes))
 
 (defn- get-all-properties [schema-data {:keys [verbose]}]
@@ -255,8 +256,13 @@
                           (get-schema-type (get-range-includes property-m) class-map)))
                   frequencies)
              "\n"))
-  (apply merge
-         (mapv #(->property-page % class-map options) select-properties)))
+  (assoc
+   (apply merge
+          (mapv #(->property-page % class-map options) select-properties))
+   ;; Have to update schema for now as validation doesn't take into account existing properties
+   :logseq.property/description {:block/schema {:public? true :type :default}
+                                 :build/properties {:url "https://schema.org/description"
+                                                    :logseq.property/description "A description of the item."}}))
 
 (defn- get-all-classes-and-properties
   "Get all classes and properties from raw json file"
@@ -266,7 +272,8 @@
                                                 (if (string? type') [type'] type')))
                                          "rdfs:Class")
                              schema-data)
-        all-properties* (get-all-properties schema-data options)
+        ;; Use built-in description
+        all-properties* (remove #(= "schema:description" (% "@id")) (get-all-properties schema-data options))
         property-tuples (map #(vector (% "@id") :property) all-properties*)
         class-tuples (map #(vector (% "@id") :class) all-classes*)
         page-tuples (map #(vector (str "schema:" %) :node) existing-pages)
@@ -275,6 +282,7 @@
         renamed-properties (detect-property-conflicts-and-get-renamed-properties
                             property-tuples page-tuples options)
         renamed-pages (merge renamed-classes renamed-properties)
+        ;; Note: schema:description refs don't get renamed but they aren't used
         ;; Updates keys like @id, @subClassOf
         rename-page-ids (fn [m]
                           (w/postwalk (fn [x]
@@ -308,7 +316,7 @@
         select-class-ids
         (if (:subset options)
           ["schema:Person" "schema:CreativeWorkSeries" "schema:Organization"
-           "schema:Movie" "schema:CreativeWork" "schema:Thing"]
+           "schema:Movie" "schema:CreativeWork" "schema:Thing" "schema:Comment"]
           (keys class-map))
         class-to-properties (get-class-to-properties select-class-ids all-properties)
         select-properties (set (mapcat val class-to-properties))

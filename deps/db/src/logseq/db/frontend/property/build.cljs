@@ -21,7 +21,7 @@
 
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
-  [block-uuid block-value property {:keys [db-ident icon description]}]
+  [block-uuid block-value property {:keys [db-ident icon]}]
   (assert block-uuid (uuid? block-uuid))
   (cond->
    (closed-value-new-block block-uuid block-value property)
@@ -30,9 +30,6 @@
 
     icon
     (assoc :logseq.property/icon icon)
-
-    description
-    (update :block/schema assoc :description description)
 
     true
     sqlite-util/block-with-timestamps))
@@ -46,13 +43,13 @@
                                                                                      :ref-type? true})
                            property-attributes)]
     (into [property-tx]
-          (map (fn [{:keys [db-ident value icon description uuid]}]
+          (map (fn [{:keys [db-ident value icon uuid]}]
                  (cond->
                   (build-closed-value-block
                    uuid
                    value
                    property
-                   {:db-ident db-ident :icon icon :description description})
+                   {:db-ident db-ident :icon icon})
                    true
                    (assoc :block/order (db-order/gen-key))))
                (:closed-values property)))))

@@ -238,6 +238,7 @@
   db-mixins/query
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
+  (rum/local nil ::property-description)
   {:init (fn [state]
            (let [*values (atom :loading)]
              (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
@@ -248,6 +249,7 @@
                  (let [[property _opts] (:rum/args state)]
                    (reset! (::property-name state) (:block/title property))
                    (reset! (::property-schema state) (:block/schema property))
+                   (reset! (::property-description state) (db-property/property-value-content (:logseq.property/description property)))
                    (state/set-state! :editor/property-configure? true)
                    state))
    :will-unmount (fn [state]
@@ -260,6 +262,7 @@
     (when-not (= :loading values)
       (let [*property-name (::property-name state)
             *property-schema (::property-schema state)
+            *property-description (::property-description state)
             property (db/sub-block (:db/id property))
             built-in? (ldb/built-in? property)
             disabled? (or built-in? config/publishing?)
@@ -391,15 +394,24 @@
                                     (swap! *property-schema assoc :hide? (not hide?))
                                     (save-property-fn))})])
 
-          (let [description (or (:description @*property-schema) "")]
+          (let [description (or @*property-description "")]
             [:div.grid.grid-cols-5.gap-1.items-start.leading-8
              [:label.col-span-2 "Description:"]
              [:div.col-span-3
               [:div.mt-1
                (shui/textarea
                 {:on-change (fn [e]
-                              (swap! *property-schema assoc :description (util/evalue e)))
-                 :on-blur save-property-fn
+                              (reset! *property-description (util/evalue e)))
+                 :on-blur (fn []
+                            (if-let [ent (:logseq.property/description property)]
+                              (db/transact! (state/get-current-repo)
+                                            [(outliner-core/block-with-updated-at
+                                              {:db/id (:db/id ent) :block/title @*property-description})]
+                                            {:outliner-op :save-block})
+                              (db-property-handler/set-block-property!
+                               (:db/id property)
+                               :logseq.property/description
+                               @*property-description)))
                  :disabled disabled?
                  :default-value description})]]])]]))))
 
@@ -716,7 +728,7 @@
           [:div.flex.flex-1
            (if (and (:class-schema? opts) (:page-configure? opts))
              [:div.property-description.text-sm.opacity-70
-              (inline-text {} :markdown (get-in property [:block/schema :description]))]
+              (inline-text {} :markdown (db-property/property-value-content (:logseq.property/description property)))]
              [:div.property-value.flex.flex-1
               (pv/property-value block property v opts)])]]]))))
 
