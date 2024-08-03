@@ -7,7 +7,7 @@
   },
   "dependencies": {
     "better-sqlite3": "9.3.0",
-    "mldoc": "^1.5.8"
+    "mldoc": "^1.5.9"
   },
   "scripts": {
     "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
