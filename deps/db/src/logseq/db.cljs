@@ -12,7 +12,6 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.order :as db-order]))
 
 ;; Use it as an input argument for datalog queries
