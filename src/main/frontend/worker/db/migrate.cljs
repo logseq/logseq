@@ -92,6 +92,38 @@
                               [:db/add id new prop-value]]))))
             old-new-props)))
 
+(defn- update-block-type-many->one
+  [conn _search-db]
+  (let [db @conn
+        datoms (d/datoms db :avet :block/type)
+        new-type-tx (->> (set (map :e datoms))
+                         (mapcat
+                          (fn [id]
+                            (let [types (:block/type (d/entity db id))
+                                  type (if (set? types)
+                                         (cond
+                                           (contains? types "class")
+                                           "tag"
+                                           (contains? types "property")
+                                           "property"
+                                           (contains? types "whiteboard")
+                                           "whiteboard"
+                                           (contains? types "journal")
+                                           "journal"
+                                           (contains? types "hidden")
+                                           "hidden"
+                                           (contains? types "page")
+                                           "page"
+                                           :else
+                                           (first types))
+                                         types)]
+                              [[:db/retract id :block/type]
+                               [:db/add id :block/type type]]))))
+        schema (:schema db)]
+    (ldb/transact! conn new-type-tx {:db-migrate? true})
+    (d/reset-schema! conn (update schema :block/type #(assoc % :db/cardinality :db.cardinality/one)))
+    []))
+
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
                     :logseq.property/table-hidden-columns :logseq.property/table-ordered-columns]
@@ -111,7 +143,8 @@
    [8 {:fix replace-object-and-page-type-with-node}]
    [9 {:fix update-task-ident}]
    [10 {:fix update-table-properties}]
-   [11 {:fix property-checkbox-type-non-ref}]])
+   [11 {:fix property-checkbox-type-non-ref}]
+   [12 {:fix update-block-type-many->one}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
