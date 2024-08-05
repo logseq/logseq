@@ -9,7 +9,7 @@
   (assert db-id (number? db-id))
   (when-not (:db/restoring? @state/state)
     (when-let [page (db/entity db-id)]
-      (when-not (ldb/hidden-page? page)
+      (when-not (ldb/hidden? page)
         (let [pages (state/get-recent-pages)]
           (when (or (and click-from-recent? (not ((set pages) db-id)))
                     (not click-from-recent?))
@@ -23,4 +23,4 @@
        (take 20)
        (keep db/entity)
        (filter db/page?)
-       (remove ldb/hidden-page?)))
+       (remove ldb/hidden?)))

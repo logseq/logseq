@@ -13,7 +13,7 @@
 
 (sr/defkeyword :block/type
   "block type"
-  [:set [:enum "page" "property" "class" "whiteboard" "hidden"]])
+  [:enum "page" "property" "class" "whiteboard" "hidden"])
 
 (sr/defkeyword :block/parent
   "page blocks don't have this attr")

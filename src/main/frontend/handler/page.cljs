@@ -247,16 +247,16 @@
   (let [graph-specific-hidden?
         (if (config/db-based-graph? repo)
           (fn [p]
-            (and (contains? (set (:block/type p)) "property") (ldb/built-in? p)))
+            (and (ldb/property? p) (ldb/built-in? p)))
           (fn [p]
             (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
     (->> (db/get-all-pages repo)
-        (remove (fn [p]
-                  (let [name (:block/name p)]
-                    (or (util/uuid-string? name)
-                        (common-config/draw? name)
-                        (graph-specific-hidden? p)))))
-        (common-handler/fix-pages-timestamps))))
+         (remove (fn [p]
+                   (let [name (:block/name p)]
+                     (or (util/uuid-string? name)
+                         (common-config/draw? name)
+                         (graph-specific-hidden? p)))))
+         (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
   [page]
@@ -340,10 +340,10 @@
         (state/clear-editor-action!)
         (let [chosen (:block/title chosen-result)
               class? (and db-based? hashtag?
-                          (or (string/includes? chosen (str (t :new-class) " "))
+                          (or (string/includes? chosen (str (t :new-tag) " "))
                               (ldb/class? (db/get-page chosen))))
               chosen (-> chosen
-                         (string/replace-first (str (t :new-class) " ") "")
+                         (string/replace-first (str (t :new-tag) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
               wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
               wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))

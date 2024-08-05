@@ -410,7 +410,7 @@
                                     options)
         {:keys [init-tx block-props-tx]} (outliner-cli/build-blocks-tx init-data)]
     (println "Generating" (str (count (filter :block/name init-tx)) " pages with "
-                               (count (:classes init-data)) " classes and "
+                               (count (:classes init-data)) " tags and "
                                (count (:properties init-data)) " properties ..."))
     (d/transact! conn init-tx)
     (d/transact! conn block-props-tx)

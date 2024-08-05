@@ -333,7 +333,7 @@
       (when title
         (let [repo (state/get-current-repo)
               db-based? (config/db-based-graph? repo)
-              journal? (ldb/journal-page? page)
+              journal? (ldb/journal? page)
               icon (or (get page (pu/get-pid :logseq.property/icon))
                        (when db-based?
                          (or (when (ldb/class? page)
@@ -595,7 +595,7 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-title))
 
-            (when (contains? (:block/type page) "class")
+            (when (ldb/class? page)
               (class-component/class-children page))
 
             ;; referenced blocks

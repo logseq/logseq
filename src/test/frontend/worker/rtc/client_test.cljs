@@ -16,7 +16,7 @@
                                    :block/created-at 1720017595872,
                                    :block/format :markdown,
                                    :db/ident :user.class/yyy,
-                                   :block/type ["class"],
+                                   :block/type "class",
                                    :block/name "yyy",
                                    :block/title "yyy"}])]
       (is (= {:update
@@ -50,7 +50,7 @@
                                    :block/format :markdown
                                    :db/cardinality :db.cardinality/one
                                    :db/ident :user.property/xxx,
-                                   :block/type #{"property"},
+                                   :block/type "property",
                                    :block/order block-order,
                                    :block/name "xxx",
                                    :block/title "xxx"}])]

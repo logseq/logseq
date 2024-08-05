@@ -129,17 +129,13 @@
   (ldb/transact! conn blocks {:persist-op? false
                               :gen-undo-ops? false}))
 
-(defn- whiteboard-page-block?
-  [block]
-  (contains? (set (:block/type block)) "whiteboard"))
-
 (defn- group-remote-remove-ops-by-whiteboard-block
   "return {true [<whiteboard-block-ops>], false [<other-ops>]}"
   [db remote-remove-ops]
   (group-by (fn [{:keys [block-uuid]}]
               (boolean
                (when-let [block (d/entity db [:block/uuid block-uuid])]
-                 (whiteboard-page-block? (:block/parent block)))))
+                 (ldb/whiteboard? (:block/parent block)))))
             remote-remove-ops))
 
 (defn- apply-remote-remove-ops-helper
@@ -186,7 +182,7 @@
   (when (seq remote-parents)
     (let [first-remote-parent (first remote-parents)
           local-parent (d/entity @conn [:block/uuid first-remote-parent])
-          whiteboard-page-block? (whiteboard-page-block? local-parent)
+          whiteboard-page-block? (ldb/whiteboard? local-parent)
           b (d/entity @conn [:block/uuid block-uuid])]
       (case [whiteboard-page-block? (some? local-parent) (some? remote-block-order)]
         [false true true]
@@ -459,7 +455,7 @@
       (let [{update-block-order-tx-data :tx-data op-value :op-value} (update-block-order (:db/id ent) op-value)
             first-remote-parent (first parents)
             local-parent (d/entity @conn [:block/uuid first-remote-parent])
-            whiteboard-page-block? (whiteboard-page-block? local-parent)]
+            whiteboard-page-block? (ldb/whiteboard? local-parent)]
         (if whiteboard-page-block?
           (upsert-whiteboard-block repo conn op-value)
           (do (when-let [schema-tx-data (remote-op-value->schema-tx-data block-uuid op-value)]

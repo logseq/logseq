@@ -8,6 +8,7 @@
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
+            [logseq.common.config :as common-config]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -90,7 +91,7 @@
      (block-with-timestamps
       (cond->
        {:db/ident db-ident'
-        :block/type #{"property" "page"}
+        :block/type "property"
         :block/format :markdown
         :block/schema (merge {:type :default} (dissoc prop-schema :classes :cardinality))
         :block/name (common-util/page-name-sanity-lc (name prop-name))
@@ -112,7 +113,7 @@
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
    (cond-> (merge block
-                  {:block/type (set (concat (:block/type block) ["class" "page"]))
+                  {:block/type "class"
                    :block/format :markdown})
      (not= (:db/ident block) :logseq.class/Root)
      (assoc :class/parent :logseq.class/Root))))
@@ -125,8 +126,36 @@
     :block/title page-name
     :block/uuid (d/squuid)
     :block/format :markdown
-    :block/type #{"page"}}))
+    :block/type "page"}))
 
 (defn page?
   [block]
-  (contains? (:block/type block) "page"))
+  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
+             (:block/type block)))
+
+(defn class?
+  [entity]
+  (= (:block/type entity) "class"))
+(defn property?
+  [entity]
+  (= (:block/type entity) "property"))
+(defn closed-value?
+  [entity]
+  (= (:block/type entity) "closed value"))
+(defn whiteboard?
+  "Given a page entity or map, check if it is a whiteboard page"
+  [page]
+  (= (:block/type page) "whiteboard"))
+
+(defn journal?
+  "Given a page entity or map, check if it is a journal page"
+  [page]
+  (= (:block/type page) "journal"))
+
+(defn hidden?
+  [page]
+  (when page
+    (if (string? page)
+      (or (string/starts-with? page "$$$")
+          (= common-config/favorites-page-name page))
+      (= (:block/type page) "hidden"))))

@@ -7,7 +7,8 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db :as ldb]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
@@ -37,7 +38,7 @@
                                            (map #(keyword (namespace %) (string/replace (name %) #".[^.]+$" "")))
                                            set)]
           (is (= []
-                 (remove #(= ["closed value"] (:block/type %)) closed-value-ents))
+                 (remove #(= "closed value" (:block/type %)) closed-value-ents))
               "All property names that contain a '.' are closed values")
           (is (= #{}
                  (set/difference closed-value-properties (set default-idents)))
@@ -60,12 +61,11 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         task (d/entity @conn :logseq.class/Task)]
-    (is (contains? (:block/type task) "class")
+    (is (ldb/class? task)
         "Task class has correct type")
     (is (= 3 (count (:class/schema.properties task)))
         "Has correct number of task properties")
-    (is (every? #(contains? (:block/type %) "property")
-                (:class/schema.properties task))
+    (is (every? ldb/property? (:class/schema.properties task))
         "Each task property has correct type")))
 
 (deftest new-graph-is-valid

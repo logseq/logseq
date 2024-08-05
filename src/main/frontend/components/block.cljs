@@ -782,7 +782,7 @@
   "Component for a page. `page` argument contains :block/name which can be (un)sanitized page name.
    Keys for `config`:
    - `:preview?`: Is this component under preview mode? (If true, `page-preview-trigger` won't be registered to this `page-cp`)"
-  [state {:keys [label children preview? disable-preview?] :as config} _page]
+  [state {:keys [label children preview? disable-preview?] :as config} page]
   (let [entity (::entity state)]
     (when-let [entity (when entity (db/sub-block (:db/id entity)))]
       (if (or (ldb/page? entity) (:block/tags entity))

@@ -102,7 +102,7 @@
         [[:.flex.items-center.page-title
           (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
             [:.text-md.mr-2 icon]
-            (ui/icon (if (contains? (:block/type page) "whiteboard") "whiteboard" "page") {:class "text-md mr-2"}))
+            (ui/icon (if (ldb/whiteboard? page) "whiteboard" "page") {:class "text-md mr-2"}))
           [:span.overflow-hidden.text-ellipsis (:block/title page)]]
          (page-cp repo (str (:block/uuid page)))]
         (block-with-breadcrumb repo page idx [repo db-id block-type] false)))

@@ -110,7 +110,7 @@
               created-at-filter
               (filter #(<= (:block/created-at %) (+ (apply min created-ats) created-at-filter)))
               (not journal?)
-              (remove ldb/journal-page?)
+              (remove ldb/journal?)
               (not excluded-pages?)
               (remove (fn [p] (true? (pu/get-block-property-value p :logseq.property/exclude-from-graph-view)))))
             links (concat (seq relation)

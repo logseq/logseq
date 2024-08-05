@@ -173,7 +173,7 @@
       (is (= 6
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
-                         (filter #(= ["page"] (:block/type %))))))
+                         (filter #(= "page" (:block/type %))))))
           "Correct number of pages with block content")
       (is (= 4 (count (d/datoms @conn :avet :block/type "whiteboard"))))
       (is (= 1 (count @(:ignored-properties import-state))) ":filters should be the only ignored property")
@@ -377,7 +377,7 @@
             "tagged block tag converts tag to page ref")
         (is (= [(:db/id tag-page)] (map :db/id (:block/refs block)))
             "tagged block has correct refs")
-        (is (and tag-page (not (contains? (set (:block/type tag-page)) "class")))
+        (is (and tag-page (not (ldb/class? tag-page)))
             "tag page is not a class")
 
         (is (= {:logseq.property/page-tags #{"Movie"}}
@@ -406,9 +406,9 @@
              (:block/tags (readable-properties @conn block)))
           "tagged block has configured tag imported as a class")
 
-      (is (= ["class" "page"] (:block/type tag-page))
+      (is (= "class" (:block/type tag-page))
           "configured tag page in :tag-classes is a class")
-      (is (and another-tag-page (not (contains? (set (:block/type another-tag-page)) "class")))
+      (is (and another-tag-page (not (ldb/class? another-tag-page)))
           "unconfigured tag page is not a class")
 
       (is (= {:block/tags [:user.class/Movie]}
@@ -467,7 +467,7 @@
           "tagged block can have another property that references the same class it is tagged with,
            without creating a duplicate class")
 
-      (is (= ["class" "page"] (:block/type tag-page))
+      (is (= "class" (:block/type tag-page))
           "configured tag page derived from :property-classes is a class")
       (is (nil? (find-page-by-name @conn "type"))
           "No page exists for configured property")

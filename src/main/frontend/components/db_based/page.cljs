@@ -12,9 +12,9 @@
             [rum.core :as rum]
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
-            [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db :as ldb]))
 
 (rum/defc page-properties
   "This component is called by page-inner and within configure/info modal. This should not
@@ -31,7 +31,7 @@
        {:class (util/classnames [{:no-properties (not has-viewable-properties?)}])}
        (if configure?
          (cond
-           (= mode :class)
+           (= mode :tag)
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
                                              (str edit-input-id-prefix "-schema")
@@ -52,13 +52,12 @@
   [state page *mode]
   (let [*mode *mode
         mode (rum/react *mode)
-        types (:block/type page)
-        class? (contains? types "class")
-        property? (contains? types "property")
+        class? (ldb/class? page)
+        property? (ldb/property? page)
         page-opts {:configure? true}]
     (when (nil? mode)
       (reset! *mode (cond
-                      class? :class
+                      class? :tag
                       property? :property
                       :else :page)))
     [:div.flex.flex-col.gap-1.pb-4
@@ -66,7 +65,7 @@
        :property
        (property-component/property-config page {:inline-text component-block/inline-text})
 
-       :class
+       :tag
        [:div.mt-2.flex.flex-col.gap-2
         (class-component/configure page {:show-title? false})
         (page-properties page (assoc page-opts :mode mode))]
@@ -74,16 +73,16 @@
        (page-properties page (assoc page-opts :mode mode)))]))
 
 (rum/defc mode-switch < rum/reactive
-  [types *mode]
+  [type *mode]
   (let [current-mode (rum/react *mode)
-        class? (contains? types "class")
-        property? (contains? types "property")
+        class? (= type "class")
+        property? (= type "property")
         modes (->
                (cond
                  property?
                  ["Property"]
                  class?
-                 ["Class"]
+                 ["Tag"]
                  :else
                  [])
                (conj "Page"))]
@@ -106,8 +105,8 @@
   (let [page (db/sub-block (:db/id page))
         *hover? (::hover? state)
         *mode (::mode state)
-        types (:block/type page)
-        class? (contains? types "class")
+        type (:block/type page)
+        class? (ldb/class? page)
         collapsed? (not @*show-info?)
         has-properties? (or
                          (seq (:block/tags page))
@@ -118,7 +117,7 @@
     (when (if config/publishing?
             ;; Since publishing is read-only, hide this component if it has no info to show
             ;; as it creates a fair amount of empty vertical space
-            (some? types)
+            (some? type)
             show-info?)
       [:div.page-info
        {:class (util/classnames [{:is-collapsed collapsed?}])}
@@ -132,14 +131,14 @@
                                (reset! *hover? false))
             :on-click (if config/publishing?
                         (fn [_]
-                          (when (seq (set/intersection #{"class" "property"} types))
+                          (when (contains? #{"class" "property"} type)
                             (swap! *show-info? not)))
                         #(do
                            (swap! *show-info? not)
                            (swap! *hover? not)))}
            [:<>
             [:div.flex.flex-row.items-center.gap-1
-             (mode-switch types *mode)]
+             (mode-switch type *mode)]
             [:div.absolute.right-1.top-1
              (shui/button
               {:variant :ghost :size :sm

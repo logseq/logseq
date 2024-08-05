@@ -29,7 +29,8 @@
             [rum.core :as rum]
             [logseq.shui.ui :as shui]
             [lambdaisland.glogi :as log]
-            [logseq.db.frontend.validate :as db-validate]))
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db :as ldb]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -238,9 +239,9 @@
   {:entities (count entities)
    :pages (count (filter :block/name entities))
    :blocks (count (filter :block/title entities))
-   :classes (count (filter #(contains? (:block/type %) "class") entities))
+   :classes (count (filter ldb/class? entities))
    :objects (count (filter #(seq (:block/tags %)) entities))
-   :properties (count (filter #(contains? (:block/type %) "property") entities))
+   :properties (count (filter ldb/property? entities))
    :property-values (count (mapcat :block/properties entities))})
 
 (defn- validate-imported-data
