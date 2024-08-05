@@ -619,7 +619,7 @@
                 (->> (get-property-values (:data table) property)
                      (map (fn [{:keys [value label]}]
                             {:label label
-                             :value (:block/uuid value)}))))
+                             :value (or (:block/uuid value) value)}))))
         filters (get-in table [:state :filters])
         set-filters! (:set-filters! data-fns)
         many? (if (or (contains? #{:date-before :date-after :before :after} operator)
@@ -766,8 +766,12 @@
               :is
               (if (boolean? match)
                 (= (boolean (get-property-value-content (get row property-ident))) match)
-                (if (and (empty? match) (empty? value'))
+                (cond
+                  (empty? match)
                   true
+                  (and (empty? match) (empty? value'))
+                  true
+                  :else
                   (if entity?
                     (boolean (seq (set/intersection (set (map :block/uuid value')) match)))
                     (boolean (seq (set/intersection (set value') match))))))

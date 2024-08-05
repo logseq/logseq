@@ -850,7 +850,7 @@
     #(vector :<>
        (class-component/configure page {})
        (db-page/page-properties page {:configure? true
-                                      :mode :class}))
+                                      :mode :tag}))
     {:label "page-configure"
      :align :top}))
 

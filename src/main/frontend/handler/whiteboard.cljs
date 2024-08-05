@@ -69,7 +69,7 @@
     {:db/id (:db/id page-entity)
      :block/title page-name
      :block/name (util/page-name-sanity-lc page-name)
-     :block/type #{"page" "whiteboard"}
+     :block/type "whiteboard"
      :block/format :markdown
      :logseq.property/ls-type :whiteboard-page
      :logseq.property.tldraw/page tldraw-page
@@ -82,7 +82,7 @@
   (let [get-k #(gobj/get tldraw-page %)]
     {:block/title page-name
      :block/name (util/page-name-sanity-lc page-name)
-     :block/type #{"page" "whiteboard"}
+     :block/type "whiteboard"
      :block/properties {(pu/get-pid :logseq.property/ls-type)
                         :whiteboard-page
 
@@ -253,7 +253,7 @@
         m #:block{:uuid id
                   :name (util/page-name-sanity-lc page-name),
                   :title page-name
-                  :type #{"whiteboard" "page"},
+                  :type "whiteboard",
                   :format :markdown
                   :updated-at (util/time-ms),
                   :created-at (util/time-ms)}

@@ -13,7 +13,8 @@
             ["path" :as node-path]
             ["os" :as os]
             [cljs.pprint :as pprint]
-            [malli.error :as me]))
+            [malli.error :as me]
+            [logseq.db :as ldb]))
 
 (defn validate-client-db
   "Validate datascript db as a vec of entity maps"
@@ -81,9 +82,9 @@
                                (count ent-maps) " entities, "
                                (count (filter :block/name ent-maps)) " pages, "
                                (count (filter :block/title ent-maps)) " blocks, "
-                               (count (filter #(contains? (:block/type %) "class") ent-maps)) " classes, "
+                               (count (filter ldb/class? ent-maps)) " tags, "
                                (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
-                               (count (filter #(contains? (:block/type %) "property") ent-maps)) " properties and "
+                               (count (filter ldb/property? ent-maps)) " properties and "
                                (count (mapcat db-property/properties ent-maps)) " property pairs"))
     (validate-client-db @conn ent-maps options)))
 

@@ -2,7 +2,7 @@
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
-(def version 11)
+(def version 12)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
   {:db/ident        {:db/unique :db.unique/identity}
@@ -10,13 +10,11 @@
 
    :recent/pages {}
 
-   ;; :block/type is a string type or multiple types of the current block
+   ;; :block/type is a string type of the current block
    ;; "whiteboard" for whiteboards
-   ;; "macros" for macro
    ;; "property" for property blocks
    ;; "class" for structured page
-   :block/type {:db/index true
-                :db/cardinality :db.cardinality/many}
+   :block/type {:db/index true}
    :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref

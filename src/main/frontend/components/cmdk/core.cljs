@@ -73,7 +73,7 @@
 (defn create-items [q]
   (when-not (string/blank? q)
     (let [class? (string/starts-with? q "#")]
-      (->> [{:text (if class? "Create class" "Create page")       :icon "new-page"
+      (->> [{:text (if class? "Create tag" "Create page")       :icon "new-page"
              :icon-theme :gray
              :info (if class?
                      (str "Create class called '" (get-class-from-input q) "'")
@@ -227,7 +227,7 @@
                "hash"
                (ldb/property? entity)
                "letter-p"
-               (ldb/whiteboard-page? entity)
+               (ldb/whiteboard? entity)
                "whiteboard"
                :else
                "page")]

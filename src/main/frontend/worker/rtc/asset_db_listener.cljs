@@ -12,7 +12,7 @@
     (let [ent (d/entity db-after e)
           block-uuid (:block/uuid ent)
           block-type (:block/type ent)]
-      (when (and block-uuid (contains? (set block-type) "asset"))
+      (when (and block-uuid (= block-type "asset"))
         (when-let [action (r.asset/asset-block->upload+download-action ent)]
           [action block-uuid])))))
 

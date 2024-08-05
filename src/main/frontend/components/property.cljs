@@ -33,7 +33,8 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.core :as outliner-core]
             [dommy.core :as d]
-            [frontend.mixins :as mixins]))
+            [frontend.mixins :as mixins]
+            [logseq.db :as ldb]))
 
 (defn- <create-class-if-not-exists!
   [value]
@@ -67,7 +68,7 @@
                                      :value (:block/uuid class)})
                                   classes)
                      opts {:items options
-                           :input-default-placeholder (if multiple-choices? "Choose classes" "Choose class")
+                           :input-default-placeholder (if multiple-choices? "Choose tags" "Choose tag")
                            :dropdown? false
                            :close-modal? false
                            :multiple-choices? multiple-choices?
@@ -112,7 +113,7 @@
 
 (defn- handle-delete-property!
   [block property & {:keys [class? class-schema?]}]
-  (let [class? (or class? (some-> block :block/type (contains? "class")))
+  (let [class? (or class? (ldb/class? block))
         remove! #(let [repo (state/get-current-repo)]
                    (if (and class? class-schema?)
                      (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
@@ -130,7 +131,7 @@
   [entity property-uuid-or-name schema {:keys [class-schema? page-configure?]}]
   (p/let [repo (state/get-current-repo)
           ;; Both conditions necessary so that a class can add its own page properties
-          add-class-property? (and (contains? (:block/type entity) "class") page-configure? class-schema?)
+          add-class-property? (and (ldb/class? entity) page-configure? class-schema?)
           result (when (uuid? property-uuid-or-name)
                    (db-async/<get-block repo property-uuid-or-name {:children? false}))
           ;; In block context result is in :block
@@ -192,7 +193,7 @@
                 (reset! *show-new-property-config? :adding-property))
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
-                      add-class-property? (and (contains? (:block/type block) "class") page-configure? class-schema?)]
+                      add-class-property? (and (ldb/class? block) page-configure? class-schema?)]
                 (when *property (reset! *property property))
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
@@ -239,6 +240,7 @@
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   (rum/local nil ::property-description)
+  (rum/local false ::show-class-select?)
   {:init (fn [state]
            (let [*values (atom :loading)]
              (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
@@ -263,6 +265,7 @@
       (let [*property-name (::property-name state)
             *property-schema (::property-schema state)
             *property-description (::property-description state)
+            *show-class-select? (::show-class-select? state)
             property (db/sub-block (:db/id property))
             built-in? (ldb/built-in? property)
             disabled? (or built-in? config/publishing?)
@@ -318,7 +321,8 @@
                                     :*property-schema *property-schema
                                     :built-in? built-in?
                                     :disabled? disabled?
-                                    :show-type-change-hints? true}))]
+                                    :show-type-change-hints? true
+                                    :*show-class-select? *show-class-select?}))]
 
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
             (case (:type @*property-schema)
@@ -327,7 +331,7 @@
               :node
               (when (empty? (:property/closed-values property))
                 [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-                 [:label.col-span-2 "Specify classes:"]
+                 [:label.col-span-2 "Specify tags:"]
                  (class-select property (assoc opts :disabled? disabled?))])
 
 
@@ -471,7 +475,7 @@
         (reset! *show-new-property-config? true))
       (reset! *property property)
       (when property
-        (let [add-class-property? (and (contains? (:block/type block) "class") class-schema?)
+        (let [add-class-property? (and (ldb/class? block) class-schema?)
               type (get-in property [:block/schema :type])]
           (cond
             add-class-property?

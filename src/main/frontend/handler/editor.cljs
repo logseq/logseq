@@ -1310,8 +1310,7 @@
 (defn save-block-aux!
   [block value opts]
   (let [entity (db/entity [:block/uuid (:block/uuid block)])]
-    (when (and (:db/id entity)
-               (not (contains? (:block/type entity) "property")))
+    (when (and (:db/id entity) (not (ldb/property? entity)))
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save the block/file in "will-unmount" event?
@@ -1651,7 +1650,7 @@
         (text-util/wrapped-by? value pos before end)))))
 
 (defn get-matched-classes
-  "Return matched classes except the root class"
+  "Return matched classes except the root tag"
   [q]
   (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
                      (map (fn [e] (select-keys e [:block/uuid :block/title]))))]
@@ -2171,7 +2170,7 @@
                                             {:children? true
                                              :nested-children? true}))]
          (when (:db/id block)
-           (let [journal? (ldb/journal-page? target)
+           (let [journal? (ldb/journal? target)
                  target (or target (state/get-edit-block))
                  format (:block/format block)
                  block-uuid (:block/uuid block)

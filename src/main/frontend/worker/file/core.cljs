@@ -134,7 +134,7 @@
     (let [format (name (get page-block :block/format (:preferred-format context)))
           date-formatter (:date-formatter context)
           title (string/capitalize (:block/name page-block))
-          whiteboard-page? (ldb/whiteboard-page? page-block)
+          whiteboard-page? (ldb/whiteboard? page-block)
           format (if whiteboard-page? "edn" format)
           journal-page? (worker-date/valid-journal-title? title date-formatter)
           journal-title (worker-date/normalize-journal-title title date-formatter)
@@ -164,7 +164,7 @@
         file-db-id (-> page-block :block/file :db/id)
         file-path (-> (d/entity db file-db-id) :file/path)
         result (if (and (string? file-path) (not-empty file-path))
-                 (let [new-content (if (contains? (set (:block/type page-block)) "whiteboard")
+                 (let [new-content (if (ldb/whiteboard? page-block)
                                      (->
                                       (wfu/ugly-pr-str {:blocks tree
                                                         :pages (list (remove-transit-ids page-block))})

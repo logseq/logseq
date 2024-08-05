@@ -1,7 +1,6 @@
 (ns frontend.components.all-pages
   "All pages"
-  (:require [clojure.string :as string]
-            [frontend.components.block :as component-block]
+  (:require [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
@@ -23,8 +22,8 @@
            :type :string}
           {:id :block/type
            :name "Type"
-           :cell (fn [_table row _column] [:div.capitalize (string/join ", " (get row :block/type))])
-           :get-value (fn [row] (string/join ", " (get row :block/type)))
+           :cell (fn [_table row _column] [:div.capitalize (get row :block/type)])
+           :get-value (fn [row] (get row :block/type))
            :type :string}
           (when db-based?
             {:id :block/tags

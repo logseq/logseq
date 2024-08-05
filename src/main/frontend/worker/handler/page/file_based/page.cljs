@@ -31,7 +31,7 @@
   (when (:block/uuid page)
     (let [page-entity   [:block/uuid (:block/uuid page)]
           page'          (merge page
-                                (when whiteboard? {:block/type #{"page" "whiteboard"}})
+                                (when whiteboard? {:block/type "whiteboard"})
                                 (when tags {:block/tags (mapv #(hash-map :db/id
                                                                          (:db/id (d/entity @conn [:block/uuid %])))
                                                               tags)}))

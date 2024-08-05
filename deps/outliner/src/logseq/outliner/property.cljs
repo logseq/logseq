@@ -335,7 +335,7 @@
 
 (defn ^:api get-class-parents
   [tags]
-  (let [tags' (filter (fn [tag] (contains? (:block/type tag) "class")) tags)]
+  (let [tags' (filter ldb/class? tags)]
     (set (mapcat ldb/get-class-parents tags'))))
 
 (defn ^:api get-class-properties
@@ -351,7 +351,7 @@
   (let [block (d/entity db eid)
         classes (->> (:block/tags block)
                      (sort-by :block/name)
-                     (filter (fn [tag] (contains? (:block/type tag) "class"))))
+                     (filter ldb/class?))
         class-parents (get-class-parents classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
@@ -501,28 +501,20 @@
   "Returns true when deleted or if not deleted displays warning and returns false"
   [conn property-id value-block-id]
   (when-let [value-block (d/entity @conn value-block-id)]
-    (cond
-      (ldb/built-in? value-block)
+    (if (ldb/built-in? value-block)
       (throw (ex-info "The choice can't be deleted"
                       {:type :notification
                        :payload {:message "The choice can't be deleted because it's built-in."
                                  :type :warning}}))
-      (seq (d/q '[:find ?b :in $ ?pvalue-id :where [?b _ ?pvalue-id]]
-                @conn (:db/id value-block)))
-      (throw (ex-info "The choice can't be deleted"
-                      {:type :notification
-                       :payload {:message "The choice can't be deleted because it's being used."
-                                 :type :warning}}))
-      :else
-      (let [tx-data [[:db/retractEntity (:db/id value-block)]
-                     (outliner-core/block-with-updated-at
-                      {:db/id property-id})]]
+      (let [data (:tx-data (outliner-core/delete-blocks conn [value-block]))
+            tx-data (conj data (outliner-core/block-with-updated-at
+                                {:db/id property-id}))]
         (ldb/transact! conn tx-data)))))
 
 (defn class-add-property!
   [conn class-id property-id]
   (when-let [class (d/entity @conn class-id)]
-    (if (contains? (:block/type class) "class")
+    (if (ldb/class? class)
       (ldb/transact! conn
                      [[:db/add (:db/id class) :class/schema.properties property-id]]
                      {:outliner-op :save-block})
@@ -532,7 +524,7 @@
 (defn class-remove-property!
   [conn class-id property-id]
   (when-let [class (d/entity @conn class-id)]
-    (when (contains? (:block/type class) "class")
+    (when (ldb/class? class)
       (when-let [property (d/entity @conn property-id)]
         (when-not (ldb/built-in-class-property? class property)
           (ldb/transact! conn [[:db/retract (:db/id class) :class/schema.properties property-id]]
