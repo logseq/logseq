@@ -26,6 +26,16 @@
     .cp__repos-list-wrap {
       @apply max-h-80 overflow-scroll mx-[-8px] px-2 pb-2;
     }
+
+    &.no-repos {
+      .cp__repos-list-wrap {
+        @apply hidden;
+      }
+
+      .cp__repos-quick-actions {
+        @apply border-t-0 -mt-1.5;
+      }
+    }
   }
 }
 
