@@ -34,8 +34,8 @@
 
 (defonce *once-theme-loaded? (volatile! false))
 
-(rum/defc ^:large-vars/cleanup-todo container
-  [{:keys [route theme accent-color on-click current-repo nfs-granted? db-restoring?
+(rum/defc ^:large-vars/cleanup-todo container < rum/static
+  [{:keys [route theme accent-color editor-font on-click current-repo nfs-granted? db-restoring?
            settings-open? sidebar-open? system-theme? sidebar-blocks-len onboarding-state preferred-language]} child]
   (let [mounted-fn (use-mounted)
         [restored-sidebar? set-restored-sidebar?] (rum/use-state false)]
@@ -59,6 +59,11 @@
          (.setAttribute "data-color"
            (or accent-color "logseq")))
       [accent-color])
+
+    (rum/use-effect!
+      #(some-> js/document.documentElement
+         (.setAttribute "data-font" (or editor-font "default")))
+      [editor-font])
 
     (rum/use-effect!
      #(let [doc js/document.documentElement]

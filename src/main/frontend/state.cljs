@@ -95,6 +95,7 @@
       :ui/custom-theme                       (or (storage/get :ui/custom-theme) {:light {:mode "light"} :dark {:mode "dark"}})
       :ui/wide-mode?                         (storage/get :ui/wide-mode)
       :ui/radix-color                        (storage/get :ui/radix-color)
+      :ui/editor-font                        (storage/get :ui/editor-font)
 
       ;; ui/collapsed-blocks is to separate the collapse/expand state from db for:
       ;; 1. right sidebar
@@ -2384,6 +2385,11 @@ Similar to re-frame subscriptions"
   (swap! state assoc :ui/radix-color :logseq)
   (storage/remove :ui/radix-color)
   (util/set-android-theme))
+
+(defn set-editor-font! [font]
+  (let [font (if (keyword? font) (name font) (str font))]
+    (swap! state assoc :ui/editor-font font)
+    (storage/set :ui/editor-font font)))
 
 (defn handbook-open?
   []
