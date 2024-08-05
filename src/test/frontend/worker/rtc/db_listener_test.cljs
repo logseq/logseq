@@ -105,7 +105,7 @@
                       [[:block/updated-at "[\"~#'\",1720019497643]"]
                        [:block/created-at "[\"~#'\",1720019497643]"]
                        [:block/title "[\"~#'\",\"zzz\"]"]
-                       [:block/type "[\"~#'\",\"class\"]"]
+                       [:block/type "[\"~#'\",\"tag\"]"]
                        ;;1. no :class/parent, because db/id 4 block doesn't exist in empty-db
                        ;;2. shouldn't have :db/ident, :db/ident is special, will be handled later
                        ]}]]
