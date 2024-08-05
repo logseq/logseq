@@ -244,7 +244,7 @@
     (testing "Add choice successfully"
       (let [_ (outliner-property/upsert-closed-value! conn :user.property/num {:value 3})
             b (first (d/q '[:find [(pull ?b [*]) ...] :where [?b :property.value/content 3]] @conn))]
-        (is (contains? (set (:block/type b)) "closed value"))
+        (is (= (:block/type b) "closed value"))
         (is (= [2 3]
                (map db-property/closed-value-content (:block/_closed-value-property (d/entity @conn :user.property/num)))))))
 
