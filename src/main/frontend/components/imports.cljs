@@ -276,7 +276,7 @@
       (do
         (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
                                    :counts (assoc (counts-from-entities entities) :datoms datom-count)})
-        (pprint/pprint (map :entity errors))
+        (pprint/pprint errors)
         (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
                             :warning false))
       (log/info :import-valid {:msg "Valid import!"
