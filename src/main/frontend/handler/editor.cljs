@@ -1310,8 +1310,7 @@
 (defn save-block-aux!
   [block value opts]
   (let [entity (db/entity [:block/uuid (:block/uuid block)])]
-    (when (and (:db/id entity)
-               (not (= (:block/type entity) "property")))
+    (when (and (:db/id entity) (not (ldb/property? entity)))
       (let [value (string/trim value)]
         ;; FIXME: somehow frontend.components.editor's will-unmount event will loop forever
         ;; maybe we shouldn't save the block/file in "will-unmount" event?
@@ -2171,7 +2170,7 @@
                                             {:children? true
                                              :nested-children? true}))]
          (when (:db/id block)
-           (let [journal? (ldb/journal-page? target)
+           (let [journal? (ldb/journal? target)
                  target (or target (state/get-edit-block))
                  format (:block/format block)
                  block-uuid (:block/uuid block)

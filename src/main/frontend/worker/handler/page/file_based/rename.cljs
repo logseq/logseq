@@ -207,7 +207,7 @@
   [db old-page-name new-page-name]
   (let [page (d/entity db [:block/name old-page-name])
         file (:block/file page)]
-    (when (and file (not (ldb/journal-page? page)))
+    (when (and file (not (ldb/journal? page)))
       (let [old-path (:file/path file)
             new-file-name (wfu/file-name-sanity new-page-name) ;; w/o file extension
             new-path (compute-new-file-path old-path new-file-name)]
@@ -302,7 +302,7 @@
 
 (defn rename!
   [repo conn config page-uuid new-name & {:keys [persist-op?]
-                                         :or {persist-op? true}}]
+                                          :or {persist-op? true}}]
   (let [db @conn
         page-e        (d/entity db [:block/uuid page-uuid])
         old-name      (:block/title page-e)
@@ -319,8 +319,8 @@
       :invalid-empty-name
 
       (and page-e new-page-e
-           (or (= (:block/type page-e) "whiteboard")
-               (= (:block/type new-page-e) "whiteboard")))
+           (or (ldb/whiteboard? page-e)
+               (ldb/whiteboard? new-page-e)))
       :merge-whiteboard-pages
 
       (and old-name new-name name-changed?)

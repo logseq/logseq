@@ -26,7 +26,7 @@
 
 (def block-attrs ldb/block-attrs)
 
-(def hidden-page? ldb/hidden-page?)
+(def hidden-page? ldb/hidden?)
 
 (defn get-all-tagged-pages
   [repo]
@@ -571,7 +571,7 @@ independent of format as format specific heading characters are stripped"
                                react)]
       (->> mentioned-pages
            (keep (fn [page]
-                   (when-not (and (not include-journals?) (ldb/journal-page? page))
+                   (when-not (and (not include-journals?) (ldb/journal? page))
                      page)))
            (mapv (fn [page]
                    [(:block/name page) (get-page-alias-names repo (:db/id page))]))))))
@@ -635,7 +635,7 @@ independent of format as format specific heading characters are stripped"
                      (= (:db/id (:block/link block)) eid)
                      (= (:db/id block) eid)
                      (= eid (:db/id (:block/page block)))
-                     (ldb/hidden-page? (:block/page block))
+                     (ldb/hidden? (:block/page block))
                      (contains? (set (map :db/id (:block/tags block))) (:db/id entity)))))
           (util/distinct-by :db/id)))))))
 
@@ -652,7 +652,7 @@ independent of format as format specific heading characters are stripped"
 (defn journal-page?
   "sanitized page-name only"
   [page-name]
-  (ldb/journal-page? (ldb/get-page (conn/get-db) page-name)))
+  (ldb/journal? (ldb/get-page (conn/get-db) page-name)))
 
 (defn get-classes-with-property
   "Get classes which have given property as a class property"
@@ -706,7 +706,7 @@ independent of format as format specific heading characters are stripped"
   (let [page (if (string? page)
                (get-page page)
                page)]
-    (ldb/whiteboard-page? page)))
+    (ldb/whiteboard? page)))
 
 (comment
   (defn get-orphaned-pages

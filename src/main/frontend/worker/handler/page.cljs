@@ -75,7 +75,7 @@
                                      blocks)
             db-based? (sqlite-util/db-based-graph? repo)]
         ;; TODO: maybe we should add $$$favorites to built-in pages?
-        (if (or (ldb/built-in? page) (= (:block/type page) "hidden"))
+        (if (or (ldb/built-in? page) (ldb/hidden? page))
           (do
             (error-handler {:msg "Built-in page cannot be deleted"})
             false)

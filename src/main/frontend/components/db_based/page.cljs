@@ -13,7 +13,8 @@
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [clojure.string :as string]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db :as ldb]))
 
 (rum/defc page-properties
   "This component is called by page-inner and within configure/info modal. This should not
@@ -51,9 +52,8 @@
   [state page *mode]
   (let [*mode *mode
         mode (rum/react *mode)
-        type (:block/type page)
-        class? (= type "tag")
-        property? (= type "property")
+        class? (ldb/tag? page)
+        property? (ldb/property? page)
         page-opts {:configure? true}]
     (when (nil? mode)
       (reset! *mode (cond
@@ -106,7 +106,7 @@
         *hover? (::hover? state)
         *mode (::mode state)
         type (:block/type page)
-        class? (= type "tag")
+        class? (ldb/tag? page)
         collapsed? (not @*show-info?)
         has-properties? (or
                          (seq (:block/tags page))

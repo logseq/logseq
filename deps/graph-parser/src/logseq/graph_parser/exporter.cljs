@@ -263,7 +263,7 @@
   (let [prop-type (cond (and (coll? prop-val)
                              (seq prop-val)
                              (set/subset? prop-val
-                                          (set (keep #(when (= (:block/type %) "journal")
+                                          (set (keep #(when (ldb/journal? %)
                                                         (:block/title %)) refs))))
                         :date
                         (and (coll? prop-val) (seq prop-val) (text-with-refs? prop-val prop-val-text))
@@ -890,7 +890,7 @@
         {:keys [pages-tx page-properties-tx page-names-to-uuids existing-pages]} (build-pages-tx conn pages blocks tx-options)
         whiteboard-pages (->> pages-tx
                               ;; support old and new whiteboards
-                              (filter #(= (:block/type %) "whiteboard"))
+                              (filter ldb/whiteboard?)
                               (map (fn [page-block]
                                      (-> page-block
                                          (assoc :block/format :markdown
