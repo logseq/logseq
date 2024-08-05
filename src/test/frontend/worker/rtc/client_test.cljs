@@ -26,7 +26,7 @@
                :av-coll
                [[:block/name "[\"~#'\",\"yyy\"]" 1 true]
                 [:block/title "[\"~#'\",\"yyy\"]" 1 true]
-                [:block/type "[\"~#'\",\"class\"]" 1 true]]}}
+                [:block/type "[\"~#'\",\"tag\"]" 1 true]]}}
              (:remote-ops
               (#'subject/local-block-ops->remote-ops
                db
