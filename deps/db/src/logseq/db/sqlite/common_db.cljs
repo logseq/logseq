@@ -221,7 +221,7 @@
                            (d/datoms db :eavt (:e d))))))
           [
            ;; property and class pages are pulled from `get-all-pages` already
-           ;; "property" "class"
+           ;; "property" "tag"
            "closed value"]))
 
 (defn get-favorites

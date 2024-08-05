@@ -758,7 +758,7 @@ independent of format as format specific heading characters are stripped"
   [repo & {:keys [except-root-class?]
            :or {except-root-class? false}}]
   (let [db (conn/get-db repo)
-        classes (->> (d/datoms db :avet :block/type "class")
+        classes (->> (d/datoms db :avet :block/type "tag")
                      (map (fn [d]
                             (db-utils/entity db (:e d)))))]
     (if except-root-class?

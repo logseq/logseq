@@ -60,7 +60,7 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         task (d/entity @conn :logseq.class/Task)]
-    (is (= (:block/type task) "class")
+    (is (= (:block/type task) "tag")
         "Task class has correct type")
     (is (= 3 (count (:class/schema.properties task)))
         "Has correct number of task properties")

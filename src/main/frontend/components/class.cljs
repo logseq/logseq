@@ -24,9 +24,9 @@
                                             :selected (= class (:block/uuid entity))})
                               classes))
         options (cons (if class
-                        {:label "Choose parent class"
+                        {:label "Choose parent tag"
                          :value "Choose"}
-                        {:label "Choose parent class"
+                        {:label "Choose parent tag"
                          :disabled true
                          :selected true
                          :value "Choose"})
@@ -65,13 +65,15 @@
                :or {show-title? true}}]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))]
+    (prn :debug :page-id page-id
+         :page page)
     (when page
       [:div.property-configure.grid.gap-2
-       (when show-title? [:h1.title.mb-4 "Configure class"])
+       (when show-title? [:h1.title.mb-4 "Configure tag"])
 
        (when-not (= (:db/ident page) :logseq.class/Root)
          [:div.grid.grid-cols-5.gap-1.items-center.class-parent
-          [:div.col-span-2 "Parent class:"]
+          [:div.col-span-2 "Parent tag:"]
           (if config/publishing?
             [:div.col-span-3
              (if-let [parent-class (some-> (:db/id (:class/parent page))
@@ -92,7 +94,7 @@
                class-ancestors (reverse ancestor-pages)]
            (when (> (count class-ancestors) 2)
              [:div.grid.grid-cols-5.gap-1.items-center.class-ancestors
-              [:div.col-span-2 "Ancestor classes:"]
+              [:div.col-span-2 "Ancestor tags:"]
               [:div.col-span-3
                (interpose [:span.opacity-50.text-sm " > "]
                           (map (fn [{class-name :block/title :as ancestor}]
@@ -123,7 +125,7 @@
           default-collapsed? (> (count children-pages) 30)]
       [:div.mt-4
        (ui/foldable
-        [:h2.font-medium "Child classes (" (count children-pages) ")"]
+        [:h2.font-medium "Child tags (" (count children-pages) ")"]
         [:div.mt-2.ml-1 (class-children-aux class {:default-collapsed? default-collapsed?})]
         {:default-collapsed? false
          :title-trigger? true})])))

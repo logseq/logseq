@@ -10,11 +10,10 @@
 
    :recent/pages {}
 
-   ;; :block/type is a string type or multiple types of the current block
+   ;; :block/type is a string type of the current block
    ;; "whiteboard" for whiteboards
-   ;; "macros" for macro
    ;; "property" for property blocks
-   ;; "class" for structured page
+   ;; "tag" for structured page
    :block/type {:db/index true}
    :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}

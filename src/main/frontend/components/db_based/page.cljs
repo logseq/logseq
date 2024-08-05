@@ -12,7 +12,6 @@
             [rum.core :as rum]
             [logseq.shui.ui :as shui]
             [frontend.util :as util]
-            [clojure.set :as set]
             [clojure.string :as string]
             [logseq.db.frontend.property :as db-property]))
 
@@ -31,7 +30,7 @@
        {:class (util/classnames [{:no-properties (not has-viewable-properties?)}])}
        (if configure?
          (cond
-           (= mode :class)
+           (= mode :tag)
            (component-block/db-properties-cp {:editor-box editor/box}
                                              page
                                              (str edit-input-id-prefix "-schema")
@@ -53,12 +52,12 @@
   (let [*mode *mode
         mode (rum/react *mode)
         type (:block/type page)
-        class? (= type "class")
+        class? (= type "tag")
         property? (= type "property")
         page-opts {:configure? true}]
     (when (nil? mode)
       (reset! *mode (cond
-                      class? :class
+                      class? :tag
                       property? :property
                       :else :page)))
     [:div.flex.flex-col.gap-1.pb-4
@@ -66,7 +65,7 @@
        :property
        (property-component/property-config page {:inline-text component-block/inline-text})
 
-       :class
+       :tag
        [:div.mt-2.flex.flex-col.gap-2
         (class-component/configure page {:show-title? false})
         (page-properties page (assoc page-opts :mode mode))]
@@ -76,14 +75,14 @@
 (rum/defc mode-switch < rum/reactive
   [type *mode]
   (let [current-mode (rum/react *mode)
-        class? (= type "class")
+        class? (= type "tag")
         property? (= type "property")
         modes (->
                (cond
                  property?
                  ["Property"]
                  class?
-                 ["Class"]
+                 ["Tag"]
                  :else
                  [])
                (conj "Page"))]
@@ -107,7 +106,7 @@
         *hover? (::hover? state)
         *mode (::mode state)
         type (:block/type page)
-        class? (= type "class")
+        class? (= type "tag")
         collapsed? (not @*show-info?)
         has-properties? (or
                          (seq (:block/tags page))
@@ -132,7 +131,7 @@
                                (reset! *hover? false))
             :on-click (if config/publishing?
                         (fn [_]
-                          (when (contains? #{"class" "property"} type)
+                          (when (contains? #{"tag" "property"} type)
                             (swap! *show-info? not)))
                         #(do
                            (swap! *show-info? not)

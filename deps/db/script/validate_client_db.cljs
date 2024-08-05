@@ -81,7 +81,7 @@
                                (count ent-maps) " entities, "
                                (count (filter :block/name ent-maps)) " pages, "
                                (count (filter :block/title ent-maps)) " blocks, "
-                               (count (filter #(= (:block/type %) "class") ent-maps)) " classes, "
+                               (count (filter #(= (:block/type %) "tag") ent-maps)) " tags, "
                                (count (filter #(seq (:block/tags %)) ent-maps)) " objects, "
                                (count (filter #(= (:block/type %) "property") ent-maps)) " properties and "
                                (count (mapcat db-property/properties ent-maps)) " property pairs"))

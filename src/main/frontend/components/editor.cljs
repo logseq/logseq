@@ -154,7 +154,7 @@
                                                            (string/lower-case (:block/title p)))) matched-pages))
                                     partial-matched-pages
                                     (if db-tag?
-                                      (concat [{:block/title (str (t :new-class) " " q)}]
+                                      (concat [{:block/title (str (t :new-tag) " " q)}]
                                               partial-matched-pages)
                                       (cons {:block/title (str (t :new-page) " " q)}
                                             partial-matched-pages))))]
@@ -180,7 +180,7 @@
                             [:div (ui/icon "whiteboard" {:extension? true})]
                             (db/page? block)
                             [:div (ui/icon "page" {:extension? true})]
-                            (or (string/starts-with? (:block/title block) (t :new-class))
+                            (or (string/starts-with? (:block/title block) (t :new-tag))
                                 (string/starts-with? (:block/title block) (t :new-page)))
                             nil
                             :else
@@ -191,7 +191,7 @@
                                       (title/block-unique-title block))]
                           (search-handler/highlight-exact-query title q))])
         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                   "Search for a class"
+                                                                   "Search for a tag"
                                                                    "Search for a node")]
         :class       "black"}))))
 
