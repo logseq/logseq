@@ -68,7 +68,7 @@
       (if-let [existing-tag-uuid (first
                                   (d/q '[:find [?uuid ...]
                                          :in $ ?name
-                                         :where [?b :block/uuid ?uuid] [?b :block/type "tag"] [?b :block/name ?name]]
+                                         :where [?b :block/uuid ?uuid] [?b :block/type "class"] [?b :block/name ?name]]
                                        db
                                        (:block/name tag-block)))]
         [:block/uuid existing-tag-uuid]
@@ -1017,7 +1017,7 @@
 (defn- export-class-properties
   [conn repo-or-conn]
   (let [user-classes (->> (d/q '[:find (pull ?b [:db/id :db/ident])
-                                 :where [?b :block/type "tag"]] @conn)
+                                 :where [?b :block/type "class"]] @conn)
                           (map first)
                           (remove #(db-class/built-in-classes (:db/ident %))))
         class-to-prop-uuids

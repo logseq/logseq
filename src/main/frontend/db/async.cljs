@@ -288,7 +288,7 @@
   (<q graph {:transact-db? false}
       '[:find [(pull ?tag [:db/id :block/title])]
         :where
-        [?tag :block/type "tag"]]))
+        [?tag :block/type "class"]]))
 
 (comment
   (defn <fetch-all-pages

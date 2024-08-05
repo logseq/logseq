@@ -101,7 +101,7 @@
   ([block property-id property-value' {:keys [exit-edit? class-schema?]
                                        :or {exit-edit? true}}]
    (let [repo (state/get-current-repo)
-         class? (ldb/tag? block)
+         class? (ldb/class? block)
          property (db/entity property-id)
          many? (db-property/many? property)
          checkbox? (= :checkbox (get-in property [:block/schema :type]))]
@@ -313,7 +313,7 @@
 (defn- get-node-icon
   [node]
   (cond
-    (ldb/tag? node)
+    (ldb/class? node)
     "hash"
     (ldb/property? node)
     "letter-p"
@@ -569,7 +569,7 @@
     (if (state/sub-async-query-loading value)
       [:div.text-sm.opacity-70 "loading"]
       (if-let [v-block (db/sub-block (:db/id value))]
-        (let [class? (ldb/tag? v-block)
+        (let [class? (ldb/class? v-block)
               invalid-warning [:div.warning.text-sm
                                "Invalid block value, please delete the current property."]]
           (when v-block

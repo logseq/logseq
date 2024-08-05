@@ -13,7 +13,7 @@
    ;; :block/type is a string type of the current block
    ;; "whiteboard" for whiteboards
    ;; "property" for property blocks
-   ;; "tag" for structured page
+   ;; "class" for structured page
    :block/type {:db/index true}
    :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}

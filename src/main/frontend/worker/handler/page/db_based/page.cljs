@@ -15,7 +15,7 @@
 
 (defn- build-page-tx [conn properties page {:keys [whiteboard? class? tags]}]
   (when (:block/uuid page)
-    (let [page (assoc page :block/type (cond class? "tag"
+    (let [page (assoc page :block/type (cond class? "class"
                                              whiteboard? "whiteboard"
                                              (:block/type page) (:block/type page)
                                              :else "page"))

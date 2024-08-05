@@ -239,7 +239,7 @@
   {:entities (count entities)
    :pages (count (filter :block/name entities))
    :blocks (count (filter :block/title entities))
-   :classes (count (filter ldb/tag? entities))
+   :classes (count (filter ldb/class? entities))
    :objects (count (filter #(seq (:block/tags %)) entities))
    :properties (count (filter ldb/property? entities))
    :property-values (count (mapcat :block/properties entities))})

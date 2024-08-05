@@ -214,7 +214,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/title :string]
-   [:block/type [:enum "page" "tag" "property" "whiteboard" "journal" "hidden"]]
+   [:block/type [:enum "page" "class" "property" "whiteboard" "journal" "hidden"]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]
@@ -431,7 +431,7 @@
                         (cond
                           (sqlite-util/property? d)
                           :property
-                          (sqlite-util/tag? d)
+                          (sqlite-util/class? d)
                           :class
                           (sqlite-util/hidden? d)
                           :hidden

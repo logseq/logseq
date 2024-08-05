@@ -62,7 +62,7 @@
   [page-entity *filters total filter-n filtered-ref-blocks *ref-pages]
   (let [filters @*filters
         threshold (state/get-linked-references-collapsed-threshold)
-        default-collapsed? (or (>= total threshold) (ldb/tag? page-entity))
+        default-collapsed? (or (>= total threshold) (ldb/class? page-entity))
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
