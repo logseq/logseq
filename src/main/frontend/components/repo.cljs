@@ -94,56 +94,56 @@
           (shui/tabler-icon "folder-pin") [:span.pl-1 root]])
 
        (let [db-graph? (config/db-based-graph? url)
-             manager? (and db-graph? (user-handler/manager? url))]
+             manager? (and db-graph? (user-handler/manager? url))
+             title (cond
+                     only-cloud?
+                     "Deletes this remote graph. Note this can't be recovered."
+
+                     db-based?
+                     "Unsafe delete this DB-based graph. Note this can't be recovered."
+
+                     :else
+                     "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
          (when-not (and only-cloud? (not manager?))
-           (ui/tippy {:html [:div.text-sm.max-w-xs
-                             (cond
-                               only-cloud?
-                               "Deletes this remote graph. Note this can't be recovered."
+           [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
+            {:title title
+             :on-click (fn []
+                         (let [has-prompt? true
+                               prompt-str (cond only-cloud?
+                                            (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
+                                            db-based?
+                                            (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
+                                            :else
+                                            (str "Are you sure to unlink the graph \"" url "\" from local folder?"))
+                               unlink-or-remote-fn! (fn []
+                                                      (repo-handler/remove-repo! repo)
+                                                      (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
+                               action-confirm-fn! (if only-cloud?
+                                                    (fn []
+                                                      (when (or manager? (not db-graph?))
+                                                        (let [delete-graph (if db-graph?
+                                                                             rtc-handler/<rtc-delete-graph!
+                                                                             file-sync/<delete-graph)]
+                                                          (state/set-state! [:file-sync/remote-graphs :loading] true)
+                                                          (go (<! (delete-graph GraphUUID))
+                                                            (state/delete-repo! repo)
+                                                            (state/delete-remote-graph! repo)
+                                                            (state/set-state! [:file-sync/remote-graphs :loading] false)))))
+                                                    unlink-or-remote-fn!)
+                               confirm-fn!
+                               (fn []
+                                 (-> (shui/dialog-confirm!
+                                       [:p.font-medium.-my-4 prompt-str
+                                        [:span.mt-1.flex.font-normal.opacity-70
+                                         (if (or db-based? only-cloud?)
+                                           [:small.text-red-rx-11 "⚠️ Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]
+                                           [:small.opacity-70 "⚠️ It won't remove your local files!"])]])
+                                   (p/then #(action-confirm-fn!))))]
 
-                               db-based?
-                               "Unsafe delete this DB-based graph. Note this can't be recovered."
-
-                               :else
-                               "Removes Logseq's access to the local file path of your graph. It won't remove your local files.")]
-                      :class "tippy-hover"
-                      :interactive true}
-             [:a.text-gray-400.ml-4.font-medium.text-sm.whitespace-nowrap
-              {:on-click (fn []
-                           (let [has-prompt? (or only-cloud? db-based?)
-                                 prompt-str (cond only-cloud?
-                                              (str "Are you sure to permanently delete the graph \"" GraphName "\" from our server?")
-                                              db-based?
-                                              (str "Are you sure to permanently delete the graph \"" url "\" from Logseq?")
-                                              :else
-                                              "")
-                                 unlink-or-remote-fn! (fn []
-                                                        (repo-handler/remove-repo! repo)
-                                                        (state/pub-event! [:graph/unlinked repo (state/get-current-repo)]))
-                                 action-confirm-fn! (if only-cloud?
-                                                      (fn []
-                                                        (when (or manager? (not db-graph?))
-                                                          (let [delete-graph (if db-graph?
-                                                                               rtc-handler/<rtc-delete-graph!
-                                                                               file-sync/<delete-graph)]
-                                                            (state/set-state! [:file-sync/remote-graphs :loading] true)
-                                                            (go (<! (delete-graph GraphUUID))
-                                                              (state/delete-repo! repo)
-                                                              (state/delete-remote-graph! repo)
-                                                              (state/set-state! [:file-sync/remote-graphs :loading] false)))))
-                                                      unlink-or-remote-fn!)
-                                 confirm-fn!
-                                 (fn []
-                                   (-> (shui/dialog-confirm!
-                                         [:p.font-medium.-my-4 prompt-str
-                                          [:span.mt-1.flex.font-normal.opacity-40
-                                           [:small "Notice that we can't recover this graph after being deleted. Make sure you have backups before deleting it."]]])
-                                     (p/then #(action-confirm-fn!))))]
-
-                             (if has-prompt?
-                               (confirm-fn!)
-                               (unlink-or-remote-fn!))))}
-              (if only-cloud? "Remove (server)" "Unlink (local)")])))]]]))
+                           (if has-prompt?
+                             (confirm-fn!)
+                             (unlink-or-remote-fn!))))}
+            (if only-cloud? "Remove (server)" "Unlink (local)")]))]]]))
 
 (rum/defc repos < rum/reactive
   []
