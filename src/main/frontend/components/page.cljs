@@ -311,7 +311,7 @@
 
 (rum/defc page-title-configure
   [*show-page-info?]
-  [:div.absolute.-top-4.left-0.fade-in.faster-fade-in
+  [:div.absolute.-top-5.-left-2.scale-75.faster.fade-in
    (shui/button
     {:variant :outline
      :size :xs
@@ -474,6 +474,15 @@
   (when-let [path-page-name (get-path-page-name state page-name)]
     (util/page-name-sanity-lc path-page-name)))
 
+(rum/defc lsp-pagebar-slot <
+  rum/static
+  []
+  (when (not config/publishing?)
+    (when config/lsp-enabled?
+      [:div.flex.flex-row
+       (plugins/hook-ui-slot :page-head-actions-slotted nil)
+       (plugins/hook-ui-items :pagebar)])))
+
 ;; A page is just a logical block
 (rum/defcs ^:large-vars/cleanup-todo page-inner < rum/reactive db-mixins/query
   (rum/local false ::all-collapsed?)
@@ -543,11 +552,7 @@
                                       :preview? preview?
                                       :*hover? (::hover-title? state)
                                       :*show-page-info? (::show-page-info? state)}))
-               (when (not config/publishing?)
-                 (when config/lsp-enabled?
-                   [:div.flex.flex-row
-                    (plugins/hook-ui-slot :page-head-actions-slotted nil)
-                    (plugins/hook-ui-items :pagebar)]))])
+               (lsp-pagebar-slot)])
 
             (cond
               (and db-based? (not block?))
