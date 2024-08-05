@@ -190,10 +190,11 @@
   [block pos & {:keys [_container-id custom-content tail-len]
                 :or {tail-len 0}
                 :as opts}]
-  (when-not config/publishing?
+  (when (and (not config/publishing?) (:block/uuid block))
     (p/do!
      (state/pub-event! [:editor/save-code-editor])
-     (state/clear-edit! {:clear-editing-block? false})
+     (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+       (state/clear-edit! {:clear-editing-block? false}))
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
              db-graph? (config/db-based-graph? repo)
