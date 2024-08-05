@@ -412,7 +412,7 @@
                            (shui/dialog-open!
                             #(set-graph-name-dialog e {:sqlite? true})))}]])
 
-         (when (and db-based? (or util/electron? util/web-platform?))
+         (when (or util/electron? util/web-platform?)
            [:label.action-input.flex.items-center.mx-2.my-2
             [:span.as-flex-center [:i (svg/logo 28)]]
             [:span.flex.flex-col
