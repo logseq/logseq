@@ -18,8 +18,7 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.file-sync :as file-sync-handler]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]
-            [logseq.db.frontend.property :as db-property]))
+            [frontend.handler.property.util :as pu]))
 
 (defn- delete-page!
   [page]
