@@ -21,16 +21,17 @@
             [logseq.sdk.utils :as sdk-utils]))
 
 (defn into-properties
-  [repo block]
-  (if (some-> repo (config/db-based-graph?))
-    (let [props (some->> block
-                  (filter (fn [[k _]] (db-property/property? k)))
-                  (into {})
-                  (db-pu/readable-properties))
-          block (update block :block/properties merge props)
-          block (apply dissoc (concat [block] (keys props)))]
-      block)
-    block))
+  ([block] (into-properties (state/get-current-repo) block))
+  ([repo block]
+   (if (some-> repo (config/db-based-graph?))
+     (let [props (some->> block
+                   (filter (fn [[k _]] (db-property/property? k)))
+                   (into {})
+                   (db-pu/readable-properties))
+           block (update block :block/properties merge props)
+           block (apply dissoc (concat [block] (keys props)))]
+       block)
+     block)))
 
 (defn infer-property-value-type-to-save!
   [ident value]
