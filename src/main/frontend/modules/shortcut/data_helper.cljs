@@ -139,8 +139,8 @@
     (if (false? bindings)
       []
       (-> bindings
-          first
-          (str/split #" |\+")))))
+        last
+        (str/split #" |\+")))))
 
 (defn binding-for-display [k binding]
   (let [tmp (cond
