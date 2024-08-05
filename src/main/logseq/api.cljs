@@ -562,8 +562,10 @@
   (fn []
     (when-let [blocks (state/selection?)]
       (let [blocks (->> blocks
-                        (map (fn [^js el] (some-> (.getAttribute el "blockid")
-                                                  (db-model/query-block-by-uuid)))))]
+                        (map (fn [^js el] (some->
+                                            (.getAttribute el "blockid")
+                                            (db-model/query-block-by-uuid)
+                                            (api-block/into-properties)))))]
         (bean/->js (sdk-utils/normalize-keyword-for-json blocks))))))
 
 (def ^:export clear_selected_blocks
