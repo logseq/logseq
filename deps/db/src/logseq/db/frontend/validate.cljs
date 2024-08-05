@@ -89,9 +89,14 @@
   (let [datoms (d/datoms db :eavt)
         ent-maps* (db-malli-schema/datoms->entities datoms)
         schema (update-schema db-malli-schema/DB db {:closed-schema? true})
-        ent-maps (db-malli-schema/update-properties-in-ents db ent-maps*)
+        ent-maps (mapv
+                  ;; Remove some UI interactions adding this e.g. import
+                  #(dissoc % :block.temp/fully-loaded?)
+                  (db-malli-schema/update-properties-in-ents db ent-maps*))
         errors (->> ent-maps (m/explain schema) :errors)]
     (cond-> {:datom-count (count datoms)
              :entities ent-maps}
       (some? errors)
-      (assoc :errors (group-errors-by-entity db ent-maps errors)))))
+      (assoc :errors (map #(-> (dissoc % :errors-by-type)
+                               (update :errors (fn [errs] (me/humanize {:errors errs}))))
+                          (group-errors-by-entity db ent-maps errors))))))

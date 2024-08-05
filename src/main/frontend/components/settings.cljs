@@ -220,6 +220,38 @@
      [:div {:style {:text-align "right"}}
       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-brackets))])])
 
+(defn toggle-wide-mode-row [t wide-mode?]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "wide_mode"}
+    (t :settings-page/wide-mode)]
+   [:div
+    [:div.rounded-md.sm:max-w-xs
+     (ui/toggle wide-mode?
+       state/toggle-wide-mode!
+       true)]]
+   (when (not (or (util/mobile?) (mobile-util/native-platform?)))
+     [:div {:style {:text-align "right"}}
+      (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-wide-mode))])])
+
+(defn editor-font-family-row [t font]
+  [:div.it.sm:grid.sm:grid-cols-3.sm:gap-4.sm:items-center
+   [:label.block.text-sm.font-medium.leading-5.opacity-70
+    {:for "font_family"}
+    (t :settings-page/editor-font)]
+   [:div.rounded-md.sm:max-w-xs.flex.gap-2
+    (for [t [:default :serif :mono]
+          :let [t (name t)
+                tt (string/capitalize t)
+                active? (= font t)]]
+      (shui/button
+        {:variant :secondary
+         :class (when active? "border-primary border-[2px]")
+         :on-click #(state/set-editor-font! t)}
+        [:span.flex.flex-col
+         [:strong "Ag"]
+         [:small tt]]))]])
+
 (rum/defcs switch-spell-check-row < rum/reactive
   [state t]
   (let [enabled? (state/sub [:electron/user-cfgs :spell-check])]
@@ -719,6 +751,8 @@
         enable-tooltip? (state/enable-tooltip?)
         enable-shortcut-tooltip? (state/sub :ui/shortcut-tooltip?)
         show-brackets? (state/show-brackets?)
+        wide-mode? (state/sub :ui/wide-mode?)
+        editor-font (state/sub :ui/editor-font)
         enable-git-auto-push? (state/enable-git-auto-push? current-repo)
         db-graph? (config/db-based-graph? (state/get-current-repo))]
 
@@ -728,7 +762,9 @@
      (date-format-row t preferred-date-format)
      (when-not db-graph?
        (workflow-row t preferred-workflow))
+     (editor-font-family-row t editor-font)
      (show-brackets-row t show-brackets?)
+     (toggle-wide-mode-row t wide-mode?)
 
      (when (util/electron?) (switch-spell-check-row t))
      (outdenting-row t logical-outdenting?)

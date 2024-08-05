@@ -900,6 +900,7 @@
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
+        editor-font (some-> (state/sub :ui/editor-font) (name))
         system-theme? (state/sub :ui/system-theme?)
         light? (= "light" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
@@ -929,6 +930,7 @@
      {:t             t
       :theme         theme
       :accent-color  accent-color
+      :editor-font   editor-font
       :route         route-match
       :current-repo  current-repo
       :edit?         edit?

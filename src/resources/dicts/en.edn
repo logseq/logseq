@@ -270,6 +270,8 @@
  :settings-page/custom-theme "Custom theme"
  :settings-page/export-theme "Export theme"
  :settings-page/show-brackets "Show brackets"
+ :settings-page/wide-mode "Wide mode"
+ :settings-page/editor-font "Font family"
  :settings-page/spell-checker "Spell checker"
  :settings-page/auto-updater "Auto updater"
  :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"

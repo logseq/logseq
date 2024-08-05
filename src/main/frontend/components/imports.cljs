@@ -277,7 +277,7 @@
       (do
         (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
                                    :counts (assoc (counts-from-entities entities) :datoms datom-count)})
-        (pprint/pprint (map :entity errors))
+        (pprint/pprint errors)
         (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
                             :warning false))
       (log/info :import-valid {:msg "Valid import!"
@@ -413,7 +413,7 @@
                            (shui/dialog-open!
                             #(set-graph-name-dialog e {:sqlite? true})))}]])
 
-         (when (and db-based? (or util/electron? util/web-platform?))
+         (when (or util/electron? util/web-platform?)
            [:label.action-input.flex.items-center.mx-2.my-2
             [:span.as-flex-center [:i (svg/logo 28)]]
             [:span.flex.flex-col
