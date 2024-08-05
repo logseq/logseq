@@ -1,7 +1,6 @@
 (ns frontend.components.all-pages
   "All pages"
-  (:require [clojure.string :as string]
-            [frontend.components.block :as component-block]
+  (:require [frontend.components.block :as component-block]
             [frontend.components.page :as component-page]
             [frontend.components.views :as views]
             [frontend.context.i18n :refer [t]]
