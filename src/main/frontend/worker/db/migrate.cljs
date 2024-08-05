@@ -103,7 +103,7 @@
                                   type (if (set? types)
                                          (cond
                                            (contains? types "class")
-                                           "tag"
+                                           "class"
                                            (contains? types "property")
                                            "property"
                                            (contains? types "whiteboard")

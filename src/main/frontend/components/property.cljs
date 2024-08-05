@@ -113,7 +113,7 @@
 
 (defn- handle-delete-property!
   [block property & {:keys [class? class-schema?]}]
-  (let [class? (or class? (ldb/tag? block))
+  (let [class? (or class? (ldb/class? block))
         remove! #(let [repo (state/get-current-repo)]
                    (if (and class? class-schema?)
                      (db-property-handler/class-remove-property! (:db/id block) (:db/id property))
@@ -131,7 +131,7 @@
   [entity property-uuid-or-name schema {:keys [class-schema? page-configure?]}]
   (p/let [repo (state/get-current-repo)
           ;; Both conditions necessary so that a class can add its own page properties
-          add-class-property? (and (ldb/tag? entity) page-configure? class-schema?)
+          add-class-property? (and (ldb/class? entity) page-configure? class-schema?)
           result (when (uuid? property-uuid-or-name)
                    (db-async/<get-block repo property-uuid-or-name {:children? false}))
           ;; In block context result is in :block
@@ -193,7 +193,7 @@
                 (reset! *show-new-property-config? :adding-property))
               (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
                       property (or property' property)
-                      add-class-property? (and (ldb/tag? block) page-configure? class-schema?)]
+                      add-class-property? (and (ldb/class? block) page-configure? class-schema?)]
                 (when *property (reset! *property property))
                 (p/do!
                  (when *show-new-property-config? (reset! *show-new-property-config? false))
@@ -475,7 +475,7 @@
         (reset! *show-new-property-config? true))
       (reset! *property property)
       (when property
-        (let [add-class-property? (and (ldb/tag? block) class-schema?)
+        (let [add-class-property? (and (ldb/class? block) class-schema?)
               type (get-in property [:block/schema :type])]
           (cond
             add-class-property?

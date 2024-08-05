@@ -52,7 +52,7 @@
   [state page *mode]
   (let [*mode *mode
         mode (rum/react *mode)
-        class? (ldb/tag? page)
+        class? (ldb/class? page)
         property? (ldb/property? page)
         page-opts {:configure? true}]
     (when (nil? mode)
@@ -75,7 +75,7 @@
 (rum/defc mode-switch < rum/reactive
   [type *mode]
   (let [current-mode (rum/react *mode)
-        class? (= type "tag")
+        class? (= type "class")
         property? (= type "property")
         modes (->
                (cond
@@ -106,7 +106,7 @@
         *hover? (::hover? state)
         *mode (::mode state)
         type (:block/type page)
-        class? (ldb/tag? page)
+        class? (ldb/class? page)
         collapsed? (not @*show-info?)
         has-properties? (or
                          (seq (:block/tags page))
@@ -131,7 +131,7 @@
                                (reset! *hover? false))
             :on-click (if config/publishing?
                         (fn [_]
-                          (when (contains? #{"tag" "property"} type)
+                          (when (contains? #{"class" "property"} type)
                             (swap! *show-info? not)))
                         #(do
                            (swap! *show-info? not)

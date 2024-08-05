@@ -341,7 +341,7 @@
         (let [chosen (:block/title chosen-result)
               class? (and db-based? hashtag?
                           (or (string/includes? chosen (str (t :new-tag) " "))
-                              (ldb/tag? (db/get-page chosen))))
+                              (ldb/class? (db/get-page chosen))))
               chosen (-> chosen
                          (string/replace-first (str (t :new-tag) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))

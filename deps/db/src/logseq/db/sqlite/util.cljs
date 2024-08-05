@@ -113,7 +113,7 @@
   {:pre [(qualified-keyword? (:db/ident block))]}
   (block-with-timestamps
    (cond-> (merge block
-                  {:block/type "tag"
+                  {:block/type "class"
                    :block/format :markdown})
      (not= (:db/ident block) :logseq.class/Root)
      (assoc :class/parent :logseq.class/Root))))
@@ -130,12 +130,12 @@
 
 (defn page?
   [block]
-  (contains? #{"page" "journal" "whiteboard" "tag" "property" "hidden"}
+  (contains? #{"page" "journal" "whiteboard" "class" "property" "hidden"}
              (:block/type block)))
 
-(defn tag?
+(defn class?
   [entity]
-  (= (:block/type entity) "tag"))
+  (= (:block/type entity) "class"))
 (defn property?
   [entity]
   (= (:block/type entity) "property"))

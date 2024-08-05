@@ -336,7 +336,7 @@
               journal? (ldb/journal? page)
               icon (or (get page (pu/get-pid :logseq.property/icon))
                        (when db-based?
-                         (or (when (ldb/tag? page)
+                         (or (when (ldb/class? page)
                                {:type :tabler-icon
                                 :id "hash"})
                              (when (ldb/property? page)
@@ -557,14 +557,14 @@
             (cond
               (and db-based? (not block?))
               (db-page/page-info page
-                                 (if (and (ldb/tag? page) sidebar?)
+                                 (if (and (ldb/class? page) sidebar?)
                                    (atom true)
                                    (::show-page-info? state)))
 
               (and (not db-based?) (not block?))
               [:div.pb-2])
 
-            (when (and db-based? (ldb/tag? page))
+            (when (and db-based? (ldb/class? page))
               [:div.mt-8
                (objects/class-objects page)])
 
@@ -572,7 +572,7 @@
               [:div.mt-8
                (objects/property-related-objects page)])
 
-            (when-not (and db-based? (or (ldb/tag? page) (ldb/property? page)))
+            (when-not (and db-based? (or (ldb/class? page) (ldb/property? page)))
               [:div
                (when (and block? (not sidebar?) (not whiteboard?))
                  (let [config (merge config {:id "block-parent"
@@ -595,7 +595,7 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-title))
 
-            (when (ldb/tag? page)
+            (when (ldb/class? page)
               (class-component/class-children page))
 
             ;; referenced blocks

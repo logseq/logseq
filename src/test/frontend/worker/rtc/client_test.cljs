@@ -16,7 +16,7 @@
                                    :block/created-at 1720017595872,
                                    :block/format :markdown,
                                    :db/ident :user.class/yyy,
-                                   :block/type "tag",
+                                   :block/type "class",
                                    :block/name "yyy",
                                    :block/title "yyy"}])]
       (is (= {:update
@@ -26,7 +26,7 @@
                :av-coll
                [[:block/name "[\"~#'\",\"yyy\"]" 1 true]
                 [:block/title "[\"~#'\",\"yyy\"]" 1 true]
-                [:block/type "[\"~#'\",\"tag\"]" 1 true]]}}
+                [:block/type "[\"~#'\",\"class\"]" 1 true]]}}
              (:remote-ops
               (#'subject/local-block-ops->remote-ops
                db
@@ -36,7 +36,7 @@
                             :av-coll
                             [[:block/name (ldb/write-transit-str "yyy") 1 true]
                              [:block/title (ldb/write-transit-str "yyy") 1 true]
-                             [:block/type (ldb/write-transit-str "tag") 1 true]]}]}))))))
+                             [:block/type (ldb/write-transit-str "class") 1 true]]}]}))))))
 
   (testing "user.property/xxx creation"
     (let [block-uuid (random-uuid)

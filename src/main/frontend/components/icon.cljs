@@ -32,7 +32,7 @@
 (defn get-node-icon
   [node-entity opts]
   (let [default-icon-id (cond
-                          (ldb/tag? node-entity)
+                          (ldb/class? node-entity)
                           "hash"
                           (ldb/property? node-entity)
                           "letter-p"

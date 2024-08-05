@@ -85,7 +85,7 @@
              (throw e))))))))
 
 (def page? sqlite-util/page?)
-(def tag? sqlite-util/tag?)
+(def class? sqlite-util/class?)
 (def property? sqlite-util/property?)
 (def closed-value? sqlite-util/closed-value?)
 (def whiteboard? sqlite-util/whiteboard?)
@@ -437,7 +437,7 @@
   "Whether property a built-in property for the specific class"
   [class-entity property-entity]
   (and (built-in? class-entity)
-       (tag? class-entity)
+       (class? class-entity)
        (built-in? property-entity)
        (contains? (set (map :db/ident (:class/schema.properties class-entity)))
                   (:db/ident property-entity))))
@@ -541,7 +541,7 @@
       (loop [current-parent parent]
         (when (and
                current-parent
-               (tag? parent)
+               (class? parent)
                (not (contains? @*classes (:db/id parent))))
           (swap! *classes conj (:db/id current-parent))
           (recur (:class/parent current-parent)))))
