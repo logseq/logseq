@@ -175,17 +175,10 @@ DROP TRIGGER IF EXISTS blocks_au;
       (seq (worker-util/search-normalize match true))
       (seq (worker-util/search-normalize q true))))))
 
-(defn- hidden-page?
-  [page]
-  (when page
-    (if (string? page)
-      (string/starts-with? page "$$$")
-      (= (:block/type page) "hidden"))))
-
 (defn- page-or-object?
   [entity]
   (and (or (ldb/page? entity) (seq (:block/tags entity)))
-       (not (hidden-page? entity))))
+       (not (ldb/hidden? entity))))
 
 (defn get-all-fuzzy-supported-blocks
   "Only pages and objects are supported now."
@@ -196,7 +189,7 @@ DROP TRIGGER IF EXISTS blocks_au;
                         (map :e))
         blocks (->> (distinct (concat page-ids object-ids))
                     (map #(d/entity db %)))]
-    (remove hidden-page? blocks)))
+    (remove ldb/hidden? blocks)))
 
 (defn- sanitize
   [content]
@@ -384,10 +377,10 @@ DROP TRIGGER IF EXISTS blocks_au;
                                blocks-to-add-set)]
       {:blocks-to-remove     (->>
                               (keep #(d/entity db-before %) blocks-to-remove-set)
-                              (remove hidden-page?))
+                              (remove ldb/hidden?))
        :blocks-to-add        (->>
                               (keep #(d/entity db-after %) blocks-to-add-set')
-                              (remove hidden-page?))})))
+                              (remove ldb/hidden?))})))
 
 (defn- get-affected-blocks
   [repo tx-report]

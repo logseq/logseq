@@ -7,7 +7,8 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db.frontend.property :as db-property]
-            [logseq.db.sqlite.build :as sqlite-build]))
+            [logseq.db.sqlite.build :as sqlite-build]
+            [logseq.db :as ldb]))
 
 (deftest new-graph-db-idents
   (testing "a new graph follows :db/ident conventions for"
@@ -60,12 +61,11 @@
   (let [conn (d/create-conn db-schema/schema-for-db-based-graph)
         _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
         task (d/entity @conn :logseq.class/Task)]
-    (is (= (:block/type task) "tag")
+    (is (ldb/tag? task)
         "Task class has correct type")
     (is (= 3 (count (:class/schema.properties task)))
         "Has correct number of task properties")
-    (is (every? #(= (:block/type %) "property")
-                (:class/schema.properties task))
+    (is (every? ldb/property? (:class/schema.properties task))
         "Each task property has correct type")))
 
 (deftest new-graph-is-valid

@@ -3,6 +3,7 @@
             [frontend.components.export :as export]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [logseq.db :as ldb]
             [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.common.developer :as dev-common-handler]
@@ -49,7 +50,7 @@
   (when-let [page-name (and page (db/page? page) (:block/name page))]
     (let [repo (state/sub :git/current-repo)
           page-title (:block/title page)
-          whiteboard? (= (:block/type page) "whiteboard")
+          whiteboard? (ldb/whiteboard? page)
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           public? (pu/get-block-property-value page :logseq.property/public)

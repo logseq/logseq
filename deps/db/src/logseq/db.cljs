@@ -84,6 +84,14 @@
              (prn :debug-tx-data tx-data)
              (throw e))))))))
 
+(def page? sqlite-util/page?)
+(def tag? sqlite-util/tag?)
+(def property? sqlite-util/property?)
+(def closed-value? sqlite-util/closed-value?)
+(def whiteboard? sqlite-util/whiteboard?)
+(def journal? sqlite-util/journal?)
+(def hidden? sqlite-util/hidden?)
+
 (defn sort-by-order
   [blocks]
   (sort-by :block/order blocks))
@@ -98,16 +106,6 @@
   [db block-uuid]
   (when-let [e (d/entity db [:block/uuid block-uuid])]
     (get-block-and-children-aux e)))
-
-(defn whiteboard-page?
-  "Given a page entity or map, check if it is a whiteboard page"
-  [page]
-  (= (:block/type page) "whiteboard"))
-
-(defn journal-page?
-  "Given a page entity or map, check if it is a journal page"
-  [page]
-  (= (:block/type page) "journal"))
 
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
@@ -164,14 +162,6 @@
   (first (sort-by-order (:block/_parent block))))
 
 
-(defn hidden-page?
-  [page]
-  (when page
-    (if (string? page)
-      (or (string/starts-with? page "$$$")
-          (= common-config/favorites-page-name page))
-      (= (:block/type page) "hidden"))))
-
 (defn get-pages
   [db]
   (->> (d/q
@@ -181,7 +171,7 @@
           [(get-else $ ?page :block/title ?page-name) ?page-title]]
         db)
        (map first)
-       (remove hidden-page?)))
+       (remove hidden?)))
 
 (def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
 
@@ -246,17 +236,17 @@
                                     (= 1 (count children))
                                     (contains? #{"" "-" "*"} (string/trim (:block/title first-child))))))
                                 (not (contains? built-in-pages name))
-                                (not (whiteboard-page? page))
+                                (not (whiteboard? page))
                                 (not (:block/_namespace page))
-                                (not (= (:block/type page) "property"))
+                                (not (property? page))
                                  ;; a/b/c might be deleted but a/b/c/d still exists (for backward compatibility)
                                 (not (and (string/includes? name "/")
-                                          (not (journal-page? page))))
+                                          (not (journal? page))))
                                 page))))
                          pages)
                         (remove false?)
                         (remove nil?)
-                        (remove hidden-page?))]
+                        (remove hidden?))]
     orphaned-pages))
 
 (defn has-children?
@@ -434,7 +424,7 @@
    (d/datoms db :avet :block/name)
    (distinct)
    (map #(d/entity db (:e %)))
-   (remove hidden-page?)
+   (remove hidden?)
    (remove (fn [page]
              (common-util/uuid-string? (:block/name page))))))
 
@@ -447,7 +437,7 @@
   "Whether property a built-in property for the specific class"
   [class-entity property-entity]
   (and (built-in? class-entity)
-       (= (:block/type class-entity) "tag")
+       (tag? class-entity)
        (built-in? property-entity)
        (contains? (set (map :db/ident (:class/schema.properties class-entity)))
                   (:db/ident property-entity))))
@@ -502,16 +492,6 @@
   [db]
   (when db (:kv/value (d/entity db :logseq.kv/graph-uuid))))
 
-(def page? sqlite-util/page?)
-(defn class?
-  [entity]
-  (= (:block/type entity) "tag"))
-(defn property?
-  [entity]
-  (= (:block/type entity) "property"))
-(defn closed-value?
-  [entity]
-  (= (:block/type entity) "closed value"))
 
 (def db-based-graph? entity-plus/db-based-graph?)
 
@@ -561,7 +541,7 @@
       (loop [current-parent parent]
         (when (and
                current-parent
-               (= (:block/type parent) "tag")
+               (tag? parent)
                (not (contains? @*classes (:db/id parent))))
           (swap! *classes conj (:db/id current-parent))
           (recur (:class/parent current-parent)))))

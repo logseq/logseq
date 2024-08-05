@@ -377,7 +377,7 @@
             "tagged block tag converts tag to page ref")
         (is (= [(:db/id tag-page)] (map :db/id (:block/refs block)))
             "tagged block has correct refs")
-        (is (and tag-page (not (= (:block/type tag-page) "tag")))
+        (is (and tag-page (not (ldb/tag? tag-page)))
             "tag page is not a class")
 
         (is (= {:logseq.property/page-tags #{"Movie"}}
@@ -408,7 +408,7 @@
 
       (is (= "tag" (:block/type tag-page))
           "configured tag page in :tag-classes is a class")
-      (is (and another-tag-page (not= (:block/type another-tag-page) "tag"))
+      (is (and another-tag-page (not (ldb/tag? another-tag-page)))
           "unconfigured tag page is not a class")
 
       (is (= {:block/tags [:user.class/Movie]}

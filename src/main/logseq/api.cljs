@@ -601,7 +601,7 @@
         (->>
           (d/datoms db :avet :block/name)
           (map #(db-utils/pull (:e %)))
-          (remove ldb/hidden-page?)
+          (remove ldb/hidden?)
           (remove (fn [page]
                     (common-util/uuid-string? (:block/name page)))))
         (sdk-utils/normalize-keyword-for-json)

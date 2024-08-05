@@ -223,11 +223,11 @@
   (let [entity (db/entity [:block/uuid (:block/uuid page)])
         source-page (model/get-alias-source-page repo (:db/id entity))
         icon (cond
-               (ldb/class? entity)
+               (ldb/tag? entity)
                "hash"
                (ldb/property? entity)
                "letter-p"
-               (ldb/whiteboard-page? entity)
+               (ldb/whiteboard? entity)
                "whiteboard"
                :else
                "page")]

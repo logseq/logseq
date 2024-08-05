@@ -429,13 +429,13 @@
   (into
    [:multi {:dispatch (fn [d]
                         (cond
-                          (= (:block/type d) "property")
+                          (sqlite-util/property? d)
                           :property
-                          (= (:block/type d) "tag")
+                          (sqlite-util/tag? d)
                           :class
-                          (= (:block/type d) "hidden")
+                          (sqlite-util/hidden? d)
                           :hidden
-                          (= (:block/type d) "whiteboard")
+                          (sqlite-util/whiteboard? d)
                           :normal-page
                           (sqlite-util/page? d)
                           :normal-page

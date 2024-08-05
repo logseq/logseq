@@ -172,7 +172,7 @@
                        [:div.flex.flex-row.items-center.gap-1
                         (when-not db-tag?
                           (cond
-                            (ldb/class? block)
+                            (ldb/tag? block)
                             [:div (ui/icon "hash" {:size 14})]
                             (ldb/property? block)
                             [:div (ui/icon "letter-p" {:size 14})]

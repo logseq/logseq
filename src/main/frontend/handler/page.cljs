@@ -247,7 +247,7 @@
   (let [graph-specific-hidden?
         (if (config/db-based-graph? repo)
           (fn [p]
-            (and (= (:block/type p) "property") (ldb/built-in? p)))
+            (and (ldb/property? p) (ldb/built-in? p)))
           (fn [p]
             (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
     (->> (db/get-all-pages repo)
@@ -341,7 +341,7 @@
         (let [chosen (:block/title chosen-result)
               class? (and db-based? hashtag?
                           (or (string/includes? chosen (str (t :new-tag) " "))
-                              (ldb/class? (db/get-page chosen))))
+                              (ldb/tag? (db/get-page chosen))))
               chosen (-> chosen
                          (string/replace-first (str (t :new-tag) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))

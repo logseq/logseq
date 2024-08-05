@@ -8,6 +8,7 @@
             [datascript.transit :as dt]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
+            [logseq.common.config :as common-config]
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -131,3 +132,30 @@
   [block]
   (contains? #{"page" "journal" "whiteboard" "tag" "property" "hidden"}
              (:block/type block)))
+
+(defn tag?
+  [entity]
+  (= (:block/type entity) "tag"))
+(defn property?
+  [entity]
+  (= (:block/type entity) "property"))
+(defn closed-value?
+  [entity]
+  (= (:block/type entity) "closed value"))
+(defn whiteboard?
+  "Given a page entity or map, check if it is a whiteboard page"
+  [page]
+  (= (:block/type page) "whiteboard"))
+
+(defn journal?
+  "Given a page entity or map, check if it is a journal page"
+  [page]
+  (= (:block/type page) "journal"))
+
+(defn hidden?
+  [page]
+  (when page
+    (if (string? page)
+      (or (string/starts-with? page "$$$")
+          (= common-config/favorites-page-name page))
+      (= (:block/type page) "hidden"))))
