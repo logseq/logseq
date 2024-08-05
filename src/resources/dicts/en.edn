@@ -467,8 +467,7 @@
 
  :home "Home"
  :new-page "New page:"
- :new-class "New class:"
- ;; :new-class "New class:"
+ :new-tag "New tag:"
  :whiteboards "Whiteboards"
  :new-graph "Add new graph"
  :graph "Graph"

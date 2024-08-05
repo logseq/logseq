@@ -448,7 +448,7 @@
   "Whether property a built-in property for the specific class"
   [class-entity property-entity]
   (and (built-in? class-entity)
-       (= (:block/type class-entity) "class")
+       (= (:block/type class-entity) "tag")
        (built-in? property-entity)
        (contains? (set (map :db/ident (:class/schema.properties class-entity)))
                   (:db/ident property-entity))))
@@ -506,7 +506,7 @@
 (def page? sqlite-util/page?)
 (defn class?
   [entity]
-  (= (:block/type entity) "class"))
+  (= (:block/type entity) "tag"))
 (defn property?
   [entity]
   (= (:block/type entity) "property"))
@@ -562,7 +562,7 @@
       (loop [current-parent parent]
         (when (and
                current-parent
-               (= (:block/type parent) "class")
+               (= (:block/type parent) "tag")
                (not (contains? @*classes (:db/id parent))))
           (swap! *classes conj (:db/id current-parent))
           (recur (:class/parent current-parent)))))

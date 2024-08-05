@@ -1651,7 +1651,7 @@
         (text-util/wrapped-by? value pos before end)))))
 
 (defn get-matched-classes
-  "Return matched classes except the root class"
+  "Return matched classes except the root tag"
   [q]
   (let [classes (->> (db-model/get-all-classes (state/get-current-repo) {:except-root-class? true})
                      (map (fn [e] (select-keys e [:block/uuid :block/title]))))]

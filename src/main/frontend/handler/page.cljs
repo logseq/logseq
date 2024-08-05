@@ -340,10 +340,10 @@
         (state/clear-editor-action!)
         (let [chosen (:block/title chosen-result)
               class? (and db-based? hashtag?
-                          (or (string/includes? chosen (str (t :new-class) " "))
+                          (or (string/includes? chosen (str (t :new-tag) " "))
                               (ldb/class? (db/get-page chosen))))
               chosen (-> chosen
-                         (string/replace-first (str (t :new-class) " ") "")
+                         (string/replace-first (str (t :new-tag) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
               wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
               wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))

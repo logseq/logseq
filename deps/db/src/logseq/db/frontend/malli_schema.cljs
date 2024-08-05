@@ -214,7 +214,7 @@
   "Common attributes for pages"
   [[:block/name :string]
    [:block/title :string]
-   [:block/type [:enum "page" "class" "property" "whiteboard" "journal" "hidden"]]
+   [:block/type [:enum "page" "tag" "property" "whiteboard" "journal" "hidden"]]
    [:block/alias {:optional true} [:set :int]]
     ;; TODO: Should this be here or in common?
    [:block/path-refs {:optional true} [:set :int]]
@@ -431,7 +431,7 @@
                         (cond
                           (= (:block/type d) "property")
                           :property
-                          (= (:block/type d) "class")
+                          (= (:block/type d) "tag")
                           :class
                           (= (:block/type d) "hidden")
                           :hidden

@@ -91,7 +91,7 @@
                    [:db/add 62 :block/created-at 1720019497643 536870954]
                    [:db/add 62 :block/format :markdown 536870954]
                    [:db/add 62 :db/ident :user.class/zzz 536870954]
-                   [:db/add 62 :block/type "class" 536870954]
+                   [:db/add 62 :block/type "tag" 536870954]
                    [:db/add 62 :block/name "zzz" 536870954]
                    [:db/add 62 :block/title "zzz" 536870954]]
           {:keys [db-before db-after tx-data]} (d/transact! conn tx-data)

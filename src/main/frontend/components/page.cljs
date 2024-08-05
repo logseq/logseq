@@ -590,7 +590,7 @@
             (when (and (not block?) (not db-based?))
               (tagged-pages repo page page-title))
 
-            (when (= (:block/type page) "class")
+            (when (= (:block/type page) "tag")
               (class-component/class-children page))
 
             ;; referenced blocks
