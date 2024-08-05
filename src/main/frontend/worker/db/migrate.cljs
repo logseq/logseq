@@ -43,6 +43,35 @@
   [{:db/id (:db/id (d/entity @conn :logseq.class/task))
     :db/ident :logseq.class/Task}])
 
+(defn- property-checkbox-type-non-ref
+  [conn _search-db]
+  (let [db @conn
+        properties (d/q
+                    '[:find [?ident ...]
+                      :where
+                      [?p :block/schema ?s]
+                      [(get ?s :type) ?t]
+                      [(= ?t :checkbox)]
+                      [?p :db/ident ?ident]]
+                    db)
+        datoms (mapcat #(d/datoms db :avet %) properties)
+        schema-tx-data (map
+                        (fn [ident]
+                          [:db/retract ident :db/valueType])
+                        properties)
+        value-tx-data (mapcat
+                       (fn [d]
+                         (let [e (:e d)
+                               a (:a d)
+                               v (:v d)
+                               ve (when (integer? v) (d/entity db v))
+                               ve-value (:property.value/content ve)]
+                           (when (some? ve-value)
+                             [[:db/add e a ve-value]
+                              [:db/retractEntity v]])))
+                       datoms)]
+    (concat schema-tx-data value-tx-data)))
+
 (defn- update-table-properties
   [conn _search-db]
   (let [old-new-props {:logseq.property/table-sorting :logseq.property.table/sorting
@@ -79,7 +108,8 @@
    [7 {:fix replace-original-name-content-with-title}]
    [8 {:fix replace-object-and-page-type-with-node}]
    [9 {:fix update-task-ident}]
-   [10 {:fix update-table-properties}]])
+   [10 {:fix update-table-properties}]
+   [11 {:fix property-checkbox-type-non-ref}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
@@ -100,7 +130,6 @@
 
       (> db-schema/version version-in-db)
       (let [db-based? (ldb/db-based-graph? @conn)
-            built-in-value (:db/id (get (d/entity db :logseq.class/Root) :logseq.property/built-in?))
             updates (keep (fn [[v updates]]
                             (when (and (< version-in-db v) (<= v db-schema/version))
                               updates))
@@ -115,7 +144,7 @@
                                             (assert (str "DB migration: property already exists " k)))))
                                 (into {})
                                 sqlite-create-graph/build-initial-properties*
-                                (map (fn [b] (assoc b :logseq.property/built-in? built-in-value))))
+                                (map (fn [b] (assoc b :logseq.property/built-in? true))))
             fixes (mapcat
                    (fn [update]
                      (when-let [fix (:fix update)]
