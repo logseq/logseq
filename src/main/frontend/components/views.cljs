@@ -365,14 +365,16 @@
 (defn- get-property-values
   [rows property]
   (let [property-ident (:db/ident property)
+        block-type? (= property-ident :block/type)
         values (->> (mapcat (fn [e] (let [v (get e property-ident)]
                                       (if (set? v) v #{v}))) rows)
                     (remove nil?)
                     (distinct))]
     (->>
      (map (fn [e]
-            {:label (get-property-value-content e)
-             :value e})
+            (let [label (get-property-value-content e)
+                  label' (if (and block-type? (= label "class")) "tag" label)]
+              {:label label' :value e}))
           values)
      (sort-by :label))))
 
@@ -438,7 +440,7 @@
                                  (do
                                    (shui/popup-hide!)
                                    (let [property internal-property
-                                         new-filter [(:db/ident property) :text-contains]
+                                         new-filter [(:db/ident property) (if (= (:db/ident property) :block/type) :is :text-contains)]
                                          filters' (if (seq filters)
                                                     (conj filters new-filter)
                                                     [new-filter])]
@@ -516,14 +518,15 @@
     [:before :after]
     (concat
      [:is :is-not]
-     (case (get-in property [:block/schema :type])
-       (:default :url :node)
-       [:text-contains :text-not-contains]
-       :date
-       [:date-before :date-after]
-       :number
-       [:number-gt :number-lt :number-gte :number-lte :between]
-       nil))))
+     (when-not (= :block/type (:db/ident property))
+       (case (get-in property [:block/schema :type])
+         (:default :url :node)
+         [:text-contains :text-not-contains]
+         :date
+         [:date-before :date-after]
+         :number
+         [:number-gt :number-lt :number-gte :number-lte :between]
+         nil)))))
 
 (defn- get-filter-with-changed-operator
   [_property operator value]
@@ -651,11 +654,16 @@
        {:class "!px-2 rounded-none border-r"
         :variant "ghost"
         :size :sm}
-       (let [value (cond
+       (let [block-type? (= (:db/ident property) :block/type)
+             value (cond
                      (uuid? value)
                      (db/entity [:block/uuid value])
                      (and (coll? value) (every? uuid? value))
                      (set (map #(db/entity [:block/uuid %]) value))
+                     (and block-type? (coll? value))
+                     (map (fn [v] (if (= v "class") "tag" v)) value)
+                     (and block-type? (= value "class"))
+                     "tag"
                      :else
                      value)]
          [:div.flex.flex-row.items-center.gap-1.text-xs

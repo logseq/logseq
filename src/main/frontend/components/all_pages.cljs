@@ -22,7 +22,9 @@
            :type :string}
           {:id :block/type
            :name "Type"
-           :cell (fn [_table row _column] [:div.capitalize (get row :block/type)])
+           :cell (fn [_table row _column]
+                   (let [type (get row :block/type)]
+                     [:div.capitalize (if (= type "class") "tag" type)]))
            :get-value (fn [row] (get row :block/type))
            :type :string}
           (when db-based?
