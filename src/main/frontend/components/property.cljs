@@ -240,6 +240,7 @@
   (rum/local nil ::property-name)
   (rum/local nil ::property-schema)
   (rum/local nil ::property-description)
+  (rum/local false ::show-class-select?)
   {:init (fn [state]
            (let [*values (atom :loading)]
              (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
@@ -264,6 +265,7 @@
       (let [*property-name (::property-name state)
             *property-schema (::property-schema state)
             *property-description (::property-description state)
+            *show-class-select? (::show-class-select? state)
             property (db/sub-block (:db/id property))
             built-in? (ldb/built-in? property)
             disabled? (or built-in? config/publishing?)
@@ -319,7 +321,8 @@
                                     :*property-schema *property-schema
                                     :built-in? built-in?
                                     :disabled? disabled?
-                                    :show-type-change-hints? true}))]
+                                    :show-type-change-hints? true
+                                    :*show-class-select? *show-class-select?}))]
 
           (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :classes)
             (case (:type @*property-schema)
