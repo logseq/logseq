@@ -122,14 +122,16 @@
   [db query-ent]
   (->> (db-property/properties query-ent)
        (map (fn [[k v]]
-              [k
-               (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
-                 (if (= :block/tags k)
-                   (mapv #(:db/ident (d/entity db (:db/id %))) v)
-                   (if (db-property-type/ref-property-types built-in-type)
-                     (db-property/ref->property-value-contents db v)
-                     v))
-                 (db-property/ref->property-value-contents db v))]))
+              (if (boolean? v)
+                [k v]
+                [k
+                (if-let [built-in-type (get-in db-property/built-in-properties [k :schema :type])]
+                  (if (= :block/tags k)
+                    (mapv #(:db/ident (d/entity db (:db/id %))) v)
+                    (if (db-property-type/ref-property-types built-in-type)
+                      (db-property/ref->property-value-contents db v)
+                      v))
+                  (db-property/ref->property-value-contents db v))])))
        (into {})))
 
 ;; Tests
@@ -224,7 +226,7 @@
               :user.property/prop-num 5
               :user.property/prop-string "woot"}
              (update-vals (db-property/properties (find-block-by-content @conn "b1"))
-                          #(db-property/ref->property-value-content @conn %)))
+                          (fn [v] (if (map? v) (db-property/ref->property-value-content @conn v) v))))
           "Basic block has correct properties")
       (is (= #{"prop-num" "prop-string" "prop-bool"}
              (->> (d/entity @conn (:db/id (find-block-by-content @conn "b1")))

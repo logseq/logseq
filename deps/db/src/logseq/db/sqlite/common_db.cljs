@@ -254,8 +254,6 @@
         _ (when db-graph?
             (reset! db-order/*max-key (db-order/get-max-order db)))
         schema (:schema db)
-        built-in-value (when-let [id (:db/id (:logseq.property/built-in? (d/entity db :logseq.class/Root)))]
-                         (d/datoms db :eavt id))
         idents (mapcat (fn [id]
                          (when-let [e (d/entity db id)]
                            (d/datoms db :eavt (:db/id e))))
@@ -267,8 +265,7 @@
         all-pages (get-all-pages db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
-        data (concat built-in-value
-                     idents
+        data (concat idents
                      all-pages
                      structured-datoms
                      favorites

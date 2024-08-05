@@ -802,7 +802,7 @@
   pages that are now properties"
   [pages-tx old-properties existing-pages import-state]
   (let [new-properties (set/difference (set (keys @(:property-schemas import-state))) (set old-properties))
-        _ (when (seq new-properties) (prn :new-properties new-properties))
+        ;; _ (when (seq new-properties) (prn :new-properties new-properties))
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
         property-pages-tx (map (fn [{:block/keys [title uuid]}]
