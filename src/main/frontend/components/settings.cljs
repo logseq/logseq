@@ -350,9 +350,14 @@
                              :-for       "preferred_language"
                              :action     action})))
 
-(defn theme-modes-row [t switch-theme system-theme? dark?]
-  (let [color-accent (state/sub :ui/radix-color)
-        pick-theme [:ul.theme-modes-options
+(rum/defc theme-modes-row < rum/reactive
+  [t]
+  (let [theme (state/sub :ui/theme)
+        dark? (= "dark" theme)
+        system-theme? (state/sub :ui/system-theme?)
+        switch-theme (if dark? "light" "dark")
+        color-accent (state/sub :ui/radix-color)
+        pick-theme [:ul.cp__theme-modes-options
                     [:li {:on-click (partial state/use-theme-mode! "light")
                           :class    (classnames [{:active (and (not system-theme?) (not dark?))}])} [:i.mode-light {:class (when color-accent "radix")}] [:strong (t :settings-page/theme-light)]]
                     [:li {:on-click (partial state/use-theme-mode! "dark")
@@ -364,8 +369,7 @@
                              :action     pick-theme
                              :desc       (ui/render-keyboard-shortcut (shortcut-helper/gen-shortcut-seq :ui/toggle-theme))})))
 
-(rum/defc accent-color-row
-  < rum/reactive
+(rum/defc accent-color-row < rum/reactive
   [_in-modal?]
   (let [color-accent (state/sub :ui/radix-color)
         pick-theme [:div.cp__accent-colors-list-wrap
@@ -399,18 +403,24 @@
                        ])]]
 
     [:<>
-     (row-with-button-action {:left-label "Accent color"
-                              :description "Choosing an accent color may override any theme you have selected."
-                              :-for "toggle_radix_theme"
-                              :desc (when-not _in-modal?
-                                      [:span.pl-6 (ui/render-keyboard-shortcut
-                                                    (shortcut-helper/gen-shortcut-seq :ui/accent-colors-picker))])
-                              :stretch (boolean _in-modal?)
-                              :action pick-theme})]))
+     (row-with-button-action
+       {:left-label "Accent color"
+        :description "Choosing an accent color may override any theme you have selected."
+        :-for "toggle_radix_theme"
+        :desc (when-not _in-modal?
+                [:span.pl-6 (ui/render-keyboard-shortcut
+                              (shortcut-helper/gen-shortcut-seq :ui/customize-appearance))])
+        :stretch (boolean _in-modal?)
+        :action pick-theme})]))
 
-(rum/defc modal-accent-colors-inner
+(rum/defc modal-appearance-inner < rum/reactive
   []
-  [:div.cp__settings-accent-colors-modal-inner
+  [:div.cp__settings-appearance-modal-inner
+   [:h1.text-2xl.font-bold.pb-2.pt-1 "Appearance"]
+   (theme-modes-row t)
+   (editor-font-family-row t (state/sub :ui/editor-font))
+   (toggle-wide-mode-row t (state/sub :ui/wide-mode?))
+   (show-brackets-row t (state/show-brackets?))
    (accent-color-row true)])
 
 (defn date-format-row [t preferred-date-format]
@@ -704,15 +714,11 @@
 (rum/defcs settings-general < rum/reactive
   [_state current-repo]
   (let [preferred-language (state/sub [:preferred-language])
-        theme (state/sub :ui/theme)
-        dark? (= "dark" theme)
-        show-radix-themes? true
-        system-theme? (state/sub :ui/system-theme?)
-        switch-theme (if dark? "light" "dark")]
+        show-radix-themes? true]
     [:div.panel-wrap.is-general
      (version-row t version)
      (language-row t preferred-language)
-     (theme-modes-row t switch-theme system-theme? dark?)
+     (theme-modes-row t)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))
      (when show-radix-themes? (accent-color-row false))
      (when (config/global-config-enabled?) (edit-global-config-edn))
