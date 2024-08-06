@@ -691,7 +691,7 @@
             (shui/popup-hide!))))
       [visible?])
 
-    [:span
+    [:span.preview-ref-link
      {:ref *el-trigger
       :on-mouse-enter (fn []
                         (let [timer (rum/deref *timer)

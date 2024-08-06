@@ -468,11 +468,21 @@ a.tag {
   @apply text-sm inline-flex items-center text-center cursor-pointer rounded opacity-70;
 
   color: var(--lx-accent-11, var(--ls-tag-text-color, hsl(var(--primary))));
+
+  &:hover {
+    opacity: var(--ls-tag-text-hover-opacity, 1);
+    text-decoration: underline;
+  }
+
+  &[data-ref] + &[data-ref] {
+    @apply mx-[3px];
+  }
 }
 
-a.tag:hover {
-  opacity: var(--ls-tag-text-hover-opacity, 1);
-  text-decoration: underline;
+.preview-ref-link {
+  & + &, & + a.tag, a.tag + & {
+    @apply mx-[3px];
+  }
 }
 
 svg.note {
