@@ -16,8 +16,7 @@
 
 .ui__dropdown-menu-content {
   &.repos-list {
-    @apply px-2 relative overflow-hidden;
-    @apply min-w-[280px] sm:max-w-[320px];
+    @apply flex flex-col px-2 relative overflow-hidden min-w-[280px] sm:max-w-[320px];
 
     .ui__dropdown-menu-item {
       @apply overflow-hidden overflow-ellipsis;
@@ -62,7 +61,7 @@
 }
 
 .cp__repos-quick-actions {
-  @apply -mx-2 bg-gray-01 px-2 pb-1.5 pt-3 border-t flex flex-col rounded-b overflow-hidden;
+  @apply -mx-2 bg-gray-01 px-2 pb-1.5 pt-3 border-t flex flex-col rounded-b h-fit;
 
   .ui__button {
     @apply w-full !py-4 !justify-start opacity-70 font-medium hover:opacity-90
