@@ -249,6 +249,7 @@
          :class (when active? "border-primary border-[2px]")
          :on-click #(state/set-editor-font! t)}
         [:span.flex.flex-col
+         {:class (str "ls-font-" t)}
          [:strong "Ag"]
          [:small tt]]))]])
 
