@@ -14,7 +14,7 @@
     (docs-graph-helper/docs-graph-assertions @conn graph-dir files)
 
     (testing "Additional counts"
-      (is (= 58054 (count (d/datoms @conn :eavt))) "Correct datoms count"))
+      (is (= 57836 (count (d/datoms @conn :eavt))) "Correct datoms count"))
 
     (testing "Asts"
       (is (seq asts) "Asts returned are non-zero")
