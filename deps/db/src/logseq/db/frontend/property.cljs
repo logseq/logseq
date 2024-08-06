@@ -52,8 +52,6 @@
    :logseq.property/heading {:schema {:type :any :hide? true}}
    :logseq.property/created-from-property {:schema {:type :entity
                                                     :hide? true}}
-   :logseq.property/source-page           {:schema {:type :entity
-                                                    :hide? true}}
    :logseq.property/built-in?             {:schema {:type :checkbox
                                                     :hide? true}}
    :logseq.property/hide-properties?      {:schema {:type :checkbox

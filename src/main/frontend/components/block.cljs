@@ -3657,17 +3657,9 @@
                           :navigated? navigated?)]
        (blocks-container config' blocks))]))
 
-(defn hidden-page->source-page
-  [page]
-  (or
-   (get page (pu/get-pid :logseq.property/source-page))
-   ;; FIXME: what if the source page has been deleted?
-   page))
-
 (rum/defc ref-block-container
   [config [page page-blocks]]
-  (let [page (hidden-page->source-page page)
-        alias? (:block/alias? page)
+  (let [alias? (:block/alias? page)
         page (db/entity (:db/id page))
         ;; FIXME: parents need to be sorted
         parent-blocks (group-by :block/parent page-blocks)]
@@ -3700,8 +3692,7 @@
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (let [page (hidden-page->source-page page)
-                alias? (:block/alias? page)
+          (let [alias? (:block/alias? page)
                 page (db/entity (:db/id page))
                 blocks (tree/non-consecutive-blocks->vec-tree blocks)
                 parent-blocks (group-by :block/parent blocks)]
@@ -3749,8 +3740,7 @@
      [:div.flex.flex-col
       (let [blocks (sort-by (comp :block/journal-day first) > blocks)]
         (for [[page blocks] blocks]
-          (let [page (hidden-page->source-page page)
-                blocks (remove nil? blocks)]
+          (let [blocks (remove nil? blocks)]
             (when (seq blocks)
               (let [alias? (:block/alias? page)
                     page (db/entity (:db/id page))
