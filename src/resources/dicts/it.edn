@@ -735,8 +735,6 @@
  :window/minimize "Minimizza"
  :window/restore "Ripristina"
  :command.editor/toggle-block-children "Espandi/Comprimi"
- :command.ui/accent-color-reset "Reimposta colore principale"
- :command.ui/accent-colors-picker "Seleziona colore principale"
  :command.whiteboard/clone-down "Clona sotto"
  :command.whiteboard/clone-left "Clona a sinistra"
  :command.whiteboard/clone-right "Clona a destra"

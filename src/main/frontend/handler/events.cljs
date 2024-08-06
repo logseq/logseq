@@ -370,13 +370,14 @@
     (plugin/open-select-theme!)
     (route-handler/go-to-search! :themes)))
 
-(defmethod handle :modal/toggle-accent-colors-modal [_]
-  (let [label "accent-colors-picker"]
+(defmethod handle :modal/toggle-appearance-modal [_]
+  (let [label "customize-appearance"]
     (if (shui/dialog-get label)
       (shui/dialog-close! label)
       (shui/dialog-open!
-        #(settings/modal-accent-colors-inner)
+        #(settings/modal-appearance-inner)
         {:id      label
+         :overlay-props {:label label}
          :label   label}))))
 
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
