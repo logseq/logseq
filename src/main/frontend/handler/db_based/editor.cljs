@@ -30,8 +30,9 @@
                    (nil? x))) refs))
 
 (defn- use-cached-refs!
-  [refs]
-  (let [cached-refs @(:editor/block-refs @state/state)
+  [refs block]
+  (let [refs (remove #(= (:block/uuid block) (:block/uuid %)) refs)
+        cached-refs @(:editor/block-refs @state/state)
         title->ref (zipmap (map :block/title cached-refs) cached-refs)]
     (map (fn [x]
            (if-let [ref (and (map? x) (title->ref (:block/title x)))]
@@ -102,7 +103,7 @@
                           (fn [refs]
                             (-> refs
                                 remove-non-existed-refs!
-                                use-cached-refs!)))))
+                                (use-cached-refs! block))))))
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]

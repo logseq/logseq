@@ -16,11 +16,12 @@
 (defn extract-blocks
   "Wrapper around logseq.graph-parser.block/extract-blocks that adds in system state
 and handles unexpected failure."
-  [blocks content format {:keys [page-name]}]
+  [blocks content format {:keys [page-name parse-block]}]
   (let [repo (state/get-current-repo)]
     (try
      (gp-block/extract-blocks blocks content format
                               {:user-config (state/get-config)
+                               :parse-block parse-block
                                :block-pattern (config/get-block-pattern format)
                                :db (db/get-db repo)
                                :date-formatter (state/get-date-formatter)
@@ -74,7 +75,7 @@ and handles unexpected failure."
           format (or format :markdown)
           parse-config (mldoc/get-default-config format)
           ast (format/to-edn title format parse-config)
-          blocks (extract-blocks ast title format {})
+          blocks (extract-blocks ast title format {:parse-block block})
           new-block (first blocks)
           block (cond->
                  (merge block new-block)
