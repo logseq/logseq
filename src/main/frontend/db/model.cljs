@@ -369,10 +369,10 @@ independent of format as format specific heading characters are stripped"
 
 (defn page-exists?
   "Whether a page exists."
-  [page-name]
+  [page-name type]
   (let [repo (state/get-current-repo)]
     (when-let [db (conn/get-db repo)]
-     (ldb/page-exists? db page-name))))
+     (ldb/page-exists? db page-name type))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?

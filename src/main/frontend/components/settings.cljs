@@ -539,7 +539,8 @@
         (config-handler/set-config! :default-home new-home)
         (notification/show! "Home default page updated successfully!" :success))
 
-      (db/page-exists? value)
+      ;; FIXME: home page should be db id instead of page name
+      (ldb/get-page (db/get-db) value)
       (let [home (get (state/get-config) :default-home {})
             new-home (assoc home :page value)]
         (config-handler/set-config! :default-home new-home)
