@@ -790,7 +790,7 @@
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
   (if (some? error)
-    error-view
+    (if (fn? error-view) (error-view error) error-view)
     view))
 
 (rum/defcs catch-error-and-notify

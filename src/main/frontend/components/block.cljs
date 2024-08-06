@@ -3166,10 +3166,15 @@
                   (assoc config :container-id container-id)
                   config)]
     (when (:block/uuid block)
-      (rum/with-key
-        (block-container-inner state repo config' block
-                               {:navigating-block navigating-block :navigated? navigated?})
-        (str "block-inner" (:block/uuid block))))))
+      (ui/catch-error
+        (fn [^js error]
+          [:div.flex.flex-col.pl-6.my-1
+           [:code (str "#uuid\"" (:block/uuid block) "\"")]
+           [:code.flex.p-1.text-red-rx-09 "Block render error: " (.-message error)]])
+        (rum/with-key
+          (block-container-inner state repo config' block
+            {:navigating-block navigating-block :navigated? navigated?})
+          (str "block-inner" (:block/uuid block)))))))
 
 (defn divide-lists
   [[f & l]]
