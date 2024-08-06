@@ -175,11 +175,25 @@
 
 (def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
 
+(def db-based-graph? entity-plus/db-based-graph?)
+
 (defn page-exists?
-  "Whether a page exists."
-  [db page-name]
+  "Whether a page exists with the `type`."
+  [db page-name type]
   (when page-name
-    (some? (get-first-page-by-name db page-name))))
+    (let [page-name (common-util/page-name-sanity-lc page-name)]
+      (if (db-based-graph? db)
+        (seq
+         (d/q
+          '[:find [?p ...]
+            :in $ ?name ?type
+            :where
+            [?p :block/name ?name]
+            [?p :block/type ?type]]
+          db
+          page-name
+          type))
+        (d/entity db [:block/name page-name])))))
 
 (defn get-page
   "Get a page given its unsanitized name"
@@ -491,9 +505,6 @@
 (defn get-graph-rtc-uuid
   [db]
   (when db (:kv/value (d/entity db :logseq.kv/graph-uuid))))
-
-
-(def db-based-graph? entity-plus/db-based-graph?)
 
 ;; File based fns
 (defn get-namespace-pages

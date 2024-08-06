@@ -33,8 +33,7 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.outliner.core :as outliner-core]
             [dommy.core :as d]
-            [frontend.mixins :as mixins]
-            [logseq.db :as ldb]))
+            [frontend.mixins :as mixins]))
 
 (defn- <create-class-if-not-exists!
   [value]

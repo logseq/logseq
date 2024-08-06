@@ -22,6 +22,7 @@
             [clojure.core.async :as async]
             [medley.core :as medley]
             [logseq.common.path :as path]
+            [logseq.db :as ldb]
             [clojure.core.async.interop :refer [p->c]]))
 
 (defn- create-contents-file
@@ -88,7 +89,7 @@
                     default-content)
           file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
                                                                           (config/get-file-extension format)))
-          page-exists? (db/page-exists? title)
+          page-exists? (ldb/get-page (db/get-db) title)
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)

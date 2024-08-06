@@ -93,7 +93,8 @@
           (not= schema (:block/schema property))
           (assoc :block/schema schema)
           (and (some? property-name) (not= property-name (:block/title property)))
-          (assoc :block/title property-name))
+          (assoc :block/title property-name
+                 :block/name (common-util/page-name-sanity-lc property-name)))
         property-tx-data
         (cond-> []
           (seq changed-property-attrs)

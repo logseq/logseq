@@ -65,16 +65,15 @@
 
 (defn rename!
   [repo conn _config page-uuid new-name & {:keys [persist-op?]
-                                          :or {persist-op? true}}]
+                                           :or {persist-op? true}}]
   (let [db @conn]
     (when-let [page-e (d/entity db [:block/uuid page-uuid])]
       (let [old-name      (:block/title page-e)
             new-name      (string/trim new-name)
             old-page-name (common-util/page-name-sanity-lc old-name)
             new-page-name (common-util/page-name-sanity-lc new-name)
-            new-page-exists? (when-let [p (ldb/get-case-page db new-name)]
-                               (not= (:db/id p) (:db/id page-e)))
-            name-changed? (not= old-name new-name)]
+            name-changed? (not= old-name new-name)
+            new-page-exists? (and name-changed? (ldb/page-exists? db new-name (:block/type page-e)))]
         (cond
           (string/blank? new-name)
           :invalid-empty-name

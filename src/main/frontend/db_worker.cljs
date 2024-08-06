@@ -203,7 +203,7 @@
           (let [initial-data (sqlite-create-graph/build-db-initial-data config)]
             (d/transact! conn initial-data {:initial-db? true})))
 
-        (when-not (ldb/page-exists? @conn common-config/views-page-name)
+        (when-not (ldb/page-exists? @conn common-config/views-page-name "hidden")
           (ldb/create-views-page! conn))
 
         (db-migrate/migrate conn search-db)

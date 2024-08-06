@@ -163,35 +163,33 @@
 
 (defn- based-merge-pages!
   [repo conn config from-page-name to-page-name {:keys [old-name new-name]}]
-  (when (and (ldb/page-exists? @conn from-page-name)
-             (ldb/page-exists? @conn to-page-name)
-             (not= from-page-name to-page-name))
-    (let [db @conn
-          to-page (d/entity db [:block/name to-page-name])
-          to-id (:db/id to-page)
-          from-page (d/entity db [:block/name from-page-name])
-          from-id (:db/id from-page)
-          datoms (d/datoms @conn :avet :block/page from-id)
-          block-eids (mapv :e datoms)
-          blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/order :block/parent] block-eids)
-          blocks-tx-data (map (fn [block]
-                                (let [id (:db/id block)]
-                                  (cond->
-                                   {:db/id id
-                                    :block/page {:db/id to-id}
-                                    :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)
-                                    :block/order (db-order/gen-key nil)}
+  (let [db @conn
+        to-page (d/entity db [:block/name to-page-name])
+        to-id (:db/id to-page)
+        from-page (d/entity db [:block/name from-page-name])
+        from-id (:db/id from-page)]
+    (when (and from-page to-page (not= from-page-name to-page-name))
+      (let [datoms (d/datoms @conn :avet :block/page from-id)
+            block-eids (mapv :e datoms)
+            blocks (d/pull-many db '[:db/id :block/page :block/refs :block/path-refs :block/order :block/parent] block-eids)
+            blocks-tx-data (map (fn [block]
+                                  (let [id (:db/id block)]
+                                    (cond->
+                                     {:db/id id
+                                      :block/page {:db/id to-id}
+                                      :block/refs (rename-update-block-refs! (:block/refs block) from-id to-id)
+                                      :block/order (db-order/gen-key nil)}
 
-                                    (= (:block/parent block) {:db/id from-id})
-                                    (assoc :block/parent {:db/id to-id})))) blocks)
-          replace-ref-tx-data (replace-page-ref db config from-page to-page-name)
-          tx-data (concat blocks-tx-data replace-ref-tx-data)]
+                                      (= (:block/parent block) {:db/id from-id})
+                                      (assoc :block/parent {:db/id to-id})))) blocks)
+            replace-ref-tx-data (replace-page-ref db config from-page to-page-name)
+            tx-data (concat blocks-tx-data replace-ref-tx-data)]
 
-      (rename-page-aux repo conn config old-name new-name
-                       :merge? true
-                       :other-tx tx-data)
+        (rename-page-aux repo conn config old-name new-name
+                         :merge? true
+                         :other-tx tx-data)
 
-      (worker-page/delete! repo conn (:block/uuid from-page) {:rename? true}))))
+        (worker-page/delete! repo conn (:block/uuid from-page) {:rename? true})))))
 
 (defn- compute-new-file-path
   "Construct the full path given old full path and the file sanitized body.

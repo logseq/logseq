@@ -359,18 +359,17 @@
           (p/do!
            (when db-based?
              (let [tag (string/trim chosen)
-                   edit-block (state/get-edit-block)
-                   get-page-fn (if class? db/get-case-page db/get-page)]
+                   edit-block (state/get-edit-block)]
                (when (:block/uuid edit-block)
-                 (p/let [_ (when-not (de/entity? chosen-result) ; page not exists yet
-                             (if class?
-                               (<create-class! tag {:redirect? false
-                                                    :create-first-block? false})
-                               (<create! tag {:redirect? false
-                                              :create-first-block? false})))
-                         tag-entity (or (when (de/entity? chosen-result) chosen-result) (get-page-fn tag))]
+                 (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
+                                  (if class?
+                                    (<create-class! tag {:redirect? false
+                                                         :create-first-block? false})
+                                    (<create! tag {:redirect? false
+                                                   :create-first-block? false})))]
                    (when class?
-                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity))))))
+                     (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)]
+                       (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity)))))))
            (editor-handler/insert-command! id
                                            (if class? "" (str "#" wrapped-tag))
                                            format
