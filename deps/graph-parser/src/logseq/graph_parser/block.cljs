@@ -362,7 +362,7 @@
           (assoc page :block/type type))))))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} db date-formatter]
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
   (let [db-based? (ldb/db-based-graph? db)
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
@@ -419,7 +419,9 @@
                     (remove nil?)
                     (map (fn [ref]
                            (if-let [entity (ldb/get-case-page db (:block/title ref))]
-                             (select-keys entity [:block/uuid :block/title :block/name])
+                             (if (= (:db/id parse-block) (:db/id entity))
+                               ref
+                               (select-keys entity [:block/uuid :block/title :block/name]))
                              ref))))
           tags (ref->map-fn *structured-tags true)]
       (assoc block
@@ -484,9 +486,9 @@
     (map (fn [page] (page-name->map page db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
-  [block db date-formatter]
+  [block db date-formatter & {:keys [parse-block]}]
   (some-> block
-          (with-page-refs-and-tags db date-formatter)
+          (with-page-refs-and-tags db date-formatter parse-block)
           with-block-refs
           (update :refs (fn [col] (remove nil? col)))))
 
@@ -558,7 +560,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter]}]
+  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -596,7 +598,7 @@
                 block)
         block (-> block
                   (assoc :body body)
-                  (with-page-block-refs db date-formatter)
+                  (with-page-block-refs db date-formatter {:parse-block parse-block})
                   (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
                   (update :refs (fn [refs] (map #(if (map? %) (assoc % :block/format format) %) refs))))
         block (update block :refs concat (:block-refs properties))
@@ -651,7 +653,7 @@
     `blocks`: mldoc ast.
     `content`: markdown or org-mode text.
     `format`: content's format, it could be either :markdown or :org-mode.
-    `options`: Options supported are :user-config, :block-pattern,
+    `options`: Options supported are :user-config, :block-pattern, parse-block,
                :extract-macros, :date-formatter, :page-name, :db-graph-mode? and :db"
   [blocks content format {:keys [user-config db-graph-mode?] :as options}]
   {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
