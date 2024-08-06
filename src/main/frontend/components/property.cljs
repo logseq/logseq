@@ -623,7 +623,7 @@
                                                {:on-click (fn []
                                                             (handle-delete-property! block property {:class-schema? class-schema?})
                                                             (shui/popup-hide!))}
-                                               [:span.w-full.text-red-rx-07.hover:text-red-rx-09
+                                               [:span.w-full.text-red-rx-09
                                                 "Delete property"]))]
                                            {:as-dropdown? true
                                             :content-props {:class "w-48"}}))}
