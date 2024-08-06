@@ -55,7 +55,7 @@
                   (fn logseq-namespace? [k]
                     (contains? logseq-ident-namespaces (namespace k)))]])
 
-(defn- class?
+(defn class?
   "Determines if keyword/ident is a logseq or user class"
   [kw]
   (string/includes? (namespace kw) ".class"))
