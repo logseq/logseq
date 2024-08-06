@@ -22,6 +22,7 @@
             [rum.core :as rum]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.handler.property.util :as pu]
+            [frontend.handler.route :as route-handler]
             [logseq.db :as ldb]))
 
 (rum/defc toggle
@@ -165,7 +166,8 @@
      (when (= type :page) [:hr.menu-separator])
      (when (= type :page)
        (let [page  (db/entity db-id)]
-         (menu-item {:href (rfe/href :page {:name (str (:block/uuid page))})} (t :right-side-bar/pane-open-as-page))))]))
+         (menu-item {:on-click (fn [] (route-handler/redirect-to-page! (:block/uuid page)))}
+                    (t :right-side-bar/pane-open-as-page))))]))
 
 (rum/defc drop-indicator
   [idx drag-to]

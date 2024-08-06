@@ -2479,13 +2479,7 @@
       [:div.flex.flex-row.justify-between.block-content-inner
        (when-not plugin-slotted?
          [:div.block-head-wrap
-          (cond
-            (or (ldb/page? block) (and (:table? config) (seq (:block/tags block))))
-            [:div.flex.flex-row.items-center.gap-1
-             (page-cp config block)]
-
-            :else
-            (build-block-title config block))])
+          (build-block-title config block)])
 
        (file-block/clock-summary-cp block ast-body)]
 
