@@ -1014,76 +1014,77 @@
              (db-async/<get-block (state/get-current-repo) block-id :children? false))
            state)}
   [config id label]
-  (if-let [block-id (if (uuid? id) id (parse-uuid id))]
-    (if (state/sub-async-query-loading (str block-id))
-      [:span "Loading..."]
-      (let [block (db/entity [:block/uuid block-id])
-            db-id (:db/id block)
-            block (when db-id (db/sub-block db-id))
-            properties (:block/properties block)
-            block-type (keyword (pu/lookup properties :logseq.property/ls-type))
-            hl-type (pu/lookup properties :logseq.property/hl-type)
-            repo (state/get-current-repo)
-            stop-inner-events? (= block-type :whiteboard-shape)]
-        (if (and block (:block/title block))
-          (let [title [:span.block-ref
-                       (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
-                                      block nil (:block/uuid block)
-                                      (:slide? config))]
-                inner (if label
-                        (->elem
-                         :span.block-ref
-                         (map-inline config label))
-                        title)]
-            [:div.block-ref-wrap.inline
-             {:data-type    (name (or block-type :default))
-              :data-hl-type hl-type
-              :on-pointer-down
-              (fn [^js/MouseEvent e]
-                (if (util/right-click? e)
-                  (state/set-state! :block-ref/context {:block (:block config)
-                                                        :block-ref block-id})
-                  (when (and
-                         (or (gobj/get e "shiftKey")
-                             (not (.. e -target (closest ".blank"))))
-                         (not (util/right-click? e)))
-                    (util/stop e)
+  (when (not= (:block/uuid (:block config)) id)
+    (if-let [block-id (if (uuid? id) id (parse-uuid id))]
+      (if (state/sub-async-query-loading (str block-id))
+        [:span "Loading..."]
+        (let [block (db/entity [:block/uuid block-id])
+              db-id (:db/id block)
+              block (when db-id (db/sub-block db-id))
+              properties (:block/properties block)
+              block-type (keyword (pu/lookup properties :logseq.property/ls-type))
+              hl-type (pu/lookup properties :logseq.property/hl-type)
+              repo (state/get-current-repo)
+              stop-inner-events? (= block-type :whiteboard-shape)]
+          (if (and block (:block/title block))
+            (let [title [:span.block-ref
+                         (block-content (assoc config :block-ref? true :stop-events? stop-inner-events?)
+                                        block nil (:block/uuid block)
+                                        (:slide? config))]
+                  inner (if label
+                          (->elem
+                           :span.block-ref
+                           (map-inline config label))
+                          title)]
+              [:div.block-ref-wrap.inline
+               {:data-type    (name (or block-type :default))
+                :data-hl-type hl-type
+                :on-pointer-down
+                (fn [^js/MouseEvent e]
+                  (if (util/right-click? e)
+                    (state/set-state! :block-ref/context {:block (:block config)
+                                                          :block-ref block-id})
+                    (when (and
+                           (or (gobj/get e "shiftKey")
+                               (not (.. e -target (closest ".blank"))))
+                           (not (util/right-click? e)))
+                      (util/stop e)
 
-                    (cond
-                      (gobj/get e "shiftKey")
-                      (state/sidebar-add-block!
-                       (state/get-current-repo)
-                       (:db/id block)
-                       :block-ref)
+                      (cond
+                        (gobj/get e "shiftKey")
+                        (state/sidebar-add-block!
+                         (state/get-current-repo)
+                         (:db/id block)
+                         :block-ref)
 
-                      (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
-                      (whiteboard-handler/add-new-block-portal-shape!
-                       (:block/uuid block)
-                       (whiteboard-handler/closest-shape (.-target e)))
+                        (and (util/meta-key? e) (whiteboard-handler/inside-portal? (.-target e)))
+                        (whiteboard-handler/add-new-block-portal-shape!
+                         (:block/uuid block)
+                         (whiteboard-handler/closest-shape (.-target e)))
 
-                      :else
-                      (match [block-type (util/electron?)]
+                        :else
+                        (match [block-type (util/electron?)]
                           ;; pdf annotation
-                        [:annotation true] (pdf-assets/open-block-ref! block)
+                          [:annotation true] (pdf-assets/open-block-ref! block)
 
-                        [:whiteboard-shape true] (route-handler/redirect-to-page!
-                                                  (get-in block [:block/page :block/uuid]) {:block-id block-id})
+                          [:whiteboard-shape true] (route-handler/redirect-to-page!
+                                                    (get-in block [:block/page :block/uuid]) {:block-id block-id})
 
                           ;; default open block page
-                        :else (route-handler/redirect-to-page! id))))))}
+                          :else (route-handler/redirect-to-page! id))))))}
 
-             (if (and (not (util/mobile?))
-                      (not (:preview? config))
-                      (not (:modal/show? @state/state))
-                      (nil? block-type))
-               (block-reference-preview inner
-                 {:repo repo :config config :id block-id})
-               inner)])
-          [:span.warning.mr-1 {:title "Block ref invalid"}
-           (block-ref/->block-ref id)])))
+               (if (and (not (util/mobile?))
+                        (not (:preview? config))
+                        (not (:modal/show? @state/state))
+                        (nil? block-type))
+                 (block-reference-preview inner
+                                          {:repo repo :config config :id block-id})
+                 inner)])
+            [:span.warning.mr-1 {:title "Block ref invalid"}
+             (block-ref/->block-ref id)])))
 
-    [:span.warning.mr-1 {:title "Block ref invalid"}
-     (block-ref/->block-ref id)]))
+      [:span.warning.mr-1 {:title "Block ref invalid"}
+       (block-ref/->block-ref id)])))
 
 (defn inline-text
   ([format v]
