@@ -167,7 +167,7 @@
 
       ;; Counts
       ;; Includes journals as property values e.g. :logseq.task/deadline
-      (is (= 17 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
+      (is (= 18 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
       (is (= 6
@@ -345,6 +345,11 @@
                   distinct
                   count))
           "A block with different case of same ref names has 1 distinct ref"))
+
+    (testing "multiline blocks"
+      (is (= "|markdown| table|\n|some|thing|" (:block/title (find-block-by-content @conn #"markdown.*table"))))
+      (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (find-block-by-content @conn #"multiline block"))))
+      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block")))))
 
     (testing "block refs and path-refs"
       (let [block (find-block-by-content @conn "old todo block")]
