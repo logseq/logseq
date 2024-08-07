@@ -658,40 +658,48 @@
   [blocks content format {:keys [user-config db-graph-mode?] :as options}]
   {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
+        all-blocks (vec (reverse blocks))
         [blocks body pre-block-properties]
         (loop [headings []
                blocks (reverse blocks)
+               block-idx 0
                timestamps {}
                properties {}
                body []]
           (if (seq blocks)
-            (let [[block pos-meta] (first blocks)
-                  ;; in db-graph-mode, property part is not included in block/title
-                  pos-meta (if db-graph-mode?
-                             pos-meta
-                             (assoc pos-meta :end_pos
-                                    (if (seq headings)
-                                      (get-in (last headings) [:meta :start_pos])
-                                      nil)))]
+            (let [[block pos-meta] (first blocks)]
               (cond
                 (paragraph-timestamp-block? block)
                 (let [timestamps (extract-timestamps block)
                       timestamps' (merge timestamps timestamps)]
-                  (recur headings (rest blocks) timestamps' properties body))
+                  (recur headings (rest blocks) (inc block-idx) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
                 (let [properties (extract-properties (second block) (assoc user-config :format format))]
-                  (recur headings (rest blocks) timestamps properties body))
+                  (recur headings (rest blocks) (inc block-idx) timestamps properties body))
 
                 (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta options)
+                  ;; in db-graphs don't include property, deadline/scheduled or logbook text in :block/title
+                (let [pos-meta' (if (and db-graph-mode?
+                                         (when-let [prev-block (first (get all-blocks (dec block-idx)))]
+                                           (or (gp-property/properties-ast? prev-block)
+                                               (= ["Drawer" "logbook"] (take 2 prev-block))
+                                               (and (= "Paragraph" (first prev-block))
+                                                    (seq (set/intersection (set (flatten prev-block)) #{"Deadline" "Scheduled"}))))))
+                                  pos-meta
+                                  ;; fix start_pos
+                                  (assoc pos-meta :end_pos
+                                         (if (seq headings)
+                                           (get-in (last headings) [:meta :start_pos])
+                                           nil)))
+                      block' (construct-block block properties timestamps body encoded-content format pos-meta' options)
                       block'' (if db-graph-mode?
                                 block'
                                 (assoc block' :macros (extract-macros-from-ast (cons block body))))]
-                  (recur (conj headings block'') (rest blocks) {} {} []))
+                  (recur (conj headings block'') (rest blocks) (inc block-idx) {} {} []))
 
                 :else
-                (recur headings (rest blocks) timestamps properties (conj body block))))
+                (recur headings (rest blocks) (inc block-idx) timestamps properties (conj body block))))
             [(-> (reverse headings)
                  sanity-blocks-data)
              body
