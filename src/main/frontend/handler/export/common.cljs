@@ -582,9 +582,6 @@
         (if (and (= "Page_ref" (first url))
                  (or (empty? label)
                      (= label [["Plain" ""]])))
-          ;; (let [plain-text (second url)]
-          ;;   (if (db-content/))
-          ;;   )
           ["Plain" (second url)]
           inline-ast))
       ;; else
