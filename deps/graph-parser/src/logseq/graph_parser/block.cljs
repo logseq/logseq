@@ -560,7 +560,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block]}]
+  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block remove-properties?]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -591,8 +591,10 @@
                     (update :properties-text-values dissoc :collapsed)
                     (update :properties-order (fn [keys] (vec (remove #{:collapsed} keys)))))
                 block)
-        block (assoc block
-                     :block/title (get-block-content encoded-content block format pos-meta block-pattern))
+        title (cond->> (get-block-content encoded-content block format pos-meta block-pattern)
+                remove-properties?
+                (gp-property/remove-properties (:format block)))
+        block (assoc block :block/title title)
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))
                 block)
@@ -679,20 +681,28 @@
                   (recur headings (rest blocks) (inc block-idx) timestamps properties body))
 
                 (heading-block? block)
-                  ;; in db-graphs don't include property, deadline/scheduled or logbook text in :block/title
-                (let [pos-meta' (if (and db-graph-mode?
-                                         (when-let [prev-block (first (get all-blocks (dec block-idx)))]
-                                           (or (gp-property/properties-ast? prev-block)
-                                               (= ["Drawer" "logbook"] (take 2 prev-block))
-                                               (and (= "Paragraph" (first prev-block))
-                                                    (seq (set/intersection (set (flatten prev-block)) #{"Deadline" "Scheduled"}))))))
-                                  pos-meta
+                ;; in db-graphs cut multi-line when there is property, deadline/scheduled or logbook text in :block/title
+                (let [cut-multiline? (and db-graph-mode?
+                                          (when-let [prev-block (first (get all-blocks (dec block-idx)))]
+                                            (or (and (gp-property/properties-ast? prev-block)
+                                                     (not= "Custom" (ffirst (get all-blocks (- block-idx 2)))))
+                                                (= ["Drawer" "logbook"] (take 2 prev-block))
+                                                (and (= "Paragraph" (first prev-block))
+                                                     (seq (set/intersection (set (flatten prev-block)) #{"Deadline" "Scheduled"}))))))
+                      pos-meta' (if cut-multiline?
+                                 pos-meta
                                   ;; fix start_pos
                                   (assoc pos-meta :end_pos
                                          (if (seq headings)
                                            (get-in (last headings) [:meta :start_pos])
                                            nil)))
-                      block' (construct-block block properties timestamps body encoded-content format pos-meta' options)
+                      ;; Remove properties text from custom queries in db graphs
+                      options' (assoc options
+                                      :remove-properties?
+                                      (and db-graph-mode?
+                                           (and (gp-property/properties-ast? (first (get all-blocks (dec block-idx))))
+                                                (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))))
+                      block' (construct-block block properties timestamps body encoded-content format pos-meta' options')
                       block'' (if db-graph-mode?
                                 block'
                                 (assoc block' :macros (extract-macros-from-ast (cons block body))))]

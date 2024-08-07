@@ -349,7 +349,9 @@
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (find-block-by-content @conn #"markdown.*table"))))
       (is (= "multiline block\na 2nd\nand a 3rd" (:block/title (find-block-by-content @conn #"multiline block"))))
-      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block")))))
+      (is (= "logbook block" (:block/title (find-block-by-content @conn #"logbook block"))))
+      (is (is (re-find #"(?s)^Text before\n.*BEGIN_QUERY.*END_QUERY\nText after$"
+                       (:block/title (find-block-by-content @conn #":title \"tasks"))))))
 
     (testing "block refs and path-refs"
       (let [block (find-block-by-content @conn "old todo block")]
