@@ -257,7 +257,7 @@
         repo (state/get-current-repo)
         current-page (when-let [id (page-util/get-current-page-id)]
                        (db/entity id))
-        opts {:limit 100}]
+        opts {:limit 100 :built-in? config/dev?}]
     (swap! !results assoc-in [group :status] :loading)
     (swap! !results assoc-in [:current-page :status] :loading)
     (p/let [blocks (search/block-search repo @!input opts)

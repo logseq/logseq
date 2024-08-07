@@ -234,11 +234,9 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn fuzzy-search
   "Return a list of blocks (pages && tagged blocks) that match the query. Takes the following
   options:
-   * :limit - Number of result to limit search results. Defaults to 100
-   * :built-in?  - Whether to return built-in pages for db graphs. Defaults to true"
-  [repo db q {:keys [limit built-in?]
-              :or {limit 100
-                   built-in? true}}]
+   * :limit - Number of result to limit search results. Defaults to 100"
+  [repo db q {:keys [limit]
+              :or {limit 100}}]
   (when repo
     (let [q (worker-util/search-normalize q true)
           q (fuzzy/clean-str q)
@@ -246,12 +244,8 @@ DROP TRIGGER IF EXISTS blocks_au;
       (when-not (string/blank? q)
         (let [indice (or (get @fuzzy-search-indices repo)
                          (build-fuzzy-search-indice repo db))
-              result (cond->>
-                      (->> (.search indice q (clj->js {:limit limit}))
-                           (bean/->clj))
-
-                       (and (sqlite-util/db-based-graph? repo) (= false built-in?))
-                       (remove #(get-in % [:item :built-in?])))]
+              result (->> (.search indice q (clj->js {:limit limit}))
+                          (bean/->clj))]
           (->> (map :item result)
                (filter (fn [{:keys [title]}]
                          (exact-matched? q title)))))))))
@@ -260,7 +254,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Options:
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
-   * :built-in?  - Whether to return built-in pages for db graphs. Defaults to true"
+   * :built-in?  - Whether to return built-in pages for db graphs. Defaults to false"
   [repo conn search-db q {:keys [limit page enable-snippet?
                                  built-in?] :as option
                           :or {enable-snippet? true}}]
