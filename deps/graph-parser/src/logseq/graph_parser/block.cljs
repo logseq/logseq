@@ -650,14 +650,14 @@
     block))
 
 (defn extract-blocks
-  "Extract headings from mldoc ast.
-  Args:
-    `blocks`: mldoc ast.
-    `content`: markdown or org-mode text.
-    `format`: content's format, it could be either :markdown or :org-mode.
-    `options`: Options supported are :user-config, :block-pattern, parse-block,
-               :extract-macros, :date-formatter, :page-name, :db-graph-mode? and :db"
-  [blocks content format {:keys [user-config db-graph-mode?] :as options}]
+  "Extract headings from mldoc ast. Args:
+  *`blocks`: mldoc ast.
+  *  `content`: markdown or org-mode text.
+  *  `format`: content's format, it could be either :markdown or :org-mode.
+  *  `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
+     * :db-graph-mode? : Set when a db graph in the frontend
+     * :export-to-db-graph? : Set when exporting to a db graph"
+  [blocks content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]
   {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
         all-blocks (vec (reverse blocks))
@@ -681,8 +681,8 @@
                   (recur headings (rest blocks) (inc block-idx) timestamps properties body))
 
                 (heading-block? block)
-                ;; in db-graphs cut multi-line when there is property, deadline/scheduled or logbook text in :block/title
-                (let [cut-multiline? (and db-graph-mode?
+                ;; for db-graphs cut multi-line when there is property, deadline/scheduled or logbook text in :block/title
+                (let [cut-multiline? (and export-to-db-graph?
                                           (when-let [prev-block (first (get all-blocks (dec block-idx)))]
                                             (or (and (gp-property/properties-ast? prev-block)
                                                      (not= "Custom" (ffirst (get all-blocks (- block-idx 2)))))
@@ -690,7 +690,7 @@
                                                 (and (= "Paragraph" (first prev-block))
                                                      (seq (set/intersection (set (flatten prev-block)) #{"Deadline" "Scheduled"}))))))
                       pos-meta' (if cut-multiline?
-                                 pos-meta
+                                  pos-meta
                                   ;; fix start_pos
                                   (assoc pos-meta :end_pos
                                          (if (seq headings)
@@ -699,11 +699,11 @@
                       ;; Remove properties text from custom queries in db graphs
                       options' (assoc options
                                       :remove-properties?
-                                      (and db-graph-mode?
+                                      (and export-to-db-graph?
                                            (and (gp-property/properties-ast? (first (get all-blocks (dec block-idx))))
                                                 (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))))
                       block' (construct-block block properties timestamps body encoded-content format pos-meta' options')
-                      block'' (if db-graph-mode?
+                      block'' (if (or db-graph-mode? export-to-db-graph?)
                                 block'
                                 (assoc block' :macros (extract-macros-from-ast (cons block body))))]
                   (recur (conj headings block'') (rest blocks) (inc block-idx) {} {} []))
