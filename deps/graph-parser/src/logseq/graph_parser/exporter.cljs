@@ -888,7 +888,7 @@
         extract-options' (merge {:block-pattern (common-config/get-block-pattern format)
                                  :date-formatter "MMM do, yyyy"
                                  :uri-encoded? false
-                                 :db-graph-mode? true
+                                 :export-to-db-graph? true
                                  :filename-format :legacy}
                                 extract-options
                                 {:db db})]
