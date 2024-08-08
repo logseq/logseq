@@ -706,26 +706,24 @@
      children]))
 
 (rum/defc page-preview-trigger
-  [{:keys [children sidebar? open? manual?] :as config} page-name]
-  (let [page-name (when page-name (util/page-name-sanity-lc page-name))
-        *timer (rum/use-ref nil)                            ;; show
+  [{:keys [children sidebar? open? manual?] :as config} page-entity]
+  (let [*timer (rum/use-ref nil)                            ;; show
         *timer1 (rum/use-ref nil)                           ;; hide
         *el-popup (rum/use-ref nil)
         [visible? set-visible!] (rum/use-state nil)
         ;; set-visible! (fn debug-visible [v] (js/console.warn "debug: visible" v) (set-visible! v))
         _  #_:clj-kondo/ignore (rum/defc preview-render []
                                  (rum/use-effect!
-                                   (fn []
-                                     (let [el-popup (rum/deref *el-popup)
-                                           focus! #(js/setTimeout (fn [] (.focus el-popup)))]
-                                       (focus!)
-                                       #(set-visible! false)))
-                                   [])
+                                  (fn []
+                                    (let [el-popup (rum/deref *el-popup)
+                                          focus! #(js/setTimeout (fn [] (.focus el-popup)))]
+                                      (focus!)
+                                      #(set-visible! false)))
+                                  [])
 
-                                 (let [redirect-page-name (or (and page-name (model/get-redirect-page-name page-name (:block/alias? config)))
-                                                            page-name)]
-                                   (when redirect-page-name
-                                     [:div.tippy-wrapper.as-page
+                                 (when-let [source (or (db/get-alias-source-page (state/get-current-repo) (:db/id page-entity))
+                                                  page-entity)]
+                                   [:div.tippy-wrapper.as-page
                                       {:ref *el-popup
                                        :tab-index -1
                                        :style {:width 600
@@ -739,19 +737,19 @@
                                                          ;; check the top popup whether is the preview popup
                                                          (when (ui/last-shui-preview-popup?)
                                                            (rum/set-ref! *timer1
-                                                             (js/setTimeout #(set-visible! false) 500))))}
+                                                                         (js/setTimeout #(set-visible! false) 500))))}
                                       (let [page-cp (state/get-page-blocks-cp)]
                                         (page-cp {:repo (state/get-current-repo)
-                                                  :page-name redirect-page-name
+                                                  :page-name (str (:block/uuid source))
                                                   :sidebar? sidebar?
-                                                  :preview? true}))])))]
+                                                  :preview? true}))]))]
 
     (if (and (not (:preview? config))
-          (or (not manual?) open?))
+             (or (not manual?) open?))
       (popup-preview-impl children
-        {:visible? visible? :set-visible! set-visible!
-         :*timer *timer :*timer1 *timer1
-         :render preview-render :*el-popup *el-popup})
+                          {:visible? visible? :set-visible! set-visible!
+                           :*timer *timer :*timer1 *timer1
+                           :render preview-render :*el-popup *el-popup})
       children)))
 
 (declare block-reference)
@@ -788,7 +786,7 @@
                    (not disable-preview?)
                    (not modal?))
             (if (ldb/page? entity)
-              (page-preview-trigger (assoc config :children inner) page-name)
+              (page-preview-trigger (assoc config :children inner) entity)
               (block-reference-preview inner {:repo (state/get-current-repo)
                                               :config config
                                               :id (:block/uuid entity)}))
