@@ -64,6 +64,7 @@
     (when (false? loading?)
       (views/view view-entity {:data data
                                :set-data! set-data!
+                               :title-key :views.table/tagged-nodes
                                :columns columns
                                :add-new-object! #(add-new-class-object! class set-data!)
                                :create-view! (fn []
@@ -147,6 +148,7 @@
     (when (false? loading?)
       (views/view view-entity {:data data
                                :set-data! set-data!
+                               :title-key :views.table/property-nodes
                                :columns columns
                                :add-new-object! #(add-new-property-object! property set-data!)
                                :create-view! (fn []

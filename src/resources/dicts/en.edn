@@ -642,7 +642,9 @@
  :header/go-forward                  "Go forward"
 
  ;; E.g. 1 node or 2 nodes
- :views.table/default-title (fn [total] (str total (if (= total 1) " Node" " Nodes")))
+ :views.table/default-title (fn [total] (str total (if (<= total 1) " Node" " Nodes")))
+ :views.table/tagged-nodes (fn [total] (str total (if (<= total 1) " tagged node" " tagged Nodes")))
+ :views.table/property-nodes (fn [total] (str total (if (<= total 1) " node with this property" " nodes with this property")))
 
  ;; Commands are nested for now to stay in sync with the shortcuts system.
  ;; Other languages should not nest keys under :commands
