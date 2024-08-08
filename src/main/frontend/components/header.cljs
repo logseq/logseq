@@ -332,7 +332,7 @@
       (when-not (mobile-util/native-platform?)
         (new-block-mode))
 
-      (when show-open-folder?
+      (when (and show-open-folder? (util/electron?))
         [:a.text-sm.font-medium.button.icon.add-graph-btn.flex.items-center
          {:on-click #(route-handler/redirect! {:to :repo-add})}
          (ui/icon "folder-plus")

@@ -246,7 +246,8 @@
   [:div.cp__repos-quick-actions
    {:on-click #(shui/popup-hide!)}
 
-   (when-not db-based?
+   (when (and (not db-based?)
+           (not (config/demo-graph?)))
      [:<>
       (shui/button {:size :sm :variant :ghost
                     :title (t :sync-from-local-files-detail)
@@ -260,17 +261,23 @@
                                 (state/pub-event! [:graph/ask-for-re-index multiple-windows? nil]))}
                    (shui/tabler-icon "folder-bolt") [:span (t :re-index)])])
 
-   (shui/button {:size :sm :variant :ghost
-                 :on-click (fn []
-                             (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
-                               (state/pub-event! [:graph/setup-a-repo])
-                               (route-handler/redirect-to-all-graphs)))}
-                (shui/tabler-icon "folder-plus")
-                [:span (t :new-graph)])
+   (when (util/electron?)
+     (shui/button {:size :sm :variant :ghost
+                   :on-click (fn []
+                               (if (or (nfs-handler/supported?) (mobile-util/native-platform?))
+                                 (state/pub-event! [:graph/setup-a-repo])
+                                 (route-handler/redirect-to-all-graphs)))}
+       (shui/tabler-icon "folder-plus")
+       [:span (t :new-graph)]))
 
    (shui/button {:size :sm :variant :ghost
                  :on-click #(state/pub-event! [:graph/new-db-graph])}
-                (shui/tabler-icon "cylinder-plus") [:span "Add new graph (DB version)"])
+                (shui/tabler-icon "database-plus") [:span "Create a new graph"])
+
+   (shui/button {:size :sm :variant :ghost
+                 :on-click (fn [] (route-handler/redirect! {:to :import}))}
+     (shui/tabler-icon "database-import")
+     [:span (t :import-notes)])
 
    (shui/button {:size :sm :variant :ghost
                  :on-click #(route-handler/redirect-to-all-graphs)}
@@ -360,7 +367,7 @@
             [:div.repo-switch.pr-2.whitespace-nowrap
              [:span.repo-name.font-medium
               [:span.repo-text.overflow-hidden.text-ellipsis
-               (if (= config/demo-repo short-repo-name) "Demo" short-repo-name)]
+               (if (config/demo-graph? short-repo-name) "Demo" short-repo-name)]
               (when remote? [:span.pl-1 (ui/icon "cloud")])]
              [:span.dropdown-caret]]))))))
 
