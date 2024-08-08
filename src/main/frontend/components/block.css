@@ -200,7 +200,7 @@
 }
 
 .block-title-wrap {
-  @apply inline-flex items-center flex-wrap;
+  @apply inline items-center flex-wrap;
 
   &.as-heading {
     @apply flex flex-1;
