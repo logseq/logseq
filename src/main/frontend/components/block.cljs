@@ -396,10 +396,8 @@
       (p/then (assets-handler/make-asset-url href) #(reset! src %)))
 
     (when @src
-      ;; NOTE(andelf): Under nfs context, src might be a bare blob:http://..../uuid URI without ext info
       (let [ext (keyword (or (util/get-file-ext @src)
                              (util/get-file-ext href)))
-            _ (prn :debug :ext ext :href href :src @src)
             repo (state/get-current-repo)
             repo-dir (config/get-repo-dir repo)
             path (str repo-dir href)

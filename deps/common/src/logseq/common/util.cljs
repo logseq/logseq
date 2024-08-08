@@ -191,7 +191,8 @@
 
 (defn path->file-ext
   [path-or-file-name]
-  (second (re-find #"(?:\.)(\w+)[^.]*$" path-or-file-name)))
+  (let [last-part (last (string/split path-or-file-name #"/"))]
+    (second (re-find #"(?:\.)(\w+)[^.]*$" last-part))))
 
 (defn get-format
   "File path to format keyword, :org, :markdown, etc."
