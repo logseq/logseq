@@ -65,8 +65,6 @@
                :or {show-title? true}}]
   (let [page-id (:db/id page)
         page (when page-id (db/sub-block page-id))]
-    (prn :debug :page-id page-id
-         :page page)
     (when page
       [:div.property-configure.grid.gap-2
        (when show-title? [:h1.title.mb-4 "Configure tag"])
