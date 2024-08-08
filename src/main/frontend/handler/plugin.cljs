@@ -512,7 +512,7 @@
 
 (defn load-unpacked-plugin
   []
-  (when util/electron?
+  (when (util/electron?)
     (p/let [path (ipc/ipc "openDialog")]
       (when-not (:plugin/selected-unpacked-pkg @state/state)
         (state/set-state! :plugin/selected-unpacked-pkg path)))))

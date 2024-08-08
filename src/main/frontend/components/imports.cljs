@@ -378,7 +378,7 @@
 
   (rum/defc importer < rum/reactive
   [{:keys [query-params]}]
-  (let [db-based? (config/db-based-graph? (state/get-current-repo))]
+  (let [support-file-based? true]
     (if (state/sub :graph/importing)
       (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
             left-label (if (and current-idx total (= current-idx total))
@@ -400,20 +400,19 @@
          [:h1 (t :on-boarding/importing-title)]
          [:h2 (t :on-boarding/importing-desc)]]
         [:section.d.md:flex.flex-col
-         (when db-based?
-           [:label.action-input.flex.items-center.mx-2.my-2
-            [:span.as-flex-center [:i (svg/logo 28)]]
-            [:span.flex.flex-col
-             [[:strong "SQLite"]
-              [:small (t :on-boarding/importing-sqlite-desc)]]]
-            [:input.absolute.hidden
-             {:id        "import-sqlite-db"
-              :type      "file"
-              :on-change (fn [e]
-                           (shui/dialog-open!
-                            #(set-graph-name-dialog e {:sqlite? true})))}]])
+         [:label.action-input.flex.items-center.mx-2.my-2
+          [:span.as-flex-center [:i (svg/logo 28)]]
+          [:span.flex.flex-col
+           [[:strong "SQLite"]
+            [:small (t :on-boarding/importing-sqlite-desc)]]]
+          [:input.absolute.hidden
+           {:id "import-sqlite-db"
+            :type "file"
+            :on-change (fn [e]
+                         (shui/dialog-open!
+                           #(set-graph-name-dialog e {:sqlite? true})))}]]
 
-         (when (or util/electron? util/web-platform?)
+         (when (or (util/electron?) util/web-platform?)
            [:label.action-input.flex.items-center.mx-2.my-2
             [:span.as-flex-center [:i (svg/logo 28)]]
             [:span.flex.flex-col
@@ -427,7 +426,7 @@
                                      (import-file-to-db-handler e {}))
                                    1000)}]])
 
-         (when-not db-based?
+         (when (and (util/electron?) support-file-based?)
            [:label.action-input.flex.items-center.mx-2.my-2
             [:span.as-flex-center [:i (svg/logo 28)]]
             [:span.flex.flex-col
@@ -438,7 +437,7 @@
               :type      "file"
               :on-change lsq-import-handler}]])
 
-         (when-not db-based?
+         (when (and (util/electron?) support-file-based?)
            [:label.action-input.flex.items-center.mx-2.my-2
             [:span.as-flex-center [:i (svg/roam-research 28)]]
             [:div.flex.flex-col
@@ -449,7 +448,7 @@
               :type      "file"
               :on-change roam-import-handler}]])
 
-         (when-not db-based?
+         (when (and (util/electron?) support-file-based?)
            [:label.action-input.flex.items-center.mx-2.my-2
             [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
             [:span.flex.flex-col
