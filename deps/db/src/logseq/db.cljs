@@ -438,6 +438,7 @@
    (d/datoms db :avet :block/name)
    (distinct)
    (map #(d/entity db (:e %)))
+   (filter page?)
    (remove hidden?)
    (remove (fn [page]
              (common-util/uuid-string? (:block/name page))))))
