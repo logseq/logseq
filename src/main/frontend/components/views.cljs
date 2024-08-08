@@ -956,8 +956,9 @@
     [:div.flex.flex-col.gap-2.grid
      [:div.flex.items-center.justify-between
       [:div.flex.flex-row.items-center.gap-2
-       [:div.font-medium (t (or title-key :views.table/default-title)
-                            (count (:rows table)))]]
+       [:div.font-medium.opacity-50
+        (t (or title-key :views.table/default-title)
+           (count (:rows table)))]]
       [:div.flex.items-center.gap-1
 
        (filter-properties columns table)
