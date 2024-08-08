@@ -175,7 +175,7 @@
                                   (date/journal-title->int (date/today))))
                      (state/pub-event! [:journal/insert-template page-name])))
                  state)}
-  [state _repo page-e {:keys [sidebar? whiteboard?] :as config}]
+  [state repo page-e {:keys [sidebar? whiteboard?] :as config}]
   (when page-e
     (let [page-name (or (:block/name page-e)
                         (str (:block/uuid page-e)))
@@ -183,33 +183,51 @@
           block (get-block (or (:block/uuid page-e) (:block/name page-e)))
           block? (not (db/page? block))
           children (:block/_parent block)
-          *loading? (:*loading? config)
-          loading? (when *loading? (rum/react *loading?))]
-      (cond
-        (and
-         (not loading?)
-         (not block?)
-         (empty? children))
-        (dummy-block page-e)
+          children (cond
+                     (ldb/class? block)
+                     (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 
-        :else
-        (let [document-mode? (state/sub :document/mode?)
-              hiccup-config (merge
-                             {:id (if block? (str block-id) page-name)
-                              :db/id (:db/id block)
-                              :block? block?
-                              :editor-box editor/box
-                              :document/mode? document-mode?}
-                             config)
-              config (common-handler/config-with-document-mode hiccup-config)
-              blocks (if block? [block] (db/sort-by-order children block))]
-          [:div
-           (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
-           (when-not config/publishing?
-             (let [args (if block-id
-                          {:block-uuid block-id}
-                          {:page page-name})]
-               (add-button args)))])))))
+                     (ldb/property? block)
+                     (remove (fn [b] (some? (get block (:db/ident b)))) children)
+
+                     :else
+                     children)
+          *loading? (:*loading? config)
+          loading? (when *loading? (rum/react *loading?))
+          db-based? (config/db-based-graph? repo)]
+      [:<>
+       (when (and db-based? (or (ldb/class? block) (ldb/property? block)))
+         [:div.font-medium.mt-8.ml-1.opacity-50
+          "Notes"])
+
+       (cond
+         loading?
+         nil
+
+         (and
+          (not loading?)
+          (not block?)
+          (empty? children))
+         (dummy-block page-e)
+
+         :else
+         (let [document-mode? (state/sub :document/mode?)
+               hiccup-config (merge
+                              {:id (if block? (str block-id) page-name)
+                               :db/id (:db/id block)
+                               :block? block?
+                               :editor-box editor/box
+                               :document/mode? document-mode?}
+                              config)
+               config (common-handler/config-with-document-mode hiccup-config)
+               blocks (if block? [block] (db/sort-by-order children block))]
+           [:div
+            (page-blocks-inner page-e blocks config sidebar? whiteboard? block-id)
+            (when-not config/publishing?
+              (let [args (if block-id
+                           {:block-uuid block-id}
+                           {:page page-name})]
+                (add-button args)))]))])))
 
 (rum/defc today-queries < rum/reactive
   [repo today? sidebar?]
@@ -572,17 +590,14 @@
               [:div.mt-8
                (objects/property-related-objects page)])
 
-            (when-not (and db-based? (or (ldb/class? page) (ldb/property? page)))
-              [:div
-               (when (and block? (not sidebar?) (not whiteboard?))
-                 (let [config (merge config {:id "block-parent"
-                                             :block? true})]
-                   [:div.mb-4
-                    (component-block/breadcrumb config repo block-id {:level-limit 3})]))
+            (when (and block? (not sidebar?) (not whiteboard?))
+              (let [config (merge config {:id "block-parent"
+                                          :block? true})]
+                [:div.mb-4
+                 (component-block/breadcrumb config repo block-id {:level-limit 3})]))
 
-               ;; blocks
-               (page-blocks-cp repo page (merge option {:sidebar? sidebar?
-                                                        :whiteboard? whiteboard?}))])])
+            (page-blocks-cp repo page (merge option {:sidebar? sidebar?
+                                                     :whiteboard? whiteboard?}))])
 
          (when (and (not preview?) @(::main-ready? state))
            [:div {:style {:padding-left 9}}

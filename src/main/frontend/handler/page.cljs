@@ -319,7 +319,9 @@
   (let [tx-data [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
                  ;; TODO: Move this to outliner.core to consistently add refs for tags
                  [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
-    (db/transact! repo tx-data {:outliner-op :save-block})))
+    (ui-outliner-tx/transact! {:outliner-op :save-block}
+      (editor-handler/save-current-block!)
+      (db/transact! repo tx-data {:outliner-op :save-block}))))
 
 (defn on-chosen-handler
   [input id _q pos format]
@@ -338,7 +340,10 @@
       (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [chosen (:block/title chosen-result)
+        (let [chosen-result (if (:block/uuid chosen-result)
+                              (db/entity [:block/uuid (:block/uuid chosen-result)])
+                              chosen-result)
+              chosen (:block/title chosen-result)
               class? (and db-based? hashtag?
                           (or (string/includes? chosen (str (t :new-tag) " "))
                               (ldb/class? (db/get-page chosen))))
@@ -357,6 +362,12 @@
                                q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (p/do!
+           (editor-handler/insert-command! id
+                                           (if class? "" (str "#" wrapped-tag))
+                                           format
+                                           {:last-pattern last-pattern
+                                            :end-pattern (when wrapped? page-ref/right-brackets)
+                                            :command :page-ref})
            (when db-based?
              (let [tag (string/trim chosen)
                    edit-block (state/get-edit-block)]
@@ -370,18 +381,15 @@
                    (when class?
                      (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)]
                        (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity)))))))
-           (editor-handler/insert-command! id
-                                           (if class? "" (str "#" wrapped-tag))
-                                           format
-                                           {:last-pattern last-pattern
-                                            :end-pattern (when wrapped? page-ref/right-brackets)
-                                            :command :page-ref})
 
            (when input (.focus input)))))
       (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [chosen (:block/title chosen-result)
+        (let [chosen-result (if (:block/uuid chosen-result)
+                              (db/entity [:block/uuid (:block/uuid chosen-result)])
+                              chosen-result)
+              chosen (:block/title chosen-result)
               chosen' (string/replace-first chosen (str (t :new-page) " ") "")
               ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
                          (cond
