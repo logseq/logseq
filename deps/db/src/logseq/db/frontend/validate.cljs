@@ -33,7 +33,7 @@
       (let [[type-before type-after] [(:block/type ent-before) (:block/type ent-after)]]
         (when (and (some? type-before)
                    (nil? type-after))
-          (js/console.error "Illeagal :block/type change, entity id:" (:db/id ent-after))
+          (js/console.error "Illegal :block/type change, entity id:" (:db/id ent-after))
           (prn :ent-before ent-before :ent-after ent-after :tx-data tx-data :tx-meta tx-meta))))))
 
 (defn validate-tx-report!
