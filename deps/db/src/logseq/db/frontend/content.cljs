@@ -3,7 +3,6 @@
   (:require [clojure.string :as string]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]))
 
 (defonce page-ref-special-chars "~^")
@@ -95,8 +94,8 @@
 
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
-  [repo db item eid]
-  (if (sqlite-util/db-based-graph? repo)
+  [db item eid]
+  (if (common-util/db-based-graph? db)
     (if-let [content (:block/title item)]
       (let [refs (:block/refs (d/entity db eid))]
         (assoc item :block/title (special-id-ref->page-ref content refs)))
