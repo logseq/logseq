@@ -32,6 +32,7 @@
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.outliner.op :as outliner-op]
+            [goog.object :as gobj]
             [promesa.core :as p]
             [shadow.cljs.modern :refer [defclass]]))
 
@@ -41,6 +42,12 @@
 (defonce *client-ops-conns worker-state/*client-ops-conns)
 (defonce *opfs-pools worker-state/*opfs-pools)
 (defonce *publishing? (atom false))
+
+(defn- check-worker-scope!
+  []
+  (when (or (gobj/get js/self "React")
+          (gobj/get js/self "module$react"))
+    (throw (js/Error. "[db-worker] React is forbidden in worker scope!"))))
 
 (defn- <get-opfs-pool
   [graph]
@@ -747,6 +754,7 @@
 (defn init
   "web worker entry"
   []
+  (check-worker-scope!)
   (let [^js obj (DBWorker.)]
     (outliner-register-op-handlers!)
     (worker-state/set-worker-object! obj)
