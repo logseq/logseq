@@ -159,6 +159,11 @@
              :options {:on-click (fn []
                                    (page-handler/toggle-properties! page))}})
 
+          (when (and db-based? (= (:block/type page) "page"))
+            {:title (t :page/convert-to-tag)
+             :options {:on-click (fn []
+                                   (page-handler/convert-to-tag! page))}})
+
           (when developer-mode?
             {:title   (t :dev/show-page-data)
              :options {:on-click (fn []
