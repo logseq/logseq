@@ -1481,23 +1481,27 @@
                     matched-alias]))
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
-          (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                 (cond
-                   (mobile-util/native-platform?)
+          (->
+           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
+                  (cond
+                    (mobile-util/native-platform?)
                    ;; capacitor fs accepts Blob, File implements Blob
-                   (p/let [buffer (.arrayBuffer file)
-                           content (base64/encodeByteArray (js/Uint8Array. buffer))
-                           fpath (path/path-join dir file-rpath)]
-                     (capacitor-fs/<write-file-with-base64 fpath content))
+                    (p/let [buffer (.arrayBuffer file)
+                            content (base64/encodeByteArray (js/Uint8Array. buffer))
+                            fpath (path/path-join dir file-rpath)]
+                      (capacitor-fs/<write-file-with-base64 fpath content))
 
-                   (config/db-based-graph? repo) ;; memory-fs
-                   (p/let [buffer (.arrayBuffer file)
-                           content (js/Uint8Array. buffer)]
-                     (fs/write-file! repo dir file-rpath content nil))
+                    (config/db-based-graph? repo) ;; memory-fs
+                    (p/let [buffer (.arrayBuffer file)
+                            content (js/Uint8Array. buffer)]
+                      (fs/write-file! repo dir file-rpath content nil))
 
-                   :else                ; nfs
-                   (fs/write-file! repo dir file-rpath (.stream file) nil))
-                 [file-rpath file (path/path-join dir file-rpath) matched-alias])))))))
+                    :else                ; nfs
+                    (fs/write-file! repo dir file-rpath (.stream file) nil))
+                  [file-rpath file (path/path-join dir file-rpath) matched-alias])
+           (p/catch (fn [error]
+                      (prn :paste-file-error)
+                      (js/console.error error))))))))))
 
 (defn delete-asset-of-block!
   [{:keys [repo href full-text block-id local? delete-local?] :as _opts}]

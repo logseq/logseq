@@ -438,10 +438,6 @@
                                 :on-click share-fn}
            title])))))
 
-(defn ar-url->http-url
-  [href]
-  (string/replace href #"^ar://" (str (state/get-arweave-gateway) "/")))
-
 ;; TODO: safe encoding asciis
 ;; TODO: image link to another link
 (defn image-link [config url href label metadata full_text]
@@ -459,9 +455,6 @@
        (let [href (cond
                     (util/starts-with? href "http")
                     href
-
-                    (util/starts-with? href "ar")
-                    (ar-url->http-url href)
 
                     config/publishing?
                     (subs href 1)
@@ -1172,9 +1165,6 @@
                  (util/starts-with? href "http")
                  href
 
-                 (util/starts-with? href "ar")
-                 (ar-url->http-url href)
-
                  config/publishing?
                  (subs href 1)
 
@@ -1369,16 +1359,6 @@
 
           (show-link? config metadata href full_text)
           (media-link config url href label metadata full_text)
-
-          (= protocol "ar")
-          (->elem
-           :a.external-link
-           (cond->
-            {:href (ar-url->http-url href)
-             :target "_blank"}
-             title
-             (assoc :title title))
-           (map-inline config label))
 
           :else
           (->elem
