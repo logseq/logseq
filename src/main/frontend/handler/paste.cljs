@@ -17,7 +17,8 @@
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]))
 
 (defn- paste-text-parseable
   [format text]
@@ -183,7 +184,10 @@
      (if (and (seq blocks) (= graph (state/get-current-repo)))
        ;; Handle internal paste
        (let [revert-cut-txs (get-revert-cut-txs blocks)
-             keep-uuid? (= (state/get-block-op-type) :cut)]
+             keep-uuid? (= (state/get-block-op-type) :cut)
+             blocks (if (config/db-based-graph? (state/get-current-repo))
+                      (map (fn [b] (dissoc b :block/properties)) blocks)
+                      blocks)]
          (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
                                               :keep-uuid? keep-uuid?}))
        (paste-copied-text input text html)))
