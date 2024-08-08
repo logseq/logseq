@@ -8,8 +8,7 @@
             [logseq.common.log :as log]
             [goog.string :as gstring]
             [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [datascript.core :as d]))
+            [cljs-time.core :as t]))
 
 (defn safe-decode-uri-component
   [uri]
@@ -349,8 +348,3 @@ return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
                 (vreset! seen-ids #{})
                 (recur (conj r id) rest-ids* (first rest-ids*))))))]
     (mapv id->elem sorted-ids)))
-
-(defn db-based-graph?
-  "Whether the current graph is db-only"
-  [db]
-  (= "db" (:kv/value (d/entity db :logseq.kv/db-type))))
