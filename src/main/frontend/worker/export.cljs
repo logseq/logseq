@@ -15,7 +15,7 @@
                        (if (ldb/page? (d/entity db [:block/uuid root-block-uuid]))
                          0
                          1))
-        blocks (->> (ldb/get-block-and-children db root-block-uuid)
+        blocks (->> (d/pull-many db '[*] (keep :db/id (ldb/get-block-and-children db root-block-uuid)))
                     (map #(db-content/update-block-content db % (:db/id %))))
         tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
     (worker-file/tree->file-content repo db tree
