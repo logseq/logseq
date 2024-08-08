@@ -295,13 +295,6 @@
               [(:name v) k]))
        (into {})))
 
-;; Should this move to logseq.db.frontend.property to be better maintained?
-(def db-only-built-in-property-names
-  "Built-in property names that are are only used by DB graphs"
-  #{:description :page-tags :hide-properties? :created-from-property
-    :built-in? :includes :excludes :status :priority :deadline :sorting
-    :hidden-columns :ordered-columns :view-for :remote-metadata})
-
 (def all-built-in-property-names
   "All built-in property names as a set of keywords"
   (-> built-in-property-name-to-idents keys set
@@ -316,9 +309,15 @@
                        (map #(-> % :title string/lower-case keyword))))))
 
 (def file-built-in-property-names
-  "Built-in property names for file graphs that are imported. Expressed as set of keywords"
-  (-> all-built-in-property-names
-      (set/difference db-only-built-in-property-names)))
+  "File-graph built-in property names that are supported. Expressed as set of keywords"
+  #{:alias :tags :background-color :background-image :heading
+    :query-table :query-properties :query-sort-by :query-sort-desc
+    :ls-type :hl-type :hl-color :hl-page :hl-stamp :hl-value :file :file-path
+    :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
+    :icon :public :exclude-from-graph-view :filters})
+
+(assert (set/subset? file-built-in-property-names all-built-in-property-names)
+        "All file-built-in properties are used in db graph")
 
 (defn- update-built-in-property-values
   [props {:keys [ignored-properties all-idents]} {:block/keys [title name]} options]
@@ -872,9 +871,9 @@
         ;; Save properties on new property pages separately as they can contain new properties and thus need to be
         ;; transacted separately the property pages
         property-page-properties-tx (keep (fn [b]
-                                              (when-let [page-properties (not-empty (db-property/properties b))]
-                                                (merge page-properties {:block/uuid (:block/uuid b)})))
-                                            properties-tx)]
+                                            (when-let [page-properties (not-empty (db-property/properties b))]
+                                              (merge page-properties {:block/uuid (:block/uuid b)})))
+                                          properties-tx)]
     {:pages-tx pages-tx'
      :property-pages-tx (concat property-pages-tx converted-property-pages-tx)
      :property-page-properties-tx property-page-properties-tx}))
