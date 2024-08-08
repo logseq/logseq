@@ -9,13 +9,10 @@
             #?(:org.babashka/nbb [datascript.db])
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.db.frontend.content :as db-content]
-            [datascript.core :as d]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.common.util :as common-util]))
 
-(defn db-based-graph?
-  "Whether the current graph is db-only"
-  [db]
-  (= "db" (:kv/value (d/entity db :logseq.kv/db-type))))
+(def db-based-graph? common-util/db-based-graph?)
 
 (def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity

@@ -1,11 +1,11 @@
 (ns frontend.worker.export
   "Export data"
   (:require [datascript.core :as d]
-            [frontend.db :as db]
             [frontend.worker.file.core :as worker-file]
             [logseq.db :as ldb]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.outliner.tree :as otree]))
+            [logseq.outliner.tree :as otree]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn block->content
   "Converts a block including its children (recursively) to plain-text."
@@ -15,7 +15,8 @@
                        (if (ldb/page? (d/entity db [:block/uuid root-block-uuid]))
                          0
                          1))
-        blocks (db/pull-many (keep :db/id (ldb/get-block-and-children db root-block-uuid)))
+        blocks (->> (ldb/get-block-and-children db root-block-uuid)
+                    (map #(db-content/update-block-content db % (:db/id %))))
         tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
     (worker-file/tree->file-content repo db tree
                                     (assoc tree->file-opts :init-level init-level)
