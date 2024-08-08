@@ -120,7 +120,9 @@ nested keys or positional errors e.g. tuples"
                (catch :default _ ::failed-to-detect))
         warnings (cond->
                   {:editor/command-trigger
-                   "is no longer supported. Please use '/' and report bugs on it."}
+                   "is no longer supported. Please use '/' and report bugs on it."
+                   :arweave/gateway
+                   "is no longer supported."}
                    db-graph?
                    (merge
                     file-only-config))]

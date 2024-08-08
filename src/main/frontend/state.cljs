@@ -352,7 +352,6 @@
 (def common-default-config
   "Common default config for a user's repo config"
   {:feature/enable-search-remove-accents? true
-   :default-arweave-gateway "https://arweave.net"
    :ui/auto-expand-block-refs? true
 
    ;; For flushing the settings of old versions. Don't bump this value.
@@ -475,10 +474,6 @@ should be done through this fn in order to get global config and config defaults
 (defn enable-editing?
   []
   (or (not @publishing?) (:publishing/enable-editing? (get-config))))
-
-(defn get-arweave-gateway
-  []
-  (:arweave/gateway (get-config)))
 
 (defonce built-in-macros
          {"img" "[:img.$4 {:src \"$1\" :style {:width $2 :height $3}}]"})
