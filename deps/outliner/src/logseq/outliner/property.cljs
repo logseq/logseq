@@ -118,7 +118,7 @@
                        :payload {:message "This property can't change from multiple values to one value because it has existing data."
                                  :type :warning}})))
     (when (seq tx-data)
-      (ldb/transact! conn tx-data {:outliner-op :update-propertyy
+      (ldb/transact! conn tx-data {:outliner-op :update-property
                                    :property-id (:db/id property)}))
     property))
 
