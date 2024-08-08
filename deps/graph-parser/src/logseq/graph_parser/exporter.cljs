@@ -308,6 +308,13 @@
       ;; :filters is not in built-in-properties because it maps to 2 new properties
       (conj :filters)))
 
+(def all-built-in-names
+  "All built-in properties and classes as a set of keywords"
+  (set/union all-built-in-property-names
+             (set (->> db-class/built-in-classes
+                       vals
+                       (map #(-> % :title string/lower-case keyword))))))
+
 (def file-built-in-property-names
   "Built-in property names for file graphs that are imported. Expressed as set of keywords"
   (-> all-built-in-property-names
@@ -700,8 +707,8 @@
         existing-page-names-to-uuids (into {} (map (juxt :block/name :block/uuid) existing-pages))
         new-pages (->> all-pages
                        (remove #(contains? existing-page-names-to-uuids (:block/name %)))
-                       ;; fix extract incorrectly assigning user properties built-in property uuids
-                       (map #(if (contains? all-built-in-property-names (keyword (:block/name %)))
+                       ;; fix extract incorrectly assigning user pages built-in uuids
+                       (map #(if (contains? all-built-in-names (keyword (:block/name %)))
                                (assoc % :block/uuid (d/squuid))
                                %)))
         page-names-to-uuids (merge existing-page-names-to-uuids
@@ -734,7 +741,7 @@
                                      ;; Don't build a new page if it overwrites an existing class
                                      (not (some-> (get @(:all-idents import-state) (keyword (:block/title m)))
                                                   db-malli-schema/class?)))
-                             (let [m' (if (contains? all-built-in-property-names (keyword (:block/name m)))
+                             (let [m' (if (contains? all-built-in-names (keyword (:block/name m)))
                                         ;; Use fixed uuid from above
                                         (cond-> (assoc m :block/uuid (get page-names-to-uuids (:block/name m)))
                                           ;; only happens for few file built-ins like tags and alias

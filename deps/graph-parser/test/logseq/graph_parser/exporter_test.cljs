@@ -170,7 +170,7 @@
       (is (= 18 (count (d/q '[:find ?b :where [?b :block/type "journal"]] @conn))))
 
       ;; Don't count pages like url.md that have properties but no content
-      (is (= 6
+      (is (= 7
              (count (->> (d/q '[:find [(pull ?b [:block/title :block/type]) ...]
                                 :where [?b :block/title] [_ :block/page ?b]] @conn)
                          (filter #(= "page" (:block/type %))))))
@@ -345,6 +345,14 @@
                   distinct
                   count))
           "A block with different case of same ref names has 1 distinct ref"))
+
+    (testing "imported concepts can have names of new-built concepts"
+      (is (= #{:logseq.property/description :user.property/description}
+             (set (d/q '[:find [?ident ...] :where [?b :db/ident ?ident] [?b :block/name "description"]] @conn)))
+          "user description property is separate from built-in one")
+      (is (= #{"page" "class"}
+             (set (d/q '[:find [?type ...] :where [?b :block/type ?type] [?b :block/name "task"]] @conn)))
+          "user page is separate from built-in class"))
 
     (testing "multiline blocks"
       (is (= "|markdown| table|\n|some|thing|" (:block/title (find-block-by-content @conn #"markdown.*table"))))

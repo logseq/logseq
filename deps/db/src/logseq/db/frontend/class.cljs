@@ -11,9 +11,7 @@
    {:title "Task"
     :schema {:properties [:logseq.task/status :logseq.task/priority :logseq.task/deadline]}}
 
-   :logseq.class/Card {:title "Card"
-                       ;; :schema {:property []}
-                       }
+   :logseq.class/Card {:title "Card"}
    ;; TODO: Add more classes such as :book, :paper, :movie, :music, :project
    })
 
