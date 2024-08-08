@@ -4,7 +4,7 @@
             [logseq.db.frontend.rules :as rules]
             [clojure.set :as set]
             [clojure.string :as string]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
 
 (defn ^:api get-area-block-asset-url
@@ -13,7 +13,7 @@
   [db block page]
   (when-some [props (and block page (:block/properties block))]
     ;; Can't use db-property-util/lookup b/c repo isn't available
-    (let [prop-lookup-fn (if (entity-plus/db-based-graph? db)
+    (let [prop-lookup-fn (if (entity-util/db-based-graph? db)
                            #(db-property/property-value-content (get %1 %2))
                            #(get %1 (keyword (name %2))))]
       (when-some [uuid (:block/uuid block)]
@@ -104,7 +104,7 @@
 
 (defn- hl-type-area-fn
   [db]
-  (if (entity-plus/db-based-graph? db)
+  (if (entity-util/db-based-graph? db)
     (fn [datom]
       (and (= :logseq.property/hl-type (:a datom))
            (= (keyword (:v datom)) :area)))

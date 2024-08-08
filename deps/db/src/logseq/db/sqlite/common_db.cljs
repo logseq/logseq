@@ -7,7 +7,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [clojure.set :as set]
             [logseq.db.frontend.order :as db-order]))
 
@@ -81,7 +81,7 @@
 
 (defn- property-with-values
   [db block]
-  (when (entity-plus/db-based-graph? db)
+  (when (entity-util/db-based-graph? db)
     (let [block (d/entity db (:db/id block))]
       (->> (:block/properties block)
            vals
@@ -250,7 +250,7 @@
   "Returns current database schema and initial data.
    NOTE: This fn is called by DB and file graphs"
   [db]
-  (let [db-graph? (entity-plus/db-based-graph? db)
+  (let [db-graph? (entity-util/db-based-graph? db)
         _ (when db-graph?
             (reset! db-order/*max-key (db-order/get-max-order db)))
         schema (:schema db)

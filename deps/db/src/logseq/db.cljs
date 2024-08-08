@@ -8,7 +8,9 @@
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
             [logseq.db.frontend.delete-blocks :as delete-blocks]
-            [logseq.db.frontend.entity-plus :as entity-plus]
+            ;; Load entity extensions
+            [logseq.db.frontend.entity-plus]
+            [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
@@ -175,7 +177,7 @@
 
 (def get-first-page-by-name sqlite-common-db/get-first-page-by-name)
 
-(def db-based-graph? entity-plus/db-based-graph?)
+(def db-based-graph? entity-util/db-based-graph?)
 
 (defn page-exists?
   "Whether a page exists with the `type`."

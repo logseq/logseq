@@ -3,7 +3,8 @@
   (:require [clojure.string :as string]
             [logseq.common.util.page-ref :as page-ref]
             [datascript.core :as d]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db.frontend.entity-util :as entity-util]))
 
 (defonce page-ref-special-chars "~^")
 
@@ -95,7 +96,7 @@
 (defn update-block-content
   "Replace `[[internal-id]]` with `[[page name]]`"
   [db item eid]
-  (if (common-util/db-based-graph? db)
+  (if (entity-util/db-based-graph? db)
     (if-let [content (:block/title item)]
       (let [refs (:block/refs (d/entity db eid))]
         (assoc item :block/title (special-id-ref->page-ref content refs)))

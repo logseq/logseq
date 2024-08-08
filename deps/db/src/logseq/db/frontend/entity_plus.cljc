@@ -10,9 +10,9 @@
             [datascript.impl.entity :as entity :refer [Entity]]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.property :as db-property]
-            [logseq.common.util :as common-util]))
+            [logseq.db.frontend.entity-util :as entity-util]))
 
-(def db-based-graph? common-util/db-based-graph?)
+(def db-based-graph? entity-util/db-based-graph?)
 
 (def lookup-entity @#'entity/lookup-entity)
 (defn lookup-kv-then-entity
