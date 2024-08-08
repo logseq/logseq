@@ -58,6 +58,15 @@
        (or (get (.-kv e) k)
            (lookup-entity e k default-value))))))
 
+(defn- cache-with-kv
+  [^js this]
+  (let [v @(.-cache this)
+        v' (if (:block/title v)
+             (assoc v :block/title (db-content/special-id-ref->page-ref (:block/title v) (:block/refs this)))
+             v)]
+    (concat (seq v')
+            (seq (.-kv this)))))
+
 #?(:org.babashka/nbb
    nil
    :default
@@ -77,6 +86,17 @@
        (assert (keyword? k) (str "attribute must be keyword: " k))
        (set! (.-kv this) (dissoc (.-kv this) k))
        this)
+
+     ISeqable
+     (-seq [this]
+       (entity/touch this)
+       (cache-with-kv this))
+
+     IPrintWithWriter
+     (-pr-writer [this writer opts]
+       (let [m (-> (into {} (cache-with-kv this))
+                   (assoc :db/id (.-eid this)))]
+         (-pr-writer m writer opts)))
 
      ICollection
      (-conj [this entry]
