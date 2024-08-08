@@ -44,7 +44,8 @@
             [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.handler.property.util :as pu]
-            [datascript.impl.entity :as de]))
+            [datascript.impl.entity :as de]
+            [logseq.db.frontend.class :as db-class]))
 
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
@@ -503,3 +504,12 @@
                                         (:block/uuid page-entity)
                                         :logseq.property/hide-properties?
                                         (not (:logseq.property/hide-properties? page-entity))))
+
+(defn convert-to-tag!
+  [page-entity]
+  (let [class (db-class/build-new-class (db/get-db)
+                                        {:db/id (:db/id page-entity)
+                                         :block/title (:block/title page-entity)
+                                         :block/created-at (:block/created-at page-entity)})]
+
+    (db/transact! (state/get-current-repo) [class] {:outliner-op :save-block})))
