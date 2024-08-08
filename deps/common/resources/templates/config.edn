@@ -105,10 +105,6 @@
  ;; Example usage:
  ;; :custom-js-url "https://cdn.logseq.com/custom.js"
 
- ;; Set a custom Arweave gateway
- ;; Default gateway: https://arweave.net
- ;; :arweave/gateway "https://arweave.net"
-
  ;; Set bullet indentation when exporting
  ;; Available options:
  ;;  - `:eight-spaces` as eight spaces

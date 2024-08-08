@@ -24,7 +24,6 @@
     [:start-of-week [:enum 0 1 2 3 4 5 6]]
     [:custom-css-url :string]
     [:custom-js-url :string]
-    [:arweave/gateway :string]
     [:export/bullet-indentation
      [:enum :eight-spaces :four-spaces :two-spaces :tab]]
     [:publishing/all-pages-public? :boolean]
