@@ -92,13 +92,7 @@
                       block-with-title? (mldoc/block-with-title? first-elem-type)
                       content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") title)
                       parsed-block (block/parse-block (assoc block :block/title content'))
-                      parsed-block' (cond-> (dissoc parsed-block :block/properties)
-                                      (:block/properties parsed-block)
-                                      (merge (update-keys (:block/properties parsed-block)
-                                                          (fn [k]
-                                                            (or ({:heading :logseq.property/heading} k)
-                                                                (throw (ex-info (str "Don't know how to save graph-parser property " (pr-str k)) {})))))))
-                      block' (merge block parsed-block' {:block/title title})]
+                      block' (merge block parsed-block {:block/title title})]
                   (update block' :block/refs
                           (fn [refs]
                             (-> refs

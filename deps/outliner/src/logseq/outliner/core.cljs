@@ -611,12 +611,15 @@
                                      (:block/title target-block)
                                      (string/blank? (:block/title target-block))
                                      (> (count blocks) 1)))
+        db-based? (sqlite-util/db-based-graph? repo)
         blocks' (let [blocks' (blocks-with-level blocks)]
                   (cond->> (blocks-with-ordered-list-props repo blocks' target-block sibling?)
                     update-timestamps?
                     (mapv (fn [b] (block-with-timestamps (dissoc b :block/created-at :block/updated-at))))
                     true
-                    (mapv block-with-timestamps)))
+                    (mapv block-with-timestamps)
+                    db-based?
+                    (mapv (fn [b] (dissoc b :block/properties)))))
         insert-opts {:sibling? sibling?
                      :replace-empty-target? replace-empty-target?
                      :keep-uuid? keep-uuid?
