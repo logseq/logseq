@@ -1,7 +1,7 @@
 {:accessibility/skip-to-main-content "Skip to main content"
  :tutorial/text #resource "tutorials/tutorial-en.md"
  :tutorial/dummy-notes #resource "tutorials/dummy-notes-en.md"
- :on-boarding/demo-graph "This is a demo graph, changes will not be saved until you open a local folder."
+ :on-boarding/demo-graph "This is a demo graph, changes will not be saved until you add a graph within a local folder."
  :on-boarding/add-graph "Add a graph"
  :on-boarding/open-local-dir "Open a local directory"
  :on-boarding/new-graph-desc-1 "Logseq supports both Markdown and Org-mode. You can open an existing directory or create a new one on your device, a directory is also known simply as a folder. Your data will be stored only on this device."
