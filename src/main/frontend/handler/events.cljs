@@ -12,7 +12,7 @@
             [clojure.string :as string]
             [frontend.commands :as commands]
             [frontend.components.class :as class-component]
-            [frontend.components.cmdk :as cmdk]
+            [frontend.components.cmdk.core :as cmdk]
             [frontend.components.settings :as settings]
             [frontend.components.diff :as diff]
             [frontend.components.encryption :as encryption]
@@ -24,12 +24,15 @@
             [frontend.components.user.login :as login]
             [frontend.components.repo :as repo]
             [frontend.components.db-based.page :as db-page]
+            [frontend.components.property.dialog :as property-dialog]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
+            [logseq.shui.ui :as shui]
             [frontend.db :as db]
             [frontend.db.conn :as conn]
             [frontend.db.model :as db-model]
             [frontend.db.persist :as db-persist]
+            [frontend.db.transact :as db-transact]
             [frontend.extensions.srs :as srs]
             [frontend.fs :as fs]
             [frontend.fs.capacitor-fs :as capacitor-fs]
@@ -53,10 +56,11 @@
             [frontend.handler.user :as user-handler]
             [frontend.handler.property.util :as pu]
             [frontend.handler.db-based.property.util :as db-pu]
-            [frontend.handler.file-based.property.util :as property-util]
             [frontend.handler.property :as property-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
             [frontend.handler.code :as code-handler]
+            [frontend.handler.db-based.rtc :as rtc-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.mobile.core :as mobile]
             [frontend.mobile.graph-picker :as graph-picker]
             [frontend.mobile.util :as mobile-util]
@@ -70,18 +74,17 @@
             [frontend.util :as util]
             [frontend.util.persist-var :as persist-var]
             [goog.dom :as gdom]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
             [promesa.core :as p]
             [lambdaisland.glogi :as log]
             [rum.core :as rum]
             [frontend.rum :as r]
             [frontend.persist-db.browser :as db-browser]
-            [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.modules.outliner.pipeline :as pipeline]
-            [electron.ipc :as ipc]
             [frontend.date :as date]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.persist-db :as persist-db]))
 
 ;; TODO: should we move all events here?
 
@@ -116,13 +119,14 @@
           (let [status (if (user-handler/alpha-or-beta-user?) :welcome :unavailable)]
             (when (and (= status :welcome) (user-handler/logged-in?))
               (enable-beta-features!)
+              (async/<! (rtc-handler/<get-remote-graphs))
               (async/<! (file-sync-handler/load-session-graphs))
               (p/let [repos (repo-handler/refresh-repos!)]
                 (when-let [repo (state/get-current-repo)]
                   (when (some #(and (= (:url %) repo)
-                                 (vector? (:sync-meta %))
-                                 (util/uuid-string? (first (:sync-meta %)))
-                                 (util/uuid-string? (second (:sync-meta %)))) repos)
+                                    (vector? (:sync-meta %))
+                                    (util/uuid-string? (first (:sync-meta %)))
+                                    (util/uuid-string? (second (:sync-meta %)))) repos)
                     (sync/<sync-start)))))
             (ui-handler/re-render-root!)
             (file-sync/maybe-onboarding-show status)))))))
@@ -136,10 +140,11 @@
 (defmethod handle :user/login [[_ host-ui?]]
   (if (or host-ui? (not util/electron?))
     (js/window.open config/LOGIN-URL)
-    (login/open-login-modal!)))
+    (if (mobile-util/native-platform?)
+      (route-handler/redirect! {:to :user-login})
+      (login/open-login-modal!))))
 
 (defmethod handle :graph/added [[_ repo {:keys [empty-graph?]}]]
-  (db/set-key-value repo :ast/version db-schema/ast-version)
   (search-handler/rebuild-indices!)
   (plugin-handler/hook-plugin-app :graph-after-indexed {:repo repo :empty-graph? empty-graph?})
   (when (state/setups-picker?)
@@ -175,37 +180,45 @@
            (route-handler/redirect-to-home!))
          (srs/update-cards-due-count!)
          (state/pub-event! [:graph/ready graph])
-         (when-not db-based?
+         (if db-based?
+           (rtc-handler/<rtc-start! graph)
            (file-sync-restart!))
          (when-let [dir-name (and (not db-based?) (config/get-repo-dir graph))]
-           (fs/watch-dir! dir-name)))))))
+           (fs/watch-dir! dir-name))
+         (graph-handler/settle-metadata-to-local! {:last-seen-at (js/Date.now)}))))))
 
 ;; Parameters for the `persist-db` function, to show the notification messages
 (defn- graph-switch-on-persisted
   "graph: the target graph to switch to"
-  [graph _opts]
+  [graph opts]
   (p/do!
-    (repo-handler/restore-and-setup-repo! graph)
-    (graph-switch graph)
-    (state/set-state! :sync-graph/init? false)))
+   (repo-handler/restore-and-setup-repo! graph)
+   (graph-switch graph)
+   (state/set-state! :sync-graph/init? false)
+   (when (:rtc-download? opts)
+     (and (search-handler/rebuild-indices!) true)
+     (repo-handler/refresh-repos!))))
 
 (defmethod handle :graph/switch [[_ graph opts]]
-  (state/set-state! :db/async-queries #{})
+  (persist-db/export-current-graph!)
+  (state/set-state! :db/async-query-loading #{})
+  (state/set-state! :db/async-queries {})
+  (st/refresh!)
   (reset! r/*key->atom {})
 
   (let [^js sqlite @db-browser/*worker]
     (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
-            request-finished? (ldb/request-finished?)]
-      (if (or (not request-finished?) (not writes-finished?)) ; TODO: test (:sync-graph/init? @state/state)
+            request-finished? (db-transact/request-finished?)]
+      (if (not writes-finished?) ; TODO: test (:sync-graph/init? @state/state)
         (do
           (log/info :graph/switch (cond->
-                                    {:request-finished? request-finished?
-                                     :file-writes-finished? writes-finished?}
+                                   {:request-finished? request-finished?
+                                    :file-writes-finished? writes-finished?}
                                     (false? request-finished?)
-                                    (assoc :unfinished-requests? @ldb/*request-id->response)))
+                                    (assoc :unfinished-requests? @db-transact/*unfinished-request-ids)))
           (notification/show!
-            "Please wait seconds until all changes are saved for the current graph."
-            :warning))
+           "Please wait seconds until all changes are saved for the current graph."
+           :warning))
         (graph-switch-on-persisted graph opts)))))
 
 (defmethod handle :graph/pull-down-remote-graph [[_ graph dir-name]]
@@ -238,12 +251,11 @@
                 (p/catch (fn [^js e]
                            (notification/show! (str e) :error)
                            (js/console.error e)))))))))
-    (state/set-modal!
-      (file-sync/pick-dest-to-sync-panel graph)
-      {:center? true})))
+    (shui/dialog-open!
+      (file-sync/pick-dest-to-sync-panel graph))))
 
 (defmethod handle :graph/pick-page-histories [[_ graph-uuid page-name]]
-  (state/set-modal!
+  (shui/dialog-open!
     (file-sync/pick-page-histories-panel graph-uuid page-name)
     {:id :page-histories :label "modal-page-histories"}))
 
@@ -265,7 +277,7 @@
   (when
    (and (not (util/electron?))
      (not (mobile-util/native-platform?)))
-    (fn [close-fn]
+    (fn [{:keys [close]}]
       [:div
        ;; TODO: fn translation with args
        [:p
@@ -276,45 +288,50 @@
          :class "ui__modal-enter"
          :on-click (fn []
                      (nfs/check-directory-permission! repo)
-                     (close-fn)))])))
+                     (close)))])))
 
 (defmethod handle :modal/nfs-ask-permission []
   (when-let [repo (get-local-repo)]
-    (state/set-modal! (ask-permission repo))))
+    (some-> (ask-permission repo)
+      (shui/dialog-open! {:align :top}))))
 
 (defonce *query-properties (atom {}))
 (rum/defc query-properties-settings-inner < rum/reactive
-                                            {:will-unmount (fn [state]
-                                                             (reset! *query-properties {})
-                                                             state)}
+  {:will-unmount (fn [state]
+                   (reset! *query-properties {})
+                   state)}
   [block shown-properties all-properties]
-  (let [query-properties (rum/react *query-properties)]
-    [:div.p-4
-     [:div.font-bold (t :query/config-property-settings)]
-     [:div.flex
+  (let [query-properties (rum/react *query-properties)
+        db-graph? (config/db-based-graph? (state/get-current-repo))]
+    [:div
+     [:h1.font-semibold.-mt-2.mb-2.text-lg (t :query/config-property-settings)]
+     [:a.flex
       {:title "Refresh list of columns"
        :on-click
        (fn []
          (reset! *query-properties {})
-         (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) :query-properties))}
+         (let [k (pu/get-pid :logseq.property/query-properties)]
+           (property-handler/remove-block-property! (state/get-current-repo) (:block/uuid block) k)))}
       (ui/icon "refresh")]
      (for [property all-properties]
        (let [property-value (get query-properties property)
              shown? (if (nil? property-value)
                       (contains? shown-properties property)
                       property-value)]
-         [:div.flex.flex-row.m-2.justify-between.align-items
-          [:div (if (uuid? property) (db-pu/get-property-name property) (name property))]
+         [:div.flex.flex-row.my-2.justify-between.align-items
+          [:div (if (and db-graph? (qualified-keyword? property))
+                  (db-pu/get-property-name property)
+                  (name property))]
           [:div.mt-1 (ui/toggle shown?
-                       (fn []
-                         (let [value (not shown?)]
-                           (swap! *query-properties assoc property value)
-                           (editor-handler/set-block-query-properties!
-                             (:block/uuid block)
-                             all-properties
-                             property
-                             value)))
-                       true)]]))]))
+                                (fn []
+                                  (let [value (not shown?)]
+                                    (swap! *query-properties assoc property value)
+                                    (editor-handler/set-block-query-properties!
+                                     (:block/uuid block)
+                                     all-properties
+                                     property
+                                     value)))
+                                true)]]))]))
 
 (defn query-properties-settings
   [block shown-properties all-properties]
@@ -323,7 +340,7 @@
 
 (defmethod handle :modal/set-query-properties [[_ block all-properties]]
   (let [properties (:block/properties block)
-        query-properties (pu/lookup properties :query-properties)
+        query-properties (pu/lookup properties :logseq.property/query-properties)
         block-properties (if (config/db-based-graph? (state/get-current-repo))
                            query-properties
                            (some-> query-properties
@@ -332,40 +349,39 @@
                            (set block-properties)
                            (set all-properties))
         shown-properties (set/intersection (set all-properties) shown-properties)]
-    (state/set-modal! (query-properties-settings block shown-properties all-properties)
-      {:center? true})))
+    (shui/dialog-open!
+      (query-properties-settings block shown-properties all-properties)
+      {})))
 
 (defmethod handle :modal/show-cards [_]
-  (state/set-modal! srs/global-cards {:id :srs
-                                      :label "flashcards__cp"}))
+  (shui/dialog-open!
+    srs/global-cards
+    {:id :srs
+     :label "flashcards__cp"}))
 
 (defmethod handle :modal/show-instruction [_]
-  (state/set-modal! capacitor-fs/instruction {:id :instruction
-                                              :label "instruction__cp"}))
+  (shui/dialog-open!
+    capacitor-fs/instruction
+    {:id :instruction
+     :label "instruction__cp"}))
 
-(defmethod handle :modal/show-themes-modal [_]
-  (plugin/open-select-theme!))
+(defmethod handle :modal/show-themes-modal [[_ classic?]]
+  (if classic?
+    (plugin/open-select-theme!)
+    (route-handler/go-to-search! :themes)))
 
-(defmethod handle :modal/toggle-accent-colors-modal [_]
-  (let [label "accent-colors-picker"]
-    (if (or (= label (state/get-modal-id))
-          (= label (some-> (state/get-sub-modals) (first) :modal/id)))
-      (state/close-sub-modal! label)
-      (state/set-sub-modal!
-        #(settings/modal-accent-colors-inner)
-        {:center? true
-         :id      label
+(defmethod handle :modal/toggle-appearance-modal [_]
+  (let [label "customize-appearance"]
+    (if (shui/dialog-get label)
+      (shui/dialog-close! label)
+      (shui/dialog-open!
+        #(settings/modal-appearance-inner)
+        {:id      label
+         :overlay-props {:label label}
          :label   label}))))
 
-(rum/defc modal-output
-  [content]
-  content)
-
-(defmethod handle :modal/show [[_ content]]
-  (state/set-modal! #(modal-output content)))
-
 (defmethod handle :modal/set-git-username-and-email [[_ _content]]
-  (state/set-modal! git-component/set-git-username-and-email))
+  (shui/dialog-open! git-component/set-git-username-and-email))
 
 (defmethod handle :page/create [[_ page-name opts]]
   (if (= page-name (date/today))
@@ -384,19 +400,30 @@
 
 (defmethod handle :file/not-matched-from-disk [[_ path disk-content db-content]]
   (when-let [repo (state/get-current-repo)]
-    (let [^js sqlite @db-browser/*worker]
-      (p/let [writes-finished? (when sqlite (.file-writes-finished? sqlite (state/get-current-repo)))
-              request-finished? (ldb/request-finished?)]
-        (prn :debug :writes-finished? writes-finished?
-          :request-finished? request-finished?)
-        (when (and request-finished? writes-finished? disk-content db-content
-                (not= (util/trim-safe disk-content) (util/trim-safe db-content)))
-          (state/set-modal! #(diff/local-file repo path disk-content db-content)
-            {:label "diff__cp"}))))))
+    (shui/dialog-open!
+      #(diff/local-file repo path disk-content db-content)
+      {:label "diff__cp"})))
 
 
 (defmethod handle :modal/display-file-version-selector  [[_ versions path  get-content]]
-  (state/set-modal! #(git-component/file-version-selector versions path get-content)))
+  (shui/dialog-open!
+    #(git-component/file-version-selector versions path get-content)))
+
+(defmethod handle :graph/sync-context []
+  (let [context {:dev? config/dev?
+                 :node-test? util/node-test?
+                 :validate-db-options (:dev/validate-db-options (state/get-config))
+                 :importing? (:graph/importing @state/state)
+                 :date-formatter (state/get-date-formatter)
+                 :journal-file-name-format (or (state/get-journal-file-name-format)
+                                               date/default-journal-filename-formatter)
+                 :export-bullet-indentation (state/get-export-bullet-indentation)
+                 :preferred-format (state/get-preferred-format)
+                 :journals-directory (config/get-journals-directory)
+                 :whiteboards-directory (config/get-whiteboards-directory)
+                 :pages-directory (config/get-pages-directory)}
+        worker ^Object @state/*db-worker]
+    (when worker (.set-context worker (ldb/write-transit-str context)))))
 
 ;; Hook on a graph is ready to be shown to the user.
 ;; It's different from :graph/restored, as :graph/restored is for window reloaded
@@ -407,21 +434,24 @@
     (p/let [dir               (config/get-repo-dir repo)
             dir-exists?       (fs/dir-exists? dir)]
       (when (and (not dir-exists?)
-              (not util/nfs?))
+                 (not util/nfs?))
         (state/pub-event! [:graph/dir-gone dir]))))
-  (p/let [;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
-          _ (js/setTimeout #(mobile/mobile-postinit) 1000)
-          ;; FIXME: an ugly implementation for redirecting to page on new window is restored
-          _ (repo-handler/graph-ready! repo)
-          _ (when-not (config/db-based-graph? repo)
-              (fs-watcher/load-graph-files! repo))]))
+  (p/do!
+   (state/pub-event! [:graph/sync-context])
+    ;; re-render-root is async and delegated to rum, so we need to wait for main ui to refresh
+   (when (mobile-util/native-ios?)
+     (js/setTimeout #(mobile/mobile-postinit) 1000))
+    ;; FIXME: an ugly implementation for redirecting to page on new window is restored
+   (repo-handler/graph-ready! repo)
+   (when-not (config/db-based-graph? repo)
+     (fs-watcher/load-graph-files! repo))))
 
 (defmethod handle :notification/show [[_ {:keys [content status clear?]}]]
   (notification/show! content status clear?))
 
 (defmethod handle :command/run [_]
   (when (util/electron?)
-    (state/set-modal! shell/shell)))
+    (shui/dialog-open! shell/shell)))
 
 (defmethod handle :go/search [_]
   (state/set-modal! cmdk/cmdk-modal
@@ -440,17 +470,15 @@
   (plugin/open-plugins-from-file-modal! plugins))
 
 (defmethod handle :go/plugins-settings [[_ pid nav? title]]
-  (if pid
-    (do
-      (state/set-state! :plugin/focused-settings pid)
-      (state/set-state! :plugin/navs-settings? (not (false? nav?)))
-      (plugin/open-focused-settings-modal! title))
-    (state/close-sub-modal! "ls-focused-settings-modal")))
+  (when pid
+    (state/set-state! :plugin/focused-settings pid)
+    (state/set-state! :plugin/navs-settings? (not (false? nav?)))
+    (plugin/open-focused-settings-modal! title)))
 
 (defmethod handle :go/proxy-settings [[_ agent-opts]]
-  (state/set-sub-modal!
-    (fn [_] (plugin/user-proxy-settings-panel agent-opts))
-    {:id :https-proxy-panel :center? true}))
+  (shui/dialog-open!
+    (plugin/user-proxy-settings-panel agent-opts)
+    {:id :https-proxy-panel :center? true :class "lg:max-w-2xl"}))
 
 
 (defmethod handle :redirect-to-home [_]
@@ -648,16 +676,16 @@
   (file-sync-restart!))
 
 (defmethod handle :graph/ask-for-re-fresh [_]
-  (handle
-    [:modal/show
-     [:div {:style {:max-width 700}}
-      [:p (t :sync-from-local-changes-detected)]
+  (shui/dialog-open!
+    [:div {:style {:max-width 700}}
+     [:p (t :sync-from-local-changes-detected)]
+     [:div.flex.justify-end
       (ui/button
         (t :yes)
         :autoFocus "on"
         :class "ui__modal-enter"
         :on-click (fn []
-                    (state/close-modal!)
+                    (shui/dialog-close!)
                     (nfs-handler/refresh! (state/get-current-repo) refresh-cb)))]]))
 
 (defmethod handle :sync/create-remote-graph [[_ current-repo]]
@@ -679,7 +707,7 @@
                             (state/get-repos)))))))
 
 (defmethod handle :modal/remote-encryption-input-pw-dialog [[_ repo-url remote-graph-info type opts]]
-  (state/set-modal!
+  (shui/dialog-open!
     (encryption/input-password
       repo-url nil (merge
                      (assoc remote-graph-info
@@ -690,13 +718,13 @@
 
 (defmethod handle :journal/insert-template [[_ page-name]]
   (let [page-name (util/page-name-sanity-lc page-name)]
-    (when-let [page (db/pull [:block/name page-name])]
+    (when-let [page (db/get-page page-name)]
       (when (db/page-empty? (state/get-current-repo) page-name)
         (when-let [template (state/get-default-journal-template)]
           (editor-handler/insert-template!
-            nil
-            template
-            {:target page}))))))
+           nil
+           template
+           {:target page}))))))
 
 (defmethod handle :editor/set-org-mode-heading [[_ block heading]]
   (when-let [id (:block/uuid block)]
@@ -719,19 +747,20 @@
                                     :path-params {:name (:block/name page-entity)}}))))))
 
 (defmethod handle :whiteboard/onboarding [[_ opts]]
-  (state/set-modal!
-    (fn [close-fn] (whiteboard/onboarding-welcome close-fn))
+  (shui/dialog-open!
+    (fn [{:keys [close]}] (whiteboard/onboarding-welcome close))
     (merge {:close-btn?      false
             :center?         true
             :close-backdrop? false} opts)))
 
 (defmethod handle :file-sync/onboarding-tip [[_ type opts]]
   (let [type (keyword type)]
-    (state/set-modal!
-      (file-sync/make-onboarding-panel type)
-      (merge {:close-btn?      false
-              :center?         true
-              :close-backdrop? (not= type :welcome)} opts))))
+    (when-not (config/db-based-graph? (state/get-current-repo))
+      (shui/dialog-open!
+        (file-sync/make-onboarding-panel type)
+        (merge {:close-btn? false
+                :center? true
+                :close-backdrop? (not= type :welcome)} opts)))))
 
 (defmethod handle :file-sync/maybe-onboarding-show [[_ type]]
   (file-sync/maybe-onboarding-show type))
@@ -744,17 +773,18 @@
   (notification/show! "file sync graph count exceed limit" :warning false)
   (file-sync-stop!))
 
-(defmethod handle :graph/restored [[_ _graph]]
+(defmethod handle :graph/restored [[_ graph]]
   (mobile/init!)
+  (rtc-handler/<rtc-start! graph)
   (when-not (mobile-util/native-ios?)
-    (state/pub-event! [:graph/ready (state/get-current-repo)])))
+    (state/pub-event! [:graph/ready graph])))
 
 (defmethod handle :whiteboard-link [[_ shapes]]
   (route-handler/go-to-search! :whiteboard/link)
   (state/set-state! :whiteboard/linked-shapes shapes))
 
 (defmethod handle :whiteboard-go-to-link [[_ link]]
-  (route-handler/redirect! {:to :whiteboard
+  (route-handler/redirect! {:to :page
                             :path-params {:name link}}))
 
 (defmethod handle :graph/dir-gone [[_ dir]]
@@ -801,38 +831,29 @@
                       :native-icloud? (not (string/blank? (state/get-icloud-container-root-url)))
                       :logged?        (user-handler/logged-in?)} opts)]
     (if (mobile-util/native-ios?)
-      (state/set-modal!
+      (shui/dialog-open!
         #(graph-picker/graph-picker-cp opts')
         {:label "graph-setup"})
       (page-handler/ls-dir-files! st/refresh! opts'))))
 
 (defmethod handle :graph/new-db-graph [[_ _opts]]
-  (state/set-modal!
+  (shui/dialog-open!
     repo/new-db-graph
     {:id :new-db-graph
-     :label "graph-setup"}))
+     :title [:h2 "Create a new graph"]
+     :style {:max-width "500px"}}))
 
-(defmethod handle :search/transact-data [[_ repo data]]
-  (let [file-based? (config/local-file-based-graph? repo)
-        data' (cond-> data
-                file-based?
-                ;; remove built-in properties from content
-                (update :blocks-to-add
-                  (fn [blocks]
-                    (map #(update % :content
-                            (fn [content]
-                              (property-util/remove-built-in-properties (get % :format :markdown) content)))
-                      blocks))))]
-    (search/transact-blocks! repo data')))
+(defmethod handle :graph/save-db-to-disk [[_ _opts]]
+  (persist-db/export-current-graph! {:succ-notification? true}))
 
 (defmethod handle :class/configure [[_ page]]
-  (state/set-modal!
+  (shui/dialog-open!
     #(vector :<>
        (class-component/configure page {})
-       (db-page/page-properties page {:configure? true}))
-    {:id :page-configure
-     :label "page-configure"
-     :container-overflow-visible? true}))
+       (db-page/page-properties page {:configure? true
+                                      :mode :tag}))
+    {:label "page-configure"
+     :align :top}))
 
 (defmethod handle :file/alter [[_ repo path content]]
   (p/let [_ (file-handler/alter-file repo path content {:from-disk? true})]
@@ -923,6 +944,9 @@
   (when (some-> block (editor-handler/own-order-number-list?))
     (editor-handler/remove-block-own-order-list-type! block)))
 
+(defmethod handle :editor/save-current-block [_]
+  (editor-handler/save-current-block!))
+
 (defmethod handle :editor/save-code-editor [_]
   (code-handler/save-code-editor!))
 
@@ -930,19 +954,61 @@
   (when-let [blocks (and block (db-model/get-block-immediate-children (state/get-current-repo) (:block/uuid block)))]
     (editor-handler/toggle-blocks-as-own-order-list! blocks)))
 
-(defmethod handle :editor/new-property [[_ property-key]]
+(defmethod handle :editor/new-property [[_ {:keys [block] :as opts}]]
   (p/do!
-    (when-let [edit-block (state/get-edit-block)]
-      (when-let [block-id (:block/uuid edit-block)]
-        (let [block (db/entity [:block/uuid block-id])
-              collapsed? (or (get-in @state/state [:ui/collapsed-blocks (state/get-current-repo) block-id])
-                           (:block/collapsed? block))]
-          (when collapsed?
-            (editor-handler/set-blocks-collapsed! [block-id] false)))))
-    (editor-handler/save-current-block!)
-    (when property-key
-      (state/set-state! :editor/new-property-key property-key))
-    (property-handler/editing-new-property!)))
+   (editor-handler/save-current-block!)
+   (let [editing-block (state/get-edit-block)
+         pos (state/get-edit-pos)
+         edit-block-or-selected (if editing-block
+                                  [editing-block]
+                                  (seq (keep #(db/entity [:block/uuid %]) (state/get-selection-block-ids))))
+         current-block (when-let [s (state/get-current-page)]
+                         (when (util/uuid-string? s)
+                           (db/entity [:block/uuid (uuid s)])))
+         blocks (or (when block [block])
+                    edit-block-or-selected
+                    (when current-block [current-block]))
+         opts' (cond-> opts
+                 editing-block
+                 (assoc :original-block editing-block
+                        :edit-original-block
+                        (fn [{:keys [editing-default-property?]}]
+                          (when editing-block
+                            (let [content (:block/title (db/entity (:db/id editing-block)))
+                                  esc? (= "Escape" (state/get-ui-last-key-code))
+                                  [content' pos] (cond
+                                                   esc?
+                                                   [nil pos]
+                                                   (and (>= (count content) pos)
+                                                        (>= pos 2)
+                                                        (= (util/nth-safe content (dec pos))
+                                                           (util/nth-safe content (- pos 2))
+                                                           ";"))
+                                                   [(str (common-util/safe-subs content 0 (- pos 2))
+                                                         (common-util/safe-subs content pos))
+                                                    (- pos 2)]
+                                                   :else
+                                                   [nil pos])]
+                              (when content'
+                                (if editing-default-property?
+                                  (editor-handler/save-block! (state/get-current-repo) (:block/uuid editing-block) content')
+                                  (editor-handler/edit-block! editing-block (or pos :max)
+                                                              (cond-> {}
+                                                                content'
+                                                                (assoc :custom-content content'))))))))))]
+     (when (seq blocks)
+       (let [input (some-> (state/get-edit-input-id)
+                           (gdom/getElement))]
+         (if input
+           (shui/popup-show! input
+                             #(property-dialog/dialog blocks opts')
+                             {:align "start"
+                              :as-dropdown? true
+                              :auto-focus? true})
+           (shui/dialog-open! #(property-dialog/dialog blocks opts')
+                              {:id :property-dialog
+                               :align "start"
+                               :content-props {:onOpenAutoFocus #(.preventDefault %)}})))))))
 
 (rum/defc multi-tabs-dialog
   []
@@ -953,25 +1019,36 @@
         word word)]
      [:div.text-lg
       [:p "Switch to another repo: "]
-      (repo/repos-dropdown {:on-click (fn [e]
-                                        (util/stop e)
-                                        (state/set-state! :error/multiple-tabs-access-opfs? false)
-                                        (state/close-modal!))})]]))
+      [:div.border.rounded.bg-gray-01.overflow-hidden.w-60
+       (repo/repos-dropdown {:on-click (fn [e]
+                                         (util/stop e)
+                                         (state/set-state! :error/multiple-tabs-access-opfs? false)
+                                         (shui/dialog-close!))})]]]))
 
 (defmethod handle :show/multiple-tabs-error-dialog [_]
   (state/set-state! :error/multiple-tabs-access-opfs? true)
-  (state/set-modal! multi-tabs-dialog {:container-overflow-visible? true}))
+  (shui/dialog-open! multi-tabs-dialog))
 
 (defmethod handle :rtc/sync-state [[_ state]]
-  (swap! rtc-debug-ui/debug-state (fn [old] (merge old state))))
+  (state/update-state! :rtc/state (fn [old] (merge old state))))
+
+(defmethod handle :rtc/log [[_ data]]
+  (state/set-state! :rtc/log data))
+
+(defmethod handle :rtc/download-remote-graph [[_ graph-name graph-uuid]]
+  (->
+   (p/do!
+     (rtc-handler/<rtc-download-graph! graph-name graph-uuid 60000))
+   (p/catch (fn [e]
+              (println "RTC download graph failed, error:")
+              (js/console.error e)))))
 
 ;; db-worker -> UI
 (defmethod handle :db/sync-changes [[_ data]]
-  (let [repo (state/get-current-repo)]
-    (pipeline/invoke-hooks data)
-
-    (when (util/electron?)
-      (ipc/ipc :db-transact repo (pr-str (:tx-data data)) (pr-str (:tx-meta data))))
+  (let [retract-datoms (filter (fn [d] (and (= :block/uuid (:a d)) (false? (:added d)))) (:tx-data data))
+        retracted-tx-data (map (fn [d] [:db/retractEntity (:e d)]) retract-datoms)
+        tx-data (concat (:tx-data data) retracted-tx-data)]
+    (pipeline/invoke-hooks (assoc data :tx-data tx-data))
 
     nil))
 

@@ -9,12 +9,12 @@
             [frontend.extensions.sci :as sci]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.property :as property-handler]
-            [frontend.handler.property.util :as pu]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
             [lambdaisland.glogi :as log]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.handler.property.util :as pu]))
 
 (defn built-in-custom-query?
   [title]
@@ -23,7 +23,7 @@
       (boolean (some #(= % title) (map :title queries))))))
 
 (rum/defc query-refresh-button
-  [query-time {:keys [on-mouse-down full-text-search?]}]
+  [query-time {:keys [on-pointer-down full-text-search?]}]
   (ui/tippy
    {:html  [:div
             [:p
@@ -38,7 +38,7 @@
                                    :boundariesElement "viewport"}}}
     :arrow true}
    [:a.fade-link.flex
-    {:on-mouse-down on-mouse-down}
+    {:on-pointer-down on-pointer-down}
     (ui/icon "refresh" {:style {:font-size 20}})]))
 
 (rum/defcs custom-query-inner < rum/reactive
@@ -51,7 +51,7 @@
            view-f
            result
            group-by-page?]}]
-  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline inline]} config
+  (let [{:keys [->hiccup ->elem inline-text page-cp map-inline]} config
         *query-error query-error-atom
         only-blocks? (:block/uuid (first result))
         blocks-grouped-by-page? (and group-by-page?
@@ -78,15 +78,16 @@
            (util/hiccup-keywordize result))
 
          page-list?
-         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text inline)
+         (query-table/result-table config current-block result {:page? true} map-inline page-cp ->elem inline-text)
 
          table?
-         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text inline)
+         (query-table/result-table config current-block result {:page? false} map-inline page-cp ->elem inline-text)
 
          (and (seq result) (or only-blocks? blocks-grouped-by-page?))
          (->hiccup result
                    (cond-> (assoc config
                                   :custom-query? true
+                                  :current-block (:db/id current-block)
                                   :dsl-query? dsl-query?
                                   :query query
                                   :breadcrumb-show? (if (some? breadcrumb-show?)
@@ -142,9 +143,11 @@
              (when-not (or built-in? dsl-query?)
                (when collapsed?
                  (editor-handler/collapse-block! current-block-uuid))))
-           (assoc state :query-error (atom nil)))}
+           (assoc state :query-error (atom nil)
+                  :fulltext-query-result (atom nil)))}
   [state config {:keys [title builder query view collapsed? table-view?] :as q}]
   (let [*query-error (:query-error state)
+        *fulltext-query-result (:fulltext-query-result state)
         built-in? (built-in-custom-query? title)
         dsl-query? (:dsl-query? config)
         current-block-uuid (or (:block/uuid (:block config))
@@ -157,21 +160,19 @@
                        collapsed?
                        (:block/collapsed? current-block)))
         built-in-collapsed? (and collapsed? built-in?)
-        properties (:block/properties current-block)
-        query-table-property (pu/lookup properties :query-table)
+        query-table? (pu/get-block-property-value current-block :logseq.property/query-table)
         table? (or table-view?
-                   query-table-property
+                   query-table?
                    (and (string? query) (string/ends-with? (string/trim query) "table")))
         view-fn (if (keyword? view) (get-in (state/sub-config) [:query/views view]) view)
         view-f (and view-fn (sci/eval-string (pr-str view-fn)))
         dsl-page-query? (and dsl-query?
                              (false? (:blocks? (query-dsl/parse-query query))))
         full-text-search? (and dsl-query?
-                               (util/electron?)
                                (string? query)
                                (re-matches #"\".*\"" query))
         result (when (or built-in-collapsed? (not collapsed?'))
-                 (query-result/get-query-result config q *query-error current-block-uuid {:table? table?}))
+                 (query-result/get-query-result config q *query-error *fulltext-query-result current-block-uuid {:table? table?}))
         query-time (:query-time (meta result))
         page-list? (and (seq result)
                         (some? (:block/name (first result))))
@@ -211,13 +212,13 @@
                  (if table?
                    [:a.flex.ml-1.fade-link {:title "Switch to list view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                  "query-table"
-                                                                                                  false))}
+                                                                                                   (pu/get-pid :logseq.property/query-table)
+                                                                                                   false))}
                     (ui/icon "list" {:style {:font-size 20}})]
                    [:a.flex.ml-1.fade-link {:title "Switch to table view"
                                             :on-click (fn [] (property-handler/set-block-property! (state/get-current-repo) current-block-uuid
-                                                                                                  "query-table"
-                                                                                                  true))}
+                                                                                                   (pu/get-pid :logseq.property/query-table)
+                                                                                                   true))}
                     (ui/icon "table" {:style {:font-size 20}})]))
 
                [:a.flex.ml-1.fade-link
@@ -231,9 +232,9 @@
                 (when (or full-text-search?
                           (and query-time (> query-time 50)))
                   (query-refresh-button query-time {:full-text-search? full-text-search?
-                                                    :on-mouse-down (fn [e]
-                                                                     (util/stop e)
-                                                                     (query-result/trigger-custom-query! config q *query-error))}))]])])
+                                                    :on-pointer-down (fn [e]
+                                                                       (util/stop e)
+                                                                       (query-result/trigger-custom-query! config q *query-error *fulltext-query-result))}))]])])
 
          (when dsl-query? builder)
 

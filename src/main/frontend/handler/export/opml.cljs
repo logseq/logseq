@@ -433,20 +433,21 @@
 
 (defn export-blocks-as-opml
   "options: see also `export-blocks-as-markdown`"
-  [repo root-block-uuids-or-page-name options]
-  {:pre [(or (coll? root-block-uuids-or-page-name)
-             (string? root-block-uuids-or-page-name))]}
+  [repo root-block-uuids-or-page-uuid options]
+  {:pre [(or (coll? root-block-uuids-or-page-uuid)
+             (uuid? root-block-uuids-or-page-uuid))]}
   (util/profile
    :export-blocks-as-opml
    (let [content
-         (if (string? root-block-uuids-or-page-name)
+         (if (uuid? root-block-uuids-or-page-uuid)
            ;; page
-           (common/get-page-content root-block-uuids-or-page-name)
-           (common/root-block-uuids->content repo root-block-uuids-or-page-name))
-         title (if (string? root-block-uuids-or-page-name)
-                 root-block-uuids-or-page-name
+           (common/get-page-content root-block-uuids-or-page-uuid)
+           (common/root-block-uuids->content repo root-block-uuids-or-page-uuid))
+         title (if (uuid? root-block-uuids-or-page-uuid)
+                 (:block/title (db/entity [:block/uuid root-block-uuids-or-page-uuid]))
                  "untitled")
-         first-block (db/entity [:block/uuid (first root-block-uuids-or-page-name)])
+         first-block (and (coll? root-block-uuids-or-page-uuid)
+                          (db/entity [:block/uuid (first root-block-uuids-or-page-uuid)]))
          format (or (:block/format first-block) (state/get-preferred-format))]
      (export-helper content format options :title title))))
 

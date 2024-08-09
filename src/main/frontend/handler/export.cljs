@@ -89,7 +89,7 @@
        (and (map? x) (contains? x :block/uuid))
        (-> x
            (s/rename-keys {:block/uuid :block/id
-                           :block/original-name :block/page-name})
+                           :block/title :block/page-name})
            (dissoc-properties [:id])
            (select-keys keyseq))
 
@@ -108,7 +108,7 @@
                           :block/properties
                           :block/format
                           :block/children
-                          :block/content
+                          :block/title
                           :block/created-at
                           :block/updated-at]
                          pages)}))
@@ -121,7 +121,6 @@
 
 (defn- <export-repo-as-edn-str [repo]
   (p/let [result (<build-blocks repo)]
-    (prn :debug :result result)
     (let [sb (StringBuffer.)]
       (pprint/pprint result (StringBufferWriter. sb))
       (str sb))))

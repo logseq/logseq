@@ -15,31 +15,41 @@
         ["logseq.db.sqlite." "logseq.db.frontend.property" "logseq.db.frontend.malli-schema"
          "electron.db"
          "frontend.handler.db-based."
-         "frontend.components.property" "frontend.components.class" "frontend.components.db-based"]))
+         "frontend.worker.handler.page.db-based"
+         "frontend.components.property" "frontend.components.class" "frontend.components.db-based"
+         "frontend.components.objects"]))
 
 (def file-graph-ns
   "Namespaces or parent namespaces _only_ for file graphs"
   (mapv escape-shell-regex
         ["frontend.handler.file-based" "frontend.handler.file-sync"
          "frontend.db.file-based"
+         "frontend.worker.handler.page.file-based"
+         ;; Want to only specify this ns and not the ones under it but don't have a way yet
+         "frontend.worker.file"
          "frontend.fs"
          "frontend.components.file-sync"
+         "frontend.components.file-based"
          "frontend.util.fs"]))
 
 (def db-graph-paths
   "Paths _only_ for DB graphs"
   ["src/main/frontend/handler/db_based"
+   "src/main/frontend/worker/handler/page/db_based"
    "src/main/frontend/components/class.cljs"
    "src/main/frontend/components/property.cljs"
    "src/main/frontend/components/property"
+   "src/main/frontend/components/objects.cljs"
    "src/main/frontend/components/db_based"
    "src/electron/electron/db.cljs"])
 
 (def file-graph-paths
   "Paths _only_ for file graphs"
   ["src/main/frontend/handler/file_based" "src/main/frontend/handler/file_sync.cljs" "src/main/frontend/db/file_based"
+   "src/main/frontend/worker/handler/page/file_based" "src/main/frontend/worker/file.cljs"
    "src/main/frontend/fs"
    "src/main/frontend/components/file_sync.cljs"
+   "src/main/frontend/components/file_based"
    "src/main/frontend/util/fs.cljs"])
 
 (defn- validate-db-ns-not-in-file
@@ -77,17 +87,34 @@
   []
   (let [file-concepts (->>
                        ;; from logseq.db.frontend.schema
-                       [:block/properties-text-values :block/pre-block :recent/pages :file/handle :block/file :block/properties-order]
+                       [:block/properties-text-values :block/pre-block :recent/pages :block/file :block/properties-order
+                        :block/marker :block/priority :block/scheduled :block/deadline :block/macros]
                        (map str)
                        (into [;; e.g. block/properties :title
                               "block/properties :"
                               ;; anything org mode
-                              "org"]))
+                              "org"
+                              "pre-block"
+                              "namespace"
+                              "db/get-page"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]
     (when-not (and (= 1 (:exit res)) (= "" (:out res)))
-      (println "The following files should not have contained file specific attributes:")
+      (println "The following files should not have contained file specific concepts:")
+      (println (:out res))
+      (System/exit 1))))
+
+(defn- validate-db-concepts-not-in-file
+  []
+  (let [db-concepts
+        ;; from logseq.db.frontend.schema
+        ["closed-value" "schema.properties" "schema.classes" "class/parent"]
+        res (apply shell {:out :string :continue true}
+                   "git grep -E" (str "(" (string/join "|" db-concepts) ")")
+                   file-graph-paths)]
+    (when-not (and (= 1 (:exit res)) (= "" (:out res)))
+      (println "The following files should not have contained db specific concepts:")
       (println (:out res))
       (System/exit 1))))
 
@@ -97,5 +124,6 @@
   (validate-db-ns-not-in-file)
   (validate-file-ns-not-in-db)
   (validate-file-concepts-not-in-db)
+  (validate-db-concepts-not-in-file)
   (validate-multi-graph-fns-not-in-file-or-db)
   (println "✅ All checks passed!"))

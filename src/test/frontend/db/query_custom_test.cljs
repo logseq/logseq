@@ -23,7 +23,7 @@
 
   (testing "advanced datalog queries"
     (is (= ["LATER b3"]
-           (map :block/content
+           (map :block/title
                 (custom-query {:query '[:find (pull ?b [*])
                                         :where
                                         (block-content ?b "b")
@@ -31,7 +31,7 @@
         "basic advanced query works")
 
     (is (= ["LATER b3"]
-           (map :block/content
+           (map :block/title
                 (custom-query {:query '[:find (pull ?b [*])
                                         :in $
                                         :where
@@ -40,7 +40,7 @@
         "advanced query with an :in works")
 
     (is (= ["foo:: bar\n" "b3"]
-           (map :block/content
+           (map :block/title
                 (custom-query {:query '[:find (pull ?b [*])
                                         :in $ ?query %
                                         :where
@@ -52,14 +52,14 @@
         "advanced query that uses rule from logseq and rule from :inputs")
 
     (is (= ["LATER b3"]
-           (map :block/content
+           (map :block/title
                 (custom-query {:query '[:find (pull ?b [*])
                                         :in $ %
                                         :where
                                         (starts-with ?b "LA")
                                         (task ?b #{"LATER"})]
                                :rules '[[(starts-with ?b ?substr)
-                                         [?b :block/content ?content]
+                                         [?b :block/title ?content]
                                          [(clojure.string/starts-with? ?content ?substr)]]]})))
         "advanced query that uses :rules and rules from logseq")
 
@@ -74,6 +74,6 @@
         "advanced query with bound :in argument works"))
 
   (is (= ["LATER b3"]
-         (map :block/content
+         (map :block/title
               (custom-query {:query (list 'and '(task later) "b")})))
       "Simple query returns correct results"))

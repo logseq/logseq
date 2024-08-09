@@ -158,45 +158,12 @@
       @apply z-10 absolute top-0 right-0 pt-2 pr-2;
     }
   }
+}
 
-  &[label="ls-modal-align-center"],
-  &.as-center{
-    top: 0;
-
-    .ui__modal-panel {
-      top: 50vh;
-      transform: translateY(-52%);
-    }
-  }
-
-  &[label="diff__cp"] {
-    .panel-content {
-      padding: 2rem 1rem;
-
-      @screen sm {
-        padding: 2rem;
-      }
-    }
-  }
-
-  &[label="flashcards__cp"] {
-    .panel-content {
-      padding: 2rem 0;
-
-      @screen sm {
-        padding: 2rem 2rem;
-      }
-    }
-  }
-
-  &[label="instruction__cp"] {
-
-    .ui__modal-panel {
-      height: 90%;
-    }
-
-    .panel-content {
-      height: 100%;
+.ui__dialog-content {
+  &[label=flashcards__cp] {
+    .ui__dialog-main-content {
+      @apply max-h-[85vh] overflow-auto;
     }
   }
 }
@@ -222,25 +189,6 @@ html.is-native-iphone-without-notch {
   .ls-card {
     min-height: 65vh;
   }
-
-  .ui__modal {
-    &[label="flashcards__cp"] {
-      .panel-content {
-        padding: 2rem 1rem 1rem;
-        width: 90vw;
-
-        .cards-review {
-          padding-left: 0px;
-          padding-right: 0px;
-        }
-
-        .blocks-container {
-          transform: translateX(-7px);
-          width: 103%;
-        }
-      }
-    }
-  }
 }
 
 html.is-mobile {
@@ -254,13 +202,6 @@ html.is-mobile {
 
       .ls-search {
         padding-bottom: 0;
-      }
-    }
-
-    &[label="ls-modal-align-center"] {
-      .ui__modal-panel {
-        top: 8vh;
-        transform: translateY(-10%);
       }
     }
   }
@@ -301,25 +242,19 @@ html.is-mobile {
 }
 
 .form-select {
-  @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
-  border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
+  @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded border-gray-06;
+  @apply focus:border-gray-04 focus:ring-2 focus:ring-ring focus:ring-offset-2 sm:text-sm sm:leading-5;
 
   background-color: var(--lx-gray-03, var(--ls-primary-background-color, transparent));
   background-repeat: no-repeat;
-  border-width: 1px;
-  border-color: var(--lx-gray-07, var(--ls-border-color));
 
   &.is-small {
-    @apply pl-2 py-1.5 sm:leading-4 sm:text-xs;
+    @apply pl-2 py-1.5 sm:leading-[15px] sm:text-xs;
   }
 }
 
 .form-input {
-  @apply block w-full pl-2 sm:text-sm sm:leading-5 rounded bg-background border border-gray-07;
-
-  &:focus {
-    box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
-  }
+  @apply block w-full mt-1 pl-2 sm:text-sm sm:leading-5 rounded bg-background border border-gray-07;
 
   &.is-small {
     @apply py-1.5 sm:leading-4 sm:text-xs;

@@ -22,8 +22,8 @@
 
   (testing "sort by block column"
     (are [sort-state result sorted-result]
-         (= (mapv #(hash-map :block/content %) sorted-result)
-            (#'query-table/sort-result (mapv #(hash-map :block/content %) result) sort-state))
+         (= (mapv #(hash-map :block/title %) sorted-result)
+            (#'query-table/sort-result (mapv #(hash-map :block/title %) result) sort-state))
          {:sort-desc? true :sort-by-column :block}
          ["abc" "cde"] ["cde" "abc"]
 
@@ -150,12 +150,12 @@ prop:: b"}])
   (testing "for :page"
     (is (= ["page1" "page1"]
            (->> (dsl-query "(property prop)")
-                (map #(#'query-table/build-column-value % :page {:page? false}))
+                (map #(#'query-table/build-column-value nil % :page {:page? false}))
                 (map second)))
         "Page columns have valid value for blocks")
 
     (is (= ["page1"]
            (->> (dsl-query "(page-property prop)")
-                (map #(#'query-table/build-column-value % :page {:page? true}))
+                (map #(#'query-table/build-column-value nil % :page {:page? true}))
                 (map second)))
         "Page columns have valid value for pages")))

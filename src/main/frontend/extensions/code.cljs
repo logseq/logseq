@@ -138,7 +138,6 @@
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [frontend.schema.handler.common-config :refer [Config-edn]]
-            [malli.util :as mu]
             [malli.core :as m]
             [rum.core :as rum]
             [promesa.core :as p]))
@@ -155,8 +154,8 @@
 (set! js/window -CodeMirror CodeMirror)
 
 
-(defn- all-tokens-by-cursur
-  "All tokens from the beginning of the document to the cursur(inclusive)."
+(defn- all-tokens-by-cursor
+  "All tokens from the beginning of the document to the cursor(inclusive)."
   [cm]
   (let [cur (.getCursor cm)
         line (.-line cur)
@@ -236,7 +235,7 @@
 (defn- doc-state-at-cursor
   "Parse tokens into document state of last token."
   [cm]
-  (let [tokens (all-tokens-by-cursur cm)
+  (let [tokens (all-tokens-by-cursor cm)
         {:keys [current-config-path state-stack]} (tokens->doc-state tokens)
         doc-state (first state-stack)]
     [current-config-path doc-state]))
@@ -250,6 +249,20 @@
     :set "#{}"
     :vector "[]"
     nil))
+
+;; TODO: mu/to-map-syntax has been deprecated, consider removing usage
+(defn -map-syntax-walker [schema _ children _]
+  (let [properties (m/properties schema)
+        options (m/options schema)
+        r (when properties (properties :registry))
+        properties (if r (assoc properties :registry (m/-property-registry r options m/-form)) properties)]
+    (cond-> {:type (m/type schema)}
+      (seq properties) (assoc :properties properties)
+      (seq children) (assoc :children children))))
+
+(defn- malli-to-map-syntax
+  ([?schema] (malli-to-map-syntax ?schema nil))
+  ([?schema options] (m/walk ?schema -map-syntax-walker options)))
 
 (.registerHelper CodeMirror "hint" "clojure"
                  (fn [cm _options]
@@ -324,7 +337,7 @@
                                                 "false" nil)
 
                                          :enum
-                                         (let [{:keys [children]} (mu/to-map-syntax schema)]
+                                         (let [{:keys [children]} (malli-to-map-syntax schema)]
                                            (doseq [child children]
                                              (swap! result assoc (str child) nil)))
 
@@ -380,7 +393,7 @@
    (code-handler/save-code-editor!)
    (when-let [block-id (:block/uuid config)]
      (let [block (db/pull [:block/uuid block-id])]
-       (editor-handler/edit-block! block :max block-id)))))
+       (editor-handler/edit-block! block :max)))))
 
 (defn render!
   [state]
@@ -445,24 +458,33 @@
                                                 {:editor editor
                                                  :config config
                                                  :state state})))
-
         (.addEventListener element "keydown" (fn [e]
                                                (let [key-code (.-code e)
-                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))]
-                                                 (when meta-or-ctrl-pressed?
+                                                     meta-or-ctrl-pressed? (or (.-ctrlKey e) (.-metaKey e))
+                                                     shifted? (.-shiftKey e)]
+                                                 (cond
+                                                   meta-or-ctrl-pressed?
                                                    ;; prevent default behavior of browser
                                                    ;; Cmd + [ => Go back in browser, outdent in CodeMirror
                                                    ;; Cmd + ] => Go forward in browser, indent in CodeMirror
                                                    (case key-code
                                                      "BracketLeft" (util/stop e)
                                                      "BracketRight" (util/stop e)
+                                                     nil)
+                                                   shifted?
+                                                   (case key-code
+                                                     "Enter"
+                                                     (when-let [blockid (some-> (.-target e) (.closest "[blockid]") (.getAttribute "blockid"))]
+                                                       (code-handler/save-code-editor!)
+                                                       (js/setTimeout
+                                                        #(editor-handler/api-insert-new-block! ""
+                                                                                               {:block-uuid (uuid blockid)
+                                                                                                :sibling? true}) 32))
                                                      nil)))))
-        (.addEventListener element "mousedown"
+        (.addEventListener element "pointerdown"
                            (fn [e]
-                             (util/stop e)
-                             (state/clear-selection!)
-                             (when-let [block (and (:block/uuid config) (into {} (db/get-block-by-uuid (:block/uuid config))))]
-                               (state/set-editing! id (.getValue editor) block nil {:move-cursor? false}))))
+                             (.stopPropagation e)
+                             (state/clear-selection!)))
         (.addEventListener element "touchstart"
                            (fn [e]
                              (.stopPropagation e)))
@@ -536,11 +558,13 @@
   ;; command is run. It's not elegant... open to suggestions for how to fix it!
   (let [block (state/get-edit-block)
         block-uuid (:block/uuid block)]
-    (state/clear-edit!)
-    (js/setTimeout
-     (fn []
-       (let [block-node (util/get-first-block-by-id block-uuid)
-             textarea-ref (.querySelector block-node "textarea")]
-         (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
-           (.focus codemirror-ref))))
-     100)))
+    (p/do!
+     (state/pub-event! [:editor/save-current-block])
+     (state/clear-edit!)
+     (js/setTimeout
+      (fn []
+        (let [block-node (util/get-first-block-by-id block-uuid)
+              textarea-ref (.querySelector block-node "textarea")]
+          (when-let [codemirror-ref (gobj/get textarea-ref codemirror-ref-name)]
+            (.focus codemirror-ref))))
+      256))))

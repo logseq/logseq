@@ -12,6 +12,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.global-config :as global-config-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.idb :as idb]
             [frontend.search :as search]
             [frontend.state :as state]
@@ -21,7 +22,6 @@
             [frontend.persist-db :as persist-db]
             [promesa.core :as p]
             [frontend.db.persist :as db-persist]
-            [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [electron.ipc :as ipc]
             [cljs-bean.core :as bean]
             [frontend.mobile.util :as mobile-util]
@@ -106,9 +106,12 @@
   []
   (p/let [nfs-dbs (db-persist/get-all-graphs)
           nfs-dbs (map (fn [db]
-                         {:url db
-                          :root (config/get-local-dir db)
-                          :nfs? true}) nfs-dbs)
+                         (let [graph-name (:name db)]
+                           {:url graph-name
+                            :metadata (:metadata db)
+                            :root (config/get-local-dir graph-name)
+                            :nfs? true}))
+                       nfs-dbs)
           nfs-dbs (and (seq nfs-dbs)
                        (cond (util/electron?)
                              (ipc/ipc :inflateGraphsInfo nfs-dbs)
@@ -128,10 +131,11 @@
         :example? true}])))
 
 (defn combine-local-&-remote-graphs
-  [demo-repos remote-repos]
-  (when-let [repos' (seq (concat (map #(if-let [sync-meta (seq (:sync-meta %))]
-                                         (assoc % :GraphUUID (second sync-meta)) %)
-                                   demo-repos)
+  [local-repos remote-repos]
+  (when-let [repos' (seq (concat (map (fn [{:keys [sync-meta metadata] :as repo}]
+                                        (let [graph-id (or (:kv/value metadata) (second sync-meta))]
+                                          (if graph-id (assoc repo :GraphUUID graph-id) repo)))
+                                      local-repos)
                                  (some->> remote-repos
                                           (map #(assoc % :remote? true)))))]
     (let [repos' (group-by :GraphUUID repos')
@@ -148,7 +152,7 @@
   [url]
   (when-let [graphs (seq (and url (combine-local-&-remote-graphs
                                     (state/get-repos)
-                                    (state/get-remote-graphs))))]
+                                    (state/get-remote-file-graphs))))]
     (first (filter #(when-let [url' (:url %)]
                       (= url url')) graphs))))
 
@@ -157,7 +161,9 @@
   (p/let [repos (get-repos)
           repos' (combine-local-&-remote-graphs
                   repos
-                  (state/get-remote-graphs))]
+                  (concat
+                   (state/get-rtc-graphs)
+                   (state/get-remote-file-graphs)))]
     (state/set-repos! repos')
     repos'))
 
@@ -182,18 +188,21 @@
 
 (defn- create-db [full-graph-name {:keys [file-graph-import?]}]
   (->
-   (p/let [_ (persist-db/<new full-graph-name)
+   (p/let [config (migrate-db-config config/config-default-content)
+           _ (persist-db/<new full-graph-name {:config config})
            _ (start-repo-db-if-not-exists! full-graph-name)
            _ (state/add-repo! {:url full-graph-name})
+           _ (restore-and-setup-repo! full-graph-name)
            _ (when-not file-graph-import? (route-handler/redirect-to-home!))
-           initial-data (sqlite-create-graph/build-db-initial-data (migrate-db-config config/config-default-content))
-           _ (db/transact! full-graph-name initial-data)
            _ (repo-config-handler/set-repo-config-state! full-graph-name config/config-default-content)
           ;; TODO: handle global graph
            _ (state/pub-event! [:init/commands])
            _ (when-not file-graph-import? (state/pub-event! [:page/create (date/today) {:redirect? false}]))]
-     (js/setTimeout ui-handler/re-render-root! 100)
-     (prn "New db created: " full-graph-name))
+     (route-handler/redirect-to-home!)
+     (ui-handler/re-render-root!)
+     (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)})
+     (prn "New db created: " full-graph-name)
+     full-graph-name)
    (p/catch (fn [error]
               (notification/show! "Create graph failed." :error)
               (js/console.error error)))))

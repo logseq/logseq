@@ -8,6 +8,7 @@
  ;; :preferred-format "Markdown"
 
  ;; Set the preferred workflow style.
+ ;; This is _only_ for file graphs.
  ;; Available options:
  ;; - :now for NOW/LATER style (default)
  ;; - :todo for TODO/DOING style
@@ -54,6 +55,11 @@
  ;; Default value: true
  :ui/auto-expand-block-refs? true
 
+ ;; Hide empty block properties
+ ;; This is _only_ for DB graphs.
+ ;; Default value: false
+ ;; :ui/hide-empty-properties? false
+
  ;; Disable accent marks when searching.
  ;; After changing this setting, rebuild the search index by pressing (^C ^S).
  ;; Default value: true
@@ -98,10 +104,6 @@
  ;; This option takes precedence over the local `logseq/custom.js` file.
  ;; Example usage:
  ;; :custom-js-url "https://cdn.logseq.com/custom.js"
-
- ;; Set a custom Arweave gateway
- ;; Default gateway: https://arweave.net
- ;; :arweave/gateway "https://arweave.net"
 
  ;; Set bullet indentation when exporting
  ;; Available options:
@@ -178,10 +180,10 @@
  ;; Default value: false
  :shortcut/doc-mode-enter-for-new-block? false
 
- ;; Block content larger than `block/content-max-length` will not be searchable
+ ;; Block content larger than `block/title-max-length` will not be searchable
  ;; or editable for performance.
  ;; Default value: 10000
- :block/content-max-length 10000
+ :block/title-max-length 10000
 
  ;; Display command documentation on hover.
  ;; Default value: true
@@ -198,46 +200,15 @@
 
  ;; Advanced queries `:result-transform` function.
  ;; Transform the query result before displaying it.
- :query/result-transforms
- {:sort-by-priority
-  (fn [result] (sort-by (fn [h] (get h :block/priority "Z")) result))}
+ ;; Example usage for DB graphs:
+;;  :query/result-transforms
+;;  {:sort-by-priority
+;;   (fn [result] (sort-by (fn [h] (get h :logseq.task/priority "Z")) result))}
 
- ;; The following queries will be displayed at the bottom of today's journal page.
- ;; The "NOW" query returns tasks with "NOW" or "DOING" status.
- ;; The "NEXT" query returns tasks with "NOW", "LATER", or "TODO" status.
- :default-queries
- {:journals
-  [{:title "🔨 NOW"
-    :query [:find (pull ?h [*])
-            :in $ ?start ?today
-            :where
-            [?h :block/marker ?marker]
-            [(contains? #{"NOW" "DOING"} ?marker)]
-            [?h :block/page ?p]
-            [?p :block/journal? true]
-            [?p :block/journal-day ?d]
-            [(>= ?d ?start)]
-            [(<= ?d ?today)]]
-    :inputs [:14d :today]
-    :result-transform (fn [result]
-                        (sort-by (fn [h]
-                                   (get h :block/priority "Z")) result))
-    :group-by-page? false
-    :collapsed? false}
-   {:title "📅 NEXT"
-    :query [:find (pull ?h [*])
-            :in $ ?start ?next
-            :where
-            [?h :block/marker ?marker]
-            [(contains? #{"NOW" "LATER" "TODO"} ?marker)]
-            [?h :block/page ?p]
-            [?p :block/journal? true]
-            [?p :block/journal-day ?d]
-            [(> ?d ?start)]
-            [(< ?d ?next)]]
-    :inputs [:today :7d-after]
-    :group-by-page? false
-    :collapsed? false}]}
+;; Queries will be displayed at the bottom of today's journal page.
+;; Example usage:
+;; :default-queries
+;; {:journals []}
 
  ;; Add custom commands to the command palette
  ;; Example usage:

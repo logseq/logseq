@@ -2,9 +2,9 @@
   (:require [clojure.string :as string]
             [frontend.diff :as diff]
             [frontend.handler.file :as file]
-            [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -35,12 +35,13 @@
     (reset! db-value db-content))
   [:div.cp__diff-file
    [:div.cp__diff-file-header
-    [:span.cp__diff-file-header-content.pl-1.font-medium
-     (str "File " path " has been modified on the disk.")]]
+    [:span.cp__diff-file-header-content.pl-1
+     (shui/tabler-icon "info-triangle")
+     [:span (str "File " path "has been modified on the disk.")]]]
    [:div.p-4
     (when (not= (string/trim disk-content) (string/trim db-content))
       (ui/foldable
-       [:span.text-sm.font-medium.ml-1 "Check diff"]
+       (shui/button {:variant :link :class "!px-0"} "Check diff")
        (fn []
          (let [local-content (or db-content "")
                content (or disk-content "")
@@ -72,7 +73,7 @@
                      (file/alter-file repo path value
                                       {:re-render-root? true
                                        :skip-compare? true}))
-                   (state/close-modal!)))]
+                   (shui/dialog-close!)))]
 
      [:div.flex-1.mt-8.sm:ml-4.sm:mt-0
       [:div.mb-2 "In Logseq:"]
@@ -89,4 +90,4 @@
                      (file/alter-file repo path value
                                       {:re-render-root? true
                                        :skip-compare? true}))
-                   (state/close-modal!)))]]]])
+                   (shui/dialog-close!)))]]]])

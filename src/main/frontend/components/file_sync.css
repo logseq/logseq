@@ -4,7 +4,7 @@
   --ls-color-file-sync-idle: var(--color-green-600);
 }
 
-.cp__file-sync {
+.cp__file-sync, .cp__rtc-sync {
   &-indicator {
     a.cloud {
       position: relative;
@@ -551,12 +551,6 @@
         }
       }
     }
-  }
-}
-
-div[label=modal-page-histories] {
-  .panel-content {
-    overflow: hidden;
   }
 }
 

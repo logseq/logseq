@@ -16,7 +16,8 @@
             [logseq.common.config :as common-config]
             #?(:org.babashka/nbb [logseq.common.log :as log]
                :default [lambdaisland.glogi :as log])
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]))
+            [logseq.graph-parser.whiteboard :as gp-whiteboard]
+            [logseq.db :as ldb]))
 
 (defn- filepath->page-name
   [filepath]
@@ -123,7 +124,7 @@
             first-block-name)))))
 
 (defn- extract-page-alias-and-tags
-  [page-m page page-name properties]
+  [page-m page-name properties]
   (let [alias (:alias properties)
         alias' (if (coll? alias) alias [(str alias)])
         aliases (and alias'
@@ -131,24 +132,11 @@
                                        (string/blank? %)) ;; disable blank alias
                                   alias')))
         aliases' (keep
-                   (fn [alias]
-                     (let [page-name (common-util/page-name-sanity-lc alias)
-                           aliases (distinct
-                                    (conj
-                                     (remove #{alias} aliases)
-                                     page))
-                           aliases (when (seq aliases)
-                                     (map
-                                       (fn [alias]
-                                         {:block/name (common-util/page-name-sanity-lc alias)})
-                                       aliases))]
-                       (if (seq aliases)
-                         {:block/name page-name
-                          :block/original-name alias
-                          :block/alias aliases}
-                         {:block/name page-name
-                          :block/original-name alias})))
-                   aliases)
+                  (fn [alias]
+                    (let [page-name (common-util/page-name-sanity-lc alias)]
+                      {:block/name page-name
+                       :block/title alias}))
+                  aliases)
         result (cond-> page-m
                  (seq aliases')
                  (assoc :block/alias aliases')
@@ -158,8 +146,8 @@
                                           tags (if (coll? tags) tags [(str tags)])
                                           tags (remove string/blank? tags)]
                                       (map (fn [tag] {:block/name (common-util/page-name-sanity-lc tag)
-                                                      :block/original-name tag})
-                                        tags))))]
+                                                      :block/title tag})
+                                           tags))))]
     (update result :block/properties #(apply dissoc % gp-property/editable-linkable-built-in-properties))))
 
 (defn- build-page-map
@@ -173,10 +161,10 @@
         page-m (->
                 (common-util/remove-nils-non-nested
                  (assoc
-                  (gp-block/page-name->map page false db true date-formatter
+                  (gp-block/page-name->map page db true date-formatter
                                            :from-page from-page)
                   :block/file {:file/path (common-util/path-normalize file)}))
-                (extract-page-alias-and-tags page page-name properties))]
+                (extract-page-alias-and-tags page-name properties))]
     (cond->
       page-m
 
@@ -216,33 +204,32 @@
                                        :or {extracted-block-ids (atom #{})
                                             resolve-uuid-fn (constantly nil)}
                                        :as options}]
+  (assert db "Datascript DB is required")
   (try
-    (let [page (get-page-name file ast false filename-format)
+    (let [db-based? (ldb/db-based-graph? db)
+          page (get-page-name file ast false filename-format)
           [page page-name _journal-day] (gp-block/convert-page-if-journal page date-formatter)
           options' (assoc options :page-name page-name)
           ;; In case of diff-merge (2way) triggered, use the uuids to override the ones extracted from the AST
           override-uuids (resolve-uuid-fn format ast content options')
-          blocks (->> (gp-block/extract-blocks ast content false format options')
+          blocks (->> (gp-block/extract-blocks ast content format options')
                       (attach-block-ids-if-match override-uuids)
                       (mapv #(gp-block/fix-block-id-if-duplicated! db page-name extracted-block-ids %))
-                      (gp-block/with-parent-and-left {:block/name page-name})
+                      ;; FIXME: use page uuid
+                      (gp-block/with-parent-and-order {:block/name page-name})
                       (vec))
           ref-pages (atom #{})
           blocks (map (fn [block]
-                        (if (contains? (:block/type block) "macro")
+                        (if (= (:block/type block) "macro")
                           block
-                          (let [block-ref-pages (seq (:block/refs block))
-                                page-lookup-ref [:block/name page-name]
-                                block-path-ref-pages (->> (cons page-lookup-ref (seq (:block/path-refs block)))
-                                                          (remove nil?))]
+                          (let [block-ref-pages (seq (:block/refs block))]
                             (when block-ref-pages
                               (swap! ref-pages set/union (set block-ref-pages)))
                             (-> block
                                 (dissoc :ref-pages)
                                 (assoc :block/format format
                                        :block/page [:block/name page-name]
-                                       :block/refs block-ref-pages
-                                       :block/path-refs block-path-ref-pages)))))
+                                       :block/refs block-ref-pages)))))
                       blocks)
           [properties invalid-properties properties-text-values]
           (if (:block/pre-block? (first blocks))
@@ -251,24 +238,31 @@
              (:block/properties-text-values (first blocks))]
             [properties [] {}])
           page-map (build-page-map properties invalid-properties properties-text-values file page page-name (assoc options' :from-page page))
-          namespace-pages (let [page (:block/original-name page-map)]
-                            (when (text/namespace-page? page)
-                              (->> (common-util/split-namespace-pages page)
-                                   (map (fn [page]
-                                          (-> (gp-block/page-name->map page true db true date-formatter)
-                                              (assoc :block/format format)))))))
+          namespace-pages (when-not db-based?
+                            (let [page (:block/title page-map)]
+                              (when (text/namespace-page? page)
+                                (->> (common-util/split-namespace-pages page)
+                                     (map (fn [page]
+                                            (-> (gp-block/page-name->map page db true date-formatter)
+                                                (assoc :block/format format))))))))
           pages (->> (concat
                       [page-map]
                       @ref-pages
                       namespace-pages)
                      ;; remove block references
                      (remove vector?)
-                     (remove nil?))
+                     (remove nil?)
+                     (filter :block/name))
           pages (common-util/distinct-by :block/name pages)
           pages (remove nil? pages)
-          pages (map (fn [page] (assoc page :block/uuid (d/squuid))) pages)
+          pages (map (fn [page]
+                       (let [page-id (or (when db
+                                           (:block/uuid (ldb/get-page db (:block/name page))))
+                                         (d/squuid))]
+                         (assoc page :block/uuid page-id)))
+                     pages)
           blocks (->> (remove nil? blocks)
-                      (map (fn [b] (dissoc b :block/title :block/body :block/level :block/children :block/meta))))]
+                      (map (fn [b] (dissoc b :block.temp/ast-title :block.temp/ast-body :block/level :block/children :block/meta))))]
       [pages blocks])
     (catch :default e
       (log/error :exception e))))
@@ -317,24 +311,26 @@
                 (fn [block]
                   (-> block
                       (common-util/dissoc-in [:block/parent :block/name])
+                      ;; :block/left here for backward compatibility
                       (common-util/dissoc-in [:block/left :block/name])))
                 blocks)
         serialized-page (first pages)
-        ;; whiteboard edn file should normally have valid :block/original-name, :block/name, :block/uuid
+        ;; whiteboard edn file should normally have valid :block/title, :block/name, :block/uuid
         page-name (-> (or (:block/name serialized-page)
                           (filepath->page-name file))
                       (common-util/page-name-sanity-lc))
-        original-name (or (:block/original-name serialized-page)
-                          page-name)
+        title (or (:block/title serialized-page)
+                  page-name)
         page-block (merge {:block/name page-name
-                           :block/original-name original-name
-                           :block/type "whiteboard"
+                           :block/title title
                            :block/file {:file/path (common-util/path-normalize file)}}
-                          serialized-page)
+                          serialized-page
+                          ;; Ensure old whiteboards have correct type
+                          {:block/type "whiteboard"})
         page-block (gp-whiteboard/migrate-page-block page-block)
         blocks (->> blocks
                     (map gp-whiteboard/migrate-shape-block)
-                    (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))
+                    (map #(merge % (gp-whiteboard/with-whiteboard-block-props % [:block/uuid (:block/uuid page-block)]))))
         _ (when verbose (println "Parsing finished: " file))]
     {:pages (list page-block)
      :blocks blocks}))

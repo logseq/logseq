@@ -2,9 +2,9 @@
 # yarn lockfile v1
 
 
-"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v8":
-  version "1.2.173-feat-db-v8"
-  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/5fa1d8c83ea9c65c56cdda8bd00f3d92f529acf5"
+"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v15":
+  version "1.2.173-feat-db-v15"
+  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/2555e106853ad4f14e21435380ffc0ce17854def"
   dependencies:
     import-meta-resolve "^2.1.0"
 
@@ -305,10 +305,10 @@ mkdirp-classic@^0.5.2, mkdirp-classic@^0.5.3:
   resolved "https://registry.yarnpkg.com/mkdirp-classic/-/mkdirp-classic-0.5.3.tgz#fa10c9115cc6d8865be221ba47ee9bed78601113"
   integrity sha512-gKLcREMhtuZRwRAfqP3RFW+TK4JqApVBtOIftVgjuABpAtpxhPGaDcfvbhNvD0B8iD1oUr/txX35NjcaY6Ns/A==
 
-mldoc@^1.5.8:
-  version "1.5.8"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.5.8.tgz#5433950c9124f8917075bafa4f1ed886959504c5"
-  integrity sha512-wNUGgwdgB/5c3GTp2qRPzWD8CpeTmA/HDlGJjTJUo2WXJttiBaz8cHQh2OdAshiLdVxteqIaSTXSPFRf7z1YRw==
+mldoc@^1.5.9:
+  version "1.5.9"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.5.9.tgz#43d740351c64285f0f4988ac9497922d54ae66fc"
+  integrity sha512-87FQ7hseS87tsk+VdpIigpu8LH+GwmbbFgpxgFwvnbH5oOjmIrc47laH4Dyggzqiy8/vMjDHkl7vsId0eXhCDQ==
   dependencies:
     yargs "^12.0.2"
 

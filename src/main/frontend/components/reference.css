@@ -1,5 +1,4 @@
 .cp__filters-input {
-  background-color: var(--ls-primary-background-color);
   padding: 0.5rem;
   outline: none;
 }
@@ -16,9 +15,9 @@
 }
 
 .ls-filters {
-    max-width: 704px;
+  max-width: 704px;
 }
 
 .custom-query-page-result {
-    @apply p-2 my-2 rounded;
+  @apply p-4 my-1.5 -mx-1 rounded bg-gray-03;
 }

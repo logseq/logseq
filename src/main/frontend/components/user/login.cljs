@@ -1,8 +1,12 @@
 (ns frontend.components.user.login
-  (:require [rum.core :as rum]
+  (:require [clojure.string :as string]
+            [logseq.shui.ui :as shui]
+            [rum.core :as rum]
+            [dommy.core :refer-macros [sel]]
             [frontend.rum :refer [adapt-class]]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.handler.user :as user]
+            [frontend.handler.route :as route-handler]
             [cljs-bean.core :as bean]
             [frontend.handler.notification :as notification]
             [frontend.state :as state]
@@ -41,7 +45,9 @@
         (when session
           (user/login-callback session)
           (notification/show! (str "Hi, " username " :)") :success)
-          (state/close-modal!)))
+          (shui/dialog-close!)
+          (when (= :user-login (state/get-current-route))
+            (route-handler/redirect! {:to :home}))))
       [])
 
     nil))
@@ -49,14 +55,30 @@
 (rum/defc page-impl
   []
   (let [[ready?, set-ready?] (rum/use-state false)
+        [tab, set-tab!] (rum/use-state :login)
         *ref-el (rum/use-ref nil)]
 
     (rum/use-effect!
       (fn [] (setup-configure!)
         (set-ready? true)
+        (js/setTimeout
+          (fn []
+            (when-let [^js el (some-> (rum/deref *ref-el) (.querySelector ".amplify-tabs"))]
+              (let [btn1 (.querySelector el "button")]
+                (.addEventListener el "pointerdown"
+                  (fn [^js e]
+                    (if (= (.-target e) btn1)
+                      (set-tab! :login)
+                      (set-tab! :create-account)))))))))
+      [])
+
+    (rum/use-effect!
+      (fn []
         (when-let [^js el (rum/deref *ref-el)]
-          (js/setTimeout #(some-> (.querySelector el "input[name=username]")
-                                  (.focus)) 100))) [])
+          (js/setTimeout
+            #(some-> (.querySelector el (str "input[name=" (if (= tab :login) "username" "email") "]"))
+               (.focus)) 100)))
+      [tab])
 
     [:div.cp__user-login
      {:ref *ref-el}
@@ -72,16 +94,21 @@
                  user'          (bean/->clj user)]
              (user-pane sign-out! user')))))]))
 
-(rum/defcs page <
+(rum/defcs modal-inner <
   shortcut/disable-all-shortcuts
   [_state]
   (page-impl))
 
+(rum/defc page
+  []
+  [:div.pt-10 (page-impl)])
+
 (defn open-login-modal!
   []
-  (state/set-modal!
-    (fn [_close] (page))
-    {:close-btn?      true
-     :label           "user-login"
-     :close-backdrop? false
-     :center?         false}))
+  (shui/dialog-open!
+    (fn [_close] (modal-inner))
+    {:label "user-login"
+     :content-props {:onPointerDownOutside #(let [inputs (sel "form[data-amplify-form] input:not([type=checkbox])")
+                                                  inputs (some->> inputs (map (fn [^js e] (.-value e))) (remove string/blank?))]
+                                              (when (seq inputs)
+                                                (.preventDefault %)))}}))

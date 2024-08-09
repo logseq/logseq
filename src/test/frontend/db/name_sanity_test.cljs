@@ -2,9 +2,9 @@
   (:require [cljs.test :refer [deftest testing is]]
             [clojure.string :as string]
             [logseq.graph-parser.extract :as extract]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
+            [frontend.worker.handler.page.file-based.rename :as worker-page-rename]
             [frontend.util.fs :as fs-util]
-            [frontend.worker.file.util :as wfu]))
+            [frontend.common.file.util :as wfu]))
 
 (defn- test-page-name
   "Check if page name can be preserved after escaping"

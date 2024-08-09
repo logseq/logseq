@@ -70,7 +70,7 @@
     ":PROPERTIES:\n:title: a/b/c\n:tags: d,e\n:END:"))
 
 (deftest test-with-built-in-properties
-  (let [content "#+BEGIN_QUERY\n{:title      \"cool NEXT\"\n    :query      [:find (pull ?h [*])\n                 :in $ ?start ?next\n                 :where\n                 [?h :block/marker ?marker]\n                 [(contains? #{\"NOW\" \"LATER\" \"TODO\"} ?marker)]\n                 [?h :block/ref-pages ?p]\n                 [?p :block/journal? true]\n                 [?p :block/journal-day ?d]\n                 [(> ?d ?start)]\n                 [(< ?d ?next)]]\n    :inputs     [:today :7d-after]\n    :collapsed? false}\n#+END_QUERY"]
+  (let [content "#+BEGIN_QUERY\n{:title      \"cool NEXT\"\n    :query      [:find (pull ?h [*])\n                 :in $ ?start ?next\n                 :where\n                 [?h :block/marker ?marker]\n                 [(contains? #{\"NOW\" \"LATER\" \"TODO\"} ?marker)]\n                 [?h :block/ref-pages ?p]\n                [?p :block/journal-day ?d]\n                 [(> ?d ?start)]\n                 [(< ?d ?next)]]\n    :inputs     [:today :7d-after]\n    :collapsed? false}\n#+END_QUERY"]
     (let [md-property "query-table:: true"]
       (are [x y] (= (property-util/with-built-in-properties {:query-table true} x :markdown) y)
        content
@@ -127,9 +127,4 @@
       {:title "foo"} [:title] {:pre-block? true :page-id 1}
       '()
       {:title "foo" :foo "bar"} [:title :foo] {:pre-block? true :page-id 1}
-      [[:foo "bar"]]
-      ;; normal block
-      {:logseq.table.version 2} [:logseq.table.version] {:pre-block? false}
-      '()
-      {:logseq.table.version 2 :foo "bar"} [:logseq.table.version :foo] {:pre-block? false}
       [[:foo "bar"]])))

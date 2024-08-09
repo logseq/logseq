@@ -4,15 +4,19 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [datascript.core :as d]
+            [datascript.impl.entity :as de]
             [logseq.common.config :as common-config]
+            [logseq.common.util :as common-util]
+            [logseq.common.util.block-ref :as block-ref]
             [logseq.common.util.date-time :as date-time-util]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.uuid :as common-uuid]
+            [logseq.db :as ldb]
+            [logseq.db.frontend.order :as db-order]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.utf8 :as utf8]
-            [logseq.common.util :as common-util]
-            [logseq.common.util.block-ref :as block-ref]
-            [logseq.common.util.page-ref :as page-ref]))
+            [logseq.graph-parser.utf8 :as utf8]))
 
 (defn heading-block?
   [block]
@@ -71,11 +75,12 @@
                     (= "Macro" (first block)))
                (let [{:keys [name arguments]} (second block)
                      argument (string/join ", " arguments)]
-                   (if (= name "embed")
-                     (text/page-ref-un-brackets! argument)
-                     {:type "macro"
-                      :name name
-                      :arguments arguments}))
+                 (if (= name "embed")
+                   (when (page-ref/page-ref? argument)
+                     (text/page-ref-un-brackets! argument))
+                   {:type "macro"
+                    :name name
+                    :arguments arguments}))
 
                (and (vector? block)
                     (= "Tag" (first block)))
@@ -148,11 +153,26 @@
            (remove (into #{}
                          (map name)
                          (apply conj
-                                (gp-property/editable-built-in-properties)
+                                (apply disj
+                                       (gp-property/editable-built-in-properties)
+                                       gp-property/editable-linkable-built-in-properties)
                                 (gp-property/hidden-built-in-properties))))
            (distinct))
      properties)
     []))
+
+(defn- extract-refs-from-property-value
+  [value format]
+  (cond
+    (coll? value)
+    (filter (fn [v] (and (string? v) (not (string/blank? v)))) value)
+    (and (string? value) (= \" (first value) (last value)))
+    nil
+    (string? value)
+    (let [ast (gp-mldoc/inline->edn value (gp-mldoc/default-config format))]
+      (text/extract-refs-from-mldoc-ast ast))
+    :else
+    nil))
 
 (defn- get-page-ref-names-from-properties
   [properties user-config]
@@ -167,8 +187,9 @@
                               (keyword k))))
                    ;; get links ast
                    (map last)
-                   (mapcat (or (:extract-refs-from-property-value-fn user-config)
-                               text/extract-refs-from-mldoc-ast))
+                   (mapcat (fn [value]
+                             (let [f (or (:extract-refs-from-property-value-fn user-config) extract-refs-from-property-value)]
+                               (f value (get user-config :format :markdown)))))
                    ;; comma separated collections
                    (concat (->> (map second properties)
                                 (filter coll?)
@@ -266,11 +287,12 @@
   [original-page-name date-formatter]
   (when original-page-name
     (let [page-name (common-util/page-name-sanity-lc original-page-name)
-          day (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter))]
-     (if day
-       (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
-         [original-page-name (common-util/page-name-sanity-lc original-page-name) day])
-       [original-page-name page-name day]))))
+          day (when date-formatter
+                (date-time-util/journal-title->int page-name (date-time-util/safe-journal-title-formatters date-formatter)))]
+      (if day
+        (let [original-page-name (date-time-util/int->journal-title day date-formatter)]
+          [original-page-name (common-util/page-name-sanity-lc original-page-name) day])
+        [original-page-name page-name day]))))
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
 
@@ -278,57 +300,71 @@
 (defn page-name->map
   "Create a page's map structure given a original page name (string).
    map as input is supported for legacy compatibility.
-   with-id?: if true, assign uuid to the map structure.
-    if the page entity already exists, no-op.
-    else, if with-id? is a uuid, the uuid is used.
-    otherwise, generate a uuid.
-   with-timestamp?: assign timestampes to the map structure.
+   `with-timestamp?`: assign timestampes to the map structure.
     Useful when creating new pages from references or namespaces,
-    as there's no chance to introduce timestamps via editing in page"
-  [original-page-name with-id? db with-timestamp? date-formatter
-   & {:keys [from-page]}]
-  (cond
-    (and original-page-name (string? original-page-name))
-    (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
-          [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
-          namespace? (and (not (boolean (text/get-nested-page-name original-page-name)))
-                          (text/namespace-page? original-page-name))
-          page-entity (some-> db (d/entity [:block/name page-name]))
-          original-page-name (or from-page (:block/original-name page-entity) original-page-name)]
-      (merge
-       {:block/name page-name
-        :block/original-name original-page-name}
-       (when with-id?
-         (let [new-uuid (or
-                         (cond page-entity      (:block/uuid page-entity)
-                               (uuid? with-id?) with-id?)
-                         (d/squuid))]
-           {:block/uuid new-uuid}))
-       (when namespace?
-         (let [namespace (first (common-util/split-last "/" original-page-name))]
-           (when-not (string/blank? namespace)
-             {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
-       (when (and with-timestamp? (not page-entity)) ;; Only assign timestamp on creating new entity
-         (let [current-ms (common-util/time-ms)]
-           {:block/created-at current-ms
-            :block/updated-at current-ms}))
-       (if journal-day
-         {:block/journal? true
-          :block/journal-day journal-day}
-         {:block/journal? false})))
+    as there's no chance to introduce timestamps via editing in page
+   `skip-existing-page-check?`: if true, allows pages to have the same name"
+  [original-page-name db with-timestamp? date-formatter
+   & {:keys [page-uuid from-page class? skip-existing-page-check?]}]
+  (when-not (and db (common-util/uuid-string? original-page-name)
+                 (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
+    (let [db-based? (ldb/db-based-graph? db)
+          page (cond
+                 (and original-page-name (string? original-page-name))
+                 (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
+                       [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+                       namespace? (and (not db-based?)
+                                       (not (boolean (text/get-nested-page-name original-page-name)))
+                                       (text/namespace-page? original-page-name))
+                       page-entity (when db
+                                     (if class?
+                                       (ldb/get-case-page db original-page-name)
+                                       (ldb/get-page db original-page-name)))
+                       original-page-name (or from-page (:block/title page-entity) original-page-name)]
+                   (merge
+                    {:block/name page-name
+                     :block/title original-page-name}
+                    (let [new-uuid* (if (uuid? page-uuid)
+                                      page-uuid
+                                      (if journal-day
+                                        (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                                        (common-uuid/gen-uuid)))
+                          new-uuid (if skip-existing-page-check?
+                                     new-uuid*
+                                     (or
+                                      (cond page-entity       (:block/uuid page-entity)
+                                            (uuid? page-uuid) page-uuid)
+                                      new-uuid*))]
+                      {:block/uuid new-uuid})
+                    (when namespace?
+                      (let [namespace (first (common-util/split-last "/" original-page-name))]
+                        (when-not (string/blank? namespace)
+                          {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
+                    (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
+                      (let [current-ms (common-util/time-ms)]
+                        {:block/created-at current-ms
+                         :block/updated-at current-ms}))
+                    (if journal-day
+                      {:block/type "journal"
+                       :block/journal-day journal-day}
+                      {})))
 
-    (and (map? original-page-name) (:block/uuid original-page-name))
-    original-page-name
+                 (and (map? original-page-name) (:block/uuid original-page-name))
+                 original-page-name
 
-    (and (map? original-page-name) with-id?)
-    (assoc original-page-name :block/uuid (d/squuid))
+                 (map? original-page-name)
+                 (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
 
-    :else
-    nil))
+                 :else
+                 nil)]
+      (when page
+        (let [type (if class? "class" (or (:block/type page) "page"))]
+          (assoc page :block/type type))))))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} with-id? db date-formatter]
-  (let [refs (->> (concat tags refs [marker priority])
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter parse-block]
+  (let [db-based? (ldb/db-based-graph? db)
+        refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
         *refs (atom refs)
@@ -352,17 +388,18 @@
     (let [*name->id (atom {})
           ref->map-fn (fn [*col _tag?]
                         (let [col (remove string/blank? @*col)
-                              children-pages (->> (mapcat (fn [p]
-                                                            (let [p (if (map? p)
-                                                                      (:block/original-name p)
-                                                                      p)]
-                                                              (when (string? p)
-                                                                (let [p (or (text/get-nested-page-name p) p)]
-                                                                  (when (text/namespace-page? p)
-                                                                    (common-util/split-namespace-pages p))))))
-                                                          col)
-                                                  (remove string/blank?)
-                                                  (distinct))
+                              children-pages (when-not db-based?
+                                               (->> (mapcat (fn [p]
+                                                              (let [p (if (map? p)
+                                                                        (:block/title p)
+                                                                        p)]
+                                                                (when (string? p)
+                                                                  (let [p (or (text/get-nested-page-name p) p)]
+                                                                    (when (text/namespace-page? p)
+                                                                      (common-util/split-namespace-pages p))))))
+                                                            col)
+                                                    (remove string/blank?)
+                                                    (distinct)))
                               col (->> (distinct (concat col children-pages))
                                        (remove nil?))]
                           (map
@@ -370,17 +407,26 @@
                              (let [macro? (and (map? item)
                                                (= "macro" (:type item)))]
                                (when-not macro?
-                                 (let [result (page-name->map item with-id? db true date-formatter)
+                                 (let [result (page-name->map item db true date-formatter)
                                        page-name (:block/name result)
                                        id (get @*name->id page-name)]
-                                   (when (and with-id? (nil? id))
+                                   (when (nil? id)
                                      (swap! *name->id assoc page-name (:block/uuid result)))
                                    (if id
                                      (assoc result :block/uuid id)
-                                     result))))) col)))]
+                                     result))))) col)))
+          refs (->> (ref->map-fn *refs false)
+                    (remove nil?)
+                    (map (fn [ref]
+                           (if-let [entity (ldb/get-case-page db (:block/title ref))]
+                             (if (= (:db/id parse-block) (:db/id entity))
+                               ref
+                               (select-keys entity [:block/uuid :block/title :block/name]))
+                             ref))))
+          tags (ref->map-fn *structured-tags true)]
       (assoc block
-             :refs (ref->map-fn *refs false)
-             :tags (ref->map-fn *structured-tags true)))))
+             :refs refs
+             :tags tags))))
 
 (defn- with-block-refs
   [{:keys [title body] :as block}]
@@ -437,66 +483,19 @@
 (defn get-page-refs-from-properties
   [properties db date-formatter user-config]
   (let [page-refs (get-page-ref-names-from-properties properties user-config)]
-    (map (fn [page] (page-name->map page true db true date-formatter)) page-refs)))
+    (map (fn [page] (page-name->map page db true date-formatter)) page-refs)))
 
 (defn- with-page-block-refs
-  [block with-id? db date-formatter]
+  [block db date-formatter & {:keys [parse-block]}]
   (some-> block
-          (with-page-refs-and-tags with-id? db date-formatter)
+          (with-page-refs-and-tags db date-formatter parse-block)
           with-block-refs
           (update :refs (fn [col] (remove nil? col)))))
-
-(defn- with-path-refs
-  [blocks]
-  (loop [blocks blocks
-         acc []
-         parents []]
-    (if (empty? blocks)
-      acc
-      (let [block (first blocks)
-            cur-level (:block/level block)
-            level-diff (- cur-level
-                          (get (last parents) :block/level 0))
-            [path-refs parents]
-            (cond
-              (zero? level-diff)            ; sibling
-              (let [path-refs (mapcat :block/refs (drop-last parents))
-                    parents (conj (vec (butlast parents)) block)]
-                [path-refs parents])
-
-              (> level-diff 0)              ; child
-              (let [path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)])
-
-              (< level-diff 0)              ; new parent
-              (let [parents (vec (take-while (fn [p] (< (:block/level p) cur-level)) parents))
-                    path-refs (mapcat :block/refs parents)]
-                [path-refs (conj parents block)]))
-            path-ref-pages (->> path-refs
-                                (concat (:block/refs block))
-                                (map (fn [ref]
-                                       (cond
-                                         (map? ref)
-                                         (:block/name ref)
-
-                                         :else
-                                         ref)))
-                                (remove string/blank?)
-                                (map (fn [ref]
-                                       (if (string? ref)
-                                         {:block/name (common-util/page-name-sanity-lc ref)}
-                                         ref)))
-                                (remove vector?)
-                                (remove nil?)
-                                (distinct))]
-        (recur (rest blocks)
-               (conj acc (assoc block :block/path-refs path-ref-pages))
-               parents)))))
 
 (defn- macro->block
   "macro: {:name \"\" arguments [\"\"]}"
   [macro]
-  {:db/ident (str (:name macro) " " (string/join " " (:arguments macro)))
+  {:block/uuid (random-uuid)
    :block/type "macro"
    :block/properties {:logseq.macro-name (:name macro)
                       :logseq.macro-arguments (:arguments macro)}})
@@ -529,15 +528,11 @@
                          id (get-custom-id-or-new-id {:properties properties})
                          property-refs (->> (get-page-refs-from-properties
                                              properties db date-formatter
-                                             (assoc user-config
-                                                    :extract-refs-from-property-value-fn
-                                                    (fn [refs]
-                                                      (when (coll? refs)
-                                                        refs))))
-                                            (map :block/original-name))
+                                             user-config)
+                                            (map :block/title))
                          pre-block? (if (:heading properties) false true)
                          block {:block/uuid id
-                                :block/content content
+                                :block/title content
                                 :block/level 1
                                 :block/properties properties
                                 :block/properties-order (vec properties-order)
@@ -545,9 +540,9 @@
                                 :block/invalid-properties invalid-properties
                                 :block/pre-block? pre-block?
                                 :block/macros (extract-macros-from-ast body)
-                                :block/body body}
+                                :block.temp/ast-body body}
                          {:keys [tags refs]}
-                         (with-page-block-refs {:body body :refs property-refs} false db date-formatter)]
+                         (with-page-block-refs {:body body :refs property-refs} db date-formatter)]
                      (cond-> block
                        tags
                        (assoc :block/tags tags)
@@ -556,7 +551,7 @@
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)]
-    (with-path-refs blocks)))
+    blocks))
 
 (defn- with-heading-property
   [properties markdown-heading? size]
@@ -565,7 +560,7 @@
     properties))
 
 (defn- construct-block
-  [block properties timestamps body encoded-content format pos-meta with-id? {:keys [block-pattern db date-formatter]}]
+  [block properties timestamps body encoded-content format pos-meta {:keys [block-pattern db date-formatter parse-block remove-properties?]}]
   (let [id (get-custom-id-or-new-id properties)
         ref-pages-in-properties (->> (:page-refs properties)
                                      (remove string/blank?))
@@ -596,14 +591,16 @@
                     (update :properties-text-values dissoc :collapsed)
                     (update :properties-order (fn [keys] (vec (remove #{:collapsed} keys)))))
                 block)
-        block (assoc block
-                     :content (get-block-content encoded-content block format pos-meta block-pattern))
+        title (cond->> (get-block-content encoded-content block format pos-meta block-pattern)
+                remove-properties?
+                (gp-property/remove-properties (:format block)))
+        block (assoc block :block/title title)
         block (if (seq timestamps)
                 (merge block (timestamps->scheduled-and-deadline timestamps))
                 block)
         block (-> block
                   (assoc :body body)
-                  (with-page-block-refs with-id? db date-formatter)
+                  (with-page-block-refs db date-formatter {:parse-block parse-block})
                   (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
                   (update :refs (fn [refs] (map #(if (map? %) (assoc % :block/format format) %) refs))))
         block (update block :refs concat (:block-refs properties))
@@ -618,13 +615,13 @@
 
 (defn fix-duplicate-id
   [block]
-  (println "Logseq will assign a new id for this block: " block)
+  (println "Logseq will assign a new id for block with content:" (pr-str (:block/title block)))
   (-> block
       (assoc :block/uuid (d/squuid))
       (update :block/properties dissoc :id)
       (update :block/properties-text-values dissoc :id)
       (update :block/properties-order #(vec (remove #{:id} %)))
-      (update :block/content (fn [c]
+      (update :block/title (fn [c]
                          (let [replace-str (re-pattern
                                             (str
                                              "\n*\\s*"
@@ -653,49 +650,66 @@
     block))
 
 (defn extract-blocks
-  "Extract headings from mldoc ast.
-  Args:
-    `blocks`: mldoc ast.
-    `content`: markdown or org-mode text.
-    `with-id?`: If `with-id?` equals to true, all the referenced pages will have new db ids.
-    `format`: content's format, it could be either :markdown or :org-mode.
-    `options`: Options supported are :user-config, :block-pattern,
-               :extract-macros, :date-formatter, :page-name, :db-graph-mode? and :db"
-  [blocks content with-id? format {:keys [user-config db-graph-mode?] :as options}]
-  {:pre [(seq blocks) (string? content) (boolean? with-id?) (contains? #{:markdown :org} format)]}
+  "Extract headings from mldoc ast. Args:
+  *`blocks`: mldoc ast.
+  *  `content`: markdown or org-mode text.
+  *  `format`: content's format, it could be either :markdown or :org-mode.
+  *  `options`: Options are :user-config, :block-pattern, :parse-block, :date-formatter, :db and
+     * :db-graph-mode? : Set when a db graph in the frontend
+     * :export-to-db-graph? : Set when exporting to a db graph"
+  [blocks content format {:keys [user-config db-graph-mode? export-to-db-graph?] :as options}]
+  {:pre [(seq blocks) (string? content) (contains? #{:markdown :org} format)]}
   (let [encoded-content (utf8/encode content)
+        all-blocks (vec (reverse blocks))
         [blocks body pre-block-properties]
         (loop [headings []
                blocks (reverse blocks)
+               block-idx 0
                timestamps {}
                properties {}
                body []]
           (if (seq blocks)
-            (let [[block pos-meta] (first blocks)
-                  ;; in db-graph-mode, property part is not included in block/content
-                  pos-meta (if db-graph-mode?
-                             pos-meta
-                             (assoc pos-meta :end_pos
-                                    (if (seq headings)
-                                      (get-in (last headings) [:meta :start_pos])
-                                      nil)))]
+            (let [[block pos-meta] (first blocks)]
               (cond
                 (paragraph-timestamp-block? block)
                 (let [timestamps (extract-timestamps block)
                       timestamps' (merge timestamps timestamps)]
-                  (recur headings (rest blocks) timestamps' properties body))
+                  (recur headings (rest blocks) (inc block-idx) timestamps' properties body))
 
                 (gp-property/properties-ast? block)
                 (let [properties (extract-properties (second block) (assoc user-config :format format))]
-                  (recur headings (rest blocks) timestamps properties body))
+                  (recur headings (rest blocks) (inc block-idx) timestamps properties body))
 
                 (heading-block? block)
-                (let [block' (construct-block block properties timestamps body encoded-content format pos-meta with-id? options)
-                      block'' (assoc block' :macros (extract-macros-from-ast (cons block body)))]
-                  (recur (conj headings block'') (rest blocks) {} {} []))
+                ;; for db-graphs cut multi-line when there is property, deadline/scheduled or logbook text in :block/title
+                (let [cut-multiline? (and export-to-db-graph?
+                                          (when-let [prev-block (first (get all-blocks (dec block-idx)))]
+                                            (or (and (gp-property/properties-ast? prev-block)
+                                                     (not= "Custom" (ffirst (get all-blocks (- block-idx 2)))))
+                                                (= ["Drawer" "logbook"] (take 2 prev-block))
+                                                (and (= "Paragraph" (first prev-block))
+                                                     (seq (set/intersection (set (flatten prev-block)) #{"Deadline" "Scheduled"}))))))
+                      pos-meta' (if cut-multiline?
+                                  pos-meta
+                                  ;; fix start_pos
+                                  (assoc pos-meta :end_pos
+                                         (if (seq headings)
+                                           (get-in (last headings) [:meta :start_pos])
+                                           nil)))
+                      ;; Remove properties text from custom queries in db graphs
+                      options' (assoc options
+                                      :remove-properties?
+                                      (and export-to-db-graph?
+                                           (and (gp-property/properties-ast? (first (get all-blocks (dec block-idx))))
+                                                (= "Custom" (ffirst (get all-blocks (- block-idx 2)))))))
+                      block' (construct-block block properties timestamps body encoded-content format pos-meta' options')
+                      block'' (if (or db-graph-mode? export-to-db-graph?)
+                                block'
+                                (assoc block' :macros (extract-macros-from-ast (cons block body))))]
+                  (recur (conj headings block'') (rest blocks) (inc block-idx) {} {} []))
 
                 :else
-                (recur headings (rest blocks) timestamps properties (conj body block))))
+                (recur headings (rest blocks) (inc block-idx) timestamps properties (conj body block))))
             [(-> (reverse headings)
                  sanity-blocks-data)
              body
@@ -703,7 +717,7 @@
         result (with-pre-block-if-exists blocks body pre-block-properties encoded-content options)]
     (map #(dissoc % :block/meta) result)))
 
-(defn with-parent-and-left
+(defn with-parent-and-order
   [page-id blocks]
   (let [[blocks other-blocks] (split-with
                                (fn [b]
@@ -725,7 +739,6 @@
                            (= level-spaces parent-spaces)        ; sibling
                            (let [block (assoc block
                                               :block/parent parent
-                                              :block/left [:block/uuid uuid]
                                               :block/level level)
                                  parents' (conj (vec (butlast parents)) block)
                                  result' (conj result block)]
@@ -734,9 +747,8 @@
                            (> level-spaces parent-spaces)         ; child
                            (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
                                  block (cond->
-                                         (assoc block
-                                                :block/parent parent
-                                                :block/left parent)
+                                        (assoc block
+                                               :block/parent parent)
                                          ;; fix block levels with wrong order
                                          ;; For example:
                                          ;;   - a
@@ -752,10 +764,8 @@
                            (cond
                              (some #(= (:block/level-spaces %) (:block/level-spaces block)) parents) ; outdent
                              (let [parents' (vec (filter (fn [p] (<= (:block/level-spaces p) level-spaces)) parents))
-                                   left (last parents')
                                    blocks (cons (assoc (first blocks)
-                                                       :block/level (dec level)
-                                                       :block/left [:block/uuid (:block/uuid left)])
+                                                       :block/level (dec level))
                                                 (rest blocks))]
                                [blocks parents' result])
 
@@ -765,18 +775,17 @@
                                    parent-id (if-let [block-id (:block/uuid (last f))]
                                                [:block/uuid block-id]
                                                page-id)
-                                   block (cond->
-                                           (assoc block
-                                                  :block/parent parent-id
-                                                  :block/left [:block/uuid (:block/uuid left)]
-                                                  :block/level (:block/level left)
-                                                  :block/level-spaces (:block/level-spaces left)))
+                                   block (assoc block
+                                                :block/parent parent-id
+                                                :block/level (:block/level left)
+                                                :block/level-spaces (:block/level-spaces left))
 
                                    parents' (->> (concat f [block]) vec)
                                    result' (conj result block)]
                                [others parents' result'])))]
-                     (recur blocks parents result))))]
-    (concat result other-blocks)))
+                     (recur blocks parents result))))
+        result' (map (fn [block] (assoc block :block/order (db-order/gen-key))) result)]
+    (concat result' other-blocks)))
 
 (defn extract-plain
   "Extract plain elements including page refs"
@@ -825,8 +834,12 @@
           refs' (->> (concat page-refs block-refs)
                      (remove string/blank?)
                      distinct)]
-      (-> (map #(if (common-util/uuid-string? %)
+      (-> (map #(cond
+                  (de/entity? %)
+                  {:block/uuid (:block/uuid %)}
+                  (common-util/uuid-string? %)
                   {:block/uuid (uuid %)}
-                  (page-name->map % true db true date-formatter))
+                  :else
+                  (page-name->map % db true date-formatter))
                refs')
           set))))

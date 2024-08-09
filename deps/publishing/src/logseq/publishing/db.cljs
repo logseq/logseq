@@ -3,22 +3,26 @@
   (:require [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
             [clojure.set :as set]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.property :as db-property]))
 
 (defn ^:api get-area-block-asset-url
   "Returns asset url for an area block used by pdf assets. This lives in this ns
   because it is used by this dep and needs to be independent from the frontend app"
-  ([block page] (get-area-block-asset-url block page {}))
-  ;; TODO: Add prop-lookup-fn support for db graphs and commandline publishing
-  ([block page {:keys [prop-lookup-fn] :or {prop-lookup-fn get}}]
-   (when-some [props (and block page (:block/properties block))]
-     (when-some [uuid (:block/uuid block)]
-       (when-some [stamp (prop-lookup-fn props :hl-stamp)]
-         (let [group-key      (string/replace-first (:block/original-name page) #"^hls__" "")
-               hl-page        (prop-lookup-fn props :hl-page)
-               encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
-               group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
-           (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png"))))))))
+  [db block page]
+  (when-some [props (and block page (:block/properties block))]
+    ;; Can't use db-property-util/lookup b/c repo isn't available
+    (let [prop-lookup-fn (if (entity-util/db-based-graph? db)
+                           #(db-property/property-value-content (get %1 %2))
+                           #(get %1 (keyword (name %2))))]
+      (when-some [uuid (:block/uuid block)]
+        (when-some [stamp (prop-lookup-fn props :logseq.property.pdf/hl-stamp)]
+          (let [group-key      (string/replace-first (:block/title page) #"^hls__" "")
+                hl-page        (prop-lookup-fn props :logseq.property.pdf/hl-page)
+                encoded-chars? (boolean (re-find #"(?i)%[0-9a-f]{2}" group-key))
+                group-key      (if encoded-chars? (js/encodeURI group-key) group-key)]
+            (str "./assets/" group-key "/" (str hl-page "_" uuid "_" stamp ".png"))))))))
 
 (defn- clean-asset-path-prefix
   [path]
@@ -45,7 +49,7 @@
   (let [pages (->> (d/q
                     '[:find ?p
                       :in $ %
-                      :where (page-property ?p :public true)]
+                      :where (page-property ?p :logseq.property/public true)]
                     db
                     (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
                    (map first)
@@ -55,13 +59,10 @@
         tag-pages (concat tag-pages*
                           ;; built-in property needs to be public to display tags
                           (when (seq tag-pages*)
-                            (some-> (d/entity db [:block/name "tags"]) :db/id vector)))
+                            (some-> (d/entity db :block/tags) :db/id vector)))
         property-pages (mapcat (fn [ent]
-                                 (let [props (:block/properties ent)]
-                                   (->> (keys props)
-                                        (into (mapcat #(filter uuid? (if (coll? %) % [%]))
-                                                      (vals props)))
-                                        (map #(:db/id (d/entity db [:block/uuid %]))))))
+                                 (->> (keys (:block/properties ent))
+                                      (map #(:db/id (d/entity db %)))))
                                page-ents)]
     (concat pages tag-pages property-pages)))
 
@@ -70,7 +71,7 @@
   (->> (d/q
         '[:find ?p
           :in $ %
-          :where (page-property ?p :public false)]
+          :where (page-property ?p :logseq.property/public false)]
         db
         (rules/extract-rules rules/db-query-dsl-rules [:page-property]))
        (map first)
@@ -101,7 +102,17 @@
         db)
        (map first)))
 
-;; FIXME: store assets as blocks for db-based graphs
+(defn- hl-type-area-fn
+  [db]
+  (if (entity-util/db-based-graph? db)
+    (fn [datom]
+      (and (= :logseq.property/hl-type (:a datom))
+           (= (keyword (:v datom)) :area)))
+    (fn [datom]
+      (and
+       (= :block/properties (:a datom))
+       (= (keyword (get (:v datom) :hl-type)) :area)))))
+
 (defn- get-assets
   [db datoms]
   (let [pull (fn [eid db]
@@ -111,12 +122,13 @@
                    (pull % db)
                    :block/page
                    :db/id
-                   (pull db)))]
+                   (pull db)))
+        hl-type-area? (hl-type-area-fn db)]
     (->>
      (keep
       (fn [datom]
         (cond-> []
-          (= :block/content (:a datom))
+          (= :block/title (:a datom))
           (concat (let [matched (re-seq #"\([./]*/assets/([^)]+)\)" (:v datom))]
                     (when (seq matched)
                       (for [[_ path] matched]
@@ -124,12 +136,10 @@
                                    (not (string/ends-with? path ".js")))
                           path)))))
           ;; area image assets
-          ;; FIXME: Lookup by property uuid
-          (and
-           (= :block/properties (:a datom))
-           (= (keyword (get (:v datom) :hl-type)) :area))
+          (hl-type-area? datom)
           (#(let [path (some-> (pull (:e datom) db)
                                (get-area-block-asset-url
+                                db
                                 (get-page-by-eid (:e datom))))
                   path (clean-asset-path-prefix path)]
               (conj % path)))))
@@ -166,6 +176,7 @@
                                        (not (contains? non-public-datom-ids (:e datom)))))))
         datoms (d/datoms filtered-db :eavt)
         assets (get-assets db datoms)]
+    ;; (prn :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))
 
 (defn filter-only-public-pages-and-blocks
@@ -190,4 +201,5 @@
                                           (contains? public-pages (:db/id (:block/page (d/entity db (:e datom))))))))))))
         datoms (d/datoms filtered-db :eavt)
         assets (get-assets db datoms)]
+    ;; (prn :datoms (count datoms) :assets (count assets))
     [@(d/conn-from-datoms datoms (:schema db)) assets]))

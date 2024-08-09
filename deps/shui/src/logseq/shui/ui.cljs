@@ -1,35 +1,47 @@
 (ns logseq.shui.ui
   (:require [logseq.shui.util :as util]
             [logseq.shui.icon.v2 :as icon-v2]
+            [logseq.shui.shortcut.v1 :as shui.shortcut.v1]
             [logseq.shui.toaster.core :as toaster-core]
             [logseq.shui.select.core :as select-core]
+            [logseq.shui.select.multi :as select-multi]
             [logseq.shui.dialog.core :as dialog-core]
             [logseq.shui.popup.core :as popup-core]
-            [logseq.shui.form.core :as form-core]))
+            [logseq.shui.base.core :as base-core]
+            [logseq.shui.form.core :as form-core]
+            [logseq.shui.table.core :as table-core]))
 
-(def button (util/lsui-wrap "Button" {:static? false}))
-(def link (util/lsui-wrap "Link"))
-(def tabler-icon icon-v2/root)
+(def button base-core/button)
+(def link base-core/link)
+(def trigger-as base-core/trigger-as)
+(def trigger-child-wrap base-core/trigger-child-wrap)
+(def ^:todo shortcut shui.shortcut.v1/root)
+(def ^:export tabler-icon icon-v2/root)
 
 (def alert (util/lsui-wrap "Alert"))
 (def alert-title (util/lsui-wrap "AlertTitle"))
 (def alert-description (util/lsui-wrap "AlertDescription"))
 (def slider (util/lsui-wrap "Slider"))
 (def badge (util/lsui-wrap "Badge"))
-(def input (util/lsui-wrap "Input"))
-(def textarea (util/lsui-wrap "Textarea"))
-(def switch (util/lsui-wrap "Switch"))
-(def checkbox (util/lsui-wrap "Checkbox"))
-(def radio-group (util/lsui-wrap "RadioGroup"))
-(def radio-group-item (util/lsui-wrap "RadioGroupItem"))
 (def skeleton (util/lsui-wrap "Skeleton"))
 (def calendar (util/lsui-wrap "Calendar"))
+(def avatar (util/lsui-wrap "Avatar"))
+(def avatar-image (util/lsui-wrap "AvatarImage"))
+(def avatar-fallback (util/lsui-wrap "AvatarFallback"))
+(def input form-core/input)
+(def textarea form-core/textarea)
+(def switch form-core/switch)
+(def checkbox form-core/checkbox)
+(def radio-group form-core/radio-group)
+(def radio-group-item form-core/radio-group-item)
 (def popover popup-core/popover)
 (def popover-trigger popup-core/popover-trigger)
 (def popover-content popup-core/popover-content)
+(def popover-arrow popup-core/popover-arrow)
 
 (def tooltip (util/lsui-wrap "Tooltip"))
 (def tooltip-trigger (util/lsui-wrap "TooltipTrigger"))
+(def tooltip-portal (util/lsui-wrap "TooltipPortal"))
 (def tooltip-content (util/lsui-wrap "TooltipContent"))
 (def tooltip-provider (util/lsui-wrap "TooltipProvider"))
 
@@ -109,6 +121,18 @@
 (def dialog-confirm! dialog-core/confirm!)
 (def dialog-close! dialog-core/close!)
 (def dialog-close-all! dialog-core/close-all!)
+(def dialog-get dialog-core/get-modal)
 (def popup-show! popup-core/show!)
 (def popup-hide! popup-core/hide!)
 (def popup-hide-all! popup-core/hide-all!)
+
+(def multi-select-content select-multi/x-select-content)
+
+(def table-option table-core/table-option)
+(def table table-core/table)
+(def table-header table-core/table-header)
+(def table-footer table-core/table-footer)
+(def table-row table-core/table-row)
+(def table-cell table-core/table-cell)
+(def table-actions table-core/table-actions)
+(def table-get-selection-rows table-core/get-selection-rows)

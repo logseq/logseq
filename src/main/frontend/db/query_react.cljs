@@ -7,7 +7,6 @@
             [frontend.db.model :as model]
             [frontend.db.react :as react]
             [frontend.db.utils :as db-utils]
-            [frontend.debug :as debug]
             [frontend.extensions.sci :as sci]
             [frontend.state :as state]
             [logseq.db.frontend.inputs :as db-inputs]
@@ -91,8 +90,9 @@
 
 (defn react-query
   [repo {:keys [query inputs rules] :as query'} query-opts]
-  (let [pprint (if config/dev? debug/pprint (fn [_] nil))
+  (let [pprint (if config/dev? #(when (state/developer-mode?) (apply prn %&)) (fn [_] nil))
         start-time (.now js/performance)]
+    (when config/dev? (js/console.groupCollapsed "react-query logs:"))
     (pprint "================")
     (pprint "Use the following to debug your datalog queries:")
     (pprint query')
@@ -108,4 +108,5 @@
       (pprint "inputs (post-resolution):" resolved-inputs)
       (pprint "query-opts:" query-opts)
       (pprint (str "time elapsed: " (.toFixed (- (.now js/performance) start-time) 2) "ms"))
+      (when config/dev? (js/console.groupEnd))
       (apply react/q repo k query-opts query inputs))))

@@ -25,10 +25,7 @@
 
 (reset! state/publishing? publishing?)
 
-(goog-define TEST false)
-(def test? TEST)
-
-(goog-define ENABLE-FILE-SYNC-PRODUCTION false)
+(def ENABLE-FILE-SYNC-PRODUCTION false)
 
 ;; this is a feature flag to enable the account tab
 ;; when it launches (when pro plan launches) it should be removed
@@ -347,7 +344,8 @@
   ([]
    (demo-graph? (state/get-current-repo)))
   ([repo-url]
-   (or (nil? repo-url) (= repo-url demo-repo))))
+   (or (nil? repo-url) (= repo-url demo-repo)
+     (string/ends-with? repo-url demo-repo))))
 
 (defonce recycle-dir ".recycle")
 (def config-file "config.edn")
@@ -500,11 +498,12 @@
           ;; BUG: use "assets" as fake current directory
           assets-link-fn (fn [_]
                            (let [graph-root (get-repo-dir (state/get-current-repo))
-                                 protocol (if (string/starts-with? graph-root "file:") "" protocol)
-                                 full-path (path/path-join protocol graph-root "assets")]
+                                 full-path (if (util/safe-re-find #"^(file|assets):" graph-root)
+                                             (path/path-join graph-root "assets")
+                                             (path/path-join protocol graph-root "assets"))]
                              (str (cond-> full-path
-                                          (mobile-util/native-platform?)
-                                          (mobile-util/convert-file-src))
+                                    (mobile-util/native-platform?)
+                                    (mobile-util/convert-file-src))
                                   "/")))]
       (string/replace source #"\.\./assets/" assets-link-fn))))
 

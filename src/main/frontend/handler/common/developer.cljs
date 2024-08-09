@@ -6,34 +6,35 @@
             [frontend.handler.notification :as notification]
             [frontend.ui :as ui]
             [frontend.util.page :as page-util]
-            [frontend.handler.db-based.property.util :as db-pu]
             [frontend.format.mldoc :as mldoc]
             [frontend.config :as config]
             [frontend.persist-db :as persist-db]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [datascript.impl.entity :as de]
+            [logseq.db.frontend.property :as db-property]))
 
 ;; Fns used between menus and commands
 (defn show-entity-data
-  [& pull-args]
-  (let [result* (apply db/pull pull-args)
+  [eid]
+  (let [result* (db/pull eid)
+        entity (db/entity eid)
         result (cond-> result*
-                 (and (seq (:block/properties result*)) (config/db-based-graph? (state/get-current-repo)))
+                 (and (seq (:block/properties entity)) (config/db-based-graph? (state/get-current-repo)))
                  (assoc :block.debug/properties
-                        (->> (update-keys (:block/properties result*) db-pu/get-property-name)
+                        (->> (:block/properties entity)
                              (map (fn [[k v]]
                                     [k
                                      (cond
-                                       (and (set? v) (uuid? (first v)))
-                                       (set (map db-pu/get-property-name v))
-                                       (uuid? v)
-                                       (or (db-pu/get-property-name v)
-                                           (get-in (db/entity [:block/uuid v]) [:block/schema :value]))
+                                       (de/entity? v)
+                                       (db-property/property-value-content v)
+                                       (and (set? v) (every? de/entity? v))
+                                       (set (map db-property/property-value-content v))
                                        :else
                                        v)]))
                              (into {})))
                  (seq (:block/refs result*))
                  (assoc :block.debug/refs
-                        (mapv #(or (:block/original-name (db/entity (:db/id %))) %) (:block/refs result*))))
+                        (mapv #(or (:block/title (db/entity (:db/id %))) %) (:block/refs result*))))
         pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
@@ -69,8 +70,8 @@
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-block-ast []
-  (if-let [{:block/keys [content format]} (:block (first (state/get-editor-args)))]
-    (show-content-ast content format)
+  (if-let [{:block/keys [title format]} (:block (first (state/get-editor-args)))]
+    (show-content-ast title format)
     (notification/show! "No block found" :warning)))
 
 (defn ^:export show-page-data []
@@ -89,9 +90,9 @@
 
 (defn import-chosen-graph
   [repo]
-  (p/let [_ (persist-db/<unsafe-delete repo)
-          _ (persist-db/<fetch-init-data repo)]
-    (notification/show! "Graph updated!" :success)))
+  (p/let [_ (persist-db/<unsafe-delete repo)]
+    (notification/show! (str "Graph updated! Switching to graph ...") :success)
+    (state/pub-event! [:graph/switch repo])))
 
 (defn ^:export replace-graph-with-db-file []
   (state/set-state! :ui/open-select :db-graph-replace))

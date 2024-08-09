@@ -4,41 +4,35 @@
             [frontend.handler.file-based.property :as file-property-handler]
             [frontend.handler.file-based.page-property :as file-page-property]
             [frontend.config :as config]
-            [frontend.util :as util]
-            [frontend.state :as state]
-            [frontend.db :as db]))
+            [frontend.state :as state]))
 
 (defn remove-block-property!
-  [repo block-id key]
+  [repo block-id property-id-or-key]
+  (assert (some? property-id-or-key) "remove-block-property! remove-block-property! is nil")
   (if (config/db-based-graph? repo)
-    (db-property-handler/remove-block-property! repo block-id key)
-    (file-property-handler/remove-block-property! block-id key)))
+    (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
+      (db-property-handler/remove-block-property! eid property-id-or-key))
+    (file-property-handler/remove-block-property! block-id property-id-or-key)))
 
 (defn set-block-property!
-  [repo block-id key v & opts]
+  [repo block-id key v]
+  (assert (some? key) "set-block-property! key is nil")
   (if (config/db-based-graph? repo)
-    (if (or (nil? v) (and (coll? v) (empty? v)))
-      (db-property-handler/remove-block-property! repo block-id key)
-      (db-property-handler/set-block-property! repo block-id key v opts))
+    (let [eid (if (uuid? block-id) [:block/uuid block-id] block-id)]
+      (if (or (nil? v) (and (coll? v) (empty? v)))
+        (db-property-handler/remove-block-property! eid key)
+        (db-property-handler/set-block-property! eid key v)))
     (file-property-handler/set-block-property! block-id key v)))
 
 (defn add-page-property!
   "Sanitized page-name, unsanitized key / value"
-  [page-name key value]
-  (let [repo (state/get-current-repo)]
-    (if (config/db-based-graph? repo)
-      (when-let [page (db/pull [:block/name (util/page-name-sanity-lc page-name)])]
-       (set-block-property! repo (:block/uuid page) key value))
-      (file-page-property/add-property! page-name key value))))
-
-(defn set-editing-new-property!
-  [value]
-  (state/set-state! :editor/new-property-input-id value))
-
-(defn editing-new-property!
-  []
-  (set-editing-new-property! (state/get-edit-input-id))
-  (state/clear-edit!))
+  [page-entity key value]
+  (assert (some? key) "key is nil")
+  (when page-entity
+    (let [repo (state/get-current-repo)]
+      (if (config/db-based-graph? repo)
+        (set-block-property! repo (:block/uuid page-entity) key value)
+        (file-page-property/add-property! page-entity key value)))))
 
 (defn remove-id-property
   [repo format content]
@@ -53,20 +47,22 @@
 
 (defn batch-remove-block-property!
   [repo block-ids key]
+  (assert (some? key) "key is nil")
   (if (config/db-based-graph? repo)
-    (db-property-handler/batch-remove-property! repo block-ids key)
+    (db-property-handler/batch-remove-property! block-ids key)
     (file-property-handler/batch-remove-block-property! block-ids key)))
 
 (defn batch-set-block-property!
   [repo block-ids key value]
+  (assert (some? key) "key is nil")
   (if (config/db-based-graph? repo)
     (if (nil? value)
-      (db-property-handler/batch-remove-property! repo block-ids key)
-      (db-property-handler/batch-set-property! repo block-ids key value))
+      (db-property-handler/batch-remove-property! block-ids key)
+      (db-property-handler/batch-set-property! block-ids key value))
     (file-property-handler/batch-set-block-property! block-ids key value)))
 
-(defn replace-key-with-id
-  [repo m]
-  (if (config/db-based-graph? repo)
-    (db-property-handler/replace-key-with-id m)
-    m))
+(defn set-block-properties!
+  [repo block-id properties]
+  (assert (uuid? block-id))
+  (when (config/db-based-graph? repo)
+    (db-property-handler/set-block-properties! block-id properties)))

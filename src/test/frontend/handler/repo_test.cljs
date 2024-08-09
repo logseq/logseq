@@ -7,6 +7,7 @@
             [logseq.common.util.block-ref :as block-ref]
             [frontend.db.model :as model]
             [frontend.db.conn :as conn]
+            [datascript.core :as d]
             [clojure.edn :as edn]
             ["path" :as node-path]
             ["fs" :as fs]))
@@ -14,15 +15,23 @@
 (use-fixtures :each test-helper/start-and-destroy-db)
 
 (deftest ^:integration parse-and-load-files-to-db
-  (let [graph-dir "src/test/docs-0.9.2"
-        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.9.2")
+  (let [graph-dir "src/test/docs-0.10.9"
+        _ (docs-graph-helper/clone-docs-repo-if-not-exists graph-dir "v0.10.9")
         repo-config (edn/read-string (str (fs/readFileSync (node-path/join graph-dir "logseq/config.edn"))))
         files (#'gp-cli/build-graph-files graph-dir repo-config)
         _ (test-helper/with-config repo-config
             (file-repo-handler/parse-files-and-load-to-db! test-helper/test-db files {:re-render? false :verbose false}))
         db (conn/get-db test-helper/test-db)]
 
-    (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))))
+    (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))
+    (testing "Additional Counts"
+      (is (= 76922 (count (d/datoms db :eavt))) "Correct datoms count")
+
+      (is (= 7047
+             (ffirst
+              (d/q '[:find (count ?b)
+                     :where [?b :block/path-refs ?bp] [?bp :block/name]] db)))
+          "Correct referenced blocks count"))))
 
 (deftest parse-files-and-load-to-db-with-block-refs-on-reload
   (testing "Refs to blocks on a page are retained if that page is reloaded"

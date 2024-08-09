@@ -15,8 +15,10 @@
             [frontend.handler.plugin :as plugin-handler]
             [frontend.handler.notification :as notification]
             [frontend.handler.property :as property-handler]
+            [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.file-based.nfs :as nfs-handler]
+            [frontend.handler.graph :as graph-handler]
             [frontend.mobile.util :as mobile-util]
             [frontend.state :as state]
             [frontend.util :as util]
@@ -26,36 +28,47 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [logseq.db.frontend.property :as db-property]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.common.util.block-ref :as block-ref]
             [promesa.core :as p]
             [logseq.common.path :as path]
-            [frontend.handler.property.util :as pu]
             [electron.ipc :as ipc]
             [frontend.context.i18n :refer [t]]
             [frontend.persist-db.browser :as db-browser]
-            [cljs-bean.core :as bean]
             [datascript.core :as d]
             [frontend.db.conn :as conn]
             [logseq.db :as ldb]
+            [logseq.graph-parser.db :as gp-db]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]))
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.handler.property.util :as pu]
+            [datascript.impl.entity :as de]
+            [logseq.db.frontend.class :as db-class]))
 
-(def create! page-common-handler/create!)
 (def <create! page-common-handler/<create!)
 (def <delete! page-common-handler/<delete!)
+
+(defn <create-class!
+  "Creates a class page and provides class-specific error handling"
+  [title options]
+  (-> (page-common-handler/<create! title (assoc options :class? true))
+      (p/catch (fn [e]
+                 (when (= :notification (:type (ex-data e)))
+                   (notification/show! (get-in (ex-data e) [:payload :message])
+                                       (get-in (ex-data e) [:payload :type])))
+                 ;; Re-throw as we don't want to proceed with a nonexistent class
+                 (throw e)))))
 
 (defn <unfavorite-page!
   [page-name]
   (p/do!
    (let [repo (state/get-current-repo)]
      (if (config/db-based-graph? repo)
-       (let [db (conn/get-db)]
-         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-           (page-common-handler/<unfavorite-page!-v2 page-block-uuid)))
-       (page-common-handler/unfavorite-page! page-name)))
+       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+         (page-common-handler/<db-unfavorite-page! page-block-uuid))
+       (page-common-handler/file-unfavorite-page! page-name)))
    (state/update-favorites-updated!)))
 
 (defn <favorite-page!
@@ -63,21 +76,19 @@
   (p/do!
    (let [repo (state/get-current-repo)]
      (if (config/db-based-graph? repo)
-       (let [db (conn/get-db)]
-         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-           (page-common-handler/<favorite-page!-v2 page-block-uuid)))
-       (page-common-handler/favorite-page! page-name)))
+       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+         (page-common-handler/<db-favorite-page! page-block-uuid))
+       (page-common-handler/file-favorite-page! page-name)))
    (state/update-favorites-updated!)))
 
 (defn favorited?
   [page-name]
   (let [repo (state/get-current-repo)]
     (if (config/db-based-graph? repo)
-      (when-let [db (conn/get-db)]
-        (boolean
-         (when-let [page-block-uuid (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))]
-           (page-common-handler/favorited?-v2 page-block-uuid))))
-      (page-common-handler/favorited? page-name))))
+      (boolean
+       (when-let [page-block-uuid (:block/uuid (db/get-page page-name))]
+         (page-common-handler/db-favorited? page-block-uuid)))
+      (page-common-handler/file-favorited? page-name))))
 
 
 (defn get-favorites
@@ -86,18 +97,17 @@
   (when-let [db (conn/get-db)]
     (let [repo (state/get-current-repo)]
       (if (config/db-based-graph? repo)
-        (let [blocks (ldb/sort-by-left
-                      (ldb/get-page-blocks db page-common-handler/favorites-page-name {})
-                      (d/entity db [:block/name page-common-handler/favorites-page-name]))]
-          (keep (fn [block]
-                  (when-let [block-db-id (:db/id (:block/link block))]
-                    (d/entity db block-db-id))) blocks))
+        (when-let [page (ldb/get-page db common-config/favorites-page-name)]
+          (let [blocks (ldb/sort-by-order (:block/_parent page))]
+            (keep (fn [block]
+                    (when-let [block-db-id (:db/id (:block/link block))]
+                      (d/entity db block-db-id))) blocks)))
         (let [page-names (->> (:favorites (state/sub-config))
                               (remove string/blank?)
                               (filter string?)
                               (mapv util/safe-page-name-sanity-lc)
                               (distinct))]
-          (keep (fn [page-name] (d/entity db [:block/name page-name])) page-names))))))
+          (keep (fn [page-name] (db/get-page page-name)) page-names))))))
 
 
 ;; FIXME: add whiteboard
@@ -125,32 +135,40 @@
         (<favorite-page! page-name)))))
 
 (defn rename!
-  [old-name new-name & {:as _opts}]
-  (when-let [^js worker @db-browser/*worker]
-    (p/let [repo (state/get-current-repo)
-            result (.page-rename worker repo old-name new-name)
-            result' (:result (bean/->clj result))]
-      (case result'
+  [page-uuid-or-old-name new-name & {:as _opts}]
+  (when @db-browser/*worker
+    (p/let [page-uuid (cond
+                        (uuid? page-uuid-or-old-name)
+                        page-uuid-or-old-name
+                        (common-util/uuid-string? page-uuid-or-old-name)
+                        page-uuid-or-old-name
+                        :else
+                        (:block/uuid (db/get-page page-uuid-or-old-name)))
+            result (ui-outliner-tx/transact!
+                       {:outliner-op :rename-page}
+                    (outliner-op/rename-page! page-uuid new-name))
+            result' (ldb/read-transit-str result)]
+      (case (if (string? result') (keyword result') result')
+        :built-in-page
+        (notification/show! "Built-in page's name cannot be modified" :warning)
         :invalid-empty-name
-        (notification/show! "Please use a valid name, empty name is not allowed!" :error)
-        :merge-whiteboard-pages
-        (notification/show! "Can't merge whiteboard pages" :error)
+        (notification/show! "Please use a valid name, empty name is not allowed!" :warning)
+        :rename-page-exists
+        (notification/show! "Another page with the new name exists already" :warning)
         nil))))
 
 (defn <reorder-favorites!
   [favorites]
   (let [conn (conn/get-db false)]
-    (when-let [favorites-page-entity (d/entity @conn [:block/name page-common-handler/favorites-page-name])]
+    (when-let [favorites-page (db/get-page common-config/favorites-page-name)]
       (let [favorite-page-block-db-id-coll
-            (keep (fn [page-name]
-                    (some-> (d/entity @conn [:block/name (common-util/page-name-sanity-lc page-name)])
-                            :db/id))
+            (keep (fn [page-uuid]
+                    (:db/id (db/get-page page-uuid)))
                   favorites)
-            current-blocks (ldb/sort-by-left (ldb/get-page-blocks @conn page-common-handler/favorites-page-name {})
-                                             favorites-page-entity)]
+            current-blocks (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page)))]
         (p/do!
          (ui-outliner-tx/transact!
-          {}
+          {:outliner-op :reorder-favorites}
           (doseq [[page-block-db-id block] (zipmap favorite-page-block-db-id-coll current-blocks)]
             (when (not= page-block-db-id (:db/id (:block/link block)))
               (outliner-op/save-block! (assoc block :block/link page-block-db-id)))))
@@ -164,11 +182,11 @@
 (defn load-more-journals!
   []
   (when (has-more-journals?)
-    (state/set-journals-length! (+ (:journals-length @state/state) 7))))
+    (state/set-journals-length! (+ (:journals-length @state/state) 1))))
 
 (defn update-public-attribute!
-  [page-name value]
-  (property-handler/add-page-property! page-name :public value))
+  [page value]
+  (property-handler/add-page-property! page (pu/get-pid :logseq.property/public) value))
 
 (defn get-page-ref-text
   [page]
@@ -192,7 +210,7 @@
                              "/"
                              (get-file-name journal? page)
                              ".org")]
-          (create! page {:redirect? false})
+          (<create! page {:redirect? false})
           (util/format "[[file:%s][%s]]"
                        (util/get-relative-path edit-block-file-path ref-file-path)
                        page)))
@@ -221,33 +239,62 @@
     (fn [e]
       (init-commands!)
       (when ok-handler
-        (ok-handler e)))
+        (ok-handler e))
+      (graph-handler/settle-metadata-to-local! {:created-at (js/Date.now)}))
     opts)))
 
 (defn get-all-pages
   [repo]
-  (->> (db/get-all-pages repo)
-       (remove (fn [p]
-                 (let [name (:block/name p)]
-                   (or (util/uuid-string? name)
-                       (common-config/draw? name)
-                       (db/built-in-pages-names (string/upper-case name))
-                       (db-property/built-in-properties-keys-str name)))))
-       (common-handler/fix-pages-timestamps)))
+  (let [graph-specific-hidden?
+        (if (config/db-based-graph? repo)
+          (fn [p]
+            (and (ldb/property? p) (ldb/built-in? p)))
+          (fn [p]
+            (gp-db/built-in-pages-names (string/upper-case (:block/name p)))))]
+    (->> (db/get-all-pages repo)
+         (remove (fn [p]
+                   (let [name (:block/name p)]
+                     (or (util/uuid-string? name)
+                         (common-config/draw? name)
+                         (graph-specific-hidden? p)))))
+         (common-handler/fix-pages-timestamps))))
 
 (defn get-filters
-  [page-name]
-  (let [properties (db/get-page-properties page-name)]
-    (if (config/db-based-graph? (state/get-current-repo))
-      (pu/lookup properties :filters)
-      (let [properties-str (or (:filters properties) "{}")]
-        (try (reader/read-string properties-str)
-             (catch :default e
-               (log/error :syntax/filters e)))))))
+  [page]
+  (if (config/db-based-graph? (state/get-current-repo))
+    (let [included-pages (:logseq.property.linked-references/includes page)
+          excluded-pages (:logseq.property.linked-references/excludes page)]
+      {:included included-pages
+       :excluded excluded-pages})
+    (let [k :filters
+          properties (:block/properties page)
+          properties-str (or (get properties k) "{}")]
+      (try (let [result (reader/read-string properties-str)]
+             (when (seq result)
+               (let [excluded-pages (->> (filter #(false? (second %)) result)
+                                         (keep first)
+                                         (keep db/get-page))
+                     included-pages (->> (filter #(true? (second %)) result)
+                                         (keep first)
+                                         (keep db/get-page))]
+                 {:included included-pages
+                  :excluded excluded-pages})))
+           (catch :default e
+             (log/error :syntax/filters e))))))
 
-(defn save-filter!
-  [page-name filter-state]
-  (property-handler/add-page-property! page-name :filters filter-state))
+(defn file-based-save-filter!
+  [page filter-state]
+  (property-handler/add-page-property! page :filters filter-state))
+
+(defn db-based-save-filter!
+  [page filter-page-id {:keys [include? add?]}]
+  (let [repo (state/get-current-repo)
+        property-id (if include?
+                      :logseq.property.linked-references/includes
+                      :logseq.property.linked-references/excludes)]
+    (if add?
+      (property-handler/set-block-property! repo (:db/id page) property-id filter-page-id)
+      (db-property-handler/delete-property-value! (:db/id page) property-id filter-page-id))))
 
 ;; Editor
 (defn page-not-exists-handler
@@ -269,13 +316,13 @@
     (let [current-selected (util/get-selected-text)]
       (cursor/move-cursor-forward input (+ 2 (count current-selected))))))
 
-(defn add-tag [repo block-id tag & {:keys [tag-entity]}]
-  (let [tag-entity (or tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)]))
-        tx-data [[:db/add (:db/id tag-entity) :block/type "class"]
-                 [:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
-                 ;; TODO: Should classes counted as refs
+(defn add-tag [repo block-id tag-entity]
+  (let [tx-data [[:db/add [:block/uuid block-id] :block/tags (:db/id tag-entity)]
+                 ;; TODO: Move this to outliner.core to consistently add refs for tags
                  [:db/add [:block/uuid block-id] :block/refs (:db/id tag-entity)]]]
-    (db/transact! repo tx-data {:outliner-op :save-block})))
+    (ui-outliner-tx/transact! {:outliner-op :save-block}
+      (editor-handler/save-current-block!)
+      (db/transact! repo tx-data {:outliner-op :save-block}))))
 
 (defn on-chosen-handler
   [input id _q pos format]
@@ -291,12 +338,18 @@
              (common-util/safe-subs edit-content pos current-pos)))
         db-based? (config/db-based-graph? (state/get-current-repo))]
     (if hashtag?
-      (fn [chosen e]
+      (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [class? (and db-based? hashtag?)
+        (let [chosen-result (if (:block/uuid chosen-result)
+                              (db/entity [:block/uuid (:block/uuid chosen-result)])
+                              chosen-result)
+              chosen (:block/title chosen-result)
+              class? (and db-based? hashtag?
+                          (or (string/includes? chosen (str (t :new-tag) " "))
+                              (ldb/class? (db/get-page chosen))))
               chosen (-> chosen
-                         (string/replace-first (str (t :new-class) " ") "")
+                         (string/replace-first (str (t :new-tag) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
               wrapped? (= page-ref/left-brackets (common-util/safe-subs edit-content (- pos 2) pos))
               wrapped-tag (if (and (util/safe-re-find #"\s+" chosen) (not wrapped?))
@@ -310,32 +363,48 @@
                                q))
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (p/do!
-           (when db-based?
-             (let [tag (string/trim chosen)
-                   edit-block (state/get-edit-block)]
-               (when (and (not (string/blank? tag)) (:block/uuid edit-block))
-                 (p/let [tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])
-                         _ (when-not tag-entity
-                             (<create! tag {:redirect? false
-                                            :create-first-block? false
-                                            :class? class?}))
-                         tag-entity (db/entity [:block/name (util/page-name-sanity-lc tag)])]
-                   (when class?
-                     (add-tag (state/get-current-repo) (:block/uuid edit-block) tag {:tag-entity tag-entity}))))))
            (editor-handler/insert-command! id
-                                           (str "#" wrapped-tag)
+                                           (if class? "" (str "#" wrapped-tag))
                                            format
                                            {:last-pattern last-pattern
                                             :end-pattern (when wrapped? page-ref/right-brackets)
                                             :command :page-ref})
+           (when db-based?
+             (let [tag (string/trim chosen)
+                   edit-block (state/get-edit-block)]
+               (when (:block/uuid edit-block)
+                 (p/let [result (when-not (de/entity? chosen-result) ; page not exists yet
+                                  (if class?
+                                    (<create-class! tag {:redirect? false
+                                                         :create-first-block? false})
+                                    (<create! tag {:redirect? false
+                                                   :create-first-block? false})))]
+                   (when class?
+                     (let [tag-entity (or (when (de/entity? chosen-result) chosen-result) result)]
+                       (add-tag (state/get-current-repo) (:block/uuid edit-block) tag-entity)))))))
 
            (when input (.focus input)))))
-      (fn [chosen e]
+      (fn [chosen-result e]
         (util/stop e)
         (state/clear-editor-action!)
-        (let [page-ref-text (get-page-ref-text chosen)]
+        (let [chosen-result (if (:block/uuid chosen-result)
+                              (db/entity [:block/uuid (:block/uuid chosen-result)])
+                              chosen-result)
+              chosen (:block/title chosen-result)
+              chosen' (string/replace-first chosen (str (t :new-page) " ") "")
+              ref-text (if (and (de/entity? chosen-result) (not (ldb/page? chosen-result)))
+                         (cond
+                           (and db-based? (seq (:block/tags chosen-result)))
+                           (page-ref/->page-ref (:block/title chosen-result))
+                           db-based?
+                           (page-ref/->page-ref (:block/uuid chosen-result))
+                           :else
+                           (block-ref/->block-ref (:block/uuid chosen-result)))
+                         (get-page-ref-text chosen'))]
+          (when (de/entity? chosen-result)
+            (state/conj-block-ref! chosen-result))
           (editor-handler/insert-command! id
-                                          page-ref-text
+                                          ref-text
                                           format
                                           {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
                                            :end-pattern page-ref/right-brackets
@@ -351,7 +420,6 @@
                (not (:graph/loading? @state/state))
                (not (:graph/importing @state/state))
                (not (state/loading-files? repo))
-               (not (state/whiteboard-route?))
                (not config/publishing?))
       (state/set-today! (date/today))
       (when (or (config/db-based-graph? repo)
@@ -363,14 +431,14 @@
               template (state/get-default-journal-template)
               create-f (fn []
                          (p/do!
-                           (<create! title {:redirect? false
-                                          :split-namespace? false
-                                          :create-first-block? (not template)
-                                          :journal? true
-                                          :today-journal? true})
-                           (state/pub-event! [:journal/insert-template today-page])
-                           (ui-handler/re-render-root!)
-                           (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
+                          (<create! title {:redirect? false
+                                           :split-namespace? false
+                                           :create-first-block? (not template)
+                                           :journal? true
+                                           :today-journal? true})
+                          (state/pub-event! [:journal/insert-template today-page])
+                          (ui-handler/re-render-root!)
+                          (plugin-handler/hook-plugin-app :today-journal-created {:title today-page})))]
           (when (db/page-empty? repo today-page)
             (if (config/db-based-graph? repo)
               (let [page-exists (db/get-page today-page)]
@@ -389,7 +457,7 @@
 
 (defn open-today-in-sidebar
   []
-  (when-let [page (db/entity [:block/name (util/page-name-sanity-lc (date/today))])]
+  (when-let [page (db/get-page (date/today))]
     (state/sidebar-add-block!
      (state/get-current-repo)
      (:db/id page)
@@ -419,9 +487,29 @@
     (notification/show! "No file found" :warning)))
 
 (defn copy-page-url
-  ([] (copy-page-url (page-util/get-current-page-name)))
-  ([page-name]
-   (if page-name
+  ([]
+   (let [id (if (config/db-based-graph? (state/get-current-repo))
+              (page-util/get-current-page-uuid)
+              (page-util/get-current-page-name))]
+     (copy-page-url id)))
+  ([page-uuid]
+   (if page-uuid
      (util/copy-to-clipboard!
-      (url-util/get-logseq-graph-page-url nil (state/get-current-repo) page-name))
+      (url-util/get-logseq-graph-page-url nil (state/get-current-repo) (str page-uuid)))
      (notification/show! "No page found to copy" :warning))))
+
+(defn toggle-properties!
+  [page-entity]
+  (property-handler/set-block-property! (state/get-current-repo)
+                                        (:block/uuid page-entity)
+                                        :logseq.property/hide-properties?
+                                        (not (:logseq.property/hide-properties? page-entity))))
+
+(defn convert-to-tag!
+  [page-entity]
+  (let [class (db-class/build-new-class (db/get-db)
+                                        {:db/id (:db/id page-entity)
+                                         :block/title (:block/title page-entity)
+                                         :block/created-at (:block/created-at page-entity)})]
+
+    (db/transact! (state/get-current-repo) [class] {:outliner-op :save-block})))

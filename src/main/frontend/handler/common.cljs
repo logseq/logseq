@@ -15,6 +15,7 @@
   [repo format raw-text html blocks]
   (util/copy-to-clipboard! (property-handler/remove-id-property repo format raw-text)
                            :html html
+                           :graph repo
                            :blocks blocks))
 
 (defn config-with-document-mode
@@ -59,11 +60,6 @@
                     (date/journal-day->ts journal-day)
                     (util/time-ms)))))
     pages))
-
-(defn show-custom-context-menu! [e context-menu-content]
-  (util/stop e)
-  (let [position [(gobj/get e "clientX") (gobj/get e "clientY")]]
-    (state/show-custom-context-menu! context-menu-content position)))
 
 (defn listen-to-scroll!
   [element]

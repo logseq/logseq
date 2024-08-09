@@ -27,7 +27,7 @@
             [rum.core :as rum]
             [clojure.core.async :as async]
             [frontend.pubsub :as pubsub]
-            [frontend.worker.util :as worker-util]))
+            [datascript.impl.entity :as de]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
    [clojure.pprint]
@@ -40,7 +40,7 @@
 
 #?(:cljs
    (extend-protocol IPrintWithWriter
-     js/Symbol
+     symbol
      (-pr-writer [sym writer _]
        (-write writer (str "\"" (.toString sym) "\"")))))
 #?(:cljs
@@ -69,7 +69,12 @@
 #?(:cljs (def string-join-path common-util/string-join-path))
 
 #?(:cljs
-   (def safe-re-find common-util/safe-re-find))
+   (do
+     (def safe-re-find common-util/safe-re-find)
+     (defn safe-keyword
+       [s]
+       (when (string? s)
+         (keyword (string/replace s " " "_"))))))
 
 #?(:cljs
    (do
@@ -199,7 +204,7 @@
    (defn- get-computed-bg-color
      []
      ;; window.getComputedStyle(document.body, null).getPropertyValue('background-color');
-     (let [styles (js/window.getComputedStyle (js/document.querySelector "#app-container"))
+     (let [styles (js/window.getComputedStyle js/document.body)
            bg-color (gobj/get styles "background-color")
            ;; convert rgb(r,g,b) to #rrggbb
            rgb2hex (fn [rgb]
@@ -210,9 +215,9 @@
                                   %))
                           (string/join)
                           (str "#")))]
-       (when (string/starts-with? bg-color "rgb(")
+       (when (string/starts-with? bg-color "rgb")
          (let [rgb (-> bg-color
-                       (string/replace #"^rgb\(" "")
+                       (string/replace #"^rgb[^\d]+" "")
                        (string/replace #"\)$" "")
                        (string/split #","))
                rgb (take 3 rgb)]
@@ -222,26 +227,27 @@
 #?(:cljs
    (defn set-android-theme
      []
-     (when (mobile-util/native-android?)
-       (when-let [bg-color (try (get-computed-bg-color)
-                                (catch :default _
-                                  nil))]
-         (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
-         (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))))
+     (let [f #(when (mobile-util/native-android?)
+                (when-let [bg-color (try (get-computed-bg-color)
+                                         (catch :default _
+                                           nil))]
+                  (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
+                  (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))]
+       (js/setTimeout f 32))))
 
 #?(:cljs
    (defn set-theme-light
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (set-android-theme))))
+       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
+       (set-android-theme))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
-      (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (set-android-theme))))
+       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
+       (set-android-theme))))
 
 (defn find-first
   [pred coll]
@@ -536,14 +542,6 @@
                                 :block    "center"}))))))
 
 #?(:cljs
-   (defn bottom-reached?
-     [node threshold]
-     (let [full-height (gobj/get node "scrollHeight")
-           scroll-top (gobj/get node "scrollTop")
-           client-height (gobj/get node "clientHeight")]
-       (<= (- full-height scroll-top client-height) threshold))))
-
-#?(:cljs
    (defn link?
      [node]
      (contains?
@@ -587,12 +585,6 @@
         (gobj/get node "tagName")))))
 
 #?(:cljs
-   (defn select?
-     [node]
-     (when node
-       (= "SELECT" (gobj/get node "tagName")))))
-
-#?(:cljs
    (defn details-or-summary?
      [node]
      (when node
@@ -610,10 +602,7 @@
    (def distinct-by common-util/distinct-by))
 
 #?(:cljs
-   (defn distinct-by-last-wins
-     [f col]
-     {:pre [(sequential? col)]}
-     (reverse (distinct-by f (reverse col)))))
+   (def distinct-by-last-wins common-util/distinct-by-last-wins))
 
 (defn get-git-owner-and-repo
   [repo-url]
@@ -626,8 +615,8 @@
 
 (defn trim-safe
   [s]
-  (when s
-    (string/trim s)))
+  (if (string? s)
+    (string/trim s) s))
 
 (defn trimr-without-newlines
   [s]
@@ -713,7 +702,7 @@
              (js/console.error e)
              (dec current-pos)))
          (dec current-pos))
-       (dec current-pos))))
+       current-pos)))
 
 #?(:cljs
    ;; for widen char
@@ -730,7 +719,7 @@
              (js/console.error e)
              (inc current-pos)))
          (inc current-pos))
-       (inc current-pos))))
+       current-pos)))
 
 #?(:cljs
    (defn kill-line-before!
@@ -756,30 +745,6 @@
      (let [start (get-selection-start input)
            end   (get-selection-end input)]
        (safe-set-range-text! input text start end "end"))))
-
-;; copied from re_com
-#?(:cljs
-   (defn deref-or-value
-     "Takes a value or an atom
-      If it's a value, returns it
-      If it's a Reagent object that supports IDeref, returns the value inside it by derefing
-      "
-     [val-or-atom]
-     (if (satisfies? IDeref val-or-atom)
-       @val-or-atom
-       val-or-atom)))
-
-;; copied from re_com
-#?(:cljs
-   (defn now->utc
-     "Return a goog.date.UtcDateTime based on local date/time."
-     []
-     (let [local-date-time (js/goog.date.DateTime.)]
-       (js/goog.date.UtcDateTime.
-        (.getYear local-date-time)
-        (.getMonth local-date-time)
-        (.getDate local-date-time)
-        0 0 0 0))))
 
 (defn safe-subvec [xs start end]
   (if (or (neg? start)
@@ -853,12 +818,20 @@
 
 #?(:cljs
    (defn copy-to-clipboard!
-     [text & {:keys [html blocks owner-window]}]
-     (let [data (clj->js
+     [text & {:keys [graph html blocks owner-window]}]
+     (let [blocks (map (fn [block] (if (de/entity? block)
+                                     (-> (into {} block)
+                                         ;; FIXME: why :db/id is not included?
+                                         (assoc :db/id (:db/id block)))
+                                     block)) blocks)
+           data (clj->js
                  (common-util/remove-nils-non-nested
                   {:text text
                    :html html
-                   :blocks (when (seq blocks) (pr-str blocks))}))]
+                   :blocks (when (and graph (seq blocks))
+                             (pr-str
+                              {:graph graph
+                               :blocks (mapv #(dissoc % :block.temp/fully-loaded? %) blocks)}))}))]
        (if owner-window
          (utils/writeClipboard data owner-window)
          (utils/writeClipboard data)))))
@@ -900,6 +873,10 @@
          (when section
            (gdom/getElement section "id"))))))
 
+(defn get-elem-idx
+  [nodes node]
+  (first (filter number? (map-indexed (fn [idx b] (when (= node b) idx)) nodes))))
+
 #?(:cljs
    (defn get-prev-block-non-collapsed
      "Gets previous non-collapsed block. If given a container
@@ -909,51 +886,43 @@
       (when-let [blocks (if container
                           (get-blocks-noncollapse container)
                           (get-blocks-noncollapse))]
-        (let [block-id (.-id block)
-              block-ids (mapv #(.-id %) blocks)]
-          (when-let [index (.indexOf block-ids block-id)]
-            (let [idx (dec index)]
-              (when (>= idx 0)
-                (nth-safe blocks idx)))))))))
+        (when-let [index (get-elem-idx blocks block)]
+          (let [idx (dec index)]
+            (when (>= idx 0)
+              (nth-safe blocks idx))))))))
 
 #?(:cljs
    (defn get-prev-block-non-collapsed-non-embed
      [block]
      (when-let [blocks (->> (get-blocks-noncollapse)
                             remove-embedded-blocks)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
+       (when-let [index (get-elem-idx blocks block)]
            (let [idx (dec index)]
              (when (>= idx 0)
-               (nth-safe blocks idx))))))))
+               (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed
      [block]
-     (when-let [blocks (get-blocks-noncollapse)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (let [idx (inc index)]
-             (when (>= (count blocks) idx)
-               (nth-safe blocks idx))))))))
+     (when-let [blocks (and block (get-blocks-noncollapse))]
+       (when-let [index (get-elem-idx blocks block)]
+         (let [idx (inc index)]
+           (when (>= (count blocks) idx)
+             (nth-safe blocks idx)))))))
 
 #?(:cljs
    (defn get-next-block-non-collapsed-skip
      [block]
      (when-let [blocks (get-blocks-noncollapse)]
-       (let [block-id (.-id block)
-             block-ids (mapv #(.-id %) blocks)]
-         (when-let [index (.indexOf block-ids block-id)]
-           (loop [idx (inc index)]
-             (when (>= (count blocks) idx)
-               (let [block (nth-safe blocks idx)
-                     nested? (->> (array-seq (gdom/getElementsByClass "selected"))
-                                  (some (fn [dom] (.contains dom block))))]
-                 (if nested?
-                   (recur (inc idx))
-                   block)))))))))
+       (when-let [index (get-elem-idx blocks block)]
+         (loop [idx (inc index)]
+           (when (>= (count blocks) idx)
+             (let [block (nth-safe blocks idx)
+                   nested? (->> (array-seq (gdom/getElementsByClass "selected"))
+                                (some (fn [dom] (.contains dom block))))]
+               (if nested?
+                 (recur (inc idx))
+                 block))))))))
 
 (defn rand-str
   [n]
@@ -1037,9 +1006,6 @@
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
 #?(:cljs
-   (def search-normalize worker-util/search-normalize))
-
-#?(:cljs
    (def page-name-sanity-lc
      "Delegate to common-util to loosely couple app usages to graph-parser"
      common-util/page-name-sanity-lc))
@@ -1048,7 +1014,7 @@
    (def safe-page-name-sanity-lc common-util/safe-page-name-sanity-lc))
 
 #?(:cljs
-   (def get-page-original-name common-util/get-page-original-name))
+   (def get-page-title common-util/get-page-title))
 
 #?(:cljs
    (defn add-style!
@@ -1155,9 +1121,6 @@
      [ch]
      (->> (repeatedly #(async/poll! ch))
           (take-while identity))))
-
-#?(:cljs
-   (def <ratelimit worker-util/<ratelimit))
 
 #?(:cljs
    (defn trace!
@@ -1268,6 +1231,11 @@
      (if mac?
        (gobj/get e "metaKey")
        (gobj/get e "ctrlKey"))))
+
+#?(:cljs
+   (defn shift-key? [e]
+     (gobj/get e "shiftKey")))
+
 
 #?(:cljs
    (defn right-click?
@@ -1443,15 +1411,41 @@
              (resolve))))))))
 
 #?(:cljs
+   (defn image-blob->png
+     [blob cb]
+     (let [image (js/Image.)
+           off-canvas (js/document.createElement "canvas")
+           data-url (js/URL.createObjectURL blob)
+           ctx (.getContext off-canvas "2d")]
+       (set! (.-onload image)
+             #(let [width (.-width image)
+                    height (.-height image)]
+                (set! (.-width off-canvas) width)
+                (set! (.-height off-canvas) height)
+                (.drawImage ctx image 0 0 width height)
+                (.toBlob off-canvas cb)))
+       (set! (.-src image) data-url))))
+
+#?(:cljs
+   (defn write-blob-to-clipboard
+     [blob]
+     (->> blob
+          (js-obj (.-type blob))
+          (js/ClipboardItem.)
+          (array)
+          (js/navigator.clipboard.write))))
+
+#?(:cljs
    (defn copy-image-to-clipboard
      [src]
      (-> (js/fetch src)
          (.then (fn [data]
                   (-> (.blob data)
                       (.then (fn [blob]
-                               (js/navigator.clipboard.write (clj->js [(js/ClipboardItem. (clj->js {(.-type blob) blob}))]))))
+                               (if (= (.-type blob) "image/png")
+                                 (write-blob-to-clipboard blob)
+                                 (image-blob->png blob write-blob-to-clipboard))))
                       (.catch js/console.error)))))))
-
 
 (defn memoize-last
   "Different from core.memoize, it only cache the last result.
@@ -1521,16 +1515,6 @@ Arg *stop: atom, reset to true to stop the loop"
                   js/window.msRequestAnimationFrame))
          #(js/setTimeout % 16))))
 
-#?(:cljs
-   (defn tag?
-     "Whether `s` is a tag."
-     [s]
-     (and (string? s)
-          (string/starts-with? s "#")
-          (or
-           (not (string/includes? s " "))
-           (string/starts-with? s "#[[")
-           (string/ends-with? s "]]")))))
 #?(:cljs
    (defn parse-params
      "Parse URL parameters in hash(fragment) into a hashmap"

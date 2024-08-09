@@ -24,6 +24,7 @@
             [frontend.util :as util]
             [frontend.util.fs :as fs-util]
             [frontend.storage :as storage]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
@@ -359,10 +360,10 @@
                                          (js/decodeURI (util/node-path.basename current-repo))
 
                                          confirm-fn
-                                         (fn [close-fn]
-                                           (create-remote-graph-panel current-repo graph-name close-fn))]
+                                         (fn [{:keys [close]}]
+                                           (create-remote-graph-panel current-repo graph-name close))]
 
-                                     (state/set-modal! confirm-fn {:center? true :close-btn? false})))
+                                     (shui/dialog-open! confirm-fn {:center? true :close-btn? false})))
         turn-on                 (->
                                  (fn []
                                    (when-not (file-sync-handler/current-graph-sync-on?)
@@ -631,7 +632,7 @@
         [list-ready? set-list-ready?] (rum/use-state false)
         [content-ready? set-content-ready?] (rum/use-state false)
         *ref-contents      (rum/use-ref (atom {}))
-        original-page-name (or (:block/original-name page-entity) page-name)]
+        original-page-name (or (:block/title page-entity) page-name)]
 
     (rum/use-effect!
      #(when selected-page
@@ -814,29 +815,29 @@
   ([] (open-icloud-graph-clone-picker (state/get-current-repo)))
   ([repo]
    (when (and repo (mobile-util/in-iCloud-container-path? repo))
-     (state/set-modal!
+     (shui/dialog-open!
       (fn [close-fn]
         (clone-local-icloud-graph-panel repo (util/node-path.basename repo) close-fn))
-      {:close-btn? false :center? true}))))
+      {:close-btn? false}))))
 
 (defn make-onboarding-panel
   [type]
 
-  (fn [close-fn]
+  (fn [{:keys [close]}]
 
     (case type
       :welcome
-      (onboarding-welcome-logseq-sync close-fn)
+      (onboarding-welcome-logseq-sync close)
 
       :unavailable
-      (onboarding-unavailable-file-sync close-fn)
+      (onboarding-unavailable-file-sync close)
 
       :congrats
-      (onboarding-congrats-successful-sync close-fn)
+      (onboarding-congrats-successful-sync close)
 
       [:p
        [:h1.text-xl.font-bold "Not handled!"]
-       [:a.button {:on-click close-fn} "Got it!"]])))
+       [:a.button {:on-click close} "Got it!"]])))
 
 (defn maybe-onboarding-show
   [type]

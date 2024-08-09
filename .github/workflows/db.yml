@@ -83,7 +83,7 @@ jobs:
           bb: ${{ env.BABASHKA_VERSION }}
 
       - name: Run clj-kondo lint
-        run: clojure -M:clj-kondo --parallel --lint src
+        run: clojure -M:clj-kondo --lint src test
 
       - name: Carve lint for unused vars
         run: bb lint:carve 2>/dev/null

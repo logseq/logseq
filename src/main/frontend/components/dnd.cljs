@@ -1,7 +1,7 @@
 (ns frontend.components.dnd
   (:require [rum.core :as rum]
             [cljs-bean.core :as bean]
-            ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy] :as sortable]
+            ["@dnd-kit/sortable" :refer [useSortable arrayMove SortableContext verticalListSortingStrategy horizontalListSortingStrategy] :as sortable]
             ["@dnd-kit/utilities" :refer [CSS]]
             ["@dnd-kit/core" :refer [DndContext closestCenter PointerSensor useSensor useSensors]]
             [frontend.rum :as r]))
@@ -9,6 +9,10 @@
 (def dnd-context (r/adapt-class DndContext))
 (def sortable-context (r/adapt-class SortableContext))
 ;; (def drag-overlay (r/adapt-class DragOverlay))
+
+(rum/defc non-sortable-item
+  [props children]
+  [:div props children])
 
 (rum/defc sortable-item
   [props children]
@@ -28,7 +32,8 @@
      children]))
 
 (rum/defc items
-  [col {:keys [on-drag-end parent-node]}]
+  [col {:keys [on-drag-end parent-node vertical?]
+        :or {vertical? true}}]
   (let [ids (mapv :id col)
         items' (bean/->js ids)
         id->item (zipmap ids col)
@@ -43,6 +48,7 @@
                   :onDragEnd (fn [event]
                                (let [active-id (.-id (.-active event))
                                      over-id (.-id (.-over event))]
+                                 (js/console.dir event)
                                  (when-not (= active-id over-id)
                                    (let [old-index (.indexOf ids active-id)
                                          new-index (.indexOf ids over-id)
@@ -61,16 +67,25 @@
                                               :new-items new-items})
                                            (do
                                              (set-items new-items)
-                                             (on-drag-end new-values)))))))
+                                             (on-drag-end new-values {:active-id active-id
+                                                                      :over-id over-id
+                                                                      :direction (if (> new-index old-index)
+                                                                                   :down
+                                                                                   :up)})))))))
                                  (set-active-id nil)))}
         sortable-opts {:items items
-                       :strategy verticalListSortingStrategy}
+                       :strategy (if vertical?
+                                   verticalListSortingStrategy
+                                   horizontalListSortingStrategy)}
         children (for [item col]
-                   (let [id (str (:id item))]
+                   (let [id (str (:id item))
+                         prop (merge
+                                 (:prop item)
+                                 {:key id :id id})]
                      (rum/with-key
-                       (sortable-item {:key id
-                                       :id id}
-                                      (:content item))
+                       (if (:disabled? item)
+                         (non-sortable-item prop (:content item))
+                         (sortable-item prop (:content item)))
                        id)))
         children' (if parent-node
                     [parent-node children]

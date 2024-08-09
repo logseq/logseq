@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [logseq.common.util :as common-util]
             [frontend.handler.notification :as notification]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [frontend.db :as db]
             [frontend.state :as state]
@@ -11,11 +12,13 @@
 
 (defn run-git-command!
   [command]
-  (ipc/ipc :runGit command))
+  (ipc/ipc :runGit {:repo (state/get-current-repo)
+                    :command command}))
 
 (defn run-git-command2!
   [command]
-  (ipc/ipc :runGitWithinCurrentGraph command))
+  (ipc/ipc :runGitWithinCurrentGraph {:repo (state/get-current-repo) 
+                                      :command command}))
 
 (defn run-cli-command!
   [command args]
@@ -74,7 +77,7 @@
   [username email]
   (p/let [_r1 (run-git-command! ["config" "--global" "user.name" username])
           _r2 (run-git-command! ["config" "--global" "user.email" email])]
-    (state/close-modal!)
+    (shui/dialog-close!)
     (notification/show!
      [:div "git config successfully!"]
      :success)))

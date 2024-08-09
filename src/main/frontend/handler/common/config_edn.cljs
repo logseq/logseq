@@ -90,6 +90,8 @@ nested keys or positional errors e.g. tuples"
   "File only config that is deprecated in DB graphs"
   {:preferred-format
    "is not used in DB graphs as there is only markdown mode."
+   :preferred-workflow
+   "is not used in DB graphs"
    :property/separated-by-commas
    "is not used in DB graphs"
    :property-pages/enabled?
@@ -118,7 +120,9 @@ nested keys or positional errors e.g. tuples"
                (catch :default _ ::failed-to-detect))
         warnings (cond->
                   {:editor/command-trigger
-                   "is no longer supported. Please use '/' and report bugs on it."}
+                   "is no longer supported. Please use '/' and report bugs on it."
+                   :arweave/gateway
+                   "is no longer supported."}
                    db-graph?
                    (merge
                     file-only-config))]

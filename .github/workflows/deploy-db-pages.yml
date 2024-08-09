@@ -33,7 +33,11 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
 
       - name: Fetch yarn deps
-        run: yarn cache clean && yarn install --frozen-lockfile
+        run: yarn install --frozen-lockfile
+
+      - name: Set Build Environment Variables
+        run: |
+          echo "ENABLE_FILE_SYNC_PRODUCTION=false" >> $GITHUB_ENV
 
       - name: Build Released-Web
         run: |

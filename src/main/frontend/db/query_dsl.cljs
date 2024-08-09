@@ -7,11 +7,9 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [frontend.date :as date]
+            [frontend.db.utils :as db-utils]
             [frontend.db.model :as model]
             [frontend.db.query-react :as query-react]
-            [frontend.db.utils :as db-utils]
-            [frontend.db.conn :as conn]
-            [datascript.core :as d]
             [logseq.db.frontend.rules :as rules]
             [frontend.template :as template]
             [logseq.graph-parser.text :as text]
@@ -20,7 +18,10 @@
             [logseq.common.util :as common-util]
             [frontend.util.text :as text-util]
             [frontend.util :as util]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.db.frontend.property :as db-property]
+            [frontend.state :as state]
+            [frontend.handler.db-based.property.util :as db-pu]))
 
 
 ;; Query fields:
@@ -210,8 +211,8 @@
 (defn- build-between-two-arg
   [e]
   (let [start (->journal-day-int (nth e 1))
-         end (->journal-day-int (nth e 2))
-         [start end] (sort [start end])]
+        end (->journal-day-int (nth e 2))
+        [start end] (sort [start end])]
     {:query (list 'between '?b start end)
      :rules [:between]}))
 
@@ -223,7 +224,7 @@
               (string/replace "-" "_"))]
     (when (contains? #{"created_at" "last_modified_at"} k)
       (let [start (->timestamp (nth e 2))
-             end (->timestamp (nth e 3))]
+            end (->timestamp (nth e 3))]
         (when (and start end)
           (let [[start end] (sort [start end])
                 sym '?v]
@@ -243,73 +244,108 @@
     (build-between-three-arg e)))
 
 
-(defn parse-property-value
-  "Parses non-string property values or any page-ref like values"
-  [v]
-  (let [result (if-some [res (text/parse-non-string-property-value v)]
-                 res
-                 (if (string/starts-with? v "#")
-                   (subs v 1)
-                   (or (page-ref/get-page-name v) v)))]
-    (if (string? result)
-      (string/trim result)
-      result)))
+(defn ->file-property-value
+  "Parses property values for file graphs and handles non-string values or any page-ref like values"
+  [v*]
+  (if (some? v*)
+   (let [v (str v*)
+         result (if-some [res (text/parse-non-string-property-value v)]
+                  res
+                  (if (string/starts-with? v "#")
+                    (subs v 1)
+                    (or (page-ref/get-page-name v) v)))]
+     (if (string? result)
+       (or (parse-double result) (string/trim result))
+       result))
+    v*))
+
+(defn ->db-property-value
+  "Parses property values for DB graphs"
+  [k v]
+  (let [v' (if (symbol? v) (str v) v)]
+    (cond (string? v')
+          (if (string/starts-with? v' "#")
+            (subs v' 1)
+            (or (page-ref/get-page-name v') v'))
+          ;; Convert number pages to string
+          (and (double? v) (= :node (get-in (db-utils/entity k) [:block/schema :type])))
+          (str v)
+          :else
+          v')))
+
+(defn- ->file-keyword-property
+  "Case-insensitive property names for file graphs. Users manually type queries to enter them as they appear"
+  [property-name]
+  (-> (string/replace (name property-name) "_" "-")
+      string/lower-case
+      keyword))
+
+(defn- ->db-keyword-property
+  "Returns property db-ident given case sensitive property names for db graphs"
+  [property-name]
+  (if (qualified-keyword? property-name)
+    property-name
+    (keyword db-property/default-user-namespace (name property-name))))
 
 (defn- build-property-two-arg
-  [e]
-  (let [k (string/replace (name (nth e 1)) "_" "-")
+  [e {:keys [db-graph?]}]
+  (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))
         v (nth e 2)
-        v (if-not (nil? v)
-            (parse-property-value (str v))
-            v)
-        v (if (coll? v) (first v) v)]
-    {:query (list 'property '?b (keyword k) v)
+        v' (if db-graph? (->db-property-value k v) (->file-property-value v))]
+    {:query (list 'property '?b k v')
      :rules [:property]}))
 
 (defn- build-property-one-arg
-  [e]
-  (let [k (string/replace (name (nth e 1)) "_" "-")]
-    {:query (list 'has-property '?b (keyword k))
+  [e {:keys [db-graph?]}]
+  (let [k (if db-graph? (->db-keyword-property (nth e 1)) (->file-keyword-property (nth e 1)))]
+    {:query (list 'has-property '?b k)
      :rules [:has-property]}))
 
-(defn- build-property [e]
+(defn- build-property [e env]
   (cond
     (= 3 (count e))
-    (build-property-two-arg e)
+    (build-property-two-arg e env)
 
     (= 2 (count e))
-    (build-property-one-arg e)))
+    (build-property-one-arg e env)))
 
 (defn- build-task
-  [e]
+  [e {:keys [db-graph?]}]
   (let [markers (if (coll? (first (rest e)))
                   (first (rest e))
                   (rest e))]
     (when (seq markers)
-      (let [markers (set (map (comp string/upper-case name) markers))]
-        {:query (list 'task '?b markers)
-         :rules [:task]}))))
+      (if db-graph?
+        (let [markers' (set (map (comp string/capitalize name) markers))]
+          {:query (list 'task '?b (set markers'))
+          :rules [:task]})
+        (let [markers (set (map (comp string/upper-case name) markers))]
+          {:query (list 'task '?b markers)
+           :rules [:task]})))))
 
 (defn- build-priority
-  [e]
+  [e {:keys [db-graph?]}]
   (let [priorities (if (coll? (first (rest e)))
                      (first (rest e))
                      (rest e))]
     (when (seq priorities)
-      (let [priorities (set (map (comp string/upper-case name) priorities))]
-        {:query (list 'priority '?b priorities)
-         :rules [:priority]}))))
+      (if db-graph?
+        (let [priorities (set (map (comp string/capitalize name) priorities))]
+          {:query (list 'priority '?b priorities)
+           :rules [:priority]})
+        (let [priorities (set (map (comp string/upper-case name) priorities))]
+          {:query (list 'priority '?b priorities)
+           :rules [:priority]})))))
 
 (defn- build-page-property
-  [e]
+  [e {:keys [db-graph?]}]
   (let [[k v] (rest e)
-        k (string/replace (name k) "_" "-")]
+        k' (if db-graph? (->db-keyword-property k) (->file-keyword-property k))]
     (if (some? v)
-      (let [v' (parse-property-value (str v))
-            val (if (coll? v') (first v') v')]
-        {:query (list 'page-property '?p (keyword k) val)
+      (let [v' (if db-graph? (->db-property-value k' v) (->file-property-value v))]
+        {:query (list 'page-property '?p k' v')
          :rules [:page-property]})
-      {:query (list 'has-page-property '?p (keyword k))
+      {:query (list 'has-page-property '?p k')
        :rules [:has-page-property]})))
 
 (defn- build-page-tags
@@ -326,7 +362,7 @@
 (defn- build-all-page-tags
   []
   {:query (list 'all-page-tags '?p)
-   :rules [:all-page-tags]} )
+   :rules [:all-page-tags]})
 
 (defn- build-sample
   [e sample]
@@ -342,7 +378,11 @@
         order (if (contains? #{:asc :desc} order*)
                 order*
                 :desc)
-        comp (if (= order :desc) >= <=)]
+        comp (if (= order :desc)
+               ;; Handle nil so that is always less than a value e.g. treated as a "" for a string.
+               ;; Otherwise sort bugs occur that prevent non-nil values from being sorted
+               #(if (nil? %2) true (>= %1 %2))
+               #(if (nil? %1) true (<= %1 %2)))]
     (reset! sort-by_
             (fn sort-results [result property-val-fn]
               ;; first because there is one binding result in query-wrapper
@@ -416,14 +456,14 @@ Some bindings in this fn:
        (build-between e)
 
        (= 'property fe)
-       (build-property e)
+       (build-property e env)
 
        ;; task is the new name and todo is the old one
        (or (= 'todo fe) (= 'task fe))
-       (build-task e)
+       (build-task e env)
 
        (= 'priority fe)
-       (build-priority e)
+       (build-priority e env)
 
        (= 'sort-by fe)
        (build-sort-by e sort-by)
@@ -435,7 +475,7 @@ Some bindings in this fn:
        (build-namespace e)
 
        (= 'page-property fe)
-       (build-page-property e)
+       (build-page-property e env)
 
        (= 'page-tags fe)
        (build-page-tags e)
@@ -480,7 +520,7 @@ Some bindings in this fn:
               (string/replace tag-placeholder "#")))))
 
 (defn- add-bindings!
-  [q]
+  [q {:keys [db-graph?]}]
   (let [forms (set (flatten q))
         syms ['?b '?p 'not]
         [b? p? not?] (-> (set/intersection (set syms) forms)
@@ -492,7 +532,11 @@ Some bindings in this fn:
         (concat [['?b :block/uuid] ['?p :block/name] ['?b :block/page '?p]] q)
 
         b?
-        (concat [['?b :block/uuid]] q)
+        (if db-graph?
+          ;; This keeps built-in properties from showing up in not results.
+          ;; May need to be revisited as more class and property filters are explored
+          (concat [['?b :block/uuid] '[(missing? $ ?b :logseq.property/built-in?)]] q)
+          (concat [['?b :block/uuid]] q))
 
         p?
         (concat [['?p :block/name]] q)
@@ -522,7 +566,7 @@ Some bindings in this fn:
 
 (def custom-readers {:readers {'tag (fn [x] (page-ref/->page-ref x))}})
 (defn parse
-  [s {:keys [db-graph?]}]
+  [s {:keys [db-graph?] :as opts}]
   (when (and (string? s)
              (not (string/blank? s)))
     (let [s (if (= \# (first s)) (page-ref/->page-ref (subs s 1)) s)
@@ -536,6 +580,7 @@ Some bindings in this fn:
           {result :query rules :rules}
           (when form (build-query form {:sort-by sort-by
                                         :blocks? blocks?
+                                        :db-graph? db-graph?
                                         :sample sample}))
           result' (when (seq result)
                     (let [key (if (coll? (first result))
@@ -543,10 +588,10 @@ Some bindings in this fn:
                                 ;; [(not (page-ref ?b "page 2"))]
                                 (keyword (ffirst result))
                                 (keyword (first result)))]
-                      (add-bindings! (if (= key :and) (rest result) result))))]
+                      (add-bindings! (if (= key :and) (rest result) result) opts)))]
       {:query result'
        :rules (if db-graph?
-                (rules/extract-rules rules/db-query-dsl-rules rules)
+                (rules/extract-rules rules/db-query-dsl-rules rules {:deps rules/rules-dependencies})
                 (mapv rules/query-dsl-rules rules))
        :sort-by @sort-by
        :blocks? (boolean @blocks?)
@@ -573,7 +618,7 @@ Some bindings in this fn:
   ([q] (parse-query q {}))
   ([q options]
    (let [q' (template/resolve-dynamic-template! q)]
-     (parse q' options))))
+     (parse q' (merge {:db-graph? (config/db-based-graph? (state/get-current-repo))} options)))))
 
 (defn pre-transform-query
   [q]
@@ -586,16 +631,10 @@ Some bindings in this fn:
   [col]
   ;; Only modify result shapes that we know of
   (if (map? (ffirst col))
-    (let [prop-uuid-names (->> (d/datoms (conn/get-db) :avet :block/type "property")
-                               (map :e)
-                               (db-utils/pull-many '[:block/uuid :block/name])
-                               (map #(vector (:block/uuid %) (keyword (:block/name %))))
-                               (into {}))]
+    (let [repo (state/get-current-repo)]
       (map (fn [blocks]
              (mapv (fn [block]
-                     (assoc block
-                            :block/properties-by-name
-                            (update-keys (:block/properties block) #(prop-uuid-names % %))))
+                     (assoc block :block/properties-by-name (db-pu/properties-by-name repo block)))
                    blocks))
            col))
     col))
@@ -607,7 +646,14 @@ Some bindings in this fn:
   (case prop
     :created-at (:block/created-at m)
     :updated-at (:block/updated-at m)
-    (get-in m [:block/properties-by-name prop])))
+    (get-in m [:block/properties-by-name (name prop)])))
+
+(def db-block-attrs
+  "Like ldb/block-attrs but for query dsl an db graphs"
+  ;; '*' needed as we need to pull user properties and don't know their names in advance
+  '[*
+    {:block/page [:db/id :block/name :block/title :block/journal-day]}
+    {:block/_parent ...}])
 
 (defn query
   "Runs a dsl query with query as a string. Primary use is from '{{query }}'"
@@ -615,8 +661,10 @@ Some bindings in this fn:
    (query repo query-string {}))
   ([repo query-string query-opts]
    (when (and (string? query-string) (not= "\"\"" query-string))
-     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string {:db-graph? (config/db-based-graph? repo)})]
-       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
+     (let [{:keys [query rules sort-by blocks? sample]} (parse-query query-string)]
+       (when-let [query' (some-> query (query-wrapper {:blocks? blocks?
+                                                       :block-attrs (when (config/db-based-graph? repo)
+                                                                      db-block-attrs)}))]
          (let [random-samples (if @sample
                                 (fn [col]
                                   (take @sample (shuffle col)))
@@ -641,8 +689,10 @@ Some bindings in this fn:
   [repo query-m query-opts]
   (when (seq (:query query-m))
     (let [query-string (template/resolve-dynamic-template! (pr-str (:query query-m)))
-          {:keys [query sort-by blocks? rules]} (parse query-string {:db-graph? (config/db-based-graph? repo)})]
-      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?}))]
+          db-graph? (config/db-based-graph? repo)
+          {:keys [query sort-by blocks? rules]} (parse query-string {:db-graph? db-graph?})]
+      (when-let [query' (some-> query (query-wrapper {:blocks? blocks?
+                                                      :block-attrs (when db-graph? db-block-attrs)}))]
         (query-react/react-query repo
                                  (merge
                                   query-m
@@ -652,9 +702,9 @@ Some bindings in this fn:
                                   query-opts
                                   (when sort-by
                                     {:transform-fn
-                                    (if (config/db-based-graph? repo)
-                                                     (comp (fn [col] (sort-by col get-db-property-value)) sort-by-prep)
-                                                     #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))})))))))
+                                     (if db-graph?
+                                       (comp (fn [col] (sort-by col get-db-property-value)) sort-by-prep)
+                                       #(sort-by % (fn [m prop] (get-in m [:block/properties prop]))))})))))))
 
 (defn query-contains-filter?
   [query filter-name]

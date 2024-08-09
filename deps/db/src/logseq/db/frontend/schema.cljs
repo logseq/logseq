@@ -2,33 +2,25 @@
   "Main datascript schemas for the Logseq app"
   (:require [clojure.set :as set]))
 
-(defonce version 2)
-(defonce ast-version 1)
+(def version 12)
 ;; A page is a special block, a page can corresponds to multiple files with the same ":block/name".
 (def ^:large-vars/data-var schema
-  {:schema/version  {}
-   :ast/version     {}
-   :db/type         {}
-   :db/ident        {:db/unique :db.unique/identity}
+  {:db/ident        {:db/unique :db.unique/identity}
+   :kv/value       {}
 
    :recent/pages {}
 
-   ;; :block/type is a string type or multiple types of the current block
+   ;; :block/type is a string type of the current block
    ;; "whiteboard" for whiteboards
-   ;; "macros" for macro
    ;; "property" for property blocks
    ;; "class" for structured page
-   :block/type {:db/index true
-                :db/cardinality :db.cardinality/many}
+   :block/type {:db/index true}
    :block/schema {}
    :block/uuid {:db/unique :db.unique/identity}
    :block/parent {:db/valueType :db.type/ref
                   :db/index true}
-   :block/left   {:db/valueType :db.type/ref
-                  :db/index true}
-   :block/collapsed? {:db/index true}
-   :block/collapsed-properties {:db/valueType :db.type/ref
-                                :db/cardinality :db.cardinality/many}
+   :block/order {:db/index true}
+   :block/collapsed? {}
 
    ;; :markdown, :org
    :block/format {}
@@ -51,12 +43,12 @@
    :block/link {:db/valueType :db.type/ref
                 :db/index true}
 
+   ;; page's namespace
+   :block/namespace {:db/valueType :db.type/ref}
+
    ;; for pages
    :block/alias {:db/valueType :db.type/ref
                  :db/cardinality :db.cardinality/many}
-
-   ;; full-text for current block
-   :block/content {}
 
    ;; todo keywords, e.g. "TODO", "DOING", "DONE"
    :block/marker {}
@@ -71,9 +63,6 @@
    ;; map, key -> original property value's content
    :block/properties-text-values {}
 
-   ;; non-indexed metadata
-   :block/metadata {}
-
    ;; first block that's not a heading or unordered list
    :block/pre-block? {}
 
@@ -86,23 +75,23 @@
    ;; whether blocks is a repeated block (usually a task)
    :block/repeated? {}
 
-   :block/created-at {}
-   :block/updated-at {}
+   :block/created-at {:db/index true}
+   :block/updated-at {:db/index true}
 
    ;; page additional attributes
    ;; page's name, lowercase
    :block/name {:db/unique :db.unique/identity}
 
    ;; page's original name
-   :block/original-name {:db/unique :db.unique/identity}
-   ;; whether page's is a journal
-   :block/journal? {}
+   :block/title {:db/index true}
+
+   ;; page's journal day
    :block/journal-day {}
-   ;; page's namespace
-   :block/namespace {:db/valueType :db.type/ref}
+
    ;; macros in block
    :block/macros {:db/valueType :db.type/ref
                   :db/cardinality :db.cardinality/many}
+
    ;; block's file
    :block/file {:db/valueType :db.type/ref}
 
@@ -111,28 +100,36 @@
 
    ;; file
    :file/path {:db/unique :db.unique/identity}
-   ;; only store the content of logseq's files
    :file/content {}
-
-   ;; TODO: do we really use this?
-   :file/handle {}
-   ;; :file/created-at {}
-   ;; :file/last-modified-at {}
-   ;; :file/size {}
+   :file/created-at {}
+   :file/last-modified-at {}
+   :file/size {}
    })
 
 (def schema-for-db-based-graph
   (merge
    (dissoc schema
-           :block/properties-text-values :block/pre-block? :recent/pages :file/handle :block/file
-           :block/properties-order)
-   {:file/last-modified-at {}}
-   {:asset/uuid {:db/unique :db.unique/identity}
+           :block/namespace :block/properties-text-values :block/pre-block? :recent/pages :block/file
+           :block/properties :block/properties-order :block/repeated? :block/deadline :block/scheduled :block/priority
+           :block/marker :block/macros)
+   {:block/name {:db/index true}        ; remove db/unique for :block/name
+    ;; class properties
+    :class/parent {:db/valueType :db.type/ref
+                   :db/index true}
+    :class/schema.properties {:db/valueType :db.type/ref
+                              :db/cardinality :db.cardinality/many
+                              :db/index true}
+    ;; closed value
+    :block/closed-value-property {:db/valueType :db.type/ref
+                                  :db/cardinality :db.cardinality/many}
+    :property/schema.classes {:db/valueType :db.type/ref
+                              :db/cardinality :db.cardinality/many}
+    :property.value/content {}
+    :asset/uuid {:db/unique :db.unique/identity}
     :asset/meta {}}))
 
 (def retract-attributes
-  #{
-    :block/refs
+  #{:block/refs
     :block/tags
     :block/alias
     :block/marker
@@ -146,51 +143,28 @@
     :block/properties-text-values
     :block/macros
     :block/invalid-properties
-    :block/warning
-    }
-  )
-
-;; If only block/content changes
-(def db-version-retract-attributes
-  #{:block/refs
-    :block/marker
-    :block/priority
-    :block/scheduled
-    :block/deadline
-    :block/repeated?
-    :block/macros
     :block/warning})
 
+;; If only block/title changes
+(def db-version-retract-attributes
+  #{:block/refs
+    :block/warning})
 
-;;; use `(map [:db.fn/retractAttribute <id> <attr>] retract-page-attributes)`
-;;; to remove attrs to make the page as it's just created and no file attached to it
-(def retract-page-attributes
-  #{:block/created-at
-    :block/updated-at
-    :block/file
-    :block/format
-    :block/content
-    :block/properties
-    :block/properties-order
-    :block/properties-text-values
-    :block/invalid-properties
-    :block/alias
-    :block/tags})
-
-
+;; DB graph helpers
+;; ================
 (def ref-type-attributes
   (into #{}
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.type/ref (:db/valueType attr-body-map))
                   attr-name)))
-        schema))
+        schema-for-db-based-graph))
 
 (def card-many-attributes
   (into #{}
         (keep (fn [[attr-name attr-body-map]]
                 (when (= :db.cardinality/many (:db/cardinality attr-body-map))
                   attr-name)))
-        schema))
+        schema-for-db-based-graph))
 
 (def card-many-ref-type-attributes
   (set/intersection card-many-attributes ref-type-attributes))

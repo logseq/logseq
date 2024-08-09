@@ -44,36 +44,16 @@
       (p/resolved files))))
 
 (defn- ->db-files
-  ;; TODO(andelf): rm nfs? parameter
   [result nfs?]
   (->>
    (cond
-     ;; TODO(andelf): use the same structure for both fields
-     (mobile-util/native-platform?)
-     (map (fn [{:keys [path content size mtime]}]
+     (or (mobile-util/native-platform?)
+         (util/electron?)
+         nfs?)
+     (map (fn [{:keys [path content stat]}]
             {:file/path             (common-util/path-normalize path)
-             :file/last-modified-at mtime
-             :file/size             size
-             :file/content content})
-          result)
-
-     (util/electron?)
-     (map (fn [{:keys [path stat content]}]
-            (let [{:keys [mtime size]} stat]
-              {:file/path             (common-util/path-normalize path)
-               :file/last-modified-at mtime
-               :file/size             size
-               :file/content content}))
-          result)
-
-     nfs?
-     (map (fn [{:keys [path content size mtime type] :as file-obj}]
-            (merge file-obj
-                   {:file/path             (common-util/path-normalize path)
-                    :file/last-modified-at mtime
-                    :file/size             size
-                    :file/type             type
-                    :file/content content}))
+             :file/content          content
+             :stat                  stat})
           result)
 
      :else ;; NFS backend
@@ -148,7 +128,7 @@
                                [:notification/show
                                 {:content (str "This graph already exists in \"" (:root exists-graph) "\"")
                                  :status :warning}])
-                              (p/do! (persist-db/<new repo)
+                              (p/do! (persist-db/<new repo {})
                                      (repo-handler/start-repo-db-if-not-exists! repo)
                                      (when (config/global-config-enabled?)
                                        (global-config-handler/restore-global-config!))
@@ -156,6 +136,7 @@
                                                                              {:new-graph?   true
                                                                               :empty-graph? (nil? (seq markup-files))
                                                                               :file-objs    files})
+                                     (state/set-parsing-state! {:graph-loading? false})
                                      (state/add-repo! {:url repo :nfs? true})
                                      (persist-db/<export-db repo {})
                                      (state/set-loading-files! repo false)
@@ -231,7 +212,7 @@
                                           (:file/content file))]
                           (assoc file :file/content content)))) added-or-modified))
         (p/then (fn [result]
-                  (let [files (map #(dissoc % :file/file :file/handle) result)
+                  (let [files (map #(dissoc % :file/file) result)
                         [modified-files modified] (if re-index?
                                                     [files (set modified)]
                                                     (let [modified-files (filter (fn [file] (contains? added-or-modified (:file/path file))) files)]

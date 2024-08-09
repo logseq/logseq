@@ -60,6 +60,16 @@
   (when (string? tag-name)
     (not (re-find #"[#\t\r\n]+" tag-name))))
 
+(defn tag?
+  "Whether `s` is a tag."
+  [s]
+  (and (string? s)
+       (string/starts-with? s "#")
+       (or
+        (not (string/includes? s " "))
+        (string/starts-with? s "#[[")
+        (string/ends-with? s "]]"))))
+
 (defn safe-subs
   ([s start]
    (let [c (count s)]
@@ -166,6 +176,11 @@
                  xs seen)))]
     (step (seq coll) #{})))
 
+(defn distinct-by-last-wins
+     [f col]
+     {:pre [(sequential? col)]}
+     (reverse (distinct-by f (reverse col))))
+
 (defn normalize-format
   [format]
   (case (keyword format)
@@ -175,7 +190,8 @@
 
 (defn path->file-ext
   [path-or-file-name]
-  (second (re-find #"(?:\.)(\w+)[^.]*$" path-or-file-name)))
+  (let [last-part (last (string/split path-or-file-name #"/"))]
+    (second (re-find #"(?:\.)(\w+)[^.]*$" last-part))))
 
 (defn get-format
   "File path to format keyword, :org, :markdown, etc."
@@ -239,7 +255,7 @@
   (when (string? s)
     (re-find pattern s)))
 
-(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}")
+(def uuid-pattern "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 (defonce exactly-uuid-pattern (re-pattern (str "(?i)^" uuid-pattern "$")))
 
 (defn uuid-string?
@@ -270,9 +286,9 @@
   []
   (tc/to-long (t/now)))
 
-(defn get-page-original-name
+(defn get-page-title
   [page]
-  (or (:block/original-name page)
+  (or (:block/title page)
       (:block/name page)))
 
 (defn string-join-path
@@ -298,3 +314,37 @@
 (defn replace-first-ignore-case
   [s old-value new-value]
   (string/replace-first s (re-pattern (str "(?i)" (escape-regex-chars old-value))) new-value))
+
+
+(defn sort-coll-by-dependency
+  "Sort the elements in the collection based on dependencies.
+coll:  [{:id 1 :depend-on 2} {:id 2 :depend-on 3} {:id 3}]
+get-elem-id-fn: :id
+get-elem-dep-id-fn :depend-on
+return: [{:id 3} {:id 2 :depend-on 3} {:id 1 :depend-on 2}]"
+  [get-elem-id-fn get-elem-dep-id-fn coll]
+  (let [id->elem (into {} (keep (juxt get-elem-id-fn identity)) coll)
+        id->dep-id (into {} (keep (juxt get-elem-id-fn get-elem-dep-id-fn)) coll)
+        all-ids (set (keys id->dep-id))
+        seen-ids (volatile! #{})        ; to check dep-cycle
+        sorted-ids
+        (loop [r []
+               rest-ids all-ids
+               id (first rest-ids)]
+          (if-not id
+            r
+            (if-let [dep-id (id->dep-id id)]
+              (let [next-id (get rest-ids dep-id)]
+                (if (and next-id
+                         ;; if found dep-cycle, break it
+                         (not (contains? @seen-ids next-id)))
+                  (do (vswap! seen-ids conj next-id)
+                      (recur r rest-ids next-id))
+                  (let [rest-ids* (disj rest-ids id)]
+                    (vreset! seen-ids #{})
+                    (recur (conj r id) rest-ids* (first rest-ids*)))))
+              ;; not found dep-id, so this id can be put into result now
+              (let [rest-ids* (disj rest-ids id)]
+                (vreset! seen-ids #{})
+                (recur (conj r id) rest-ids* (first rest-ids*))))))]
+    (mapv id->elem sorted-ids)))

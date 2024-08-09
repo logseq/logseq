@@ -1,15 +1,13 @@
 .cp__settings {
   &-inner {
-    @apply flex flex-col md:flex-row;
+    @apply flex flex-col md:flex-row min-h-[55dvh] max-h-[75dvh];
 
     > header {
-      padding: 10px;
-      padding-top: 0;
-      border-bottom: 1px solid or(--ls-settings-header-border-color, --lx-gray-06, --ls-quaternary-background-color);
+      padding: 0 10px 10px;
+      border-bottom: 1px solid var(--lx-gray-06, var(--ls-quaternary-background-color));
 
       h1 {
-        font-size: 22px;
-        margin: 0;
+        @apply text-xl m-0;
       }
     }
 
@@ -21,10 +19,7 @@
           @apply mb-2;
 
           > strong {
-            font-size: 14px;
-            font-weight: normal;
-            padding-left: 5px;
-            opacity: .9;
+            @apply text-sm font-normal pl-1 opacity-90;
           }
         }
 
@@ -35,8 +30,8 @@
     }
 
     > article {
-      @apply p-4 flex-1 min-h-[12rem] w-auto overflow-y-auto;
-      @apply md:max-h-[70vh] md:w-[40rem];
+      @apply p-4 flex-1 min-h-[12rem] w-screen overflow-y-auto;
+      @apply md:max-h-[70vh] md:w-[44rem];
     }
 
     > aside > .cp__settings-header,
@@ -83,8 +78,7 @@
     }
 
     .settings-menu-link {
-      @apply px-2 py-1.5 select-none;
-      color: var(--ls-primary-text-color);
+      @apply px-2 py-1.5 select-none text-gray-12;
     }
 
 
@@ -180,67 +174,6 @@
         @apply text-sm;
       }
     }
-
-    .theme-modes-options {
-      @apply flex items-center m-0 list-none;
-
-      > li {
-        @apply pr-2 m-0 opacity-90 hover:opacity-100;
-
-        &:hover {
-          cursor: pointer;
-        }
-
-        &.active {
-          @apply opacity-100;
-          cursor: inherit;
-
-          > i {
-            border-color: var(--ls-link-text-color);
-            border-width: 2px;
-          }
-        }
-
-        > i {
-          display: block;
-          width: 80px;
-          height: 57px;
-          background-color: #a4b5b6;
-          background: url("../img/theme-modes.png") no-repeat;
-          background-size: 355%;
-          border-radius: 4px;
-          overflow: hidden;
-          border-width: 0;
-          border-style: solid;
-          border-color: transparent;
-
-
-          &.mode-dark {
-            background-position-x: -97px;
-          }
-
-          &.mode-system {
-            background-position-x: -194px;
-          }
-
-          &.mode-dark.radix {
-            background: url('../img/dark-theme.png') no-repeat center / cover;
-          }
-
-          &.mode-light.radix {
-            background: url('../img/light-theme.png') no-repeat center / cover;
-          }
-
-          &.mode-system.radix {
-            background: url('../img/system-theme.png') no-repeat center / cover;
-          }
-        }
-
-        > strong {
-          @apply block pr-2 pt-1.5 text-center text-xs font-medium;
-        }
-      }
-    }
   }
 
   &-app-updater {
@@ -287,7 +220,7 @@
   }
 
   &-network-proxy-panel {
-    margin: -15px;
+    margin: -15px 0;
 
     label {
       display: flex;
@@ -317,14 +250,72 @@
     }
   }
 
-  &-accent-colors-modal-inner {
+  &-appearance-modal-inner {
+    @apply -m-2 -mb-3;
+
     & > .it {
-      grid-template-columns: auto;
-      margin: -8px;
+      @apply mb-3;
     }
 
     label[for=toggle_radix_theme] {
-      @apply text-xl font-semibold opacity-90;
+      @apply pt-2;
+    }
+
+    .keyboard-shortcut {
+      @apply relative -top-[3px];
+    }
+  }
+}
+
+.cp__theme-modes-options {
+  @apply flex items-center m-0 list-none;
+
+  > li {
+    @apply pr-2 m-0 opacity-90 hover:opacity-100;
+
+    &:hover {
+      cursor: pointer;
+    }
+
+    &.active {
+      @apply opacity-100;
+      cursor: inherit;
+
+      > i {
+        border-color: var(--ls-link-text-color);
+        border-width: 2px;
+      }
+    }
+
+    > i {
+      @apply block w-[70px] h-[47px] rounded overflow-hidden border-0 border-solid border-transparent bg-gray-04;
+
+      background: url("../img/theme-modes.png") no-repeat;
+      background-size: 355%;
+
+      &.mode-dark {
+        background-position-x: -97px;
+      }
+
+      &.mode-system {
+        background-position-x: -194px;
+      }
+
+      &.mode-dark.radix {
+        background: url('../img/dark-theme.png') no-repeat center / cover;
+      }
+
+      &.mode-light.radix {
+        background: url('../img/light-theme.png') no-repeat center / cover;
+      }
+
+      &.mode-system.radix {
+        background: url('../img/system-theme.png') no-repeat center / cover;
+      }
+    }
+
+    > strong {
+      @apply block pr-2 pt-1.5 text-center text-xs font-medium;
     }
   }
 }
@@ -499,12 +490,18 @@ body[data-settings-tab=keymap] {
       }
     }
   }
+
+  .ui__dialog-content[label=app-settings] {
+    @apply max-w-none;
+  }
 }
 
-.ui__modal[label=accent-colors-picker] {
-  .panel-content {
-    @apply sm:min-w-[520px];
-  }
+.ui__dialog-content[label=customize-appearance] {
+  @apply pt-4 pb-8 px-8 lg:max-w-xl;
+}
+
+.ui__dialog-overlay[label=customize-appearance] {
+  @apply bg-transparent;
 }
 
 .cp__accent-colors {
@@ -512,7 +509,7 @@ body[data-settings-tab=keymap] {
     @apply grid grid-cols-8 gap-2 max-w-[250px];
 
     &.as-modal-picker {
-      @apply grid-cols-8 gap-3 pt-1 pb-2 ml-8 max-w-none;
+      @apply grid-cols-8 pb-1 ml-1 max-w-[320px];
     }
   }
 }

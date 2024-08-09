@@ -15,6 +15,9 @@
             [frontend.components.dnd :as dnd-component]
             [frontend.components.icon :as icon]
             [frontend.components.handbooks :as handbooks]
+            [dommy.core :as d]
+            [frontend.components.content :as cp-content]
+            [frontend.components.title :as title]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -71,96 +74,90 @@
       (when child [:div.bd child])]]))
 
 (rum/defc page-name
-  [name icon recent?]
-  (let [original-name (db-model/get-page-original-name name)
-        whiteboard-page? (db-model/whiteboard-page? name)
-        untitled? (db-model/untitled-page? name)
-        name (util/safe-page-name-sanity-lc name)
+  [page icon recent?]
+  (let [repo (state/get-current-repo)
+        page (or (db/get-alias-source-page repo (:db/id page)) page)
+        title (:block/title page)
+        whiteboard-page? (db-model/whiteboard-page? page)
+        untitled? (db-model/untitled-page? title)
+        name (:block/name page)
         file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
-        source-page (db-model/get-alias-source-page (state/get-current-repo) name)
         ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
-        open-in-sidebar #(when-let [page-entity (and (not whiteboard-page?)
-                                                  (if (empty? source-page)
-                                                    (db/entity [:block/name name]) source-page))]
-                           (state/sidebar-add-block!
-                             (state/get-current-repo)
-                             (:db/id page-entity)
-                             :page))
-        x-menu-content (fn [type opts]
-                         (let [dropdown? (= type :dropdown)
-                               x-menu-content (if dropdown? shui/dropdown-menu-content shui/context-menu-content)
-                               x-menu-item (if dropdown? shui/dropdown-menu-item shui/context-menu-item)
-                               x-menu-shortcut (if dropdown? shui/dropdown-menu-shortcut shui/context-menu-shortcut)]
-                           (x-menu-content
-                             (merge {:class "w-60"} opts)
-                             (when-not recent?
+        open-in-sidebar #(state/sidebar-add-block!
+                          (state/get-current-repo)
+                          (:db/id page)
+                          :page)
+        x-menu-content (fn []
+                         (let [x-menu-item shui/dropdown-menu-item
+                               x-menu-shortcut shui/dropdown-menu-shortcut]
+                           [:<>
+                            (when-not recent?
+                              (x-menu-item
+                               {:on-click #(page-handler/<unfavorite-page! title)}
+                               (ctx-icon "star-off")
+                               (t :page/unfavorite)
+                               (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
+                                                  (some-> binding
+                                                          (first)
+                                                          (shortcut-utils/decorate-binding))))))
+                            (when-let [page-fpath (and (util/electron?) file-rpath
+                                                       (config/get-repo-fpath (state/get-current-repo) file-rpath))]
+                              [:<>
                                (x-menu-item
-                                 {:on-click #(page-handler/<unfavorite-page! original-name)}
-                                 (ctx-icon "star-off")
-                                 (t :page/unfavorite)
-                                 (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
-                                                    (some-> binding
-                                                            (first)
-                                                            (shortcut-utils/decorate-binding))))))
-                             (when-let [page-fpath (and (util/electron?) file-rpath
-                                                     (config/get-repo-fpath (state/get-current-repo) file-rpath))]
-                               [:<>
-                                (x-menu-item
-                                  {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
-                                  (ctx-icon "folder")
-                                  (t :page/open-in-finder))
+                                {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
+                                (ctx-icon "folder")
+                                (t :page/open-in-finder))
 
-                                (x-menu-item
-                                  {:on-click #(js/window.apis.openPath page-fpath)}
-                                  (ctx-icon "file")
-                                  (t :page/open-with-default-app))])
-
-                             (x-menu-item
-                               {:on-click open-in-sidebar}
-                               (ctx-icon "layout-sidebar-right")
-                               (t :content/open-in-sidebar)
-                               (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click"))))))]
+                               (x-menu-item
+                                {:on-click #(js/window.apis.openPath page-fpath)}
+                                (ctx-icon "file")
+                                (t :page/open-with-default-app))])
+                            (x-menu-item
+                             {:on-click open-in-sidebar}
+                             (ctx-icon "layout-sidebar-right")
+                             (t :content/open-in-sidebar)
+                             (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click")))]))]
 
     ;; TODO: move to standalone component
-    (shui/context-menu
-      (shui/context-menu-trigger
-        [:a.flex.items-center.justify-between.relative.group
-         {:on-click
-          (fn [e]
-            (let [name (if (empty? source-page) name (:block/name source-page))]
-              (if (gobj/get e "shiftKey")
-                (open-in-sidebar)
-                (if whiteboard-page?
-                  (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
-                  (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-         [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-         [:span.page-title {:class (when untitled? "opacity-50")}
-          (if untitled? (t :untitled)
-                        (pdf-utils/fix-local-asset-pagename original-name))]
+    [:a.flex.items-center.justify-between.relative.group
+     {:title (title/block-unique-title page)
+      :on-click
+      (fn [e]
+        (if (gobj/get e "shiftKey")
+          (open-in-sidebar)
+          (route-handler/redirect-to-page! (:block/uuid page) {:click-from-recent? recent?})))
+      :on-context-menu (fn [^js e]
+                         (shui/popup-show! e (x-menu-content)
+                                           {:as-dropdown? true
+                                            :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                            :class "w-60"}})
+                         (util/stop e))}
+     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+     [:span.page-title {:class (when untitled? "opacity-50")}
+      (if untitled? (t :untitled)
+          (pdf-utils/fix-local-asset-pagename title))]
 
-         ;; dots trigger
-         (shui/dropdown-menu
-           (shui/dropdown-menu-trigger
-             (shui/button
-               {:size     :sm
-                :variant  :ghost
-                :class    "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
-                :on-click #(util/stop %)}
-               [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")]))
-           ;; menu content
-           (x-menu-content :dropdown {:align "start"}))]
+     ;; dots trigger
+     (shui/button
+      {:size :sm
+       :variant :ghost
+       :class "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
+       :on-click #(do
+                    (shui/popup-show! (.-target %) (x-menu-content)
+                                      {:as-dropdown? true
+                                       :content-props {:on-click (fn [] (shui/popup-hide!))
+                                                       :class "w-60"}})
+                    (util/stop %))}
+      [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")])]))
 
-        ;; menu content
-        (x-menu-content :context nil)))))
-
- ;; Fall back to default if icon is undefined or empty
+;; Fall back to default if icon is undefined or empty
 
 (rum/defc favorites < rum/reactive
   [t]
   (let [_favorites-updated? (state/sub :favorites/updated?)
         favorite-entities (page-handler/get-favorites)]
     (nav-content-item
-     [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
+      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
       [:strong.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
@@ -173,11 +170,10 @@
      (when (seq favorite-entities)
        (let [favorites (map
                         (fn [e]
-                          (let [name (:block/name e)
-                                icon (icon/get-page-icon e {})]
+                          (let [icon (icon/get-node-icon e {})]
                             {:id (str (:db/id e))
-                             :value name
-                             :content [:li.favorite-item (page-name name icon false)]}))
+                             :value (:block/uuid e)
+                             :content [:li.favorite-item (page-name e icon false)]}))
                         favorite-entities)]
          (dnd-component/items favorites
                               {:on-drag-end (fn [favorites]
@@ -197,15 +193,14 @@
       :count (count pages)}
 
      [:ul.text-sm
-      (for [name pages]
-        (when-let [entity (db/entity [:block/name (util/safe-page-name-sanity-lc name)])]
-          [:li.recent-item.select-none
-           {:key name
-            :title name
-            :draggable true
-            :on-drag-start (fn [event] (editor-handler/block->data-transfer! name event))
-            :data-ref name}
-           (page-name name (icon/get-page-icon entity {}) true)]))])))
+      (for [page pages]
+        [:li.recent-item.select-none
+         {:key (str "recent-" (:db/id page))
+          :title (title/block-unique-title page)
+          :draggable true
+          :on-drag-start (fn [event] (editor-handler/block->data-transfer! (:block/name page) event true))
+          :data-ref name}
+         (page-name page (icon/get-node-icon page {}) true)])])))
 
 (rum/defcs flashcards < db-mixins/query rum/reactive
   {:did-mount (fn [state]
@@ -232,7 +227,7 @@
     (let [page (:page default-home)
           page (when (and (string? page)
                           (not (string/blank? page)))
-                 (db/entity [:block/name (util/safe-page-name-sanity-lc page)]))]
+                 (db/get-page page))]
       (if page
         default-home
         (dissoc default-home :page)))))
@@ -290,6 +285,7 @@
         [el-rect set-el-rect!] (rum/use-state nil)
         ref-el              (rum/use-ref nil)
         ref-open?           (rum/use-ref left-sidebar-open?)
+        db-based?           (config/db-based-graph? (state/get-current-repo))
         default-home        (get-default-home-if-valid)
         route-name          (get-in route-match [:data :name])
         on-contents-scroll  #(when-let [^js el (.-target %)]
@@ -356,18 +352,11 @@
                                (close-fn)))}
 
       [:div.flex.flex-col.wrap.gap-1.relative
-       ;; temporarily remove fake hamburger menu
-       ;(when (mobile-util/native-platform?)
-       ;  [:div.fake-bar.absolute
-       ;   [:button
-       ;    {:on-click state/toggle-left-sidebar!}
-       ;    (ui/icon "menu-2" {:size ui/icon-size})]])
-
        [:nav.px-4.flex.flex-col.gap-1.cp__menubar-repos
         {:aria-label "Navigation menu"}
         (repo/repos-dropdown)
 
-        [:div.nav-header.flex.flex-col.mt-2
+        [:div.nav-header.flex.flex-col.mt-1
          (let [page (:page default-home)]
            (if (and page (not (state/enable-journals? (state/get-current-repo))))
              (sidebar-item
@@ -392,17 +381,18 @@
                :shortcut :go/journals})))
 
          (when enable-whiteboards?
-           (sidebar-item
-            {:class "whiteboard"
-             :title (t :right-side-bar/whiteboards)
-             :href (rfe/href :whiteboards)
-             :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
-             :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
-             :icon "whiteboard"
-             :icon-extension? true
-             :shortcut :go/whiteboards}))
+           (when (or config/dev? (not db-based?))
+             (sidebar-item
+              {:class "whiteboard"
+               :title (t :right-side-bar/whiteboards)
+               :href (rfe/href :whiteboards)
+               :on-click-handler (fn [_e] (whiteboard-handler/onboarding-show))
+               :active (and (not srs-open?) (#{:whiteboard :whiteboards} route-name))
+               :icon "whiteboard"
+               :icon-extension? true
+               :shortcut :go/whiteboards})))
 
-         (when (state/enable-flashcards? (state/get-current-repo))
+         (when (and (state/enable-flashcards? (state/get-current-repo)) (not db-based?))
            [:div.flashcards-nav
             (flashcards srs-open?)])
 
@@ -538,7 +528,7 @@
                  (state/set-editor-last-pos! pos)))
     :onStop (fn [_event]
               (when-let [block (get @(get @state/state :editor/block) :block/uuid)]
-                (editor-handler/edit-block! block :max nil)
+                (editor-handler/edit-block! block :max)
                 (when-let [input (state/get-input)]
                   (when-let [saved-cursor (state/get-editor-last-pos)]
                     (cursor/move-cursor-to input saved-cursor)))))}
@@ -555,7 +545,7 @@
                    {:drop (fn [_e files]
                             (when-let [id (state/get-edit-input-id)]
                               (let [format (:block/format (state/get-edit-block))]
-                                (editor-handler/upload-asset id files format editor-handler/*asset-uploading? true))))})
+                                (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? true))))})
                   (common-handler/listen-to-scroll! element)
                   (when (:margin-less-pages? (first (:rum/args state))) ;; makes sure full screen pages displaying without scrollbar
                     (set! (.. element -scrollTop) 0)))
@@ -565,10 +555,10 @@
                      (dnd/unsubscribe! el :upload-files))
                    state)}
   [{:keys [route-match margin-less-pages? route-name indexeddb-support? db-restoring? main-content show-action-bar? show-recording-bar?]}]
-  (let [left-sidebar-open?   (state/sub :ui/left-sidebar-open?)
+  (let [left-sidebar-open? (state/sub :ui/left-sidebar-open?)
         onboarding-and-home? (and (or (nil? (state/get-current-repo)) (config/demo-graph?))
-                                  (not config/publishing?)
-                                  (= :home route-name))
+                               (not config/publishing?)
+                               (= :home route-name))
         margin-less-pages?   (or (and (mobile-util/native-platform?) onboarding-and-home?) margin-less-pages?)]
     [:div#main-container.cp__sidebar-main-layout.flex-1.flex
      {:class (util/classnames [{:is-left-sidebar-open left-sidebar-open?}])}
@@ -659,7 +649,7 @@
                    (let [page (util/safe-page-name-sanity-lc page)
                          [db-id block-type] (if (= page "contents")
                                               ["contents" :contents]
-                                              [(:db/id (db/pull [:block/name page])) :page])]
+                                              [(:db/id (db/get-page page)) :page])]
                      (state/sidebar-add-block! current-repo db-id block-type)))
                  (reset! sidebar-inited? true))))
            (when (state/mobile?)
@@ -707,14 +697,13 @@
 (defn- hide-context-menu-and-clear-selection
   [e]
   (state/hide-custom-context-menu!)
-  (let [block (.closest (.-target e) ".ls-block")]
-    (when-not (or (gobj/get e "shiftKey")
-                  (util/meta-key? e)
-                  (state/get-edit-input-id)
-                  (and block
-                       (or (= block (.-target e))
-                           (.contains block (.-target e)))))
-      (editor-handler/clear-selection!))))
+  (when-not (or (gobj/get e "shiftKey")
+                (util/meta-key? e)
+                (state/get-edit-input-id)
+                (= (shui-dialog/get-last-modal-id) :property-dialog)
+                (some-> (.-target e) (.closest ".ls-block"))
+                (some-> (.-target e) (.closest "[data-keep-selection]")))
+    (editor-handler/clear-selection!)))
 
 (rum/defc render-custom-context-menu
   [links position]
@@ -725,7 +714,7 @@
         (set! (.. el -style -transform)
               (str "translate3d(" (if (neg? x) x 0) "px," (if (neg? y) (- y 10) 0) "px" ",0)"))))
     [:<>
-     [:div.menu-backdrop {:on-mouse-down (fn [e] (hide-context-menu-and-clear-selection e))}]
+     [:div.menu-backdrop {:on-pointer-down (fn [e] (hide-context-menu-and-clear-selection e))}]
      [:div#custom-context-menu
       {:ref ref
        :style {:z-index 999
@@ -763,7 +752,7 @@
    {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
    :hr
    {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
-   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feature-requests/"}
+   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feedback/feature-requests/"}
    {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
    :hr
    {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
@@ -826,29 +815,92 @@
      (when handbooks-open?
        (handbooks/handbooks-popup))]))
 
-(rum/defcs ^:large-vars/cleanup-todo sidebar <
+(rum/defc app-context-menu-observer
+  < rum/static
+    (mixins/event-mixin
+      (fn [state]
+        ;; fixme: this mixin will register global event listeners on window
+        ;; which might cause unexpected issues
+        (mixins/listen state js/window "contextmenu"
+          (fn [^js e]
+            (let [target (gobj/get e "target")
+                  block-el (.closest target ".bullet-container[blockid]")
+                  block-id (some-> block-el (.getAttribute "blockid"))
+                  {:keys [block block-ref]} (state/sub :block-ref/context)
+                  {:keys [page page-entity]} (state/sub :page-title/context)]
+
+              (let [show!
+                    (fn [content]
+                      (shui/popup-show! e
+                        (fn [{:keys [id]}]
+                          [:div {:on-click #(shui/popup-hide! id)
+                                 :data-keep-selection true}
+                           content])
+                        {:on-before-hide state/dom-clear-selection!
+                         :on-after-hide state/state-clear-selection!
+                         :content-props {:class "w-[280px] ls-context-menu-content"}
+                         :as-dropdown? true}))
+
+                    handled
+                    (cond
+                      page
+                      (do
+                        (show! (cp-content/page-title-custom-context-menu-content page-entity))
+                        (state/set-state! :page-title/context nil))
+
+                      block-ref
+                      (do
+                        (show! (cp-content/block-ref-custom-context-menu-content block block-ref))
+                        (state/set-state! :block-ref/context nil))
+
+                      ;; block selection
+                      (and (state/selection?) (not (d/has-class? target "bullet")))
+                      (show! (cp-content/custom-context-menu-content))
+
+                      ;; block bullet
+                      (and block-id (parse-uuid block-id))
+                      (let [block (.closest target ".ls-block")]
+                        (when block
+                          (state/clear-selection!)
+                          (state/conj-selection-block! block :down))
+                        (show! (cp-content/block-context-menu-content target (uuid block-id))))
+
+                      :else
+                      false)]
+                (when (not (false? handled))
+                  (util/stop e))))))))
+  []
+  nil)
+
+(rum/defcs ^:large-vars/cleanup-todo root-container <
   (mixins/modal :modal/show?)
   rum/reactive
   (mixins/event-mixin
    (fn [state]
-     (mixins/listen state js/window "click" hide-context-menu-and-clear-selection)
+     (mixins/listen state js/window "pointerdown" hide-context-menu-and-clear-selection)
      (mixins/listen state js/window "keydown"
                     (fn [e]
-                      (when (= 27 (.-keyCode e))
+                      (cond
+                        (= 27 (.-keyCode e))
                         (if (and (state/modal-opened?)
                                  (not
                                   (and
                                    ;; FIXME: this does not work on CI tests
                                    util/node-test?
-                                   state/*editor-editing-ref)))
+                                   (state/editing?))))
                           (state/close-modal!)
-                          (hide-context-menu-and-clear-selection e)))))))
+                          (hide-context-menu-and-clear-selection e)))
+                      (state/set-ui-last-key-code! (.-key e))))
+     (mixins/listen state js/window "keyup"
+                    (fn [_e]
+                      (state/set-state! :editor/latest-shortcut nil)))))
   [state route-match main-content]
   (let [{:keys [open-fn]} state
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
         accent-color (some-> (state/sub :ui/radix-color) (name))
+        editor-font (some-> (state/sub :ui/editor-font) (name))
         system-theme? (state/sub :ui/system-theme?)
         light? (= "light" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
@@ -859,14 +911,15 @@
         onboarding-state (state/sub :file-sync/onboarding-state)
         right-sidebar-blocks (state/sub-right-sidebar-blocks)
         route-name (get-in route-match [:data :name])
-        margin-less-pages? (boolean (#{:graph :whiteboard} route-name))
+        margin-less-pages? (or (boolean (#{:graph} route-name))
+                               (db-model/whiteboard-page? (state/get-current-page)))
         db-restoring? (state/sub :db/restoring?)
         indexeddb-support? (state/sub :indexeddb/support?)
         page? (= :page route-name)
         home? (= :home route-name)
         native-titlebar? (state/sub [:electron/user-cfgs :window/native-titlebar?])
         window-controls? (and (util/electron?) (not util/mac?) (not native-titlebar?))
-        edit? (some? @state/*editor-editing-ref)
+        edit? (state/editing?)
         default-home (get-default-home-if-valid)
         logged? (user-handler/logged-in?)
         fold-button-on-right? (state/enable-fold-button-right?)
@@ -877,6 +930,7 @@
      {:t             t
       :theme         theme
       :accent-color  accent-color
+      :editor-font   editor-font
       :route         route-match
       :current-repo  current-repo
       :edit?         edit?
@@ -892,18 +946,24 @@
                        (editor-handler/unhighlight-blocks!)
                        (util/fix-open-external-with-shift! e))}
 
-     [:main.theme-inner
-      {:class (util/classnames [{:ls-left-sidebar-open    left-sidebar-open?
-                                 :ls-right-sidebar-open   sidebar-open?
-                                 :ls-wide-mode            wide-mode?
-                                 :ls-window-controls      window-controls?
-                                 :ls-fold-button-on-right fold-button-on-right?
-                                 :ls-hl-colored           ls-block-hl-colored?}])}
+     [:main.theme-container-inner#app-container-wrapper
+      {:class (util/classnames
+                [{:ls-left-sidebar-open left-sidebar-open?
+                  :ls-right-sidebar-open sidebar-open?
+                  :ls-wide-mode wide-mode?
+                  :ls-window-controls window-controls?
+                  :ls-fold-button-on-right fold-button-on-right?
+                  :ls-hl-colored ls-block-hl-colored?}])
+       :on-pointer-up (fn []
+                        (when-let [container (gdom/getElement "app-container-wrapper")]
+                          (d/remove-class! container "blocks-selection-mode")
+                          (when (> (count (state/get-selection-blocks)) 1)
+                            (util/clear-selection!))))}
 
       [:button#skip-to-main
        {:on-click #(ui/focus-element (ui/main-node))
         :on-key-up (fn [e]
-                     (when (= (.-key e) "Enter")
+                     (when (= "Enter" (.-key e))
                        (ui/focus-element (ui/main-node))))}
        (t :accessibility/skip-to-main-content)]
       [:div.#app-container
@@ -948,10 +1008,13 @@
 
       (select/select-modal)
       (custom-context-menu)
-      (plugins/custom-js-installer {:t t
-                                    :current-repo current-repo
-                                    :nfs-granted? granted?
-                                    :db-restoring? db-restoring?})
+      (plugins/custom-js-installer
+       {:t t
+        :current-repo current-repo
+        :nfs-granted? granted?
+        :db-restoring? db-restoring?})
+      (app-context-menu-observer)
+
       [:a#download.hidden]
       (when (and (not config/mobile?)
                  (not config/publishing?))

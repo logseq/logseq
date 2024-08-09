@@ -1,63 +1,60 @@
 (ns frontend.handler.db-based.property.util
   "DB-graph only utility fns for properties"
   (:require [frontend.db.utils :as db-utils]
+            [frontend.db.conn :as conn]
             [frontend.state :as state]
-            [logseq.db.frontend.property :as db-property]
-            [logseq.common.util :as common-util]
-            [clojure.set :as set]
-            [frontend.db :as db]))
+            [logseq.db.frontend.property :as db-property]))
 
 (defn get-property-name
-  "Get a property's name given its uuid"
-  [uuid]
-  (:block/original-name (db-utils/entity [:block/uuid uuid])))
+  "Get a property's name given its id"
+  [id]
+  (:block/title (db-utils/entity id)))
 
-(defn get-built-in-property-uuid
-  "Get a built-in property's uuid given its name"
-  ([property-name] (get-built-in-property-uuid (state/get-current-repo) property-name))
-  ([repo property-name]
-   (:block/uuid (db-utils/entity repo [:block/name (name property-name)]))))
+(defn get-property-value
+  "Get a property's name given its id"
+  [e]
+  (if-let [e (if (number? e) (db-utils/pull e) e)]
+    (db-property/property-value-content e)
+    e))
 
-(defn get-user-property-uuid
-  "Get a user property's uuid given its unsanitized name"
-  ([property-name] (get-user-property-uuid (state/get-current-repo) property-name))
-  ([repo property-name]
-   (:block/uuid (db-utils/entity repo [:block/name (common-util/page-name-sanity-lc (name property-name))]))))
+(defn properties-by-name
+  "Given a block from a query result, returns a map of its properties indexed by property names"
+  [repo block]
+  (let [db (conn/get-db repo)]
+    (db-property/properties-by-name db block)))
 
 (defn all-hidden-properties?
   "Checks if the given properties are all hidden properties"
   [properties]
   (every? (fn [id]
-            (:hide? (:block/schema (db/entity [:block/uuid id])))) properties))
-
-(defn has-hidden-properties?
-  "Checks if the given properties has any hidden properties"
-  [properties]
-  (some (fn [id]
-          (:hide? (:block/schema (db/entity [:block/uuid id])))) properties))
+            (:hide? (:block/schema (db-utils/entity id)))) properties))
 
 (defn readable-properties
   "Given a DB graph's properties, returns a readable properties map with keys as
-  property names and property values dereferenced where possible. A property's
-  value will only be a uuid if it's a page or a block"
-  [properties]
-  (->> properties
-       (map (fn [[k v]]
-              (let [prop-ent (db-utils/entity [:block/uuid k])
-                    readable-property-val
-                    #(if (seq (get-in prop-ent [:block/schema :values])) ; closed values
-                       (when-let [block (db-utils/entity [:block/uuid %])]
-                         (or (:block/original-name block)
-                             (get-in block [:block/schema :value])))
-                       %)]
-                [(-> prop-ent :block/name keyword)
-                (if (set? v)
-                  (set (map readable-property-val v))
-                  (readable-property-val v))])))
-       (into {})))
+  property names and property values dereferenced where possible. Has some
+  overlap with db-property/properties-by-name"
+  ([properties] (readable-properties properties true))
+  ([properties original-key?]
+   (->> properties
+     (map (fn [[k v]]
+            (let [prop-ent (db-utils/entity k)]
+              [(if original-key? k (-> prop-ent :block/title keyword))
+               (cond
+                 (set? v)
+                 (set (map db-property/property-value-content v))
 
-(defn property-value-when-closed
-  "Returns property value if the given entity is type 'closed value' or nil"
-  [ent]
-  (when (contains? (:block/type ent) "closed value")
-    (get-in ent [:block/schema :value])))
+                 (sequential? v)
+                 (map #(get-property-value (or (:db/id %) %)) v)
+
+                 (:db/id v)
+                 (get-property-value (or (:db/id v) v))
+
+                 :else
+                 v)])))
+     (into {}))))
+
+(defn get-closed-property-values
+  [property-id]
+  (let [repo (state/get-current-repo)
+        db (conn/get-db repo)]
+    (db-property/get-closed-property-values db property-id)))

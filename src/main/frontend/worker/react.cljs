@@ -15,12 +15,15 @@
 ;; ::refs
 ;; get BLOCKS referencing PAGE or BLOCK
 (s/def ::refs (s/tuple #(= ::refs %) int?))
+;; get class's Objects
+(s/def ::objects (s/tuple #(= ::objects %) int?))
 ;; custom react-query
 (s/def ::custom any?)
 
 (s/def ::react-query-keys (s/or :block ::block
                                 :journals ::journals
                                 :refs ::refs
+                                :objects ::objects
                                 :custom ::custom))
 
 (s/def ::affected-keys (s/coll-of ::react-query-keys))
@@ -29,13 +32,16 @@
   "Get affected queries through transaction datoms."
   [{:keys [tx-data db-after]}]
   {:post [(s/valid? ::affected-keys %)]}
-  (let [blocks (->> (filter (fn [datom] (contains? #{:block/left :block/parent :block/page} (:a datom))) tx-data)
+  (let [blocks (->> (filter (fn [datom] (contains? #{:block/parent :block/page} (:a datom))) tx-data)
                     (map :v)
                     (distinct))
         refs (->> (filter (fn [datom]
                             (when (contains? #{:block/refs :block/path-refs} (:a datom))
                               (not= (:v datom)
                                     (:db/id (:block/page (d/entity db-after (:e datom))))))) tx-data)
+                  (map :v)
+                  (distinct))
+        tags (->> (filter (fn [datom] (contains? #{:block/tags} (:a datom))) tx-data)
                   (map :v)
                   (distinct))
         other-blocks (->> (filter (fn [datom] (= "block" (namespace (:a datom)))) tx-data)
@@ -68,7 +74,12 @@
                         (fn [ref]
                           [[::refs ref]
                            [::block ref]])
-                        refs))]
+                        refs)
+
+                       (keep
+                        (fn [tag]
+                          (when tag [::objects tag]))
+                        tags))]
     (->>
      affected-keys
      (remove nil?)

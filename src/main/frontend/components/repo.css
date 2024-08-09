@@ -10,6 +10,61 @@
 }
 
 .repo-plus svg {
-    display: inline;
-    transform: scale(0.7);
+  display: inline;
+  transform: scale(0.7);
+}
+
+.ui__dropdown-menu-content {
+  &.repos-list {
+    @apply flex flex-col px-2 relative overflow-hidden min-w-[280px] sm:max-w-[320px];
+
+    .ui__dropdown-menu-item {
+      @apply overflow-hidden overflow-ellipsis;
+    }
+
+    .cp__repos-list-wrap {
+      @apply max-h-80 overflow-scroll mx-[-8px] px-2 pb-2;
+    }
+
+    &.no-repos {
+      .cp__repos-list-wrap {
+        @apply hidden;
+      }
+
+      .cp__repos-quick-actions {
+        @apply border-t-0 -mt-1.5;
+      }
+    }
+  }
+}
+
+.cp__repos-select {
+  &-trigger {
+    @apply flex items-center p-2 text-sm font-medium rounded-md;
+
+    .repo-switch {
+      @apply flex w-[90%] overflow-hidden items-center select-none;
+    }
+
+    .repo-text, .repo-name {
+      @apply flex w-[95%] items-center;
+
+      .ui__icon {
+        @apply !mr-0;
+      }
+    }
+
+    .dropdown-caret {
+      @apply relative border-t-gray-09 left-1.5 top-[2px];
+    }
+  }
+}
+
+.cp__repos-quick-actions {
+  @apply -mx-2 bg-gray-01 px-2 pb-1.5 pt-3 border-t flex flex-col rounded-b h-fit;
+
+  .ui__button {
+    @apply w-full !py-4 !justify-start opacity-70 font-medium hover:opacity-90
+    items-center gap-1.5 hover:bg-gray-03;
+  }
 }

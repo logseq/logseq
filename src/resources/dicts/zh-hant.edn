@@ -34,7 +34,6 @@
  :help/reference-autocomplete "頁面引用自動完成"
  :help/block-reference "區塊引用"
  :help/open-link-in-sidebar "在側邊欄開啟連結r"
- :search/page-names "搜尋分頁名稱"
  :search-item/whiteboard "白板"
  :search-item/page "頁面"
  :help/context-menu "區塊內容選單"
@@ -78,9 +77,7 @@
  :page/delete "刪除頁面"
  :page/add-to-favorites "加入我的最愛"
  :page/unfavorite "從我的最愛移除"
- :page/show-journals "顯示日記頁面"
  :block/name "頁面名稱"
- :page/earlier "最近"
  :page/copy-page-url "複製頁面連結"
  :file/name "檔案名稱"
  :file/last-modified-at "最後更新於"
@@ -261,10 +258,6 @@
 
  :updater/new-version-install "已下載新版本。"
  :updater/quit-and-install "重新啟動以安裝。"
-
- :paginates/pages "總共 {1} 頁"
- :paginates/prev "上一頁"
- :paginates/next "下一頁"
 
  :select/default-prompt "請選擇提示"
  :select.graph/prompt "請選擇圖表"

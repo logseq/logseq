@@ -4,9 +4,8 @@
             ["path" :as node-path]
             [datascript.core :as d]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.frontend.schema :as db-schema]
             [logseq.common.util.date-time :as date-time-util]
-            [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.sqlite.cli :as sqlite-cli]
             [clojure.string :as string]))
 
 (use-fixtures
@@ -28,13 +27,13 @@
   (testing "Fetches a defined block"
     (create-graph-dir "tmp/graphs" "test-db")
 
-    (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
+    (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
           blocks [{:file/path "logseq/config.edn"
                    :file/content "{:foo :bar}"}]
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
-          conn (-> (sqlite-common-db/get-initial-data @conn*)
-                   (sqlite-common-db/restore-initial-data db-schema/schema-for-db-based-graph))]
+          {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
+          conn (sqlite-common-db/restore-initial-data initial-data schema)]
       (is (= blocks
              (->> @conn
                   (d/q '[:find (pull ?b [:block/uuid :file/path :file/content]) :where [?b :file/content]])
@@ -44,7 +43,7 @@
 (deftest restore-initial-data
   (testing "Restore a journal page"
     (create-graph-dir "tmp/graphs" "test-db")
-    (let [conn* (sqlite-db/open-db! "tmp/graphs" "test-db")
+    (let [conn* (sqlite-cli/open-db! "tmp/graphs" "test-db")
           page-uuid (random-uuid)
           block-uuid (random-uuid)
           created-at (js/Date.now)
@@ -52,22 +51,21 @@
           date-title (date-time-util/int->journal-title date-int "MMM do, yyyy")
           blocks [{:db/id 100001
                    :block/uuid page-uuid
-                   :block/journal? true
                    :block/journal-day date-int
                    :block/name (string/lower-case date-title)
-                   :block/original-name date-title
+                   :block/title date-title
                    :block/created-at created-at
                    :block/updated-at created-at}
                   {:db/id 100002
-                   :block/content "test"
+                   :block/title "test"
                    :block/uuid block-uuid
                    :block/page {:db/id 100001}
                    :block/created-at created-at
                    :block/updated-at created-at}]
           _ (d/transact! conn* blocks)
           ;; Simulate getting data from sqlite and restoring it for frontend
-          conn (-> (sqlite-common-db/get-initial-data @conn*)
-                   (sqlite-common-db/restore-initial-data db-schema/schema-for-db-based-graph))]
+          {:keys [schema initial-data]} (sqlite-common-db/get-initial-data @conn*)
+          conn (sqlite-common-db/restore-initial-data initial-data schema)]
       (is (= (take 1 blocks)
              (->> (d/q '[:find (pull ?b [*])
                          :where [?b :block/created-at]]

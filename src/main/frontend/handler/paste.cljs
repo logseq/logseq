@@ -17,7 +17,9 @@
             [frontend.util.text :as text-util]
             [frontend.format.mldoc :as mldoc]
             [lambdaisland.glogi :as log]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [frontend.config :as config]
+            [logseq.db.frontend.content :as db-content]))
 
 (defn- paste-text-parseable
   [format text]
@@ -27,7 +29,16 @@
                   (mldoc/->edn text format)
                   text format
                   {:page-name (:block/name (db/entity page-id))})
-          blocks' (gp-block/with-parent-and-left page-id blocks)]
+          db-based? (config/db-based-graph? (state/get-current-repo))
+          blocks' (cond->> (gp-block/with-parent-and-order page-id blocks)
+                    db-based?
+                    (map (fn [block]
+                           (let [refs (:block/refs block)]
+                             (-> block
+                                 (dissoc :block/tags)
+                                 (update :block/title (fn [title]
+                                                        (-> (db-content/replace-tags-with-page-refs title refs)
+                                                            (db-content/page-ref->special-id-ref refs)))))))))]
       (editor-handler/paste-blocks blocks' {:keep-uuid? true}))))
 
 (defn- paste-segmented-text
@@ -51,7 +62,7 @@
     (boolean (text-util/get-matched-video url))
     (util/format "{{video %s}}" url)
 
-    (string/includes? url "twitter.com")
+    (or (string/includes? url "twitter.com") (string/includes? url "x.com"))
     (util/format "{{twitter %s}}" url)))
 
 (defn- try-parse-as-json
@@ -179,13 +190,16 @@
   [input text e html]
   (util/stop e)
   (->
-   (p/let [copied-blocks (get-copied-blocks)]
-     (if (seq copied-blocks)
+   (p/let [{:keys [graph blocks]} (get-copied-blocks)]
+     (if (and (seq blocks) (= graph (state/get-current-repo)))
        ;; Handle internal paste
-       (let [revert-cut-txs (get-revert-cut-txs copied-blocks)
-             keep-uuid? (= (state/get-block-op-type) :cut)]
-         (editor-handler/paste-blocks copied-blocks {:revert-cut-txs revert-cut-txs
-                                                     :keep-uuid? keep-uuid?}))
+       (let [revert-cut-txs (get-revert-cut-txs blocks)
+             keep-uuid? (= (state/get-block-op-type) :cut)
+             blocks (if (config/db-based-graph? (state/get-current-repo))
+                      (map (fn [b] (dissoc b :block/properties)) blocks)
+                      blocks)]
+         (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                              :keep-uuid? keep-uuid?}))
        (paste-copied-text input text html)))
    (p/catch (fn [error]
               (log/error :msg "Paste failed" :exception error)
@@ -220,7 +234,7 @@
           files (.-files clipboard-data)]
       (when-let [file (first files)]
         (when-let [block (state/get-edit-block)]
-          (editor-handler/upload-asset id #js[file] (:block/format block)
+          (editor-handler/upload-asset! id #js[file] (:block/format block)
                                        editor-handler/*asset-uploading? true)))
       (util/stop e))))
 

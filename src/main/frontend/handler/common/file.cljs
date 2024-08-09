@@ -82,13 +82,6 @@
       :fs/local-file-change
       (graph-parser/parse-file db-conn file-path content (assoc-in options [:extract-options :resolve-uuid-fn] diff-merge-uuids-2ways))
 
-      ;; TODO Junyi: 3 ways to handle remote file change
-      ;; The file is on remote, so we should have
-      ;;   1. a "common ancestor" file locally
-      ;;     the worst case is that the file is not in db, so we should use the
-      ;;     empty file as the common ancestor
-      ;;   2. a "remote version" just fetched from remote
-
       ;; default to parse the file
       (graph-parser/parse-file db-conn file-path content options))))
 
@@ -96,11 +89,9 @@
   "Main fn for updating a db with the results of a parsed file"
   ([repo-url file-path content]
    (reset-file! repo-url file-path content {}))
-  ([repo-url file-path content {:keys [verbose extracted-block-ids] :as options}]
-   (let [new? (nil? (db/entity [:file/path file-path]))
-         options (merge (dissoc options :verbose :extracted-block-ids)
-                        {:new? new?
-                         :delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
+  ([repo-url file-path content {:keys [verbose extracted-block-ids _ctime _mtime] :as options}]
+   (let [options (merge (dissoc options :verbose :extracted-block-ids)
+                        {:delete-blocks-fn (partial validate-and-get-blocks-to-delete repo-url)
                          ;; Options here should also be present in gp-cli/parse-graph
                          :extract-options (merge
                                            {:user-config (state/get-config)

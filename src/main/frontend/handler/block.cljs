@@ -4,11 +4,13 @@
    [clojure.string :as string]
    [clojure.walk :as walk]
    [frontend.db :as db]
+   [logseq.db :as ldb]
    [frontend.db.model :as db-model]
    [frontend.mobile.haptics :as haptics]
    [logseq.outliner.core :as outliner-core]
    [frontend.modules.outliner.ui :as ui-outliner-tx]
    [frontend.modules.outliner.op :as outliner-op]
+   [logseq.outliner.op]
    [frontend.state :as state]
    [frontend.util :as util]
    [frontend.util.drawer :as drawer]
@@ -33,7 +35,7 @@
        (if (check? x)
          (reset! result (transform x))
          x))
-     (:block/body block))
+     (:block.temp/ast-body block))
     @result))
 
 (defn get-timestamp
@@ -53,9 +55,10 @@
   (get-timestamp block "Deadline"))
 
 (defn indentable?
-  [{:block/keys [parent left]}]
+  [{:block/keys [parent] :as block}]
   (when parent
-    (not= parent left)))
+    (not= (:db/id (ldb/get-first-child (db/get-db) (:db/id parent)))
+          (:db/id block))))
 
 (defn outdentable?
   [{:block/keys [level] :as _block}]
@@ -78,16 +81,14 @@
             (when (:block/name ref)
               {:db/id (:db/id ref)
                :block/name (:block/name ref)
-               :block/original-name (:block/original-name ref)})) refs)))
+               :block/title (:block/title ref)})) refs)))
 
 (defn filter-blocks
   [ref-blocks filters]
   (if (empty? filters)
     ref-blocks
-    (let [exclude-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters false))
-                           (set))
-          include-ids (->> (keep (fn [page] (:db/id (db/entity [:block/name (util/page-name-sanity-lc page)]))) (get filters true))
-                           (set))]
+    (let [exclude-ids (set (map :db/id (:excluded filters)))
+          include-ids (set (map :db/id (:included filters)))]
       (cond->> ref-blocks
         (seq exclude-ids)
         (remove (fn [block]
@@ -116,19 +117,19 @@
   [block order-list-type]
   (let [order-block-fn? (fn [block]
                           (let [properties (:block/properties block)
-                                type (pu/lookup properties :logseq.order-list-type)]
+                                type (pu/lookup properties :logseq.property/order-list-type)]
                             (= type order-list-type)))
-        prev-block-fn   #(some->> (:db/id %) (db-model/get-prev-sibling (db/get-db)))
+        prev-block-fn   #(some-> (db/entity (:db/id %)) ldb/get-left-sibling)
         prev-block      (prev-block-fn block)]
     (letfn [(page-fn? [b] (some-> b :block/name some?))
             (order-sibling-list [b]
               (lazy-seq
-                (when (and (not (page-fn? b)) (order-block-fn? b))
-                  (cons b (order-sibling-list (prev-block-fn b))))))
+               (when (and (not (page-fn? b)) (order-block-fn? b))
+                 (cons b (order-sibling-list (prev-block-fn b))))))
             (order-parent-list [b]
               (lazy-seq
-                (when (and (not (page-fn? b)) (order-block-fn? b))
-                  (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
+               (when (and (not (page-fn? b)) (order-block-fn? b))
+                 (cons b (order-parent-list (db-model/get-block-parent (:block/uuid b)))))))]
       (let [idx           (if prev-block
                             (count (order-sibling-list block)) 1)
             order-parents-count (dec (count (order-parent-list block)))
@@ -145,7 +146,7 @@
 (defn attach-order-list-state
   [config block]
   (let [properties (:block/properties block)
-        type (pu/lookup properties :logseq.order-list-type)
+        type (pu/lookup properties :logseq.property/order-list-type)
         own-order-list-type  (some-> type str string/lower-case)
         own-order-list-index (some->> own-order-list-type (get-idx-of-order-list-block block))]
     (assoc config :own-order-list-type own-order-list-type
@@ -170,55 +171,13 @@
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
 (defn- edit-block-aux
-  [repo block content block-node text-range {:keys [direction retry-times max-retry-times]
-                                             :or {retry-times 0
-                                                  max-retry-times 10}
-                                             :as opts}]
-  (when (and (<= retry-times max-retry-times) block)
-    (let [block-node block-node
-          block-id (:block/uuid block)
-          id-class (str "id" block-id)
-          next-edit-node (cond
-                           (and block-node (< retry-times max-retry-times))
-                           (or
-                              ;; up/down
-                            (when direction
-                              (let [blocks (dom/by-class "ls-block")
-                                    idx (.indexOf blocks block-node)]
-                                (when idx
-                                  (if (= direction :down)
-                                    (util/nth-safe blocks (inc idx))
-                                    (util/nth-safe blocks (dec idx))))))
-
-                              ;; next
-                            (let [id (some-> (dom/attr block-node "blockid") uuid)
-                                  link (when id (:link (db/entity [:block/uuid id])))
-                                  block-node (if link
-                                               (.-previousSibling block-node)
-                                               block-node)]
-                              (when-let [next (.-nextSibling block-node)]
-                                (when (dom/has-class? next id-class)
-                                  next)))
-
-                              ;; first child
-                            (when-let [first-child (first (dom/sel block-node ".ls-block"))]
-                              (when (dom/has-class? first-child id-class)
-                                first-child))
-
-                              ;; prev
-                            (when-let [prev (.-previousSibling block-node)]
-                              (when (dom/has-class? prev id-class)
-                                prev)))
-
-                           :else
-                           ;; take the first dom node
-                           (gdom/getElement (str "ls-block-" (:block/uuid block))))]
-      (state/set-editing! "" content block text-range {:ref next-edit-node})
-      (if next-edit-node
-        (do
-          (state/update-tx-after-cursor-state!)
-          (mark-last-input-time! repo))
-        (util/schedule (fn [] (edit-block-aux repo block content block-node text-range (update opts :retry-times inc))))))))
+  [repo block content text-range {:keys [container-id]}]
+  (when block
+    (let [container-id (or container-id
+                           (state/get-current-editor-container-id)
+                           :unknown-container)]
+      (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range {:container-id container-id}))
+    (mark-last-input-time! repo)))
 
 (defn sanity-block-content
   [repo format content]
@@ -228,26 +187,21 @@
         (drawer/remove-logbook))))
 
 (defn edit-block!
-  [block pos block-node & {:keys [custom-content tail-len _direction]
-                           :or {tail-len 0}
-                           :as opts}]
-  (when-not config/publishing?
+  [block pos & {:keys [_container-id custom-content tail-len]
+                :or {tail-len 0}
+                :as opts}]
+  (when (and (not config/publishing?) (:block/uuid block))
     (p/do!
      (state/pub-event! [:editor/save-code-editor])
+     (when (not= (:block/uuid block) (:block/uuid (state/get-edit-block)))
+       (state/clear-edit! {:clear-editing-block? false}))
      (when-let [block-id (:block/uuid block)]
        (let [repo (state/get-current-repo)
-             block-node (cond
-                          (uuid? block-node)
-                          nil
-                          (string? block-node)
-                          (gdom/getElement (string/replace block-node "edit-block" "ls-block"))
-                          :else
-                          block-node)
              db-graph? (config/db-based-graph? repo)
              block (or (db/entity [:block/uuid block-id]) block)
              content (if (and db-graph? (:block/name block))
-                       (:block/original-name block)
-                       (or custom-content (:block/content block) ""))
+                       (:block/title block)
+                       (or custom-content (:block/title block) ""))
              content-length (count content)
              text-range (cond
                           (vector? pos)
@@ -263,7 +217,7 @@
                           (subs content 0 pos))
              content (sanity-block-content repo (:block/format block) content)]
          (state/clear-selection!)
-         (edit-block-aux repo block content block-node text-range opts))))))
+         (edit-block-aux repo block content text-range opts))))))
 
 (defn- get-original-block-by-dom
   [node]
@@ -378,7 +332,7 @@
   (when-let [touches (.-targetTouches event)]
     (let [selection-type (.-type (.getSelection js/document))]
       (when-not (= selection-type "Range")
-        (when (or (not @state/*editor-editing-ref)
+        (when (or (not (state/editing?))
                   (< (- (js/Date.now) @*touch-start) 600))
           (when (and (= (.-length touches) 1) @*swipe)
             (let [{:keys [x0 xi direction]} @*swipe

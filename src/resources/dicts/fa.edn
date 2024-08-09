@@ -88,7 +88,6 @@
  :help/search                 "جستجو در برگه‌ها/بلوک‌ها/نظرات"
  :help/block-reference        "ارجاع بلوک"
  :help/open-link-in-sidebar   "باز کردن پیوند در نوار کناری"
- :search/page-names      "جستجو در نام برگه‌ها"
  :search-item/whiteboard "تخته‌سفید"
  :search-item/page       "برگه"
  :search-item/no-result  "نتایجی یافت نشد"
@@ -104,8 +103,6 @@
  :right-side-bar/switch-theme         "پوسته"
  :right-side-bar/contents             "محتوا"
  :right-side-bar/page-graph           "گراف برگه"
- :right-side-bar/history-global       "سراسری"
- :right-side-bar/history-pageonly     "فقط برگه"
  :right-side-bar/block-ref            "ارجاعات بلوک"
  :right-side-bar/graph-view           "نمای گراف"
  :right-side-bar/all-pages            "همه برگه‌ها"
@@ -148,9 +145,7 @@
  :page/delete "حذف برگه"
  :page/add-to-favorites "افزودن به برگزیده‌ها"
  :page/unfavorite "برداشتن از برگزیده‌ها"
- :page/show-journals "نمایش روزنگارها"
  :block/name "نام برگه"
- :page/earlier "پیش‌تر"
  :page/copy-page-url "رونوشت از نشانی برگه"
  :page/illegal-page-name "نام برگه غیرمجاز!"
  :page/page-already-exists "برگه «{1}» از پیش موجود است!"
@@ -318,7 +313,6 @@
 
  :home "خانه"
  :new-page "برگه جدید:"
- :whiteboard "تخته‌سفید"
  :whiteboards "تخته‌سفیدها"
  :new-graph "افزودن گراف جدید"
  :graph "گراف"
@@ -358,7 +352,6 @@
  :loading-files "بار کردن پرونده‌ها"
  :login "ورود"
  :logout "خروج"
- :logout-user "خروج ({1})"
  :download "بارگیری"
  :language "زبان"
  :remove-background "حذف پس‌زمینه"
@@ -421,10 +414,6 @@
 
  :updater/new-version-install "نسخه‌ای جدید بارگیری شده است."
  :updater/quit-and-install "بازراه‌اندازی برای نصب"
-
- :paginates/pages "مجموعا {1} برگه"
- :paginates/prev "قبلی"
- :paginates/next "بعدی"
 
  :tips/all-done "همه انجام شدند!"
 

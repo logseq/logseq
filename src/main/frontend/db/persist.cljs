@@ -11,15 +11,20 @@
 
 (defn get-all-graphs
   []
-  (p/let [repos (idb/get-nfs-dbs)
-          db-repos (persist-db/<list-db)
-          db-repos' (map
-                      #(if (config/local-file-based-graph? %)
-                         %
-                         (str config/db-version-prefix %))
-                      db-repos)
+  (p/let [idb-repos (idb/get-nfs-dbs)
+          repos (persist-db/<list-db)
+          repos' (map
+                  (fn [{:keys [name] :as repo}]
+                    (assoc repo :name
+                           (if (config/local-file-based-graph? name)
+                             name
+                             (str config/db-version-prefix name))))
+                  repos)
           electron-disk-graphs (when (util/electron?) (ipc/ipc "getGraphs"))]
-    (distinct (concat repos db-repos' (some-> electron-disk-graphs bean/->clj)))))
+    (distinct (concat
+               repos'
+               (map (fn [repo-name] {:name repo-name})
+                 (concat idb-repos (some-> electron-disk-graphs bean/->clj)))))))
 
 (defn delete-graph!
   [graph]

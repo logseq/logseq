@@ -60,7 +60,7 @@
                       :sibling? false}))))
 
 (defn- create-page [page-name properties]
-  (page-handler/create!
+  (page-handler/<create!
    page-name
    {:redirect? false
     :format :markdown
@@ -77,7 +77,8 @@
        (p->c
         (p/do!
          (when-not (str/blank? page-name)
-           (if (db/page-exists? (str/lower-case page-name))
+           (if (db/page-exists? (str/lower-case page-name) "page")
+             ;; FIXME: Overwrite if it has a zotero tag (which means created by Zotero)
              (if (setting/setting :overwrite-mode?)
                (page-handler/<delete!
                 page-name

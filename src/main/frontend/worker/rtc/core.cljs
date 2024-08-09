@@ -1,1040 +1,391 @@
 (ns frontend.worker.rtc.core
-  "Main ns for rtc related fns"
-  (:require-macros
-   [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
-  (:require [cljs-time.coerce :as tc]
-            [cljs-time.core :as t]
-            [cljs.core.async :as async :refer [<! >! chan go go-loop]]
-            [clojure.set :as set]
-            [clojure.string :as string]
-            [cognitect.transit :as transit]
-            [frontend.worker.async-util :include-macros true :refer [<?]]
-            [logseq.outliner.core :as outliner-core]
-            [logseq.outliner.transaction :as outliner-tx]
-            [frontend.worker.util :as worker-util]
-            [logseq.common.util :as common-util]
-            [logseq.common.config :as common-config]
-            [malli.core :as m]
-            [malli.util :as mu]
-            [logseq.db.frontend.property :as db-property]
-            [datascript.core :as d]
-            [logseq.graph-parser.whiteboard :as gp-whiteboard]
-            [frontend.worker.handler.page :as worker-page]
-            [frontend.worker.handler.page.rename :as worker-page-rename]
-            [frontend.worker.state :as worker-state]
-            [logseq.db :as ldb]
-            [frontend.worker.rtc.const :as rtc-const]
-            [frontend.worker.rtc.op-mem-layer :as op-mem-layer]
+  "Main(use missionary) ns for rtc related fns"
+  (:require [frontend.common.missionary-util :as c.m]
+            [frontend.worker.rtc.asset :as r.asset]
+            [frontend.worker.rtc.client :as r.client]
+            [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.exception :as r.ex]
+            [frontend.worker.rtc.full-upload-download-graph :as r.upload-download]
+            [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
+            [frontend.worker.rtc.remote-update :as r.remote-update]
+            [frontend.worker.rtc.skeleton]
             [frontend.worker.rtc.ws :as ws]
-            [frontend.worker.rtc.asset-sync :as asset-sync]
-            [promesa.core :as p]
-            [cljs-bean.core :as bean]
-            [logseq.db.frontend.content :as db-content]
-            [logseq.common.util.page-ref :as page-ref]))
+            [frontend.worker.rtc.ws-util :as ws-util]
+            [frontend.worker.state :as worker-state]
+            [frontend.worker.util :as worker-util]
+            [logseq.common.config :as common-config]
+            [logseq.db :as ldb]
+            [malli.core :as ma]
+            [missionary.core :as m])
+  (:import [missionary Cancelled]))
 
-;;                     +-------------+
-;;                     |             |
-;;                     |   server    |
-;;                     |             |
-;;                     +----^----+---+
-;;                          |    |
-;;                          |    |
-;;                          |   rtc-const/data-from-ws-schema
-;;                          |    |
-;; rtc-const/data-to-ws-schema   |
-;;                          |    |
-;;                          |    |
-;;                          |    |
-;;                     +----+----v---+                     +------------+
-;;                     |             +--------------------->            |
-;;                     |   client    |                     |  indexeddb |
-;;                     |             |<--------------------+            |
-;;                     +-------------+                     +------------+
-;;                                frontend.worker.rtc.op/op-schema
+(def ^:private rtc-state-schema
+  [:map
+   [:ws-state {:optional true} [:enum :connecting :open :closing :closed]]])
+(def ^:private rtc-state-validator (ma/validator rtc-state-schema))
 
-(def state-schema
-  "
-  | :*graph-uuid                      | atom of graph-uuid syncing now                     |
-  | :*repo                            | atom of repo name syncing now                      |
-  | :data-from-ws-chan                | channel for receive messages from server websocket |
-  | :data-from-ws-pub                 | pub of :data-from-ws-chan, dispatch by :req-id     |
-  | :*stop-rtc-loop-chan              | atom of chan to stop <loop-for-rtc                 |
-  | :*ws                              | atom of websocket                                  |
-  | :*rtc-state                       | atom of state of current rtc progress              |
-  | :toggle-auto-push-client-ops-chan | channel to toggle pushing client ops automatically |
-  | :*auto-push-client-ops?           | atom to show if it's push client-ops automatically |
-  | :force-push-client-ops-chan       | chan used to force push client-ops                 |
-"
-  [:map {:closed true}
-   [:*graph-uuid :any]
-   [:*repo :any]
-   [:*db-conn :any]
-   [:*token :any]
-   [:*date-formatter :any]
-   [:data-from-ws-chan :any]
-   [:data-from-ws-pub :any]
-   [:*stop-rtc-loop-chan :any]
-   [:*ws :any]
-   [:*rtc-state :any]
-   [:toggle-auto-push-client-ops-chan :any]
-   [:*auto-push-client-ops? :any]
-   [:force-push-client-ops-chan :any]
-   [:counter :any]])
+(def ^:private sentinel (js-obj))
+(defn- get-remote-updates
+  "Return a flow: receive messages from ws, and filter messages with :req-id=`push-updates` or `online-users-updated`."
+  [get-ws-create-task]
+  (m/ap
+    (loop []
+      (let [ws (m/? get-ws-create-task)
+            x (try
+                (m/?> (m/eduction
+                       (filter (fn [data] (contains? #{"online-users-updated" "push-updates"} (:req-id data))))
+                       (ws/recv-flow ws)))
+                (catch js/CloseEvent _
+                  sentinel))]
+        (if (identical? x sentinel)
+          (recur)
+          x)))))
 
-(def state-validator
-  (let [validator (m/validator state-schema)]
-    (fn [data]
-      (if (validator data)
-        true
-        (prn (mu/explain-data state-schema data))))))
+(defn- create-local-updates-check-flow
+  "Return a flow: emit if need to push local-updates"
+  [repo *auto-push? interval-ms]
+  (let [auto-push-flow (m/watch *auto-push?)
+        clock-flow (c.m/clock interval-ms :clock)
+        merge-flow (m/latest vector auto-push-flow clock-flow)]
+    (m/eduction (filter first)
+                (map second)
+                (filter (fn [v] (when (pos? (client-op/get-unpushed-ops-count repo)) v)))
+                merge-flow)))
 
-(def rtc-state-schema
-  [:enum :open :closed])
-(def rtc-state-validator (m/validator rtc-state-schema))
+(defn- create-mixed-flow
+  "Return a flow that emits all kinds of events:
+  `:remote-update`: remote-updates data from server
+  `:local-update-check`: event to notify to check if there're some new local-updates, then push to remote.
+  `:online-users-updated`: online users info updated"
+  [repo get-ws-create-task *auto-push?]
+  (let [remote-updates-flow (m/eduction
+                             (map (fn [data]
+                                    (case (:req-id data)
+                                      "push-updates" {:type :remote-update :value data}
+                                      "online-users-updated" {:type :online-users-updated :value data})))
+                             (get-remote-updates get-ws-create-task))
+        local-updates-check-flow (m/eduction
+                                  (map (fn [data] {:type :local-update-check :value data}))
+                                  (create-local-updates-check-flow repo *auto-push? 2000))]
+    (c.m/mix remote-updates-flow local-updates-check-flow)))
 
-(def transit-w (transit/writer :json))
-(def transit-r (transit/reader :json))
+(defn- new-task--get-ws-create
+  "Return a map with atom *current-ws and a task
+  that get current ws, create one if needed(closed or not created yet)"
+  [url & {:keys [retry-count open-ws-timeout]
+          :or {retry-count 10 open-ws-timeout 10000}}]
+  (let [*current-ws (atom nil)
+        ws-create-task (ws/mws-create url {:retry-count retry-count :open-ws-timeout open-ws-timeout})]
+    {:*current-ws *current-ws
+     :get-ws-create-task
+     (m/sp
+       (let [ws @*current-ws]
+         (if (and ws
+                  (not (ws/closed? ws)))
+           ws
+           (let [ws (m/? ws-create-task)]
+             (reset! *current-ws ws)
+             ws))))}))
 
-(defmulti transact-db! (fn [action & _args] action))
+(def new-task--get-ws-create--memoized
+  "Return a memoized task to reuse the same websocket."
+  (memoize new-task--get-ws-create))
 
-(defmethod transact-db! :delete-blocks [_ & args]
-  (outliner-tx/transact!
-   {:persist-op? false
-    :outliner-op :delete-blocks
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
-   (apply outliner-core/delete-blocks! args)))
+(defn- create-ws-state-flow
+  [*current-ws]
+  (m/relieve
+   (m/ap
+     (let [ws (m/?< (m/watch *current-ws))]
+       (try
+         (if ws
+           (m/?< (ws/create-mws-state-flow ws))
+           (m/amb))
+         (catch Cancelled _
+           (m/amb)))))))
 
-(defmethod transact-db! :move-blocks [_ & args]
-  (outliner-tx/transact!
-   {:persist-op? false
-    :outliner-op :move-blocks
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
-   (apply outliner-core/move-blocks! args)))
+(defn- create-rtc-state-flow
+  [ws-state-flow]
+  (m/latest
+   (fn [ws-state]
+     {:post [(rtc-state-validator %)]}
+     (cond-> {}
+       ws-state (assoc :ws-state ws-state)))
+   (m/reductions {} nil ws-state-flow)))
 
-(defmethod transact-db! :insert-blocks [_ & args]
-  (outliner-tx/transact!
-   {:persist-op? false
-    :outliner-op :insert-blocks
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
-   (apply outliner-core/insert-blocks! args)))
+(defonce ^:private *rtc-lock (atom nil))
+(defn- holding-rtc-lock
+  "Use this fn to prevent multiple rtc-loops at same time.
+  rtc-loop-task is stateless, but conn is not.
+  we need to ensure that no two concurrent rtc-loop-tasks are modifying `conn` at the same time"
+  [started-dfv task]
+  (m/sp
+    (when-not (compare-and-set! *rtc-lock nil true)
+      (let [e (ex-info "Must not run multiple rtc-loops, try later"
+                       {:type :rtc.exception/lock-failed
+                        :missionary/retry true})]
+        (started-dfv e)
+        (throw e)))
+    (try
+      (m/? task)
+      (finally
+        (reset! *rtc-lock nil)))))
 
-(defmethod transact-db! :save-block [_ & args]
-  (outliner-tx/transact!
-   {:persist-op? false
-    :outliner-op :save-block
-    :transact-opts {:repo (first args)
-                    :conn (second args)}}
-   (apply outliner-core/save-block! args)))
+(defn- create-rtc-loop
+  "Return a map with [:rtc-state-flow :rtc-loop-task :*rtc-auto-push? :onstarted-task]
+  TODO: auto refresh token if needed"
+  [graph-uuid repo conn date-formatter token
+   & {:keys [auto-push? debug-ws-url] :or {auto-push? true}}]
+  (let [ws-url                     (or debug-ws-url (ws-util/get-ws-url token))
+        *auto-push?                (atom auto-push?)
+        *last-calibrate-t          (atom nil)
+        *online-users              (atom nil)
+        *assets-sync-loop-canceler (atom nil)
+        started-dfv                (m/dfv)
+        add-log-fn                 (fn [type message]
+                                     (assert (map? message) message)
+                                     (rtc-log-and-state/rtc-log type (assoc message :graph-uuid graph-uuid)))
+        {:keys [*current-ws get-ws-create-task]}
+        (new-task--get-ws-create--memoized ws-url)
+        get-ws-create-task         (r.client/ensure-register-graph-updates
+                                    get-ws-create-task graph-uuid repo conn *last-calibrate-t *online-users)
+        {:keys [assets-sync-loop-task]}
+        (r.asset/create-assets-sync-loop get-ws-create-task graph-uuid conn)
+        mixed-flow                 (create-mixed-flow repo get-ws-create-task *auto-push?)]
+    (assert (some? *current-ws))
+    {:rtc-state-flow     (create-rtc-state-flow (create-ws-state-flow *current-ws))
+     :*rtc-auto-push?    *auto-push?
+     :*online-users      *online-users
+     :onstarted-task     started-dfv
+     :rtc-loop-task
+     (holding-rtc-lock
+      started-dfv
+      (m/sp
+        (try
+          ;; init run to open a ws
+          (m/? get-ws-create-task)
+          (started-dfv true)
+          (reset! *assets-sync-loop-canceler
+                  (c.m/run-task assets-sync-loop-task :assets-sync-loop-task))
+          (->>
+           (let [event (m/?> mixed-flow)]
+             (case (:type event)
+               :remote-update
+               (try (r.remote-update/apply-remote-update graph-uuid repo conn date-formatter event add-log-fn)
+                    (catch :default e
+                      (when (= ::r.remote-update/need-pull-remote-data (:type (ex-data e)))
+                        (m/? (r.client/new-task--pull-remote-data
+                              repo conn graph-uuid date-formatter get-ws-create-task add-log-fn)))))
 
-(defmethod transact-db! :delete-whiteboard-blocks [_ conn block-uuids]
-  (ldb/transact! conn
-                 (mapv (fn [block-uuid] [:db/retractEntity [:block/uuid block-uuid]]) block-uuids)
-                 {:persist-op? false}))
+               :local-update-check
+               (m/? (r.client/new-task--push-local-ops
+                     repo conn graph-uuid date-formatter
+                     get-ws-create-task add-log-fn))
 
-(defmethod transact-db! :upsert-whiteboard-block [_ conn blocks]
-  (ldb/transact! conn blocks {:persist-op? false}))
+               :online-users-updated
+               (reset! *online-users (:online-users (:value event)))))
+           (m/ap)
+           (m/reduce {} nil)
+           (m/?))
+          (catch Cancelled e
+            (when @*assets-sync-loop-canceler (@*assets-sync-loop-canceler))
+            (add-log-fn :rtc.log/cancelled {})
+            (throw e)))))}))
 
-(defn- whiteboard-page-block?
-  [block]
-  (contains? (set (:block/type block)) "whiteboard"))
+(def ^:private empty-rtc-loop-metadata
+  {:graph-uuid nil
+   :user-uuid nil
+   :rtc-state-flow nil
+   :*rtc-auto-push? nil
+   :*online-users nil
+   :*rtc-lock nil
+   :canceler nil})
 
-(defn- group-remote-remove-ops-by-whiteboard-block
-  "return {true [<whiteboard-block-ops>], false [<other-ops>]}"
-  [db remote-remove-ops]
-  (group-by (fn [{:keys [block-uuid]}]
-              (boolean
-               (when-let [block (d/entity db [:block/uuid block-uuid])]
-                 (whiteboard-page-block? (:block/parent block)))))
-            remote-remove-ops))
+(defonce ^:private *rtc-loop-metadata (atom empty-rtc-loop-metadata))
 
-(defn apply-remote-remove-ops
-  [repo conn date-formatter remove-ops]
-  (prn :remove-ops remove-ops)
-  (let [{whiteboard-block-ops true other-ops false} (group-remote-remove-ops-by-whiteboard-block @conn remove-ops)]
-    (transact-db! :delete-whiteboard-blocks conn (map :block-uuid whiteboard-block-ops))
+;;; ================ API ================
+(defn new-task--rtc-start
+  [repo token]
+  (m/sp
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (if-let [graph-uuid (ldb/get-graph-rtc-uuid @conn)]
+        (let [user-uuid (:sub (worker-util/parse-jwt token))
+              config (worker-state/get-config repo)
+              date-formatter (common-config/get-date-formatter config)
+              {:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task *online-users]
+               onstarted-task :onstarted-task}
+              (create-rtc-loop graph-uuid repo conn date-formatter token)
+              canceler (c.m/run-task rtc-loop-task :rtc-loop-task)
+              start-ex (m/? onstarted-task)]
+          (if-let [start-ex (:ex-data start-ex)]
+            (r.ex/->map start-ex)
+            (do (reset! *rtc-loop-metadata {:repo repo
+                                            :graph-uuid graph-uuid
+                                            :user-uuid user-uuid
+                                            :rtc-state-flow rtc-state-flow
+                                            :*rtc-auto-push? *rtc-auto-push?
+                                            :*online-users *online-users
+                                            :*rtc-lock *rtc-lock
+                                            :canceler canceler})
+                nil)))
+        (r.ex/->map r.ex/ex-local-not-rtc-graph))
+      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                                :repo repo})))))
 
-    (doseq [op other-ops]
-      (when-let [block (d/entity @conn [:block/uuid (:block-uuid op)])]
-        (transact-db! :delete-blocks repo conn date-formatter [block] {:children? false})
-        (prn :apply-remote-remove-ops (:block-uuid op))))))
+(defn rtc-stop
+  []
+  (when-let [canceler (:canceler @*rtc-loop-metadata)]
+    (canceler)
+    (reset! *rtc-loop-metadata empty-rtc-loop-metadata)))
 
-(defn- insert-or-move-block
-  [repo conn block-uuid remote-parents remote-left-uuid move? op-value]
-  (when (and (seq remote-parents) remote-left-uuid)
-    (let [first-remote-parent (first remote-parents)
-          local-parent (d/entity @conn [:block/uuid first-remote-parent])
-          whiteboard-page-block? (whiteboard-page-block? local-parent)
-          ;; when insert blocks in whiteboard, local-left is ignored
-          local-left (when-not whiteboard-page-block? (d/entity @conn [:block/uuid remote-left-uuid]))
-          b {:block/uuid block-uuid}
-          ;; b-ent (d/entity @conn [:block/uuid (uuid block-uuid-str)])
-          ]
-      (case [whiteboard-page-block? (some? local-parent) (some? local-left)]
-        [false false true]
-        (if move?
-          (transact-db! :move-blocks repo conn [b] local-left true)
-          (transact-db! :insert-blocks repo conn
-                        [{:block/uuid block-uuid
-                          :block/content ""
-                          :block/format :markdown}]
-                        local-left {:sibling? true :keep-uuid? true}))
+(defn rtc-toggle-auto-push
+  []
+  (when-let [*auto-push? (:*rtc-auto-push? @*rtc-loop-metadata)]
+    (swap! *auto-push? not)))
 
-        [false true true]
-        (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
-          (if move?
-            (transact-db! :move-blocks repo conn [b] local-left sibling?)
-            (transact-db! :insert-blocks repo conn
-                          [{:block/uuid block-uuid :block/content ""
-                            :block/format :markdown}]
-                          local-left {:sibling? sibling? :keep-uuid? true})))
+(defn new-task--get-graphs
+  [token]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (m/join :graphs
+            (ws-util/send&recv get-ws-create-task {:action "list-graphs"}))))
 
-        [false true false]
-        (if move?
-          (transact-db! :move-blocks repo conn [b] local-parent false)
-          (transact-db! :insert-blocks repo conn
-                        [{:block/uuid block-uuid :block/content ""
-                          :block/format :markdown}]
-                        local-parent {:sibling? false :keep-uuid? true}))
+(defn new-task--delete-graph
+  "Return a task that return true if succeed"
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (m/sp
+      (let [{:keys [ex-data]}
+            (m/? (ws-util/send&recv get-ws-create-task
+                                    {:action "delete-graph" :graph-uuid graph-uuid}))]
+        (when ex-data (prn ::delete-graph-failed graph-uuid ex-data))
+        (boolean (nil? ex-data))))))
 
-        ;; Don't need to insert-whiteboard-block here,
-        ;; will do :upsert-whiteboard-block in `update-block-attrs`
-        [true true false]
-        (when (nil? (:properties op-value))
-          ;; when :properties is nil, this block should be treat as normal block
-          (if move?
-            (transact-db! :move-blocks repo conn [b] local-parent false)
-            (transact-db! :insert-blocks repo conn [{:block/uuid block-uuid :block/content "" :block/format :markdown}]
-                          local-parent {:sibling? false :keep-uuid? true})))
-        [true true true]
-        (when (nil? (:properties op-value))
-          (let [sibling? (not= (:block/uuid local-parent) (:block/uuid local-left))]
-            (if move?
-              (transact-db! :move-blocks repo conn [b] local-left sibling?)
-              (transact-db! :insert-blocks repo conn [{:block/uuid block-uuid :block/content "" :block/format :markdown}]
-                            local-left {:sibling? sibling? :keep-uuid? true}))))
+(defn new-task--get-user-info
+  "Return a task that return users-info about the graph."
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (m/join :users
+            (ws-util/send&recv get-ws-create-task
+                               {:action "get-users-info" :graph-uuid graph-uuid}))))
 
-        (throw (ex-info "Don't know where to insert" {:block-uuid block-uuid :remote-parents remote-parents
-                                                      :remote-left remote-left-uuid}))))))
+(defn new-task--grant-access-to-others
+  [token graph-uuid & {:keys [target-user-uuids target-user-emails]}]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (ws-util/send&recv get-ws-create-task
+                       (cond-> {:action "grant-access"
+                                :graph-uuid graph-uuid}
+                         target-user-uuids (assoc :target-user-uuids target-user-uuids)
+                         target-user-emails (assoc :target-user-emails target-user-emails)))))
 
-(defn- move-ops-map->sorted-move-ops
-  [move-ops-map]
-  (let [uuid->dep-uuids (into {} (map (fn [[uuid env]] [uuid (set (conj (:parents env) (:left env)))]) move-ops-map))
-        all-uuids (set (keys move-ops-map))
-        sorted-uuids
-        (loop [r []
-               rest-uuids all-uuids
-               uuid (first rest-uuids)]
-          (if-not uuid
-            r
-            (let [dep-uuids (uuid->dep-uuids uuid)]
-              (if-let [next-uuid (first (set/intersection dep-uuids rest-uuids))]
-                (recur r rest-uuids next-uuid)
-                (let [rest-uuids* (disj rest-uuids uuid)]
-                  (recur (conj r uuid) rest-uuids* (first rest-uuids*)))))))]
-    (mapv move-ops-map sorted-uuids)))
+(defn new-task--get-block-content-versions
+  "Return a task that return map [:ex-data :ex-message :versions]"
+  [token graph-uuid block-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (m/join :versions (ws-util/send&recv get-ws-create-task
+                                         {:action "query-block-content-versions"
+                                          :block-uuids [block-uuid]
+                                          :graph-uuid graph-uuid}))))
+
+(def ^:private create-get-state-flow
+  (let [rtc-loop-metadata-flow (m/watch *rtc-loop-metadata)]
+    (m/ap
+      (let [{:keys [repo graph-uuid user-uuid rtc-state-flow *rtc-auto-push? *rtc-lock *online-users]}
+            (m/?< rtc-loop-metadata-flow)]
+        (try
+          (when (and repo rtc-state-flow *rtc-auto-push? *rtc-lock)
+            (m/?<
+             (m/latest
+              (fn [rtc-state rtc-auto-push? rtc-lock online-users pending-local-ops-count local-tx remote-tx]
+                {:graph-uuid graph-uuid
+                 :user-uuid user-uuid
+                 :unpushed-block-update-count pending-local-ops-count
+                 :local-tx local-tx
+                 :remote-tx remote-tx
+                 :rtc-state rtc-state
+                 :rtc-lock rtc-lock
+                 :auto-push? rtc-auto-push?
+                 :online-users online-users})
+              rtc-state-flow (m/watch *rtc-auto-push?) (m/watch *rtc-lock) (m/watch *online-users)
+              (client-op/create-pending-ops-count-flow repo)
+              (rtc-log-and-state/create-local-t-flow graph-uuid)
+              (rtc-log-and-state/create-remote-t-flow graph-uuid))))
+          (catch Cancelled _))))))
+
+(defn new-task--get-debug-state
+  []
+  (m/reduce {} nil (m/eduction (take 1) create-get-state-flow)))
+
+(defn new-task--snapshot-graph
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (m/join #(select-keys % [:snapshot-uuid :graph-uuid])
+            (ws-util/send&recv get-ws-create-task {:action "snapshot-graph"
+                                                   :graph-uuid graph-uuid}))))
+(defn new-task--snapshot-list
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (m/join :snapshot-list
+            (ws-util/send&recv get-ws-create-task {:action "snapshot-list"
+                                                   :graph-uuid graph-uuid}))))
+
+(defn new-task--upload-graph
+  [token repo remote-graph-name]
+  (m/sp
+    (if-let [conn (worker-state/get-datascript-conn repo)]
+      (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+        (m/? (r.upload-download/new-task--upload-graph get-ws-create-task repo conn remote-graph-name)))
+      (r.ex/->map (ex-info "Not found db-conn" {:type :rtc.exception/not-found-db-conn
+                                                :repo repo})))))
+
+(defn new-task--request-download-graph
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (r.upload-download/new-task--request-download-graph get-ws-create-task graph-uuid)))
+
+(defn new-task--download-info-list
+  [token graph-uuid]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (r.upload-download/new-task--download-info-list get-ws-create-task graph-uuid)))
+
+(defn new-task--wait-download-info-ready
+  [token download-info-uuid graph-uuid timeout-ms]
+  (let [{:keys [get-ws-create-task]} (new-task--get-ws-create--memoized (ws-util/get-ws-url token))]
+    (r.upload-download/new-task--wait-download-info-ready
+     get-ws-create-task download-info-uuid graph-uuid timeout-ms)))
+
+(def new-task--download-graph-from-s3 r.upload-download/new-task--download-graph-from-s3)
+
+;;; ================ API (ends) ================
+
+;;; subscribe state ;;;
+
+(defonce ^:private *last-subscribe-canceler (atom nil))
+(defn- subscribe-state
+  []
+  (when-let [canceler @*last-subscribe-canceler]
+    (canceler)
+    (reset! *last-subscribe-canceler nil))
+  (let [cancel (c.m/run-task
+                (m/reduce
+                 (fn [_ v] (worker-util/post-message :rtc-sync-state v))
+                 create-get-state-flow)
+                :subscribe-state)]
+    (reset! *last-subscribe-canceler cancel)
+    nil))
+
+(subscribe-state)
 
 (comment
-  (def move-ops-map {"2" {:parents ["1"] :left "1" :x "2"}
-                     "1" {:parents ["3"] :left nil :x "1"}
-                     "3" {:parents [] :left nil :x "3"}})
-  (move-ops-map->sorted-move-ops move-ops-map))
-
-(defn- check-block-pos
-  "NOTE: some blocks don't have :block/left (e.g. whiteboard blocks)"
-  [db block-uuid remote-parents remote-left-uuid]
-  (let [local-b (d/entity db [:block/uuid block-uuid])
-        remote-parent-uuid (first remote-parents)]
-    (cond
-      (nil? local-b)
-      :not-exist
-
-      (and (nil? (:block/left local-b))
-           (not= (:block/uuid (:block/parent local-b)) remote-parent-uuid))
-      ;; blocks don't have :block/left
-      :wrong-pos
-
-      (and (:block/left local-b)
-           (or (not= (:block/uuid (:block/parent local-b)) remote-parent-uuid)
-               (not= (:block/uuid (:block/left local-b)) remote-left-uuid)))
-      :wrong-pos
-      :else nil)))
-
-(defn- upsert-whiteboard-block
-  [repo conn {:keys [parents properties] :as _op-value}]
-  (let [db @conn
-        first-remote-parent (first parents)]
-    (when-let [local-parent (d/entity db [:block/uuid first-remote-parent])]
-      (let [page-name (:block/name local-parent)
-            properties* (transit/read transit-r properties)
-            shape-property-id (db-property/get-pid repo db :logseq.tldraw.shape)
-            shape (and (map? properties*)
-                       (get properties* shape-property-id))]
-        (assert (some? page-name) local-parent)
-        (assert (some? shape) properties*)
-        (transact-db! :upsert-whiteboard-block conn [(gp-whiteboard/shape->block repo db shape page-name)])))))
-
-(defn- special-id-ref->page
-  "Convert special id ref backs to page name."
-  [db content]
-  (let [matches (distinct (re-seq db-content/special-id-ref-pattern content))]
-    (if (seq matches)
-      (reduce (fn [content [full-text id]]
-                (if-let [page (d/entity db [:block/uuid (uuid id)])]
-                  (string/replace content full-text
-                                  (str page-ref/left-brackets
-                                       (:block/original-name page)
-                                       page-ref/right-brackets))
-                  content)) content matches)
-      content)))
-
-(defn- update-block-attrs
-  [repo conn date-formatter block-uuid {:keys [parents properties _content] :as op-value}]
-  (let [key-set (set/intersection
-                 (conj rtc-const/general-attr-set :content)
-                 (set (keys op-value)))]
-    (when (seq key-set)
-      (let [first-remote-parent (first parents)
-            local-parent (d/entity @conn [:block/uuid first-remote-parent])
-            whiteboard-page-block? (whiteboard-page-block? local-parent)]
-        (cond
-          (and whiteboard-page-block? properties)
-          (upsert-whiteboard-block repo conn op-value)
-
-          :else
-          (let [b-ent (d/entity @conn [:block/uuid block-uuid])
-                db-id (:db/id b-ent)
-                new-block
-                (cond-> b-ent
-                  (and (contains? key-set :content)
-                       (not= (:content op-value)
-                             (:block/raw-content b-ent)))
-                  (assoc :block/content
-                         (special-id-ref->page @conn (:content op-value)))
-
-                  (contains? key-set :updated-at)     (assoc :block/updated-at (:updated-at op-value))
-                  (contains? key-set :created-at)     (assoc :block/created-at (:created-at op-value))
-                  (contains? key-set :alias)          (assoc :block/alias (some->> (seq (:alias op-value))
-                                                                                   (map (partial vector :block/uuid))
-                                                                                   (d/pull-many @conn [:db/id])
-                                                                                   (keep :db/id)))
-                  (contains? key-set :type)           (assoc :block/type (:type op-value))
-                  (and (contains? key-set :schema)
-                       (some? (:schema op-value)))
-                  (assoc :block/schema (transit/read transit-r (:schema op-value)))
-
-                  (contains? key-set :tags)           (assoc :block/tags (some->> (seq (:tags op-value))
-                                                                                  (map (partial vector :block/uuid))
-                                                                                  (d/pull-many @conn [:db/id])
-                                                                                  (keep :db/id)))
-                  (contains? key-set :properties)     (assoc :block/properties
-                                                             (transit/read transit-r (:properties op-value)))
-                  (and (contains? key-set :link)
-                       (some? (:link op-value)))
-                  (assoc :block/link (some->> (:link op-value)
-                                              (vector :block/uuid)
-                                              (d/pull @conn [:db/id])
-                                              :db/id))
-
-                  (and (contains? key-set :journal-day)
-                       (some? (:journal-day op-value)))
-                  (assoc :block/journal-day (:journal-day op-value)
-                         :block/journal? true))
-                *other-tx-data (atom [])]
-            ;; 'save-block' dont handle card-many attrs well?
-            (when (contains? key-set :alias)
-              (swap! *other-tx-data conj [:db/retract db-id :block/alias]))
-            (when (contains? key-set :tags)
-              (swap! *other-tx-data conj [:db/retract db-id :block/tags]))
-            (when (contains? key-set :type)
-              (swap! *other-tx-data conj [:db/retract db-id :block/type]))
-            (when (and (contains? key-set :link) (nil? (:link op-value)))
-              (swap! *other-tx-data conj [:db/retract db-id :block/link]))
-            (when (and (contains? key-set :schema) (nil? (:schema op-value)))
-              (swap! *other-tx-data conj [:db/retract db-id :block/schema]))
-            (when (and (contains? key-set :properties) (nil? (:properties op-value)))
-              (swap! *other-tx-data conj [:db/retract db-id :block/properties]))
-            (when (and (contains? key-set :journal-day) (nil? (:journal-day op-value)))
-              (swap! *other-tx-data conj
-                     [:db/retract db-id :block/journal-day]
-                     [:db/retract db-id :block/journal?]))
-            (when (seq @*other-tx-data)
-              (ldb/transact! conn @*other-tx-data {:persist-op? false}))
-            (transact-db! :save-block repo conn date-formatter new-block)))))))
-
-(defn apply-remote-move-ops
-  [repo conn date-formatter sorted-move-ops]
-  (prn :repo repo :sorted-move-ops sorted-move-ops)
-  (doseq [{:keys [parents left self] :as op-value} sorted-move-ops]
-    (let [r (check-block-pos @conn self parents left)]
-      (case r
-        :not-exist
-        (insert-or-move-block repo conn self parents left false op-value)
-        :wrong-pos
-        (insert-or-move-block repo conn self parents left true op-value)
-        nil                             ; do nothing
-        nil)
-      (update-block-attrs repo conn date-formatter self op-value)
-      (prn :apply-remote-move-ops self r parents left))))
-
-(defn apply-remote-update-ops
-  [repo conn date-formatter update-ops]
-  (prn :update-ops update-ops)
-  (doseq [{:keys [parents left self] :as op-value} update-ops]
-    (when (and parents left)
-      (let [r (check-block-pos @conn self parents left)]
-        (case r
-          :not-exist
-          (insert-or-move-block repo conn self parents left false op-value)
-          :wrong-pos
-          (insert-or-move-block repo conn self parents left true op-value)
-          nil)))
-    (update-block-attrs repo conn date-formatter self op-value)
-    (prn :apply-remote-update-ops self)))
-
-(defn- move-all-blocks-to-another-page
-  [repo conn from-page-name to-page-name]
-  (let [blocks (ldb/get-page-blocks @conn from-page-name {})
-        target-page-block (d/entity @conn [:block/name to-page-name])]
-    (when (and (seq blocks) target-page-block)
-      (outliner-tx/transact!
-       {:persist-op? true
-        :transact-opts {:repo repo
-                        :conn conn}}
-       (outliner-core/move-blocks! repo conn blocks target-page-block false)))))
-
-(defn apply-remote-update-page-ops
-  [repo conn date-formatter update-page-ops]
-  (let [config (worker-state/get-config repo)]
-    (doseq [{:keys [self page-name original-name] :as op-value} update-page-ops]
-      (let [old-page-original-name (:block/original-name (d/entity @conn [:block/uuid self]))
-            exist-page (d/entity @conn [:block/name page-name])
-            create-opts {:create-first-block? false
-                         :uuid self :persist-op? false}]
-        (cond
-          ;; same name but different uuid
-          ;; remote page has same block/name as local's, but they don't have same block/uuid.
-          ;; 1. rename local page's name to '<origin-name>-<ms-epoch>-Conflict'
-          ;; 2. create page, name=<origin-name>, uuid=remote-uuid
-          (and exist-page (not= (:block/uuid exist-page) self))
-          (let [conflict-page-name (common-util/format "%s-%s-CONFLICT" original-name (tc/to-long (t/now)))]
-            (worker-page-rename/rename! repo conn config original-name conflict-page-name {:persist-op? false})
-            (worker-page/create! repo conn config original-name create-opts)
-            (move-all-blocks-to-another-page repo conn conflict-page-name original-name))
-
-          ;; a client-page has same uuid as remote but different page-names,
-          ;; then we need to rename the client-page to remote-page-name
-          (and old-page-original-name (not= old-page-original-name original-name))
-          (worker-page-rename/rename! repo conn config old-page-original-name original-name {:persist-op? false})
-
-          ;; no such page, name=remote-page-name, OR, uuid=remote-block-uuid
-          ;; just create-page
-          :else
-          (worker-page/create! repo conn config original-name create-opts))
-
-        (update-block-attrs repo conn date-formatter self op-value)))))
-
-(defn apply-remote-remove-page-ops
-  [repo conn remove-page-ops]
-  (doseq [op remove-page-ops]
-    (when-let [page-name (:block/name (d/entity @conn [:block/uuid (:block-uuid op)]))]
-      (worker-page/delete! repo conn page-name nil {:persist-op? false}))))
-
-(defn filter-remote-data-by-local-unpushed-ops
-  "when remote-data request client to move/update/remove/... blocks,
-  these updates maybe not needed, because this client just updated some of these blocks,
-  so we need to filter these just-updated blocks out, according to the unpushed-local-ops"
-  [affected-blocks-map local-unpushed-ops]
-  ;; (assert (op-mem-layer/ops-coercer local-unpushed-ops) local-unpushed-ops)
-  (reduce
-   (fn [affected-blocks-map local-op]
-     (case (first local-op)
-       "move"
-       (let [block-uuid (:block-uuid (second local-op))
-             remote-op (get affected-blocks-map block-uuid)]
-         (case (:op remote-op)
-           :remove (dissoc affected-blocks-map (:block-uuid remote-op))
-           :move (dissoc affected-blocks-map (:self remote-op))
-           ;; default
-           affected-blocks-map))
-
-       "update"
-       (let [block-uuid (:block-uuid (second local-op))
-             local-updated-attr-set (set (keys (:updated-attrs (second local-op))))]
-         (if-let [remote-op (get affected-blocks-map block-uuid)]
-           (assoc affected-blocks-map block-uuid
-                  (if (#{:update-attrs :move} (:op remote-op))
-                    (apply dissoc remote-op local-updated-attr-set)
-                    remote-op))
-           affected-blocks-map))
-       ;;else
-       affected-blocks-map))
-   affected-blocks-map local-unpushed-ops))
-
-(defn- affected-blocks->diff-type-ops
-  [repo affected-blocks]
-  (let [unpushed-ops (op-mem-layer/get-all-ops repo)
-        affected-blocks-map* (if unpushed-ops
-                               (filter-remote-data-by-local-unpushed-ops
-                                affected-blocks unpushed-ops)
-                               affected-blocks)
-        {remove-ops-map :remove move-ops-map :move update-ops-map :update-attrs
-         update-page-ops-map :update-page remove-page-ops-map :remove-page}
-        (update-vals
-         (group-by (fn [[_ env]] (get env :op)) affected-blocks-map*)
-         (partial into {}))]
-    {:remove-ops-map remove-ops-map
-     :move-ops-map move-ops-map
-     :update-ops-map update-ops-map
-     :update-page-ops-map update-page-ops-map
-     :remove-page-ops-map remove-page-ops-map}))
-
-(defn <apply-remote-data
-  [repo conn date-formatter data-from-ws]
-  (assert (rtc-const/data-from-ws-validator data-from-ws) data-from-ws)
-  (go
-    (let [remote-t (:t data-from-ws)
-          remote-t-before (:t-before data-from-ws)
-          local-tx (op-mem-layer/get-local-tx repo)]
-      (cond
-        (not (and (pos? remote-t)
-                  (pos? remote-t-before)))
-        (throw (ex-info "invalid remote-data" {:data data-from-ws}))
-
-        (<= remote-t local-tx)
-        (prn ::skip :remote-t remote-t :remote-t remote-t-before :local-t local-tx)
-
-        (< local-tx remote-t-before)
-        (do (prn ::need-pull-remote-data :remote-t remote-t :remote-t-before remote-t-before :local-t local-tx)
-            ::need-pull-remote-data)
-
-        (<= remote-t-before local-tx remote-t)
-        (let [affected-blocks-map (:affected-blocks data-from-ws)
-              {:keys [remove-ops-map move-ops-map update-ops-map update-page-ops-map remove-page-ops-map]}
-              (affected-blocks->diff-type-ops repo affected-blocks-map)
-              remove-ops (vals remove-ops-map)
-              sorted-move-ops (move-ops-map->sorted-move-ops move-ops-map)
-              update-ops (vals update-ops-map)
-              update-page-ops (vals update-page-ops-map)
-              remove-page-ops (vals remove-page-ops-map)]
-
-          ;; (worker-state/start-batch-tx-mode!)
-
-          (worker-util/profile :apply-remote-update-page-ops (apply-remote-update-page-ops repo conn date-formatter update-page-ops))
-          (worker-util/profile :apply-remote-remove-ops (apply-remote-remove-ops repo conn date-formatter remove-ops))
-          (worker-util/profile :apply-remote-move-ops (apply-remote-move-ops repo conn date-formatter sorted-move-ops))
-          (worker-util/profile :apply-remote-update-ops (apply-remote-update-ops repo conn date-formatter update-ops))
-          (worker-util/profile :apply-remote-remove-page-ops (apply-remote-remove-page-ops repo conn remove-page-ops))
-
-          ;; (let [txs (worker-state/get-batch-txs)
-          ;;       affected-keys (worker-react/get-affected-queries-keys {:tx-data txs :db-after @conn})]
-          ;;   (worker-state/exit-batch-tx-mode!))
-
-          (op-mem-layer/update-local-tx! repo remote-t))
-        :else (throw (ex-info "unreachable" {:remote-t remote-t
-                                             :remote-t-before remote-t-before
-                                             :local-t local-tx}))))))
-
-(defn- <push-data-from-ws-handler
-  [repo conn date-formatter push-data-from-ws]
-  (prn :push-data-from-ws push-data-from-ws)
-  (go
-    (let [r (<! (<apply-remote-data repo conn date-formatter push-data-from-ws))]
-      (when (= r ::need-pull-remote-data)
-        r))))
-
-(defn- remove-non-exist-block-uuids-in-add-retract-map
-  [conn add-retract-map]
-  (let [{:keys [add retract]} add-retract-map
-        add* (->> add
-                  (map (fn [x] [:block/uuid x]))
-                  (d/pull-many @conn [:block/uuid])
-                  (keep :block/uuid))]
-    (cond-> {}
-      (seq add*) (assoc :add add*)
-      (seq retract) (assoc :retract retract))))
-
-(defmulti local-block-ops->remote-ops-aux (fn [tp & _] tp))
-
-(defmethod local-block-ops->remote-ops-aux :move-op
-  [_ & {:keys [parent-uuid left-uuid block-uuid *remote-ops *depend-on-block-uuid-set]}]
-  (when parent-uuid
-    (let [target-uuid (or left-uuid parent-uuid)
-          sibling? (not= left-uuid parent-uuid)]
-      (swap! *remote-ops conj [:move {:block-uuid block-uuid :target-uuid target-uuid :sibling? sibling?}])
-      (swap! *depend-on-block-uuid-set conj target-uuid))))
-
-(defmethod local-block-ops->remote-ops-aux :update-op
-  [_ & {:keys [conn block update-op left-uuid parent-uuid *remote-ops]}]
-  (let [block-uuid (:block/uuid block)
-        attr-map (:updated-attrs (second update-op))
-        attr-alias-map (when (contains? attr-map :alias)
-                         (remove-non-exist-block-uuids-in-add-retract-map conn (:alias attr-map)))
-        attr-tags-map (when (contains? attr-map :tags)
-                        (remove-non-exist-block-uuids-in-add-retract-map conn (:tags attr-map)))
-        attr-type-map (when (contains? attr-map :type)
-                        (let [{:keys [add retract]} (:type attr-map)
-                              current-type-value (set (:block/type block))
-                              add (set/intersection add current-type-value)
-                              retract (set/difference retract current-type-value)]
-                          (cond-> {}
-                            (seq add)     (assoc :add add)
-                            (seq retract) (assoc :retract retract))))
-        attr-properties-map (when (contains? attr-map :properties)
-                              (let [{:keys [add retract]} (:properties attr-map)
-                                    properties (:block/properties block)
-                                    add* (into []
-                                               (update-vals (select-keys properties add)
-                                                            (partial transit/write transit-w)))]
-                                (cond-> {}
-                                  (seq add*) (assoc :add add*)
-                                  (seq retract) (assoc :retract retract))))
-        target-uuid (or left-uuid parent-uuid)
-        sibling? (not= left-uuid parent-uuid)]
-    (swap! *remote-ops conj
-           [:update
-            (cond-> {:block-uuid block-uuid}
-              (:block/journal-day block)      (assoc :journal-day (:block/journal-day block))
-              (:block/updated-at block)       (assoc :updated-at (:block/updated-at block))
-              (:block/created-at block)       (assoc :created-at (:block/created-at block))
-              (contains? attr-map :schema)    (assoc :schema
-                                                     (transit/write transit-w (:block/schema block)))
-              attr-alias-map                  (assoc :alias attr-alias-map)
-              attr-type-map                   (assoc :type attr-type-map)
-              attr-tags-map                   (assoc :tags attr-tags-map)
-              attr-properties-map             (assoc :properties attr-properties-map)
-              (and (contains? attr-map :content)
-                   (:block/raw-content block))
-              (assoc :content (:block/raw-content block))
-              (and (contains? attr-map :link)
-                   (:block/uuid (:block/link block)))
-              (assoc :link (:block/uuid (:block/link block)))
-              target-uuid                     (assoc :target-uuid target-uuid :sibling? sibling?))])))
-
-(defmethod local-block-ops->remote-ops-aux :update-page-op
-  [_ & {:keys [conn block-uuid *remote-ops]}]
-  (when-let [{page-name :block/name original-name :block/original-name}
-             (d/entity @conn [:block/uuid block-uuid])]
-    (swap! *remote-ops conj
-           [:update-page {:block-uuid block-uuid
-                          :page-name page-name
-                          :original-name (or original-name page-name)}])))
-
-(defmethod local-block-ops->remote-ops-aux :remove-op
-  [_ & {:keys [conn remove-op *remote-ops]}]
-  (when-let [block-uuid (:block-uuid (second remove-op))]
-    (when (nil? (d/entity @conn [:block/uuid block-uuid]))
-      (swap! *remote-ops conj [:remove {:block-uuids [block-uuid]}]))))
-
-(defmethod local-block-ops->remote-ops-aux :remove-page-op
-  [_ & {:keys [conn remove-page-op *remote-ops]}]
-  (when-let [block-uuid (:block-uuid (second remove-page-op))]
-    (when (nil? (d/entity @conn [:block/uuid block-uuid]))
-      (swap! *remote-ops conj [:remove-page {:block-uuid block-uuid}]))))
-
-(defn- local-block-ops->remote-ops
-  [repo conn block-ops]
-  (let [*depend-on-block-uuid-set (atom #{})
-        *remote-ops (atom [])
-        {move-op :move remove-op :remove update-op :update update-page-op :update-page remove-page-op :remove-page}
-        block-ops]
-    (when-let [block-uuid
-               (some (comp :block-uuid second) [move-op update-op update-page-op])]
-      (when-let [block (d/entity @conn [:block/uuid block-uuid])]
-        (let [left-uuid (some-> block :block/left :block/uuid)
-              parent-uuid (some-> block :block/parent :block/uuid)]
-          (when parent-uuid ; whiteboard blocks don't have :block/left
-            ;; remote-move-op
-            (when move-op
-              (local-block-ops->remote-ops-aux :move-op
-                                               :parent-uuid parent-uuid
-                                               :left-uuid left-uuid
-                                               :block-uuid block-uuid
-                                               :*remote-ops *remote-ops
-                                               :*depend-on-block-uuid-set *depend-on-block-uuid-set)))
-          ;; remote-update-op
-          (when update-op
-            (local-block-ops->remote-ops-aux :update-op
-                                             :repo repo
-                                             :conn conn
-                                             :block block
-                                             :update-op update-op
-                                             :parent-uuid parent-uuid
-                                             :left-uuid left-uuid
-                                             :*remote-ops *remote-ops)))
-        ;; remote-update-page-op
-        (when update-page-op
-          (local-block-ops->remote-ops-aux :update-page-op
-                                           :repo repo
-                                           :conn conn
-                                           :block-uuid block-uuid
-                                           :*remote-ops *remote-ops))))
-    ;; remote-remove-op
-    (when remove-op
-      (local-block-ops->remote-ops-aux :remove-op
-                                       :repo repo
-                                       :conn conn
-                                       :remove-op remove-op
-                                       :*remote-ops *remote-ops))
-
-    ;; remote-remove-page-op
-    (when remove-page-op
-      (local-block-ops->remote-ops-aux :remove-page-op
-                                       :repo repo
-                                       :conn conn
-                                       :remove-page-op remove-page-op
-                                       :*remote-ops *remote-ops))
-
-    {:remote-ops @*remote-ops
-     :depend-on-block-uuids @*depend-on-block-uuid-set}))
-
-(defn gen-block-uuid->remote-ops
-  [repo conn & {:keys [n] :or {n 50}}]
-  (loop [current-handling-block-ops nil
-         current-handling-block-uuid nil
-         depend-on-block-uuid-coll nil
-         r {}]
-    (cond
-      (and (empty? current-handling-block-ops)
-           (empty? depend-on-block-uuid-coll)
-           (>= (count r) n))
-      r
-
-      (and (empty? current-handling-block-ops)
-           (empty? depend-on-block-uuid-coll))
-      (if-let [{min-epoch-block-ops :ops block-uuid :block-uuid} (op-mem-layer/get-min-epoch-block-ops repo)]
-        (do (assert (not (contains? r block-uuid)) {:r r :block-uuid block-uuid})
-            (op-mem-layer/remove-block-ops! repo block-uuid)
-            (recur min-epoch-block-ops block-uuid depend-on-block-uuid-coll r))
-        ;; finish
-        r)
-
-      (and (empty? current-handling-block-ops)
-           (seq depend-on-block-uuid-coll))
-      (let [[block-uuid & other-block-uuids] depend-on-block-uuid-coll
-            block-ops (op-mem-layer/get-block-ops repo block-uuid)]
-        (op-mem-layer/remove-block-ops! repo block-uuid)
-        (recur block-ops block-uuid other-block-uuids r))
-
-      (seq current-handling-block-ops)
-      (let [{:keys [remote-ops depend-on-block-uuids]}
-            (local-block-ops->remote-ops repo conn current-handling-block-ops)]
-        (recur nil nil
-               (set/union (set depend-on-block-uuid-coll)
-                          (op-mem-layer/intersection-block-uuids repo depend-on-block-uuids))
-               (assoc r current-handling-block-uuid (into {} remote-ops)))))))
-
-(defn sort-remote-ops
-  [block-uuid->remote-ops]
-  (let [block-uuid->dep-uuid
-        (into {}
-              (keep (fn [[block-uuid remote-ops]]
-                      (when-let [move-op (get remote-ops :move)]
-                        [block-uuid (:target-uuid move-op)])))
-              block-uuid->remote-ops)
-        all-move-uuids (set (keys block-uuid->dep-uuid))
-        sorted-uuids
-        (loop [r []
-               rest-uuids all-move-uuids
-               uuid (first rest-uuids)]
-          (if-not uuid
-            r
-            (let [dep-uuid (block-uuid->dep-uuid uuid)]
-              (if-let [next-uuid (get rest-uuids dep-uuid)]
-                (recur r rest-uuids next-uuid)
-                (let [rest-uuids* (disj rest-uuids uuid)]
-                  (recur (conj r uuid) rest-uuids* (first rest-uuids*)))))))
-        sorted-move-ops (keep
-                         (fn [block-uuid]
-                           (some->> (get-in block-uuid->remote-ops [block-uuid :move])
-                                    (vector :move)))
-                         sorted-uuids)
-        remove-ops (keep
-                    (fn [[_ remote-ops]]
-                      (some->> (:remove remote-ops) (vector :remove)))
-                    block-uuid->remote-ops)
-        update-ops (keep
-                    (fn [[_ remote-ops]]
-                      (some->> (:update remote-ops) (vector :update)))
-                    block-uuid->remote-ops)
-        update-page-ops (keep
-                         (fn [[_ remote-ops]]
-                           (some->> (:update-page remote-ops) (vector :update-page)))
-                         block-uuid->remote-ops)
-        remove-page-ops (keep
-                         (fn [[_ remote-ops]]
-                           (some->> (:remove-page remote-ops) (vector :remove-page)))
-                         block-uuid->remote-ops)]
-    (concat update-page-ops remove-ops sorted-move-ops update-ops remove-page-ops)))
-
-(defn- <client-op-update-handler
-  [state _token]
-  {:pre [(some? @(:*graph-uuid state))
-         (some? @(:*repo state))]}
-  (go
-    (let [repo @(:*repo state)
-          conn @(:*db-conn state)
-          date-formatter @(:*date-formatter state)]
-      (op-mem-layer/new-branch! repo)
-      (try
-        (let [ops-for-remote (sort-remote-ops (gen-block-uuid->remote-ops repo conn))
-              local-tx (op-mem-layer/get-local-tx repo)
-              r (<? (ws/<send&receive state {:action "apply-ops" :graph-uuid @(:*graph-uuid state)
-                                             :ops ops-for-remote :t-before (or local-tx 1)}))]
-          (if-let [remote-ex (:ex-data r)]
-            (case (:type remote-ex)
-              ;; conflict-update remote-graph, keep these local-pending-ops
-              ;; and try to send ops later
-              :graph-lock-failed
-              (do (prn :graph-lock-failed)
-                  (op-mem-layer/rollback! repo)
-                  nil)
-              ;; this case means something wrong in remote-graph data,
-              ;; nothing to do at client-side
-              :graph-lock-missing
-              (do (prn :graph-lock-missing)
-                  (op-mem-layer/rollback! repo)
-                  nil)
-
-              :get-s3-object-failed
-              (do (prn ::get-s3-object-failed r)
-                  (op-mem-layer/rollback! repo)
-                  nil)
-              ;; else
-              (do (op-mem-layer/rollback! repo)
-                  (throw (ex-info "Unavailable" {:remote-ex remote-ex}))))
-            (do (assert (pos? (:t r)) r)
-                (op-mem-layer/commit! repo)
-                (<! (<apply-remote-data repo conn date-formatter r))
-                (prn :<client-op-update-handler :t (:t r)))))
-        (catch :default e
-          (prn ::unknown-ex e)
-          (op-mem-layer/rollback! repo)
-          nil)))))
-
-(defn- make-push-client-ops-timeout-ch
-  [repo never-timeout?]
-  (if never-timeout?
-    (chan)
-    (go
-      (<! (async/timeout 2000))
-      (pos? (op-mem-layer/get-unpushed-block-update-count repo)))))
-
-(defonce *state (atom nil))
-
-(defn <loop-for-rtc
-  ":loop-started-ch used to notify that rtc-loop started"
-  [state graph-uuid repo conn date-formatter & {:keys [loop-started-ch token]}]
-  {:pre [(state-validator state)
-         (some? graph-uuid)
-         (some? repo)]}
-  (go
-    (reset! (:*repo state) repo)
-    (reset! (:*db-conn state) conn)
-    (reset! (:*date-formatter state) date-formatter)
-    (reset! (:*rtc-state state) :open)
-    (swap! *state update :counter inc)
-    (let [{:keys [data-from-ws-pub _client-op-update-chan]} state
-          push-data-from-ws-ch (chan (async/sliding-buffer 100) (map rtc-const/data-from-ws-coercer))
-          stop-rtc-loop-chan (chan)
-          *auto-push-client-ops? (:*auto-push-client-ops? state)
-          force-push-client-ops-ch (:force-push-client-ops-chan state)
-          toggle-auto-push-client-ops-ch (:toggle-auto-push-client-ops-chan state)]
-      (reset! (:*stop-rtc-loop-chan state) stop-rtc-loop-chan)
-      (<! (ws/<ensure-ws-open! state))
-      (reset! (:*graph-uuid state) graph-uuid)
-      (with-sub-data-from-ws state
-        (<! (ws/<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
-        (<! (get-result-ch)))
-
-      (async/sub data-from-ws-pub "push-updates" push-data-from-ws-ch)
-      (when loop-started-ch (async/close! loop-started-ch))
-      (<! (go-loop [push-client-ops-ch
-                    (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))]
-            (let [{:keys [push-data-from-ws client-op-update stop continue]}
-                  (async/alt!
-                    toggle-auto-push-client-ops-ch {:continue true}
-                    force-push-client-ops-ch {:client-op-update true}
-                    push-client-ops-ch ([v] (if (and @*auto-push-client-ops? (true? v))
-                                              {:client-op-update true}
-                                              {:continue true}))
-                    push-data-from-ws-ch ([v] {:push-data-from-ws v})
-                    stop-rtc-loop-chan {:stop true}
-                    :priority true)]
-              (cond
-                continue
-                (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?)))
-
-                push-data-from-ws
-                (let [r (<! (<push-data-from-ws-handler repo conn date-formatter push-data-from-ws))]
-                  (when (= r ::need-pull-remote-data)
-                    ;; trigger a force push, which can pull remote-diff-data from local-t to remote-t
-                    (async/put! force-push-client-ops-ch true))
-                  (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
-
-                client-op-update
-                ;; FIXME: access token expired
-                (let [_ (<! (<client-op-update-handler state token))]
-                  (recur (make-push-client-ops-timeout-ch repo (not @*auto-push-client-ops?))))
-
-                stop
-                (do (ws/stop @(:*ws state))
-                    (reset! (:*rtc-state state) :closed))
-
-                :else
-                nil))))
-      (async/unsub data-from-ws-pub "push-updates" push-data-from-ws-ch))))
-
-(defn <grant-graph-access-to-others
-  [state graph-uuid & {:keys [target-user-uuids target-user-emails]}]
-  (go
-    (let [r (with-sub-data-from-ws state
-              (<! (ws/<send! state (cond-> {:req-id (get-req-id)
-                                            :action "grant-access"
-                                            :graph-uuid graph-uuid}
-                                     target-user-uuids (assoc :target-user-uuids target-user-uuids)
-                                     target-user-emails (assoc :target-user-emails target-user-emails))))
-              (<! (get-result-ch)))]
-      (if-let [ex-message (:ex-message r)]
-        (prn ::<grant-graph-access-to-others ex-message (:ex-data r))
-        (prn ::<grant-graph-access-to-others :succ)))))
-
-(defn <toggle-auto-push-client-ops
-  [state]
-  (go
-    (swap! (:*auto-push-client-ops? state) not)
-    (>! (:toggle-auto-push-client-ops-chan state) true)
-    @(:*auto-push-client-ops? state)))
-
-(defn <get-block-content-versions
-  [state block-uuid]
-  (let [d (p/deferred)]
-    (go
-      (when (some-> state :*graph-uuid deref)
-        (with-sub-data-from-ws state
-          (<! (ws/<send! state {:req-id (get-req-id)
-                                :action "query-block-content-versions"
-                                :block-uuids [block-uuid]
-                                :graph-uuid @(:*graph-uuid state)}))
-          (let [{:keys [ex-message ex-data versions]} (<! (get-result-ch))]
-            (if ex-message
-              (do
-                (prn ::<get-block-content-versions :ex-message ex-message :ex-data ex-data)
-                (p/resolve! d nil))
-              (p/resolve! d (bean/->js versions)))))))
-    d))
-
-;; (defn- <query-page-blocks
-;;   [state page-block-uuid]
-;;   (go
-;;     (when (some-> state :*graph-uuid deref)
-;;       (<! (ws/<send&receive state {:action "query-blocks" :graph-uuid @(:*graph-uuid state)
-;;                                    :block-uuids [page-block-uuid]})))))
-
-(defn init-state
-  [ws data-from-ws-chan repo token]
-  ;; {:post [(m/validate state-schema %)]}
-  {:*rtc-state (atom :closed :validator rtc-state-validator)
-   :*graph-uuid (atom nil)
-   :*repo (atom repo)
-   :*db-conn (atom nil)
-   :*token (atom token)
-   :*date-formatter (atom nil)
-   :data-from-ws-chan data-from-ws-chan
-   :data-from-ws-pub (async/pub data-from-ws-chan :req-id)
-   :toggle-auto-push-client-ops-chan (chan (async/sliding-buffer 1))
-   :*auto-push-client-ops? (atom true :validator boolean?)
-   :*stop-rtc-loop-chan (atom nil)
-   :force-push-client-ops-chan (chan (async/sliding-buffer 1))
-   :*ws (atom ws)
-
-   ;; used to trigger state watch
-   :counter 0})
-
-(defn get-debug-state
-  ([repo]
-   (get-debug-state repo @*state))
-  ([repo state]
-   (let [graph-uuid (op-mem-layer/get-graph-uuid repo)
-         local-tx (op-mem-layer/get-local-tx repo)
-         unpushed-block-update-count (op-mem-layer/get-unpushed-block-update-count repo)]
-     (cond->
-      {:graph-uuid graph-uuid
-       :local-tx local-tx
-       :unpushed-block-update-count unpushed-block-update-count}
-       state
-       (merge
-        {:rtc-state @(:*rtc-state state)
-         :ws-state (some-> @(:*ws state) ws/get-state)
-         :auto-push-updates? (when-let [a (:*auto-push-client-ops? state)]
-                               @a)})))))
-
-;; FIXME: token might be expired
-(defn <init-state
-  [repo token reset-*state?]
-  (go
-    (let [data-from-ws-chan (chan (async/sliding-buffer 100))
-          ws-opened-ch (chan)
-          ws (ws/ws-listen token data-from-ws-chan ws-opened-ch)]
-      (<! ws-opened-ch)
-      (let [state (init-state ws data-from-ws-chan repo token)]
-        (when reset-*state?
-          (reset! *state state)
-          (swap! *state update :counter inc))
-        state))))
-
-(defn <start-rtc
-  [repo conn token]
-  (go
-    (let [state (<! (<init-state repo token true))
-          state-for-asset-sync (asset-sync/init-state-from-rtc-state state)
-          _ (reset! asset-sync/*asset-sync-state state-for-asset-sync)
-          config (worker-state/get-config repo)]
-      (if-let [graph-uuid (op-mem-layer/get-graph-uuid repo)]
-        (let [c1 (<loop-for-rtc state graph-uuid repo conn (common-config/get-date-formatter config))
-              c2 (asset-sync/<loop-for-assets-sync state-for-asset-sync graph-uuid repo conn)]
-          (<! c1)
-          (<! c2))
-        (worker-util/post-message :notification (pr-str
-                                                 [[:div
-                                                   [:p "RTC is not supported for this graph"]]
-                                                  :error]))))))
-
-(defn <stop-rtc
-  []
-  (when-let [ch (some-> @*state
-                        :*stop-rtc-loop-chan
-                        deref)]
-    (async/close! ch))
-  (when-let [ch (some-> @asset-sync/*asset-sync-state
-                        :*stop-asset-sync-loop-chan
-                        deref)]
-    (async/close! ch)))
-
-(defn <toggle-sync
-  []
-  (when-let [state @*state]
-    (<toggle-auto-push-client-ops state)))
-
-(defn <get-graphs
-  [repo token]
-  (let [d (p/deferred)]
-    (go
-      (let [state (or @*state (<! (<init-state repo token true)))
-            graph-list (with-sub-data-from-ws state
-                         (<! (ws/<send! state {:req-id (get-req-id)
-                                               :action "list-graphs"}))
-                         (:graphs (<! (get-result-ch))))]
-        (p/resolve! d (bean/->js graph-list))))
-    d))
-
-(add-watch *state :notify-main-thread
-           (fn [_ _ old new]
-             (when-let [*repo (:*repo new)]
-               (let [new-state (get-debug-state @*repo new)
-                     old-state (get-debug-state @*repo old)]
-                 (when (or (not= new-state old-state)
-                           (= :open (:rtc-state new-state)))
-                   (worker-util/post-message :rtc-sync-state (pr-str new-state)))))))
+  (do
+    (def user-uuid "7f41990d-2c8f-4f79-b231-88e9f652e072")
+    (def graph-uuid "ff7186c1-5903-4bc8-b4e9-ca23525b9983")
+    (def repo "logseq_db_4-23")
+    (def conn (worker-state/get-datascript-conn repo))
+    (def date-formatter "MMM do, yyyy")
+    (def debug-ws-url "wss://ws-dev.logseq.com/rtc-sync?token=???")
+    (let [{:keys [rtc-state-flow *rtc-auto-push? rtc-loop-task]}
+          (create-rtc-loop user-uuid graph-uuid repo conn date-formatter nil {:debug-ws-url debug-ws-url})
+          c (c.m/run-task rtc-loop-task :rtc-loop-task)]
+      (def cancel c)
+      (def rtc-state-flow rtc-state-flow)
+      (def *rtc-auto-push? *rtc-auto-push?)))
+  (cancel))

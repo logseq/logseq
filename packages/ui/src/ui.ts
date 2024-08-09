@@ -66,7 +66,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { Calendar } from '@/components/ui/calendar'
-import { Popover, PopoverContent, PopoverTrigger, PopoverArrow } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger, PopoverArrow, PopoverRemoveScroll } from '@/components/ui/popover'
 import {
   Dialog,
   DialogClose,
@@ -83,12 +83,14 @@ import {
   AlertDialogPortal, AlertDialogTitle,
   AlertDialogTrigger
 } from '@/components/ui/alert-dialog'
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger, TooltipPortal } from '@/components/ui/tooltip'
 import { TooltipArrow } from '@radix-ui/react-tooltip'
 import { Link } from '@/components/ui/link'
 import { Separator } from '@/components/ui/separator'
 import { Toggle } from '@/components/ui/toggle'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import * as uniqolor from 'uniqolor'
 
 declare global {
   var LSUI: any
@@ -157,6 +159,7 @@ const shadui = {
   PopoverTrigger,
   PopoverContent,
   PopoverArrow,
+  PopoverRemoveScroll,
   Dialog,
   DialogPortal,
   DialogOverlay,
@@ -179,8 +182,9 @@ const shadui = {
   AlertDialogAction,
   AlertDialogCancel,
   Tooltip, TooltipTrigger, TooltipArrow,
-  TooltipContent, TooltipProvider,
-  Toggle, ToggleGroup, ToggleGroupItem
+  TooltipContent, TooltipProvider, TooltipPortal,
+  Toggle, ToggleGroup, ToggleGroupItem,
+  Avatar, AvatarImage, AvatarFallback
 }
 
 function setupGlobals() {
@@ -189,7 +193,8 @@ function setupGlobals() {
   window.LSUI = shadui
 
   window.LSUtils = {
-    isDev: process.env.NODE_ENV === 'development'
+    isDev: process.env.NODE_ENV === 'development',
+    uniqolor,
   }
 }
 

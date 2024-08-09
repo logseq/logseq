@@ -10,29 +10,30 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.config :as config]))
+            [frontend.config :as config]
+            [logseq.shui.ui :as shui]))
 
 (defmethod events/handle :graph/ask-for-re-index [[_ *multiple-windows? ui]]
   ;; *multiple-windows? - if the graph is opened in multiple windows, boolean atom
   ;; ui - custom message to show on asking for re-index
   (if (and (util/atom? *multiple-windows?) @*multiple-windows?)
-    (events/handle
-     [:modal/show
+    (shui/dialog-open!
       [:div
        (when (not (nil? ui)) ui)
-       [:p (t :re-index-multiple-windows-warning)]]])
-    (events/handle
-     [:modal/show
+       [:p (t :re-index-multiple-windows-warning)]])
+
+    (shui/dialog-open!
       [:div {:style {:max-width 700}}
        (when (not (nil? ui)) ui)
        [:p (t :re-index-discard-unsaved-changes-warning)]
-       (ui/button
-        (t :yes)
-        :autoFocus "on"
-        :class "ui__modal-enter"
-        :on-click (fn []
-                    (state/close-modal!)
-                    (state/pub-event! [:graph/re-index])))]])))
+       [:div.flex.justify-end.pt-2
+        (ui/button
+          (t :yes)
+          :autoFocus "on"
+          :class "ui__modal-enter"
+          :on-click (fn []
+                      (shui/dialog-close!)
+                      (state/pub-event! [:graph/re-index])))]])))
 
 (defmethod events/handle :graph/re-index [[_]]
   ;; Ensure the graph only has ONE window instance

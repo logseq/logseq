@@ -15,6 +15,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.common.async-util :as async-util]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -2680,7 +2681,7 @@
 
   (<ratelimit [this from-chan]
     (let [<fast-filter-e-fn (.filter-file-change-events-fn this)]
-      (util/<ratelimit
+      (async-util/<ratelimit
        from-chan rate
        :filter-fn
        (fn [e]

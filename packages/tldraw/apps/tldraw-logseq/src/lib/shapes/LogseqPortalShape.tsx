@@ -296,7 +296,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
             size: [this.props.size[0], newHeight],
           })
 
-          if (loaded) app.persist(true)
+          if (loaded) app.persist({replace: true})
         }
       }
     }, [innerHeight, this.props.isAutoResizing])
@@ -305,7 +305,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       if (!this.initialHeightCalculated) {
         setTimeout(() => {
           this.onResetBounds()
-          app.persist(true)
+          app.persist({replace: true})
         })
       }
     }, [this.initialHeightCalculated])
@@ -420,9 +420,9 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
       }
     }, [app.viewport.bounds.height.toFixed(2)])
 
-    const onPageNameChanged = React.useCallback((id: string) => {
+    const onPageNameChanged = React.useCallback((id: string, isPage: boolean) => {
       this.initialHeightCalculated = false
-      const blockType = validUUID(id) ? 'B' : 'P'
+      const blockType = isPage ? 'P' : 'B'
       this.update({
         pageId: id,
         size: [400, 320],
@@ -438,7 +438,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
 
     const blockContent = React.useMemo(() => {
       if (pageId && this.props.blockType === 'B') {
-        return handlers?.queryBlockByUUID(pageId)?.content
+        return handlers?.queryBlockByUUID(pageId)?.title
       }
     }, [handlers?.queryBlockByUUID, pageId])
 
@@ -550,6 +550,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
   getShapeSVGJsx({ preview }: any) {
     // Do not need to consider the original point here
     const bounds = this.getBounds()
+
     return (
       <>
         <rect
@@ -595,7 +596,7 @@ export class LogseqPortalShape extends TLBoxShape<LogseqPortalShapeProps> {
           fill="var(--ls-secondary-text-color)"
           stroke="var(--ls-secondary-text-color)"
         >
-          {this.props.blockType === 'P' ? this.props.pageId : ''}
+          {this.props.blockType === 'P' ? this.props.pageName : ''}
         </text>
       </>
     )

@@ -6,12 +6,11 @@
             ["react-textarea-autosize" :as TextareaAutosize]
             ["react-tippy" :as react-tippy]
             ["react-transition-group" :refer [CSSTransition TransitionGroup]]
+            ["react-virtuoso" :refer [Virtuoso]]
             ["@emoji-mart/data" :as emoji-data]
-            ;; ["@emoji-mart/react" :as Picker]
             ["emoji-mart" :as emoji-mart]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
-            [datascript.core :as d]
             [electron.ipc :as ipc]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
@@ -27,24 +26,25 @@
             [frontend.rum :as r]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.ui.date-picker]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [goog.dom :as gdom]
-            [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
+            [logseq.shui.icon.v2 :as shui.icon.v2]
+            [logseq.shui.popup.core :as shui-popup]
             [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.shui.core :as shui]
-            [logseq.shui.ui :as shui-ui]))
+            [logseq.shui.ui :as shui]))
 
 (declare icon)
 
 (defonce transition-group (r/adapt-class TransitionGroup))
 (defonce css-transition (r/adapt-class CSSTransition))
 (defonce textarea (r/adapt-class (gobj/get TextareaAutosize "default")))
+(defonce virtualized-list (r/adapt-class Virtuoso))
+
 (def resize-provider (r/adapt-class (gobj/get Resize "ResizeProvider")))
 (def resize-consumer (r/adapt-class (gobj/get Resize "ResizeConsumer")))
 (def Tippy (r/adapt-class (gobj/get react-tippy "Tooltip")))
@@ -54,6 +54,17 @@
 ;; (def EmojiPicker (r/adapt-class (gobj/get Picker "default")))
 
 (defonce icon-size (if (mobile-util/native-platform?) 26 20))
+
+(defn shui-popups? [] (some-> (shui-popup/get-popups) (count) (> 0)))
+(defn last-shui-preview-popup?
+  []
+  (= "ls-preview-popup"
+    (some-> (shui-popup/get-last-popup) :content-props :class)))
+(defn hide-popups-until-preview-popup!
+  []
+  (while (and (shui-popups?)
+           (not (last-shui-preview-popup?)))
+    (shui/popup-hide!)))
 
 (def built-in-colors
   ["yellow"
@@ -98,19 +109,23 @@
                   (.setAttribute el "aria-label" "editing block")
                   (doto el
                     (.addEventListener "select"
-                       #(let [start (util/get-selection-start el)
-                              end (util/get-selection-end el)]
-                          (when (and start end)
-                            (when-let [e (and (not= start end)
-                                              (let [caret-pos (cursor/get-caret-pos el)]
-                                                {:caret caret-pos
-                                                 :start start :end end
-                                                 :text  (. (.-value el) substring start end)
-                                                 :point (select-keys (or @*mouse-point caret-pos) [:x :y])}))]
-                              (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))
-                              (vreset! *mouse-point nil)))))
+                                       #(let [start (util/get-selection-start el)
+                                              end (util/get-selection-end el)]
+                                          (when (and start end)
+                                            (when-let [e (and (not= start end)
+                                                              (let [caret-pos (cursor/get-caret-pos el)]
+                                                                {:caret caret-pos
+                                                                 :start start :end end
+                                                                 :text  (. (.-value el) substring start end)
+                                                                 :point (select-keys (or @*mouse-point caret-pos) [:x :y])}))]
+                                              (plugin-handler/hook-plugin-editor :input-selection-end (bean/->js e))
+                                              (vreset! *mouse-point nil)))))
                     (.addEventListener "mouseup" #(vreset! *mouse-point {:x (.-x %) :y (.-y %)}))))
-                state)}
+                state)
+   :will-unmount (fn [state]
+                   (when-let [on-unmount (:on-unmount (first (:rum/args state)))]
+                     (on-unmount))
+                   state)}
   [{:keys [on-change] :as props}]
   (let [skip-composition? (state/sub :editor/action)
         on-composition (fn [e]
@@ -122,11 +137,11 @@
                                                 (on-change e))
                              (state/set-editor-in-composition! true))))
         props (assoc props
-                :on-change (fn [e] (when-not (state/editor-in-composition?)
-                                     (on-change e)))
-                :on-composition-start on-composition
-                :on-composition-update on-composition
-                :on-composition-end on-composition)]
+                     :on-change (fn [e] (when-not (state/editor-in-composition?)
+                                          (on-change e)))
+                     :on-composition-start on-composition
+                     :on-composition-update on-composition
+                     :on-composition-end on-composition)]
     (textarea props)))
 
 (rum/defc dropdown-content-wrapper
@@ -365,8 +380,19 @@
 
 (defn checkbox
   [option]
-  [:input.form-checkbox.h-4.w-4.transition.duration-150.ease-in-out
-   (merge {:type "checkbox" :disabled config/publishing?} option)])
+  (let [on-change' (:on-change option)
+        on-click' (:on-click option)
+        option (cond-> (dissoc option :on-change :on-click)
+                 (or on-change' on-click')
+                 (assoc :on-click
+                        (fn [^js e]
+                          (some-> on-click' (apply [e]))
+                          (let [checked? (= (.-state (.-dataset (.-target e))) "checked")]
+                            (set! (. (.-target e) -checked) (not checked?))
+                            (some-> on-change' (apply [e]))))))]
+    (shui/checkbox
+     (merge option
+            {:disabled (or (:disabled option) config/publishing?)}))))
 
 (defn main-node
   []
@@ -376,9 +402,6 @@
   [element]
   (when-let [element ^js (gdom/getElement element)]
     (.focus element)))
-
-(defn get-scroll-top []
-  (.-scrollTop (main-node)))
 
 (defn get-dynamic-style-node
   []
@@ -478,52 +501,6 @@
       (handler)
       #(.removeEventListener js/window.visualViewport "resize" handler))))
 
-(defonce last-scroll-top (atom 0))
-
-(defn scroll-down?
-  []
-  (let [scroll-top (get-scroll-top)
-        down? (> scroll-top @last-scroll-top)]
-    (reset! last-scroll-top scroll-top)
-    down?))
-
-(defn on-scroll
-  [node {:keys [on-load on-top-reached threshold bottom-reached]
-         :or {threshold 500}}]
-  (let [scroll-top (gobj/get node "scrollTop")
-        bottom-reached? (if (fn? bottom-reached)
-                          (bottom-reached)
-                          (util/bottom-reached? node threshold))
-        top-reached? (= scroll-top 0)
-        down? (scroll-down?)]
-    (when (and bottom-reached? down? on-load)
-      (on-load))
-    (when (and (not down?) top-reached? on-top-reached)
-      (on-top-reached))))
-
-(defn attach-listeners
-  "Attach scroll and resize listeners."
-  [state]
-  (let [list-element-id (first (:rum/args state))
-        opts (-> state :rum/args (nth 2))
-        node (js/document.getElementById list-element-id)
-        debounced-on-scroll (debounce #(on-scroll node opts) 100)]
-    (mixins/listen state node :scroll debounced-on-scroll)))
-
-(rum/defcs infinite-list <
-  (mixins/event-mixin attach-listeners)
-  "Render an infinite list."
-  [state _list-element-id body {:keys [on-load has-more more more-class]
-                                :or {more-class "text-sm"}}]
-  [:div
-   body
-   (when has-more
-     [:div.w-full.p-4
-      [:a.fade-link.text-link.font-bold
-       {:on-click on-load
-        :class more-class}
-       (or more (t :page/earlier))]])])
-
 (rum/defcs auto-complete <
   (rum/local 0 ::current-idx)
   (shortcut/mixin* :shortcut.handler/auto-complete)
@@ -551,15 +528,17 @@
                    :on-mouse-move  #(reset! *current-idx idx)}
                   (let [chosen? (= @*current-idx idx)]
                     (menu-link
-                     {:id            (str "ac-" idx)
-                      :tab-index     "0"
-                      :class         (when chosen? "chosen")
-                      :on-mouse-down (fn [e]
-                                       (util/stop e)
-                                       (if (and (gobj/get e "shiftKey") on-shift-chosen)
-                                         (on-shift-chosen item)
-                                         (on-chosen item e)))}
-                     (if item-render (item-render item chosen?) item)))]]
+                      {:id (str "ac-" idx)
+                       :tab-index "0"
+                       :class (when chosen? "chosen")
+                       ;; TODO: should have more tests on touch devices
+                       ;:on-pointer-down #(util/stop %)
+                       :on-click (fn [e]
+                                   (util/stop e)
+                                   (if (and (gobj/get e "shiftKey") on-shift-chosen)
+                                     (on-shift-chosen item)
+                                     (on-chosen item e)))}
+                      (if item-render (item-render item chosen?) item)))]]
 
              (if get-group-name
                (if-let [group-name (get-group-name item)]
@@ -571,8 +550,6 @@
                item-cp))])]
        (when empty-placeholder
          empty-placeholder))]))
-
-(def datepicker frontend.ui.date-picker/date-picker)
 
 (defn toggle
   ([on? on-click] (toggle on? on-click false))
@@ -689,51 +666,6 @@
       (fn [state]
         (modal-panel show? modal-panel-content state close-fn fullscreen? close-btn? style)))]))
 
-(defn make-confirm-modal
-  [{:keys [tag title sub-title sub-checkbox? on-cancel on-confirm]
-    :or {on-cancel #()}}]
-  (fn [close-fn]
-    (let [*sub-checkbox-selected (and sub-checkbox? (atom []))]
-      [:div.ui__confirm-modal
-       {:class (str "is-" tag)}
-       [:div.sm:flex.sm:items-start
-        [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-error.sm:mx-0.sm:h-10.sm:w-10
-         [:svg.h-6.w-6.text-error
-          {:stroke "currentColor", :view-box "0 0 24 24", :fill "none"}
-          [:path
-           {:d
-            "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            :stroke-width    "2"
-            :stroke-linejoin "round"
-            :stroke-linecap  "round"}]]]
-        [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left
-         [:h2.headline.text-lg.leading-6.font-medium
-          (if (keyword? title) (t title) title)]
-         [:label.sublabel
-          (when sub-checkbox?
-            (checkbox
-             {:default-value false
-              :on-change     (fn [e]
-                               (let [checked (.. e -target -checked)]
-                                 (reset! *sub-checkbox-selected [checked])))}))
-          [:h3.subline.text-gray-400
-           (if (keyword? sub-title)
-             (t sub-title)
-             sub-title)]]]]
-
-       [:div.mt-5.sm:mt-4.flex.gap-4
-        (button
-          (t :cancel)
-          {:theme :gray
-           :on-click (comp on-cancel close-fn)})
-        (button
-          (t :yes)
-          {:class "ui__modal-enter"
-           :on-click #(and (fn? on-confirm)
-                           (on-confirm % {:close-fn close-fn
-                                          :sub-selected (and *sub-checkbox-selected @*sub-checkbox-selected)}))
-           :button-props {:autoFocus "on"}})]])))
-
 (rum/defc sub-modal < rum/reactive
   []
   (when-let [modals (seq (state/sub :modal/subsets))]
@@ -779,14 +711,14 @@
 
 (rum/defcs foldable-title <
   (rum/local false ::control?)
-  [state {:keys [on-mouse-down header title-trigger? collapsed?]}]
+  [state {:keys [on-pointer-down header title-trigger? collapsed?]}]
   (let [control? (get state ::control?)]
     [:div.content
      [:div.flex-1.flex-row.foldable-title (cond->
                                             {:on-mouse-over #(reset! control? true)
                                              :on-mouse-out  #(reset! control? false)}
                                             title-trigger?
-                                            (assoc :on-mouse-down on-mouse-down
+                                            (assoc :on-pointer-down on-pointer-down
                                                    :class "cursor"))
       [:div.flex.flex-row.items-center
        (when-not (mobile-util/native-platform?)
@@ -796,7 +728,7 @@
                         :height      16
                         :margin-left -30}}
             (not title-trigger?)
-            (assoc :on-mouse-down on-mouse-down))
+            (assoc :on-pointer-down on-pointer-down))
           [:span {:class (if (or @control? @collapsed?) "control-show cursor-pointer" "control-hide")}
            (rotating-arrow @collapsed?)]])
        (if (fn? header)
@@ -814,22 +746,22 @@
                 (when-let [f (:init-collapsed (last (:rum/args state)))]
                   (f (::collapsed? state)))
                 state)}
-  [state header content {:keys [title-trigger? on-mouse-down class
+  [state header content {:keys [title-trigger? on-pointer-down class
                                 _default-collapsed? _init-collapsed]}]
   (let [collapsed? (get state ::collapsed?)
-        on-mouse-down (fn [e]
+        on-pointer-down (fn [e]
                         (util/stop e)
                         (swap! collapsed? not)
-                        (when on-mouse-down
-                          (on-mouse-down @collapsed?)))]
+                        (when on-pointer-down
+                          (on-pointer-down @collapsed?)))]
     [:div.flex.flex-col
      {:class class}
-     (foldable-title {:on-mouse-down on-mouse-down
+     (foldable-title {:on-pointer-down on-pointer-down
                       :header header
                       :title-trigger? title-trigger?
                       :collapsed? collapsed?})
      [:div {:class (if @collapsed? "hidden" "initial")
-            :on-mouse-down (fn [e] (.stopPropagation e))}
+            :on-pointer-down (fn [e] (.stopPropagation e))}
       (if (fn? content)
         (if (not @collapsed?) (content) nil)
         content)]]))
@@ -858,7 +790,7 @@
        (assoc state ::error error))}
   [{error ::error, c :rum/react-component} error-view view]
   (if (some? error)
-    error-view
+    (if (fn? error-view) (error-view error) error-view)
     view))
 
 (rum/defcs catch-error-and-notify
@@ -978,7 +910,7 @@
                     :popperOptions {:modifiers {:flip {:enabled (not fixed-position?)}
                                                 :hide {:enabled false}
                                                 :preventOverflow {:enabled false}}}
-                    :onShow #(when-not (or (some? @state/*editor-editing-ref)
+                    :onShow #(when-not (or (state/editing?)
                                            @(:ui/scrolling? @state/state))
                                (reset! *mounted? true))
                     :onHide #(reset! *mounted? false)}
@@ -1013,7 +945,7 @@
       :style     {:width "100%"}
       :on-change #(let [value (util/evalue %)]
                     (reset! *value value))
-      :on-mouse-up #(let [value (util/evalue %)]
+      :on-pointer-up #(let [value (util/evalue %)]
                       (on-change value))}]))
 
 (rum/defcs tweet-embed < (rum/local true :loading?)
@@ -1026,7 +958,7 @@
              :options               {:theme (when (= (state/sub :ui/theme) "dark") "dark")}
              :on-tweet-load-success #(reset! *loading? false)})]]))
 
-(def icon shui/icon)
+(def icon shui.icon.v2/root)
 
 (rum/defc button-inner
   [text & {:keys [theme background variant href size class intent small? icon icon-props disabled? button-props]
@@ -1051,10 +983,15 @@
                       :muted   disabled?}
                 button-props)
 
-        icon (when icon (shui-ui/tabler-icon icon icon-props))
+        icon (when icon (shui/tabler-icon icon icon-props))
+        href? (not (string/blank? href))
+        text (cond
+               href? [:a {:href href :target "_blank"
+                          :style {:color "inherit"}} text]
+               :else text)
         children [icon text]]
 
-    (shui-ui/button props children)))
+    (shui/button props children)))
 
 (defn button
   [text & {:keys []
@@ -1143,27 +1080,10 @@
                                      :rootMargin (str root-margin "px")
                                      :triggerOnce trigger-once?
                                      :onChange (fn [in-view? _entry]
-                                                 (set-visible! in-view?))})
+                                                 (when-not (= in-view? visible?)
+                                                   (set-visible! in-view?)))})
          ref (.-ref inViewState)]
      (lazy-visible-inner visible? content-fn ref fade-in?))))
-
-(rum/defc portal
-  ([children]
-   (portal children {:attach-to (fn [] js/document.body)
-                     :prepend? false}))
-  ([children {:keys [attach-to prepend?]}]
-   (let [[portal-anchor set-portal-anchor] (rum/use-state nil)]
-     (rum/use-effect!
-      (fn []
-        (let [div (js/document.createElement "div")
-              attached (or (if (fn? attach-to) (attach-to) attach-to) js/document.body)]
-          (.setAttribute div "data-logseq-portal" (str (d/squuid)))
-          (if prepend? (.prepend attached div) (.append attached div))
-          (set-portal-anchor div)
-          #(.remove div)))
-      [])
-     (when portal-anchor
-       (rum/portal (rum/fragment children) portal-anchor)))))
 
 (rum/defc menu-heading
   ([add-heading-fn auto-heading-fn rm-heading-fn]
@@ -1202,6 +1122,15 @@
       :on-click rm-heading-fn
       :intent "link"
       :small? true)]]))
+
+(rum/defc tooltip
+  [trigger tooltip-content]
+  (shui/tooltip-provider
+   (shui/tooltip
+    (shui/tooltip-trigger
+     trigger)
+    (shui/tooltip-content
+     tooltip-content))))
 
 (comment
   (rum/defc emoji-picker

@@ -13,6 +13,7 @@
             [electron.ipc :as ipc]
             [frontend.handler.worker :as worker-handler]
             [logseq.db :as ldb]
+            [frontend.db.transact :as db-transact]
             [frontend.date :as date]))
 
 (defonce *worker state/*db-worker)
@@ -36,12 +37,35 @@
                                  (not= (:config prev) (:config current))
                                  (assoc :config (:config current)))]
                  (when (seq new-state)
-                   (.sync-app-state worker (pr-str new-state)))))))
+                   (.sync-app-state worker (ldb/write-transit-str new-state)))))))
+
+(defn get-route-data
+    [route-match]
+    (when (seq route-match)
+      {:to (get-in route-match [:data :name])
+       :path-params (:path-params route-match)
+       :query-params (:query-params route-match)}))
+
+(defn- sync-ui-state!
+  [^js worker]
+  (add-watch state/state
+             :sync-ui-state
+             (fn [_ _ prev current]
+               (when-not @(:history/paused? @state/state)
+                 (let [f (fn [state]
+                           (-> (select-keys state [:ui/sidebar-open? :ui/sidebar-collapsed-blocks :sidebar/blocks])
+                               (assoc :route-data (get-route-data (:route-match state)))))
+                       old-state (f prev)
+                       new-state (f current)]
+                   (when (not= new-state old-state)
+                     (.sync-ui-state worker (state/get-current-repo)
+                                     (ldb/write-transit-str {:old-state old-state
+                                                             :new-state new-state}))))))))
 
 (defn transact!
   [^js worker repo tx-data tx-meta]
-  (let [tx-meta' (pr-str tx-meta)
-        tx-data' (pr-str tx-data)
+  (let [tx-meta' (ldb/write-transit-str tx-meta)
+        tx-data' (ldb/write-transit-str tx-data)
         ;; TODO: a better way to share those information with worker, maybe using the state watcher to notify the worker?
         context {:dev? config/dev?
                  :node-test? util/node-test?
@@ -57,7 +81,7 @@
                  :pages-directory (config/get-pages-directory)}]
     (if worker
       (.transact worker repo tx-data' tx-meta'
-                 (pr-str context))
+                 (ldb/write-transit-str context))
       (notification/show! "Latest change was not saved! Please restart the application." :error))))
 
 (defn start-db-worker!
@@ -67,23 +91,28 @@
                        "js/db-worker.js"
                        "static/js/db-worker.js")
           worker (js/Worker. (str worker-url "?electron=" (util/electron?) "&publishing=" config/publishing?))
-          wrapped-worker (Comlink/wrap worker)]
+          wrapped-worker (Comlink/wrap worker)
+          t1 (util/time-ms)]
       (worker-handler/handle-message! worker wrapped-worker)
       (reset! *worker wrapped-worker)
       (-> (p/let [_ (.init wrapped-worker config/RTC-WS-URL)
+                  _ (js/console.debug (str "debug: init worker spent: " (- (util/time-ms) t1) "ms"))
                   _ (.sync-app-state wrapped-worker
-                                     (pr-str
+                                     (ldb/write-transit-str
                                       {:git/current-repo (state/get-current-repo)
                                        :config (:config @state/state)}))
                   _ (sync-app-state! wrapped-worker)
-                  _ (ask-persist-permission!)]
+                  _ (sync-ui-state! wrapped-worker)
+                  _ (ask-persist-permission!)
+                  _ (state/pub-event! [:graph/sync-context])]
             (ldb/register-transact-fn!
              (fn worker-transact!
                [repo tx-data tx-meta]
-               (let [repo' (if (string? repo) repo (state/get-current-repo))]
-                 (transact! wrapped-worker repo' tx-data
-                 ;; not from remote(rtc)
-                            (assoc tx-meta :local-tx? true))))))
+               (db-transact/transact (partial transact! wrapped-worker)
+                                     (if (string? repo) repo (state/get-current-repo))
+                                     tx-data
+                                     tx-meta)))
+            (db-transact/listen-for-requests))
           (p/catch (fn [error]
                      (prn :debug "Can't init SQLite wasm")
                      (js/console.error error)
@@ -109,9 +138,9 @@
 
 (defrecord InBrowser []
   protocol/PersistentDB
-  (<new [_this repo]
+  (<new [_this repo opts]
     (when-let [^js sqlite @*worker]
-      (.createOrOpenDB sqlite repo)))
+      (.createOrOpenDB sqlite repo (ldb/write-transit-str opts))))
 
   (<list-db [_this]
     (when-let [^js sqlite @*worker]
@@ -134,7 +163,7 @@
                   disk-db-data (when-not db-exists? (ipc/ipc :db-get repo))
                   _ (when disk-db-data
                       (.importDb sqlite repo disk-db-data))
-                  _ (.createOrOpenDB sqlite repo)]
+                  _ (.createOrOpenDB sqlite repo (ldb/write-transit-str {}))]
             (.getInitialData sqlite repo))
           (p/catch sqlite-error-handler))))
 

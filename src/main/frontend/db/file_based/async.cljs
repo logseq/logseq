@@ -9,7 +9,7 @@
 
 (defn <file-based-get-all-properties
   [graph]
-  (p/let [properties (<q graph
+  (p/let [properties (<q graph {:transact-db? false}
                          '[:find [?p ...]
                            :where
                            [_ :block/properties ?p]])
@@ -18,7 +18,8 @@
          (apply concat)
          distinct
          sort
-         (map name))))
+         (map name)
+         (map #(hash-map :block/title %)))))
 
 (defn- property-value-for-refs-and-text
   "Given a property value's refs and full text, determines the value to
@@ -37,7 +38,7 @@
 
 (defn <get-file-based-property-values
   [graph property]
-  (p/let [result (<q graph
+  (p/let [result (<q graph {:transact-db? false}
                      '[:find ?property-val ?text-property-val
                        :in $ ?property
                        :where

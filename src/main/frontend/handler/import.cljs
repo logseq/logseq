@@ -69,7 +69,7 @@
                                    (when journal-title
                                      (let [page-name (util/page-name-sanity-lc journal-title)]
                                        {:block/name page-name
-                                        :block/journal? true
+                                        :block/type "journal"
                                         :block/journal-day day}))))
                                titles))]
       (when (seq journal-pages-tx)
@@ -101,21 +101,21 @@
       (p/do!
        (when (not (db/page-exists? page-name))
          (page-handler/<create! page-name {:redirect? false}))
-       (let [page-block (db/entity [:block/name (util/page-name-sanity-lc page-name)])
-            children (:block/_parent page-block)
-            blocks (db/sort-by-left children page-block)
-            last-block (last blocks)
-            snd-last-block (last (butlast blocks))
-            [target-block sibling?] (if (and last-block (seq (:block/content last-block)))
-                                      [last-block true]
-                                      (if snd-last-block
-                                        [snd-last-block true]
-                                        [page-block false]))]
-        (editor/paste-blocks
-         parsed-blocks
-         {:target-block target-block
-          :sibling? sibling?})
-        (finished-ok-handler [page-name]))))))
+       (let [page-block (db/get-page page-name)
+             children (:block/_parent page-block)
+             blocks (db/sort-by-order children)
+             last-block (last blocks)
+             snd-last-block (last (butlast blocks))
+             [target-block sibling?] (if (and last-block (seq (:block/title last-block)))
+                                       [last-block true]
+                                       (if snd-last-block
+                                         [snd-last-block true]
+                                         [page-block false]))]
+         (editor/paste-blocks
+          parsed-blocks
+          {:target-block target-block
+           :sibling? sibling?})
+         (finished-ok-handler [page-name]))))))
 
 (defn create-page-with-exported-tree!
   "Create page from the per page object generated in `export-repo-as-edn-v2!`
@@ -146,14 +146,14 @@
                                      "\nSkipped and continue the remaining import.") :error)))
      (when has-children?
        (let [page-name (util/page-name-sanity-lc title)
-             page-block (db/entity [:block/name page-name])]
+             page-block (db/get-page page-name)]
         ;; Missing support for per block format (or deprecated?)
          (try (if whiteboard?
                ;; only works for file graph :block/properties
                 (let [blocks (->> children
                                   (map (partial medley/map-keys (fn [k] (keyword "block" k))))
                                   (map gp-whiteboard/migrate-shape-block)
-                                  (map #(merge % (gp-whiteboard/with-whiteboard-block-props % page-name))))]
+                                  (map #(merge % (gp-whiteboard/with-whiteboard-block-props % [:block/uuid uuid]))))]
                   (db/transact! blocks))
                 (editor/insert-block-tree children page-format
                                           {:target-block page-block
@@ -229,20 +229,20 @@
 (defn import-from-sqlite-db!
   [buffer bare-graph-name finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
-    (-> (p/let [_ (persist-db/<import-db graph buffer)]
-          (state/add-repo! {:url graph})
-          (repo-handler/restore-and-setup-repo! graph))
-        (p/then
-         (fn [_result]
-           (state/set-current-repo! graph)
-           (persist-db/<export-db graph {})
-           (finished-ok-handler)))
-        (p/catch
-         (fn [e]
-           (js/console.error e)
-           (notification/show!
-            (str (.-message e))
-            :error))))))
+    (->
+     (p/do!
+      (persist-db/<import-db graph buffer)
+      (state/add-repo! {:url graph})
+      (repo-handler/restore-and-setup-repo! graph)
+      (state/set-current-repo! graph)
+      (persist-db/<export-db graph {})
+      (finished-ok-handler))
+     (p/catch
+      (fn [e]
+        (js/console.error e)
+        (notification/show!
+         (str (.-message e))
+         :error))))))
 
 (defn import-from-edn!
   [raw finished-ok-handler]

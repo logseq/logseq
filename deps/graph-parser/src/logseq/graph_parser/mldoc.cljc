@@ -145,7 +145,9 @@
     (->>
      (cond-> (default-config-map format)
        db-based?
-       (assoc :enable_drawers false))
+       (assoc :enable_drawers false
+              :parse_marker false
+              :parse_priority false))
      bean/->js
      js/JSON.stringify)))
 

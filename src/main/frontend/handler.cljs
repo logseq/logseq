@@ -42,7 +42,8 @@
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
             [frontend.persist-db.browser :as db-browser]
-            [frontend.db.async :as db-async]))
+            [frontend.db.async :as db-async]
+            [frontend.persist-db :as persist-db]))
 
 (defn- set-global-error-notification!
   []
@@ -50,6 +51,7 @@
     (set! js/window.onerror
           (fn [message, _source, _lineno, _colno, error]
             (when-not (error/ignored? message)
+              (js/console.error message)
               (log/error :exception error))))))
 
 (defn- watch-for-date!
@@ -146,7 +148,12 @@
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
   (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/reference block/block-reference)
+  (state/set-component! :block/blocks-container block/blocks-container)
+  (state/set-component! :block/properties-cp block/db-properties-cp)
   (state/set-component! :block/embed block/block-embed)
+  (state/set-component! :block/page-cp block/page-cp)
+  (state/set-component! :block/inline-text block/inline-text)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 
@@ -193,6 +200,8 @@
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                repo (or (state/get-current-repo) (:url (first repos)))
                _ (restore-and-setup! repo repos)]
+         (when (util/electron?)
+           (persist-db/run-export-periodically!))
          (when (mobile-util/native-platform?)
            (state/restore-mobile-theme!)))
        (p/catch (fn [e]

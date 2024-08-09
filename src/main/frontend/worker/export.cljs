@@ -1,26 +1,10 @@
 (ns frontend.worker.export
   "Export data"
-  (:require [logseq.db :as ldb]
-            [logseq.outliner.tree :as otree]
-            [frontend.worker.file.core :as worker-file]
-            [datascript.core :as d]
-            [logseq.common.util :as common-util]
-            [logseq.graph-parser.property :as gp-property]))
-
-(defn block->content
-  "Converts a block including its children (recursively) to plain-text."
-  [repo db root-block-uuid-or-page-name tree->file-opts context]
-  (let [root-block-uuid (or
-                         (and (uuid? root-block-uuid-or-page-name) root-block-uuid-or-page-name)
-                         (:block/uuid (d/entity db [:block/name (common-util/page-name-sanity-lc
-                                                                 root-block-uuid-or-page-name)])))
-        init-level (or (:init-level tree->file-opts)
-                       (if (uuid? root-block-uuid-or-page-name) 1 0))
-        blocks (ldb/get-block-and-children repo db root-block-uuid)
-        tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
-    (worker-file/tree->file-content repo db tree
-                                    (assoc tree->file-opts :init-level init-level)
-                                    context)))
+  (:require [datascript.core :as d]
+            [frontend.common.file.core :as common-file]
+            [logseq.db :as ldb]
+            [logseq.graph-parser.property :as gp-property]
+            [logseq.outliner.tree :as otree]))
 
 (defn- safe-keywordize
   [block]
@@ -37,24 +21,24 @@
   (->> (d/q '[:find (pull ?b [*])
               :in $
               :where
-              [?b :block/original-name]
+              [?b :block/title]
               [?b :block/name]] db)
 
-       (map (fn [[{:block/keys [name] :as page}]]
-              (let [whiteboard? (contains? (set (:block/type page)) "whiteboard")
-                    blocks (ldb/get-page-blocks db name {})
+       (map (fn [[page]]
+              (let [whiteboard? (ldb/whiteboard? page)
+                    blocks (ldb/get-page-blocks db (:db/id page))
                     blocks' (if whiteboard?
                               blocks
                               (map (fn [b]
                                      (let [b' (if (seq (:block/properties b))
-                                                (update b :block/content
+                                                (update b :block/title
                                                         (fn [content]
                                                           (gp-property/remove-properties (:block/format b) content)))
                                                 b)]
                                        (safe-keywordize b'))) blocks))
                     children (if whiteboard?
                                blocks'
-                               (otree/blocks->vec-tree repo db blocks' name))
+                               (otree/blocks->vec-tree repo db blocks' (:db/id page)))
                     page' (safe-keywordize page)]
                 (assoc page' :block/children children))))))
 
@@ -63,5 +47,5 @@
   (->> (d/datoms db :avet :block/name)
        (map (fn [d]
               (let [e (d/entity db (:e d))]
-                [(:block/original-name e)
-                 (block->content repo db (:v d) {} {})])))))
+                [(:block/title e)
+                 (common-file/block->content repo db (:block/uuid e) {} {})])))))

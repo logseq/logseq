@@ -6,13 +6,14 @@
             ["fuse.js" :as fuse]
             [goog.object :as gobj]
             [datascript.core :as d]
-            [frontend.search.fuzzy :as fuzzy]
-            [frontend.worker.util :as worker-util]
+            [frontend.common.search-fuzzy :as fuzzy]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]))
 
 ;; TODO: use sqlite for fuzzy search
-(defonce indices (atom nil))
+;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
+(defonce fuzzy-search-indices (atom {}))
 
 (defn- add-blocks-fts-triggers!
   "Table bindings of blocks tables and the blocks FTS virtual tables"
@@ -25,15 +26,15 @@
                   ;; insert
                   "CREATE TRIGGER IF NOT EXISTS blocks_ai AFTER INSERT ON blocks
                   BEGIN
-                      INSERT INTO blocks_fts (id, content, page)
-                      VALUES (new.id, new.content, new.page);
+                      INSERT INTO blocks_fts (id, title, page)
+                      VALUES (new.id, new.title, new.page);
                   END;"
                   ;; update
                   "CREATE TRIGGER IF NOT EXISTS blocks_au AFTER UPDATE ON blocks
                   BEGIN
                       DELETE from blocks_fts where id = old.id;
-                      INSERT INTO blocks_fts (id, content, page)
-                      VALUES (new.id, new.content, new.page);
+                      INSERT INTO blocks_fts (id, title, page)
+                      VALUES (new.id, new.title, new.page);
                   END;"]]
     (doseq [trigger triggers]
       (.exec db trigger))))
@@ -43,12 +44,14 @@
   ;; id -> block uuid, page -> page uuid
   (.exec db "CREATE TABLE IF NOT EXISTS blocks (
                         id TEXT NOT NULL PRIMARY KEY,
-                        content TEXT NOT NULL,
+                        title TEXT NOT NULL,
                         page TEXT)"))
 
 (defn- create-blocks-fts-table!
   [db]
-  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, content, page)"))
+  ;; The trigram tokenizer extends FTS5 to support substring matching in general, instead of the usual token matching. When using the trigram tokenizer, a query or phrase token may match any sequence of characters within a row, not just a complete token.
+  ;; Check https://www.sqlite.org/fts5.html#the_experimental_trigram_tokenizer.
+  (.exec db "CREATE VIRTUAL TABLE IF NOT EXISTS blocks_fts USING fts5(id, title, page, tokenize=\"trigram\")"))
 
 (defn create-tables-and-triggers!
   "Open a SQLite db for search index"
@@ -67,6 +70,16 @@
       ;;     (js/console.error "cannot unlink search db:" e)))
       )))
 
+(defn drop-tables-and-triggers!
+  [db]
+  (.exec db "
+DROP TABLE IF EXISTS blocks;
+DROP TABLE IF EXISTS blocks_fts;
+DROP TRIGGER IF EXISTS blocks_ad;
+DROP TRIGGER IF EXISTS blocks_ai;
+DROP TRIGGER IF EXISTS blocks_au;
+"))
+
 (defn- clj-list->sql
   "Turn clojure list into SQL list
    '(1 2 3 4)
@@ -80,10 +93,17 @@
   [^Object db blocks]
   (.transaction db (fn [tx]
                      (doseq [item blocks]
-                       (.exec tx #js {:sql "INSERT INTO blocks (id, content, page) VALUES ($id, $content, $page) ON CONFLICT (id) DO UPDATE SET (content, page) = ($content, $page)"
-                                      :bind #js {:$id (.-id item)
-                                                 :$content (.-content item)
-                                                 :$page (.-page item)}})))))
+                       (if (and (common-util/uuid-string? (.-id item))
+                                (common-util/uuid-string? (.-page item)))
+                         (.exec tx #js {:sql "INSERT INTO blocks (id, title, page) VALUES ($id, $title, $page) ON CONFLICT (id) DO UPDATE SET (title, page) = ($title, $page)"
+                                        :bind #js {:$id (.-id item)
+                                                   :$title (.-title item)
+                                                   :$page (.-page item)}})
+                         (do
+                           (js/console.error "Upsert blocks wrong data: ")
+                           (js/console.dir item)
+                           (throw (ex-info "Search upsert-blocks wrong data: "
+                                          (bean/->clj item)))))))))
 
 (defn delete-blocks!
   [db ids]
@@ -106,18 +126,24 @@
     snippet))
 
 (defn- search-blocks-aux
-  [db sql input page limit]
+  [db sql input page limit enable-snippet?]
   (try
     (p/let [result (if page
                      (.exec db #js {:sql sql
-                                    :bind #js [input page limit]
+                                    :bind #js [page input limit]
                                     :rowMode "array"})
                      (.exec db #js {:sql sql
                                     :bind #js [input limit]
                                     :rowMode "array"}))
             blocks (bean/->clj result)]
       (map (fn [block]
-             (update block 3 get-snippet-result)) blocks))
+             (let [[id page title snippet] (if enable-snippet?
+                                             (update block 3 get-snippet-result)
+                                             block)]
+               {:id id
+                :page page
+                :title title
+                :snippet snippet})) blocks))
     (catch :default e
       (prn :debug "Search blocks failed: ")
       (js/console.error e))))
@@ -132,212 +158,199 @@
                         (string/replace " not " " NOT "))]
     (if (not= q match-input)
       (string/replace match-input "," "")
-      (str "\"" match-input "\""))))
+      (str "\"" match-input "\"*"))))
 
-(defn search-blocks
-  ":page - the page to specifically search on"
-  [db q {:keys [limit page]}]
-  (when-not (string/blank? q)
-    (p/let [match-input (get-match-input q)
-            non-match-input (str "%" (string/replace q #"\s+" "%") "%")
-            limit  (or limit 20)
-            ;; https://www.sqlite.org/fts5.html#the_highlight_function
-            ;; the 2nd column in blocks_fts (content)
-            ;; pfts_2lqh is a key for retrieval
-            ;; highlight and snippet only works for some matching with high rank
-            snippet-aux "snippet(blocks_fts, 1, ' $pfts_2lqh>$ ', ' $<pfts_2lqh$ ', '...', 32)"
-            select (str "select id, page, content, " snippet-aux " from blocks_fts where ")
-            pg-sql (if page "page = ? and" "")
-            match-sql (str select
-                           pg-sql
-                           " content match ? order by rank limit ?")
-            non-match-sql (str select
-                               pg-sql
-                               " content like ? limit ?")
-            matched-result (search-blocks-aux db match-sql match-input page limit)
-            non-match-result (search-blocks-aux db non-match-sql non-match-input page limit)
-            all-result (->> (concat matched-result non-match-result)
-                            (map (fn [[id page _content snippet]]
-                                   {:uuid id
-                                    :content snippet
-                                    :page page})))]
-      (->>
-       all-result
-       (common-util/distinct-by :uuid)
-       (take limit)))))
+(defn exact-matched?
+  "Check if two strings points toward same search result"
+  [q match]
+  (when (and (string? q) (string? match))
+    (boolean
+     (reduce
+      (fn [coll char]
+        (let [coll' (drop-while #(not= char %) coll)]
+          (if (seq coll')
+            (rest coll')
+            (reduced false))))
+      (seq (fuzzy/search-normalize match true))
+      (seq (fuzzy/search-normalize q true))))))
 
-(defn truncate-table!
+(defn- page-or-object?
+  [entity]
+  (and (or (ldb/page? entity) (seq (:block/tags entity)))
+       (not (ldb/hidden? entity))))
+
+(defn get-all-fuzzy-supported-blocks
+  "Only pages and objects are supported now."
   [db]
-  (.exec db "delete from blocks")
-  (.exec db "delete from blocks_fts"))
+  (let [page-ids (->> (d/datoms db :avet :block/name)
+                      (map :e))
+        object-ids (->> (d/datoms db :avet :block/tags)
+                        (map :e))
+        blocks (->> (distinct (concat page-ids object-ids))
+                    (map #(d/entity db %)))]
+    (remove ldb/hidden? blocks)))
 
 (defn- sanitize
   [content]
   (some-> content
-          (worker-util/search-normalize true)))
-
-(defn- property-value-when-closed
-  "Returns property value if the given entity is type 'closed value' or nil"
-  [ent]
-  (when (contains? (:block/type ent) "closed value")
-    (get-in ent [:block/schema :value])))
-
-(defn get-by-parent-&-left
-  [db parent-id left-id]
-  (when (and parent-id left-id)
-    (let [lefts (:block/_left (d/entity db left-id))]
-      (some (fn [node] (when (and (= parent-id (:db/id (:block/parent node)))
-                                  (not= parent-id (:db/id node)))
-                         node)) lefts))))
-
-(defn- get-db-properties-str
-  "Similar to db-pu/readable-properties but with a focus on making property values searchable"
-  [db properties]
-  (->> properties
-       (map
-        (fn [[k v]]
-          (let [values
-                (->> (if (set? v) v #{v})
-                     (map (fn [val]
-                            (if (uuid? val)
-                              (let [e (d/entity db [:block/uuid val])
-                                    value (or
-                                           ;; closed value
-                                           (property-value-when-closed e)
-                                           ;; page
-                                           (:block/original-name e)
-                                           ;; block generated by template
-                                           (and
-                                            (get-in e [:block/metadata :created-from-template])
-                                            (:block/content e))
-                                           ;; first child
-                                           (let [parent-id (:db/id e)]
-                                             (:block/content (get-by-parent-&-left db parent-id parent-id))))]
-                                value)
-                              val)))
-                     (remove string/blank?))]
-            (when (seq values)
-              (str (:block/original-name (d/entity db [:block/uuid k]))
-                   ": "
-                   (string/join "; " values))))))
-       (remove nil?)
-       (string/join ";; ")))
-
-(defn whiteboard-page?
-  "Given a page name or a page object, check if it is a whiteboard page"
-  [db page]
-  (cond
-    (string? page)
-    (let [page (d/entity db [:block/name page])]
-      (or
-       (= (:block/type page) "whiteboard")
-       (contains? (set (:block/type page)) "whiteboard")))
-
-    (seq page)
-    (contains? (set (:block/type page)) "whiteboard")
-
-    :else false))
+          (fuzzy/search-normalize true)))
 
 (defn block->index
   "Convert a block to the index for searching"
-  [repo db {:block/keys [name uuid page content properties format]
-            :as block}]
-  (let [page? (some? name)
-        block? (nil? name)
-        db-based? (sqlite-util/db-based-graph? repo)]
-    (when-not (or
-               (and page? name (whiteboard-page? db name))
-               (and block? (> (count content) 10000))
-               (and (empty? properties)
-                    (or (and block? (string/blank? content))
-                        (and db-based? page?))))        ; empty page or block
-      (let [content (if block?
-                      content
-                      ;; File based page content
-                      (if db-based?
-                        ""            ; empty page content
-                        (some-> (:block/file (d/entity db (:db/id block))) :file/content)))
-            content' (if (and db-based? (seq properties))
-                       (str content (when (not= content "") "\n") (get-db-properties-str db properties))
-                       content)]
-        (when-not (string/blank? content')
-          {:id (str uuid)
-           :page (str (:block/uuid page))
-           :content (sanitize content')
-           :format format})))))
+  [{:block/keys [uuid page title] :as block}]
+  (when-not (or
+             (ldb/closed-value? block)
+             (and (string? title) (> (count title) 10000))
+             (string/blank? title))        ; empty page or block
+      ;; Should properties be included in the search indice?
+      ;; It could slow down the search indexing, also it can be confusing
+      ;; if the showing properties are not useful to users.
+      ;; (let [content (if (and db-based? (seq (:block/properties block)))
+      ;;                 (str content (when (not= content "") "\n") (get-db-properties-str db properties))
+      ;;                 content)])
+    (when uuid
+      {:id (str uuid)
+       :page (str (or (:block/uuid page) uuid))
+       :title (if (page-or-object? block) title (sanitize title))})))
 
-(defn get-single-block-contents [db id]
-  (let [e (d/entity db [:block/uuid id])]
-    (when-not (and (nil? (:block/name e))
-                   (string/blank? (:block/content e))) ; empty block
-      {:db/id (:db/id e)
-       :block/name (:block/name e)
-       :block/uuid id
-       :block/page (:db/id (:block/page e))
-       :block/content (:block/content e)
-       :block/format (:block/format e)
-       :block/properties (:block/properties e)})))
+(defn build-fuzzy-search-indice
+  "Build a block title indice from scratch.
+   Incremental page title indice is implemented in frontend.search.sync-search-indice!"
+  [repo db]
+  (let [blocks (->> (get-all-fuzzy-supported-blocks db)
+                    (map block->index)
+                    (bean/->js))
+        indice (fuse. blocks
+                      (clj->js {:keys ["title"]
+                                :shouldSort true
+                                :tokenize true
+                                :distance 1024
+                                :threshold 0.5 ;; search for 50% match from the start
+                                :minMatchCharLength 1}))]
+    (swap! fuzzy-search-indices assoc-in repo indice)
+    indice))
+
+(defn fuzzy-search
+  "Return a list of blocks (pages && tagged blocks) that match the query. Takes the following
+  options:
+   * :limit - Number of result to limit search results. Defaults to 100"
+  [repo db q {:keys [limit]
+              :or {limit 100}}]
+  (when repo
+    (let [q (fuzzy/search-normalize q true)
+          q (fuzzy/clean-str q)
+          q (if (= \# (first q)) (subs q 1) q)]
+      (when-not (string/blank? q)
+        (let [indice (or (get @fuzzy-search-indices repo)
+                         (build-fuzzy-search-indice repo db))
+              result (->> (.search indice q (clj->js {:limit limit}))
+                          (bean/->clj))]
+          (->> (map :item result)
+               (filter (fn [{:keys [title]}]
+                         (exact-matched? q title)))))))))
+
+(defn search-blocks
+  "Options:
+   * :page - the page to specifically search on
+   * :limit - Number of result to limit search results. Defaults to 100
+   * :built-in?  - Whether to return built-in pages for db graphs. Defaults to false"
+  [repo conn search-db q {:keys [limit page enable-snippet?
+                                 built-in?] :as option
+                          :or {enable-snippet? true}}]
+  (when-not (string/blank? q)
+    (p/let [match-input (get-match-input q)
+            limit  (or limit 100)
+            ;; https://www.sqlite.org/fts5.html#the_highlight_function
+            ;; the 2nd column in blocks_fts (content)
+            ;; pfts_2lqh is a key for retrieval
+            ;; highlight and snippet only works for some matching with high rank
+            snippet-aux "snippet(blocks_fts, 1, '$pfts_2lqh>$', '$<pfts_2lqh$', '...', 32)"
+            select (if enable-snippet?
+                     (str "select id, page, title, " snippet-aux " from blocks_fts where ")
+                     "select id, page, title from blocks_fts where ")
+            pg-sql (if page "page = ? and" "")
+            match-sql (str select
+                           pg-sql
+                           " title match ? order by rank limit ?")
+            matched-result (search-blocks-aux search-db match-sql match-input page limit enable-snippet?)
+            fuzzy-result (when-not page (fuzzy-search repo @conn q option))]
+      (let [result (->> (concat fuzzy-result matched-result)
+                        (common-util/distinct-by :id)
+                        (keep (fn [result]
+                                (let [{:keys [id page title snippet]} result
+                                      block-id (uuid id)]
+                                  (when-let [block (d/entity @conn [:block/uuid block-id])]
+                                    (when-not (and (not built-in?) (ldb/built-in? block))
+                                      {:db/id (:db/id block)
+                                       :block/uuid block-id
+                                       :block/title (or snippet title)
+                                       :block/page (if (common-util/uuid-string? page)
+                                                     (uuid page)
+                                                     nil)
+                                       :block/tags (seq (map :db/id (:block/tags block)))
+                                       :page? (ldb/page? block)}))))))
+            page-or-object-result (filter (fn [b] (or (:page? b) (:block/tags result))) result)]
+        (->>
+         (concat page-or-object-result
+                 (remove (fn [b] (or (:page? b) (:block/tags result))) result))
+         (common-util/distinct-by :block/uuid))))))
+
+(defn truncate-table!
+  [db]
+  (drop-tables-and-triggers! db)
+  (create-tables-and-triggers! db))
+
+(comment
+  (defn- property-value-when-closed
+    "Returns property value if the given entity is type 'closed value' or nil"
+    [ent]
+    (when (= (:block/type ent) "closed value")
+      (:block/title ent))))
+
+(comment
+  (defn- get-db-properties-str
+    "Similar to db-pu/readable-properties but with a focus on making property values searchable"
+    [db properties]
+    (->> properties
+         (keep
+          (fn [[k v]]
+            (let [property (d/entity db k)
+                  values
+                  (->> (if (set? v) v #{v})
+                       (map (fn [val]
+                              (if (= :db.type/ref (:db/valueType property))
+                                (let [e (d/entity db (:db/id val))
+                                      value (or
+                                           ;; closed value
+                                             (property-value-when-closed e)
+                                           ;; :page or :date properties
+                                             (:block/title e)
+                                             ;; first child
+                                             (let [parent-id (:db/id e)]
+                                               (:block/title (ldb/get-first-child db parent-id))))]
+                                  value)
+                                val)))
+                       (remove string/blank?))
+                  hide? (get-in property [:block/schema :hide?])]
+              (when (and (not hide?) (seq values))
+                (str (:block/title property)
+                     ": "
+                     (string/join "; " values))))))
+         (string/join ", "))))
 
 (defn get-all-block-contents
   [db]
   (when db
     (->> (d/datoms db :avet :block/uuid)
          (map :v)
-         (map #(get-single-block-contents db %))
-         (remove nil?))))
+         (keep #(d/entity db [:block/uuid %])))))
 
 (defn build-blocks-indice
   [repo db]
+  (build-fuzzy-search-indice repo db)
   (->> (get-all-block-contents db)
-       (map #(block->index repo db %))
-       (remove nil?)
+       (keep block->index)
        (bean/->js)))
-
-(defn original-page-name->index
-  [p]
-  (when p
-    {:id (str (:block/uuid p))
-     :name (:block/name p)
-     :original-name (:block/original-name p)}))
-
-(defn- safe-subs
-  ([s start]
-   (let [c (count s)]
-     (safe-subs s start c)))
-  ([s start end]
-   (let [c (count s)]
-     (subs s (min c start) (min c end)))))
-
-(defn- hidden-page?
-  [page]
-  (when page
-    (if (string? page)
-      (and (string/starts-with? page "$$$")
-           (common-util/uuid-string? (safe-subs page 3)))
-      (contains? (set (:block/type page)) "hidden"))))
-
-(defn get-all-pages
-  [db]
-  (let [page-datoms (d/datoms db :avet :block/name)
-        pages (map (fn [d] (d/entity db (:e d))) page-datoms)]
-    (remove (fn [p] (hidden-page? (:block/name p))) pages)))
-
-(defn build-page-indice
-  "Build a page title indice from scratch.
-   Incremental page title indice is implemented in frontend.search.sync-search-indice!
-   Rename from the page indice since 10.25.2022, since this is only used for page title search.
-   From now on, page indice is talking about page content search."
-  [repo db]
-  (let [pages (->> (get-all-pages db)
-                   (map original-page-name->index)
-                   (bean/->js))
-        indice (fuse. pages
-                      (clj->js {:keys ["name"]
-                                :shouldSort true
-                                :tokenize true
-                                :minMatchCharLength 1}))]
-    (swap! indices assoc-in [repo :pages] indice)
-    indice))
 
 (defn- get-blocks-from-datoms-impl
   [repo {:keys [db-after db-before]} datoms]
@@ -356,83 +369,43 @@
                                     set)
                                blocks-to-add-set)]
       {:blocks-to-remove     (->>
-                              (map #(d/entity db-before %) blocks-to-remove-set)
-                              (remove nil?)
-                              (remove hidden-page?))
+                              (keep #(d/entity db-before %) blocks-to-remove-set)
+                              (remove ldb/hidden?))
        :blocks-to-add        (->>
-                              (map #(d/entity db-after %) blocks-to-add-set')
-                              (remove nil?)
-                              (remove hidden-page?))})))
+                              (keep #(d/entity db-after %) blocks-to-add-set')
+                              (remove ldb/hidden?))})))
 
-(defn- get-direct-blocks-and-pages
+(defn- get-affected-blocks
   [repo tx-report]
   (let [data (:tx-data tx-report)
         datoms (filter
                 (fn [datom]
                   ;; Capture any direct change on page display title, page ref or block content
-                  (contains? #{:block/uuid :block/name :block/original-name :block/content :block/properties :block/schema} (:a datom)))
+                  (contains? #{:block/uuid :block/name :block/title :block/properties :block/schema} (:a datom)))
                 data)]
     (when (seq datoms)
       (get-blocks-from-datoms-impl repo tx-report datoms))))
 
 (defn sync-search-indice
   [repo tx-report]
-  (let [{:keys [blocks-to-add blocks-to-remove]} (get-direct-blocks-and-pages repo tx-report)]
+  (let [{:keys [blocks-to-add blocks-to-remove]} (get-affected-blocks repo tx-report)]
     ;; update page title indice
-    (let [pages-to-add (filter :block/name blocks-to-add)
-          pages-to-remove (filter :block/name blocks-to-remove)]
-      (when (or (seq pages-to-add) (seq pages-to-remove))
-        (swap! indices update-in [repo :pages]
+    (let [fuzzy-blocks-to-add (filter page-or-object? blocks-to-add)
+          fuzzy-blocks-to-remove (filter page-or-object? blocks-to-remove)]
+      (when (or (seq fuzzy-blocks-to-add) (seq fuzzy-blocks-to-remove))
+        (swap! fuzzy-search-indices update-in repo
                (fn [indice]
                  (when indice
-                   (doseq [page-entity pages-to-remove]
-                     (.remove indice (fn [page] (= (:block/name page-entity) (gobj/get page "name")))))
-                   (doseq [page pages-to-add]
+                   (doseq [page-entity fuzzy-blocks-to-remove]
+                     (.remove indice (fn [page] (= (str (:block/uuid page-entity)) (gobj/get page "id")))))
+                   (doseq [page fuzzy-blocks-to-add]
                      (.remove indice (fn [p] (= (str (:block/uuid page)) (gobj/get p "id"))))
-                     (.add indice (bean/->js (original-page-name->index page))))
+                     (.add indice (bean/->js (block->index page))))
                    indice)))))
 
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
-      (let [blocks-to-add (remove nil? (map #(block->index repo (:db-after tx-report) %) blocks-to-add))
+      (let [blocks-to-add (keep block->index blocks-to-add)
             blocks-to-remove (set (map (comp str :block/uuid) blocks-to-remove))]
         {:blocks-to-remove-set blocks-to-remove
          :blocks-to-add        blocks-to-add}))))
-
-(defn exact-matched?
-  "Check if two strings points toward same search result"
-  [q match]
-  (when (and (string? q) (string? match))
-    (boolean
-     (reduce
-      (fn [coll char]
-        (let [coll' (drop-while #(not= char %) coll)]
-          (if (seq coll')
-            (rest coll')
-            (reduced false))))
-      (seq (worker-util/search-normalize match true))
-      (seq (worker-util/search-normalize q true))))))
-
-(defn page-search
-  "Return a list of page names that match the query"
-  [repo db q limit]
-  (when repo
-    (let [q (worker-util/search-normalize q true)
-          q (fuzzy/clean-str q)
-          q (if (= \# (first q)) (subs q 1) q)]
-      (when-not (string/blank? q)
-        (let [indice (or (get-in @indices [repo :pages])
-                         (build-page-indice repo db))
-              result (->> (.search indice q (clj->js {:limit limit}))
-                          (bean/->clj))]
-          (->> result
-               (common-util/distinct-by (fn [i] (string/trim (get-in i [:item :name]))))
-               (map
-                (fn [{:keys [item]}]
-                  (:original-name item)))
-               (remove nil?)
-               (map string/trim)
-               (distinct)
-               (filter (fn [original-name]
-                         (exact-matched? q original-name)))
-               bean/->js))))))

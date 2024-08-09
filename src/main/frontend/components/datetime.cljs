@@ -8,6 +8,7 @@
             [frontend.handler.repeated :as repeated]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
             [frontend.util :as util]
             [frontend.mixins :as mixins]
             [rum.core :as rum]
@@ -45,7 +46,7 @@
   [{:keys [num duration kind]}]
   (let [show? (rum/react *show-repeater?)]
     (if (or show? (and num duration kind))
-      [:div.w.full.flex.flex-row.justify-left
+      [:div.w.full.flex.flex-row.justify-left.items-center
        [:input#repeater-num.form-input.w-8.mr-2.px-1.sm:w-20.sm:px-2.text-center
         {:default-value num
          :on-change (fn [event]
@@ -89,7 +90,7 @@
   [e]
   (when e (util/stop e))
   (let [{:keys [repeater] :as timestamp} @*timestamp
-        date (:date-picker/date @state/state)
+        date (-> (:date-picker/date @state/state) date/js-date->goog-date)
         timestamp (assoc timestamp :date (or date (t/today)))
         kind (if (= "w" (:duration repeater)) "++" ".+")
         timestamp (assoc-in timestamp [:repeater :kind] kind)
@@ -147,27 +148,34 @@
   [dom-id format _ts]
   (let [current-command @commands/*current-command
         deadline-or-schedule? (and current-command
-                                   (contains? #{"deadline" "scheduled"}
-                                              (string/lower-case current-command)))
-        date (state/sub :date-picker/date)]
-    [:div#date-time-picker.flex.flex-col.sm:flex-row {:on-click (fn [e] (util/stop e))
-                                                      :on-mouse-down (fn [e] (.stopPropagation e))}
-     (ui/datepicker
-      date
-      {:deadline-or-schedule? deadline-or-schedule?
-       :on-change
-       (fn [e date]
-         (util/stop e)
-         (let [date (t/to-default-time-zone date)
-               journal (date/journal-name date)]
-           ;; deadline-or-schedule? is handled in on-submit, not here
-           (when-not deadline-or-schedule?
-               ;; similar to page reference
-             (editor-handler/insert-command! dom-id
-                                             (page-ref/->page-ref journal)
-                                             format
-                                             {:command :page-ref})
-             (state/clear-editor-action!)
-             (reset! commands/*current-command nil))))})
+                                (contains? #{"deadline" "scheduled"}
+                                  (string/lower-case current-command)))
+        _date (state/sub :date-picker/date)
+        select-handler! (fn [^js d]
+                          (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))
+                                journal (date/js-date->journal-title gd)]
+                            ;; deadline-or-schedule? is handled in on-submit, not here
+                            (when-not deadline-or-schedule?
+                              ;; similar to page reference
+                              (editor-handler/insert-command! dom-id
+                                (page-ref/->page-ref journal)
+                                format
+                                {:command :page-ref})
+                              (state/clear-editor-action!)
+                              (reset! commands/*current-command nil))
+                            (state/set-state! :date-picker/date d)))]
+    [:div#date-time-picker.flex.flex-col.sm:flex-row
+     ;; inline container
+     [:div.border-red-500
+      (shui/calendar
+        {:mode "single"
+         :initial-focus true
+         :show-week-number false
+         :selected _date
+         :on-select select-handler!
+         :on-day-key-down (fn [^js d _ ^js e]
+                            (when (= "Enter" (.-key e))
+                              (select-handler! d)
+                              (util/stop e)))})]
      (when deadline-or-schedule?
        (time-repeater))]))

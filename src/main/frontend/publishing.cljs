@@ -3,6 +3,7 @@
   application"
   (:require [frontend.state :as state]
             [datascript.core :as d]
+            [datascript.transit :as dt]
             [frontend.db :as db]
             [rum.core :as rum]
             [frontend.handler.route :as route-handler]
@@ -58,7 +59,7 @@
       (state/set-current-repo! repo)
       (p/let [_ (repo-handler/restore-and-setup-repo! repo)
               _ (let [data (unescape-html data)
-                      db (db/string->db data)
+                      db (dt/read-transit-str data)
                       datoms (d/datoms db :eavt)]
                   (db/transact! repo datoms {:init-db? true
                                              :new-graph? true}))]
@@ -90,6 +91,13 @@
   (state/set-component! :block/linked-references reference/block-linked-references)
   (state/set-component! :whiteboard/tldraw-preview whiteboard/tldraw-preview)
   (state/set-component! :block/single-block block/single-block-cp)
+  (state/set-component! :block/container block/block-container)
+  (state/set-component! :block/blocks-container block/blocks-container)
+  (state/set-component! :block/reference block/block-reference)
+  (state/set-component! :block/properties-cp block/db-properties-cp)
+  (state/set-component! :block/embed block/block-embed)
+  (state/set-component! :block/page-cp block/page-cp)
+  (state/set-component! :block/inline-text block/inline-text)
   (state/set-component! :editor/box editor/box)
   (command-palette/register-global-shortcut-commands))
 

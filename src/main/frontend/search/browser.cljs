@@ -6,7 +6,8 @@
             [frontend.persist-db.browser :as browser]
             [frontend.state :as state]
             [frontend.config :as config]
-            [frontend.handler.file-based.property.util :as property-util]))
+            [frontend.handler.file-based.property.util :as property-util]
+            [logseq.db :as ldb]))
 
 (defonce *sqlite browser/*worker)
 
@@ -14,12 +15,8 @@
   protocol/Engine
   (query [_this q option]
     (if-let [^js sqlite @*sqlite]
-      (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))
-              result (bean/->clj result)]
-        (keep (fn [{:keys [content page] :as block}]
-                {:block/uuid (uuid (:uuid block))
-                 :block/content content
-                 :block/page (uuid page)}) result))
+      (p/let [result (.search-blocks sqlite (state/get-current-repo) q (bean/->js option))]
+        (ldb/read-transit-str result))
       (p/resolved nil)))
   (rebuild-pages-indice! [_this]
     (if-let [^js sqlite @*sqlite]
@@ -31,14 +28,14 @@
               file-based? (config/local-file-based-graph? repo)
               _ (protocol/truncate-blocks! this)
               result (.search-build-blocks-indice sqlite repo)
-              blocks (cond->> (bean/->clj result)
-                       file-based?
-                       ;; remove built-in properties from content
-                       (map #(update % :content
-                                     (fn [content]
-                                       (property-util/remove-built-in-properties (get % :format :markdown) content))))
-                       true
-                       bean/->js)
+              blocks (if file-based?
+                       (->> (bean/->clj result)
+                            ;; remove built-in properties from content
+                            (map #(update % :content
+                                          (fn [content]
+                                            (property-util/remove-built-in-properties (get % :format :markdown) content))))
+                            bean/->js)
+                       result)
               _ (when (seq blocks)
                   (.search-upsert-blocks sqlite repo blocks))])
       (p/resolved nil)))

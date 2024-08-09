@@ -157,8 +157,7 @@
                           :size        (.-size file)
                           :type        (.-kind (.-handle file))
                           :content     content
-                          :file/file   file
-                          :file/handle (.-handle file)})))))))
+                          :file/file   file})))))))
 
 (defrecord ^:large-vars/cleanup-todo Nfs []
   protocol/Fs
@@ -345,8 +344,7 @@
                                  :type        (.-kind (.-handle file))
                                  :content     content
                                  ;; expose the following, they are used by the file system
-                                 :file/file   file
-                                 :file/handle (.-handle file)}))))
+                                 :file/file   file}))))
             files (p/all files)]
       (add-nfs-file-handle! (str "handle/" dir-name) dir-handle)
       (idb/set-item! (str "handle/" dir-name) dir-handle)

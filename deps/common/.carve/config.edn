@@ -1,5 +1,6 @@
 {:paths ["src"]
  :api-namespaces [logseq.common.path
+                  logseq.common.uuid
                   logseq.common.util.page-ref
                   logseq.common.util.block-ref
                   logseq.common.util

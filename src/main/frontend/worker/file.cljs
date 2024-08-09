@@ -3,23 +3,23 @@
   (:require [clojure.core.async :as async]
             [clojure.string :as string]
             [clojure.set :as set]
-            [frontend.worker.file.core :as file]
+            [frontend.common.file.core :as common-file]
             [logseq.outliner.tree :as otree]
             [lambdaisland.glogi :as log]
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.worker.util :as worker-util]
+            [frontend.common.async-util :as async-util]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [malli.core :as m]
             [frontend.worker.state :as worker-state]
             [goog.object :as gobj]
-            [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]))
 
-(def *writes file/*writes)
-(def dissoc-request! file/dissoc-request!)
-(def conj-page-write! file/conj-page-write!)
+(def *writes common-file/*writes)
+(def dissoc-request! common-file/dissoc-request!)
+(def conj-page-write! common-file/conj-page-write!)
 
 (defonce file-writes-chan
   (let [coercer (m/coercer [:catn
@@ -35,13 +35,13 @@
 (def whiteboard-blocks-pull-keys-with-persisted-ids
   '[:block/properties
     :block/uuid
-    :block/content
+    :block/order
+    :block/title
     :block/format
     :block/created-at
     :block/updated-at
     :block/collapsed?
     {:block/page      [:block/uuid]}
-    {:block/left      [:block/uuid]}
     {:block/parent    [:block/uuid]}])
 
 (defn- cleanup-whiteboard-block
@@ -51,9 +51,9 @@
             :db/id
             :block/uuid ;; shape block uuid is read from properties
             :block/collapsed?
-            :block/content
+            :block/title
             :block/format
-            :block/left
+            :block/order
             :block/page
             :block/parent) ;; these are auto-generated for whiteboard shapes
     (dissoc block :db/id :block/page)))
@@ -62,7 +62,7 @@
   [repo conn page-db-id outliner-op context request-id]
   (let [page-block (d/pull @conn '[*] page-db-id)
         page-db-id (:db/id page-block)
-        whiteboard? (contains? (set (:block/type page-block)) "whiteboard")
+        whiteboard? (ldb/whiteboard? page-block)
         blocks-count (ldb/get-page-blocks-count @conn page-db-id)
         blocks-just-deleted? (and (zero? blocks-count)
                                   (contains? #{:delete-blocks :move-blocks} outliner-op))]
@@ -71,17 +71,17 @@
                (not (worker-state/tx-idle? repo {:diff 3000})))
         (async/put! file-writes-chan [repo page-db-id outliner-op (tc/to-long (t/now)) request-id])
         (let [pull-keys (if whiteboard? whiteboard-blocks-pull-keys-with-persisted-ids '[*])
-              blocks (ldb/get-page-blocks @conn (:block/name page-block) {:pull-keys pull-keys})
+              blocks (ldb/get-page-blocks @conn (:db/id page-block) {:pull-keys pull-keys})
               blocks (if whiteboard? (map cleanup-whiteboard-block blocks) blocks)]
           (if (and (= 1 (count blocks))
-                   (string/blank? (:block/content (first blocks)))
+                   (string/blank? (:block/title (first blocks)))
                    (nil? (:block/file page-block))
                    (not whiteboard?))
             (dissoc-request! request-id)
             (let [tree-or-blocks (if whiteboard? blocks
-                                     (otree/blocks->vec-tree repo @conn blocks (:block/name page-block)))]
+                                     (otree/blocks->vec-tree repo @conn blocks (:db/id page-block)))]
               (if page-block
-                (file/save-tree! repo conn page-block tree-or-blocks blocks-just-deleted? context request-id)
+                (common-file/save-tree! repo conn page-block tree-or-blocks blocks-just-deleted? context request-id)
                 (do
                   (js/console.error (str "can't find page id: " page-db-id))
                   (dissoc-request! request-id)))))))
@@ -100,18 +100,16 @@
         (try (do-write-file! repo conn page-id outliner-op context request-id)
              (catch :default e
                (worker-util/post-message :notification
-                                         (pr-str
-                                          [[:div
-                                            [:p "Write file failed, please copy the changes to other editors in case of losing data."]
-                                            "Error: " (str (gobj/get e "stack"))]
-                                           :error]))
+                                         [[:div
+                                           [:p "Write file failed, please copy the changes to other editors in case of losing data."]
+                                           "Error: " (str (gobj/get e "stack"))]
+                                          :error])
                (log/error :file/write-file-error {:error e})
                (dissoc-request! request-id)))))))
 
 (defn sync-to-file
   [repo page-id tx-meta]
-  (when (and (sqlite-util/local-file-based-graph? repo)
-             page-id
+  (when (and page-id
              (not (:created-from-journal-template? tx-meta))
              (not (:delete-files? tx-meta)))
     (let [request-id (conj-page-write! page-id)]
@@ -119,7 +117,7 @@
 
 (defn <ratelimit-file-writes!
   []
-  (worker-util/<ratelimit file-writes-chan batch-write-interval
+  (async-util/<ratelimit file-writes-chan batch-write-interval
                           :filter-fn (fn [_] true)
                           :flush-fn
                           (fn [col]
@@ -127,5 +125,6 @@
                               (let [repo (ffirst col)
                                     conn (worker-state/get-datascript-conn repo)]
                                 (if conn
-                                  (write-files! conn col (worker-state/get-context))
+                                  (when-not (ldb/db-based-graph? @conn)
+                                    (write-files! conn col (worker-state/get-context)))
                                   (js/console.error (str "DB is not found for ") repo)))))))

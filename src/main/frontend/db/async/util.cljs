@@ -2,18 +2,19 @@
   "Async util helper"
   (:require [frontend.state :as state]
             [promesa.core :as p]
-            [clojure.edn :as edn]
             [frontend.db.conn :as db-conn]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.db :as ldb]))
 
 (defn <q
-  [graph & inputs]
+  [graph {:keys [transact-db?]
+          :or {transact-db? true}} & inputs]
   (assert (not-any? fn? inputs) "Async query inputs can't include fns because fn can't be serialized")
   (when-let [^Object sqlite @state/*db-worker]
-    (p/let [result (.q sqlite graph (pr-str inputs))]
+    (p/let [result (.q sqlite graph (ldb/write-transit-str inputs))]
       (when result
-        (let [result' (edn/read-string result)]
-          (when (and (seq result') (coll? result'))
+        (let [result' (ldb/read-transit-str result)]
+          (when (and transact-db? (seq result') (coll? result'))
             (when-let [conn (db-conn/get-db graph false)]
               (let [tx-data (->>
                              (if (and (coll? (first result'))
@@ -21,12 +22,13 @@
                                (apply concat result')
                                result')
                              (remove nil?))]
-                (when (every? map? tx-data)
+                (if (every? map? tx-data)
                   (try
                     (d/transact! conn tx-data)
                     (catch :default e
                       (js/console.error "<q failed with:" e)
-                      nil))))))
+                      nil))
+                  (js/console.log "<q skipped tx for inputs:" inputs)))))
           result')))))
 
 (defn <pull
@@ -34,9 +36,9 @@
    (<pull graph '[*] id))
   ([graph selector id]
    (when-let [^Object sqlite @state/*db-worker]
-     (p/let [result (.pull sqlite graph (pr-str selector) (pr-str id))]
+     (p/let [result (.pull sqlite graph (ldb/write-transit-str selector) (ldb/write-transit-str id))]
        (when result
-         (let [result' (edn/read-string result)]
+         (let [result' (ldb/read-transit-str result)]
            (when-let [conn (db-conn/get-db graph false)]
              (d/transact! conn [result']))
            result'))))))
@@ -46,6 +48,6 @@
    [graph selector ids]
    (assert (seq ids))
    (when-let [^Object sqlite @state/*db-worker]
-     (p/let [result (.pull-many sqlite graph (pr-str selector) (pr-str ids))]
+     (p/let [result (.pull-many sqlite graph (ldb/write-transit-str selector) (ldb/write-transit-str ids))]
        (when result
-         (edn/read-string result))))))
+         (ldb/read-transit-str result))))))

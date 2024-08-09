@@ -14,7 +14,6 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.handler.editor :as editor-handler]
@@ -30,6 +29,7 @@
             [frontend.util.persist-var :as persist-var]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.util.page-ref :as page-ref]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -112,7 +112,7 @@
   (editor-handler/save-block-if-changed!
    block
    (property-file/insert-properties-when-file-based
-    (state/get-current-repo) (:block/format block) (:block/content block) props)
+    (state/get-current-repo) (:block/format block) (:block/title block) props)
    {:force? true}))
 
 (defn- reset-block-card-properties!
@@ -130,7 +130,7 @@
 
 (defn card-block?
   [block]
-  (let [card-entity (db/entity [:block/name card-hash-tag])
+  (let [card-entity (db/get-page card-hash-tag)
         refs (into #{} (:block/refs block))]
     (contains? refs card-entity)))
 
@@ -207,7 +207,7 @@
 
 (defn- has-cloze?
   [blocks]
-  (->> (map :block/content blocks)
+  (->> (map :block/title blocks)
        (some #(string/includes? % "{{cloze "))))
 
 (defn- clear-collapsed-property
@@ -265,7 +265,7 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [result (if (string/blank? query-string)
-                    (:block/_refs (db/entity [:block/name card-hash-tag]))
+                    (:block/_refs (db/get-page card-hash-tag))
                     (let [query-string (template/resolve-dynamic-template! query-string)
                           query-string (if-not (or (string/blank? query-string)
                                                    (string/starts-with? query-string "(")
@@ -422,7 +422,7 @@
    :id id
    :class (str id " " class)
    :background background
-   :on-mouse-down (fn [e] (util/stop-propagation e))
+   :on-pointer-down (fn [e] (util/stop-propagation e))
    :on-click (fn [_e]
                (js/setTimeout #(on-click) 10))))
 
@@ -452,11 +452,11 @@
            [:div {:style {:margin-top 20}}
             (component-block/breadcrumb {} repo root-block-id {})])
          (component-block/blocks-container
-          current-blocks
           (merge (show-cycle-config card @phase)
                  {:id (str root-block-id)
                   :editor-box editor/box
-                  :review-cards? true}))
+                  :review-cards? true})
+          current-blocks)
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))
@@ -531,7 +531,7 @@
 
 (defn preview
   [block-id]
-  (state/set-modal! #(preview-cp block-id) {:id :srs}))
+  (shui/dialog-open! #(preview-cp block-id) {:id :srs}))
 
 ;;; ================================================================
 ;;; register some external vars & related UI
@@ -588,12 +588,10 @@
 
 (declare cards)
 
+;; TODO: FIXME: macros have been deleted
 (rum/defc cards-select
   [{:keys [on-chosen]}]
-  (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
-        items (->> (map (comp :logseq.macro-arguments :block/properties) cards)
-                   (map (fn [col] (string/join " " col))))
-        items (concat items [(t :flashcards/modal-select-all)])]
+  (let [items [(t :flashcards/modal-select-all)]]
     (component-select/select {:items items
                               :on-chosen on-chosen
                               :close-modal? false
@@ -627,7 +625,7 @@
            (ui/dropdown
             (fn [{:keys [toggle-fn]}]
               [:div.ml-1.text-sm.font-medium.cursor
-               {:on-mouse-down (fn [e]
+               {:on-pointer-down (fn [e]
                                  (util/stop e)
                                  (toggle-fn))}
                [:span.flex (if (string/blank? query-string) (t :flashcards/modal-select-all) query-string)
@@ -697,8 +695,9 @@
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []
-                         (state/set-modal! #(cards (assoc config :modal? true) {:query-string query-string})
-                                           {:id :srs}))})
+                         (shui/dialog-open!
+                           #(cards (assoc config :modal? true) {:query-string query-string})
+                           {:id :srs}))})
           (let [view-fn (if modal? view-modal view)
                 blocks (if @*preview-mode? query-result review-cards)
                 blocks (if @*random-mode? (shuffle blocks) blocks)]
@@ -771,18 +770,22 @@
 ;;; register slash commands
 (commands/register-slash-command ["Cards"
                                   [[:editor/input "{{cards }}" {:backward-pos 2}]]
-                                  "Create a cards query"])
+                                  "Create a cards query"
+                                  {:db-graph? false
+                                   :icon :icon/cards}])
 
 (commands/register-slash-command ["Cloze"
                                   [[:editor/input "{{cloze }}" {:backward-pos 2}]]
-                                  "Create a cloze"])
+                                  "Create a cloze"
+                                  {:db-graph? false
+                                   :icon :icon/eye-question}])
 
 ;; handlers
 (defn add-card-tag-to-block
   "given a block struct, adds the #card to title and returns
    a seq of [original-block new-content-string]"
   [block]
-    (when-let [content (:block/content block)]
+    (when-let [content (:block/title block)]
       (let [format (:block/format block)
             content (-> (property-file/remove-built-in-properties-when-file-based
                          (state/get-current-repo) (:block/format block) content)

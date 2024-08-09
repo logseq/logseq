@@ -18,7 +18,8 @@
             [frontend.modules.outliner.op :as outliner-op]
             [frontend.schema.handler.repo-config :as repo-config-schema]
             [promesa.core :as p]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.outliner.op]))
 
 (defn- remove-non-existed-refs!
   [refs]
@@ -27,6 +28,17 @@
                         (= :block/uuid (first x))
                         (nil? (db/entity x)))
                    (nil? x))) refs))
+
+(defn- use-cached-refs!
+  [refs block]
+  (let [refs (remove #(= (:block/uuid block) (:block/uuid %)) refs)
+        cached-refs @(:editor/block-refs @state/state)
+        title->ref (zipmap (map :block/title cached-refs) cached-refs)]
+    (map (fn [x]
+           (if-let [ref (and (map? x) (title->ref (:block/title x)))]
+             ref
+             x))
+         refs)))
 
 (defn- replace-tag-ref
   [content page-name id]
@@ -60,46 +72,38 @@
 
 (defn- replace-page-refs-with-ids
   [block]
-  (let [content (:block/content block)
-        content' (if (some :block/name (:block/refs block))
+  (let [content (:block/title block)
+        content' (if (some :block/title (:block/refs block))
                    (reduce
-                    (fn [content {:block/keys [original-name uuid]}]
-                      (replace-page-ref-with-id content original-name uuid))
+                    (fn [content {:block/keys [title uuid]}]
+                      (replace-page-ref-with-id content title uuid))
                     content
-                    (filter :block/name (:block/refs block)))
+                    (filter :block/title (:block/refs block)))
                    content)]
-    (assoc block :block/content content')))
+    (assoc block :block/title content')))
 
 (defn wrap-parse-block
-  [{:block/keys [content left level] :as block}]
+  [{:block/keys [title level] :as block}]
   (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
-        block (if (nil? content)
+        block (if (nil? title)
                 block
-                (let [ast (mldoc/->edn (string/trim content) :markdown)
+                (let [ast (mldoc/->edn (string/trim title) :markdown)
                       first-elem-type (first (ffirst ast))
                       block-with-title? (mldoc/block-with-title? first-elem-type)
-                      content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") content)
-                      block' (merge block (block/parse-block (assoc block :block/content content')))
-                      block' (if (seq (:block/properties block))
-                               (update block' :block/properties (fn [m] (merge m (:block/properties block))))
-                               block')]
-                  (update block' :block/refs remove-non-existed-refs!)))
-        block (if (and left (not= (:block/left block) left)) (assoc block :block/left left) block)
+                      content' (str (config/get-block-pattern :markdown) (if block-with-title? " " "\n") title)
+                      parsed-block (block/parse-block (assoc block :block/title content'))
+                      block' (merge block parsed-block {:block/title title})]
+                  (update block' :block/refs
+                          (fn [refs]
+                            (-> refs
+                                remove-non-existed-refs!
+                                (use-cached-refs! block))))))
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]
     (-> result
         ;; Remove tags from content
-        (assoc :block/content
-               (db-content/content-without-tags
-                (:block/content result)
-                (->>
-                 (map
-                  (fn [tag]
-                    (when (:block/uuid tag)
-                      (str db-content/page-ref-special-chars (:block/uuid tag))))
-                  (concat (:block/tags result) (:block/tags block)))
-                 (remove nil?)))))))
+        (assoc :block/title (db-content/content-without-tags (:block/title result) (:block/refs result))))))
 
 (defn save-file!
   "This fn is the db version of file-handler/alter-file"
@@ -110,20 +114,22 @@
                       true)]
 
     (when file-valid?
-      (db/transact! [{:file/path path
-                      :file/content content
-                      :file/last-modified-at (js/Date.)}])
+      (p/do!
+       (db/transact! [{:file/path path
+                       :file/content content
+                       :file/created-at (js/Date.)
+                       :file/last-modified-at (js/Date.)}])
       ;; Post save
-      (cond (= path "logseq/config.edn")
-            (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
-              (state/pub-event! [:shortcut/refresh]))
-            (= path "logseq/custom.css")
-            (ui-handler/add-style-if-exists!)))))
+       (cond (= path "logseq/config.edn")
+             (p/let [_ (repo-config-handler/restore-repo-config! (state/get-current-repo) content)]
+               (state/pub-event! [:shortcut/refresh]))
+             (= path "logseq/custom.css")
+             (ui-handler/add-style-if-exists!))))))
 
 (defn- set-heading-aux!
   [block-id heading]
   (let [block (db/pull [:block/uuid block-id])
-        old-heading (pu/lookup (:block/properties block) :heading)]
+        old-heading (pu/lookup (:block/properties block) :logseq.property/heading)]
     (cond
       ;; nothing changed for first two cases
       (or (and (nil? old-heading) (nil? heading))
@@ -137,24 +143,24 @@
 
       (and (or (nil? heading) (true? heading))
            (number? old-heading))
-      (let [content (commands/clear-markdown-heading (:block/content block))]
-        {:block/content content
+      (let [content (commands/clear-markdown-heading (:block/title block))]
+        {:block/title content
          :block/uuid (:block/uuid block)})
 
       (and (or (nil? old-heading) (true? old-heading))
            (number? heading))
-      (let [content (commands/set-markdown-heading (:block/content block) heading)]
-        {:block/content content
+      (let [content (commands/set-markdown-heading (:block/title block) heading)]
+        {:block/title content
          :block/uuid (:block/uuid block)})
 
         ;; heading-num1 -> heading-num2
       :else
       (let [content (-> block
-                        :block/content
+                        :block/title
                         commands/clear-markdown-heading
                         (commands/set-markdown-heading heading))]
         {:block/uuid (:block/uuid block)
-         :block/content content}))))
+         :block/title content}))))
 
 (defn batch-set-heading!
   [repo block-ids heading]
@@ -162,4 +168,4 @@
    {:outliner-op :save-block}
    (doseq [block (keep #(set-heading-aux! % heading) block-ids)]
      (outliner-op/save-block! block))
-   (property-handler/batch-set-block-property! repo block-ids :heading heading)))
+   (property-handler/batch-set-block-property! repo block-ids :logseq.property/heading heading)))

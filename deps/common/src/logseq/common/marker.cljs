@@ -1,5 +1,5 @@
 (ns logseq.common.marker
-  "marker patterns"
+  "Marker patterns. File graph only"
   (:require [clojure.string :as string]))
 
 (defn marker-pattern [format]

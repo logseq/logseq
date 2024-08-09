@@ -49,15 +49,6 @@
   "Properties used by logseq that user can edit and that can have linkable property values"
   #{:alias :aliases :tags})
 
-;; file based graphs only (or maybe not for backward compatibility with markdown tables)
-(def editable-view-and-table-properties
-  "Properties used by view and table component"
-  #{;; view props
-    :logseq.color
-    ;; table props
-    :logseq.table.version :logseq.table.compact :logseq.table.headers :logseq.table.hover
-    :logseq.table.borders :logseq.table.stripes :logseq.table.max-width})
-
 (defn editable-built-in-properties
   "Properties used by logseq that user can edit"
   []
@@ -65,8 +56,7 @@
                :logseq.query/nlp-date
                ;; org-mode only
                :macro :filetags}
-             editable-linkable-built-in-properties
-             editable-view-and-table-properties))
+             editable-linkable-built-in-properties))
 
 (defn hidden-built-in-properties
   "Properties used by logseq that user can't edit or see"
@@ -76,7 +66,7 @@
      :id :background-color :heading :collapsed
      :created-at :updated-at :last-modified-at
      :query-table :query-properties :query-sort-by :query-sort-desc :ls-type
-     :hl-type :hl-page :hl-stamp :hl-color :logseq.macro-name :logseq.macro-arguments
+     :hl-type :hl-page :hl-stamp :hl-color
      :logseq.order-list-type :logseq.tldraw.page :logseq.tldraw.shape
      ; task markers
      :todo :doing :now :later :done}
@@ -352,6 +342,6 @@
                 (distinct)
                 (map (fn [item] (page-ref/->page-ref (page-ref/page-ref-un-brackets! item))))
                 (string/join ", "))
-               v)]
+               (if (keyword? v) (name v) v))]
        (insert-property repo format content k v)))
    content kvs))

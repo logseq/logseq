@@ -21,7 +21,9 @@
             [logseq.common.config :as common-config]
             [clojure.core.async :as async]
             [medley.core :as medley]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [logseq.db :as ldb]
+            [clojure.core.async.interop :refer [p->c]]))
 
 (defn- create-contents-file
   [repo-url]
@@ -87,7 +89,7 @@
                     default-content)
           file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
                                                                           (config/get-file-extension format)))
-          page-exists? (db/entity repo-url [:block/name (util/page-name-sanity-lc title)])
+          page-exists? (ldb/get-page (db/get-db) title)
           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
       (when (or empty-blocks? (not page-exists?))
         (p/let [_ (nfs/check-directory-permission! repo-url)
@@ -136,7 +138,8 @@
             (file-handler/alter-file repo-url
                                      (:file/path file)
                                      (:file/content file)
-                                     (merge {:new-graph? new-graph?
+                                     (merge (:stat file)
+                                            {:new-graph? new-graph?
                                              :re-render-root? false
                                              :from-disk? true
                                              :skip-db-transact? skip-db-transact?}
@@ -218,7 +221,7 @@
                   result (parse-and-load-file! repo-url file opts')
                   page-name (when (coll? result) ; result could be a promise
                               (some (fn [x] (when (and (map? x)
-                                                       (:block/original-name x)
+                                                       (:block/title x)
                                                        (= (:file/path file) (:file/path (:block/file x))))
                                               (:block/name x)))
                                     result))
@@ -238,14 +241,15 @@
                   _ (when (and page-name (not page-exists?))
                       (swap! *page-names conj page-name)
                       (swap! *page-name->path assoc page-name (:file/path file)))
-                  tx' (if (or whiteboard? (zero? (rem (inc idx) 100)))
-                        (do (db/transact! repo-url tx' {:from-disk? true})
-                            [])
+                  tx' (if (zero? (rem (inc idx) 100))
+                        (do
+                          (async/<! (p->c (db/transact! repo-url tx' {:from-disk? true})))
+                          [])
                         tx')]
               (recur tx')))
-          (do
-            (when (seq tx) (db/transact! repo-url tx {:from-disk? true}))
-            (after-parse repo-url re-render? re-render-opts opts graph-added-chan)))))
+          (p/do!
+           (when (seq tx) (db/transact! repo-url tx {:from-disk? true}))
+           (after-parse repo-url re-render? re-render-opts opts graph-added-chan)))))
     graph-added-chan))
 
 (defn- parse-files-and-create-default-files!
@@ -276,8 +280,7 @@
 
     ;; Load to db even it's empty, (will create default files)
     (parse-files-and-load-to-db! repo-url file-objs {:new-graph? new-graph?
-                                                     :empty-graph? empty-graph?})
-    (state/set-parsing-state! {:graph-loading? false})))
+                                                     :empty-graph? empty-graph?})))
 
 (defn load-repo-to-db!
   [repo-url {:keys [diffs file-objs refresh? new-graph? empty-graph?]}]

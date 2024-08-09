@@ -1,9 +1,9 @@
 (ns logseq.common.config
-  "Common config that is shared between deps and app"
+  "Common config and constants that are shared between deps and app"
   (:require [clojure.string :as string]
             [goog.object :as gobj]))
 
-(defn- hidden?
+(defn hidden?
   [path patterns]
   (let [path (if (and (string? path)
                       (= \/ (first path)))
@@ -34,6 +34,9 @@
 (defonce capacitor-x-protocol-with-prefix (str (gobj/getValueByKeys js/globalThis "location" "href") capacitor-prefix))
 
 (defonce local-assets-dir "assets")
+
+(defonce favorites-page-name "$$$favorites")
+(defonce views-page-name "$$$views")
 
 (defn local-asset?
   [s]

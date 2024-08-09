@@ -1,95 +1,198 @@
 (ns frontend.worker.rtc.ws
-  "Websocket related util-fns"
-  (:require-macros
-   [frontend.worker.rtc.macro :refer [with-sub-data-from-ws get-req-id get-result-ch]])
+  "Websocket wrapped by missionary.
+  based on
+  https://github.com/ReilySiegel/missionary-websocket/blob/master/src/com/reilysiegel/missionary/websocket.cljs"
   (:require [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [<! chan offer!]]
-            [frontend.worker.async-util :include-macros true :refer [<? go-try]]
+            [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.const :as rtc-const]
-            [frontend.worker.state :as worker-state]
-            [goog.string :as gstring]))
+            [frontend.worker.rtc.exception :as r.ex]
+            [missionary.core :as m]))
 
-(def WebSocketOPEN (if (= *target* "nodejs")
-                     1
-                     js/WebSocket.OPEN))
-
-(defn ws-listen
-  [token data-from-ws-chan ws-opened-ch]
-  (let [ws (js/WebSocket. (gstring/format @worker-state/*rtc-ws-url token))]
-    (set! (.-onopen ws) (fn [_e] (async/close! ws-opened-ch)))
-    (set! (.-onmessage ws) (fn [e]
-                             (let [data (js->clj (js/JSON.parse (.-data e)) :keywordize-keys true)]
-                               (offer! data-from-ws-chan data))))
-
-    (set! (.-onclose ws) (fn [e]
-                           (println :ws-stopped)
-                           (js/console.error e)))
-    ws))
-
-(defn send!
-  [ws message]
-  (assert (= WebSocketOPEN (.-readyState ws)))
-  (let [decoded-message (rtc-const/data-to-ws-coercer message)]
-    (.send ws (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message))))))
-
-(declare <send!)
-(defn <ensure-ws-open!
-  "ensure websocket in state is OPEN, if not, make a connection, and
-  call init 'register-graph-updates' message"
-  [state]
-  (go-try
-   (let [ws @(:*ws state)]
-     (when (or (nil? ws)
-               (> (.-readyState ws) WebSocketOPEN))
-       (let [ws-opened-ch (chan)
-             ws* (ws-listen @(:*token state) (:data-from-ws-chan state) ws-opened-ch)]
-         (<! ws-opened-ch)
-         (reset! (:*ws state) ws*)
-         (when-let [graph-uuid @(:*graph-uuid state)]
-           (with-sub-data-from-ws state
-             (<? (<send! state {:action "register-graph-updates" :req-id (get-req-id) :graph-uuid graph-uuid}))
-             (<! (get-result-ch)))))))))
-
-(defn <send!
-  "ensure ws state=open, then send messages"
-  [state message]
-  (go-try
-   (<? (<ensure-ws-open! state))
-   (send! @(:*ws state) message)))
-
-(defn <send&receive
-  "Send 'message' to ws, and return response of this request.
-  When this response is too huge, backend will put it in s3 and return the presigned-url,
-  this fn will handle this case."
-  [state message]
-  (go-try
-   (with-sub-data-from-ws state
-     (<? (<send! state (assoc message :req-id (get-req-id))))
-     (let [resp (<! (get-result-ch))
-           resp*
-           (if-let [s3-presign-url (:s3-presign-url resp)]
-             (let [{:keys [status body]} (<! (http/get s3-presign-url {:with-credentials? false}))]
-               (if (http/unexceptional-status? status)
-                 (js->clj (js/JSON.parse body) :keywordize-keys true)
-                 {:req-id (get-req-id)
-                  :ex-message "get s3 object failed"
-                  :ex-data {:type :get-s3-object-failed :status status :body body}}))
-             resp)]
-       (rtc-const/data-from-ws-coercer resp*)))))
-
-
-(defn stop
-  [ws]
-  (set! (.-onopen ws) nil)
-  (set! (.-onclose ws) nil)
-  (set! (.-onmessage ws) nil)
-  (set! (.-onerror ws) nil)
-  (.close ws))
-
-(defn get-state
+(defn- get-state
   [ws]
   (case (.-readyState ws)
     0 :connecting
     1 :open
     2 :closing
     3 :closed))
+
+(defn- open-ws-task
+  [url]
+  (fn [s! f!]
+    (try
+      (let [ws (js/WebSocket. url)]
+        (set! (.-onopen ws)
+              (fn [_]
+                (let [close-dfv (m/dfv)
+                      mbx (m/mbx)]
+                  (set! (.-onopen ws) nil)
+                  (set! (.-onmessage ws) (fn [e] (mbx (.-data e))))
+                  (set! (.-onclose ws) (fn [e]
+                                         (set! (.-onclose ws) nil)
+                                         (close-dfv e)))
+                  (s! [mbx ws close-dfv]))))
+        (set! (.-onclose ws)
+              (fn [e]
+                (set! (.-onopen ws) nil)
+                (set! (.-onclose ws) nil)
+                (f! e)))
+        (fn canceller []
+          ;; canceller will be called(no gua) even this task succeed
+          ;; should only cancel :connecting state websocket
+          ;; see also some explanations from lib author about canceller:
+          ;; https://clojurians.slack.com/archives/CL85MBPEF/p1714323302110269
+          (when (= :connecting (get-state ws))
+            (.close ws))))
+      (catch :default e
+        (f! e) #(do)))))
+
+(defn- handle-close
+  [x]
+  (if (instance? js/CloseEvent x)
+    (throw x)
+    x))
+
+(defn- create-mws*
+  [url]
+  (m/sp
+    (if-let [[mbx ws close-dfv] (m/? (open-ws-task url))]
+      {:raw-ws ws
+       :send (fn [data]
+               (m/sp
+                 (handle-close
+                  (m/?
+                   (m/race close-dfv
+                           (m/sp (while (< 4096 (.-bufferedAmount ws))
+                                   (m/? (m/sleep 50)))
+                                 (.send ws data)))))))
+       :recv-flow
+       (m/stream
+        (m/ap
+          (loop []
+            (m/amb
+             (handle-close
+              (m/? (m/race close-dfv mbx)))
+             (recur)))))}
+      (throw (ex-info "open ws timeout(10s)" {:missionary/retry true})))))
+
+(defn closed?
+  [mws]
+  (contains? #{:closing :closed} (get-state (:raw-ws mws))))
+
+(defn mws-create
+  "Return a task that create a mws (missionary wrapped websocket).
+  When failed to open websocket, retry with backoff.
+  TODO: retry ASAP once network condition changed"
+  [url & {:keys [retry-count open-ws-timeout]
+          :or {retry-count 10 open-ws-timeout 10000}}]
+  (assert (and (pos-int? retry-count)
+               (pos-int? open-ws-timeout))
+          [retry-count open-ws-timeout])
+  (c.m/backoff
+   (take retry-count c.m/delays)
+   (m/sp
+     (try
+       (if-let [ws (m/? (m/timeout (create-mws* url) open-ws-timeout))]
+         ws
+         (throw (ex-info "open websocket timeout" {:missionary/retry true})))
+       (catch js/CloseEvent e
+         (throw (ex-info "failed to open websocket conn"
+                         {:missionary/retry true}
+                         e)))))))
+
+(defn create-mws-state-flow
+  [mws]
+  (m/relieve
+   (m/observe
+    (fn ctor [emit!]
+      (let [ws (:raw-ws mws)
+            old-onclose (.-onclose ws)
+            old-onerror (.-onerror ws)
+            old-onopen (.-onopen ws)]
+        (set! (.-onclose ws) (fn [e]
+                               (when old-onclose (old-onclose e))
+                               (emit! (get-state ws))))
+        (set! (.-onerror ws) (fn [e]
+                               (when old-onerror (old-onerror e))
+                               (emit! (get-state ws))))
+        (set! (.-onopen ws) (fn [e]
+                              (when old-onopen (old-onopen e))
+                              (emit! (get-state ws))))
+        (emit! (get-state ws))
+        (fn dtor []
+          (set! (.-onclose ws) old-onclose)
+          (set! (.-onerror ws) old-onerror)
+          (set! (.-onopen ws) old-onopen)))))))
+
+(comment
+  (defn close
+    [m-ws]
+    (.close (:raw-ws m-ws))))
+
+(defn send
+  "Returns a task: send message"
+  [mws message]
+  (m/sp
+    (let [decoded-message (rtc-const/data-to-ws-coercer message)
+          message-str (js/JSON.stringify (clj->js (rtc-const/data-to-ws-encoder decoded-message)))]
+      (m/? ((:send mws) message-str)))))
+
+(defn- recv-flow*
+  "Throw if recv `Internal server error`"
+  [m-ws]
+  (assert (some? (:recv-flow m-ws)) m-ws)
+  (m/eduction
+   (map #(js->clj (js/JSON.parse %) :keywordize-keys true))
+   (map (fn [m]
+          (if (= "Internal server error" (:message m))
+            (throw r.ex/ex-unknown-server-error)
+            m)))
+   (map rtc-const/data-from-ws-coercer)
+   (:recv-flow m-ws)))
+
+(defn recv-flow
+  "Throw if recv `Internal server error`.
+  Also take care of :s3-presign-url.(when response is too huge, it's stored in s3)"
+  [m-ws]
+  (let [f (recv-flow* m-ws)]
+    (m/ap
+      (let [resp (m/?> f)]
+        (if-let [s3-presign-url (:s3-presign-url resp)]
+          (let [{:keys [status body]} (c.m/<? (http/get s3-presign-url {:with-credentials? false}))]
+            (if (http/unexceptional-status? status)
+              (rtc-const/data-from-ws-coercer (js->clj (js/JSON.parse body) :keywordize-keys true))
+              {:req-id (:req-id resp)
+               :ex-message "get s3 object failed"
+               :ex-data {:type :rtc.exception/get-s3-object-failed :status status :body body}}))
+          resp)))))
+
+(defn- send&recv*
+  "Return a task: send message wait to recv its response and return it.
+  Throw if timeout"
+  [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
+  {:pre [(pos-int? timeout-ms)
+         (some? (:req-id message))]}
+  (m/sp
+    (m/? (send mws message))
+    (let [req-id (:req-id message)
+          result (m/?
+                  (m/timeout
+                   (m/reduce
+                    (fn [_ v]
+                      (when (= req-id (:req-id v))
+                        (reduced v)))
+                    (recv-flow mws))
+                   timeout-ms))]
+      (when-not result
+        (throw (ex-info (str "recv timeout (" timeout-ms "ms)") {:missionary/retry true
+                                                                 :message message})))
+      result)))
+
+(defn send&recv
+  "Return a task that send the message then wait to recv its response.
+  Throw if timeout"
+  [mws message & {:keys [timeout-ms] :or {timeout-ms 10000}}]
+  (m/sp
+    (let [req-id (str (random-uuid))
+          message (assoc message :req-id req-id)]
+      (m/? (send&recv* mws message :timeout-ms timeout-ms)))))

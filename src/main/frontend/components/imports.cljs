@@ -1,12 +1,8 @@
 (ns frontend.components.imports
   "Import data into Logseq."
-  (:require [cljs.core.async.interop :refer [p->c]]
-            [clojure.core.async :as async]
-            [clojure.edn :as edn]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [cljs-time.core :as t]
             [cljs.pprint :as pprint]
-            [datascript.core :as d]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
@@ -20,7 +16,6 @@
             [frontend.handler.repo :as repo-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.ui :as ui-handler]
-            [frontend.modules.outliner.ui :as ui-outliner-tx]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.ui :as ui]
@@ -29,17 +24,13 @@
             [goog.functions :refer [debounce]]
             [goog.object :as gobj]
             [logseq.common.path :as path]
-            [logseq.common.util :as common-util]
-            [logseq.db :as ldb]
             [logseq.graph-parser.exporter :as gp-exporter]
-            [logseq.outliner.core :as outliner-core]
-            [medley.core :as medley]
             [promesa.core :as p]
             [rum.core :as rum]
-            [logseq.common.config :as common-config]
+            [logseq.shui.ui :as shui]
             [lambdaisland.glogi :as log]
-            [frontend.handler.db-based.property.util :as db-pu]
-            [logseq.db.frontend.validate :as db-validate]))
+            [logseq.db.frontend.validate :as db-validate]
+            [logseq.db :as ldb]))
 
 ;; Can't name this component as `frontend.components.import` since shadow-cljs
 ;; will complain about it.
@@ -48,9 +39,9 @@
 
 (defn- finished-cb
   []
-  (route-handler/redirect-to-home!)
   (notification/show! "Import finished!" :success)
-  (ui-handler/re-render-root!))
+  (ui-handler/re-render-root!)
+  (route-handler/redirect-to-home!))
 
 (defn- roam-import-handler
   [e]
@@ -95,7 +86,7 @@
                   (fn []
                     (let [buffer (.-result ^js reader)]
                       (import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
-                      (state/close-modal!))))
+                      (shui/dialog-close!))))
             (set! (.-onerror reader) (fn [e] (js/console.error e)))
             (set! (.-onabort reader) (fn [e]
                                        (prn :debug :aborted)
@@ -154,7 +145,7 @@
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.leading-6.font-medium
+       [:h3#modal-headline.leading-6.font-medium.pb-2
         "New graph name:"]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
@@ -169,163 +160,32 @@
       (ui/button "Submit"
                  {:on-click on-submit})]]))
 
-(defn- import-from-doc-files!
-  [db-conn repo config doc-files import-state user-options]
-  (let [imported-chan (async/promise-chan)
-        page-tags-uuid (db-pu/get-built-in-property-uuid repo :pagetags)]
-    (try
-      (let [docs-chan (async/to-chan! (medley/indexed doc-files))]
-        (state/set-state! [:graph/importing-state :total] (count doc-files))
-        (async/go-loop []
-          (if-let [[i {:keys [rpath] :as file}] (async/<! docs-chan)]
-            (let [extract-options {:date-formatter (common-config/get-date-formatter config)
-                                   :user-config config
-                                   :filename-format (or (:file/name-format config) :legacy)
-                                   :block-pattern (common-config/get-block-pattern (common-util/get-format rpath))}]
-              (state/set-state! [:graph/importing-state :current-idx] (inc i))
-              (state/set-state! [:graph/importing-state :current-page] rpath)
-              (async/<! (async/timeout 10))
-              (async/<! (p->c (-> (.text (:file-object file))
-                                  (p/then (fn [content]
-                                            (prn :import-file rpath i)
-                                            {:file/path rpath
-                                             :file/content content}))
-                                  (p/then (fn [m]
-                                            ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
-                                            (let [tx-report
-                                                  (gp-exporter/add-file-to-db-graph
-                                                   db-conn
-                                                   (:file/path m)
-                                                   (:file/content m)
-                                                   {:extract-options extract-options
-                                                    :user-options user-options
-                                                    :page-tags-uuid page-tags-uuid
-                                                    :import-state import-state
-                                                    :macros (state/get-macros)
-                                                    :notify-user #(notification/show! (:msg %) :warning false)})]
-                                              (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))
-                                            m))
-                                  (p/catch (fn [error]
-                                             (notification/show! (str "Import failed on " (pr-str rpath) " with error:\n" error)
-                                                                 :error)
-                                             (log/error :import-error {:path rpath :error error}))))))
-              (recur))
-            (async/offer! imported-chan true))))
-      (catch :default e
-        (notification/show! (str "Error happens when importing:\n" e) :error)
-        (async/offer! imported-chan true)))))
-
-(defn- import-from-asset-files!
-  [asset-files]
-  (let [ch (async/to-chan! asset-files)
-        repo (state/get-current-repo)
-        repo-dir (config/get-repo-dir repo)]
-    (prn :in-files asset-files)
-    (async/go-loop []
-      (if-let [file (async/<! ch)]
-        (do
-          (async/<! (p->c (-> (.arrayBuffer (:file-object file))
-                              (p/then (fn [buffer]
-                                        (let [content (js/Uint8Array. buffer)
-                                              parent-dir (path/path-join repo-dir (path/dirname (:rpath file)))]
-                                          (p/do!
-                                           (fs/mkdir-if-not-exists parent-dir)
-                                           (fs/write-file! repo repo-dir (:rpath file) content {:skip-transact? true}))))))))
-          (recur))
-        true))))
-
-(defn- import-logseq-files
-  [logseq-files]
-  (let [custom-css (first (filter #(= (:rpath %) "logseq/custom.css") logseq-files))
-        custom-js (first (filter #(= (:rpath %) "logseq/custom.js") logseq-files))]
-    (p/do!
-     (some-> (:file-object custom-css)
-             (.text)
-             (p/then #(db-editor-handler/save-file! "logseq/custom.css" %)))
-     (some-> (:file-object custom-js)
-             (.text)
-             (p/then #(db-editor-handler/save-file! "logseq/custom.js" %))))))
-
-(defn- import-config-file!
-  [{:keys [file-object]}]
-  (-> (.text file-object)
-      (p/then (fn [content]
-                (let [migrated-content (repo-handler/migrate-db-config content)]
-                  (p/do!
-                   (db-editor-handler/save-file! "logseq/config.edn" migrated-content))
-                  ;; Return original config as import process depends on original config e.g. :hidden
-                  (edn/read-string content))))
-      (p/catch (fn [err]
-                 (log/error :import-config-file err)
-                 (notification/show! "Import may have mistakes due to an invalid config.edn. Recommend re-importing with a valid config.edn"
-                                     :warning
-                                     false)
-                 (edn/read-string config/config-default-content)))))
-
-(defn- build-hidden-favorites-page-blocks
-  [page-block-uuid-coll]
-  (map
-   (fn [uuid]
-     {:block/link [:block/uuid uuid]
-      :block/content ""
-      :block/format :markdown})
-   page-block-uuid-coll))
-
-(def hidden-favorites-page-name "$$$favorites")
-(def hidden-favorites-page-tx
-  {:block/uuid (d/squuid)
-   :block/name hidden-favorites-page-name
-   :block/original-name hidden-favorites-page-name
-   :block/journal? false
-   :block/type #{"hidden"}
-   :block/format :markdown})
-
-(defn- import-favorites-from-config-edn!
-  [db-conn repo config-file]
-  (let [now (inst-ms (js/Date.))]
-    (p/do!
-     (ldb/transact! repo [(assoc hidden-favorites-page-tx
-                                 :block/created-at now
-                                 :block/updated-at now)])
-     (p/let [content (when config-file (.text (:file-object config-file)))]
-       (when-let [content-edn (try (edn/read-string content)
-                                   (catch :default _ nil))]
-         (when-let [favorites (seq (:favorites content-edn))]
-           (when-let [page-block-uuid-coll
-                      (seq
-                       (keep (fn [page-name]
-                               (some-> (d/entity @db-conn [:block/name (common-util/page-name-sanity-lc page-name)])
-                                       :block/uuid))
-                             favorites))]
-             (let [page-entity (d/entity @db-conn [:block/name hidden-favorites-page-name])]
-               (ui-outliner-tx/transact!
-                {:outliner-op :insert-blocks}
-                (outliner-core/insert-blocks! repo db-conn (build-hidden-favorites-page-blocks page-block-uuid-coll)
-                                              page-entity {}))))))))))
-
 (rum/defc import-file-graph-dialog
   [initial-name on-graph-name-confirmed]
   (let [[graph-input set-graph-input!] (rum/use-state initial-name)
         [tag-classes-input set-tag-classes-input!] (rum/use-state "")
         [property-classes-input set-property-classes-input!] (rum/use-state "")
+        [property-parent-classes-input set-property-parent-classes-input!] (rum/use-state "")
         on-submit #(do (on-graph-name-confirmed
                         {:graph-name graph-input
                          :tag-classes tag-classes-input
-                         :property-classes property-classes-input})
-                       (state/close-modal!))]
+                         :property-classes property-classes-input
+                         :property-parent-classes property-parent-classes-input})
+                       (shui/dialog-close!))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
        [:h3#modal-headline.leading-6.font-medium
         "New graph name:"]]]
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:auto-focus true
+     (shui/input
+      {:class "my-2 mb-4"
+       :auto-focus true
        :default-value graph-input
        :on-change (fn [e]
                     (set-graph-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
-                        (on-submit)))}]
+                        (on-submit)))})
 
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -333,13 +193,14 @@
         "(Optional) Tags to import as tag classes:"]
        [:span.text-xs
         "Tags are case insensitive and separated by commas"]]]
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:default-value tag-classes-input
+     (shui/input
+      {:class "my-2 mb-4"
+       :default-value tag-classes-input
        :on-change (fn [e]
                     (set-tag-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
-                        (on-submit)))}]
+                        (on-submit)))})
 
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -347,31 +208,46 @@
         "(Optional) Properties whose values are imported as tag classes e.g. 'type':"]
        [:span.text-xs
         "Properties are case insensitive and separated by commas"]]]
-     [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2.mb-4
-      {:default-value property-classes-input
+     (shui/input
+      {:class "my-2 mb-4"
+       :default-value property-classes-input
        :on-change (fn [e]
                     (set-property-classes-input! (util/evalue e)))
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
-                        (on-submit)))}]
+                        (on-submit)))})
 
-     [:div.mt-5.sm:mt-4.flex
-      (ui/button "Submit"
-                 {:on-click on-submit})]]))
+     [:div.sm:flex.sm:items-start
+      [:div.mt-3.text-center.sm:mt-0.sm:text-left
+       [:h3#modal-headline.leading-6.font-medium
+        "(Optional) Properties whose values are imported as parent classes e.g. 'parent':"]
+       [:span.text-xs
+        "Properties are case insensitive and separated by commas"]]]
+     (shui/input
+      {:class "my-2 mb-4"
+       :default-value property-parent-classes-input
+       :on-change (fn [e]
+                    (set-property-parent-classes-input! (util/evalue e)))
+       :on-key-down (fn [e]
+                      (when (= "Enter" (util/ekey e))
+                        (on-submit)))})
+
+     (shui/button {:size :sm :on-click on-submit} "Submit")]))
 
 (defn- counts-from-entities
   [entities]
   {:entities (count entities)
    :pages (count (filter :block/name entities))
-   :blocks (count (filter :block/content entities))
-   :classes (count (filter #(contains? (:block/type %) "class") entities))
-   :properties (count (filter #(contains? (:block/type %) "property") entities))
+   :blocks (count (filter :block/title entities))
+   :classes (count (filter ldb/class? entities))
+   :objects (count (filter #(seq (:block/tags %)) entities))
+   :properties (count (filter ldb/property? entities))
    :property-values (count (mapcat :block/properties entities))})
 
 (defn- validate-imported-data
   [db import-state files]
-  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:rpath %))) files))]
-    (log/info :org-files (mapv :rpath org-files))
+  (when-let [org-files (seq (filter #(= "org" (path/file-ext (:path %))) files))]
+    (log/info :org-files (mapv :path org-files))
     (notification/show! (str "Imported " (count org-files) " org file(s) as markdown. Support for org files will be added later.")
                         :info false))
   (when-let [ignored-props (seq @(:ignored-properties import-state))]
@@ -388,7 +264,9 @@
                      (if (:page location)
                        (str "Page icons can't be imported. Go to the page " (pr-str (:page location)) " to manually import it.")
                        (str "Block icons can't be imported. Manually import it at the block: " (pr-str (:block location))))
-                     (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from])))]))
+                     (if (not= (get-in schema [:type :to]) (get-in schema [:type :from]))
+                       (str "Property value has type " (get-in schema [:type :to]) " instead of type " (get-in schema [:type :from]))
+                       (str "Property should be imported manually")))]))
            (map (fn [[k v]]
                   [:dl.my-2.mb-0
                    [:dt.m-0 [:strong (str k)]]
@@ -399,40 +277,69 @@
       (do
         (log/error :import-errors {:msg (str "Import detected " (count errors) " invalid block(s):")
                                    :counts (assoc (counts-from-entities entities) :datoms datom-count)})
-        (pprint/pprint (map :entity errors))
+        (pprint/pprint errors)
         (notification/show! (str "Import detected " (count errors) " invalid block(s). These blocks may be buggy when you interact with them. See the javascript console for more.")
                             :warning false))
       (log/info :import-valid {:msg "Valid import!"
                                :counts (assoc (counts-from-entities entities) :datoms datom-count)}))))
 
+(defn- show-notification [{:keys [msg level ex-data]}]
+  (if (= :error level)
+    (do
+      (notification/show! msg :error)
+      (when ex-data
+        (log/error :import-error ex-data)))
+    (notification/show! msg :warning false)))
+
+(defn- copy-asset [repo repo-dir file]
+  (-> (.arrayBuffer (:file-object file))
+      (p/then (fn [buffer]
+                (let [content (js/Uint8Array. buffer)
+                      parent-dir (path/path-join repo-dir (path/dirname (:path file)))]
+                  (p/do!
+                   (fs/mkdir-if-not-exists parent-dir)
+                   (fs/write-file! repo repo-dir (:path file) content {:skip-transact? true})))))))
+
 (defn- import-file-graph
-  [*files {:keys [graph-name tag-classes property-classes]} config-file]
+  [*files {:keys [graph-name tag-classes property-classes property-parent-classes]} config-file]
   (state/set-state! :graph/importing :file-graph)
-  (state/set-state! [:graph/importing-state :current-page] (str graph-name " Assets"))
-  (async/go
-    (let [start-time (t/now)
-          import-state (gp-exporter/new-import-state)
-          _ (async/<! (p->c (repo-handler/new-db! graph-name {:file-graph-import? true})))
+  (state/set-state! [:graph/importing-state :current-page] "Config files")
+  (p/let [start-time (t/now)
+          _ (repo-handler/new-db! graph-name {:file-graph-import? true})
           repo (state/get-current-repo)
           db-conn (db/get-db repo false)
-          config (async/<! (p->c (import-config-file! config-file)))
-          files (common-config/remove-hidden-files *files config :rpath)
-          logseq-file? #(string/starts-with? (:rpath %) "logseq/")
-          doc-files (->> files
-                         (remove logseq-file?)
-                         (filter #(contains? #{"md" "org" "markdown" "edn"} (path/file-ext (:rpath %)))))
-          asset-files (filter #(string/starts-with? (:rpath %) "assets/") files)]
-      (async/<! (p->c (import-logseq-files (filter logseq-file? files))))
-      (async/<! (import-from-asset-files! asset-files))
-      (async/<! (import-from-doc-files! db-conn repo config doc-files import-state
-                                        {:tag-classes (set (string/split tag-classes #",\s*"))
-                                         :property-classes (set (string/split property-classes #",\s*")) }))
-      (async/<! (p->c (import-favorites-from-config-edn! db-conn repo config-file)))
-      (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
-      (state/set-state! :graph/importing nil)
-      (state/set-state! :graph/importing-state nil)
-      (validate-imported-data @db-conn import-state files)
-      (finished-cb))))
+          options {;; user options
+                   :tag-classes (set (string/split tag-classes #",\s*"))
+                   :property-classes (set (string/split property-classes #",\s*"))
+                   :property-parent-classes (set (string/split property-parent-classes #",\s*"))
+                   ;; common options
+                   :notify-user show-notification
+                   :set-ui-state state/set-state!
+                   :<read-file (fn <read-file [file] (.text (:file-object file)))
+                   ;; config file options
+                   :default-config config/config-default-content
+                   :<save-config-file (fn save-config-file [_ path content]
+                                        (let [migrated-content (repo-handler/migrate-db-config content)]
+                                          (db-editor-handler/save-file! path migrated-content)))
+                   ;; logseq file options
+                   :<save-logseq-file (fn save-logseq-file [_ path content]
+                                        (db-editor-handler/save-file! path content))
+                   ;; asset file options
+                   :<copy-asset #(copy-asset repo (config/get-repo-dir repo) %)
+                   ;; doc file options
+                   ;; Write to frontend first as writing to worker first is poor ux with slow streaming changes
+                   :export-file (fn export-file [conn m opts]
+                                  (let [tx-reports
+                                        (gp-exporter/add-file-to-db-graph conn (:file/path m) (:file/content m) opts)]
+                                    (doseq [tx-report tx-reports]
+                                      (db-browser/transact! @db-browser/*worker repo (:tx-data tx-report) (:tx-meta tx-report)))))}
+          {:keys [files import-state]} (gp-exporter/export-file-graph repo db-conn config-file *files options)]
+    (log/info :import-file-graph {:msg (str "Import finished in " (/ (t/in-millis (t/interval start-time (t/now))) 1000) " seconds")})
+    (state/set-state! :graph/importing nil)
+    (state/set-state! :graph/importing-state nil)
+    (validate-imported-data @db-conn import-state files)
+    (state/pub-event! [:graph/ready (state/get-current-repo)])
+    (finished-cb)))
 
 (defn import-file-to-db-handler
   "Import from a graph folder as a DB-based graph.
@@ -444,15 +351,15 @@
         import-graph-fn (fn [user-inputs]
                           (let [files (->> file-objs
                                            (map #(hash-map :file-object %
-                                                           :rpath (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
-                                           (remove #(and (not (string/starts-with? (:rpath %) "assets/"))
+                                                           :path (path/trim-dir-prefix original-graph-name (.-webkitRelativePath %))))
+                                           (remove #(and (not (string/starts-with? (:path %) "assets/"))
                                                          ;; TODO: Update this when supporting more formats as this aggressively excludes most formats
                                                          (fs-util/ignored-path? original-graph-name (.-webkitRelativePath (:file-object %))))))]
-                            (if-let [config-file (first (filter #(= (:rpath %) "logseq/config.edn") files))]
+                            (if-let [config-file (first (filter #(= (:path %) "logseq/config.edn") files))]
                               (import-file-graph files user-inputs config-file)
                               (notification/show! "Import failed as the file 'logseq/config.edn' was not found for a Logseq graph."
                                                   :error))))]
-    (state/set-modal!
+    (shui/dialog-open!
      #(import-file-graph-dialog original-graph-name
                                 (fn [{:keys [graph-name] :as user-inputs}]
                                   (cond
@@ -470,7 +377,8 @@
 
 
   (rum/defc importer < rum/reactive
-    [{:keys [query-params]}]
+  [{:keys [query-params]}]
+  (let [support-file-based? (config/local-file-based-graph? (state/get-current-repo))]
     (if (state/sub :graph/importing)
       (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
             left-label (if (and current-idx total (= current-idx total))
@@ -498,57 +406,60 @@
            [[:strong "SQLite"]
             [:small (t :on-boarding/importing-sqlite-desc)]]]
           [:input.absolute.hidden
-           {:id        "import-sqlite-db"
-            :type      "file"
+           {:id "import-sqlite-db"
+            :type "file"
             :on-change (fn [e]
-                         (state/set-modal!
-                          #(set-graph-name-dialog e {:sqlite? true})))}]]
+                         (shui/dialog-open!
+                           #(set-graph-name-dialog e {:sqlite? true})))}]]
 
-         (when (or util/electron? util/web-platform?)
-          [:label.action-input.flex.items-center.mx-2.my-2
-           [:span.as-flex-center [:i (svg/logo 28)]]
-           [:span.flex.flex-col
-            [[:strong "File to DB graph"]
-             [:small  "Import a file-based Logseq graph folder into a new DB graph"]]]
-           [:input.absolute.hidden
-            {:id        "import-file-graph"
-             :type      "file"
-             :webkitdirectory "true"
-             :on-change (debounce (fn [e]
-                                    (import-file-to-db-handler e {}))
-                                  1000)}]])
+         (when (or (util/electron?) util/web-platform?)
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center [:i (svg/logo 28)]]
+            [:span.flex.flex-col
+             [[:strong "File to DB graph"]
+              [:small  "Import a file-based Logseq graph folder into a new DB graph"]]]
+            [:input.absolute.hidden
+             {:id        "import-file-graph"
+              :type      "file"
+              :webkitdirectory "true"
+              :on-change (debounce (fn [e]
+                                     (import-file-to-db-handler e {}))
+                                   1000)}]])
 
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center [:i (svg/logo 28)]]
-          [:span.flex.flex-col
-           [[:strong "EDN / JSON"]
-            [:small (t :on-boarding/importing-lsq-desc)]]]
-          [:input.absolute.hidden
-           {:id        "import-lsq"
-            :type      "file"
-            :on-change lsq-import-handler}]]
+         (when (and (util/electron?) support-file-based?)
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center [:i (svg/logo 28)]]
+            [:span.flex.flex-col
+             [[:strong "EDN / JSON"]
+              [:small (t :on-boarding/importing-lsq-desc)]]]
+            [:input.absolute.hidden
+             {:id        "import-lsq"
+              :type      "file"
+              :on-change lsq-import-handler}]])
 
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center [:i (svg/roam-research 28)]]
-          [:div.flex.flex-col
-           [[:strong "RoamResearch"]
-            [:small (t :on-boarding/importing-roam-desc)]]]
-          [:input.absolute.hidden
-           {:id        "import-roam"
-            :type      "file"
-            :on-change roam-import-handler}]]
+         (when (and (util/electron?) support-file-based?)
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center [:i (svg/roam-research 28)]]
+            [:div.flex.flex-col
+             [[:strong "RoamResearch"]
+              [:small (t :on-boarding/importing-roam-desc)]]]
+            [:input.absolute.hidden
+             {:id        "import-roam"
+              :type      "file"
+              :on-change roam-import-handler}]])
 
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
-          [:span.flex.flex-col
-           [[:strong "OPML"]
-            [:small (t :on-boarding/importing-opml-desc)]]]
+         (when (and (util/electron?) support-file-based?)
+           [:label.action-input.flex.items-center.mx-2.my-2
+            [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
+            [:span.flex.flex-col
+             [[:strong "OPML"]
+              [:small (t :on-boarding/importing-opml-desc)]]]
 
-          [:input.absolute.hidden
-           {:id        "import-opml"
-            :type      "file"
-            :on-change opml-import-handler}]]]
+            [:input.absolute.hidden
+             {:id        "import-opml"
+              :type      "file"
+              :on-change opml-import-handler}]])]
 
         (when (= "picker" (:from query-params))
           [:section.e
-           [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])])))
+           [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])]))))

@@ -4,19 +4,19 @@
   when use together with dynamic var."
   (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require [cljs.core.match :refer [match]]
+            [clojure.edn :as edn]
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
             [frontend.modules.file.core :as outliner-file]
             [frontend.modules.outliner.tree :as outliner-tree]
+            [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
+            [frontend.common.file.core :as common-file]
             [malli.core :as m]
             [malli.util :as mu]
-            [promesa.core :as p]
-            [frontend.persist-db.browser :as db-browser]
-            [frontend.worker.export :as worker-export]
-            [clojure.edn :as edn]))
+            [promesa.core :as p]))
 
 ;;; TODO: split frontend.handler.export.text related states
 (def ^:dynamic *state*
@@ -59,10 +59,9 @@
 (defn- get-blocks-contents
   [repo root-block-uuid & {:keys [init-level]
                            :or {init-level 1}}]
-  (->
-   (db/get-block-and-children repo root-block-uuid)
-   (outliner-tree/blocks->vec-tree (str root-block-uuid))
-   (outliner-file/tree->file-content {:init-level init-level})))
+  (-> (db/pull-many (keep :db/id (db/get-block-and-children repo root-block-uuid)))
+      (outliner-tree/blocks->vec-tree (str root-block-uuid))
+      (outliner-file/tree->file-content {:init-level init-level})))
 
 (defn root-block-uuids->content
   [repo root-block-uuids]
@@ -90,31 +89,23 @@
                (mapv remove-block-ast-pos
                      (mldoc/->edn content format))))))
 
-;; TODO: Enable when unused
-#_(defn <get-page-content
-    ([page-name]
-     (<get-page-content (state/get-current-repo) page-name))
-    ([repo page-name]
-     (when-let [^object worker @db-browser/*worker]
-       (.block->content worker repo page-name nil
-                        (pr-str {:export-bullet-indentation (state/get-export-bullet-indentation)})))))
-
 (defn get-page-content
-  [page-name]
+  [page-uuid]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (worker-export/block->content repo db page-name
-                                  nil
-                                  {:export-bullet-indentation (state/get-export-bullet-indentation)})))
+    (common-file/block->content repo db page-uuid
+                                nil
+                                {:export-bullet-indentation (state/get-export-bullet-indentation)})))
 
 (defn- page-name->ast
   [page-name]
-  (when-let [content (get-page-content page-name)]
-    (when content
-      (let [format :markdown]
-        (removev Properties-block-ast?
-                 (mapv remove-block-ast-pos
-                       (mldoc/->edn content format)))))))
+  (let [page (db/get-page page-name)]
+    (when-let [content (get-page-content (:block/uuid page))]
+      (when content
+        (let [format :markdown]
+          (removev Properties-block-ast?
+                   (mapv remove-block-ast-pos
+                         (mldoc/->edn content format))))))))
 
 (defn- update-level-in-block-ast-coll
   [block-ast-coll origin-level]
@@ -530,7 +521,6 @@
   [[tp _]]
   (= tp "Properties"))
 
-
 (defn replace-Heading-with-Paragraph
   "works on block-ast
   replace all heading with paragraph when indent-style is no-indent"
@@ -568,7 +558,6 @@
        block-ast-coll)
       :result-ast-tcoll
       persistent!))
-
 
 ;;; inline transformers
 
@@ -831,11 +820,9 @@
 
 ;;; simple ast (ends)
 
-
 ;;; TODO: walk the hiccup tree,
 ;;; and call escape-html on all its contents
 ;;;
-
 
 ;;; walk the hiccup tree,
 ;;; and call escape-html on all its contents (ends)

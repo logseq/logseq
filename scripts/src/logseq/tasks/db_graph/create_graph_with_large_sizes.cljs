@@ -1,11 +1,12 @@
 (ns logseq.tasks.db-graph.create-graph-with-large-sizes
   "Script that generates graphs at large sizes"
-  (:require [logseq.tasks.db-graph.create-graph :as create-graph]
+  (:require [logseq.outliner.cli :as outliner-cli]
             [clojure.string :as string]
             [datascript.core :as d]
             [babashka.cli :as cli]
             ["path" :as node-path]
             ["os" :as os]
+            [nbb.classpath :as cp]
             [nbb.core :as nbb]))
 
 (def *ids (atom #{}))
@@ -24,7 +25,7 @@
     (map-indexed
      (fn [idx id]
        {:block/uuid id
-        :block/name (str "page-" (+ start-idx idx))})
+        :block/title (str "Page-" (+ start-idx idx))})
      ids)))
 
 (defn build-blocks
@@ -33,14 +34,16 @@
                    (fn []
                      (let [id (get-next-id)]
                        {:block/uuid id
-                        :block/content (str id)})))))
+                        :block/title (str id)})))))
 
 (defn- create-init-data
   [options]
   (let [pages (build-pages 0 (:pages options))]
     {:pages-and-blocks
      (mapv #(hash-map :page % :blocks (build-blocks (:blocks options)))
-           pages)}))
+           pages)
+     ;; Custom id fn because transaction chunks may separate blocks and pages from each other
+     :page-id-fn (fn [b] [:block/uuid (:block/uuid b)])}))
 
 (def spec
   "Options spec"
@@ -63,18 +66,18 @@
         [dir db-name] (if (string/includes? graph-dir "/")
                         ((juxt node-path/dirname node-path/basename) graph-dir)
                         [(node-path/join (os/homedir) "logseq" "graphs") graph-dir])
-        conn (create-graph/init-conn dir db-name)
+        conn (outliner-cli/init-conn dir db-name {:classpath (cp/get-classpath)})
         _ (println "Building tx ...")
-        blocks-tx (create-graph/create-blocks-tx (create-init-data options))]
-    (println "Built" (count blocks-tx) "tx," (count (filter :block/name blocks-tx)) "pages and"
-             (count (filter :block/content blocks-tx)) "blocks ...")
+        {:keys [init-tx]} (outliner-cli/build-blocks-tx (create-init-data options))]
+    (println "Built" (count init-tx) "tx," (count (filter :block/title init-tx)) "pages and"
+             (count (filter :block/title init-tx)) "blocks ...")
     ;; Vary the chunking with page size up to a max to avoid OOM
-    (let [tx-chunks (partition-all (min (:pages options) 30000) blocks-tx)]
+    (let [tx-chunks (partition-all (min (:pages options) 30000) init-tx)]
       (loop [chunks tx-chunks
              chunk-num 1]
         (when-let [chunk (first chunks)]
           (println "Transacting chunk" chunk-num  "of" (count tx-chunks)
-                   "starting with block:" (pr-str (select-keys (first chunk) [:block/content :block/name])))
+                   "starting with block:" (pr-str (select-keys (first chunk) [:block/title :block/title])))
           (d/transact! conn chunk)
           (recur (rest chunks) (inc chunk-num)))))
     #_(d/transact! conn blocks-tx)

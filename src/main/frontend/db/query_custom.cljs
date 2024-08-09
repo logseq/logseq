@@ -38,7 +38,10 @@
                   (assoc (vec inputs)
                          ;; last position is rules
                          (dec (count inputs))
-                         (->> (rules/extract-rules query-dsl-rules rules-found)
+                         (->> (rules/extract-rules query-dsl-rules
+                                                   rules-found
+                                                   (when db-graph?
+                                                     {:deps rules/rules-dependencies}))
                               (into (last inputs))
                               ;; user could give rules that we already have
                               distinct
@@ -56,7 +59,10 @@
             (update :rules
                     (fn [rules]
                       (into (or rules [])
-                            (rules/extract-rules query-dsl-rules rules-found))))))
+                            (rules/extract-rules query-dsl-rules
+                                                   rules-found
+                                                   (when db-graph?
+                                                     {:deps rules/rules-dependencies})))))))
       query-m)))
 
 (defn custom-query

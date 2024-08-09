@@ -8,11 +8,13 @@
             [frontend.db.conn :as conn]
             [frontend.db.utils :as db-utils]
             [frontend.state :as state]
-            [frontend.util :as util :refer [react]]
+            [frontend.util :as util]
             [clojure.core.async :as async]
             [frontend.db.async.util :as db-async-util]
             [promesa.core :as p]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]))
 
 ;; Query atom of map of Key ([repo q inputs]) -> atom
 ;; TODO: replace with LRUCache, only keep the latest 20 or 50 items?
@@ -32,13 +34,6 @@
   [k new-result]
   (when-let [result-atom (get-in @query-state [k :result])]
     (reset! result-atom new-result)))
-
-(def kv conn/kv)
-
-(defn remove-key!
-  [repo-url key]
-  (db-utils/transact! repo-url [[:db.fn/retractEntity [:db/ident key]]])
-  (set-new-result! [repo-url :kv key] nil))
 
 (defn clear-query-state!
   []
@@ -94,7 +89,7 @@
         journals? (and (vector? k) (= :frontend.worker.react/journals (last k)))
         q (if (or journals? util/node-test?)
             (fn [query inputs] (apply d/q query db inputs))
-            (fn [query inputs] (apply db-async-util/<q repo (cons query inputs))))]
+            (fn [query inputs] (apply db-async-util/<q repo {} (cons query inputs))))]
     (when (or query-fn query kv?)
       (cond
         query-fn
@@ -156,14 +151,11 @@
         page (case route-name
                :page
                (get-in match [:path-params :name])
-
-               :file
-               (get-in match [:path-params :path])
-
                (date/journal-name))]
     (when page
-      (let [page-name (util/page-name-sanity-lc page)]
-        (db-utils/entity [:block/name page-name])))))
+      (if (common-util/uuid-string? page)
+        (db-utils/entity [:block/uuid (uuid page)])
+        (ldb/get-page (conn/get-db) page)))))
 
 (defn- execute-query!
   [graph db k {:keys [query inputs transform-fn query-fn inputs-fn result]
@@ -191,14 +183,11 @@
      (doseq [k all-keys]
        (when-let [cache (get state k)]
          (let [{:keys [query query-fn]} cache
-               custom? (= :custom (first k))
-               {:keys [custom-query?]} (state/edit-in-query-or-refs-component)]
+               custom? (= :custom (first k))]
            (when (or query query-fn)
              (try
                (let [f #(execute-query! repo-url db (vec (cons repo-url k)) cache)]
-                       ;; Detects whether user is editing in a custom query, if so, execute the query immediately
-                 (if (and custom? (not custom-query?))
-                   (async/put! (state/get-reactive-custom-queries-chan) [f query])
+                 (when-not custom?
                    (f)))
                (catch :default e
                  (js/console.error e)
@@ -206,30 +195,9 @@
 
 (defn refresh!
   "Re-compute corresponding queries (from tx) and refresh the related react components."
-  [repo-url {:keys [tx-data tx-meta] :as tx} affected-keys]
-  (when repo-url
-    (if (get-in @state/state [:rtc/remote-batch-tx-state repo-url :in-transaction?])
-      (state/update-state! [:rtc/remote-batch-tx-state repo-url :txs]
-                           (fn [txs]
-                             (conj txs tx)))
-      (when (and (not (:skip-refresh? tx-meta)) (seq tx-data))
-        (refresh-affected-queries! repo-url affected-keys)))))
-
-(defn set-key-value
-  [repo-url key value]
-  (if value
-    (db-utils/transact! repo-url [(kv key value)])
-    (remove-key! repo-url key)))
-
-(defn sub-key-value
-  ([key]
-   (sub-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when (conn/get-db repo-url)
-     (let [m (some-> (q repo-url [:kv key] {} key key) react)]
-       (if-let [result (get m key)]
-         result
-         m)))))
+  [repo-url affected-keys]
+  (when (and repo-url (seq affected-keys))
+    (refresh-affected-queries! repo-url affected-keys)))
 
 (defn run-custom-queries-when-idle!
   []

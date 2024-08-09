@@ -1,22 +1,24 @@
 (ns ^:no-doc frontend.handler.ui
-  (:require [cljs-time.core :refer [plus days weeks]]
+  (:require [clojure.string :as string]
             [dommy.core :as dom]
-            [frontend.util :as util]
+            [electron.ipc :as ipc]
+            [frontend.config :as config]
             [frontend.db :as db]
             [frontend.db.model :as db-model]
-            [frontend.config :as config]
+            [frontend.db.react :as react]
+            [frontend.fs :as fs]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.loader :refer [load]]
             [frontend.state :as state]
             [frontend.storage :as storage]
-            [frontend.fs :as fs]
-            [frontend.loader :refer [load]]
+            [frontend.util :as util]
+            [logseq.shui.dialog.core :as shui-dialog]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [clojure.string :as string]
-            [rum.core :as rum]
-            [electron.ipc :as ipc]
-            [promesa.core :as p]
             [logseq.common.path :as path]
-            [frontend.db.react :as react]))
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 ;; sidebars
 (def *right-sidebar-resized-at (atom (js/Date.now)))
@@ -79,8 +81,11 @@
 (defn re-render-root!
   ([]
    (re-render-root! {}))
-  ([_opts]
+  ([{:keys [clear-query-state?]
+     :or {clear-query-state? true}}]
    {:post [(nil? %)]}
+   (when clear-query-state?
+     (react/clear-query-state!))
    (doseq [component (keys @react/query-components)]
      (rum/request-render component))
    (when-let [component (state/get-root-component)]
@@ -105,11 +110,14 @@
 
 (defn add-style-if-exists!
   []
-  (when-let [style (or
-                    (state/get-custom-css-link)
-                    (some-> (db-model/get-custom-css)
-                            (config/expand-relative-assets-path)))]
-    (util/add-style! style)))
+  (when-let [style (or (state/get-custom-css-link)
+                       (db-model/get-custom-css))]
+    (if (config/db-based-graph? (state/get-current-repo))
+      (p/let [style (assets-handler/<expand-assets-links-for-db-graph style)]
+        (util/add-style! style))
+      (some-> (config/expand-relative-assets-path style)
+              (util/add-style!)))))
+
 (defn reset-custom-css!
   []
   (when-let [el-style (gdom/getElement "logseq-custom-theme-id")]
@@ -223,74 +231,10 @@
       ((or on-shift-chosen on-chosen) (nth matched @current-idx) false)
       (and on-enter (on-enter state)))))
 
-(defn auto-complete-open-link
-  [state e]
-  (let [[matched {:keys [on-chosen-open-link]}] (:rum/args state)]
-    (when (and on-chosen-open-link (not (state/editing?)))
-      (let [current-idx (get state :frontend.ui/current-idx)]
-        (util/stop e)
-        (when (and (seq matched)
-                   (> (count matched)
-                      @current-idx))
-          (on-chosen-open-link (nth matched @current-idx) false))))))
-
-;; date-picker
-;; TODO: find a better way
-(def *internal-model (rum/cursor state/state :date-picker/date))
-
-(defn- non-edit-input?
-  []
-  (when-let [elem js/document.activeElement]
-    (and (util/input? elem)
-         (when-let [id (gobj/get elem "id")]
-           (not (string/starts-with? id "edit-block-"))))))
-
-(defn- input-or-select?
-  []
-  (when-let [elem js/document.activeElement]
-    (or (non-edit-input?)
-        (util/select? elem))))
-
-(defn- inc-date [date n] (plus date (days n)))
-
-(defn- inc-week [date n] (plus date (weeks n)))
-
-(defn shortcut-complete
-  [state e]
-  (let [{:keys [on-change deadline-or-schedule?]} (last (:rum/args state))]
-    (when (and on-change
-               (not (input-or-select?)))
-      (when-not deadline-or-schedule?
-        (on-change e @*internal-model)))))
-
-(defn shortcut-prev-day
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-date -1)))
-
-(defn shortcut-next-day
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-date 1)))
-
-(defn shortcut-prev-week
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-week -1)))
-
-(defn shortcut-next-week
-  [_state e]
-  (when-not (input-or-select?)
-    (util/stop e)
-    (swap! *internal-model inc-week 1)))
-
 (defn toggle-cards!
   []
-  (if (and (= :srs (:modal/id @state/state)) (:modal/show? @state/state))
-    (state/close-modal!)
+  (if (shui-dialog/get-modal :srs)
+    (shui/dialog-close!)
     (state/pub-event! [:modal/show-cards])))
 
 (defn open-new-window-or-tab!

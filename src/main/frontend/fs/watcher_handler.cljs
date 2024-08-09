@@ -40,99 +40,100 @@
           missing-blocks))))))
 
 (defn- handle-add-and-change!
-  [repo path content db-content mtime backup?]
-  (p/let [;; save the previous content in a versioned bak file to avoid data overwritten.
-          _ (when backup?
-              (-> (when-let [repo-dir (config/get-local-dir repo)]
-                    (file-handler/backup-file! repo-dir path db-content content))
-                  (p/catch #(js/console.error "❌ Bak Error: " path %))))
+  [repo path content db-content ctime mtime backup?]
+  (let [config (state/get-config repo)
+        path-hidden-patterns (:hidden config)
+        db-last-modified-at (db/get-file-last-modified-at repo path)]
+    (when-not (or (and (seq path-hidden-patterns)
+                    (common-config/hidden? path path-hidden-patterns))
+                  ;; File not changed
+                  (= db-last-modified-at mtime))
+      (p/let [;; save the previous content in a versioned bak file to avoid data overwritten.
+              _ (when backup?
+                  (-> (when-let [repo-dir (config/get-local-dir repo)]
+                        (file-handler/backup-file! repo-dir path db-content content))
+                      (p/catch #(js/console.error "❌ Bak Error: " path %))))
 
-          _ (file-handler/alter-file repo path content {:re-render-root? true
-                                                        :from-disk? true
-                                                        :fs/event :fs/local-file-change})]
-    (set-missing-block-ids! content)
-    (db/set-file-last-modified-at! repo path mtime)))
+              _ (file-handler/alter-file repo path content {:re-render-root? true
+                                                            :from-disk? true
+                                                            :fs/event :fs/local-file-change
+                                                            :ctime ctime
+                                                            :mtime mtime})]
+        (set-missing-block-ids! content)))))
 
 (defn handle-changed!
   [type {:keys [dir path content stat global-dir] :as payload}]
-  (when dir
-    (let [;; Global directory events don't know their originating repo so we rely
+  (let [repo (state/get-current-repo)]
+    (when dir
+      (let [;; Global directory events don't know their originating repo so we rely
           ;; on the client to correctly identify it
-          repo (cond
-                 global-dir (state/get-current-repo)
+            repo (cond
+                   global-dir repo
                  ;; FIXME(andelf): hack for demo graph, demo graph does not bind to local directory
-                 (string/starts-with? dir "memory://") "Logseq demo"
-                 :else (config/get-local-repo dir))
-          repo-dir (config/get-local-dir repo)
-          {:keys [mtime]} stat
-          ext (keyword (path/file-ext path))]
-      (when (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
-        (p/let [db-content (db-async/<get-file repo path)
-                exists-in-db? (not (nil? db-content))
-                db-content (or db-content "")]
-          (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
-            (cond
-              (and (= "unlinkDir" type) dir)
-              (state/pub-event! [:graph/dir-gone dir])
+                   (string/starts-with? dir "memory://") "Logseq demo"
+                   :else (config/get-local-repo dir))
+            repo-dir (config/get-local-dir repo)
+            {:keys [mtime ctime]} stat
+            ext (keyword (path/file-ext path))]
+        (when (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
+          (p/let [db-content (db-async/<get-file repo path)
+                  exists-in-db? (not (nil? db-content))
+                  db-content (or db-content "")]
+            (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
+              (cond
+                (and (= "unlinkDir" type) dir)
+                (state/pub-event! [:graph/dir-gone dir])
 
-              (and (= "addDir" type) dir)
-              (state/pub-event! [:graph/dir-back repo dir])
+                (and (= "addDir" type) dir)
+                (state/pub-event! [:graph/dir-back repo dir])
 
-              (contains? (:file/unlinked-dirs @state/state) dir)
-              nil
+                (contains? (:file/unlinked-dirs @state/state) dir)
+                nil
 
-              (and (= "add" type)
-                   (not= (string/trim content) (string/trim db-content)))
-              (let [backup? (not (string/blank? db-content))]
-                (handle-add-and-change! repo path content db-content mtime backup?))
+                (and (= "add" type)
+                     (not= (string/trim content) (string/trim db-content)))
+                (let [backup? (not (string/blank? db-content))]
+                  (handle-add-and-change! repo path content db-content ctime mtime backup?))
 
-              (and (= "change" type)
-                   (= dir repo-dir)
-                   (not= (string/trim content) (string/trim db-content))
-                   (not (common-config/local-asset? path)))
-              (when-not (and
-                         (string/includes? path (str "/" (config/get-journals-directory) "/"))
-                         (or
-                          (= (string/trim content)
-                             (string/trim (or (state/get-default-journal-template) "")))
-                          (= (string/trim content) "-")
-                          (= (string/trim content) "*")))
-                (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
+                (and (= "change" type)
+                     (= dir repo-dir)
+                     (not (common-config/local-asset? path)))
+                (handle-add-and-change! repo path content db-content ctime mtime (not global-dir)) ;; no backup for global dir
 
-              (and (= "unlink" type)
-                   exists-in-db?)
-              (p/let [dir-exists? (fs/file-exists? dir "")]
-                (when dir-exists?
-                  (when-let [page-name (db/get-file-page path)]
-                    (println "Delete page: " page-name ", file path: " path ".")
-                    (page-handler/<delete! page-name #()))))
+                (and (= "unlink" type)
+                     exists-in-db?)
+                (p/let [dir-exists? (fs/file-exists? dir "")]
+                  (when dir-exists?
+                    (when-let [page-name (db/get-file-page path)]
+                      (println "Delete page: " page-name ", file path: " path ".")
+                      (page-handler/<delete! page-name #()))))
 
           ;; global config handling
-              (and (= "change" type)
-                   (= dir (global-config-handler/global-config-dir)))
-              (when (= path "config.edn")
-                (file-handler/alter-global-file
-                 (global-config-handler/global-config-path) content {:from-disk? true}))
+                (and (= "change" type)
+                     (= dir (global-config-handler/global-config-dir)))
+                (when (= path "config.edn")
+                  (file-handler/alter-global-file
+                   (global-config-handler/global-config-path) content {:from-disk? true}))
 
-              (and (= "change" type)
-                   (not exists-in-db?))
-              (js/console.error "Can't get file in the db: " path)
+                (and (= "change" type)
+                     (not exists-in-db?))
+                (js/console.error "Can't get file in the db: " path)
 
-              (and (contains? #{"add" "change" "unlink"} type)
-                   (string/ends-with? path "logseq/custom.css"))
-              (do
-                (println "reloading custom.css")
-                (ui-handler/add-style-if-exists!))
+                (and (contains? #{"add" "change" "unlink"} type)
+                     (string/ends-with? path "logseq/custom.css"))
+                (do
+                  (println "reloading custom.css")
+                  (ui-handler/add-style-if-exists!))
 
-              (contains? #{"add" "change" "unlink"} type)
-              nil
+                (contains? #{"add" "change" "unlink"} type)
+                nil
 
-              :else
-              (log/error :fs/watcher-no-handler {:type type
-                                                 :payload payload})))))
+                :else
+                (log/error :fs/watcher-no-handler {:type type
+                                                   :payload payload})))))
 
       ;; return nil, otherwise the entire db will be transferred by ipc
-      nil)))
+        nil))))
 
 (defn load-graph-files!
   "This fn replaces the former initial fs watcher"
@@ -176,30 +177,32 @@
                                                      false))]
         (prn ::initial-watcher repo-dir {:deleted (count deleted-files)
                                          :total (count files)})
-        (when (seq deleted-files)
-          (let [delete-tx-data (->> (db/delete-files deleted-files)
-                                    (concat (db/delete-blocks graph deleted-files nil))
-                                    (remove nil?))]
-            (db/transact! graph delete-tx-data {:delete-files? true})))
-        (-> (p/delay 500) ;; workaround for notification ui not showing
-            (p/then #(p/all (map (fn [file-rpath]
-                                   (p/let [stat (fs/stat repo-dir file-rpath)
-                                           content (fs/read-file repo-dir file-rpath)
-                                           type (if (db/file-exists? graph file-rpath)
-                                                  "change"
-                                                  "add")]
-                                     (handle-changed! type
-                                                      {:dir repo-dir
-                                                       :path file-rpath
-                                                       :content content
-                                                       :stat stat})))
-                                 files)))
-            (p/then (fn []
-                      (when notification-uid
-                        (prn ::init-notify)
-                        (notification/clear! notification-uid)
-                        (state/pub-event! [:notification/show {:content (str "The graph " graph " is loaded.")
-                                                               :status :success
-                                                               :clear? true}]))))
-            (p/catch (fn [error]
-                       (js/console.dir error))))))))
+        (p/do!
+         (when (seq deleted-files)
+           (p/all (map (fn [path]
+                         (when-let [page-name (db/get-file-page path)]
+                           (println "Delete page: " page-name ", file path: " path ".")
+                           (page-handler/<delete! page-name #())))
+                       deleted-files)))
+         (-> (p/delay 500) ;; workaround for notification ui not showing
+             (p/then #(p/all (map (fn [file-rpath]
+                                    (p/let [stat (fs/stat repo-dir file-rpath)
+                                            content (fs/read-file repo-dir file-rpath)
+                                            type (if (db/file-exists? graph file-rpath)
+                                                   "change"
+                                                   "add")]
+                                      (handle-changed! type
+                                                       {:dir repo-dir
+                                                        :path file-rpath
+                                                        :content content
+                                                        :stat stat})))
+                                  files)))
+             (p/then (fn []
+                       (when notification-uid
+                         (prn ::init-notify)
+                         (notification/clear! notification-uid)
+                         (state/pub-event! [:notification/show {:content (str "The graph " graph " is loaded.")
+                                                                :status :success
+                                                                :clear? true}]))))
+             (p/catch (fn [error]
+                        (js/console.dir error)))))))))

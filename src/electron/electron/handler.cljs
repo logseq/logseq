@@ -30,11 +30,10 @@
             [electron.window :as win]
             [electron.handler-interface :refer [handle]]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.sqlite.db :as sqlite-db]
+            [logseq.db.sqlite.common-db :as sqlite-common-db]
             [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
-            [promesa.core :as p]
-            [clojure.edn :as edn]))
+            [promesa.core :as p]))
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
@@ -295,7 +294,7 @@
 (defmethod handle :deleteGraph [_window [_ graph graph-name _db-based?]]
   (when graph-name
     (db/unlink-graph! graph)
-    (let [old-transit-path (node-path/join (get-graphs-dir) (str (sqlite-db/sanitize-db-name graph) ".transit"))]
+    (let [old-transit-path (node-path/join (get-graphs-dir) (str (sqlite-common-db/sanitize-db-name graph) ".transit"))]
       (when (fs/existsSync old-transit-path)
         (fs/unlinkSync old-transit-path)))))
 
@@ -305,20 +304,8 @@
   (db/ensure-graph-dir! repo)
   (db/save-db! repo data))
 
-(defmethod handle :db-open [_window [_ repo]]
-  (db/ensure-graph-dir! repo)
-  (db/open-db! repo)
-  nil)
-
 (defmethod handle :db-get [_window [_ repo]]
   (db/get-db repo))
-
-(defmethod handle :db-transact [_window [_ repo tx-data-str tx-meta-str]]
-  (when-let [conn (sqlite-db/get-conn repo)]
-    (let [tx-data (edn/read-string tx-data-str)
-          tx-meta (edn/read-string tx-meta-str)]
-      (sqlite-db/transact! repo tx-data tx-meta)
-      (:max-tx @conn))))
 
 ;; DB related IPCs End
 
@@ -434,7 +421,6 @@
   (let [old-path (state/get-window-graph-path window)]
     (when (and old-path graph-path (not= old-path graph-path))
       (close-watcher-when-orphaned! window old-path))
-    (swap! state/state assoc :graph/current graph-path)
     (swap! state/state assoc-in [:window/graph window] graph-path)
     nil))
 
@@ -442,14 +428,14 @@
   (when graph-name
     (set-current-graph! window (utils/get-graph-dir graph-name))))
 
-(defmethod handle :runGit [_ [_ args]]
-  (when (seq args)
-    (git/raw! args)))
+(defmethod handle :runGit [_ [_ {:keys [repo command]}]]
+  (when (seq command)
+    (git/raw! (utils/get-graph-dir repo) command)))
 
-(defmethod handle :runGitWithinCurrentGraph [_ [_ args]]
-  (when (seq args)
-    (git/init!)
-    (git/run-git2! (clj->js args))))
+(defmethod handle :runGitWithinCurrentGraph [_ [_ {:keys [repo command]}]]
+  (when (seq command)
+    (git/init! (utils/get-graph-dir repo))
+    (git/run-git2! (utils/get-graph-dir repo) (clj->js command))))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try
@@ -472,8 +458,8 @@
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
 
-(defmethod handle :gitStatus [_ [_]]
-  (git/short-status!))
+(defmethod handle :gitStatus [_ [_ repo]]
+  (git/short-status! (utils/get-graph-dir repo)))
 
 (def debounced-configure-auto-commit! (debounce git/configure-auto-commit! 5000))
 (defmethod handle :setGitAutoCommit []

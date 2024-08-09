@@ -103,8 +103,9 @@ export const LogseqQuickSearch = observer(
     const { handlers, renderers } = React.useContext(LogseqContext)
     const t = handlers.t
 
-    const finishSearching = React.useCallback((id: string) => {
-      setTimeout(() => onChange(id))
+    const finishSearching = React.useCallback((id: string, isPage: boolean) => {
+    console.log({id, isPage})
+      setTimeout(() => onChange(id, isPage))
       rInput.current?.blur()
       if (id) {
         LogseqPortalShape.defaultSearchQuery = ''
@@ -185,12 +186,13 @@ export const LogseqQuickSearch = observer(
       }
 
       // New page or whiteboard option when no exact match
-      if (!searchResult?.pages?.some(p => p.toLowerCase() === q.toLowerCase()) && q) {
+      if (!searchResult?.pages?.some(p => p.title.toLowerCase() === q.toLowerCase()) && q) {
         options.push(
           {
             actionIcon: 'circle-plus',
-            onChosen: () => {
-              finishSearching(q)
+            onChosen: async () => {
+              let result = await handlers?.addNewPage(q)
+              finishSearching(result, true)
               return true
             },
             element: (
@@ -204,8 +206,8 @@ export const LogseqQuickSearch = observer(
           {
             actionIcon: 'circle-plus',
             onChosen: async () => {
-              await handlers?.addNewWhiteboard(q)
-              finishSearching(q)
+              let result = await handlers?.addNewWhiteboard(q)
+              finishSearching(result, true)
               return true
             },
             element: (
@@ -258,13 +260,13 @@ export const LogseqQuickSearch = observer(
             return {
               actionIcon: 'search' as 'search',
               onChosen: () => {
-                finishSearching(page)
+                finishSearching(page.id, true)
                 return true
               },
               element: (
                 <div className="tl-quick-search-option-row">
-                  <LogseqTypeTag type={handlers.isWhiteboardPage(page) ? 'WP' : 'P'} />
-                  {highlightedJSX(page, q)}
+                  <LogseqTypeTag type={handlers.isWhiteboardPage(page.id) ? 'WP' : 'P'} />
+                  {highlightedJSX(page.title, q)}
                 </div>
               ),
             }
@@ -276,8 +278,8 @@ export const LogseqQuickSearch = observer(
       if ((!searchFilter || searchFilter === 'B') && searchResult && searchResult.blocks) {
         options.push(
           ...searchResult.blocks
-            .filter(block => block.content && block.uuid)
-            .map(({ content, uuid }) => {
+            .filter(block => block.title && block.uuid)
+            .map(({ title, uuid }) => {
               const block = handlers.queryBlockByUUID(uuid)
               return {
                 actionIcon: 'search' as 'search',
@@ -289,21 +291,14 @@ export const LogseqQuickSearch = observer(
                   }
                   return false
                 },
-                element: block ? (
+                // FIXME: breadcrumb not works here because of async loading
+                element: (
                   <>
                     <div className="tl-quick-search-option-row">
                       <LogseqTypeTag type="B" />
-                      <div className="tl-quick-search-option-breadcrumb">
-                        <Breadcrumb blockId={uuid} />
-                      </div>
-                    </div>
-                    <div className="tl-quick-search-option-row">
-                      <div className="tl-quick-search-option-placeholder" />
-                      {highlightedJSX(content, q)}
+                      {highlightedJSX(title, q)}
                     </div>
                   </>
-                ) : (
-                  <div className="tl-quick-search-option-row">{t('whiteboard/cache-outdated')}</div>
                 ),
               }
             })

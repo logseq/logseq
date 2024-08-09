@@ -9,6 +9,7 @@
   ;; stubbed in nbb
   com.lambdaisland/glogi      {:mvn/version "1.1.144"}
   ;; built in to nbb
+  funcool/promesa             {:mvn/version "4.0.2"}
   cljs-bean/cljs-bean         {:mvn/version "1.5.0"}}
 
  :aliases
@@ -17,7 +18,8 @@
  ;; with karma, shadow-cljs.edn and headless mode on CI
  {:test {:extra-paths ["test"]
          :extra-deps  {olical/cljs-test-runner   {:mvn/version "3.8.0"}
-                       org.clojure/clojurescript {:mvn/version "1.11.54"}}
+                       org.clojure/clojurescript {:mvn/version "1.11.132"}
+                       logseq/outliner {:local/root "../outliner"}}
          :main-opts   ["-m" "cljs-test-runner.main"]}
 
   :clj-kondo {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2023.05.26"}}
