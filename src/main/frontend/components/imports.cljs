@@ -378,7 +378,7 @@
 
   (rum/defc importer < rum/reactive
   [{:keys [query-params]}]
-  (let [support-file-based? true]
+  (let [support-file-based? (config/local-file-based-graph? (state/get-current-repo))]
     (if (state/sub :graph/importing)
       (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
             left-label (if (and current-idx total (= current-idx total))
