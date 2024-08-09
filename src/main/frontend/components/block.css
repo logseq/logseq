@@ -200,10 +200,18 @@
 }
 
 .block-title-wrap {
-  @apply inline items-center flex-wrap;
+  @apply inline;
+
+  > .ui__checkbox {
+    @apply relative top-[3px];
+  }
 
   &.as-heading {
-    @apply flex flex-1;
+    @apply flex flex-1 items-center;
+
+    > .ui__checkbox {
+      @apply top-0;
+    }
 
     h1& {
       .ui__icon.ti svg {
