@@ -3398,18 +3398,20 @@
 
 (defn- valid-dsl-query-block?
   "Whether block has a valid dsl query."
-  [block]
-  (->> (:block/macros (db/entity (:db/id block)))
-       (some (fn [macro]
-               (let [properties (:block/properties macro)
-                     macro-name (pu/lookup properties :logseq.property/macro-name)
-                     macro-arguments (pu/lookup properties :logseq.property/macro-arguments)]
-                 (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
-                   (seq (:query
-                         (try
-                           (query-dsl/parse-query query-body)
-                           (catch :default _e
-                             nil))))))))))
+  [block repo]
+  (if (config/db-based-graph? repo)
+    (string/includes? (:block/title block) "{{query")
+    (->> (:block/macros (db/entity (:db/id block)))
+         (some (fn [macro]
+                 (let [properties (:block/properties macro)
+                       macro-name (:logseq.macro-name properties)
+                       macro-arguments (:logseq.macro-arguments properties)]
+                   (when-let [query-body (and (= "query" macro-name) (not-empty (string/join " " macro-arguments)))]
+                     (seq (:query
+                           (try
+                             (query-dsl/parse-query query-body)
+                             (catch :default _e
+                               nil)))))))))))
 
 (defn- valid-custom-query-block?
   "Whether block has a valid custom query."
@@ -3437,7 +3439,7 @@
                                   (remove db-property/db-attribute-properties)
                                   (remove #(outliner-property/property-with-other-position? (db/entity %))))]
            (or (db-model/has-children? block-id)
-               (valid-dsl-query-block? block)
+               (valid-dsl-query-block? block repo)
                (valid-custom-query-block? block)
                (and db-based?
                     (seq property-keys)
