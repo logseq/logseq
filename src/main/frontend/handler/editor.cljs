@@ -1623,9 +1623,15 @@
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
                                             :selected selected}))
 
+          (and (= prefix block-ref/left-parens)
+               (config/db-based-graph? (state/get-current-repo)))
+          (notification/show!
+           "To reference a node, please use `[[]]`."
+           :warning)
+
           (= prefix block-ref/left-parens)
-          (let [db-based? (config/db-based-graph? (state/get-current-repo))]
-            (commands/handle-step [:editor/search-block (if db-based? :embed :reference)])
+          (do
+            (commands/handle-step [:editor/search-block :reference])
             (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)
                                             :selected selected})))))))
 
@@ -1857,7 +1863,9 @@
              (not (wrapped-by? input block-ref/left-parens block-ref/right-parens))
              ;; wrapped-by? doesn't detect multiple beginnings when ending with "" so
              ;; use subs to correctly detect current hashtag
-             (not (text-util/wrapped-by? (subs (.-value input) 0 (cursor/pos input)) (cursor/pos input) commands/hashtag "")))
+             (not (text-util/wrapped-by? (subs (.-value input) 0 (cursor/pos input)) (cursor/pos input) commands/hashtag ""))
+             (not (and (config/db-based-graph? (state/get-current-repo))
+                       (= :block-search (state/get-editor-action)))))
     (state/clear-editor-action!)))
 
 (defn resize-image!

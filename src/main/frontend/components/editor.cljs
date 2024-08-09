@@ -297,7 +297,7 @@
         selected-text (editor-handler/get-selected-text)
         q (or
             selected-text
-            (when (> (count edit-content) current-pos)
+            (when (>= (count edit-content) current-pos)
               (subs edit-content pos current-pos)))]
     (when input
       (block-search-auto-complete edit-block input id q format selected-text))))

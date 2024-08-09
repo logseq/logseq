@@ -135,8 +135,7 @@
 
 (defn db-based-embed-block
   []
-  [[:editor/input "(())" {:last-pattern command-trigger
-                          :backward-pos 2}]
+  [[:editor/input "" {:last-pattern command-trigger}]
    [:editor/search-block :embed]])
 
 (defn get-statuses
@@ -792,7 +791,8 @@
 
 (defmethod handle-step :editor/search-block [[_ type]]
   (when (and (= type :embed) (config/db-based-graph? (state/get-current-repo)))
-    (reset! *current-command "Block embed"))
+    (reset! *current-command "Block embed")
+    (state/set-editor-action-data! {:pos (cursor/get-caret-pos (state/get-input))}))
   (state/set-editor-action! :block-search))
 
 (defmethod handle-step :editor/search-template [[_]]
