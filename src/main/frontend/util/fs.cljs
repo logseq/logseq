@@ -8,7 +8,7 @@
             [frontend.config :as config]
             [promesa.core :as p]
             [cljs.reader :as reader]
-            [frontend.worker.file.util :as wfu]))
+            [frontend.common.file.util :as wfu]))
 
 ;; NOTE: This is not the same ignored-path? as src/electron/electron/utils.cljs.
 ;;       The assets directory is ignored.

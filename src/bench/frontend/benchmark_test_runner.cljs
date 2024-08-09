@@ -5,7 +5,7 @@
             [clojure.pprint :as pprint]
             [clojure.test :refer [deftest testing]]
             [fipp.edn :as fipp]
-            [frontend.worker.file.util :as wfu]))
+            [frontend.common.file.util :as wfu]))
 
 (def onboarding
   (edn/read-string (slurped "resources/whiteboard/onboarding.edn")))

@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [logseq.common.util.page-ref :as page-ref]
-            [frontend.worker.file.util :as wfu]
+            [frontend.common.file.util :as wfu]
             [logseq.db :as ldb]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]

@@ -1,7 +1,8 @@
-(ns frontend.worker.file.util
-  "File name fns"
+(ns frontend.common.file.util
+  "File name fns. Used by worker and frontend namespaces"
   (:require [clojure.string :as string]
-            [logseq.common.util :as common-util]))
+            [logseq.common.util :as common-util]
+            [logseq.db :as ldb]))
 
 ;; Update repo/invalid-graph-name-warning if characters change
 (def multiplatform-reserved-chars ":\\*\\?\"<>|\\#\\\\")
@@ -88,3 +89,8 @@
   [x]
   (with-redefs [print-prefix-map print-prefix-map*]
     (pr-str x)))
+
+(defn post-message
+  [type data]
+  (when (exists? js/self)
+    (.postMessage js/self (ldb/write-transit-str [type data]))))

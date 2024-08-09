@@ -122,11 +122,12 @@ The main convention is that file and db specific files go under directories name
 
 ### Separate Worker from Frontend
 
-The worker and frontend code share common code from deps/ and `frontend.common.*`. However, the worker should never depend on other frontend namespaces as it could pull in libraries like React which cause it to fail hard. Run this linter to ensure worker namespaces are not dependent on other frontend namespaces:
+The worker and frontend code share common code from deps/ and `frontend.common.*`. However, the worker should never depend on other frontend namespaces as it could pull in libraries like React which cause it to fail hard. Likewise the frontend should never depend on worker namespaces. Run this linter to ensure worker and frontend namespaces don't require each other:
 
 ```
 $ bb lint:worker-and-frontend-separate
-Success!
+Valid worker namespaces!
+Valid frontend namespaces!
 ```
 
 ## Testing
