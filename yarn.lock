@@ -401,6 +401,11 @@
   resolved "https://registry.yarnpkg.com/@excalidraw/excalidraw/-/excalidraw-0.16.1.tgz#a928945d567a1f5c0aa75bd1b1c05b50329eb27a"
   integrity sha512-4zirHk7dNx6SVq2jQmYOLliqAa1h3WPVqHM5qtJyhD769VsOqwlkopAcnZMb3G1PeIMm6cf2F31quS5MVqvoOQ==
 
+"@glidejs/glide@^3.6.0":
+  version "3.6.0"
+  resolved "https://registry.yarnpkg.com/@glidejs/glide/-/glide-3.6.0.tgz#d13fd57de8473a2d86022ac601b5cbc98c9dcfe5"
+  integrity sha512-47Aa+JmYjY4xTFpTtYCwrqirmI1arnp1UZETwtWpbTPisXUAuxrdJxKJLH8KHFWMsSrLi9+AcfyfzDIuO75rEA==
+
 "@highlightjs/cdn-assets@10.4.1":
   version "10.4.1"
   resolved "https://registry.yarnpkg.com/@highlightjs/cdn-assets/-/cdn-assets-10.4.1.tgz#261bc7a391cd22e86e19ba809a9b997ca37f1514"
