@@ -120,8 +120,8 @@
     (if (and class? class-schema?)
       (-> (shui/dialog-confirm!
             ;; Only ask for confirmation on class schema properties
-            [:p (str "Are you sure you want to delete this property?")])
-        (p/then remove!))
+           [:p (str "Are you sure you want to delete this property?")])
+          (p/then remove!))
       (remove!))))
 
 (defn- <add-property-from-dropdown
@@ -640,14 +640,15 @@
                                                                                 {:properties {:logseq.property/icon icon}})]
                                   (shui/popup-hide! id))))}))]
 
-         (shui/trigger-as :button
-           (-> (when-not config/publishing?
-                 {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
-             (assoc :class "flex items-center"))
-           (if icon
-             [:span.flex.items-center {:style {:color (or (some-> icon :color) "inherit")}}
-              (icon-component/icon icon {:size 15})]
-             (property-icon property nil)))))
+         (shui/trigger-as
+          :button
+          (-> (when-not config/publishing?
+                {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
+              (assoc :class "flex items-center"))
+          (if icon
+            [:span.flex.items-center {:style {:color (or (some-> icon :color) "inherit")}}
+             (icon-component/icon icon {:size 15})]
+            (property-icon property nil)))))
 
      (if config/publishing?
        [:a.property-k.flex.select-none.jtrigger

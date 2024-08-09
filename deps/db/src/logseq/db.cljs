@@ -7,14 +7,14 @@
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db.frontend.delete-blocks :as delete-blocks]
-            ;; Load entity extensions
+            [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.delete-blocks :as delete-blocks] ;; Load entity extensions
             [logseq.db.frontend.entity-plus]
             [logseq.db.frontend.entity-util :as entity-util]
+            [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.order :as db-order]))
+            [logseq.db.sqlite.util :as sqlite-util]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -456,7 +456,7 @@
   (and (built-in? class-entity)
        (class? class-entity)
        (built-in? property-entity)
-       (contains? (set (map :db/ident (:class/schema.properties class-entity)))
+       (contains? (set (get-in (db-class/built-in-classes (:db/ident class-entity)) [:schema :properties]))
                   (:db/ident property-entity))))
 
 (def write-transit-str sqlite-util/write-transit-str)
