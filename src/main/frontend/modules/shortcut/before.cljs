@@ -10,14 +10,18 @@
     (f e)
     ;; return false to prevent default browser behavior
     ;; and stop event from bubbling
+    (.preventDefault e)
     false))
 
 (defn enable-when-not-editing-mode!
-  [f]
+  [f s]
   (fn [e]
     (when-not (or (state/editing?)
                   (util/input? (.-target e)))
-      (f e)
+      (when (or (not (:selection? s))
+              (seq (state/get-selection-blocks)))
+        (f e))
+      (.preventDefault e)
       false)))
 
 (defn enable-when-editing-mode!

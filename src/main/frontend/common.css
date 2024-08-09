@@ -31,6 +31,7 @@ body {
   line-height: 1.5;
   min-height: 100%;
   word-break: break-word; /* compatible for overflow-wrap: anywhere */
+  overflow-y: overlay;
 }
 
 @layer base {
@@ -115,11 +116,14 @@ body {
     text-indent: 0;
     padding: 8px 20px;
     border-left: 4px solid;
-    border-left-color: var(--ls-page-blockquote-border-color, hsl(var(--primary)/.4));
-    background-color: var(--ls-page-blockquote-bg-color, hsl(var(--secondary)));
+    background-color: var(--ls-page-blockquote-bg-color, var(--lx-gray-04, hsl(var(--secondary))));
     color: var(--ls-page-blockquote-color, hsl(var(--secondary-foreground)));
     margin: 1rem 0;
     font-size: 1rem;
+  }
+
+  html blockquote {
+    border-left-color: var(--ls-page-blockquote-border-color, var(--lx-gray-05-alpha, hsl(var(--primary)/.4)));
   }
 
   summary {
@@ -297,46 +301,26 @@ i.ti {
 }
 
 .admonitionblock {
-  margin: 2rem 0;
-}
-
-.abstract {
-  margin: 2rem 0;
-  width: 80%;
-  font-style: italic;
-}
-
-.abstract p:last-of-type::before {
-  content: '    ';
-  white-space: pre;
-}
-
-.dropdown-overflow-auto {
-  max-height: 400px;
-  overflow-y: auto;
+  @apply my-2 p-2;
 }
 
 .heading-bg {
-  border-radius: 50%;
-  width: 18px;
-  height: 18px;
+  @apply rounded-full w-[18px] h-[18px];
 
   &.remove {
-    @apply border flex items-center justify-center;
-
-    border-color: var(--border-color);
+    @apply border flex items-center justify-center border-gray-07 hover:border-gray-09;
   }
 }
 
 .to-heading-button {
-  @apply px-1 text-lg !important;
+  @apply px-1 text-lg;
 }
 
 /** endregion **/
 
 /* region FIXME: override elements (?) */
 h1.title, h1.title input {
-  @apply mb-4 font-medium;
+  @apply font-medium;
 
   color: var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))));
   font-size: var(--ls-page-title-size, 32px);
@@ -350,7 +334,6 @@ h1.title, h1.title input {
 .content .selected {
   transition: background-color 0.2s cubic-bezier(0, 1, 0, 1);
   background-color: var(--ls-block-highlight-color, var(--rx-gray-04));
-  padding: -1px;
 }
 
 span.timestamp {
@@ -401,7 +384,7 @@ button.menu:focus {
 
 .menu-link {
   @apply text-popover-foreground/75 select-none hover:text-popover-foreground/100;
-  @apply text-sm px-2 py-1.5 mx-1 hover:rounded transition-opacity duration-150;
+  @apply text-sm px-2 py-1.5 hover:rounded transition-opacity duration-150;
 }
 
 .menu-separator {
@@ -482,20 +465,24 @@ img.small {
 }
 
 a.tag {
-  font-size: 0.9em;
-  text-align: center;
-  text-decoration: none;
-  display: inline-block;
-  cursor: pointer;
-  padding: 0 2px;
-  border-radius: 4px;
+  @apply text-sm inline-flex items-center text-center cursor-pointer rounded opacity-70;
+
   color: var(--lx-accent-11, var(--ls-tag-text-color, hsl(var(--primary))));
-  opacity: var(--ls-tag-text-opacity, 0.7);
+
+  &:hover {
+    opacity: var(--ls-tag-text-hover-opacity, 1);
+    text-decoration: underline;
+  }
+
+  &[data-ref] + &[data-ref] {
+    @apply mx-[3px];
+  }
 }
 
-a.tag:hover {
-  opacity: var(--ls-tag-text-hover-opacity, 1);
-  text-decoration: underline;
+.preview-ref-link {
+  & + &, & + a.tag, a.tag + & {
+    @apply mx-[3px];
+  }
 }
 
 svg.note {
@@ -571,26 +558,8 @@ a.navigation {
 mark {
   background: var(--ls-page-mark-bg-color, #fef3ac);
   color: var(--ls-page-mark-color, #262626);
-  padding: 2px 4px;
-  border-radius: 3px;
-}
-
-/* page reference */
-
-.page-reference {
-  border-radius: 3px;
-  padding: 2px 0px;
-  transition: 0.3s;
-}
-
-.page-reference .bracket {
-  opacity: 0.3;
-}
-
-/* block references */
-.block-ref .block-ref {
-  padding: 6px 5px;
-  border: none;
+  padding: 0 4px;
+  border-radius: 4px;
 }
 
 /* inline code */
@@ -618,35 +587,6 @@ mark > code {
   line-height: inherit !important;
   background: #fef3ac !important;
   color: #262626 !important;
-}
-
-b > code {
-  font-weight: bold !important;
-}
-
-i > code {
-  font-style: italic !important;
-}
-
-a {
-  transition: 0.3s;
-}
-
-a.tooltip-priority {
-  transition: none;
-}
-
-.page-reference:hover {
-  background: var(--lx-accent-04-alpha, var(--ls-secondary-background-color, hsl(var(--primary)/.4)));
-}
-
-.references-blocks .page-reference:hover {
-  background: var(--lx-accent-04-alpha, var(--ls-tertiary-background-color, hsl(var(--primary)/.4)));
-}
-
-#head .fade-link {
-  font-weight: 600;
-  font-size: 13px;
 }
 
 .text-link {
@@ -718,7 +658,7 @@ html.is-mobile {
     margin-top: 5px;
   }
 
-  main.theme-inner {
+  main.theme-container-inner {
     @apply overflow-x-hidden;
   }
 }
@@ -733,4 +673,12 @@ html.is-mobile {
   img {
     @apply inline-block;
   }
+}
+
+button[role="checkbox"][data-state=unchecked] {
+    border-color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))));
+}
+
+.dark-theme button[role="checkbox"][data-state=unchecked] {
+    border-color: var(--lx-gray-11, var(--ls-primary-text-color, hsl(var(--foreground))));
 }

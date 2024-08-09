@@ -2,7 +2,10 @@
  :deps
  {org.clojure/clojure                   {:mvn/version "1.11.1"}
   rum/rum                               {:mvn/version "0.12.9"}
-  datascript/datascript                 {:mvn/version "1.5.3"}
+
+  datascript/datascript                 {:git/url "https://github.com/logseq/datascript" ;; fork
+                                         :sha     "8c7168b0c29ae2dc3c3efb5d28188916e991bde1"}
+
   datascript-transit/datascript-transit {:mvn/version "0.3.0"}
   borkdude/rewrite-edn                  {:mvn/version "0.4.7"}
   funcool/promesa                       {:mvn/version "4.0.2"}
@@ -13,6 +16,7 @@
   org.clojure/core.match                {:mvn/version "1.0.0"}
   com.andrewmcveigh/cljs-time           {:git/url "https://github.com/logseq/cljs-time" ;; fork
                                          :sha     "5704fbf48d3478eedcf24d458c8964b3c2fd59a9"}
+  ;; TODO: delete cljs-drag-n-drop and use dnd-kit
   cljs-drag-n-drop/cljs-drag-n-drop     {:mvn/version "0.1.0"}
   cljs-http/cljs-http                   {:mvn/version "0.1.46"}
   org.babashka/sci                      {:mvn/version "0.3.2"}
@@ -24,28 +28,34 @@
   expound/expound                       {:mvn/version "0.8.6"}
   com.lambdaisland/glogi                {:mvn/version "1.1.144"}
   binaryage/devtools                    {:mvn/version "1.0.5"}
-  camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.2"}
+  camel-snake-kebab/camel-snake-kebab   {:mvn/version "0.4.3"}
   instaparse/instaparse                 {:mvn/version "1.4.10"}
   org.clojars.mmb90/cljs-cache          {:mvn/version "0.1.4"}
   fipp/fipp                             {:mvn/version "0.6.26"}
   logseq/common                         {:local/root "deps/common"}
   logseq/graph-parser                   {:local/root "deps/graph-parser"}
+  logseq/outliner                       {:local/root "deps/outliner"}
   logseq/publishing                     {:local/root "deps/publishing"}
   logseq/shui                           {:local/root "deps/shui"}
-  metosin/malli                         {:mvn/version "0.10.0"}}
+  metosin/malli                         {:mvn/version "0.16.1"}
+  com.cognitect/transit-cljs            {:mvn/version "0.8.280"}
+  missionary/missionary                 {:mvn/version "b.39"}}
 
  :aliases {:cljs {:extra-paths ["src/dev-cljs/" "src/test/" "src/electron/"]
-                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
+                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
                                 org.clojure/tools.namespace      {:mvn/version "0.2.11"}
-                                cider/cider-nrepl                {:mvn/version "0.29.0"}
-                                org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
+                                cider/cider-nrepl                {:mvn/version "0.47.0"}
+                                org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
+                                tortue/spy                       {:mvn/version "2.14.0"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            :test {:extra-paths ["src/test/"]
-                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.54"}
+                  :extra-deps  {org.clojure/clojurescript        {:mvn/version "1.11.132"}
                                 org.clojure/test.check           {:mvn/version "1.1.1"}
                                 pjstadig/humane-test-output      {:mvn/version "0.11.0"}
-                                org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}}
+                                org.clojars.knubie/cljs-run-test {:mvn/version "1.0.1"}
+                                tortue/spy                       {:mvn/version "2.14.0"}
+                                cider/cider-nrepl                {:mvn/version "0.47.0"}}
                   :main-opts   ["-m" "shadow.cljs.devtools.cli"]}
 
            :bench {:extra-paths ["src/bench/"]

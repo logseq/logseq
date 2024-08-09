@@ -2,27 +2,10 @@
   "Some utils are required by other namespace in frontend.db package."
   (:require [datascript.core :as d]
             [frontend.state :as state]
-            [datascript.transit :as dt]
             [frontend.db.conn :as conn]
-            [frontend.config :as config]
-            [logseq.graph-parser.util :as gp-util]))
+            [logseq.db.frontend.content :as db-content]))
 
 ;; transit serialization
-
-(defn db->string [db]
-  (dt/write-transit-str db))
-
-(defn db->json [db]
-  (js/JSON.stringify
-   (into-array
-    (for [d (d/datoms db :eavt)]
-      #js [(:e d) (name (:a d)) (:v d)]))))
-
-(defn db->edn-str [db]
-  (pr-str db))
-
-(defn string->db [s]
-  (dt/read-transit-str s))
 
 (defn seq-flatten [col]
   (flatten (seq col)))
@@ -34,28 +17,37 @@
              (group-by :block/page))
     blocks))
 
-(defn get-tx-id [tx-report]
-  (get-in tx-report [:tempids :db/current-tx]))
-
-(defn get-max-tx-id
-  [db]
-  (:max-tx db))
-
 (defn entity
-  "This function will return nil if passed `id-or-lookup-ref` is an integer and
+  "This function will return nil if passed `eid` is an integer and
   the entity doesn't exist in db.
   `repo-or-db`: a repo string or a db,
-  `id-or-lookup-ref`: same as d/entity."
-  ([id-or-lookup-ref]
-   (entity (state/get-current-repo) id-or-lookup-ref))
-  ([repo-or-db id-or-lookup-ref]
-   (when-let [db (if (string? repo-or-db)
-                   ;; repo
-                   (let [repo (or repo-or-db (state/get-current-repo))]
-                     (conn/get-db repo))
-                   ;; db
-                   repo-or-db)]
-     (d/entity db id-or-lookup-ref))))
+  `eid`: same as d/entity."
+  ([eid]
+   (entity (state/get-current-repo) eid))
+  ([repo-or-db eid]
+   (when eid
+     (assert (or (number? eid)
+                 (sequential? eid)
+                 (keyword? eid)
+                 (uuid? eid))
+             (do
+               (js/console.trace)
+               (str "Invalid entity eid: " (pr-str eid))))
+     (let [eid (if (uuid? eid) [:block/uuid eid] eid)]
+       (when-let [db (if (string? repo-or-db)
+                     ;; repo
+                      (let [repo (or repo-or-db (state/get-current-repo))]
+                        (conn/get-db repo))
+                     ;; db
+                      repo-or-db)]
+        (d/entity db eid))))))
+
+(defn update-block-content
+  "Replace `[[internal-id]]` with `[[page name]]`"
+  [item eid]
+  (if-let [db (conn/get-db)]
+    (db-content/update-block-content db item eid)
+    item))
 
 (defn pull
   ([eid]
@@ -64,12 +56,8 @@
    (pull (state/get-current-repo) selector eid))
   ([repo selector eid]
    (when-let [db (conn/get-db repo)]
-     (try
-       (d/pull db
-               selector
-               eid)
-       (catch :default _e
-         nil)))))
+     (let [result (d/pull db selector eid)]
+       (update-block-content result eid)))))
 
 (defn pull-many
   ([eids]
@@ -78,32 +66,9 @@
    (pull-many (state/get-current-repo) selector eids))
   ([repo selector eids]
    (when-let [db (conn/get-db repo)]
-     (try
-       (d/pull-many db selector eids)
-       (catch :default e
-         (js/console.error e))))))
-
-(defn transact!
-  ([tx-data]
-   (transact! (state/get-current-repo) tx-data))
-  ([repo-url tx-data]
-   (transact! repo-url tx-data nil))
-  ([repo-url tx-data tx-meta]
-   (when-not config/publishing?
-     (let [tx-data (gp-util/fast-remove-nils tx-data)]
-       (when (seq tx-data)
-         (when-let [conn (conn/get-db repo-url false)]
-           (if tx-meta
-             (d/transact! conn (vec tx-data) tx-meta)
-             (d/transact! conn (vec tx-data)))))))))
-
-(defn get-key-value
-  ([key]
-   (get-key-value (state/get-current-repo) key))
-  ([repo-url key]
-   (when-let [db (conn/get-db repo-url)]
-     (some-> (d/entity db key)
-             key))))
+     (let [selector (if (some #{:db/id} selector) selector (conj selector :db/id))]
+       (->> (d/pull-many db selector eids)
+            (map #(update-block-content % (:db/id %))))))))
 
 (defn q
   [query & inputs]

@@ -3,8 +3,8 @@
             [daiquiri.interpreter :refer [interpret]]
             [medley.core :as medley]
             [logseq.shui.util :as util]
-            [promesa.core :as p]
-            [clojure.string :as string]))
+            [logseq.shui.base.core :as base]
+            [promesa.core :as p]))
 
 ;; provider
 (def dialog (util/lsui-wrap "Dialog"))
@@ -39,7 +39,7 @@
               (if (vector? v) (assoc config k (interpret v)) config)))
     config ks))
 
-;; {:id :title :description :content :footer :open? ...}
+;; {:id :title :description :content :footer :open? :on-close ...}
 (def ^:private *modals (atom []))
 (def ^:private *id (atom 0))
 (def ^:private gen-id #(reset! *id (inc @*id)))
@@ -57,7 +57,9 @@
           config (if (nil? val)
                    (medley/dissoc-in config ks)
                    (assoc-in config ks val))]
-      (swap! *modals assoc index config))))
+      (swap! *modals assoc index config)
+      (when (and (false? (:open? config)) (fn? (:on-close config)))
+        ((:on-close config) id)))))
 
 (defn upsert-modal!
   [config]
@@ -69,10 +71,58 @@
   (when-let [[index] (get-modal id)]
     (swap! *modals #(->> % (medley/remove-nth index) (vec)))))
 
+(defn has-modal?
+  []
+  (some-> @*modals (last) :open?))
+
+;; apis
+(declare close!)
+
+(defn open!
+  [content-or-config & config']
+  (let [config (if (map? content-or-config)
+                 content-or-config
+                 {:content content-or-config})
+        content (:content config)
+        id (gen-id)
+        config (merge {:id id :open? true :close #(close! id)} config (first config'))
+        config (cond-> config
+                 (fn? content)
+                 (assoc :content (content config)))]
+    (upsert-modal! config)))
+
+(defn alert!
+  [content-or-config & config']
+  (let [deferred (p/deferred)]
+    (open! content-or-config
+      (merge {:alert? :default :deferred deferred} (first config')))
+    (p/promise deferred)))
+
+(defn confirm!
+  [content-or-config & config']
+  (alert! content-or-config (assoc (first config') :alert? :confirm)))
+
+(defn get-last-modal-id
+  []
+  (some-> (last @*modals) (:id)))
+
+(defn close!
+  ([] (close! (get-last-modal-id)))
+  ([id] (update-modal! id :open? false)))
+
+(defn close-all! []
+  (doseq [{:keys [id]} @*modals]
+    (close! id)))
+
+;; components
 (rum/defc modal-inner
   [config]
-  (let [{:keys [id title description content footer on-open-change open?]} config
-        props (dissoc config :id :title :description :content :footer :on-open-change :open?)]
+  (let [{:keys [id title description content footer on-open-change align open?
+                auto-width? close-btn? root-props content-props]} config
+        props (dissoc config
+                :id :title :description :content :footer :auto-width? :close-btn?
+                :align :on-open-change :open? :root-props :content-props)
+        props (assoc-in props [:overlay-props :data-align] (name (or align :center)))]
 
     (rum/use-effect!
       (fn []
@@ -81,21 +131,34 @@
       [open?])
 
     (dialog
-      {:key            (str "modal-" id)
-       :open           open?
-       :on-open-change (fn [v]
-                         (let [set-open! #(update-modal! id :open? %)]
-                           (if (fn? on-open-change)
-                             (on-open-change {:value v :set-open! set-open!})
-                             (set-open! v))))}
-      (dialog-content props
-        (dialog-header
-          (when title (dialog-title title))
-          (when description (dialog-description description)))
-        (when content
-          [:div.ui__dialog-main-content content])
-        (when footer
-          (dialog-footer footer))))))
+      (merge root-props
+        {:key (str "modal-" id)
+         :open open?
+         :on-open-change (fn [v]
+                           (let [set-open! #(update-modal! id :open? %)]
+                             (if (fn? on-open-change)
+                               (on-open-change {:value v :set-open! set-open!})
+                               (set-open! v))))})
+      (let [onPointerDownOutside (:onPointerDownOutside content-props)
+            content-props (assoc content-props
+                            :onPointerDownOutside
+                            (fn [^js e]
+                              (when (fn? onPointerDownOutside)
+                                (onPointerDownOutside e))
+                              (when-not (some-> (.-target e) (.closest ".ui__dialog-overlay"))
+                                (.preventDefault e))))]
+        (dialog-content
+          (cond-> (merge props content-props)
+            auto-width? (assoc :data-auto-width true)
+            (false? close-btn?) (assoc :data-close-btn false))
+          (when title
+            (dialog-header
+              (when title (dialog-title title))
+              (when description (dialog-description description))))
+          (when content
+            [:div.ui__dialog-main-content content])
+          (when footer
+            (dialog-footer footer)))))))
 
 (rum/defc alert-inner
   [config]
@@ -109,8 +172,8 @@
       [open?])
 
     (alert-dialog
-      {:key            (str "alert-" id)
-       :open           open?
+      {:key (str "alert-" id)
+       :open open?
        :on-open-change #(update-modal! id :open? %)}
       (alert-dialog-content props
         (alert-dialog-header
@@ -121,16 +184,33 @@
         (alert-dialog-footer
           (if footer
             footer
-            [:<> (alert-dialog-action {:key "ok" :on-click #(p/resolve! deferred true)} "OK")]))))))
+            [:<>
+             (base/button
+               {:key "ok"
+                :on-click #(do (close!) (p/resolve! deferred true))
+                :size :sm
+                } "OK")]))))))
 
 (rum/defc confirm-inner
   [config]
-  (let [{:keys [deferred]} config]
+  (let [{:keys [deferred outside-cancel?]} config]
     (alert-inner
-      (assoc config :footer
-             [:<>
-              (alert-dialog-cancel {:key "cancel" :on-click #(p/reject! deferred false)} "Cancel")
-              (alert-dialog-action {:key "ok" :on-click #(p/resolve! deferred true)} "OK")]))))
+      (assoc config
+        :overlay-props
+        {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
+        :footer
+        [:<>
+         (base/button
+           {:key "cancel"
+            :on-click #(do (close!) (p/reject! deferred false))
+            :variant :outline
+            :size :sm}
+           "Cancel")
+         (base/button
+           {:key "ok"
+            :on-click #(do (close!) (p/resolve! deferred true))
+            :size :sm
+            } "OK")]))))
 
 (rum/defc install-modals
   < rum/static
@@ -150,31 +230,3 @@
           (confirm-inner config)
           ;; modal
           (modal-inner config))))))
-
-;; apis
-(defn open!
-  [content-or-config & config']
-  (let [config (if (map? content-or-config)
-                 content-or-config
-                 {:content content-or-config})
-        config (merge config (first config'))]
-    (upsert-modal!
-      (merge {:id (gen-id) :open? true} config))))
-
-(defn alert!
-  [content-or-config & config']
-  (let [deferred (p/deferred)]
-    (open! content-or-config
-      (merge {:alert? :default :deferred deferred} (first config')))
-    (p/promise deferred)))
-
-(defn confirm!
-  [content-or-config & config']
-  (alert! content-or-config (assoc (first config') :alert? :confirm)))
-
-(defn close! [id]
-  (update-modal! id :open? false))
-
-(defn close-all! []
-  (doseq [{:keys [id]} @*modals]
-    (close! id)))

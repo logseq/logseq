@@ -10,11 +10,16 @@
              logseq.graph-parser.text text
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
-             logseq.graph-parser.util gp-util
+             logseq.common.util common-util
              logseq.graph-parser.property gp-property
-             logseq.graph-parser.config gp-config
+             logseq.common.config common-config
              logseq.graph-parser.date-time-util date-time-util
-             logseq.graph-parser.util.page-ref page-ref
-             logseq.graph-parser.util.block-ref block-ref}}}
+             logseq.common.util.page-ref page-ref
+             logseq.common.util.block-ref block-ref}}}
+
+ :lint-as {promesa.core/let clojure.core/let
+           promesa.core/loop clojure.core/loop
+           promesa.core/recur clojure.core/recur
+           logseq.graph-parser.test.helper/deftest-async clojure.test/deftest}
  :skip-comments true
  :output {:progress true}}

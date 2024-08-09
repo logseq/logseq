@@ -180,14 +180,18 @@ export interface AppGraphInfo {
 export interface BlockEntity {
   id: EntityID // db id
   uuid: BlockUUID
-  left: IEntityID
+  order: string
   format: 'markdown' | 'org'
   parent: IEntityID
-  content: string
+  title: string
+  content?: string // @deprecated. Use :title instead!
   page: IEntityID
+  createdAt: number
+  updatedAt: number
   properties?: Record<string, any>
 
   // optional fields in dummy page
+  left?: IEntityID
   anchor?: string
   body?: any
   children?: Array<BlockEntity | BlockUUIDTuple>
@@ -195,7 +199,6 @@ export interface BlockEntity {
   file?: IEntityID
   level?: number
   meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
-  title?: Array<any>
   marker?: string
 
   [key: string]: unknown
@@ -449,10 +452,11 @@ export interface IAppProxy {
 
   // graph
   getCurrentGraph: () => Promise<AppGraphInfo | null>
+  checkCurrentIsDbGraph: () => Promise<Boolean>
   getCurrentGraphConfigs: (...keys: string[]) => Promise<any>
   setCurrentGraphConfigs: (configs: {}) => Promise<void>
-  getCurrentGraphFavorites: () => Promise<Array<string> | null>
-  getCurrentGraphRecent: () => Promise<Array<string> | null>
+  getCurrentGraphFavorites: () => Promise<Array<string | PageEntity> | null>
+  getCurrentGraphRecent: () => Promise<Array<string | PageEntity> | null>
   getCurrentGraphTemplates: () => Promise<Record<string, BlockEntity> | null>
 
   // router
@@ -623,6 +627,8 @@ export interface IEditorProxy extends Record<string, any> {
 
   getSelectedBlocks: () => Promise<Array<BlockEntity> | null>
 
+  clearSelectedBlocks: () => Promise<void>
+
   /**
    * get all blocks of the current page as a tree structure
    *
@@ -768,7 +774,9 @@ export interface IEditorProxy extends Record<string, any> {
     srcBlock: BlockIdentity
   ) => Promise<BlockEntity | null>
 
-  getNextSiblingBlock: (srcBlock: BlockIdentity) => Promise<BlockEntity | null>
+  getNextSiblingBlock: (
+    srcBlock: BlockIdentity
+  ) => Promise<BlockEntity | null>
 
   moveBlock: (
     srcBlock: BlockIdentity,
@@ -789,9 +797,9 @@ export interface IEditorProxy extends Record<string, any> {
 
   removeBlockProperty: (block: BlockIdentity, key: string) => Promise<void>
 
-  getBlockProperty: (block: BlockIdentity, key: string) => Promise<any>
+  getBlockProperty: (block: BlockIdentity, key: string) => Promise<BlockEntity | string| null>
 
-  getBlockProperties: (block: BlockIdentity) => Promise<any>
+  getBlockProperties: (block: BlockIdentity) => Promise<Record<string, any> | null>
 
   scrollToBlockInPage: (
     pageName: BlockPageName,

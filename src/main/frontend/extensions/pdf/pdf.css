@@ -791,9 +791,6 @@ input::-webkit-inner-spin-button {
 
 .block-ref {
   &-wrap {
-    &[data-type=annotation] {
-    }
-
     &[data-hl-type=area] {
       display: block;
 

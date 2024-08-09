@@ -1,3 +1,11 @@
 {:paths ["src"]
- :api-namespaces [logseq.common.path]
+ :api-namespaces [logseq.common.path
+                  logseq.common.uuid
+                  logseq.common.util.page-ref
+                  logseq.common.util.block-ref
+                  logseq.common.util
+                  logseq.common.util.date-time
+                  logseq.common.util.macro
+                  logseq.common.marker
+                  logseq.common.config]
  :report {:format :ignore}}

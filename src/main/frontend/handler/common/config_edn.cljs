@@ -36,7 +36,7 @@ nested keys or positional errors e.g. tuples"
   ([title body]
    (config-notification-show! title body :error))
   ([title body status]
-   (config-notification-show! title body status true))
+   (config-notification-show! title body status false))
   ([title body status clear?]
    (notification/show!
     [:.mb-2
@@ -86,13 +86,46 @@ nested keys or positional errors e.g. tuples"
       :else
       (validate-config-map parsed-body schema path))))
 
+(def file-only-config
+  "File only config that is deprecated in DB graphs"
+  {:preferred-format
+   "is not used in DB graphs as there is only markdown mode."
+   :preferred-workflow
+   "is not used in DB graphs"
+   :property/separated-by-commas
+   "is not used in DB graphs"
+   :property-pages/enabled?
+   "is not used in DB graphs as all properties have pages"
+   :property-pages/excludelist
+   "is not used in DB graphs"
+   :hidden
+   "is not used in DB graphs"
+   :org-mode/insert-file-link?
+   "is not used in DB graphs"
+   :block-hidden-properties
+   "is not used in DB graphs as hiding a property is done in its configuration"
+   :ignored-page-references-keywords
+   "is not used in DB graphs"
+   :file/name-format
+   "is not used in DB graphs"
+   :feature/enable-block-timestamps?
+   "is not used in DB graphs as it is always enabled"
+   :favorites
+   "is not stored in config for DB graphs"})
+
 (defn detect-deprecations
   "Detects config keys that will or have been deprecated"
-  [path content]
+  [path content {:keys [db-graph?]}]
   (let [body (try (edn/read-string content)
                (catch :default _ ::failed-to-detect))
-        warnings {:editor/command-trigger
-                  "is no longer supported. Please use '/' and report bugs on it."}]
+        warnings (cond->
+                  {:editor/command-trigger
+                   "is no longer supported. Please use '/' and report bugs on it."
+                   :arweave/gateway
+                   "is no longer supported."}
+                   db-graph?
+                   (merge
+                    file-only-config))]
     (cond
       (= body ::failed-to-detect)
       (log/info :msg "Skip deprecation check since config is not valid edn")

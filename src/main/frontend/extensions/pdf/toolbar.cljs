@@ -1,20 +1,21 @@
 (ns frontend.extensions.pdf.toolbar
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [frontend.components.svg :as svg]
             [frontend.context.i18n :refer [t]]
-            [rum.core :as rum]
-            [promesa.core :as p]
+            [frontend.extensions.pdf.assets :as pdf-assets]
+            [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]
+            [frontend.handler.assets :as assets-handler]
+            [frontend.handler.notification :as notification]
             [frontend.rum :refer [use-atom]]
             [frontend.state :as state]
-            [frontend.util :as util]
             [frontend.storage :as storage]
             [frontend.ui :as ui]
-            [frontend.components.svg :as svg]
-            [frontend.extensions.pdf.assets :as pdf-assets]
-            [frontend.handler.editor :as editor-handler]
-            [frontend.extensions.pdf.utils :as pdf-utils]
-            [frontend.handler.notification :as notification]
-            [frontend.extensions.pdf.windows :refer [resolve-own-container] :as pdf-windows]))
+            [frontend.util :as util]
+            [logseq.shui.ui :as shui]
+            [promesa.core :as p]
+            [rum.core :as rum]))
 
 (declare make-docinfo-in-modal)
 
@@ -100,8 +101,10 @@
       [:div.extensions__pdf-settings-item.toggle-input
        [:a.is-info.w-full.text-gray-500
         {:title    (t :pdf/doc-metadata)
-         :on-click #(p/let [ret (pdf-utils/get-meta-data$ viewer)]
-                      (state/set-modal! (make-docinfo-in-modal ret)))}
+         :on-click (fn []
+                     (p/let [ret (pdf-utils/get-meta-data$ viewer)]
+                       (hide-settings!)
+                       (shui/dialog-open! (make-docinfo-in-modal ret))))}
 
         [:span.flex.items-center.justify-between.w-full
          (t :pdf/doc-metadata)
@@ -400,7 +403,7 @@
           (if-let [img-stamp (:image content)]
             (let [fpath (pdf-assets/resolve-area-image-file
                          img-stamp (state/get-current-pdf) hl)
-                  fpath (editor-handler/make-asset-url fpath)]
+                  fpath (assets-handler/make-asset-url fpath)]
               [:p.area-wrap
                [:img {:src fpath}]])
             [:p.text-wrap (:text content)])])))))
@@ -510,11 +513,12 @@
          (svg/adjustments 18)]
 
         ;; selection
-        [:a.button
-         {:title    (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
-          :class    (when area-mode? "is-active")
-          :on-click #(set-area-mode! (not area-mode?))}
-         (svg/icon-area 18)]
+        (when (pdf-utils/support-area?)
+          [:a.button
+           {:title (str "Area highlight (" (if util/mac? "⌘" "Shift") ")")
+            :class (when area-mode? "is-active")
+            :on-click #(set-area-mode! (not area-mode?))}
+           (svg/icon-area 18)])
 
         [:a.button
          {:title    "Highlight mode"

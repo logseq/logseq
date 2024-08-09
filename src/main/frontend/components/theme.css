@@ -151,6 +151,14 @@ main.ls-fold-button-on-right {
   }
 }
 
-main.theme-inner {
+main.theme-container-inner {
   --left-sidebar-bg-color: var(--lx-gray-02, hsl(var(--secondary, var(--rx-gray-03-hsl))));
+}
+
+html[data-font='serif'] .ls-block, .ls-font-serif {
+  font-family: Lyon-Text, Georgia, ui-serif, serif;
+}
+
+html[data-font='mono'] .ls-block, .ls-font-mono {
+  font-family: iawriter-mono, Nitti, Menlo, Courier, monospace;
 }

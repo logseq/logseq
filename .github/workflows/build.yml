@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Actions Repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: Check spelling with custom config file
         uses: crate-ci/typos@v1.16.8
         with:
@@ -38,7 +38,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  # v3.3.0
+        uses: actions/checkout@v4
 
       - name: Set up Node
         uses: actions/setup-node@v3
@@ -77,17 +77,21 @@ jobs:
       - name: Fetch yarn deps
         run: yarn install --frozen-lockfile
 
+      - name: Build test asset
+        run: clojure -M:test compile test
+
+      - name: Run some ClojureScript tests against DB version
+        run: DB_GRAPH=1 node static/tests.js -r frontend.db.query-dsl-test
+
       - name: Run ClojureScript tests
-        run: |
-          yarn cljs:test
-          node static/tests.js
+        run: node static/tests.js -e fix-me
 
   lint:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c  #v3
+        uses: actions/checkout@v4
 
       - name: Set up Java
         uses: actions/setup-java@v3
@@ -116,12 +120,66 @@ jobs:
       - name: Lint invalid translation entries
         run: bb lang:validate-translations
 
+      - name: Lint to keep worker independent of frontend
+        run: bb lint:worker-and-frontend-separate
+
+      - name: Lint to keep db and file graph code separate
+        run: bb lint:db-and-file-graphs-separate
+
+  db-graph-test:
+    strategy:
+      matrix:
+        operating-system: [ubuntu-latest]
+
+    runs-on: ${{ matrix.operating-system }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'yarn'
+          cache-dependency-path: |
+            deps/db/yarn.lock
+            scripts/yarn.lock
+
+      - name: Set up Java
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - name: Set up Clojure
+        uses: DeLaGuardo/setup-clojure@10.1
+        with:
+          cli: ${{ env.CLOJURE_VERSION }}
+          bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Fetch scripts yarn deps
+        run: cd scripts && yarn install --frozen-lockfile
+
+      - name: Create DB graph with properties
+        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs ./db-graph-with-props
+
+      # TODO: Use a smaller, test-focused graph to test classes
+      - name: Create DB graph with classes
+        run: cd scripts && yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs ./db-graph-with-schema
+
+      - name: Fetch deps/db yarn deps
+        run: cd deps/db && yarn install --frozen-lockfile
+
+      - name: Validate created DB graphs
+        run: cd deps/db && yarn nbb-logseq script/validate_client_db.cljs ../../scripts/db-graph-with-props ../../scripts/db-graph-with-schema --closed-maps --group-errors
+
   e2e-test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c # v3
+        uses: actions/checkout@v4
 
       - name: Set up Node
         uses: actions/setup-node@v3

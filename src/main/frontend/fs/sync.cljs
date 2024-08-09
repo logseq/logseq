@@ -15,6 +15,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [electron.ipc :as ipc]
+            [frontend.common.async-util :as async-util]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
@@ -36,7 +37,7 @@
             [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.common.path :as path]
-            [logseq.graph-parser.util :as gp-util]
+            [logseq.common.util :as common-util]
             [medley.core :refer [dedupe-by]]
             [promesa.core :as p]
             [rum.core :as rum]))
@@ -514,13 +515,7 @@
   (let [path-string? (string? (first paths))
         f (if path-string?
             fs-util/include-reserved-chars?
-            #(fs-util/include-reserved-chars? (-relative-path %)))
-        reserved-paths (filter f paths)]
-    (when (seq reserved-paths)
-      (let [paths (if path-string? reserved-paths (map -relative-path reserved-paths))]
-        (when (seq paths)
-          (state/pub-event! [:ui/notify-outdated-filename-format paths]))
-        (prn "Skipped uploading those file paths with reserved chars: " paths)))
+            #(fs-util/include-reserved-chars? (-relative-path %)))]
     (vec (remove f paths))))
 
 (defn- diffs->filetxns
@@ -729,7 +724,7 @@
 ;;; ### path-normalize
 (def path-normalize
 
-  gp-util/path-normalize)
+  common-util/path-normalize)
 
 
 ;;; ### APIs
@@ -1600,7 +1595,7 @@
                       (map (fn [rpath]
                              (p/let [base-file (path/path-join "logseq/version-files/base" rpath)
                                      current-change-file rpath
-                                     format (gp-util/get-format current-change-file)
+                                     format (common-util/get-format current-change-file)
                                      repo (state/get-current-repo)
                                      repo-dir (config/get-repo-dir repo)
                                      base-exists? (fs/file-exists? repo-dir base-file)]
@@ -1635,7 +1630,7 @@
                                   (p/let [incoming-file (path/path-join "logseq/version-files/incoming" rpath)
                                           base-file (path/path-join "logseq/version-files/base" rpath)
                                           current-change-file rpath
-                                          format (gp-util/get-format current-change-file)
+                                          format (common-util/get-format current-change-file)
                                           repo (state/get-current-repo)
                                           repo-dir (config/get-repo-dir repo)
                                           base-exists? (fs/file-exists? repo-dir base-file)]
@@ -2241,8 +2236,8 @@
   "Triggered when there is content editing"
   (chan 1))
 (def recent-edited-mult (async/mult recent-edited-chan))
-(def last-input-time-cursor (rum/cursor state/state :editor/last-input-time))
-(add-watch last-input-time-cursor "sync"
+(def last-input-time-atom (get @state/state :editor/last-input-time))
+(add-watch last-input-time-atom "sync"
            (fn [_ _ _ _]
              (offer! recent-edited-chan true)))
 
@@ -2686,7 +2681,7 @@
 
   (<ratelimit [this from-chan]
     (let [<fast-filter-e-fn (.filter-file-change-events-fn this)]
-      (util/<ratelimit
+      (async-util/<ratelimit
        from-chan rate
        :filter-fn
        (fn [e]

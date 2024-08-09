@@ -2,10 +2,9 @@
 # yarn lockfile v1
 
 
-"@logseq/nbb-logseq@^1.2.173":
-  version "1.2.173"
-  resolved "https://registry.yarnpkg.com/@logseq/nbb-logseq/-/nbb-logseq-1.2.173.tgz#27a52c350f06ac9c337d73687738f6ea8b2fc3f3"
-  integrity sha512-ABKPtVnSOiS4Zpk9+UTaGcs5H6EUmRADr9FJ0aEAVpa0WfAyvUbX/NgkQGMe1kKRv3EbIuLwaxfy+txr31OtAg==
+"@logseq/nbb-logseq@logseq/nbb-logseq#feat-db-v15":
+  version "1.2.173-feat-db-v15"
+  resolved "https://codeload.github.com/logseq/nbb-logseq/tar.gz/2555e106853ad4f14e21435380ffc0ce17854def"
   dependencies:
     import-meta-resolve "^2.1.0"
 
@@ -190,10 +189,10 @@ mimic-fn@^2.0.0:
   resolved "https://registry.yarnpkg.com/mimic-fn/-/mimic-fn-2.1.0.tgz#7ed2c2ccccaf84d3ffcb7a69b57711fc2083401b"
   integrity sha512-OqbOk5oEQeAZ8WXWydlu9HJjz9WVdEIvamMCcXmuqUYjTknH/sqsWvhQ3vgwKFRR1HpjvNBKQ37nbJgYzGqGcg==
 
-mldoc@^1.5.1:
-  version "1.5.3"
-  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.5.3.tgz#98d5bb276ac6908d72e1c58c27916e488ef9d395"
-  integrity sha512-hkI3PtjBHhbZqTr1U5/A8TIrIzg9DGZzCMLrfzePAdM+97GNeZijmPqUQXWEAyEQsDPnkipMoQZsBXxhnwzfJA==
+mldoc@^1.5.9:
+  version "1.5.9"
+  resolved "https://registry.yarnpkg.com/mldoc/-/mldoc-1.5.9.tgz#43d740351c64285f0f4988ac9497922d54ae66fc"
+  integrity sha512-87FQ7hseS87tsk+VdpIigpu8LH+GwmbbFgpxgFwvnbH5oOjmIrc47laH4Dyggzqiy8/vMjDHkl7vsId0eXhCDQ==
   dependencies:
     yargs "^12.0.2"
 

@@ -25,7 +25,7 @@
 (rum/defc indent-outdent [indent? icon]
   [:div
    [:button.bottom-action
-    {:on-mouse-down (fn [e]
+    {:on-pointer-down (fn [e]
                       (util/stop e)
                       (blur-if-compositing)
                       (editor-handler/indent-outdent indent?))}
@@ -35,7 +35,7 @@
   [command-handler {:keys [icon class]} & [event?]]
   [:div
    [:button.bottom-action
-    {:on-mouse-down (fn [e]
+    {:on-pointer-down (fn [e]
                       (util/stop e)
                       (if event?
                         (command-handler e)
@@ -50,13 +50,13 @@
                      (dom/remove-class! target "show-submenu")))
         command-cp (fn [action description]
                      [:button
-                      {:on-mouse-down (fn [e]
+                      {:on-pointer-down (fn [e]
                                         (action)
                                         (callback e))}
                       description])]
     [:div
      [:button.bottom-action
-      {:on-mouse-down (fn [event]
+      {:on-pointer-down (fn [event]
                         (util/stop event)
                         (let [target (gdom/getElement "mobile-toolbar-timestamp-submenu")]
                           (dom/add-class! target "show-submenu")))}
@@ -87,7 +87,7 @@
 
 (rum/defc mobile-bar < rum/reactive
   []
-  (when (and (state/sub :editor/editing?)
+  (when (and (state/editing?)
              (or (state/sub :mobile/show-toolbar?)
                  (mobile-util/native-ipad?)))
     (let [parent-id (state/get-edit-input-id)

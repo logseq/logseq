@@ -1,8 +1,9 @@
 (ns frontend.util.priority
-  "Util fns for task priorities e.g. A, B, C"
+  "Util fns for task priorities e.g. A, B, C.
+   File graph only"
   (:require [clojure.string :as string]
             [frontend.util :as util]
-            [frontend.util.marker :as marker]))
+            [frontend.handler.file-based.status :as status]))
 
 (defn add-or-update-priority
   [content format priority]
@@ -17,7 +18,7 @@
             (+ start-pos (count content)))
           (count (util/safe-re-find re-pattern content)))
         skip-marker-pos
-        (if-let [matches (seq (util/re-pos marker/bare-marker-pattern (subs content skip-hash-pos)))]
+        (if-let [matches (seq (util/re-pos status/bare-marker-pattern (subs content skip-hash-pos)))]
           (let [[start-pos content] (last matches)]
             (+ start-pos (count content)))
           0)

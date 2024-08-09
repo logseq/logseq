@@ -6,9 +6,7 @@
             [frontend.test.helper :as test-helper :refer [load-test-files]]
             [frontend.db.model :as model]
             [frontend.state :as state]
-            [frontend.util.cursor :as cursor]
-            [goog.dom :as gdom]
-            [frontend.util :as util]))
+            [frontend.util.cursor :as cursor]))
 
 (use-fixtures :each test-helper/start-and-destroy-db)
 
@@ -58,7 +56,7 @@
   (let [actual-content (atom nil)]
     (with-redefs [editor/save-block-if-changed! (fn [_ content]
                                                   (reset! actual-content content))]
-      (editor/set-marker {:block/marker marker :block/content content :block/format format})
+      (editor/set-marker {:block/marker marker :block/title content :block/format format})
       @actual-content)))
 
 (deftest set-marker-org
@@ -229,7 +227,7 @@
   (testing "updating block's content changes content and preserves path-refs"
    (let [conn (db/get-db test-helper/test-db false)
          block (->> (d/q '[:find (pull ?b [* {:block/path-refs [:block/name]}])
-                           :where [?b :block/content "b1 #foo"]]
+                           :where [?b :block/title "b1 #foo"]]
                          @conn)
                     ffirst)
          prev-path-refs (set (map :block/name (:block/path-refs block)))
@@ -238,7 +236,7 @@
          ;; Use same options as edit-box-on-change!
          _ (editor/save-block-aux! block "b12 #foo" {:skip-properties? true})
          updated-block (d/pull @conn '[* {:block/path-refs [:block/name]}] [:block/uuid (:block/uuid block)])]
-     (is (= "b12 #foo" (:block/content updated-block)) "Content updated correctly")
+     (is (= "b12 #foo" (:block/title updated-block)) "Content updated correctly")
      (is (= prev-path-refs
             (set (map :block/name (:block/path-refs updated-block))))
          "Path-refs remain the same"))))
@@ -248,78 +246,13 @@
     (test-helper/load-test-files [{:file/path "foo.md"
                                    :file/content "# foo"}])
     (let [repo test-helper/test-db
-          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo "foo" "foo"))]
+          page-uuid (:block/uuid (db/get-page "foo"))
+          block-uuid (:block/uuid (model/get-block-by-page-name-and-block-route-name repo (str page-uuid) "foo"))]
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid))))
+      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid))))
 
       (editor/save-block! repo block-uuid "# foo" {:properties {:foo "bar"}})
-      (is (= "# foo\nfoo:: bar" (:block/content (model/query-block-by-uuid block-uuid))))
+      (is (= "# foo\nfoo:: bar" (:block/title (model/query-block-by-uuid block-uuid))))
 
       (editor/save-block! repo block-uuid "# bar")
-      (is (= "# bar" (:block/content (model/query-block-by-uuid block-uuid)))))))
-
-(defn- delete-block
-  [db block {:keys [embed?]}]
-  (let [sibling-block (d/entity db (get-in block [:block/left :db/id]))
-        first-block (d/entity db (get-in sibling-block [:block/left :db/id]))
-        block-dom-id "ls-block-block-to-delete"]
-    (with-redefs [editor/get-state (constantly {:block-id (:block/uuid block)
-                                                :block-parent-id block-dom-id
-                                                :config {:embed? embed?}})
-                ;; stub for delete-block
-                  gdom/getElement (constantly #js {:id block-dom-id})
-                ;; stub since not testing moving
-                  editor/edit-block! (constantly nil)
-                  util/get-blocks-noncollapse (constantly (mapv
-                                                           (fn [m]
-                                                             #js {:id (:id m)
-                                                                  ;; for dom/attr
-                                                                  :getAttribute #({"blockid" (str (:block-uuid m))
-                                                                                   "data-embed" (if embed? "true" "false")} %)})
-                                                           [{:id "ls-block-first-block"
-                                                             :block-uuid (:block/uuid first-block)}
-                                                            {:id "ls-block-sibling-block"
-                                                             :block-uuid (:block/uuid sibling-block)}
-                                                            {:id block-dom-id
-                                                             :block-uuid (:block/uuid block)}]))]
-      (editor/delete-block! test-helper/test-db false))))
-
-(deftest delete-block!
-  (testing "backspace deletes empty block"
-    (load-test-files [{:file/path "pages/page1.md"
-                       :file/content "\n
-- b1
-- b2
--"}])
-    (let [conn (db/get-db test-helper/test-db false)
-          block (->> (d/q '[:find (pull ?b [*])
-                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
-                          @conn)
-                     ffirst)
-          _ (delete-block @conn block {})
-          updated-blocks (->> (d/q '[:find (pull ?b [*])
-                                     :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
-                                   @conn)
-                              (map (comp :block/content first)))]
-      (is (= ["b1" "b2"] updated-blocks) "Block is deleted"))
-    (test-helper/reset-test-db!))
-
-  (testing "backspace deletes empty block in embedded context"
-    ;; testing embed at this layer doesn't require an embed block since
-    ;; delete-block handles all the embed setup
-    (load-test-files [{:file/path "pages/page1.md"
-                       :file/content "\n
-- b1
-- b2
--"}])
-    (let [conn (db/get-db test-helper/test-db false)
-          block (->> (d/q '[:find (pull ?b [*])
-                            :where [?b :block/content ""] [?b :block/page [:block/name "page1"]]]
-                          @conn)
-                     ffirst)
-          _ (delete-block @conn block {:embed? true})
-          updated-blocks (->> (d/q '[:find (pull ?b [*])
-                                     :where [?b :block/content] [(missing? $ ?b :block/pre-block?)]]
-                                   @conn)
-                              (map (comp :block/content first)))]
-      (is (= ["b1" "b2"] updated-blocks) "Block is deleted"))))
+      (is (= "# bar" (:block/title (model/query-block-by-uuid block-uuid)))))))

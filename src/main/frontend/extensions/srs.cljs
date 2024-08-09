@@ -3,6 +3,7 @@
             [cljs-time.core :as t]
             [cljs-time.local :as tl]
             [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.commands :as commands]
             [frontend.components.block :as component-block]
             [frontend.components.editor :as editor]
@@ -13,22 +14,22 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.db-mixins :as db-mixins]
-            [frontend.db.model :as db-model]
             [frontend.db.query-dsl :as query-dsl]
             [frontend.db.query-react :as query-react]
             [frontend.handler.editor :as editor-handler]
-            [frontend.handler.editor.property :as editor-property]
+            [frontend.handler.property :as property-handler]
+            [frontend.handler.property.file :as property-file]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
             [frontend.template :as template]
             [frontend.ui :as ui]
             [frontend.util :as util]
-            [frontend.util.block-content :as content]
+            [frontend.format.mldoc :as mldoc]
             [frontend.util.drawer :as drawer]
             [frontend.util.persist-var :as persist-var]
-            [frontend.util.property :as property]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.graph-parser.util.page-ref :as page-ref]
+            [logseq.common.util.page-ref :as page-ref]
+            [logseq.shui.ui :as shui]
             [medley.core :as medley]
             [rum.core :as rum]))
 
@@ -93,6 +94,7 @@
 ;;; ================================================================
 ;;; utils
 
+;; FIXME: All uses of properties in this namespace for db
 (defn- get-block-card-properties
   [block]
   (when-let [properties (:block/properties block)]
@@ -109,7 +111,8 @@
   [block props]
   (editor-handler/save-block-if-changed!
    block
-   (property/insert-properties (:block/format block) (:block/content block) props)
+   (property-file/insert-properties-when-file-based
+    (state/get-current-repo) (:block/format block) (:block/title block) props)
    {:force? true}))
 
 (defn- reset-block-card-properties!
@@ -127,7 +130,7 @@
 
 (defn card-block?
   [block]
-  (let [card-entity (db/entity [:block/name card-hash-tag])
+  (let [card-entity (db/get-page card-hash-tag)
         refs (into #{} (:block/refs block))]
     (contains? refs card-entity)))
 
@@ -204,7 +207,7 @@
 
 (defn- has-cloze?
   [blocks]
-  (->> (map :block/content blocks)
+  (->> (map :block/title blocks)
        (some #(string/includes? % "{{cloze "))))
 
 (defn- clear-collapsed-property
@@ -225,14 +228,13 @@
   ICardShow
   (show-cycle [_this phase]
     (let [block-id (:db/id block)
-          blocks (-> (db/get-paginated-blocks (state/get-current-repo) block-id
-                                              {:scoped-block-id block-id})
+          blocks (-> [(db/entity block-id)]
                      clear-collapsed-property)
           cloze? (has-cloze? blocks)]
       (case phase
         1
         (let [blocks-count (count blocks)]
-          {:value [(first blocks)] :next-phase (if (or (> blocks-count 1) (nil? cloze?)) 2 3)})
+          {:value [(first blocks)] :next-phase (if (or (> blocks-count 1) cloze?) 2 3)})
         2
         {:value blocks :next-phase (if cloze? 3 1)}
         3
@@ -241,7 +243,7 @@
   (show-cycle-config [_this phase]
     (case phase
       1
-      {}
+      {:hide-children? true}
       2
       {}
       3
@@ -263,14 +265,14 @@
                        :or {use-cache? true}}]
    (when (string? query-string)
      (let [result (if (string/blank? query-string)
-                    (:block/_refs (db/entity [:block/name card-hash-tag]))
+                    (:block/_refs (db/get-page card-hash-tag))
                     (let [query-string (template/resolve-dynamic-template! query-string)
                           query-string (if-not (or (string/blank? query-string)
                                                    (string/starts-with? query-string "(")
                                                    (string/starts-with? query-string "["))
                                          (page-ref/->page-ref (string/trim query-string))
                                          query-string)
-                          {:keys [query sort-by rules]} (query-dsl/parse query-string)
+                          {:keys [query sort-by rules]} (query-dsl/parse query-string {:db-graph? (config/db-based-graph? repo)})
                           query* (util/concat-without-nil
                                   [['?b :block/refs '?br] ['?br :block/name card-hash-tag]]
                                   (if (coll? (first query)) query [query]))]
@@ -420,7 +422,7 @@
    :id id
    :class (str id " " class)
    :background background
-   :on-mouse-down (fn [e] (util/stop-propagation e))
+   :on-pointer-down (fn [e] (util/stop-propagation e))
    :on-click (fn [_e]
                (js/setTimeout #(on-click) 10))))
 
@@ -450,11 +452,11 @@
            [:div {:style {:margin-top 20}}
             (component-block/breadcrumb {} repo root-block-id {})])
          (component-block/blocks-container
-          current-blocks
           (merge (show-cycle-config card @phase)
                  {:id (str root-block-id)
                   :editor-box editor/box
-                  :review-cards? true}))
+                  :review-cards? true})
+          current-blocks)
          (if (or preview? modal?)
            [:div.flex.my-4.justify-between
             (when-not (and (not preview?) (= next-phase 1))
@@ -486,7 +488,7 @@
                                    :on-click   (fn []
                                                  (score-and-next-card 1 card card-index finished? phase review-records cb)
                                                  (let [tomorrow (tc/to-string (t/plus (t/today) (t/days 1)))]
-                                                   (editor-property/set-block-property! root-block-id card-next-schedule-property tomorrow)))})
+                                                   (property-handler/set-block-property! (state/get-current-repo) root-block-id card-next-schedule-property tomorrow)))})
 
                (btn-with-shortcut {:btn-text (if (util/mobile?) "Hard" (t :flashcards/modal-btn-recall))
                                    :shortcut "t"
@@ -524,13 +526,12 @@
 
 (rum/defc preview-cp < rum/reactive db-mixins/query
   [block-id]
-  (let [blocks (db/get-paginated-blocks (state/get-current-repo) block-id
-                                        {:scoped-block-id block-id})]
+  (let [blocks [(db/entity block-id)]]
     (view-modal blocks {:preview? true} (atom 0))))
 
 (defn preview
   [block-id]
-  (state/set-modal! #(preview-cp block-id) {:id :srs}))
+  (shui/dialog-open! #(preview-cp block-id) {:id :srs}))
 
 ;;; ================================================================
 ;;; register some external vars & related UI
@@ -587,12 +588,10 @@
 
 (declare cards)
 
+;; TODO: FIXME: macros have been deleted
 (rum/defc cards-select
   [{:keys [on-chosen]}]
-  (let [cards (db-model/get-macro-blocks (state/get-current-repo) "cards")
-        items (->> (map (comp :logseq.macro-arguments :block/properties) cards)
-                   (map (fn [col] (string/join " " col))))
-        items (concat items [(t :flashcards/modal-select-all)])]
+  (let [items [(t :flashcards/modal-select-all)]]
     (component-select/select {:items items
                               :on-chosen on-chosen
                               :close-modal? false
@@ -626,7 +625,7 @@
            (ui/dropdown
             (fn [{:keys [toggle-fn]}]
               [:div.ml-1.text-sm.font-medium.cursor
-               {:on-mouse-down (fn [e]
+               {:on-pointer-down (fn [e]
                                  (util/stop e)
                                  (toggle-fn))}
                [:span.flex (if (string/blank? query-string) (t :flashcards/modal-select-all) query-string)
@@ -696,8 +695,9 @@
          [:div.px-1
           (when (and (not modal?) (not @*preview-mode?))
             {:on-click (fn []
-                         (state/set-modal! #(cards (assoc config :modal? true) {:query-string query-string})
-                                           {:id :srs}))})
+                         (shui/dialog-open!
+                           #(cards (assoc config :modal? true) {:query-string query-string})
+                           {:id :srs}))})
           (let [view-fn (if modal? view-modal view)
                 blocks (if @*preview-mode? query-result review-cards)
                 blocks (if @*random-mode? (shuffle blocks) blocks)]
@@ -770,22 +770,27 @@
 ;;; register slash commands
 (commands/register-slash-command ["Cards"
                                   [[:editor/input "{{cards }}" {:backward-pos 2}]]
-                                  "Create a cards query"])
+                                  "Create a cards query"
+                                  {:db-graph? false
+                                   :icon :icon/cards}])
 
 (commands/register-slash-command ["Cloze"
                                   [[:editor/input "{{cloze }}" {:backward-pos 2}]]
-                                  "Create a cloze"])
+                                  "Create a cloze"
+                                  {:db-graph? false
+                                   :icon :icon/eye-question}])
 
 ;; handlers
 (defn add-card-tag-to-block
   "given a block struct, adds the #card to title and returns
    a seq of [original-block new-content-string]"
   [block]
-    (when-let [content (:block/content block)]
+    (when-let [content (:block/title block)]
       (let [format (:block/format block)
-            content (-> (property/remove-built-in-properties format content)
+            content (-> (property-file/remove-built-in-properties-when-file-based
+                         (state/get-current-repo) (:block/format block) content)
                         (drawer/remove-logbook))
-            [title body] (content/get-title&body content format)]
+            [title body] (mldoc/get-title&body content format)]
         [block (str title " #" card-hash-tag "\n" body)])))
 
 (defn make-block-a-card!

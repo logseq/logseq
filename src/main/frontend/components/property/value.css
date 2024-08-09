@@ -1,0 +1,22 @@
+.property-value-inner:not([data-type="default"]) {
+  @apply cursor-pointer;
+  &:hover, .as-scalar-value-wrap:hover {
+    @apply bg-gray-02 rounded transition-[background-color] duration-300;
+  }
+}
+
+.ls-property-input {
+  @apply min-w-[224px];
+}
+
+.ls-property-dialog {
+  .ls-property-key {
+    @apply overflow-y-hidden h-[286px];
+
+    .cp__select-main {
+      .item-results-wrap {
+        @apply max-h-[250px];
+      }
+    }
+  }
+}

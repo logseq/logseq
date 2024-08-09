@@ -55,9 +55,7 @@
 }
 
 #main-content-container {
-  @apply p-4 sm:px-8;
-
-  font-size: 1em;
+  @apply py-4 sm:pl-8 sm:pr-4;
 }
 
 #main-content-container[data-is-margin-less-pages=true] {
@@ -197,6 +195,7 @@
       @apply pl-6 pr-4 py-1 flex justify-between items-center select-none sticky top-[-4px];
       @apply cursor-pointer z-[2] active:opacity-80;
 
+      background-color: var(--left-sidebar-bg-color);
 
       .ui__icon {
         @apply flex justify-center;
@@ -529,15 +528,22 @@
   }
 }
 
-.settings-modal {
-  @apply -m-8 rounded-lg;
-  /* box-shadow: inset 0 0 0 1px var(--ls-border-color); */
+.ui__dialog-content[label=app-settings] {
+  @apply w-auto md:max-w-5xl overflow-hidden;
+
+  .settings-modal {
+    @apply -mx-6 -mt-6 -mb-6 rounded-xl;
+  }
 }
 
 .cp__sidebar-main-content {
   width: 100%;
   max-width: var(--ls-main-content-max-width);
   flex: 1;
+
+  .page {
+    @apply px-6;
+  }
 }
 
 .cp__sidebar-help {
@@ -594,27 +600,17 @@
   user-select: none;
 
   .resizer {
-    @apply absolute top-0 bottom-0;
-
-    touch-action: none;
-    left: 1px;
-    width: 3px;
-    user-select: none;
-    cursor: col-resize !important;
-
-    transition: background-color 300ms;
-    transition-delay: 300ms;
-    z-index: 1000;
-
-    &:hover,
-    &:focus,
-    &:active {
-      @apply bg-primary/90;
-    }
+    @apply absolute top-0 bottom-0 touch-none left-[1px] w-[3px] select-none;
+    @apply cursor-col-resize hover:bg-primary/90 focus:bg-primary/90 active:bg-primary/90;
+    @apply z-[1000] delay-300 transition-[background-color] duration-300;
   }
 
   &.closed {
-    width: 0 !important;
+    @apply !w-0;
+
+    .resizer {
+      @apply hidden;
+    }
   }
 
   &.open {
@@ -662,7 +658,7 @@
   }
 
   .page {
-    margin-top: 0;
+    @apply mt-0 mx-3 my-5;
   }
 
   .non-block-editor textarea,
@@ -672,10 +668,6 @@
     padding: 0;
     font-size: 90%;
     background: none;
-  }
-
-  .references {
-    @apply mx-[28px];
   }
 
   .sidebar-drop-indicator {
@@ -747,10 +739,6 @@
       }
     }
   }
-
-  .page-hierarchy {
-    @apply pl-[28px];
-  }
 }
 
 .cp__sidebar-main-content[data-is-full-width='true'] {
@@ -770,7 +758,7 @@
 
 /* Workaround for Linux Intel GPU text rendering issue GH#7233 */
 .is-electron.is-linux .cp__menubar-repos {
-  #repo-switch, .nav-header .flex-1 {
+  .repo-switch, .nav-header .flex-1 {
     position: relative;
   }
 }
@@ -787,7 +775,31 @@
   }
 }
 
-.favorites li.dragging-target {
+.force-visible-scrollbar {
+  &::-webkit-scrollbar {
+    -webkit-appearance: none;
+  }
+
+  &::-webkit-scrollbar:vertical {
+    width: 11px;
+  }
+
+  &::-webkit-scrollbar:horizontal {
+    height: 11px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    border-radius: 8px;
+    border: 2px solid var(--ls-primary-background-color, white); /* should match background, can't be transparent */
+    background-color: rgba(0, 0, 0, .1);
+
+    &:hover {
+      background-color: rgba(0, 0, 0, .4);
+    }
+  }
+}
+
+li.dragging-target {
   border-left: 5px solid green;
 }
 
@@ -820,4 +832,8 @@ html[data-theme='dark'] {
       background-color: var(--lx-gray-03, var(--ls-secondary-background-color));
     }
   }
+}
+
+.blocks-selection-mode .page-title, .blocks-selection-mode .block-content-inner, .blocks-selection-mode .block-body, .blocks-selection-mode .ls-properties-area {
+    user-select: none;
 }

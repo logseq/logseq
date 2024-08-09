@@ -7,7 +7,7 @@ This page describes development practices for this codebase.
 Most of our linters require babashka. Before running them, please [install babashka](https://github.com/babashka/babashka#installation). To invoke all the linters in this section, run
 
 ```sh
-bb dev:lint
+bb lint:dev
 ```
 
 ### Clojure code
@@ -108,6 +108,28 @@ $ typos -w
 
 To configure it e.g. for dealing with false positives, see `typos.toml`.
 
+### Separate DB and File Graph Code
+
+There is a growing number of code and features that are only for file or DB graphs. Run this linter to
+ensure that code you add or modify keeps with existing conventions:
+
+```
+$ bb lint:db-and-file-graphs-separate
+✅ All checks passed!
+```
+
+The main convention is that file and db specific files go under directories named `file_based` and `db_based` respectively. To see the full list of file and db specific namespaces and files see the top of [the script](/scripts/src/logseq/tasks/dev/db_and_file_graphs.clj).
+
+### Separate Worker from Frontend
+
+The worker and frontend code share common code from deps/ and `frontend.common.*`. However, the worker should never depend on other frontend namespaces as it could pull in libraries like React which cause it to fail hard. Likewise the frontend should never depend on worker namespaces. Run this linter to ensure worker and frontend namespaces don't require each other:
+
+```
+$ bb lint:worker-and-frontend-separate
+Valid worker namespaces!
+Valid frontend namespaces!
+```
+
 ## Testing
 
 We have unit, performance and end to end tests.
@@ -178,9 +200,9 @@ For this workflow:
   1. Add `^:focus` metadata flags to tests e.g. `(deftest ^:focus test-name ...)`.
   2. In another shell, run `node static/tests.js -i focus` to only run those
   tests. To run all tests except those tests run `node static/tests.js -e focus`.
-3. Or focus namespaces: Using the regex option `-r`, run tests for `frontend.util.page-property-test` with `node static/tests.js -r page-property`.
+3. Or focus namespaces: Using the regex option `-r`, run tests for `frontend.db.query-dsl-test` with `node static/tests.js -r query-dsl`.
 
-Multiple options can be specified to AND selections. For example, to run all `frontend.util.page-property-test` tests except for the focused one: `node static/tests.js -r page-property -e focus`
+Multiple options can be specified to AND selections. For example, to run all `frontend.db.query-dsl-test` tests except for the focused one: `node static/tests.js -r query-dsl -e focus`
 
 For help on more options, run `node static/tests.js -h`.
 
@@ -189,7 +211,7 @@ For help on more options, run `node static/tests.js -h`.
 To run tests automatically on file save, run `clojure -M:test watch test
 --config-merge '{:autorun true}'`. Specific namespace(s) can be auto run with
 the `:ns-regexp` option e.g. `clojure -M:test watch test --config-merge
-'{:autorun true :ns-regexp "frontend.util.page-property-test"}'`.
+'{:autorun true :ns-regexp "frontend.db.query-dsl-test"}'`.
 
 #### REPL tests
 
@@ -297,8 +319,9 @@ point out:
 * `dev:validate-repo-config-edn` - Validate a repo config.edn
 
   ```sh
-  bb dev:validate-repo-config-edn src/resources/templates/config.edn
+  bb dev:validate-repo-config-edn deps/common/resources/templates/config.edn
   ```
+
 
 * `dev:publishing` - Build a publishing app for a given graph dir. If the
   publishing frontend is out of date, it builds that first which takes time.
@@ -327,6 +350,141 @@ point out:
 There are also some tasks under `nbb:` which are useful for inspecting database
 changes in realtime. See [these
 docs](https://github.com/logseq/bb-tasks#logseqbb-tasksnbbwatch) for more info.
+
+#### DB Graph Tasks
+
+These tasks are specific to database graphs. For these tasks there is a one time setup:
+
+```sh
+  $ cd deps/db && yarn install && cd ../outliner && yarn install && cd ../..
+```
+
+* `dev:validate-db` - Validates a DB graph's datascript schema
+
+  ```sh
+  # One or more graphs can be validated e.g.
+  $ bb dev:validate-db test-db schema -c -g
+  Read graph test-db with 1572 datoms, 220 entities and 13 properties
+  Valid!
+  Read graph schema with 26105 datoms, 2320 entities and 3168 properties
+  Valid!
+  ```
+
+* `dev:db-query` - Query a DB graph
+
+  ```sh
+  $ bb dev:db-query woot '[:find (pull ?b [*]) :where (block-content ?b "Dogma")]'
+  DB contains 833 datoms
+  [{:block/tx-id 536870923, :block/link #:db{:id 100065}, :block/uuid #uuid "65565c26-f972-4400-bce4-a15df488784d", :block/updated-at 1700158508564, :block/order "a0", :block/refs [#:db{:id 100064}], :block/created-at 1700158502056, :block/format :markdown, :block/tags [#:db{:id 100064}], :block/title "Dogma #~^65565c2a-b1c5-4dc8-a0f0-81b786bc5c6d", :db/id 100090, :block/path-refs [#:db{:id 100051} #:db{:id 100064}], :block/parent #:db{:id 100051}, :block/page #:db{:id 100051}}]
+  ```
+
+* `dev:db-transact` - Run a `d/transact!` against the queried results of a DB graph
+
+  ```sh
+  # The second arg is a datascript like with db-query. The third arg is a fn that is applied to each query result to generate transact data
+  $ bb dev:db-transact
+  Usage: $0 GRAPH-DIR QUERY TRANSACT-FN
+
+  # First use the -n flag to see a dry-run of what would happen
+  $ bb dev:db-transact test-db '[:find ?b :where [?b :block/type "object"]]' '(fn [id] (vector :db/retract id :block/type "object"))' -n
+  Would update 16 blocks with the following tx:
+  [[:db/retract 100137 :block/type "object"] [:db/retract 100035 :block/type "object"] [:db/retract 100128 :block/type "object"] [:db/retract 100049 :block/type "object"] [:db/retract 100028 :block/type "object"] [:db/retract 100146 :block/type "object"] [:db/retract 100144 :block/type "object"] [:db/retract 100047 :block/type "object"] [:db/retract 100145 :block/type "object"] [:db/retract 100046 :block/type "object"] [:db/retract 100045 :block/type "object"] [:db/retract 100063 :block/type "object"] [:db/retract 100036 :block/type "object"] [:db/retract 100044 :block/type "object"] [:db/retract 100129 :block/type "object"] [:db/retract 100030 :block/type "object"]]
+  With the following blocks updated:
+  ...
+
+  # When the transact looks good, run it without the flag
+  $ bb dev:db-transact test-db '[:find ?b :where [?b :block/type "object"]]' '(fn [id] (vector :db/retract id :block/type "object"))'
+  Updated 16 block(s) for graph test-db!
+  ```
+
+* `dev:db-create` - Create a DB graph given a `sqlite.build` EDN file
+
+  First in Electron, create the name of the graph you want create e.g. `inferred`.
+  Then:
+
+  ```sh
+  bb dev:db-create inferred deps/db/script/create_graph/inferred.edn
+  Generating 11 pages and 0 blocks ...
+  Created graph inferred!
+  ```
+
+  Finally, upload this created graph with the dev command: `Replace graph with
+  its db.sqlite file`. You'll be switched to the graph and you can use it!
+
+* `dev:db-datoms` and `dev:diff-datoms` - Save a db's datoms to file and diff two datom files
+
+  ```sh
+  # Save a current datoms snapshot of a graph
+  $ bb dev:db-datoms woot w2.edn
+  # After some edits, save another datoms snapshot
+  $ bb dev:db-datoms woot w3.edn
+
+  # Diff the two datom snapshots
+  # This snapshot correctly shows an added block with content "b7" and a property using a closed :default value
+  $  bb dev:diff-datoms w2.edn w3.edn
+  [[]
+  [[162 :block/title "b7" 536871039 true]
+    [162 :block/created-at 1703004379103 536871037 true]
+    [162 :block/format :markdown 536871037 true]
+    [162 :block/page 149 536871037 true]
+    [162 :block/parent 149 536871037 true]
+    [162 :block/path-refs 108 536871044 true]
+    [162 :block/path-refs 149 536871044 true]
+    [162 :block/path-refs 160 536871044 true]
+    [162
+    :block/properties
+    {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
+      #uuid "6581b09e-8b9c-4dca-a938-c900aedc8275"}
+    536871043
+    true]
+    [162 :block/refs 108 536871043 true]
+    [162 :block/refs 160 536871043 true]
+    [162
+    :block/uuid
+    #uuid "6581c8db-a2a2-4e09-b30d-cdea6ad69512"
+    536871037
+    true]]]
+
+  # By default this task ignores commonly changing datascript attributes.
+  # To see all changed attributes, tell the task to ignore a nonexistent attribute:
+  $ bb dev:diff-datoms w2.edn w3.edn -i a
+  [[[nil nil 536871029 536871030]
+    [nil nil 1702998192728 536871029]
+    [nil nil 536871035 536871036]
+    [nil nil 1703000139716 536871035]
+    [nil nil 149 536871033]
+    [nil nil 536871035 536871036]]
+  [[nil nil 536871041 536871042]
+    [nil nil 1703004384793 536871041]
+    [nil nil 536871039 536871040]
+    [nil nil 1703004380918 536871039]
+    [nil nil 162 536871037]
+    [nil nil 536871037 536871038]
+    [162 :block/title "b7" 536871039 true]
+    [162 :block/created-at 1703004379103 536871037 true]
+    [162 :block/format :markdown 536871037 true]
+    [162 :block/order "a0" 536871037 true]
+    [162 :block/page 149 536871037 true]
+    [162 :block/parent 149 536871037 true]
+    [162 :block/path-refs 108 536871044 true]
+    [162 :block/path-refs 149 536871044 true]
+    [162 :block/path-refs 160 536871044 true]
+    [162
+    :block/properties
+    {#uuid "21be4275-bba9-48b8-9351-c9ca27883159"
+      #uuid "6581b09e-8b9c-4dca-a938-c900aedc8275"}
+    536871043
+    true]
+    [162 :block/refs 108 536871043 true]
+    [162 :block/refs 160 536871043 true]
+    [162 :block/tx-id 536871043 536871044 true]
+    [162 :block/updated-at 1703004380918 536871039 true]
+    [162
+    :block/uuid
+    #uuid "6581c8db-a2a2-4e09-b30d-cdea6ad69512"
+    536871037
+    true]]]
+  ```
 
 ### Dev Commands
 

@@ -38,8 +38,8 @@
                            (let [target (.. e -target)]
                              ;; If the click target is outside of current node
                              (when (and
-                                     (not (dom/contains dom-node target))
-                                     (not (.contains (.-classList target) "ignore-outside-event")))
+                                    (not (dom/contains dom-node target))
+                                    (not (.contains (.-classList target) "ignore-outside-event")))
                                (on-hide state e :click))))]
             (when-not (false? outside?)
               (listen state js/window "mousedown" click-fn)))
@@ -102,11 +102,7 @@
              (init-callback state))
      :did-mount (fn [state]
                   (attach-listeners state)
-                  state)
-     :will-remount (fn [old-state new-state]
-                     (detach old-state)
-                     (attach-listeners new-state)
-                     new-state)})))
+                  state)})))
 
 (defn modal
   [k]
@@ -142,6 +138,14 @@
    (fn [state]
      (state/set-block-component-editing-mode! false)
      state)})
+
+(def container-id
+  "Notice: the first parameter needs to be a `config` with `id`, optional `sidebar?`, `whiteboard?`"
+  {:init (fn [state]
+           (let [config (first (:rum/args state))
+                 key (select-keys config [:id :sidebar? :whiteboard? :embed? :custom-query? :query :current-block])
+                 container-id (state/get-container-id key)]
+             (assoc state :container-id container-id)))})
 
 (defn perf-measure-mixin
   "Does performance measurements in development."

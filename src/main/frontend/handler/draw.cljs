@@ -8,7 +8,7 @@
             [frontend.handler.file :as file-handler]
             [frontend.state :as state]
             [frontend.util :as util]
-            [logseq.graph-parser.config :as gp-config]
+            [logseq.common.config :as common-config]
             [promesa.core :as p]))
 
 (defn create-draws-directory!
@@ -16,7 +16,7 @@
   (when repo
     (let [repo-dir (config/get-repo-dir repo)]
       (util/p-handle
-       (fs/mkdir! (str repo-dir (str "/" gp-config/default-draw-directory)))
+       (fs/mkdir! (str repo-dir (str "/" common-config/default-draw-directory)))
        (fn [_result] nil)
        (fn [_error] nil)))))
 
@@ -25,19 +25,16 @@
   (let [path file
         repo (state/get-current-repo)]
     (when repo
-      (let [repo-dir (config/get-repo-dir repo)]
-        (->
-         (p/do!
-          (create-draws-directory! repo)
-          (fs/write-file! repo repo-dir path data nil)
-          (db/transact! repo
-                        [{:file/path path
-                          :block/name (util/page-name-sanity-lc file)
-                          :block/file {:file/path path}
-                          :block/journal? false}]))
-         (p/catch (fn [error]
-                    (prn "Write file failed, path: " path ", data: " data)
-                    (js/console.dir error))))))))
+      (->
+       (p/do!
+        (create-draws-directory! repo)
+        (db/transact! repo
+                      [{:file/path path
+                        :block/name (util/page-name-sanity-lc file)
+                        :block/file {:file/path path}}]))
+       (p/catch (fn [error]
+                  (prn "Write file failed, path: " path ", data: " data)
+                  (js/console.dir error)))))))
 
 (defn load-excalidraw-file
   [file ok-handler]
@@ -63,6 +60,6 @@
   [current-file]
   (when-let [repo (state/get-current-repo)]
     (p/let [exists? (fs/file-exists? (config/get-repo-dir repo)
-                                     (str gp-config/default-draw-directory current-file))]
+                                     (str common-config/default-draw-directory current-file))]
       (when-not exists?
         (save-excalidraw! current-file default-content)))))

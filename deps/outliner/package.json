@@ -1,0 +1,15 @@
+{
+  "name": "@logseq/outliner",
+  "version": "1.0.0",
+  "private": true,
+  "devDependencies": {
+    "@logseq/nbb-logseq": "logseq/nbb-logseq#feat-db-v15"
+  },
+  "dependencies": {
+    "better-sqlite3": "9.3.0",
+    "mldoc": "^1.5.9"
+  },
+  "scripts": {
+    "test": "yarn nbb-logseq -cp test -m nextjournal.test-runner"
+  }
+}

@@ -7,6 +7,7 @@
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.paste :as paste-handler]
             [frontend.handler.history :as history]
+            [frontend.handler.notification :as notification]
             [frontend.handler.page :as page-handler]
             [frontend.handler.route :as route-handler]
             [frontend.handler.journal :as journal-handler]
@@ -17,7 +18,7 @@
             [frontend.handler.whiteboard :as whiteboard-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.window :as window-handler]
-            [frontend.modules.editor.undo-redo :as undo-redo]
+            [frontend.handler.jump :as jump-handler]
             [frontend.dicts :as dicts]
             [frontend.modules.shortcut.before :as m]
             [frontend.state :as state]
@@ -32,7 +33,9 @@
 (defn- search
   [mode]
   (editor-handler/escape-editing false)
-  (route-handler/go-to-search! mode))
+  (if (state/get-search-mode)
+    (js/setTimeout #(route-handler/go-to-search! mode) 128)
+    (route-handler/go-to-search! mode)))
 
 ;; TODO: Namespace all-default-keyboard-shortcuts keys with `:command` e.g.
 ;; `:command.date-picker/complete`. They are namespaced in translation but
@@ -47,26 +50,10 @@
 ;;  * :fn - Fn or a qualified keyword that represents a fn
 ;;  * :inactive - Optional boolean to disable a shortcut for certain conditions
 ;;    e.g. a given platform or feature condition
+;;  * :file-graph? - Optional boolean to identify a command to only be run in file graphs
+;;    and warned gracefully in db graphs
 (def ^:large-vars/data-var all-built-in-keyboard-shortcuts
-  ;; BUG: Actually, "enter" is registered by mixin behind a "when inputing" guard
-  ;; So this setting item does not cover all cases.
-  ;; See-also: frontend.components.datetime/time-repeater
-  {:date-picker/complete                    {:binding "enter"
-                                             :fn      ui-handler/shortcut-complete}
-
-   :date-picker/prev-day                    {:binding "left"
-                                             :fn      ui-handler/shortcut-prev-day}
-
-   :date-picker/next-day                    {:binding "right"
-                                             :fn      ui-handler/shortcut-next-day}
-
-   :date-picker/prev-week                   {:binding ["up" "ctrl+p"]
-                                             :fn      ui-handler/shortcut-prev-week}
-
-   :date-picker/next-week                   {:binding ["down" "ctrl+n"]
-                                             :fn      ui-handler/shortcut-next-week}
-
-   :pdf/previous-page                       {:binding "alt+p"
+  {:pdf/previous-page                       {:binding "alt+p"
                                              :fn      pdf-utils/prev-page}
 
    :pdf/next-page                           {:binding "alt+n"
@@ -174,8 +161,9 @@
    :auto-complete/shift-complete            {:binding "shift+enter"
                                              :fn      ui-handler/auto-complete-shift-complete}
 
-   :auto-complete/open-link                 {:binding "mod+o"
-                                             :fn      ui-handler/auto-complete-open-link}
+   :auto-complete/meta-complete             {:binding "mod+enter"
+                                             :fn      (fn [state e]
+                                                        (ui-handler/auto-complete-complete state e))}
 
    :cards/toggle-answers                    {:binding "s"
                                              :fn      srs/toggle-answers}
@@ -209,7 +197,7 @@
                                              :fn      editor-handler/keydown-new-line-handler}
 
    :editor/new-whiteboard                   {:binding "n w"
-                                             :fn      #(whiteboard-handler/create-new-whiteboard-and-redirect!)}
+                                             :fn      #(whiteboard-handler/<create-new-whiteboard-and-redirect!)}
 
    :editor/follow-link                      {:binding "mod+o"
                                              :fn      editor-handler/follow-link-under-cursor!}
@@ -346,28 +334,49 @@
    :editor/select-parent                    {:binding "mod+a"
                                              :fn      editor-handler/select-parent}
 
-   :editor/zoom-in                          {:binding (if mac? "mod+." "alt+right")
+   :editor/zoom-in                          {:binding (if mac? ["mod+." "mod+shift+."] "alt+right") ; FIXME: mod+. not works on Chrome
                                              :fn      editor-handler/zoom-in!}
 
    :editor/zoom-out                         {:binding (if mac? "mod+," "alt+left")
                                              :fn      editor-handler/zoom-out!}
 
-   :editor/toggle-undo-redo-mode            {:binding []
-                                             :fn      undo-redo/toggle-undo-redo-mode!}
-
    :editor/toggle-number-list               {:binding "t n"
                                              :fn      #(state/pub-event! [:editor/toggle-own-number-list (state/get-selection-block-ids)])}
 
-   :ui/toggle-brackets                      {:binding "mod+c mod+b"
+   :editor/add-property                     {:binding "mod+p"
+                                             :fn      (fn [e]
+                                                        (when e (.preventDefault e))
+                                                        (state/pub-event! [:editor/new-property {}]))}
+
+   :editor/add-property-deadline            {:binding "p d"
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Deadline"}]))}
+
+   :editor/add-property-status              {:binding "p s"
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Status"}]))}
+
+   :editor/add-property-priority            {:binding "p p"
+                                             :selection? true
+                                             :fn      (fn []
+                                                        (state/pub-event! [:editor/new-property {:property-key "Priority"}]))}
+
+   :ui/toggle-brackets                      {:binding "t b"
                                              :fn      config-handler/toggle-ui-show-brackets!}
 
    :go/search                               {:binding "mod+k"
                                              :fn      #(search :global)}
+
+   :go/search-themes                        {:binding "mod+shift+i"
+                                             :fn      #(search :themes)}
+
    :command-palette/toggle                  {:binding "mod+shift+p"
                                              :fn      #(search :commands)}
+
    :go/search-in-page                       {:binding "mod+shift+k"
                                              :fn      #(search :current-page)}
-
 
    :go/electron-find-in-page                {:binding  "mod+f"
                                              :inactive (not (util/electron?))
@@ -407,7 +416,6 @@
    :misc/copy                               {:binding "mod+c"
                                              :fn      (fn [] (js/document.execCommand "copy"))}
 
-
    :graph/export-as-html                    {:fn      #(export-handler/download-repo-as-html!
                                                         (state/get-current-repo))
                                              :binding []}
@@ -425,12 +433,20 @@
    :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :repo-add}))
                                              :binding []}
 
-   :graph/save                              {:fn      #(state/pub-event! [:graph/save])
-                                             :binding []}
+   :graph/db-add                            {:fn #(state/pub-event! [:graph/new-db-graph])
+                                             ;; TODO: Remove this once feature is released
+                                             :inactive (not config/db-graph-enabled?)
+                                             :binding false}
+
+   :graph/db-save                           {:fn #(state/pub-event! [:graph/save-db-to-disk])
+                                             ;; TODO: Remove `(not config/db-graph-enabled?)` check once feature is released
+                                             :inactive (or (not config/db-graph-enabled?) (not (util/electron?)))
+                                             :binding "mod+s"}
 
    :graph/re-index                          {:fn      (fn []
                                                         (p/let [multiple-windows? (ipc/ipc "graphHasMultipleWindows" (state/get-current-repo))]
                                                           (state/pub-event! [:graph/ask-for-re-index (atom multiple-windows?) nil])))
+                                             :file-graph? true
                                              :binding []}
 
    :command/run                             {:binding  "mod+shift+1"
@@ -493,16 +509,21 @@
    :command/toggle-favorite                 {:binding "mod+shift+f"
                                              :fn      page-handler/toggle-favorite!}
 
+   :editor/jump                             {:binding "mod+j"
+                                             :fn      jump-handler/jump-to}
    :editor/open-file-in-default-app         {:binding  "mod+d mod+a"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/open-file-in-default-app}
 
    :editor/open-file-in-directory           {:binding  "mod+d mod+i"
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/open-file-in-directory}
 
    :editor/copy-current-file                {:binding  false
                                              :inactive (not (util/electron?))
+                                             :file-graph? true
                                              :fn       page-handler/copy-current-file}
 
    :editor/copy-page-url                    {:binding  []
@@ -517,7 +538,7 @@
                                              :fn      ui-handler/toggle-wide-mode!}
 
    :ui/select-theme-color                   {:binding "t i"
-                                             :fn      plugin-handler/show-themes-modal!}
+                                             :fn      #(plugin-handler/show-themes-modal! true)}
 
    :ui/goto-plugins                         {:binding  "t p"
                                              :inactive (not config/lsp-enabled?)
@@ -533,34 +554,35 @@
    :editor/toggle-open-blocks               {:binding "t o"
                                              :fn      editor-handler/toggle-open!}
 
-   :ui/accent-color-reset                   {:binding "c o"
-                                             :fn      state/unset-color-accent!}
+   :ui/customize-appearance                 {:binding "c c"
+                                             :fn      #(state/pub-event! [:modal/toggle-appearance-modal])}
 
-   :ui/accent-colors-picker                 {:binding "c c"
-                                             :fn      #(state/pub-event! [:modal/toggle-accent-colors-modal])}
+   :git/commit {:binding "mod+g c"
+                :inactive (not (util/electron?))
+                :fn commit/show-commit-modal!}
 
-   :git/commit                              {:binding  "mod+g c"
-                                             :inactive (not (util/electron?))
-                                             :fn       commit/show-commit-modal!}
+   :dev/replace-graph-with-db-file {:binding []
+                                    :inactive (or (not (util/electron?)) (not (state/developer-mode?)))
+                                    :fn :frontend.handler.common.developer/replace-graph-with-db-file}
 
-   :dev/show-block-data                     {:binding  []
-                                             :inactive (not (state/developer-mode?))
-                                             :fn       :frontend.handler.common.developer/show-block-data}
+   :dev/show-block-data {:binding []
+                         :inactive (not (state/developer-mode?))
+                         :fn :frontend.handler.common.developer/show-block-data}
 
-   :dev/show-block-ast                      {:binding  []
-                                             :inactive (not (state/developer-mode?))
-                                             :fn       :frontend.handler.common.developer/show-block-ast}
+   :dev/show-block-ast {:binding []
+                        :inactive (not (state/developer-mode?))
+                        :fn :frontend.handler.common.developer/show-block-ast}
 
-   :dev/show-page-data                      {:binding  []
-                                             :inactive (not (state/developer-mode?))
-                                             :fn       :frontend.handler.common.developer/show-page-data}
+   :dev/show-page-data {:binding []
+                        :inactive (not (state/developer-mode?))
+                        :fn :frontend.handler.common.developer/show-page-data}
 
-   :dev/show-page-ast                       {:binding  []
-                                             :inactive (not (state/developer-mode?))
-                                             :fn       :frontend.handler.common.developer/show-page-ast}})
+   :dev/show-page-ast {:binding []
+                       :inactive (not (state/developer-mode?))
+                       :fn :frontend.handler.common.developer/show-page-ast}})
 
 (let [keyboard-commands
-      {::commands       (set (keys all-built-in-keyboard-shortcuts))
+      {::commands (set (keys all-built-in-keyboard-shortcuts))
        ::dicts/commands dicts/abbreviated-commands}]
   (assert (= (::commands keyboard-commands) (::dicts/commands keyboard-commands))
     (str "Keyboard commands must have an english label"
@@ -575,6 +597,15 @@
                            (aget (munge (name keyword-fn))))]
       (resolved-fn)
       (throw (ex-info (str "Unable to resolve " keyword-fn " to a fn") {})))))
+
+(defn- wrap-fn-with-file-graph-only-warning
+  "Wraps file graph only commands so they are only run in file graphs and warned
+   when in DB graphs"
+  [f]
+  (fn []
+    (if (config/db-based-graph? (state/get-current-repo))
+      (notification/show! "This command is only for file graphs." :warning true nil 3000)
+      (f))))
 
 (defn build-category-map [ks]
   (->> (if (sequential? ks)
@@ -592,6 +623,10 @@
     (map (fn [[k v]]
            [k (if (keyword? (:fn v))
                 (assoc v :fn (resolve-fn (:fn v)))
+                v)]))
+    (map (fn [[k v]]
+           [k (if (:file-graph? v)
+                (update v :fn wrap-fn-with-file-graph-only-warning)
                 v)]))
     (into {})))
 
@@ -652,7 +687,8 @@
             :graph/open
             :graph/remove
             :graph/add
-            :graph/save
+            :graph/db-add
+            :graph/db-save
             :graph/re-index
             :editor/cycle-todo
             :editor/up
@@ -676,21 +712,21 @@
             :editor/copy
             :editor/copy-text
             :editor/cut
-            :command/toggle-favorite])
+            :command/toggle-favorite
+            :editor/jump])
        (with-meta {:before m/enable-when-not-component-editing!}))
 
      :shortcut.handler/global-prevent-default
      (-> (build-category-map
            [:editor/insert-link
             :editor/select-all-blocks
-            :editor/toggle-undo-redo-mode
             :editor/toggle-number-list
             :editor/undo
             :editor/redo
             :ui/toggle-brackets
-            :go/search
             :go/search-in-page
-            :command-palette/toggle
+            :go/search
+            :go/search-themes
             :go/electron-find-in-page
             :go/electron-jump-to-the-next
             :go/electron-jump-to-the-previous
@@ -700,6 +736,8 @@
             :sidebar/open-today-page
             :sidebar/clear
             :command/run
+            :command-palette/toggle
+            :editor/add-property
             :window/close])
        (with-meta {:before m/prevent-default-behavior}))
 
@@ -728,6 +766,9 @@
             :editor/copy-current-file
             :editor/copy-page-url
             :editor/new-whiteboard
+            :editor/add-property-deadline
+            :editor/add-property-status
+            :editor/add-property-priority
             :ui/toggle-wide-mode
             :ui/select-theme-color
             :ui/goto-plugins
@@ -740,8 +781,8 @@
             :dev/show-block-ast
             :dev/show-page-data
             :dev/show-page-ast
-            :ui/accent-colors-picker
-            :ui/accent-color-reset])
+            :dev/replace-graph-with-db-file
+            :ui/customize-appearance])
        (with-meta {:before m/enable-when-not-editing-mode!}))
 
      :shortcut.handler/misc
@@ -755,6 +796,7 @@
   (atom
     {:shortcut.category/basics
      [:go/search
+      :go/search-themes
       :editor/new-block
       :editor/new-line
       :editor/indent
@@ -788,6 +830,7 @@
       :editor/expand-block-children
       :editor/toggle-block-children
       :editor/toggle-open-blocks
+      :editor/jump
       :go/backward
       :go/forward
       :go/home
@@ -841,12 +884,15 @@
       :editor/select-parent
       :editor/select-block-up
       :editor/select-block-down
-      :editor/delete-selection]
+      :editor/delete-selection
+      :editor/add-property
+      :editor/add-property-deadline
+      :editor/add-property-status
+      :editor/add-property-priority]
 
      :shortcut.category/toggle
      [:ui/toggle-help
       :editor/toggle-open-blocks
-      :editor/toggle-undo-redo-mode
       :editor/toggle-number-list
       :ui/toggle-wide-mode
       :ui/toggle-document-mode
@@ -856,8 +902,7 @@
       :ui/toggle-right-sidebar
       :ui/toggle-settings
       :ui/toggle-contents
-      :ui/accent-color-reset
-      :ui/accent-colors-picker]
+      :ui/customize-appearance]
 
      :shortcut.category/whiteboard
      [:editor/new-whiteboard
@@ -901,7 +946,6 @@
       :graph/open
       :graph/remove
       :graph/add
-      :graph/save
       :graph/re-index
       :sidebar/close-top
       :sidebar/clear
@@ -916,23 +960,19 @@
       :auto-complete/next
       :auto-complete/complete
       :auto-complete/shift-complete
-      :auto-complete/open-link
-      :date-picker/prev-day
-      :date-picker/next-day
-      :date-picker/prev-week
-      :date-picker/next-week
-      :date-picker/complete
+      :auto-complete/meta-complete
       :git/commit
       :dev/show-block-data
       :dev/show-block-ast
       :dev/show-page-data
       :dev/show-page-ast
+      :dev/replace-graph-with-db-file
       :ui/clear-all-notifications]
 
      :shortcut.category/plugins
      []}))
 
-(let [category-maps {::category       (set (keys @*category))
+(let [category-maps {::category (set (keys @*category))
                      ::dicts/category dicts/categories}]
   (assert (= (::category category-maps) (::dicts/category category-maps))
     (str "Keys for category maps must have an english label "

@@ -1,9 +1,9 @@
 {;; Only lint production namespaces as most dev
  ;; namespaces are unused
  :paths ["src/main" "src/electron" "src/test"]
- :api-namespaces [
-                  ;; Ignore b/c too many false positives
+ :api-namespaces [;; Ignore b/c too many false positives
                   frontend.db
                   ;; Used for debugging
-                  frontend.db.debug]
+                  frontend.db.debug
+                  frontend.worker.debug]
  :report {:format :ignore}}

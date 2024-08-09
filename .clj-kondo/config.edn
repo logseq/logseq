@@ -7,7 +7,7 @@
   ;; false positive with match/match and _
   frontend.handler.paste {:linters {:used-underscored-binding {:level :off}}}
   frontend.db {:linters {:aliased-namespace-symbol
-                         {:exclude [frontend.db.conn frontend.db.react logseq.db.default]}}}}
+                         {:exclude [frontend.db.conn frontend.db.react]}}}}
 
  :linters
  {:path-invalid-construct/string-join {:level :info}
@@ -21,6 +21,14 @@
                                 goog.string.unescapeEntities
                                 ;; TODO:lint: Fix when fixing all type hints
                                 object]}
+
+  :discouraged-namespace
+  {logseq.db.sqlite.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}
+   logseq.outliner.cli {:message "frontend should not depend on CLI namespace with sqlite3 dependency"}}
+
+  :unused-namespace {:level :warning
+                     :exclude [logseq.db.frontend.entity-plus]}
+
   ;; TODO:lint: Remove node-path excludes once we have a cleaner api
   :unresolved-var {:exclude [frontend.util/node-path.basename
                              frontend.util/node-path.dirname
@@ -44,12 +52,21 @@
              frontend.components.block.macros block-macros
              frontend.components.query query
              frontend.components.query.result query-result
+             frontend.components.class class-component
+             frontend.components.property property-component
+             frontend.common.date common-date
+             frontend.common.file.core common-file
+             frontend.common.file.util wfu
+             frontend.common.missionary-util c.m
+             frontend.common.schema-register sr
+             frontend.common.search-fuzzy fuzzy
              frontend.config config
              frontend.date date
              frontend.db db
              frontend.db-mixins db-mixins
              frontend.db.query-dsl query-dsl
              frontend.db.react react
+             frontend.db.query-custom query-custom
              frontend.db.query-react query-react
              frontend.db.util db-utils
              frontend.diff diff
@@ -66,6 +83,7 @@
              frontend.handler.common.file file-common-handler
              frontend.handler.common.plugin plugin-common-handler
              frontend.handler.common.developer dev-common-handler
+             frontend.handler.common.page page-common-handler
              frontend.handler.config config-handler
              frontend.handler.editor.property editor-property
              frontend.handler.events events
@@ -73,8 +91,20 @@
              frontend.handler.ui ui-handler
              frontend.handler.notification notification
              frontend.handler.page page-handler
+             frontend.handler.db-based.editor db-editor-handler
+             frontend.handler.db-based.page db-page-handler
+             frontend.handler.db-based.property db-property-handler
+             frontend.handler.db-based.property.util db-pu
+             frontend.handler.file-based.page file-page-handler
+             frontend.handler.file-based.property file-property-handler
+             frontend.handler.file-based.page-property file-page-property
+             frontend.handler.file-based.property.util property-util
+             frontend.handler.file-based.recent file-recent-handler
+             frontend.handler.file-based.repo file-repo-handler
              frontend.handler.plugin plugin-handler
              frontend.handler.plugin-config plugin-config-handler
+             frontend.handler.property.file property-file
+             frontend.handler.property.util pu
              frontend.handler.query.builder query-builder
              frontend.handler.repo repo-handler
              frontend.handler.repo-config repo-config-handler
@@ -83,8 +113,10 @@
              frontend.idb idb
              frontend.loader loader
              frontend.mixins mixins
+             frontend.modules.outliner.ui ui-outliner-tx
              frontend.mobile.util mobile-util
              frontend.page page
+             frontend.persist-db persist-db
              frontend.schema.handler.common-config common-config-schema
              frontend.search search
              frontend.state state
@@ -93,27 +125,56 @@
              frontend.ui ui
              frontend.util util
              frontend.util.clock clock
+             frontend.util.drawer drawer
              frontend.util.page page-util
              frontend.util.property property
              frontend.util.persist-var persist-var
              frontend.util.text text-util
              frontend.util.url url-util
              frontend.util.thingatpt thingatpt
+             frontend.worker.pipeline worker-pipeline
+             frontend.worker.util worker-util
+             frontend.worker.state worker-state
+             frontend.worker.handler.page worker-page
              lambdaisland.glogi log
-             logseq.common.path path
-             logseq.common.graph common-graph
              logseq.common.config common-config
+             logseq.common.graph common-graph
+             logseq.common.date-time-util date-time-util
+             logseq.common.path path
+             logseq.common.util common-util
+             logseq.common.util.page-ref page-ref
+             logseq.common.util.block-ref block-ref
+             logseq.common.util.macro macro-util
+             logseq.db ldb
+             logseq.db.frontend.content db-content
+             logseq.db.frontend.class db-class
+             logseq.db.frontend.db-ident db-ident
+             logseq.db.frontend.inputs db-inputs
+             logseq.db.frontend.order db-order
+             logseq.db.frontend.property db-property
+             logseq.db.frontend.property.build db-property-build
+             logseq.db.frontend.property.type db-property-type
+             logseq.db.frontend.property.util db-property-util
+             logseq.db.frontend.entity-plus entity-plus
+             logseq.db.frontend.entity-util entity-util
+             logseq.db.frontend.rules rules
+             logseq.db.frontend.schema db-schema
+             logseq.db.frontend.validate db-validate
+             logseq.db.sqlite.cli sqlite-cli
+             logseq.db.sqlite.util sqlite-util
              logseq.graph-parser graph-parser
              logseq.graph-parser.text text
+             logseq.graph-parser.db gp-db
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
-             logseq.graph-parser.util gp-util
              logseq.graph-parser.property gp-property
-             logseq.graph-parser.config gp-config
-             logseq.graph-parser.util.page-ref page-ref
-             logseq.graph-parser.util.block-ref block-ref
-             logseq.graph-parser.util.db db-util
-             logseq.graph-parser.date-time-util date-time-util
+             logseq.outliner.batch-tx batch-tx
+             logseq.outliner.core outliner-core
+             logseq.outliner.op outliner-op
+             logseq.outliner.pipeline outliner-pipeline
+             logseq.outliner.datascript-report ds-report
+             logseq.shui.ui shui
+             logseq.shui.popup.core shui-popup
              medley.core medley
              "path" node-path
              promesa.core p}}
@@ -134,11 +195,13 @@
            clojure.test.check.clojure-test/defspec clojure.core/def
            clojure.test.check.properties/for-all clojure.core/for
            ;; src/main
-           frontend.modules.outliner.datascript/auto-transact! clojure.core/let
            frontend.namespaces/import-vars potemkin/import-vars
            ;; src/test
            frontend.test.helper/deftest-async clojure.test/deftest
            frontend.test.helper/with-reset cljs.test/async
-           frontend.react/defc clojure.core/defn}
+           frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
+           frontend.react/defc clojure.core/defn
+           frontend.common.schema-register/defkeyword cljs.spec.alpha/def}
  :skip-comments true
- :output {:progress true}}
+ :output {:progress true
+          :exclude-files ["src/test/docs-0.10.9/"]}}

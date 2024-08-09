@@ -8,19 +8,20 @@
             [frontend.state :as state]
             [goog.object :as gobj]
             [logseq.graph-parser.utf8 :as utf8]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [frontend.handler.db-based.editor :as db-editor-handler]))
 
 (defn save-code-editor!
   []
   (let [{:keys [config state editor]} (get @state/state :editor/code-block-context)]
-    (state/set-state! :editor/skip-saving-current-block? true)
-    (state/set-block-component-editing-mode! false)
     (when editor
+      (state/set-block-component-editing-mode! false)
       (.save editor)
       (let [textarea (.getTextArea editor)
             ds (.-dataset textarea)
             value (gobj/get textarea "value")
-            default-value (or (.-v ds) (gobj/get textarea "defaultValue"))]
+            default-value (or (.-v ds) (gobj/get textarea "defaultValue"))
+            repo (state/get-current-repo)]
         (when (not= value default-value)
           ;; update default value for the editor initial state
           (set! ds -v value)
@@ -28,7 +29,7 @@
             ;; save block content
             (:block/uuid config)
             (let [block (db/pull [:block/uuid (:block/uuid config)])
-                  content (:block/content block)
+                  content (:block/title block)
                   {:keys [start_pos end_pos]} (:pos_meta @(:code-options state))
                   offset (if (:block/pre-block? block) 0 2)
                   raw-content (utf8/encode content) ;; NOTE: :pos_meta is based on byte position
@@ -40,9 +41,12 @@
               (state/set-edit-content! (state/get-edit-input-id) new-content)
               (editor-handler/save-block-if-changed! block new-content))
 
+            (and (not-empty (:file-path config))
+                 (config/db-based-graph? repo))
+            (db-editor-handler/save-file! (:file-path config) value)
+
             (not-empty (:file-path config))
             (let [path (:file-path config)
-                  repo (state/get-current-repo)
                   repo-dir (config/get-repo-dir repo)
                   rpath (when (string/starts-with? path repo-dir)
                           (path/trim-dir-prefix repo-dir path))]

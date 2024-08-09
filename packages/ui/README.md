@@ -16,7 +16,7 @@ npx shadcn-ui@latest add button
 1. Watch shui cljs stories from root [scripts](https://github.com/logseq/logseq/blob/15be34fc5c79ccef9e7756131f54436763f36699/package.json#L59).
 
 ```shell
-yarn run cljs:watch-stories
+yarn run cljs:watch-storybook
 
 # cljs:watch-stories: "clojure -M:cljs watch stories-dev"
 ```
@@ -34,4 +34,3 @@ yarn run watch:storybook
 
 ### License
 MIT
-

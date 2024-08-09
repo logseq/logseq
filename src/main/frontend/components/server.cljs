@@ -1,14 +1,15 @@
 (ns frontend.components.server
   (:require
-    [clojure.string :as string]
-    [rum.core :as rum]
-    [electron.ipc :as ipc]
-    [medley.core :as medley]
-    [promesa.core :as p]
-    [frontend.state :as state]
-    [frontend.util :as util]
-    [frontend.handler.notification :as notification]
-    [frontend.ui :as ui]))
+   [clojure.string :as string]
+   [logseq.shui.ui :as shui]
+   [rum.core :as rum]
+   [electron.ipc :as ipc]
+   [medley.core :as medley]
+   [promesa.core :as p]
+   [frontend.state :as state]
+   [frontend.util :as util]
+   [frontend.handler.notification :as notification]
+   [frontend.ui :as ui]))
 
 (rum/defcs panel-of-tokens
   < rum/reactive
@@ -22,7 +23,7 @@
   (let [server-state (state/sub :electron/server)
         *tokens      (::tokens _state)
         changed?     (not= @*tokens (:tokens server-state))]
-    [:div.cp__server-tokens-panel.-mx-2
+    [:div.cp__server-tokens-panel.pt-6
      [:h2.text-3xl.-translate-y-4 "Authorization tokens"]
      ;; items
      (let [update-value! (fn [idx k v] (swap! *tokens assoc-in [idx k] v))]
@@ -48,7 +49,7 @@
      [:p.flex.justify-end.pt-6.space-x-3
       (ui/button "+ Add new token"
                  :on-click #(swap! *tokens conj {})
-                 :intent "logseq")
+                 :variant :outline)
       (ui/button "Save"
                  :on-click (fn [] (-> (ipc/ipc :server/set-config {:tokens @*tokens})
                                       (p/then #(notification/show! "Update tokens successfully!" :success))
@@ -75,7 +76,7 @@
                                           (mapv #(cond-> % (nil? %) not))
                                           (apply not=)))]
 
-    [:div.cp__server-configs-panel.-mx-2
+    [:div.cp__server-configs-panel.pt-5
      [:h2.text-3xl.-translate-y-4 "Server configurations"]
 
      [:div.item.flex.items-center.space-x-3
@@ -99,16 +100,15 @@
 
      [:p.py-3.px-1
       [:label.flex.space-x-2.items-center
-       [:input.form-checkbox
-        {:type      "checkbox"
-         :on-change #(let [checked (.-checked (.-target %))]
+       (ui/checkbox
+        {:on-change #(let [checked (.-checked (.-target %))]
                        (swap! *configs assoc :autostart checked))
-         :checked   (not (false? autostart))}]
+         :value     (not (false? autostart))})
 
        [:strong.select-none "Auto start server with the app launched"]]]
 
      [:p.flex.justify-end.pt-6.space-x-3
-      (ui/button "Reset" :intent "logseq"
+      (ui/button "Reset" :variant :outline
                  :on-click #(reset! *configs (select-keys server-state [:host :port :autostart])))
       (ui/button "Save & Apply"
                  :disabled (not changed?)
@@ -144,43 +144,50 @@
       [error])
 
     [:div.cp__server-indicator
-     ;; settings menus
-     (ui/dropdown-with-links
-       (fn [{:keys [toggle-fn]}]
-         [:button.button.icon
-          {:on-click #(toggle-fn)}
-          (ui/icon (if running? "api" "api-off") {:size 22})])
+     [:button.button.icon
+      {:on-click (fn [^js e]
+                   (shui/popup-show!
+                     (.-target e)
+                     (fn [{:keys [_close]}]
+                       (let [items [{:hr? true}
 
-       ;; items
-       (->> [{:hr true}
+                                    (cond
+                                      running?
+                                      {:title "Stop server"
+                                       :options {:on-click #(ipc/ipc :server/do :stop)}
+                                       :icon [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
 
-             (cond
-               running?
-               {:title   "Stop server"
-                :options {:on-click #(ipc/ipc :server/do :stop)}
-                :icon    [:span.text-red-500.flex.items-center (ui/icon "player-stop")]}
+                                      :else
+                                      {:title "Start server"
+                                       :options {:on-click #(ipc/ipc :server/do :restart)}
+                                       :icon [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
 
-               :else
-               {:title   "Start server"
-                :options {:on-click #(ipc/ipc :server/do :restart)}
-                :icon    [:span.text-green-500.flex.items-center (ui/icon "player-play")]})
+                                    {:title "Authorization tokens"
+                                     :options {:on-click #(shui/dialog-open!
+                                                            (fn []
+                                                              (panel-of-tokens shui/dialog-close!)))}
+                                     :icon (ui/icon "key")}
 
-             {:title   "Authorization tokens"
-              :options {:on-click #(state/set-modal!
-                                     (fn [close]
-                                       (panel-of-tokens close))
-                                     {:center? true})}
-              :icon    (ui/icon "key")}
+                                    {:title "Server configurations"
+                                     :options {:on-click #(shui/dialog-open!
+                                                            (fn []
+                                                              (panel-of-configs shui/dialog-close!)))}
+                                     :icon (ui/icon "server-cog")}]]
 
-             {:title   "Server configurations"
-              :options {:on-click #(state/set-modal!
-                                     (fn [close]
-                                       (panel-of-configs close))
-                                     {:center? true})}
-              :icon    (ui/icon "server-cog")}])
-       {:links-header
-        [:div.links-header.flex.justify-center.py-2
-         [:span.ml-1.text-sm
-          (if-not running?
-            (string/upper-case (or (:status server-state) "stopped"))
-            [:a.hover:underline {:href href} href])]]})]))
+                         (cons
+                           [:div.links-header.flex.justify-center.py-2
+                            [:span.ml-1.text-sm.opacity-70
+                             (if-not running?
+                               (string/upper-case (or (:status server-state) "stopped"))
+                               [:a.hover:underline {:href href} href])]]
+                           (for [{:keys [hr? title options icon]} items]
+                             (cond
+                               hr?
+                               (shui/dropdown-menu-separator)
+
+                               :else
+                               (shui/dropdown-menu-item options
+                                 [:span.flex.items-center icon [:span.pl-1 title]]))))))
+                     {:as-dropdown? true
+                      :content-props {:onClick #(shui/popup-hide!)}}))}
+      (ui/icon (if running? "api" "api-off") {:size 22})]]))

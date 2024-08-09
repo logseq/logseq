@@ -5,6 +5,8 @@
             [frontend.components.journal :as journal]
             [frontend.components.onboarding.setups :as setups]
             [frontend.components.page :as page]
+            [frontend.components.all-pages :as all-pages]
+            ;; [frontend.components.all-pages2 :as all-pages]
             [frontend.components.plugins :as plugins]
             [frontend.components.repo :as repo]
             [frontend.components.settings :as settings]
@@ -12,8 +14,11 @@
             [frontend.extensions.zotero :as zotero]
             [frontend.components.bug-report :as bug-report]
             [frontend.components.user.login :as login]
-            [logseq.shui.demo :as shui]
-            ))
+            [logseq.shui.demo2 :as shui]
+            [frontend.components.imports :as imports]
+            [frontend.config :as config]
+            [logseq.db :as ldb]
+            [frontend.db :as db]))
 
 ;; http://localhost:3000/#?anchor=fn.1
 (def routes
@@ -25,10 +30,6 @@
     {:name :repos
      :view repo/repos}]
 
-   ["/whiteboard/:name"
-    {:name :whiteboard
-     :view whiteboard/whiteboard-route}]
-
    ["/whiteboards"
     {:name :whiteboards
      :view whiteboard/whiteboard-dashboard}]
@@ -37,17 +38,14 @@
     {:name :repo-add
      :view setups/picker}]
 
-   ["/all-files"
-    {:name :all-files
-     :view file/files}]
-
-   ["/file/:path"
-    {:name :file
-     :view file/file}]
-
    ["/page/:name"
     {:name :page
-     :view page/page}]
+     :view (fn [route-match]
+             (let [page-name (get-in route-match [:parameters :path :name])
+                   whiteboard? (ldb/whiteboard? (db/get-page page-name))]
+               (if whiteboard?
+                 (whiteboard/whiteboard-route route-match)
+                 (page/page route-match))))}]
 
    ["/page/:name/block/:block-route-name"
     {:name :page-block
@@ -55,7 +53,7 @@
 
    ["/all-pages"
     {:name :all-pages
-     :view page/all-pages}]
+     :view all-pages/all-pages}]
 
    ["/graph"
     {:name :graph
@@ -71,15 +69,15 @@
 
    ["/import"
     {:name :import
-     :view setups/importer}]
+     :view imports/importer}]
 
    ["/bug-report"
     {:name :bug-report
      :view bug-report/bug-report}]
 
-    ["/bug-report-tool/:tool"
-     {:name :bug-report-tools
-      :view bug-report/bug-report-tool-route}]
+   ["/bug-report-tool/:tool"
+    {:name :bug-report-tools
+     :view bug-report/bug-report-tool-route}]
 
    ["/all-journals"
     {:name :all-journals
@@ -93,7 +91,15 @@
     {:name :user-login
      :view login/page}]
 
-   ["/ui"
-    {:name :ui
-     :view shui/page}]
-   ])
+   ["/all-files"
+    {:name :all-files
+     :view file/files}]
+
+   ["/file/:path"
+    {:name :file
+     :view file/file}]
+
+   (when config/dev?
+     ["/ui"
+      {:name :ui
+       :view shui/page}])])

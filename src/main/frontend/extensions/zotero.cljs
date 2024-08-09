@@ -13,6 +13,7 @@
             [frontend.ui :as ui]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [logseq.shui.ui :as shui]
             [promesa.core :as p]
             [rum.core :as rum]))
 
@@ -320,11 +321,11 @@
   (rum/local "" ::input)
   [state profile* close-fn]
   (let [input (get state ::input)]
-    [:div
+    [:div.w-96
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
-       [:h3#modal-headline.text-lg.leading-6.font-medium
-        "Please enter your profile name"]]]
+       [:h3#modal-headline.text-lg.leading-6.font-medium.mt-2.pb-2
+        "Please enter your profile name:"]]]
 
      [:input.form-input.block.w-full.sm:text-sm.sm:leading-5.my-2
       {:auto-focus    true
@@ -342,7 +343,7 @@
                          (p/let [_ (setting/add-profile profile-name)
                                  _ (setting/set-profile profile-name)]
                            (reset! profile* profile-name)))
-                       (state/close-modal!))))]
+                       (shui/dialog-close!))))]
       [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
        (ui/button "Cancel" {:variant :ghost :on-click close-fn :class "opacity-70 hover:opacity-100"})]]]))
 
@@ -370,9 +371,11 @@
       :class "ml-4"
       :on-click
       (fn []
-        (state/set-modal!
-          (fn [close-fn]
-            (profile-name-dialog-inner profile* close-fn)))))
+        (shui/dialog-open!
+          (fn [{:keys [close]}]
+            (profile-name-dialog-inner profile* close))
+          {:align :center
+           :auto-width? true})))
     (ui/button
       "Delete profile!"
       :small? true

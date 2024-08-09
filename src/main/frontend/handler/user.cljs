@@ -1,19 +1,21 @@
 (ns frontend.handler.user
   "Provides user related handler fns like login and logout"
   (:require-macros [frontend.handler.user])
-  (:require [frontend.config :as config]
-            [frontend.handler.config :as config-handler]
-            [frontend.state :as state]
-            [frontend.debug :as debug]
-            [clojure.string :as string]
-            [cljs-time.core :as t]
+  (:require [cljs-http.client :as http]
             [cljs-time.coerce :as tc]
-            [cljs-http.client :as http]
-            [cljs.core.async :as async :refer [go <!]]
-            [goog.crypt.Sha256]
-            [goog.crypt.Hmac]
+            [cljs-time.core :as t]
+            [cljs.core.async :as async :refer [<! go]]
+            [clojure.string :as string]
+            [frontend.common.missionary-util :as c.m]
+            [frontend.config :as config]
+            [frontend.debug :as debug]
+            [frontend.handler.config :as config-handler]
+            [frontend.handler.notification :as notification]
+            [frontend.state :as state]
             [goog.crypt :as crypt]
-            [frontend.handler.notification :as notification]))
+            [goog.crypt.Hmac]
+            [goog.crypt.Sha256]
+            [missionary.core :as m]))
 
 (defn set-preferred-format!
   [format]
@@ -36,7 +38,7 @@
       (aset arr i (.charCodeAt username i)))
     (.decode (new js/TextDecoder "utf-8") arr)))
 
-(defn- parse-jwt [jwt]
+(defn parse-jwt [jwt]
   (some-> jwt
           (string/split ".")
           second
@@ -275,6 +277,37 @@
 (defn alpha-or-beta-user?
   []
   (or (alpha-user?) (beta-user?)))
+
+(defn get-user-type
+  [repo]
+  (-> (some #(when (= repo (:url %)) %) (:rtc/graphs @state/state))
+      :graph<->user-user-type))
+
+(defn manager?
+  [repo]
+  (= (get-user-type repo) "manager"))
+
+;; TODO: Remove if still unused
+#_(defn member?
+    [repo]
+    (= (get-user-type repo) "member"))
+
+(defn new-task--upload-user-avatar
+  [avatar-str]
+  (m/sp
+    (when-let [token (state/get-auth-id-token)]
+      (let [{:keys [status body] :as resp}
+            (c.m/<?
+             (http/post
+              (str "https://" config/API-DOMAIN "/logseq/get_presigned_user_avatar_put_url")
+              {:oauth-token token
+               :with-credentials? false}))]
+        (when-not (http/unexceptional-status? status)
+          (throw (ex-info "failed to get presigned url" {:resp resp})))
+        (let [presigned-url (:presigned-url body)
+              {:keys [status]} (c.m/<? (http/put presigned-url {:body avatar-str :with-credentials? false}))]
+          (when-not (http/unexceptional-status? status)
+            (throw (ex-info "failed to upload avatar" {:resp resp}))))))))
 
 (comment
   ;; We probably need this for some new features later

@@ -1,0 +1,25 @@
+{:linters
+ {:aliased-namespace-symbol {:level :warning}
+  :namespace-name-mismatch {:level :warning}
+  :used-underscored-binding {:level :warning}
+
+  :consistent-alias
+  {:aliases {clojure.string string
+             logseq.db ldb
+             logseq.db.frontend.content db-content
+             logseq.db.frontend.class db-class
+             logseq.db.frontend.db-ident db-ident
+             logseq.db.frontend.inputs db-inputs
+             logseq.db.frontend.order db-order
+             logseq.db.frontend.property db-property
+             logseq.db.frontend.property.build db-property-build
+             logseq.db.frontend.property.type db-property-type
+             logseq.db.frontend.property.util db-property-util
+             logseq.db.frontend.entity-plus entity-plus
+             logseq.db.frontend.rules rules
+             logseq.db.frontend.schema db-schema
+             logseq.db.frontend.validate db-validate
+             logseq.db.sqlite.cli sqlite-cli
+             logseq.db.sqlite.util sqlite-util}}}
+ :skip-comments true
+ :output {:progress true}}
