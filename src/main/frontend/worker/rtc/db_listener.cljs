@@ -2,7 +2,7 @@
   "listen datascript changes, infer operations from the db tx-report"
   (:require [clojure.string :as string]
             [datascript.core :as d]
-            [frontend.schema-register :include-macros true :as sr]
+            [frontend.common.schema-register :include-macros true :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.client-op :as client-op]
             [logseq.db :as ldb]))

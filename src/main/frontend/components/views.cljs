@@ -13,7 +13,7 @@
             [frontend.date :as date]
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
-            [frontend.search.fuzzy :as fuzzy-search]
+            [frontend.common.search-fuzzy :as fuzzy]
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
@@ -749,8 +749,8 @@
 
 (defn- fuzzy-matched?
   [input s]
-  (pos? (fuzzy-search/score (string/lower-case (str input))
-                            (string/lower-case (str s)))))
+  (pos? (fuzzy/score (string/lower-case (str input))
+                     (string/lower-case (str s)))))
 
 (defn- row-matched?
   [row input filters]

@@ -5,27 +5,11 @@
             [babashka.fs :as fs]
             [babashka.cli :as cli]
             [logseq.tasks.util :as task-util]
+            [logseq.tasks.dev.lint :as dev-lint]
             [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.edn :as edn]
             [clojure.data :as data]))
-
-(defn lint
-  "Run all lint tasks
-  - clj-kondo lint
-  - carve lint for unused vars
-  - lint for vars that are too large
-  - lint invalid translation entries
-  - lint to ensure file and db graph remain separate"
-  []
-  (doseq [cmd ["clojure -M:clj-kondo --parallel --lint src --cache false"
-               "bb lint:carve"
-               "bb lint:large-vars"
-               "bb lint:db-and-file-graphs-separate"
-               "bb lang:validate-translations"
-               "bb lint:ns-docstrings"]]
-    (println cmd)
-    (shell cmd)))
 
 (defn test
   "Run tests. Pass args through to cmd 'yarn cljs:run-test'"
@@ -37,9 +21,8 @@
   "Run all lint tasks, then run tests(exclude testcases tagged by :long).
   pass args through to cmd 'yarn cljs:run-test'"
   []
-  (lint)
+  (dev-lint/dev)
   (test "-e" "long" "-e" "fix-me"))
-
 
 (defn gen-malli-kondo-config
   "Generate clj-kondo type-mismatch config from malli schema

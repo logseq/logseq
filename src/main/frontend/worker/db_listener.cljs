@@ -8,7 +8,7 @@
             [frontend.worker.util :as worker-util]
             [promesa.core :as p]
             [logseq.outliner.batch-tx :as batch-tx]
-            [frontend.schema-register :as sr]))
+            [frontend.common.schema-register :as sr]))
 
 
 (defn- entity-datoms=>attr->datom

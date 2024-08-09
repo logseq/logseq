@@ -1,6 +1,6 @@
 (ns frontend.worker.rtc.log-and-state
   "Fns to generate rtc related logs"
-  (:require [frontend.schema-register :as sr]
+  (:require [frontend.common.schema-register :as sr]
             [frontend.worker.util :as worker-util]
             [malli.core :as ma]
             [missionary.core :as m]))

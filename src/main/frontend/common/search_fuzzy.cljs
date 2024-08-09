@@ -1,5 +1,5 @@
-(ns frontend.search.fuzzy
-  "fuzzy search"
+(ns frontend.common.search-fuzzy
+  "fuzzy search. Used by frontend and worker namespaces"
   (:require [clojure.string :as string]
             [cljs-bean.core :as bean]
             [frontend.worker.util :as worker-util]))

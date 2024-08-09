@@ -1,6 +1,6 @@
 (ns frontend.common-keywords
   "There are some keywords scattered throughout the codebase."
-  (:require [frontend.schema-register :include-macros true :as sr]))
+  (:require [frontend.common.schema-register :include-macros true :as sr]))
 
 
 (sr/defkeyword :block/uuid

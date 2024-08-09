@@ -1,4 +1,4 @@
-(ns frontend.schema-register
+(ns frontend.common.schema-register
   "Set malli default registry to a mutable one,
   and use `register!` to add schemas dynamically."
   (:require [malli.core :as m]

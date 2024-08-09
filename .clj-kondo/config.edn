@@ -197,7 +197,7 @@
            frontend.test.helper/with-reset cljs.test/async
            frontend.worker.rtc.idb-keyval-mock/with-reset-idb-keyval-mock cljs.test/async
            frontend.react/defc clojure.core/defn
-           frontend.schema-register/defkeyword cljs.spec.alpha/def}
+           frontend.common.schema-register/defkeyword cljs.spec.alpha/def}
  :skip-comments true
  :output {:progress true
           :exclude-files ["src/test/docs-0.10.9/"]}}

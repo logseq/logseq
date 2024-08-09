@@ -1,7 +1,7 @@
 (ns frontend.worker.rtc.asset-db-listener
   "Listen asset-block changes in db, generate asset-sync operations"
   (:require [datascript.core :as d]
-            [frontend.schema-register :as sr]
+            [frontend.common.schema-register :as sr]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.rtc.asset :as r.asset]
             [frontend.worker.rtc.client-op :as client-op]))

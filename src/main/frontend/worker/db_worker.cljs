@@ -1,4 +1,4 @@
-(ns frontend.db-worker
+(ns frontend.worker.db-worker
   "Worker used for browser DB implementation"
   (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]

@@ -7,7 +7,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [promesa.core :as p]
-            [frontend.search.fuzzy :as fuzzy]
+            [frontend.common.search-fuzzy :as fuzzy]
             [logseq.common.config :as common-config]
             [frontend.db.async :as db-async]
             [frontend.db :as db]

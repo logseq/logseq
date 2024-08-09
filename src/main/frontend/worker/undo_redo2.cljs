@@ -4,7 +4,7 @@
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]
             [clojure.set :as set]
-            [frontend.schema-register :include-macros true :as sr]
+            [frontend.common.schema-register :include-macros true :as sr]
             [malli.core :as m]
             [malli.util :as mu]
             [logseq.db :as ldb]))
