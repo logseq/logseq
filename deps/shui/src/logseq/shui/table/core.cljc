@@ -167,9 +167,13 @@
             ^js target-cls (.-classList target)
             ^js table (.closest target ".ls-table-rows")
             ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
+            ^js page-el (.closest target ".page-inner")
             *ticking? (volatile! false)
-            el-top (-> target (.getBoundingClientRect) (.-top))
+            *el-top (volatile! 128)
             head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
+            update-target-top! (fn []
+                                 (when (not (.contains target-cls "ls-fixed"))
+                                   (vreset! *el-top (-> target (.getBoundingClientRect) (.-top)))))
             update-footer! (fn []
                              (when table-footer
                                (set! (. (.-style table-footer) -width) (str (.-scrollWidth table) "px"))))
@@ -188,7 +192,7 @@
             ;; target observer
             target-observe! (fn []
                               (let [scroll-top (js/parseInt (.-scrollTop container))
-                                    fixed? (> (+ scroll-top head-top) el-top)]
+                                    fixed? (> (+ scroll-top head-top) @*el-top)]
                                 (if fixed?
                                   (.add target-cls "ls-fixed")
                                   (.remove target-cls "ls-fixed"))
@@ -198,10 +202,12 @@
                                 (js/window.requestAnimationFrame
                                   #(do (target-observe!) (vreset! *ticking? false)))
                                 (vreset! *ticking? true)))
-            resize-observer (js/ResizeObserver. update-target!)]
+            resize-observer (js/ResizeObserver. update-target!)
+            page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
         ;; events
         (.observe resize-observer container)
         (.observe resize-observer table)
+        (.observe page-resize-observer page-el)
         (.addEventListener container "scroll" target-observe!)
         (.addEventListener table "scroll" update-target!)
         (.addEventListener table "resize" update-target!)
@@ -209,7 +215,8 @@
 
         ;; teardown
         #(do (.removeEventListener container "scroll" target-observe!)
-           (.disconnect resize-observer))))
+           (.disconnect resize-observer)
+           (.disconnect page-resize-observer))))
     []))
 
 (rum/defc table-header < rum/static
