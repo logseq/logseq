@@ -188,7 +188,7 @@
                      (remove (fn [b] (contains? (set (map :db/id (:block/tags b))) (:db/id block))) children)
 
                      (ldb/property? block)
-                     (remove (fn [b] (some? (get block (:db/ident b)))) children)
+                     (remove (fn [b] (some? (get b (:db/ident block)))) children)
 
                      :else
                      children)
