@@ -219,31 +219,3 @@ html.is-zoomed-native-ios {
     }
   }
 }
-
-.ui__modal {
-  &[label=graph-setup] {
-    align-items: center;
-
-    .ui__modal-panel {
-      transform: translate3d(0, -78px, 0);
-    }
-
-    .panel-content {
-      padding: 0;
-    }
-
-    .cp__graph-picker {
-      padding: 58px 20px 20px 20px;
-      background: var(--ls-primary-background-color);
-
-      > h1 {
-        position: absolute;
-        font-size: 18px;
-        font-weight: 500;
-        top: 12px;
-        left: 20px;
-        opacity: .9;
-      }
-    }
-  }
-}

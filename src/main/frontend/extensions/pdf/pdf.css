@@ -791,9 +791,6 @@ input::-webkit-inner-spin-button {
 
 .block-ref {
   &-wrap {
-    &[data-type=annotation] {
-    }
-
     &[data-hl-type=area] {
       display: block;
 
@@ -861,10 +858,6 @@ input::-webkit-inner-spin-button {
         max-height: 420px;
         cursor: alias;
       }
-    }
-
-    .block-title-wrap {
-      @apply block;
     }
   }
 }

@@ -841,7 +841,7 @@
     repo/new-db-graph
     {:id :new-db-graph
      :title [:h2 "Create a new graph"]
-     :label "graph-setup"}))
+     :style {:max-width "500px"}}))
 
 (defmethod handle :graph/save-db-to-disk [[_ _opts]]
   (persist-db/export-current-graph! {:succ-notification? true}))
