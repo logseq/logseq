@@ -67,7 +67,16 @@ const common = {
         'packages/amplify/dist/amplify.js',
         'packages/ui/dist/ui.js',
         'node_modules/@logseq/sqlite-wasm/sqlite-wasm/jswasm/sqlite3.wasm',
+        'node_modules/react/umd/react.production.min.js',
+        'node_modules/react/umd/react.development.js',
+        'node_modules/react-dom/umd/react-dom.production.min.js',
+        'node_modules/react-dom/umd/react-dom.development.js',
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
+      () => gulp.src([
+        'node_modules/@glidejs/glide/dist/glide.min.js',
+        'node_modules/@glidejs/glide/dist/css/glide.core.min.css',
+        'node_modules/@glidejs/glide/dist/css/glide.theme.min.css',
+      ]).pipe(gulp.dest(path.join(outputPath, 'js', 'glide'))),
       () => gulp.src([
         'node_modules/pdfjs-dist/build/pdf.js',
         'node_modules/pdfjs-dist/build/pdf.worker.js',

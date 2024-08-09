@@ -32,8 +32,8 @@
    :beforeSend (fn [^js event]
                  (try
                    (when-let [[_ _ query-and-fragment]
-                              (re-matches #"file://.*?/(app/electron|static/index)\.html(.*)" (.. event -request -url))]
-                     (set! (.. event -request -url) (str "http://localhost/electron.html" query-and-fragment)))
+                              (re-matches #"file://.*?/(app/index|static/index)\.html(.*)" (.. event -request -url))]
+                     (set! (.. event -request -url) (str "http://localhost/index.html" query-and-fragment)))
 
                    (let [*filtered (volatile! [])
                          ^js values (.. event -exception -values)]
