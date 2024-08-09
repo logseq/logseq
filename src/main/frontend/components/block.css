@@ -763,12 +763,6 @@ a.filter svg {
   height: 100%;
 }
 
-@media (min-width: 1024px) {
-  .ui__modal-panel .ls-card {
-    min-height: 24rem;
-  }
-}
-
 .ls-card a[data-ref="card"], .ls-card .page-reference[data-ref="card"] {
   display: none;
 }

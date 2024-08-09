@@ -158,26 +158,6 @@
       @apply z-10 absolute top-0 right-0 pt-2 pr-2;
     }
   }
-
-  &[label="ls-modal-align-center"],
-  &.as-center {
-    top: 0;
-
-    .ui__modal-panel {
-      top: 50vh;
-      transform: translateY(-52%);
-    }
-  }
-
-  &[label="diff__cp"] {
-    .panel-content {
-      padding: 2rem 1rem;
-
-      @screen sm {
-        padding: 2rem;
-      }
-    }
-  }
 }
 
 .ui__dialog-content {
@@ -222,13 +202,6 @@ html.is-mobile {
 
       .ls-search {
         padding-bottom: 0;
-      }
-    }
-
-    &[label="ls-modal-align-center"] {
-      .ui__modal-panel {
-        top: 8vh;
-        transform: translateY(-10%);
       }
     }
   }
