@@ -27,7 +27,6 @@
             [rum.core :as rum]
             [clojure.core.async :as async]
             [frontend.pubsub :as pubsub]
-            [frontend.worker.util :as worker-util]
             [datascript.impl.entity :as de]))
   #?(:cljs (:import [goog.async Debouncer]))
   (:require
@@ -1007,9 +1006,6 @@
      (some-> string str (js/encodeURIComponent) (.replace "+" "%20"))))
 
 #?(:cljs
-   (def search-normalize worker-util/search-normalize))
-
-#?(:cljs
    (def page-name-sanity-lc
      "Delegate to common-util to loosely couple app usages to graph-parser"
      common-util/page-name-sanity-lc))
@@ -1125,9 +1121,6 @@
      [ch]
      (->> (repeatedly #(async/poll! ch))
           (take-while identity))))
-
-#?(:cljs
-   (def <ratelimit worker-util/<ratelimit))
 
 #?(:cljs
    (defn trace!

@@ -24,7 +24,7 @@
             [logseq.shui.ui :as shui]
             [frontend.handler.db-based.rtc :as rtc-handler]
             [frontend.handler.graph :as graph]
-            [frontend.worker.async-util :as async-util]))
+            [frontend.common.async-util :as async-util]))
 
 (rum/defc normalized-graph-label
   [{:keys [url remote? GraphName GraphUUID] :as graph} on-click]

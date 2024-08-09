@@ -7,7 +7,6 @@
             [goog.object :as gobj]
             [datascript.core :as d]
             [frontend.common.search-fuzzy :as fuzzy]
-            [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]))
@@ -172,8 +171,8 @@ DROP TRIGGER IF EXISTS blocks_au;
           (if (seq coll')
             (rest coll')
             (reduced false))))
-      (seq (worker-util/search-normalize match true))
-      (seq (worker-util/search-normalize q true))))))
+      (seq (fuzzy/search-normalize match true))
+      (seq (fuzzy/search-normalize q true))))))
 
 (defn- page-or-object?
   [entity]
@@ -194,7 +193,7 @@ DROP TRIGGER IF EXISTS blocks_au;
 (defn- sanitize
   [content]
   (some-> content
-          (worker-util/search-normalize true)))
+          (fuzzy/search-normalize true)))
 
 (defn block->index
   "Convert a block to the index for searching"
@@ -238,7 +237,7 @@ DROP TRIGGER IF EXISTS blocks_au;
   [repo db q {:keys [limit]
               :or {limit 100}}]
   (when repo
-    (let [q (worker-util/search-normalize q true)
+    (let [q (fuzzy/search-normalize q true)
           q (fuzzy/clean-str q)
           q (if (= \# (first q)) (subs q 1) q)]
       (when-not (string/blank? q)

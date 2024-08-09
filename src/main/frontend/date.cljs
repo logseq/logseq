@@ -10,7 +10,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [goog.object :as gobj]
             [lambdaisland.glogi :as log]
-            [frontend.worker.date :as worker-date]))
+            [frontend.common.date :as common-date]))
 
 (defn nld-parse
   [s]
@@ -21,7 +21,7 @@
 
 (defn journal-title-formatters
   []
-  (worker-date/journal-title-formatters (state/get-date-formatter)))
+  (common-date/journal-title-formatters (state/get-date-formatter)))
 
 (defn get-date-time-string
   ([]
@@ -111,15 +111,15 @@
 
 (defn normalize-date
   [s]
-  (worker-date/normalize-date s (state/get-date-formatter)))
+  (common-date/normalize-date s (state/get-date-formatter)))
 
 (defn normalize-journal-title
   [title]
-  (worker-date/normalize-journal-title title (state/get-date-formatter)))
+  (common-date/normalize-journal-title title (state/get-date-formatter)))
 
 (defn valid-journal-title?
   [title]
-  (worker-date/valid-journal-title? title (state/get-date-formatter)))
+  (common-date/valid-journal-title? title (state/get-date-formatter)))
 
 (defn journal-title->
   ([journal-title then-fn]
@@ -144,7 +144,7 @@
   [journal-title]
   (journal-title-> journal-title #(tc/to-long %)))
 
-(def default-journal-filename-formatter worker-date/default-journal-filename-formatter)
+(def default-journal-filename-formatter common-date/default-journal-filename-formatter)
 
 (defn journal-title->default
   "Journal title to filename format"

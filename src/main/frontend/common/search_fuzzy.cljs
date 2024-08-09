@@ -2,7 +2,7 @@
   "fuzzy search. Used by frontend and worker namespaces"
   (:require [clojure.string :as string]
             [cljs-bean.core :as bean]
-            [frontend.worker.util :as worker-util]))
+            ["remove-accents" :as removeAccents]))
 
 (def MAX-STRING-LENGTH 1000.0)
 
@@ -56,15 +56,24 @@
                        (dec idx)
                        (- score 0.1)))))))
 
+(defn search-normalize
+  "Normalize string for searching (loose)"
+  [s remove-accents?]
+  (when s
+    (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
+      (if remove-accents?
+        (removeAccents normalize-str)
+        normalize-str))))
+
 (defn fuzzy-search
   [data query & {:keys [limit extract-fn]
                  :or {limit 20}}]
-  (let [query (worker-util/search-normalize query true)]
+  (let [query (search-normalize query true)]
     (->> (take limit
                (sort-by :score (comp - compare)
                         (filter #(< 0 (:score %))
                                 (for [item data]
                                   (let [s (str (if extract-fn (extract-fn item) item))]
                                     {:data item
-                                     :score (score query (worker-util/search-normalize s true))})))))
+                                     :score (score query (search-normalize s true))})))))
          (map :data))))
