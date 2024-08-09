@@ -367,7 +367,8 @@
                                            node (or (db/entity id) node)
                                            icon (get-node-icon node)]
                                        [:div.flex.flex-row.items-center.gap-1
-                                        (ui/icon icon {:size 14})
+                                        (when-not (:property/schema.classes property)
+                                          (ui/icon icon {:size 14}))
                                         [:div title]])
                                      (or (:label node) (:block/title node)))]
                          (assoc node

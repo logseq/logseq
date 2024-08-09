@@ -270,7 +270,8 @@
             disabled? (or built-in? config/publishing?)
             property-type (get-in property [:block/schema :type])
             save-property-fn (fn [] (components-pu/update-property! property @*property-name @*property-schema))
-            enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))]
+            enable-closed-values? (contains? db-property-type/closed-value-property-types (or property-type :default))
+            tags? (= (:db/ident property) :block/tags)]
         [:div.property-configure.flex.flex-1.flex-col
          [:div.grid.gap-2.p-1
           [:div.grid.grid-cols-5.gap-1.items-center.leading-8
@@ -328,11 +329,10 @@
               ;; Question: 1. should we still support classes for `page` type?
               ;;           2. flexible query instead of classes? e.g. find all papers are related to either Clojure or OCaml `(and (tag :paper) (or (tag :clojure) (tag :ocaml)))`
               :node
-              (when (empty? (:property/closed-values property))
+              (when (and (empty? (:property/closed-values property)) (not tags?))
                 [:div.grid.grid-cols-5.gap-1.items-center.leading-8
                  [:label.col-span-2 "Specify tags:"]
                  (class-select property (assoc opts :disabled? disabled?))])
-
 
               nil))
 
@@ -353,7 +353,7 @@
              [:div.col-span-3
               (closed-value/choices property opts)]])
 
-          (when (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position)
+          (when (and (db-property-type/property-type-allows-schema-attribute? (:type @*property-schema) :position) (not tags?))
             (let [position (:position @*property-schema)
                   choices (map
                            (fn [item]
@@ -387,15 +387,16 @@
                    (for [{:keys [label value]} choices]
                      (shui/select-item {:value value} label)))))]]))
 
-          (let [hide? (:hide? @*property-schema)]
-            [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-             [:label.col-span-2 "Hide by default:"]
-             (shui/checkbox
-              {:checked           hide?
-               :disabled          config/publishing?
-               :on-checked-change (fn []
-                                    (swap! *property-schema assoc :hide? (not hide?))
-                                    (save-property-fn))})])
+          (when (not tags?)
+            (let [hide? (:hide? @*property-schema)]
+              [:div.grid.grid-cols-5.gap-1.items-center.leading-8
+               [:label.col-span-2 "Hide by default:"]
+               (shui/checkbox
+                {:checked           hide?
+                 :disabled          config/publishing?
+                 :on-checked-change (fn []
+                                      (swap! *property-schema assoc :hide? (not hide?))
+                                      (save-property-fn))})]))
 
           (let [description (or @*property-description "")]
             [:div.grid.grid-cols-5.gap-1.items-start.leading-8
