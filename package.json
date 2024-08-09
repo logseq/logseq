@@ -17,7 +17,6 @@
         "del": "^6.0.0",
         "gulp": "^4.0.2",
         "gulp-clean-css": "^4.3.0",
-        "gulp-rename": "^2.0.0",
         "ip": "1.1.9",
         "npm-run-all": "^4.1.5",
         "playwright": "=1.44.0",
