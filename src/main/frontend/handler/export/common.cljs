@@ -13,7 +13,7 @@
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util :refer [concatv mapcatv removev]]
-            [frontend.worker.export :as worker-export]
+            [frontend.common.file.core :as common-file]
             [malli.core :as m]
             [malli.util :as mu]
             [promesa.core :as p]))
@@ -93,9 +93,9 @@
   [page-uuid]
   (let [repo (state/get-current-repo)
         db (db/get-db repo)]
-    (worker-export/block->content repo db page-uuid
-                                  nil
-                                  {:export-bullet-indentation (state/get-export-bullet-indentation)})))
+    (common-file/block->content repo db page-uuid
+                                nil
+                                {:export-bullet-indentation (state/get-export-bullet-indentation)})))
 
 (defn- page-name->ast
   [page-name]

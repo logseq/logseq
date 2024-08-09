@@ -8,6 +8,7 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
+            [frontend.common.file.core :as common-file]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.db-metadata :as worker-db-metadata]
             [frontend.worker.db.migrate :as db-migrate]
@@ -601,9 +602,9 @@
    (assert (common-util/uuid-string? block-uuid-str))
    (let [block-uuid (uuid block-uuid-str)]
      (when-let [conn (worker-state/get-datascript-conn repo)]
-       (worker-export/block->content repo @conn block-uuid
-                                     (ldb/read-transit-str tree->file-opts)
-                                     (ldb/read-transit-str context)))))
+       (common-file/block->content repo @conn block-uuid
+                                   (ldb/read-transit-str tree->file-opts)
+                                   (ldb/read-transit-str context)))))
 
   (get-all-pages
    [this repo]

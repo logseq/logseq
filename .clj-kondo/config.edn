@@ -55,6 +55,8 @@
              frontend.components.class class-component
              frontend.components.property property-component
              frontend.common.date common-date
+             frontend.common.file.core common-file
+             frontend.common.file.util wfu
              frontend.common.missionary-util c.m
              frontend.common.schema-register sr
              frontend.common.search-fuzzy fuzzy
@@ -134,9 +136,6 @@
              frontend.worker.util worker-util
              frontend.worker.state worker-state
              frontend.worker.handler.page worker-page
-             frontend.worker.handler.page.rename worker-page-rename
-             frontend.worker.handler.file.util wfu
-             logseq.outliner.batch-tx batch-tx
              lambdaisland.glogi log
              logseq.common.config common-config
              logseq.common.graph common-graph
@@ -169,6 +168,7 @@
              logseq.graph-parser.block gp-block
              logseq.graph-parser.mldoc gp-mldoc
              logseq.graph-parser.property gp-property
+             logseq.outliner.batch-tx batch-tx
              logseq.outliner.core outliner-core
              logseq.outliner.op outliner-op
              logseq.outliner.pipeline outliner-pipeline

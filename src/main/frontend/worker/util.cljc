@@ -6,8 +6,8 @@
                      [goog.crypt :as crypt]
                      [goog.crypt.Hmac]
                      [goog.crypt.Sha256]
-                     [logseq.db :as ldb]
-                     [logseq.db.sqlite.common-db :as sqlite-common-db])))
+                     [logseq.db.sqlite.common-db :as sqlite-common-db]
+                     [frontend.common.file.util :as wfu])))
 
 ;; Copied from https://github.com/tonsky/datascript-todo
 #?(:clj
@@ -23,10 +23,7 @@
 
 #?(:cljs
    (do
-     (defn post-message
-       [type data]
-       (when (exists? js/self)
-         (.postMessage js/self (ldb/write-transit-str [type data]))))
+     (def post-message wfu/post-message)
 
      (defn get-pool-name
        [graph-name]

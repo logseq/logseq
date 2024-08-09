@@ -21,8 +21,7 @@
     (println cmd)
     (shell cmd)))
 
-(defn worker-and-frontend-separate
-  "Ensures worker is independent of frontend"
+(defn- validate-frontend-not-in-worker
   []
   (let [res (shell {:out :string}
                    "git grep -h" "\\[frontend.*:as" "src/main/frontend/worker")
@@ -32,8 +31,26 @@
 
     (if (seq req-lines)
       (do
-        (println "The following requires should not be in worker namespaces:")
+        (println "The following frontend requires should not be in worker namespaces:")
         (println (string/join "\n" req-lines))
         (System/exit 1))
-      (println "Success!"))))
+      (println "Valid worker namespaces!"))))
+
+(defn- validate-worker-not-in-frontend
+  []
+  (let [res (shell {:out :string :continue true}
+                   "grep -r --exclude-dir=worker" "\\[frontend.worker.*:" "src/main/frontend")
+        req-lines (->> (:out res) string/split-lines)]
+    (if-not (and (= 1 (:exit res)) (= "" (:out res)))
+      (do
+        (println "The following worker requires should not be in frontend namespaces:")
+        (println (:out res))
+        (System/exit 1))
+      (println "Valid frontend namespaces!"))))
+
+(defn worker-and-frontend-separate
+  "Ensures worker is independent of frontend"
+  []
+  (validate-frontend-not-in-worker)
+  (validate-worker-not-in-frontend))
 

@@ -1,14 +1,16 @@
-(ns frontend.worker.file.core
-  "Save file to disk. Used by both file and DB graphs"
+(ns frontend.common.file.core
+  "Save file to disk. Used by both file and DB graphs and shared
+   by worker and frontend namespaces"
   (:require [clojure.string :as string]
-            [frontend.worker.file.util :as wfu]
+            [frontend.common.file.util :as wfu]
             [logseq.graph-parser.property :as gp-property]
             [logseq.common.path :as path]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [frontend.common.date :as common-date]
-            [frontend.worker.util :as worker-util]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.outliner.tree :as otree]))
 
 (defonce *writes (atom {}))
 (defonce *request-id (atom 0))
@@ -174,10 +176,10 @@
                      (let [files [[file-path new-content]]]
                        (when (seq files)
                          (let [page-id (:db/id page-block)]
-                           (worker-util/post-message :write-files {:request-id request-id
-                                                                   :page-id page-id
-                                                                   :repo repo
-                                                                   :files files})
+                           (wfu/post-message :write-files {:request-id request-id
+                                                           :page-id page-id
+                                                           :repo repo
+                                                           :files files})
                            :sent)))))
                  ;; In e2e tests, "card" page in db has no :file/path
                  (js/console.error "File path from page-block is not valid" page-block tree))]
@@ -195,3 +197,18 @@
       (if file
         (ok-handler)
         (transact-file-tx-if-not-exists! conn page-block ok-handler context)))))
+
+(defn block->content
+  "Converts a block including its children (recursively) to plain-text."
+  [repo db root-block-uuid tree->file-opts context]
+  (assert (uuid? root-block-uuid))
+  (let [init-level (or (:init-level tree->file-opts)
+                       (if (ldb/page? (d/entity db [:block/uuid root-block-uuid]))
+                         0
+                         1))
+        blocks (->> (d/pull-many db '[*] (keep :db/id (ldb/get-block-and-children db root-block-uuid)))
+                    (map #(db-content/update-block-content db % (:db/id %))))
+        tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
+    (tree->file-content repo db tree
+                        (assoc tree->file-opts :init-level init-level)
+                        context)))

@@ -1,26 +1,10 @@
 (ns frontend.worker.export
   "Export data"
   (:require [datascript.core :as d]
-            [frontend.worker.file.core :as worker-file]
+            [frontend.common.file.core :as common-file]
             [logseq.db :as ldb]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.outliner.tree :as otree]
-            [logseq.db.frontend.content :as db-content]))
-
-(defn block->content
-  "Converts a block including its children (recursively) to plain-text."
-  [repo db root-block-uuid tree->file-opts context]
-  (assert (uuid? root-block-uuid))
-  (let [init-level (or (:init-level tree->file-opts)
-                       (if (ldb/page? (d/entity db [:block/uuid root-block-uuid]))
-                         0
-                         1))
-        blocks (->> (d/pull-many db '[*] (keep :db/id (ldb/get-block-and-children db root-block-uuid)))
-                    (map #(db-content/update-block-content db % (:db/id %))))
-        tree (otree/blocks->vec-tree repo db blocks (str root-block-uuid))]
-    (worker-file/tree->file-content repo db tree
-                                    (assoc tree->file-opts :init-level init-level)
-                                    context)))
+            [logseq.outliner.tree :as otree]))
 
 (defn- safe-keywordize
   [block]
@@ -64,4 +48,4 @@
        (map (fn [d]
               (let [e (d/entity db (:e d))]
                 [(:block/title e)
-                 (block->content repo db (:block/uuid e) {} {})])))))
+                 (common-file/block->content repo db (:block/uuid e) {} {})])))))
