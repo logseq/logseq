@@ -47,16 +47,16 @@
   [page-entity filters filtered-ref-blocks]
   (let [*ref (rum/use-ref nil)]
     [:div.references-blocks.faster.fade-in {:ref *ref}
-    (let [ref-hiccup (block/->hiccup filtered-ref-blocks
-                                     {:id (:block/title page-entity)
-                                      :scroll-container *ref
-                                      :ref? true
-                                      :breadcrumb-show? true
-                                      :group-by-page? true
-                                      :editor-box editor/box
-                                      :filters filters}
-                                     {})]
-      (content/content (:block/title page-entity) {:hiccup ref-hiccup}))]))
+     (let [ref-hiccup (block/->hiccup filtered-ref-blocks
+                                      {:id (str (:block/uuid page-entity))
+                                       :scroll-container *ref
+                                       :ref? true
+                                       :breadcrumb-show? true
+                                       :group-by-page? true
+                                       :editor-box editor/box
+                                       :filters filters}
+                                      {})]
+       (content/content (str (:block/uuid page-entity)) {:hiccup ref-hiccup}))]))
 
 (rum/defc references-cp
   [page-entity *filters total filter-n filtered-ref-blocks *ref-pages]

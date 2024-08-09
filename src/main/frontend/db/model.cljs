@@ -632,7 +632,6 @@ independent of format as format specific heading characters are stripped"
           :entities
           (remove (fn [block]
                     (or
-                     (= (:db/id (:block/link block)) eid)
                      (= (:db/id block) eid)
                      (= eid (:db/id (:block/page block)))
                      (ldb/hidden? (:block/page block))

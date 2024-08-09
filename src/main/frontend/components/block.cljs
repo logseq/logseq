@@ -3071,10 +3071,10 @@
                                                (= (:block/uuid block) (:embed-id config)))
                                           table?)]
            (block-content-or-editor config block
-                                    {:edit-input-id edit-input-id
-                                     :block-id block-id
-                                     :edit? editing?
-                                     :hide-block-refs-count? hide-block-refs-count?}))])
+                                     {:edit-input-id edit-input-id
+                                      :block-id block-id
+                                      :edit? editing?
+                                      :hide-block-refs-count? hide-block-refs-count?}))])
 
       (when (and @*show-right-menu? (not in-whiteboard?) (not table?))
         (block-right-menu config block editing?))]
