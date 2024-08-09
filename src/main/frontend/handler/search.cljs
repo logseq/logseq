@@ -2,6 +2,7 @@
   "Provides util handler fns for search"
   (:require [clojure.string :as string]
             [frontend.config :as config]
+            [frontend.common.search-fuzzy :as fuzzy]
             [frontend.db :as db]
             [frontend.handler.notification :as notification]
             [frontend.search :as search]
@@ -123,8 +124,8 @@
     content
     (when (and content q)
       (let [q-words (string/split q #" ")
-            lc-content (util/search-normalize content (state/enable-search-remove-accents?))
-            lc-q (util/search-normalize q (state/enable-search-remove-accents?))]
+            lc-content (fuzzy/search-normalize content (state/enable-search-remove-accents?))
+            lc-q (fuzzy/search-normalize q (state/enable-search-remove-accents?))]
         (if (and (string/includes? lc-content lc-q)
                  (not (util/safe-re-find #" " q)))
           (let [i (string/index-of lc-content lc-q)
@@ -140,8 +141,8 @@
                                 result []]
                            (if (and (seq words) content)
                              (let [word (first words)
-                                   lc-word (util/search-normalize word (state/enable-search-remove-accents?))
-                                   lc-content (util/search-normalize content (state/enable-search-remove-accents?))]
+                                   lc-word (fuzzy/search-normalize word (state/enable-search-remove-accents?))
+                                   lc-content (fuzzy/search-normalize content (state/enable-search-remove-accents?))]
                                (if-let [i (string/index-of lc-content lc-word)]
                                  (recur (rest words)
                                         (subs content (+ i (count word)))

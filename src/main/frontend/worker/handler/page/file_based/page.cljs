@@ -9,7 +9,7 @@
             [logseq.graph-parser.text :as text]
             [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [frontend.worker.date :as date]
+            [frontend.common.date :as common-date]
             [logseq.db.frontend.order :as db-order]))
 
 (defn- file-based-properties-block
@@ -74,7 +74,7 @@
                            :as options}]
   (let [date-formatter (common-config/get-date-formatter config)
         split-namespace? (not (or (string/starts-with? title "hls__")
-                                  (date/valid-journal-title? date-formatter title)))
+                                  (common-date/valid-journal-title? date-formatter title)))
         [title page-name] (get-title-and-pagename title)]
     (when-not (ldb/get-page @conn page-name)
       (let [pages    (if split-namespace?

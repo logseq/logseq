@@ -9,6 +9,7 @@
             [cljs-time.core :as t]
             [cljs-time.coerce :as tc]
             [frontend.worker.util :as worker-util]
+            [frontend.common.async-util :as async-util]
             [datascript.core :as d]
             [logseq.db :as ldb]
             [malli.core :as m]
@@ -116,7 +117,7 @@
 
 (defn <ratelimit-file-writes!
   []
-  (worker-util/<ratelimit file-writes-chan batch-write-interval
+  (async-util/<ratelimit file-writes-chan batch-write-interval
                           :filter-fn (fn [_] true)
                           :flush-fn
                           (fn [col]

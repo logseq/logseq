@@ -1,7 +1,5 @@
 {:paths ["src"]
  :api-namespaces [logseq.common.path
-                  logseq.common.fractional-index
-                  logseq.common.missionary-util
                   logseq.common.uuid
                   logseq.common.util.page-ref
                   logseq.common.util.block-ref

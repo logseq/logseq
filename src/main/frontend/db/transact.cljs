@@ -3,7 +3,7 @@
   (:require [clojure.core.async :as async]
             [clojure.core.async.interop :refer [p->c]]
             [promesa.core :as p]
-            [frontend.worker.async-util :include-macros true :refer [<?]]))
+            [frontend.common.async-util :include-macros true :refer [<?]]))
 
 (defonce *request-id (atom 0))
 (defonce requests (async/chan 1000))

@@ -6,7 +6,7 @@
             [logseq.common.path :as path]
             [datascript.core :as d]
             [logseq.db :as ldb]
-            [frontend.worker.date :as worker-date]
+            [frontend.common.date :as common-date]
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]))
 
@@ -136,11 +136,11 @@
           title (string/capitalize (:block/name page-block))
           whiteboard-page? (ldb/whiteboard? page-block)
           format (if whiteboard-page? "edn" format)
-          journal-page? (worker-date/valid-journal-title? title date-formatter)
-          journal-title (worker-date/normalize-journal-title title date-formatter)
+          journal-page? (common-date/valid-journal-title? title date-formatter)
+          journal-title (common-date/normalize-journal-title title date-formatter)
           journal-page? (and journal-page? (not (string/blank? journal-title)))
           filename (if journal-page?
-                     (worker-date/date->file-name journal-title (:journal-file-name-format context))
+                     (common-date/date->file-name journal-title (:journal-file-name-format context))
                      (-> (or (:block/title page-block) (:block/name page-block))
                          wfu/file-name-sanity))
           sub-dir (cond

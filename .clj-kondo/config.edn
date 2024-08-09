@@ -54,6 +54,10 @@
              frontend.components.query.result query-result
              frontend.components.class class-component
              frontend.components.property property-component
+             frontend.common.date common-date
+             frontend.common.missionary-util c.m
+             frontend.common.schema-register sr
+             frontend.common.search-fuzzy fuzzy
              frontend.config config
              frontend.date date
              frontend.db db
