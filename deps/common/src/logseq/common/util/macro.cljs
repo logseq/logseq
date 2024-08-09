@@ -2,8 +2,8 @@
   "Core vars and util fns for user macros e.g. {{foo}}"
   (:require [clojure.string :as string]))
 
-(def left-braces "Opening characters for block-ref" "{{")
-(def right-braces "Closing characters for block-ref" "}}")
+(def left-braces "Opening characters for macro" "{{")
+(def right-braces "Closing characters for macro" "}}")
 
 (defn macro?
   [*s]
