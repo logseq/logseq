@@ -82,14 +82,9 @@
   [content refs]
   (reduce
    (fn [content ref]
-     (string/replace content
-                     (str page-ref/left-brackets
-                          (:block/title ref)
-                          page-ref/right-brackets)
-                     (str page-ref/left-brackets
-                          page-ref-special-chars
-                          (:block/uuid ref)
-                          page-ref/right-brackets)))
+     (-> content
+         (string/replace (str page-ref/left-brackets (:block/title ref) page-ref/right-brackets)
+                         (str page-ref/left-brackets page-ref-special-chars (:block/uuid ref) page-ref/right-brackets))))
    content
    refs))
 
@@ -105,31 +100,34 @@
 
 (defn content-without-tags
   "Remove tags from content"
-  [content tags]
+  [content refs]
   (->
    (reduce
-    (fn [content tag]
+    (fn [content ref]
       (-> content
-          (string/replace (str "#" tag " ") "")
-          (string/replace (str "#" tag) "")
-          (string/replace (str "#" page-ref/left-brackets tag page-ref/right-brackets " ") "")
-          (string/replace (str "#" page-ref/left-brackets tag page-ref/right-brackets) "")))
+          (string/replace (str "#" page-ref-special-chars (:block/uuid ref))
+                          (block-id->special-id-ref (:block/uuid ref)))
+          (string/replace (str "#" (block-id->special-id-ref (:block/uuid ref)))
+                          (block-id->special-id-ref (:block/uuid ref)))))
     content
-    tags)
+    refs)
    (string/trim)))
 
 (defn replace-tags-with-page-refs
   "Replace tags in content with page-ref ids. Ignore case because tags in
   content can have any case and still have a valid ref"
   [content tags]
-  (reduce
-   (fn [content tag]
-     (common-util/replace-ignore-case
-      content
-      (str "#" (:block/title tag))
-      (str page-ref/left-brackets
-           page-ref-special-chars
-           (:block/uuid tag)
-           page-ref/right-brackets)))
-   content
-   (sort-by :block/title > tags)))
+  (->>
+   (reduce
+    (fn [content tag]
+      (let [id-ref (block-id->special-id-ref (:block/uuid tag))]
+        (-> content
+           ;; #[[favorite book]]
+            (common-util/replace-ignore-case
+             (str "#" page-ref/left-brackets (:block/title tag) page-ref/right-brackets)
+             id-ref)
+          ;; #book
+            (common-util/replace-ignore-case (str "#" (:block/title tag)) id-ref))))
+    content
+    (sort-by :block/title > tags))
+   (string/trim)))
