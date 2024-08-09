@@ -604,13 +604,14 @@
   (let [page-title (str page-uuid-or-title)]
     (when-not (string/blank? page-title)
       (when-let [page (db/get-page page-title)]
-        (when (db/page-empty? (state/get-current-repo) (:db/id page))
-          (let [format (or (:block/format page) (state/get-preferred-format))
-                new-block {:block/title ""
-                           :block/format format}]
-            (ui-outliner-tx/transact!
-             {:outliner-op :insert-blocks}
-             (outliner-op/insert-blocks! [new-block] page {:sibling? false}))))))))
+        (let [class-or-property? (or (ldb/class? page) (ldb/property? page))]
+          (when (or class-or-property? (db/page-empty? (state/get-current-repo) (:db/id page)))
+           (let [format (or (:block/format page) (state/get-preferred-format))
+                 new-block {:block/title ""
+                            :block/format format}]
+             (ui-outliner-tx/transact!
+              {:outliner-op :insert-blocks}
+              (outliner-op/insert-blocks! [new-block] page {:sibling? false})))))))))
 
 (defn update-timestamps-content!
   [{:block/keys [repeated? marker format] :as block} content]
