@@ -2,7 +2,7 @@
   "State hub for worker"
   (:require [logseq.common.util :as common-util]
             [logseq.common.config :as common-config]
-            [frontend.schema-register :include-macros true :as sr]))
+            [frontend.common.schema-register :include-macros true :as sr]))
 
 (sr/defkeyword :undo/repo->page-block-uuid->undo-ops
   "{repo {<page-block-uuid> [op1 op2 ...]}}")

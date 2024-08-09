@@ -30,7 +30,7 @@
                         {:entries [frontend.extensions.tldraw]
                          :depends-on #{:main}}
                         :db-worker
-                        {:init-fn frontend.db-worker/init
+                        {:init-fn frontend.worker.db-worker/init
                          :depends-on #{:shared}
                          :web-worker true}}
 
@@ -118,7 +118,7 @@
                                {:entries    [frontend.extensions.tldraw]
                                 :depends-on #{:main}}
                                :db-worker
-                               {:init-fn   frontend.db-worker/init
+                               {:init-fn   frontend.worker.db-worker/init
                                 :depends-on #{:shared}
                                 :web-worker true}}
 

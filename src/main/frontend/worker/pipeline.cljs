@@ -1,7 +1,7 @@
 (ns frontend.worker.pipeline
   "Pipeline work after transaction"
   (:require [datascript.core :as d]
-            [frontend.schema-register :as sr]
+            [frontend.common.schema-register :as sr]
             [frontend.worker.file :as file]
             [frontend.worker.react :as worker-react]
             [frontend.worker.state :as worker-state]

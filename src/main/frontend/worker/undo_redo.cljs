@@ -2,7 +2,7 @@
   "undo/redo related fns and op-schema"
   (:require [clojure.set :as set]
             [datascript.core :as d]
-            [frontend.schema-register :include-macros true :as sr]
+            [frontend.common.schema-register :include-macros true :as sr]
             [logseq.outliner.batch-tx :include-macros true :as batch-tx]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.state :as worker-state]

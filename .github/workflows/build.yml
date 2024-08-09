@@ -120,6 +120,9 @@ jobs:
       - name: Lint invalid translation entries
         run: bb lang:validate-translations
 
+      - name: Lint to keep worker independent of frontend
+        run: bb lint:worker-and-frontend-separate
+
       - name: Lint to keep db and file graph code separate
         run: bb lint:db-and-file-graphs-separate
 

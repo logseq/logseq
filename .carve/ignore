@@ -81,7 +81,7 @@ frontend.ui/_emoji-init-data
 ;; placeholder var for defonce
 frontend.worker.rtc.op-mem-layer/_sync-loop-canceler
 ;; Used by shadow.cljs
-frontend.db-worker/init
+frontend.worker.db-worker/init
 ;; WIP fn, remove when it's ready
 frontend.worker.rtc.asset-sync/<loop-for-assets-sync
 ;; Future use?

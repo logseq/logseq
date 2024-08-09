@@ -1,5 +1,5 @@
 (ns frontend.common.missionary-util
-  "Utils based on missionary."
+  "Utils based on missionary. Used by frontend and worker namespaces"
   (:require-macros [frontend.common.missionary-util])
   (:require [clojure.core.async :as a]
             [missionary.core :as m])

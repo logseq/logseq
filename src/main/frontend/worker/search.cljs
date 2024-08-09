@@ -6,7 +6,7 @@
             ["fuse.js" :as fuse]
             [goog.object :as gobj]
             [datascript.core :as d]
-            [frontend.search.fuzzy :as fuzzy]
+            [frontend.common.search-fuzzy :as fuzzy]
             [frontend.worker.util :as worker-util]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]

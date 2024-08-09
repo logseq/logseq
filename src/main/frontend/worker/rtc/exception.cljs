@@ -1,6 +1,6 @@
 (ns frontend.worker.rtc.exception
   "Exception list"
-  (:require [frontend.schema-register :as sr]))
+  (:require [frontend.common.schema-register :as sr]))
 
 (sr/defkeyword :rtc.exception/remote-graph-not-exist
   "Remote exception. e.g. push client-updates to a deleted graph.")

@@ -11,7 +11,7 @@
             [frontend.log]
             [frontend.page :as page]
             [frontend.routes :as routes]
-            [frontend.schema-register :as sr]
+            [frontend.common.schema-register :as sr]
             [frontend.spec]
             [logseq.api]
             [malli.dev.cljs :as md]
@@ -49,7 +49,7 @@
 (defn ^:export start []
   (when config/dev?
     (md/start!))
-  (frontend.schema-register/init)
+  (frontend.common.schema-register/init)
   (when-let [node (.getElementById js/document "root")]
     (set-router!)
     (rum/mount (page/current-page) node)

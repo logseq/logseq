@@ -7,7 +7,7 @@ This page describes development practices for this codebase.
 Most of our linters require babashka. Before running them, please [install babashka](https://github.com/babashka/babashka#installation). To invoke all the linters in this section, run
 
 ```sh
-bb dev:lint
+bb lint:dev
 ```
 
 ### Clojure code
@@ -119,6 +119,15 @@ $ bb lint:db-and-file-graphs-separate
 ```
 
 The main convention is that file and db specific files go under directories named `file_based` and `db_based` respectively. To see the full list of file and db specific namespaces and files see the top of [the script](/scripts/src/logseq/tasks/dev/db_and_file_graphs.clj).
+
+### Separate Worker from Frontend
+
+The worker and frontend code share common code from deps/ and `frontend.common.*`. However, the worker should never depend on other frontend namespaces as it could pull in libraries like React which cause it to fail hard. Run this linter to ensure worker namespaces are not dependent on other frontend namespaces:
+
+```
+$ bb lint:worker-and-frontend-separate
+Success!
+```
 
 ## Testing
 
