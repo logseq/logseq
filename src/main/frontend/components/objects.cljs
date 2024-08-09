@@ -13,7 +13,8 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [frontend.modules.outliner.ui :as ui-outliner-tx]
-            [frontend.modules.outliner.op :as outliner-op]))
+            [frontend.modules.outliner.op :as outliner-op]
+            [frontend.db.react :as react]))
 
 (defn- get-class-objects
   [class]
@@ -51,14 +52,17 @@
 
     (rum/use-effect!
      (fn []
-       (set-loading? true)
-       (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id class))
-               views (get-views class)]
-         (when-let [view (first views)]
-           (set-view-entity! view))
-         (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
-           (set-data! (get-class-objects class))
-           (set-loading? false))))
+       (when (nil? loading?)
+         (set-loading? true)
+         (p/let [_result (db-async/<get-views (state/get-current-repo) (:db/id class))
+                 views (get-views class)]
+           (when-let [view (first views)]
+             (set-view-entity! view))
+           (p/let [_result (db-async/<get-tag-objects (state/get-current-repo) (:db/id class))]
+             (react/refresh! (state/get-current-repo)
+                             [[:frontend.worker.react/objects (:db/id class)]])
+             (set-data! (get-class-objects class))
+             (set-loading? false)))))
      [])
 
     (when (false? loading?)
