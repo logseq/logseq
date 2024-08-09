@@ -792,8 +792,7 @@ independent of format as format specific heading characters are stripped"
   [repo class-id]
   (when class-id
     (-> (react/q repo [:frontend.worker.react/objects class-id]
-                 {:query-fn (fn [_]
-                              (get-class-objects repo class-id))}
+                 {:query-fn (fn [_] (get-class-objects repo class-id))}
                  nil)
         react)))
 
