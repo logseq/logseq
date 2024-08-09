@@ -103,16 +103,7 @@
                    (replace-page-refs-with-ids))]
     (-> result
         ;; Remove tags from content
-        (assoc :block/title
-               (db-content/content-without-tags
-                (:block/title result)
-                (->>
-                 (map
-                  (fn [tag]
-                    (when (:block/uuid tag)
-                      (str db-content/page-ref-special-chars (:block/uuid tag))))
-                  (:block/tags (db/entity (:db/id block))))
-                 (remove nil?)))))))
+        (assoc :block/title (db-content/content-without-tags (:block/title result) (:block/refs result))))))
 
 (defn save-file!
   "This fn is the db version of file-handler/alter-file"
