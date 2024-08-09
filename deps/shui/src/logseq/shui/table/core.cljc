@@ -169,7 +169,7 @@
             ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
             ^js page-el (.closest target ".page-inner")
             *ticking? (volatile! false)
-            *el-top (volatile! 128)
+            *el-top (volatile! (-> target (.getBoundingClientRect) (.-top)))
             head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
             update-target-top! (fn []
                                  (when (not (.contains target-cls "ls-fixed"))
@@ -207,7 +207,7 @@
         ;; events
         (.observe resize-observer container)
         (.observe resize-observer table)
-        (.observe page-resize-observer page-el)
+        (some->> page-el (.observe page-resize-observer))
         (.addEventListener container "scroll" target-observe!)
         (.addEventListener table "scroll" update-target!)
         (.addEventListener table "resize" update-target!)
