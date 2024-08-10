@@ -28,6 +28,7 @@
             [promesa.core :as p]
             [rum.core :as rum]
             [logseq.shui.ui :as shui]
+            [logseq.shui.dialog.core :as shui-dialog]
             [lambdaisland.glogi :as log]
             [logseq.db.frontend.validate :as db-validate]
             [logseq.db :as ldb]))
@@ -40,6 +41,7 @@
 (defn- finished-cb
   []
   (notification/show! "Import finished!" :success)
+  (shui/dialog-close! :import-indicator)
   (ui-handler/re-render-root!)
   (route-handler/redirect-to-home!))
 
@@ -375,91 +377,110 @@
                                     :else
                                     (import-graph-fn user-inputs)))))))
 
+(rum/defc indicator-progress < rum/reactive
+  []
+  (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
+        left-label (if (and current-idx total (= current-idx total))
+                     [:div.flex.flex-row.font-bold "Loading ..."]
+                     [:div.flex.flex-row.font-bold
+                      (t :importing)
+                      [:div.hidden.md:flex.flex-row
+                       [:span.mr-1 ": "]
+                       [:div.text-ellipsis-wrapper {:style {:max-width 300}}
+                        current-page]]])
+        width (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
+        process (when (and total current-idx)
+                  (str current-idx "/" total))]
+    [:div.p-5
+     (ui/progress-bar-with-label width left-label process)]))
 
-  (rum/defc importer < rum/reactive
+(rum/defc import-indicator
+  [importing?]
+  (rum/use-effect!
+    (fn []
+      (when (and importing? (not (shui-dialog/get-modal :import-indicator)))
+        (shui/dialog-open! indicator-progress
+          {:id :import-indicator
+           :content-props
+           {:onPointerDownOutside #(.preventDefault %)
+            :onOpenAutoFocus #(.preventDefault %)}})))
+    [importing?])
+  [:<>])
+
+(rum/defc importer < rum/reactive
   [{:keys [query-params]}]
-  (let [support-file-based? (config/local-file-based-graph? (state/get-current-repo))]
-    (if (state/sub :graph/importing)
-      (let [{:keys [total current-idx current-page]} (state/sub :graph/importing-state)
-            left-label (if (and current-idx total (= current-idx total))
-                         [:div.flex.flex-row.font-bold "Loading UI ..."]
-                         [:div.flex.flex-row.font-bold
-                          (t :importing)
-                          [:div.hidden.md:flex.flex-row
-                           [:span.mr-1 ": "]
-                           [:div.text-ellipsis-wrapper {:style {:max-width 300}}
-                            current-page]]])
-            width (js/Math.round (* (.toFixed (/ current-idx total) 2) 100))
-            process (when (and total current-idx)
-                      (str current-idx "/" total))]
-        (ui/progress-bar-with-label width left-label process))
-      (setups/setups-container
-       :importer
-       [:article.flex.flex-col.items-center.importer.py-16.px-8
-        [:section.c.text-center
-         [:h1 (t :on-boarding/importing-title)]
-         [:h2 (t :on-boarding/importing-desc)]]
-        [:section.d.md:flex.flex-col
-         [:label.action-input.flex.items-center.mx-2.my-2
-          [:span.as-flex-center [:i (svg/logo 28)]]
-          [:span.flex.flex-col
-           [[:strong "SQLite"]
-            [:small (t :on-boarding/importing-sqlite-desc)]]]
-          [:input.absolute.hidden
-           {:id "import-sqlite-db"
-            :type "file"
-            :on-change (fn [e]
-                         (shui/dialog-open!
-                           #(set-graph-name-dialog e {:sqlite? true})))}]]
-
-         (when (or (util/electron?) util/web-platform?)
+  (let [support-file-based? (config/local-file-based-graph? (state/get-current-repo))
+        importing? (state/sub :graph/importing)]
+    [:<>
+     (import-indicator importing?)
+     (when-not importing?
+       (setups/setups-container
+         :importer
+         [:article.flex.flex-col.items-center.importer.py-16.px-8
+          [:section.c.text-center
+           [:h1 (t :on-boarding/importing-title)]
+           [:h2 (t :on-boarding/importing-desc)]]
+          [:section.d.md:flex.flex-col
            [:label.action-input.flex.items-center.mx-2.my-2
             [:span.as-flex-center [:i (svg/logo 28)]]
             [:span.flex.flex-col
-             [[:strong "File to DB graph"]
-              [:small  "Import a file-based Logseq graph folder into a new DB graph"]]]
+             [[:strong "SQLite"]
+              [:small (t :on-boarding/importing-sqlite-desc)]]]
             [:input.absolute.hidden
-             {:id        "import-file-graph"
-              :type      "file"
-              :webkitdirectory "true"
-              :on-change (debounce (fn [e]
-                                     (import-file-to-db-handler e {}))
-                                   1000)}]])
+             {:id "import-sqlite-db"
+              :type "file"
+              :on-change (fn [e]
+                           (shui/dialog-open!
+                             #(set-graph-name-dialog e {:sqlite? true})))}]]
 
-         (when (and (util/electron?) support-file-based?)
-           [:label.action-input.flex.items-center.mx-2.my-2
-            [:span.as-flex-center [:i (svg/logo 28)]]
-            [:span.flex.flex-col
-             [[:strong "EDN / JSON"]
-              [:small (t :on-boarding/importing-lsq-desc)]]]
-            [:input.absolute.hidden
-             {:id        "import-lsq"
-              :type      "file"
-              :on-change lsq-import-handler}]])
+           (when (or (util/electron?) util/web-platform?)
+             [:label.action-input.flex.items-center.mx-2.my-2
+              [:span.as-flex-center [:i (svg/logo 28)]]
+              [:span.flex.flex-col
+               [[:strong "File to DB graph"]
+                [:small "Import a file-based Logseq graph folder into a new DB graph"]]]
+              [:input.absolute.hidden
+               {:id "import-file-graph"
+                :type "file"
+                :webkitdirectory "true"
+                :on-change (debounce (fn [e]
+                                       (import-file-to-db-handler e {}))
+                             1000)}]])
 
-         (when (and (util/electron?) support-file-based?)
-           [:label.action-input.flex.items-center.mx-2.my-2
-            [:span.as-flex-center [:i (svg/roam-research 28)]]
-            [:div.flex.flex-col
-             [[:strong "RoamResearch"]
-              [:small (t :on-boarding/importing-roam-desc)]]]
-            [:input.absolute.hidden
-             {:id        "import-roam"
-              :type      "file"
-              :on-change roam-import-handler}]])
+           (when (and (util/electron?) support-file-based?)
+             [:label.action-input.flex.items-center.mx-2.my-2
+              [:span.as-flex-center [:i (svg/logo 28)]]
+              [:span.flex.flex-col
+               [[:strong "EDN / JSON"]
+                [:small (t :on-boarding/importing-lsq-desc)]]]
+              [:input.absolute.hidden
+               {:id "import-lsq"
+                :type "file"
+                :on-change lsq-import-handler}]])
 
-         (when (and (util/electron?) support-file-based?)
-           [:label.action-input.flex.items-center.mx-2.my-2
-            [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
-            [:span.flex.flex-col
-             [[:strong "OPML"]
-              [:small (t :on-boarding/importing-opml-desc)]]]
+           (when (and (util/electron?) support-file-based?)
+             [:label.action-input.flex.items-center.mx-2.my-2
+              [:span.as-flex-center [:i (svg/roam-research 28)]]
+              [:div.flex.flex-col
+               [[:strong "RoamResearch"]
+                [:small (t :on-boarding/importing-roam-desc)]]]
+              [:input.absolute.hidden
+               {:id "import-roam"
+                :type "file"
+                :on-change roam-import-handler}]])
 
-            [:input.absolute.hidden
-             {:id        "import-opml"
-              :type      "file"
-              :on-change opml-import-handler}]])]
+           (when (and (util/electron?) support-file-based?)
+             [:label.action-input.flex.items-center.mx-2.my-2
+              [:span.as-flex-center.ml-1 (ui/icon "sitemap" {:size 26})]
+              [:span.flex.flex-col
+               [[:strong "OPML"]
+                [:small (t :on-boarding/importing-opml-desc)]]]
 
-        (when (= "picker" (:from query-params))
-          [:section.e
-           [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])]))))
+              [:input.absolute.hidden
+               {:id "import-opml"
+                :type "file"
+                :on-change opml-import-handler}]])]
+
+          (when (= "picker" (:from query-params))
+            [:section.e
+             [:a.button {:on-click #(route-handler/redirect-to-home!)} "Skip"]])]))]))
