@@ -337,7 +337,7 @@
   []
   (or (state/get-whiteboards-directory) default-whiteboards-directory))
 
-(defonce demo-repo "Logseq demo")
+(defonce demo-repo "Demo")
 
 (defn demo-graph?
   "Demo graph or nil graph?"
@@ -401,48 +401,44 @@
 
 (defn get-repo-dir
   [repo-url]
-  (let [db-based? (db-based-graph? repo-url)]
-    (cond
-      (nil? repo-url)
-      (do
-        (js/console.error "BUG: nil repo")
-        nil)
+  (when repo-url
+    (let [db-based? (db-based-graph? repo-url)]
+      (cond
+        (and (util/electron?) db-based-graph?)
+        (get-local-dir repo-url)
 
-      (and (util/electron?) db-based-graph?)
-      (get-local-dir repo-url)
+        db-based?
+        (str "memory:///"
+             (string/replace-first repo-url db-version-prefix ""))
 
-      db-based?
-      (str "memory:///"
-           (string/replace-first repo-url db-version-prefix ""))
+        (and (util/electron?) (local-file-based-graph? repo-url))
+        (get-local-dir repo-url)
 
-      (and (util/electron?) (local-file-based-graph? repo-url))
-      (get-local-dir repo-url)
-
-      (and (mobile-util/native-platform?) (local-file-based-graph? repo-url))
-      (let [dir (get-local-dir repo-url)]
-        (if (string/starts-with? dir "file://")
-          dir
-          (path/path-join "file://" dir)))
+        (and (mobile-util/native-platform?) (local-file-based-graph? repo-url))
+        (let [dir (get-local-dir repo-url)]
+          (if (string/starts-with? dir "file://")
+            dir
+            (path/path-join "file://" dir)))
 
     ;; Special handling for demo graph
-      (= repo-url demo-repo)
-      "memory:///local"
+        (= repo-url demo-repo)
+        "memory:///local"
 
     ;; nfs, browser-fs-access
     ;; Format: logseq_local_{dir-name}
-      (local-file-based-graph? repo-url)
-      (string/replace-first repo-url local-db-prefix "")
+        (local-file-based-graph? repo-url)
+        (string/replace-first repo-url local-db-prefix "")
 
      ;; unit test
-      (= repo-url "test-db")
-      "/test-db"
+        (= repo-url "test-db")
+        "/test-db"
 
-      :else
-      (do
-        (js/console.error "Unknown Repo URL type:" repo-url)
-        (str "/"
-             (->> (take-last 2 (string/split repo-url #"/"))
-                  (string/join "_")))))))
+        :else
+        (do
+          (js/console.error "Unknown Repo URL type:" repo-url)
+          (str "/"
+               (->> (take-last 2 (string/split repo-url #"/"))
+                    (string/join "_"))))))))
 
 (defn get-string-repo-dir
   [repo-dir]

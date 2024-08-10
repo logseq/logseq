@@ -98,7 +98,7 @@
               [:p "You can also go to "
                [:a {:title "All graphs"
                     :on-click (fn []
-                                (set! (.-href js/window.location) (rfe/href :repos))
+                                (set! (.-href js/window.location) (rfe/href :graphs))
                                 (.reload js/window.location))}
                 "All graphs"]
                " to switch to another graph."])

@@ -39,7 +39,7 @@
 
 (defn get-all-pages
   [repo]
-  (let [db (conn/get-db repo)]
+  (when-let [db (conn/get-db repo)]
     (ldb/get-all-pages db)))
 
 (defn get-all-page-titles

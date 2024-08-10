@@ -50,7 +50,8 @@
 
 (defn db-based-graph?
   [graph-name]
-  (string/starts-with? graph-name db-version-prefix))
+  (when graph-name
+    (string/starts-with? graph-name db-version-prefix)))
 
 (defn local-file-based-graph?
   [s]

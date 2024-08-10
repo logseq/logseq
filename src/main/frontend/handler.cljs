@@ -24,7 +24,6 @@
             [frontend.handler.page :as page-handler]
             [frontend.handler.plugin-config :as plugin-config-handler]
             [frontend.handler.repo :as repo-handler]
-            [frontend.handler.file-based.repo :as file-repo-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.ui :as ui-handler]
             [frontend.handler.user :as user-handler]
@@ -42,7 +41,6 @@
             [cljs-bean.core :as bean]
             [frontend.handler.test :as test]
             [frontend.persist-db.browser :as db-browser]
-            [frontend.db.async :as db-async]
             [frontend.persist-db :as persist-db]))
 
 (defn- set-global-error-notification!
@@ -69,7 +67,7 @@
     (js/setInterval f 5000)))
 
 (defn restore-and-setup!
-  [repo repos]
+  [repo]
   (when repo
     (-> (p/let [_ (db-restore/restore-graph! repo)]
           (repo-config-handler/start {:repo repo}))
@@ -89,18 +87,7 @@
                 ;; install after config is restored
                 (shortcut/refresh!)
 
-                (p/let [files (db-async/<get-files config/demo-repo)]
-                  (cond
-                    (and (not (seq files))
-                         ;; Not native local directory
-                         (not (some config/local-file-based-graph? (map :url repos)))
-                         (not (mobile-util/native-platform?))
-                         (not (config/db-based-graph? repo)))
-                    ;; will execute `(state/set-db-restoring! false)` inside
-                    (file-repo-handler/setup-demo-repo-if-not-exists!)
-
-                    :else
-                    (state/set-db-restoring! false))))))))
+                (state/set-db-restoring! false))))))
         (p/then
          (fn []
            (js/console.log "db restored, setting up repo hooks")
@@ -199,7 +186,9 @@
                _ (state/set-repos! repos)
                _ (mobile-util/hide-splash) ;; hide splash as early as ui is stable
                repo (or (state/get-current-repo) (:url (first repos)))
-               _ (restore-and-setup! repo repos)]
+               _ (if (empty? repos)
+                   (repo-handler/new-db! config/demo-repo)
+                   (restore-and-setup! repo))]
          (when (util/electron?)
            (persist-db/run-export-periodically!))
          (when (mobile-util/native-platform?)

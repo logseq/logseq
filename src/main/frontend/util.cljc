@@ -984,14 +984,6 @@
 (defonce linux? #?(:cljs goog.userAgent/LINUX
                    :clj nil))
 
-(defn default-content-with-title
-  [text-format]
-  (case (name text-format)
-    "org"
-    "* "
-
-    "- "))
-
 #?(:cljs
    (defn get-first-block-by-id
      [block-id]

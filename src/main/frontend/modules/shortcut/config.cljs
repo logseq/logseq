@@ -430,7 +430,7 @@
                                                          (state/set-state! :ui/open-select :graph-remove))
                                              :binding []}
 
-   :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :repo-add}))
+   :graph/add                               {:fn      (fn [] (route-handler/redirect! {:to :graphs}))
                                              :binding []}
 
    :graph/db-add                            {:fn #(state/pub-event! [:graph/new-db-graph])
