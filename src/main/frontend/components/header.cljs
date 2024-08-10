@@ -246,15 +246,8 @@
 
 (rum/defc ^:large-vars/cleanup-todo header < rum/reactive
   [{:keys [open-fn current-repo default-home new-block-mode]}]
-  (let [repos (->> (state/sub [:me :repos])
-                   (remove #(= (:url %) config/demo-repo)))
-        _ (state/sub [:user/info :UserGroups])
+  (let [_ (state/sub [:user/info :UserGroups])
         electron-mac? (and util/mac? (util/electron?))
-        show-open-folder? (and (nfs/supported?)
-                               (or (empty? repos)
-                                   (nil? (state/sub :git/current-repo)))
-                               (not (mobile-util/native-platform?))
-                               (not config/publishing?))
         left-menu (left-menu-button {:on-click (fn []
                                                  (open-fn)
                                                  (state/set-left-sidebar-open!
@@ -331,14 +324,6 @@
 
       (when-not (mobile-util/native-platform?)
         (new-block-mode))
-
-      (when (and show-open-folder? (util/electron?))
-        [:a.text-sm.font-medium.button.icon.add-graph-btn.flex.items-center
-         {:on-click #(route-handler/redirect! {:to :repo-add})}
-         (ui/icon "folder-plus")
-         (when-not config/mobile?
-           [:span.ml-1 {:style {:margin-top (if electron-mac? 0 2)}}
-            (t :on-boarding/add-graph)])])
 
       (when config/publishing?
         [:a.text-sm.font-medium.button {:href (rfe/href :graph)}

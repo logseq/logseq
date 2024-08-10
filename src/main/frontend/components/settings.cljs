@@ -446,7 +446,7 @@
                           [:div (t :settings-page/custom-date-format-notification)]
                           :warning false)
                         (state/close-modal!)
-                        (route-handler/redirect! {:to :repos}))))}
+                        (route-handler/redirect! {:to :graphs}))))}
       (for [format (sort (date/journal-title-formatters))]
         [:option {:key format} format])]]]])
 

@@ -69,8 +69,6 @@
           ;; on the client to correctly identify it
             repo (cond
                    global-dir repo
-                 ;; FIXME(andelf): hack for demo graph, demo graph does not bind to local directory
-                   (string/starts-with? dir "memory://") "Logseq demo"
                    :else (config/get-local-repo dir))
             repo-dir (config/get-local-dir repo)
             {:keys [mtime ctime]} stat

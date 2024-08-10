@@ -205,7 +205,7 @@
                           [:div.mb-2 (t :select.graph/empty-placeholder-description)]
                           (ui/button
                            (t :select.graph/add-graph)
-                           :href (rfe/href :repo-add)
+                            :href (rfe/href :graphs)
                            :on-click state/close-modal!)])}
    :graph-remove
    {:items-fn (fn []

@@ -107,7 +107,7 @@
               _ (when (fn? picked-root-fn) (picked-root-fn root-dir))
               repo (str config/local-db-prefix root-dir)]
         (state/set-loading-files! repo true)
-        (when-not (or (state/home?) (state/setups-picker?))
+        (when-not (state/home?)
           (route-handler/redirect-to-home! false))
         (reset! *repo repo)
         (when-not (string/blank? root-dir)

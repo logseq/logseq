@@ -890,10 +890,6 @@ Similar to re-frame subscriptions"
   []
   (= :whiteboards (get-current-route)))
 
-(defn setups-picker?
-  []
-  (= :repo-add (get-current-route)))
-
 (defn get-current-page
   []
   (when (= :page (get-current-route))
@@ -907,8 +903,7 @@ Similar to re-frame subscriptions"
 (defn get-current-repo
   "Returns the current repo URL, or else open demo graph"
   []
-  (or (:git/current-repo @state)
-      "Logseq demo"))
+  (:git/current-repo @state))
 
 (defn get-remote-file-graphs
   []

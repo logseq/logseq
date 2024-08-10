@@ -43,7 +43,7 @@
 
 (defn redirect-to-all-graphs
   []
-  (redirect! {:to :repos}))
+  (redirect! {:to :graphs}))
 
 (defn redirect-to-whiteboard-dashboard!
   []
@@ -111,10 +111,8 @@
     "Logseq"
     :whiteboards
     (t :whiteboards)
-    :repos
-    "Repos"
-    :repo-add
-    "Add another repo"
+    :graphs
+    "Graphs"
     :graph
     (t :graph)
     :all-files

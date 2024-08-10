@@ -147,7 +147,7 @@ generated index.html string and assets used by the html"
         asset-filenames (remove nil? asset-filenames')
 
         db-str (dt/write-transit-str db)
-        repo-name (if db-graph? (str sqlite-util/db-version-prefix "Logseq demo") "Logseq demo")
+        repo-name (if db-graph? (str sqlite-util/db-version-prefix "Demo") "Demo")
         ;; The repo-name is used by the client and thus determines whether
         ;; it's a db graph or not
         state (assoc app-state

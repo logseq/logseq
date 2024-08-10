@@ -1,12 +1,8 @@
 (ns frontend.handler.file-based.repo
   "Repo fns for creating, loading and parsing file graphs"
-  (:require [clojure.string :as string]
-            [frontend.config :as config]
-            [frontend.context.i18n :refer [t]]
-            [frontend.date :as date]
+  (:require [frontend.config :as config]
             [frontend.db :as db]
             [frontend.fs :as fs]
-            [frontend.fs.nfs :as nfs]
             [frontend.handler.file :as file-handler]
             [frontend.handler.repo-config :as repo-config-handler]
             [frontend.handler.common.file :as file-common-handler]
@@ -22,7 +18,6 @@
             [clojure.core.async :as async]
             [medley.core :as medley]
             [logseq.common.path :as path]
-            [logseq.db :as ldb]
             [clojure.core.async.interop :refer [p->c]]))
 
 (defn- create-contents-file
@@ -56,48 +51,50 @@
       (when-not file-exists?
         (file-common-handler/reset-file! repo-url path default-content)))))
 
-(defn- create-dummy-notes-page
-  [repo-url content]
-  (spec/validate :repos/url repo-url)
-  (let [repo-dir (config/get-repo-dir repo-url)
-        file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
-    (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
-            _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
-      (file-common-handler/reset-file! repo-url file-rpath content))))
+(comment
+  (defn- create-dummy-notes-page
+   [repo-url content]
+   (spec/validate :repos/url repo-url)
+   (let [repo-dir (config/get-repo-dir repo-url)
+         file-rpath (str (config/get-pages-directory) "/how_to_make_dummy_notes.md")]
+     (p/let [_ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-pages-directory)))
+             _file-exists? (fs/create-if-not-exists repo-url repo-dir file-rpath content)]
+       (file-common-handler/reset-file! repo-url file-rpath content)))))
 
-(defn- create-today-journal-if-not-exists
-  [repo-url {:keys [content]}]
-  (spec/validate :repos/url repo-url)
-  (when (state/enable-journals? repo-url)
-    (let [repo-dir (config/get-repo-dir repo-url)
-          format (state/get-preferred-format repo-url)
-          title (date/today)
-          file-name (date/journal-title->default title)
-          default-content (util/default-content-with-title format)
-          template (state/get-default-journal-template)
-          template (when (and template
-                              (not (string/blank? template)))
-                     template)
-          content (cond
-                    content
-                    content
+(comment
+  (defn- create-today-journal-if-not-exists
+   [repo-url {:keys [content]}]
+   (spec/validate :repos/url repo-url)
+   (when (state/enable-journals? repo-url)
+     (let [repo-dir (config/get-repo-dir repo-url)
+           format (state/get-preferred-format repo-url)
+           title (date/today)
+           file-name (date/journal-title->default title)
+           default-content (util/default-content-with-title format)
+           template (state/get-default-journal-template)
+           template (when (and template
+                               (not (string/blank? template)))
+                      template)
+           content (cond
+                     content
+                     content
 
-                    template
-                    (str default-content template)
+                     template
+                     (str default-content template)
 
-                    :else
-                    default-content)
-          file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
-                                                                          (config/get-file-extension format)))
-          page-exists? (ldb/get-page (db/get-db) title)
-          empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
-      (when (or empty-blocks? (not page-exists?))
-        (p/let [_ (nfs/check-directory-permission! repo-url)
-                _ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
-                file-exists? (fs/file-exists? repo-dir file-rpath)]
-          (when-not file-exists?
-            (p/let [_ (file-common-handler/reset-file! repo-url file-rpath content)]
-              (fs/create-if-not-exists repo-url repo-dir file-rpath content))))))))
+                     :else
+                     default-content)
+           file-rpath (path/path-join (config/get-journals-directory) (str file-name "."
+                                                                           (config/get-file-extension format)))
+           page-exists? (ldb/get-page (db/get-db) title)
+           empty-blocks? (db/page-empty? repo-url (util/page-name-sanity-lc title))]
+       (when (or empty-blocks? (not page-exists?))
+         (p/let [_ (nfs/check-directory-permission! repo-url)
+                 _ (fs/mkdir-if-not-exists (path/path-join repo-dir (config/get-journals-directory)))
+                 file-exists? (fs/file-exists? repo-dir file-rpath)]
+           (when-not file-exists?
+             (p/let [_ (file-common-handler/reset-file! repo-url file-rpath content)]
+               (fs/create-if-not-exists repo-url repo-dir file-rpath content)))))))))
 
 
 (defn create-config-file-if-not-exists
@@ -337,38 +334,3 @@
                                                 :refresh? refresh?
                                                 :re-render-opts {:clear-all-query-state? true}))
             (load-contents add-or-modify-files options)))))))
-
-(defn- setup-demo-repo-if-not-exists-impl!
-  []
-  ;; loop query if js/window.pfs is ready, interval 100ms
-  (if js/window.pfs
-    (let [repo config/demo-repo
-          repo-dir (config/get-repo-dir repo)]
-      (p/do! (fs/mkdir-if-not-exists repo-dir) ;; create memory://local
-             (state/set-current-repo! repo)
-             (db/start-db-conn! repo {})
-             (when-not config/publishing?
-               (let [dummy-notes (t :tutorial/dummy-notes)]
-                 (create-dummy-notes-page repo dummy-notes)))
-             (when-not config/publishing?
-               (let [tutorial (t :tutorial/text)
-                     tutorial (string/replace-first tutorial "$today" (date/today))]
-                 (create-today-journal-if-not-exists repo {:content tutorial})))
-             (create-config-file-if-not-exists repo)
-             (create-contents-file repo)
-             (create-custom-theme repo)
-             (state/set-db-restoring! false)
-             (ui-handler/re-render-root!)))
-    (p/then (p/delay 100) ;; TODO Junyi remove the string
-            setup-demo-repo-if-not-exists-impl!)))
-
-(defn setup-demo-repo-if-not-exists!
-  "Setup demo repo, i.e. `demo-repo`"
-  []
-  ;; ensure `(state/set-db-restoring! false)` at exit
-  (-> (setup-demo-repo-if-not-exists-impl!)
-      (p/timeout 3000)
-      (p/catch (fn []
-                 (prn "setup-demo-repo failed! timeout 3000ms")))
-      (p/finally (fn []
-                   (state/set-db-restoring! false)))))

@@ -3,7 +3,6 @@
   (:require [frontend.components.file :as file]
             [frontend.components.home :as home]
             [frontend.components.journal :as journal]
-            [frontend.components.onboarding.setups :as setups]
             [frontend.components.page :as page]
             [frontend.components.all-pages :as all-pages]
             ;; [frontend.components.all-pages2 :as all-pages]
@@ -27,16 +26,12 @@
      :view home/home}]
 
    ["/graphs"
-    {:name :repos
+    {:name :graphs
      :view repo/repos}]
 
    ["/whiteboards"
     {:name :whiteboards
      :view whiteboard/whiteboard-dashboard}]
-
-   ["/repo/add"
-    {:name :repo-add
-     :view setups/picker}]
 
    ["/page/:name"
     {:name :page
