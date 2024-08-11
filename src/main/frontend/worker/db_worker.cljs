@@ -207,7 +207,7 @@
             initial-data-exists? (d/entity @conn :logseq.class/Root)]
         (swap! *datascript-conns assoc repo conn)
         (swap! *client-ops-conns assoc repo client-ops-conn)
-        (when-not initial-data-exists?
+        (when (and (sqlite-util/db-based-graph? repo) (not initial-data-exists?))
           (let [config (or config {})
                 initial-data (sqlite-create-graph/build-db-initial-data config)]
             (d/transact! conn initial-data {:initial-db? true})))
