@@ -124,10 +124,10 @@
              :value value
              :uuid (common-uuid/gen-uuid :db-ident-block-uuid db-ident)
              :icon {:type :tabler-icon :id icon}})
-          [[:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]
-           [:logseq.task/priority.high "High" "priorityLvlHigh"]
+          [[:logseq.task/priority.low "Low" "priorityLvlLow"]
            [:logseq.task/priority.medium "Medium" "priorityLvlMedium"]
-           [:logseq.task/priority.low "Low" "priorityLvlLow"]])}
+           [:logseq.task/priority.high "High" "priorityLvlHigh"]
+           [:logseq.task/priority.urgent "Urgent" "priorityLvlUrgent"]])}
    :logseq.task/deadline
    {:title "Deadline"
     :schema {:type :date
