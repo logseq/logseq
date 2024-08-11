@@ -20,16 +20,16 @@
   "Support multiple sorts"
   [rows sorting columns]
   (let [column-id->get-value (zipmap (map column-id columns)
-                                     (map :get-value columns))]
+                                     (map :get-value-for-sort columns))]
     (loop [[sorting-item & other-sorting] (reverse sorting)
            rows rows]
       (if sorting-item
         (let [{:keys [id asc?]} sorting-item
               rows' (sort-by
                      (fn [row]
-                       (let [get-value (or (get column-id->get-value id)
+                       (let [sort-value (or (get column-id->get-value id)
                                            (fn [row] (get row id)))]
-                         (get-value row)))
+                         (sort-value row)))
                      (if asc? compare #(compare %2 %1))
                      rows)]
           (recur other-sorting rows'))

@@ -152,7 +152,22 @@
              (let [ident (or (:id property) (:db/ident property))
                    property (if (de/entity? property)
                               property
-                              (or (db/entity ident) property))]
+                              (or (db/entity ident) property))
+                   get-value (or (:get-value property)
+                                 (when (de/entity? property)
+                                   (fn [row] (get-property-value-for-search row property))))
+                   closed-values (seq (:property/closed-values property))
+                   closed-value->sort-number (when closed-values
+                                               (->> (zipmap (map :db/id closed-values) (range 0 (count closed-values)))
+                                                    (into {})))
+                   get-value-for-sort (fn [row]
+                                        (cond
+                                          (= (:db/ident property) :logseq.task/deadline)
+                                          (:block/journal-day (get row :logseq.task/deadline))
+                                          closed-values
+                                          (closed-value->sort-number (:db/id (get row (:db/ident property))))
+                                          :else
+                                          (get-value row)))]
                {:id ident
                 :name (or (:name property)
                           (:block/title property))
@@ -162,9 +177,8 @@
                           (when (de/entity? property)
                             (fn [_table row _column]
                               (pv/property-value row property (get row (:db/ident property)) {:container-id container-id}))))
-                :get-value (or (:get-value property)
-                               (when (de/entity? property)
-                                 (fn [row] (get-property-value-for-search row property))))
+                :get-value get-value
+                :get-value-for-sort get-value-for-sort
                 :type (:type property)}))
            properties)
 
