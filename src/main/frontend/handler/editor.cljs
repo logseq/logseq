@@ -1932,7 +1932,7 @@
         (commands/reinit-matched-commands!)
         (state/set-editor-show-commands!))
 
-      (= last-input-char commands/angle-bracket)
+      (and (not db-based?) (= last-input-char commands/angle-bracket))
       (do
         (state/set-editor-action-data! {:pos (cursor/get-caret-pos input)})
         (commands/reinit-matched-block-commands!)
@@ -3086,7 +3086,7 @@
                 (state/clear-editor-action!))))
 
           ;; When you type search text after < (and when you release shift after typing <)
-          (and (= :block-commands (state/get-editor-action)) (not= key-code 188)) ; not <
+          (and (not (config/db-based-graph? (state/get-current-repo))) (= :block-commands (state/get-editor-action)) (not= key-code 188)) ; not <
           (let [matched-block-commands (get-matched-block-commands input)
                 format (:format (get-state))]
             (if (seq matched-block-commands)
