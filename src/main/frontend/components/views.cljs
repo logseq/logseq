@@ -995,7 +995,8 @@
 
           (ui/virtualized-list
            {:custom-scroll-parent (gdom/getElement "main-content-container")
-            :overscan 10
+            :increase-viewport-by 128
+            :overscan 128
             :compute-item-key (fn [idx]
                                 (let [block (nth rows idx)]
                                   (str "table-row-" (:db/id block))))

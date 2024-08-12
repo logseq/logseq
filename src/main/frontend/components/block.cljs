@@ -3561,7 +3561,7 @@
                           block
                           {:top? top?
                            :bottom? bottom?})))
-        virtualized? (and virtualized? (seq blocks) (> (count blocks) 50))
+        virtualized? (and virtualized? (seq blocks))
         [ready?, set-ready!] (rum/use-state (not virtualized?))
         virtual-opts (when virtualized?
                        {:custom-scroll-parent (gdom/getElement "main-content-container")
@@ -3569,7 +3569,8 @@
                                             (let [block (nth blocks idx)]
                                               (str (:container-id config) "-" (:db/id block))))
                         ;; Leave some space for the new inserted block
-                        :increase-viewport-by {:top 64 :bottom 64}
+                        :increase-viewport-by 254
+                        :overscan 254
                         :total-count (count blocks)
                         :item-content (fn [idx]
                                         (let [top? (zero? idx)
