@@ -71,6 +71,8 @@ const common = {
         'node_modules/react/umd/react.development.js',
         'node_modules/react-dom/umd/react-dom.production.min.js',
         'node_modules/react-dom/umd/react-dom.development.js',
+        'node_modules/prop-types/prop-types.min.js',
+        'node_modules/@tabler/icons-react/dist/umd/tabler-icons-react.min.js'
       ]).pipe(gulp.dest(path.join(outputPath, 'js'))),
       () => gulp.src([
         'node_modules/@glidejs/glide/dist/glide.min.js',
@@ -86,14 +88,13 @@ const common = {
         'node_modules/pdfjs-dist/cmaps/*.*',
       ]).pipe(gulp.dest(path.join(outputPath, 'js', 'pdfjs', 'cmaps'))),
       () => gulp.src([
-        'node_modules/@tabler/icons/iconfont/tabler-icons.min.css',
         'node_modules/inter-ui/inter.css',
         'node_modules/reveal.js/dist/theme/fonts/source-sans-pro/**',
       ]).pipe(gulp.dest(path.join(outputPath, 'css'))),
       () => gulp.src('node_modules/inter-ui/Inter (web)/*.*')
         .pipe(gulp.dest(path.join(outputPath, 'css', 'Inter (web)'))),
       () => gulp.src([
-        'node_modules/@tabler/icons/iconfont/fonts/**',
+        'node_modules/@tabler/icons-webfont/fonts/**',
         'node_modules/katex/dist/fonts/*.woff2'
       ]).pipe(gulp.dest(path.join(outputPath, 'css', 'fonts'))),
     )(...params)
