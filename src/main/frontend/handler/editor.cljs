@@ -3400,7 +3400,8 @@
   "Whether block has a valid dsl query."
   [block repo]
   (if (config/db-based-graph? repo)
-    (string/includes? (:block/title block) "{{query")
+    (when-let [title (:block/title block)]
+      (string/includes? title "{{query"))
     (->> (:block/macros (db/entity (:db/id block)))
          (some (fn [macro]
                  (let [properties (:block/properties macro)
