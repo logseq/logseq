@@ -160,10 +160,11 @@
 
 ;; FIXME: another solution for the sticky header
 (defn- use-sticky-element2!
-  [^js/HTMLDivElement container target-ref]
+  [^js/HTMLDivElement target-ref]
   (rum/use-effect!
     (fn []
       (let [^js target (rum/deref target-ref)
+            ^js container (or (.closest target ".sidebar-item-list") (get-main-scroll-container))
             ^js target-cls (.-classList target)
             ^js table (.closest target ".ls-table-rows")
             ^js table-footer (some-> table (.querySelector ".ls-table-footer"))
@@ -227,7 +228,7 @@
   [& prop-and-children]
   (let [[prop children] (get-prop-and-children prop-and-children)
         el-ref (rum/use-ref nil)
-        _ (use-sticky-element2! (get-main-scroll-container) el-ref)]
+        _ (use-sticky-element2! el-ref)]
     [:div.ls-table-header
      (merge {:class "border-y transition-colors bg-gray-01"
              :ref el-ref
