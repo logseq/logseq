@@ -167,7 +167,9 @@
                                           closed-values
                                           (closed-value->sort-number (:db/id (get row (:db/ident property))))
                                           :else
-                                          (get-value row)))]
+                                          (if (fn? get-value)
+                                            (get-value row)
+                                            (get row ident))))]
                {:id ident
                 :name (or (:name property)
                           (:block/title property))
