@@ -792,7 +792,8 @@
 (defn- async-load-classes!
   [block]
   (let [repo (state/get-current-repo)
-        classes (concat (:block/tags block) (outliner-property/get-class-parents (:block/tags block)))]
+        db (db/get-db repo)
+        classes (concat (:block/tags block) (outliner-property/get-class-parents db (:block/tags block)))]
     (doseq [class classes]
       (db-async/<get-block repo (:db/id class) :children? false))
     classes))

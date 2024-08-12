@@ -103,7 +103,7 @@
   (when class
     (let [class (db/sub-block (:db/id class))
           config {:container-id (:container-id state)}
-          properties (cond->> (outliner-property/get-class-properties class)
+          properties (cond->> (outliner-property/get-class-properties (db/get-db) class)
                        (= :logseq.class/Root (:db/ident class))
                        (concat [(db/entity :block/tags)]))
           repo (state/get-current-repo)

@@ -335,13 +335,16 @@
                            {:outliner-op :save-block})))))))
 
 (defn ^:api get-class-parents
-  [tags]
-  (let [tags' (filter ldb/class? tags)]
-    (set (mapcat ldb/get-class-parents tags'))))
+  [db tags]
+  (let [tags' (filter ldb/class? tags)
+        result (map
+                (fn [id] (d/entity db id))
+                (set (mapcat ldb/get-class-parents tags')))]
+    (set result)))
 
 (defn ^:api get-class-properties
-  [class]
-  (let [class-parents (get-class-parents [class])]
+  [db class]
+  (let [class-parents (get-class-parents db [class])]
     (->> (mapcat (fn [class]
                    (:class/schema.properties class)) (concat [class] class-parents))
          (common-util/distinct-by :db/id)
@@ -353,7 +356,7 @@
         classes (->> (:block/tags block)
                      (sort-by :block/name)
                      (filter ldb/class?))
-        class-parents (get-class-parents classes)
+        class-parents (get-class-parents db classes)
         all-classes (->> (concat classes class-parents)
                          (filter (fn [class]
                                    (seq (:class/schema.properties class)))))
