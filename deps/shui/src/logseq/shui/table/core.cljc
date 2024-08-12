@@ -173,7 +173,8 @@
             head-top (-> (get-head-container) (js/getComputedStyle) (.-height) (js/parseInt))
             update-target-top! (fn []
                                  (when (not (.contains target-cls "ls-fixed"))
-                                   (vreset! *el-top (-> target (.getBoundingClientRect) (.-top)))))
+                                   (vreset! *el-top (+ (-> target (.getBoundingClientRect) (.-top))
+                                                      (.-scrollTop container)))))
             update-footer! (fn []
                              (when table-footer
                                (set! (. (.-style table-footer) -width) (str (.-scrollWidth table) "px"))))
@@ -192,23 +193,26 @@
             ;; target observer
             target-observe! (fn []
                               (let [scroll-top (js/parseInt (.-scrollTop container))
-                                    fixed? (> (+ scroll-top head-top) @*el-top)]
+                                    table-in-top (+ scroll-top head-top)
+                                    table-bottom (.-bottom (.getBoundingClientRect table))
+                                    fixed? (and (> table-bottom (+ head-top 90))
+                                             (> table-in-top @*el-top))]
                                 (if fixed?
                                   (.add target-cls "ls-fixed")
                                   (.remove target-cls "ls-fixed"))
                                 (update-target!)))
-            target-observe! (fn [^js _e]
-                              (when (not @*ticking?)
-                                (js/window.requestAnimationFrame
-                                  #(do (target-observe!) (vreset! *ticking? false)))
-                                (vreset! *ticking? true)))
+            target-observe-handle! (fn [^js _e]
+                                     (when (not @*ticking?)
+                                       (js/window.requestAnimationFrame
+                                         #(do (target-observe!) (vreset! *ticking? false)))
+                                       (vreset! *ticking? true)))
             resize-observer (js/ResizeObserver. update-target!)
             page-resize-observer (js/ResizeObserver. (fn [] (update-target-top!)))]
         ;; events
         (.observe resize-observer container)
         (.observe resize-observer table)
         (some->> page-el (.observe page-resize-observer))
-        (.addEventListener container "scroll" target-observe!)
+        (.addEventListener container "scroll" target-observe-handle!)
         (.addEventListener table "scroll" update-target!)
         (.addEventListener table "resize" update-target!)
         (update-footer!)
