@@ -23,7 +23,8 @@
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
             [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [frontend.components.icon :as icon]))
 
 (rum/defc toggle
   []
@@ -101,9 +102,7 @@
           page (db/entity repo lookup)]
       (if (ldb/page? page)
         [[:.flex.items-center.page-title
-          (if-let [icon (pu/get-block-property-value page :logseq.property/icon)]
-            [:.text-md.mr-2 icon]
-            (ui/icon (if (ldb/whiteboard? page) "whiteboard" "page") {:class "text-md mr-2"}))
+          (icon/get-node-icon page {:class "text-md mr-2"})
           [:span.overflow-hidden.text-ellipsis (:block/title page)]]
          (page-cp repo (str (:block/uuid page)))]
         (block-with-breadcrumb repo page idx [repo db-id block-type] false)))
