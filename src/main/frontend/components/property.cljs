@@ -45,7 +45,7 @@
           (:block/uuid page))))))
 
 (rum/defc class-select
-  [property {:keys [multiple-choices? disabled? default-open? on-hide]
+  [property {:keys [multiple-choices? disabled? default-open? no-class? on-hide]
              :or {multiple-choices? true}}]
   (let [*ref (rum/use-ref nil)]
     (rum/use-effect!
@@ -66,6 +66,11 @@
                                     {:label (:block/title class)
                                      :value (:block/uuid class)})
                                   classes)
+                     options (if no-class?
+                               (cons {:label "Skip choosing tag"
+                                      :value :no-tag}
+                                     options)
+                               options)
                      opts {:items options
                            :input-default-placeholder (if multiple-choices? "Choose tags" "Choose tag")
                            :dropdown? false
@@ -84,11 +89,13 @@
                                               (toggle-fn))
                                             nil))}
                            :on-chosen (fn [value select?]
-                                        (p/let [result (<create-class-if-not-exists! value)
-                                                value' (or result value)
-                                                tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]
-                                                _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
-                                          (when-not multiple-choices? (toggle-fn))))}]
+                                        (if (= value :no-tag)
+                                          (toggle-fn)
+                                          (p/let [result (<create-class-if-not-exists! value)
+                                                 value' (or result value)
+                                                 tx-data [[(if select? :db/add :db/retract) (:db/id property) :property/schema.classes [:block/uuid value']]]
+                                                 _ (db/transact! (state/get-current-repo) tx-data {:outliner-op :update-property})]
+                                           (when-not multiple-choices? (toggle-fn)))))}]
 
                  (select/select opts)))]
 
@@ -573,7 +580,8 @@
              (class-select property (assoc opts
                                            :on-hide #(reset! *show-class-select? false)
                                            :multiple-choices? false
-                                           :default-open? true))
+                                           :default-open? true
+                                           :no-class? true))
 
              :else
              (when (and property (not class-schema?))
