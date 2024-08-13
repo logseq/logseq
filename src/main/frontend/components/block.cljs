@@ -567,7 +567,8 @@
                (and tag? display-close-button?) (str " pl-4"))
       :data-ref page-name
       :draggable true
-      :on-drag-start (fn [e] (editor-handler/block->data-transfer! page-name e true))
+      :on-drag-start (fn [e]
+                       (editor-handler/block->data-transfer! page-name e true))
       :on-mouse-over #(reset! *hover? true)
       :on-mouse-leave #(reset! *hover? false)
       :on-click (fn [e] (when-not meta-click? (util/stop e)))
@@ -1932,6 +1933,7 @@
                       {:id (str "dot-" uuid)
                        :draggable true
                        :on-drag-start (fn [event]
+                                        (util/stop-propagation event)
                                         (bullet-drag-start event block uuid block-id))
                        :blockid (str uuid)
                        :class (str (when collapsed? "bullet-closed")
