@@ -149,7 +149,7 @@
               :disable-hide? true})]
           (map
            (fn [property]
-             (let [ident (or (:id property) (:db/ident property))
+             (let [ident (or (:db/ident property) (:id property))
                    property (if (de/entity? property)
                               property
                               (or (db/entity ident) property))
