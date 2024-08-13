@@ -228,7 +228,7 @@
    [:div
     [:div.rounded-md.sm:max-w-xs
      (ui/toggle wide-mode?
-       state/toggle-wide-mode!
+       ui-handler/toggle-wide-mode!
        true)]]
    (when (not (or (util/mobile?) (mobile-util/native-platform?)))
      [:div {:style {:text-align "right"}}
