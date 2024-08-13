@@ -142,7 +142,7 @@
   [page theme show-journal]
   (let [dark? (= "dark" theme)]
     (when-let [repo (state/get-current-repo)]
-      (let [page-entity (db/entity page)
+      (let [page-entity (db/get-page page)
             page-id (:db/id page-entity)
             tags (if (config/db-based-graph? repo)
                    (set (map #(:block/name (db/entity repo (:db/id %)))

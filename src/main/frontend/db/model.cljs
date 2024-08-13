@@ -48,15 +48,14 @@
        (map :block/title)))
 
 (defn get-page-alias
-  [repo page-name]
+  [repo page-id]
   (when-let [db (and repo (conn/get-db repo))]
     (some->> (d/q '[:find ?alias
-                    :in $ ?page-name
+                    :in $ ?page-id
                     :where
-                    [?page :block/name ?page-name]
-                    [?page :block/alias ?alias]]
+                    [?page-id :block/alias ?alias]]
                   db
-                  (util/page-name-sanity-lc page-name))
+                  page-id)
              db-utils/seq-flatten
              distinct)))
 
@@ -540,7 +539,7 @@ independent of format as format specific heading characters are stripped"
   (when-let [db (conn/get-db repo)]
     (let [pages (page-alias-set repo page-id)
           ref-pages (d/q
-                     '[:find [?ref-page ?ref-page-name]
+                     '[:find ?ref-page ?ref-page-name
                        :in $ ?pages
                        :where
                        [(untuple ?pages) [?page ...]]
@@ -549,7 +548,9 @@ independent of format as format specific heading characters are stripped"
                        [?ref-page :block/name ?ref-page-name]]
                      db
                      pages)]
-      (mapv (fn [[ref-page ref-page-name]] [ref-page-name (get-page-alias repo ref-page)]) ref-pages))))
+      (mapv (fn [[ref-page ref-page-name]]
+              [ref-page-name (get-page-alias repo ref-page)])
+            ref-pages))))
 
 ;; get pages who mentioned this page
 (defn get-pages-that-mentioned-page
