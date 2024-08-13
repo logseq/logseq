@@ -275,7 +275,7 @@
   ([]
    (<create-new-whiteboard-and-redirect! (str (d/squuid))))
   ([name]
-   (when-not config/publishing?
+   (when-not (or config/publishing? (config/db-based-graph? (state/get-current-repo)))
      (p/let [id (<create-new-whiteboard-page! name)]
        (route-handler/redirect-to-page! id {:new-whiteboard? true})))))
 
