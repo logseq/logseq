@@ -3548,11 +3548,11 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [first-journal-or-route-page-container? (or
-                                                 (:first-journal? config)
-                                                 (= :page (get-in config [:data :name])))
+  (let [first-journal-virtualized-on? false
+        page-container? (= :page (get-in config [:data :name]))
         virtualized? (and (not (:block-children? config))
-                       first-journal-or-route-page-container?)
+                       (or page-container? (and first-journal-virtualized-on?
+                                             (:first-journal? config))))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
