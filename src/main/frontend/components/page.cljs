@@ -1041,15 +1041,16 @@
 (rum/defc page-graph < db-mixins/query rum/reactive
   []
   (let [page (or
-               (and (= :page (state/sub [:route-match :data :name]))
-                 (state/sub [:route-match :path-params :name]))
-               (date/today))
+              (and (= :page (state/sub [:route-match :data :name]))
+                   (state/sub [:route-match :path-params :name]))
+              (date/today))
         theme (:ui/theme @state/state)
         dark? (= theme "dark")
         show-journals-in-page-graph (rum/react *show-journals-in-page-graph?)
-        graph (if (util/uuid-string? page)
-                (graph-handler/build-block-graph (uuid page) theme)
-                (graph-handler/build-page-graph page theme show-journals-in-page-graph))]
+        page-entity (db/get-page page)
+        graph (if (ldb/page? page-entity)
+                (graph-handler/build-page-graph page theme show-journals-in-page-graph)
+                (graph-handler/build-block-graph (uuid page) theme))]
     (when (seq (:nodes graph))
       (page-graph-inner page graph dark?))))
 
