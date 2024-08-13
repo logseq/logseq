@@ -96,7 +96,8 @@
   [page-e blocks config sidebar? whiteboard? _block-uuid]
   (when page-e
     (let [hiccup (component-block/->hiccup blocks config {})]
-      [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)}}
+      [:div.page-blocks-inner {:style {:margin-left (if whiteboard? 0 -20)
+                                       :min-height 29}}
        (rum/with-key
          (content/content (str (:block/uuid page-e))
                           {:hiccup   hiccup

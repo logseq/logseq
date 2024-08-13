@@ -243,7 +243,7 @@ html.is-native-ios {
 }
 
 .ls-dummy-block {
-  @apply pb-[27px];
+  @apply pb-[25px];
 
   .bullet {
     @apply relative top-[4px] left-[-2px];

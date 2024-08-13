@@ -3554,11 +3554,10 @@
                             bottom? (= (dec (count blocks)) idx)
                             block (nth blocks idx)]
                         (block-item (assoc config :top? top?)
-                          block
-                          {:top? top?
-                           :bottom? bottom?})))
+                                    block
+                                    {:top? top?
+                                     :bottom? bottom?})))
         virtualized? (and virtualized? (seq blocks))
-        [ready?, set-ready!] (rum/use-state (not virtualized?))
         virtual-opts (when virtualized?
                        {:custom-scroll-parent (gdom/getElement "main-content-container")
                         :compute-item-key (fn [idx]
@@ -3573,24 +3572,18 @@
                                               bottom? (= (dec (count blocks)) idx)
                                               block (nth blocks idx)]
                                           (block-item (assoc config :top? top?)
-                                            block
-                                            {:top? top?
-                                             :bottom? bottom?})))})]
-    (rum/use-effect!
-      (fn []
-        (js/setTimeout #(set-ready! true) 0))
-      [])
-
-    (when ready?
-      [:div.blocks-list-wrap
-       {:data-level (or (:level config) 0)}
-       (cond
-         virtualized?
-         (ui/virtualized-list virtual-opts)
-         :else
-         (map-indexed (fn [idx block]
-                        (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
-           blocks))])))
+                                                      block
+                                                      {:top? top?
+                                                       :bottom? bottom?})))})]
+    [:div.blocks-list-wrap
+     {:data-level (or (:level config) 0)}
+     (cond
+       virtualized?
+       (ui/virtualized-list virtual-opts)
+       :else
+       (map-indexed (fn [idx block]
+                      (rum/with-key (render-item idx) (str (:container-id config) "-" (:db/id block))))
+                    blocks))]))
 
 (rum/defcs blocks-container < mixins/container-id rum/static
   [state config blocks]
