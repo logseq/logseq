@@ -4,41 +4,43 @@
             [frontend.db-mixins :as db-mixins]
             [frontend.handler.page :as page-handler]
             [frontend.state :as state]
-            [frontend.ui :as ui]
             [rum.core :as rum]
-            [goog.dom :as gdom]
-            [frontend.util :as util]))
+            [frontend.util :as util]
+            [medley.core :as medley]
+            [goog.functions :refer [debounce]]
+            [frontend.mixins :as mixins]))
 
 (rum/defc journal-cp < rum/reactive
   [page idx]
   [:div.journal-item.content {:key (:db/id page)}
    (let [repo (state/sub :git/current-repo)]
      (page/page {:repo repo
-                 :page-name (str (:block/uuid page))
-                 :first-journal? (zero? idx)}))])
+                 :page-name (str (:block/uuid page))}))])
+
+(defn on-scroll
+  [node {:keys [threshold on-load]
+         :or {threshold 500}}]
+  (when (util/bottom-reached? node threshold)
+    (on-load)))
+
+(defn attach-listeners
+  "Attach scroll and resize listeners."
+  [state]
+  (let [node (js/document.getElementById "main-content-container")
+        opts {:on-load page-handler/load-more-journals!}
+        debounced-on-scroll (debounce #(on-scroll node opts) 100)]
+    (mixins/listen state node :scroll debounced-on-scroll)))
 
 (rum/defc journals < rum/reactive
+  (mixins/event-mixin attach-listeners)
   {:will-unmount (fn [state]
                    (state/set-journals-length! 3)
                    state)}
   [latest-journals]
   (when (seq latest-journals)
     [:div#journals
-     (ui/virtualized-list
-      {:custom-scroll-parent (gdom/getElement "main-content-container")
-       :compute-item-key (fn [idx]
-                           (let [block (nth latest-journals idx)]
-                             (str "journal-" (:db/id block))))
-       :initial-item-count 1
-       :total-count (count latest-journals)
-       :item-content (fn [idx]
-                       (when-let [page (util/nth-safe latest-journals idx)]
-                         (journal-cp page idx)))
-       :start-reached (fn [_idx]
-                        (page-handler/create-today-journal!))
-       :end-reached (fn [idx]
-                      (when (= (dec (count latest-journals)) idx)
-                        (page-handler/load-more-journals!)))})]))
+     (for [[idx journal] (medley/indexed latest-journals)]
+       (journal-cp journal idx))]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []

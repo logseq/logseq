@@ -138,7 +138,7 @@
                                 "3px solid #ccc"
                                 nil)}}
          [:div.flex.items-center
-          [:div.flex.items-center.mx-1.pr-1 {:style {:height 24}}
+          [:div.flex.items-center.mx-1 {:style {:height 24}}
            [:span.bullet-container.cursor
             [:span.bullet]]]
           (shui/trigger-as :div.flex.flex-1

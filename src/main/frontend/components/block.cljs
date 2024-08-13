@@ -3088,7 +3088,7 @@
 
      (when-not (or (:hide-children? config) in-whiteboard? table?)
        (let [config' (-> (update config :level inc)
-                         (dissoc :original-block :data :first-journal?))]
+                         (dissoc :original-block :data))]
          (block-children config' block children collapsed?)))
 
      (when-not (or in-whiteboard? table?) (dnd-separator-wrapper block children block-id slide? false false))]))
@@ -3548,11 +3548,7 @@
 
 (rum/defc block-list
   [config blocks]
-  (let [first-journal-virtualized-on? false
-        page-container? (= :page (get-in config [:data :name]))
-        virtualized? (and (not (:block-children? config))
-                       (or page-container? (and first-journal-virtualized-on?
-                                             (:first-journal? config))))
+  (let [virtualized? (not (:block-children? config))
         render-item (fn [idx]
                       (let [top? (zero? idx)
                             bottom? (= (dec (count blocks)) idx)
