@@ -2367,11 +2367,13 @@
   [config block]
   (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) (:block/tags block))]
     (when (seq block-tags)
-      [:div.flex.flex-row.flex-wrap.items-center.gap-1
+      [:div.block-tags.flex.flex-row.flex-wrap.items-center.gap-1
        (for [tag block-tags]
-         (page-cp (assoc config
-                         :tag? true
-                         :disable-preview? true) tag))])))
+         (rum/with-key
+           (page-cp (assoc config
+                          :tag? true
+                          :disable-preview? true) tag)
+           (str "tag-" (:db/id tag))))])))
 
 (rum/defc block-positioned-properties
   [config block position]
