@@ -635,7 +635,8 @@ independent of format as format specific heading characters are stripped"
                      (= (:db/id block) eid)
                      (= eid (:db/id (:block/page block)))
                      (ldb/hidden? (:block/page block))
-                     (contains? (set (map :db/id (:block/tags block))) (:db/id entity)))))
+                     (contains? (set (map :db/id (:block/tags block))) (:db/id entity))
+                     (some? (get block (:db/ident entity))))))
           (util/distinct-by :db/id)))))))
 
 (defn get-block-referenced-blocks
