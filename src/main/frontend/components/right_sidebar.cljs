@@ -210,10 +210,12 @@
              [:.flex.flex-row.justify-between.pr-2.sidebar-item-header.color-level.rounded-t-md
               {:class         (when collapsed? "rounded-b-md")
                :draggable     true
-               :on-context-menu #(shui/popup-show! %
-                                   (actions-menu-content db-id idx block-type collapsed? block-count)
-                                   {:as-dropdown? true
-                                    :content-props {:on-click (fn [] (shui/popup-hide!))}})
+               :on-context-menu (fn [e]
+                                  (util/stop e)
+                                  (shui/popup-show! e
+                                                    (actions-menu-content db-id idx block-type collapsed? block-count)
+                                                    {:as-dropdown? true
+                                                     :content-props {:on-click (fn [] (shui/popup-hide!))}}))
                :on-drag-start (fn [event]
                                 (editor-handler/block->data-transfer! (:block/name (db/entity db-id)) event true)
                                 (reset! *drag-from idx))
@@ -222,8 +224,8 @@
                                 (reset! *drag-to nil)
                                 (reset! *drag-from nil))
                :on-pointer-up   (fn [event]
-                                (when (= (.-which (.-nativeEvent event)) 2)
-                                  (state/sidebar-remove-block! idx)))}
+                                  (when (= (.-which (.-nativeEvent event)) 2)
+                                    (state/sidebar-remove-block! idx)))}
 
               [:button.flex.flex-row.p-2.items-center.w-full.overflow-hidden
                {:aria-expanded (str (not collapsed?))
@@ -238,22 +240,22 @@
                 title]]
               [:.item-actions.flex.items-center
                (shui/button
-                 {:title (t :right-side-bar/pane-more)
-                  :class "px-3"
-                  :variant :text
-                  :on-click #(shui/popup-show!
-                               (.-target %)
-                               (actions-menu-content db-id idx block-type collapsed? block-count)
-                               {:as-dropdown? true
-                                :content-props {:on-click (fn [] (shui/popup-hide!))}})}
-                 (ui/icon "dots"))
+                {:title (t :right-side-bar/pane-more)
+                 :class "px-3"
+                 :variant :text
+                 :on-click #(shui/popup-show!
+                             (.-target %)
+                             (actions-menu-content db-id idx block-type collapsed? block-count)
+                             {:as-dropdown? true
+                              :content-props {:on-click (fn [] (shui/popup-hide!))}})}
+                (ui/icon "dots"))
 
                (shui/button
-                 {:title (t :right-side-bar/pane-close)
-                  :variant :text
-                  :class "px-3"
-                  :on-click #(state/sidebar-remove-block! idx)}
-                 (ui/icon "x"))]]
+                {:title (t :right-side-bar/pane-close)
+                 :variant :text
+                 :class "px-3"
+                 :on-click #(state/sidebar-remove-block! idx)}
+                (ui/icon "x"))]]
 
              [:div {:role "region"
                     :id (str "sidebar-panel-content-" idx)
