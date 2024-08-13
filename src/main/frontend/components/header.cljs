@@ -134,10 +134,9 @@
                       :options {:on-click #(plugin-handler/goto-plugins-dashboard!)}
                       :icon (ui/icon "apps")})
 
-                   (when config/lsp-enabled?
-                     {:title (t :themes)
-                      :options {:on-click #(plugin-handler/show-themes-modal!)}
-                      :icon (ui/icon "palette")})
+                   {:title (t :appearance)
+                    :options {:on-click #(state/pub-event! [:modal/toggle-appearance-modal])}
+                    :icon (ui/icon "color-swatch")}
 
                    (when current-repo
                      {:title (t :export-graph)
