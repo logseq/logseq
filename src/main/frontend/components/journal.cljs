@@ -6,12 +6,11 @@
             [frontend.state :as state]
             [rum.core :as rum]
             [frontend.util :as util]
-            [medley.core :as medley]
             [goog.functions :refer [debounce]]
             [frontend.mixins :as mixins]))
 
 (rum/defc journal-cp < rum/reactive
-  [page idx]
+  [page]
   [:div.journal-item.content {:key (:db/id page)}
    (let [repo (state/sub :git/current-repo)]
      (page/page {:repo repo
@@ -39,8 +38,8 @@
   [latest-journals]
   (when (seq latest-journals)
     [:div#journals
-     (for [[idx journal] (medley/indexed latest-journals)]
-       (journal-cp journal idx))]))
+     (for [journal latest-journals]
+       (journal-cp journal))]))
 
 (rum/defc all-journals < rum/reactive db-mixins/query
   []

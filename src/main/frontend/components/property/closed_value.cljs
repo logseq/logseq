@@ -229,7 +229,8 @@
      (if config/publishing?
        (constantly [])
        (shui/button
-        {:variant :secondary
+        {:variant :ghost
+         :class "justify-start px-0"
          :size :sm
          :on-click
          (fn [e]
