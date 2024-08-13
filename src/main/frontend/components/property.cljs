@@ -248,13 +248,17 @@
   (rum/local nil ::property-description)
   (rum/local false ::show-class-select?)
   {:init (fn [state]
-           (let [*values (atom :loading)]
-             (p/let [result (db-async/<get-block-property-values (state/get-current-repo)
-                                                                 (:db/ident (first (:rum/args state))))]
+           (let [*values (atom :loading)
+                 repo (state/get-current-repo)
+                 property (first (:rum/args state))
+                 ident (:db/ident property)]
+             (p/let [_ (db-async/<get-block repo (:block/uuid property))
+                     result (db-async/<get-block-property-values repo ident)]
                (reset! *values result))
              (assoc state ::values *values)))
    :will-mount (fn [state]
-                 (let [[property _opts] (:rum/args state)]
+                 (let [[property _opts] (:rum/args state)
+                       property (db/entity (:db/id property))]
                    (reset! (::property-name state) (:block/title property))
                    (reset! (::property-schema state) (:block/schema property))
                    (reset! (::property-description state) (db-property/property-value-content (:logseq.property/description property)))
@@ -266,7 +270,8 @@
                      (reset! *show-property-config? false))
                    state)}
   [state property {:keys [add-new-property?] :as opts}]
-  (let [values (rum/react (::values state))]
+  (let [property (db/entity (:db/id property))
+        values (rum/react (::values state))]
     (when-not (= :loading values)
       (let [*property-name (::property-name state)
             *property-schema (::property-schema state)
@@ -419,10 +424,11 @@
                                             [(outliner-core/block-with-updated-at
                                               {:db/id (:db/id ent) :block/title @*property-description})]
                                             {:outliner-op :save-block})
-                              (db-property-handler/set-block-property!
-                               (:db/id property)
-                               :logseq.property/description
-                               @*property-description)))
+                              (when-not (string/blank? @*property-description)
+                                (db-property-handler/set-block-property!
+                                 (:db/id property)
+                                 :logseq.property/description
+                                 @*property-description))))
                  :disabled disabled?
                  :default-value description})]]])]]))))
 
