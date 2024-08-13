@@ -504,6 +504,7 @@
  :settings-of-plugins "Plugins"
  :plugins "Plugins"
  :themes "Themes"
+ :appearance "Appearance"
  :relaunch-confirm-to-work "Should relaunch app to make it work. Do you want to restart it now?"
  :import-notes "Import existing notes"
  :import "Import"

@@ -236,6 +236,7 @@
  :settings-of-plugins "插件设置"
  :plugins "插件"
  :themes "主题"
+ :appearance "界面"
  :relaunch-confirm-to-work "如果希望立刻生效, 请重启应用。是否现在重启？"
  :import "导入"
  :importing "导入中"

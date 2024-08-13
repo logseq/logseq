@@ -1067,6 +1067,12 @@
                          :options {:on-click #(plugin-handler/goto-plugins-dashboard!)
                                    :class "extra-item mt-2"}
                          :icon (ui/icon "apps")}
+
+                        {:title (t :themes)
+                         :options {:on-click #(plugin-handler/show-themes-modal!)
+                                   :class "extra-item"}
+                         :icon (ui/icon "palette")}
+
                         {:title (t :settings)
                          :options {:on-click #(plugin-handler/goto-plugins-settings!)
                                    :class "extra-item"}
