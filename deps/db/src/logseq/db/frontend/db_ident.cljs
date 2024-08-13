@@ -1,7 +1,8 @@
 (ns logseq.db.frontend.db-ident
   "Helper fns for class and property :db/ident"
   (:require [datascript.core :as d]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [clojure.edn :as edn]))
 
 (defn ensure-unique-db-ident
   "Ensures the given db-ident is unique. If a db-ident conflicts, it is made
@@ -42,5 +43,14 @@
               ;; '/' cannot be in name - https://clojure.org/reference/reader
               (string/replace "/" "-")
               (string/trim))]
-    (assert (seq n) "name is not empty")
-    (keyword user-namespace n)))
+    (try
+      (assert (seq n) "name is not empty")
+      (let [k (keyword user-namespace n)]
+        (assert (= k (edn/read-string (str k))))
+        k)
+      (catch :default _e
+        (let [n (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq n))
+                     (apply str))]
+          (if (seq n)
+            (keyword user-namespace n)
+            (keyword user-namespace (subs (str (random-uuid)) 30))))))))
