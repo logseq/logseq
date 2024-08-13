@@ -243,39 +243,6 @@
     (when shortcut
       [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config shortcut))])]])
 
-(defn close-sidebar-on-mobile!
-  []
-  (and (util/sm-breakpoint?)
-       (state/toggle-left-sidebar!)))
-
-(defn create-dropdown
-  []
-  (ui/dropdown-with-links
-   (fn [{:keys [toggle-fn]}]
-     [:button#create-button
-      {:on-click toggle-fn}
-      [:<>
-       (ui/icon "plus" {:font? "true"})
-       [:span.mx-1 (t :left-side-bar/create)]]])
-   (->>
-    [{:title (t :left-side-bar/new-page)
-      :class "new-page-link"
-      :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (state/pub-event! [:go/search]))
-                :shortcut (ui/keyboard-shortcut-from-config :go/search)}
-      :icon (ui/type-icon {:name "new-page"
-                           :class "highlight"
-                           :extension? true})}
-     {:title (t :left-side-bar/new-whiteboard)
-      :class "new-whiteboard-link"
-      :options {:on-click #(do (close-sidebar-on-mobile!)
-                               (whiteboard-handler/<create-new-whiteboard-and-redirect!))
-                :shortcut (ui/keyboard-shortcut-from-config :editor/new-whiteboard)}
-      :icon (ui/type-icon {:name "new-whiteboard"
-                           :class "highlight"
-                           :extension? true})}])
-   {}))
-
 (rum/defc ^:large-vars/cleanup-todo sidebar-nav
   [route-match close-modal-fn left-sidebar-open? enable-whiteboards? srs-open?
    *closing? close-signal touching-x-offset]
@@ -414,19 +381,7 @@
         (favorites t)
 
         (when (not config/publishing?)
-          (recent-pages t))]
-
-       [:footer.px-2 {:class "create"}
-        (when-not config/publishing?
-          (if enable-whiteboards?
-            (create-dropdown)
-            [:a.item.group.flex.items-center.px-2.py-2.text-sm.font-medium.rounded-md.new-page-link
-             {:on-click (fn []
-                          (and (util/sm-breakpoint?)
-                               (state/toggle-left-sidebar!))
-                          (state/pub-event! [:go/search]))}
-             (ui/icon "circle-plus" {:style {:font-size 20}})
-             [:span.flex-1 (t :right-side-bar/new-page)]]))]]]
+          (recent-pages t))]]]
      [:span.shade-mask
       (cond-> {:on-click close-fn}
         (number? offset-ratio)

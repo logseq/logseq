@@ -197,7 +197,9 @@
                                              :fn      editor-handler/keydown-new-line-handler}
 
    :editor/new-whiteboard                   {:binding "n w"
-                                             :fn      #(whiteboard-handler/<create-new-whiteboard-and-redirect!)}
+                                             :fn      (fn []
+                                                        (when-not (config/db-based-graph? (state/get-current-repo))
+                                                          (whiteboard-handler/<create-new-whiteboard-and-redirect!)))}
 
    :editor/follow-link                      {:binding "mod+o"
                                              :fn      editor-handler/follow-link-under-cursor!}
