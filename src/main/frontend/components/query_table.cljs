@@ -256,25 +256,27 @@
                                                              :config config
                                                              :db-graph? db-graph?
                                                              :comma-separated-property? (property-separated-by-commas? column)})]
-                [:td.whitespace-nowrap {:on-pointer-down (fn []
-                                                           (reset! *mouse-down? true)
-                                                           (reset! select? false))
-                                        :on-mouse-move (fn [] (reset! select? true))
-                                        :on-pointer-up (fn []
-                                                         (when (and @*mouse-down? (not @select?))
-                                                           (state/sidebar-add-block!
-                                                            (state/get-current-repo)
-                                                            (:db/id row)
-                                                            :block-ref)
-                                                           (reset! *mouse-down? false)))}
+                [:td.whitespace-nowrap
+                 {:data-key (pr-str column)
+                  :on-pointer-down (fn []
+                                     (reset! *mouse-down? true)
+                                     (reset! select? false))
+                  :on-mouse-move (fn [] (reset! select? true))
+                  :on-pointer-up (fn []
+                                   (when (and @*mouse-down? (not @select?))
+                                     (state/sidebar-add-block!
+                                       (state/get-current-repo)
+                                       (:db/id row)
+                                       :block-ref)
+                                     (reset! *mouse-down? false)))}
                  (when (some? value)
                    (render-column-value {:row-block row
                                          :row-format format
                                          :cell-format cell-format
                                          :value value}
-                                        page-cp
-                                        inline-text
-                                        {:db-graph? db-graph?}))]))]))]]]))
+                     page-cp
+                     inline-text
+                     {:db-graph? db-graph?}))]))]))]]]))
 
 (rum/defc result-table < rum/reactive
   [config current-block result {:keys [page?] :as options} map-inline page-cp ->elem inline-text]
