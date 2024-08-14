@@ -405,8 +405,8 @@
 
     [:<>
      (row-with-button-action
-       {:left-label "Accent color"
-        :description "Choosing an accent color may override any theme you have selected."
+       {:left-label (t :settings-page/accent-color)
+        :description (t :settings-page/accent-color-alert)
         :-for "toggle_radix_theme"
         :desc (when-not _in-modal?
                 [:span.pl-6 (ui/render-keyboard-shortcut

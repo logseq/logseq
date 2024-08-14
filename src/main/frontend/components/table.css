@@ -55,8 +55,8 @@
   }
 }
 
-.query-table {
-  @apply my-2 rounded;
+.query-table, .classic-table {
+  @apply my-2 rounded overflow-hidden;
 
   table {
     @apply w-full border-none;
@@ -67,6 +67,8 @@
   }
 
   tr {
+    @apply hover:bg-gray-03;
+
     &:nth-child(even) {
       @apply bg-gray-02;
     }
