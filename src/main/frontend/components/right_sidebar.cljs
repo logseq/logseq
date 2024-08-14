@@ -262,6 +262,7 @@
                     :aria-labelledby (str "sidebar-panel-header-" idx)
                     :class           (util/classnames [{:hidden  collapsed?
                                                         :initial (not collapsed?)
+                                                        :sidebar-panel-content true
                                                         :px-2    (not (contains? #{:search :shortcut-settings} block-type))}])}
               (inner-component component (not drag-from))]
              (when drag-from (drop-area idx))])]

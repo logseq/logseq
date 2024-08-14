@@ -583,7 +583,7 @@
                                    (::show-page-info? state)))
 
               (and (not db-based?) (not block?))
-              [:div.pb-2])
+              [:<>])
 
             (when (and db-based? (ldb/class? page))
               [:div.mt-8
