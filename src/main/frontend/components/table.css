@@ -74,5 +74,9 @@
 
   th, td {
     @apply p-1.5 border border-collapse;
+
+    &[data-key=":block"] {
+      @apply whitespace-normal;
+    }
   }
 }
