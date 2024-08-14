@@ -1077,17 +1077,17 @@
 (defn ^:export exper_load_scripts
   [pid & scripts]
   (when-let [^js _pl (plugin-handler/get-plugin-inst pid)]
-    (doseq [s scripts
-            :let [upt-status #(state/upt-plugin-resource pid :scripts s :status %)
-                  init?      (plugin-handler/register-plugin-resources pid :scripts {:key s :src s})]]
-      (when init?
-        (p/catch
-          (p/then
-            (do
-              (upt-status :pending)
-              (loader/load s nil {:attributes {:data-ref (name pid)}}))
-            #(upt-status :done))
-          #(upt-status :error))))))
+    (some-> (for [s scripts
+                  :let [upt-status #(state/upt-plugin-resource pid :scripts s :status %)
+                        init? (contains? #{:error nil} (:status (state/get-plugin-resource pid :scripts s)))]]
+              (when init?
+                (plugin-handler/register-plugin-resources pid :scripts {:key s :src s})
+                (upt-status :pending)
+                (-> (loader/load s nil {:attributes {:data-ref (name pid)}})
+                  (p/then (fn [] (upt-status :done)))
+                  (p/catch (fn [] (upt-status :error))))))
+      (vec)
+      (p/all))))
 
 ;; http request
 (defonce *request-k (volatile! 0))
