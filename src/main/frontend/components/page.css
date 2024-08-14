@@ -235,7 +235,7 @@ html.is-native-ios {
 }
 
 .info-title a.tag:hover, .multi-values a.tag:hover {
-    text-decoration: none;
+  text-decoration: none;
 }
 
 .no-ring {
@@ -267,5 +267,11 @@ html.is-native-ios {
     &.as-block {
       @apply -ml-5;
     }
+  }
+}
+
+.cp__right-sidebar {
+  .page-linked > .content {
+    @apply pt-2;
   }
 }
