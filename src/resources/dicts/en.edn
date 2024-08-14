@@ -273,6 +273,8 @@
  :settings-page/show-brackets "Show brackets"
  :settings-page/wide-mode "Wide mode"
  :settings-page/editor-font "Editor font"
+ :settings-page/accent-color "Accent color"
+ :settings-page/accent-color-alert "Choosing an accent color may override any theme you have selected."
  :settings-page/spell-checker "Spell checker"
  :settings-page/auto-updater "Auto updater"
  :settings-page/disable-sentry "Send usage data and diagnostics to Logseq"
