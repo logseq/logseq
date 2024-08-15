@@ -16,7 +16,8 @@
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
             [logseq.graph-parser.text :as text]
-            [logseq.graph-parser.utf8 :as utf8]))
+            [logseq.graph-parser.utf8 :as utf8]
+            [logseq.db.frontend.class :as db-class]))
 
 (defn heading-block?
   [block]
@@ -324,18 +325,21 @@
                                      page (merge
                                            {:block/name page-name
                                             :block/title original-page-name}
-                                           (let [new-uuid* (if (uuid? page-uuid)
-                                                             page-uuid
-                                                             (if journal-day
-                                                               (common-uuid/gen-uuid :journal-page-uuid journal-day)
-                                                               (common-uuid/gen-uuid)))
-                                                 new-uuid (if skip-existing-page-check?
-                                                            new-uuid*
-                                                            (or
-                                                             (cond page-entity       (:block/uuid page-entity)
-                                                                   (uuid? page-uuid) page-uuid)
-                                                             new-uuid*))]
-                                             {:block/uuid new-uuid})
+                                           (if (and class? page-entity (:db/ident page-entity))
+                                             {:block/uuid (:block/uuid page-entity)
+                                              :db/ident (:db/ident page-entity)}
+                                             (let [new-uuid* (if (uuid? page-uuid)
+                                                               page-uuid
+                                                               (if journal-day
+                                                                 (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                                                                 (common-uuid/gen-uuid)))
+                                                   new-uuid (if skip-existing-page-check?
+                                                              new-uuid*
+                                                              (or
+                                                               (cond page-entity       (:block/uuid page-entity)
+                                                                     (uuid? page-uuid) page-uuid)
+                                                               new-uuid*))]
+                                               {:block/uuid new-uuid}))
                                            (when namespace?
                                              (let [namespace (first (common-util/split-last "/" original-page-name))]
                                                (when-not (string/blank? namespace)
@@ -389,7 +393,7 @@
      (concat title body))
     (swap! *refs #(remove string/blank? %))
     (let [*name->id (atom {})
-          ref->map-fn (fn [*col _tag?]
+          ref->map-fn (fn [*col tag?]
                         (let [col (remove string/blank? @*col)
                               children-pages (when-not db-based?
                                                (->> (mapcat (fn [p]
@@ -410,7 +414,9 @@
                              (let [macro? (and (map? item)
                                                (= "macro" (:type item)))]
                                (when-not macro?
-                                 (let [result (page-name->map item db true date-formatter)
+                                 (let [result (cond->> (page-name->map item db true date-formatter {:class? tag?})
+                                                tag?
+                                                (db-class/build-new-class db))
                                        page-name (:block/name result)
                                        id (get @*name->id page-name)]
                                    (when (nil? id)
