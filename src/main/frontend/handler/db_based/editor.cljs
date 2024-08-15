@@ -101,9 +101,7 @@
         result (-> block
                    (merge (if level {:block/level level} {}))
                    (replace-page-refs-with-ids))]
-    (-> result
-        ;; Remove tags from content
-        (assoc :block/title (db-content/content-without-tags (:block/title result) (:block/refs result))))))
+    result))
 
 (defn save-file!
   "This fn is the db version of file-handler/alter-file"

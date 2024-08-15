@@ -98,21 +98,6 @@
       item)
     item))
 
-(defn content-without-tags
-  "Remove tags from content"
-  [content refs]
-  (->
-   (reduce
-    (fn [content ref]
-      (-> content
-          (string/replace (str "#" page-ref-special-chars (:block/uuid ref))
-                          (block-id->special-id-ref (:block/uuid ref)))
-          (string/replace (str "#" (block-id->special-id-ref (:block/uuid ref)))
-                          (block-id->special-id-ref (:block/uuid ref)))))
-    content
-    refs)
-   (string/trim)))
-
 (defn replace-tags-with-page-refs
   "Replace tags in content with page-ref ids. Ignore case because tags in
   content can have any case and still have a valid ref"

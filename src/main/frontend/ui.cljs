@@ -1008,12 +1008,6 @@
             :style (merge {:width size :height size} style)}
       (dissoc opts :style :class))]))
 
-(rum/defc type-icon
-  [{:keys [name class title extension?]}]
-  [:.type-icon {:class class
-                :title title}
-   (icon name {:extension? extension?})])
-
 (rum/defc with-shortcut < rum/reactive
   < {:key-fn (fn [key pos] (str "shortcut-" key pos))}
   [shortcut-key position content]

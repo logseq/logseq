@@ -338,7 +338,7 @@
              (common-util/safe-subs edit-content pos current-pos)))
         db-based? (config/db-based-graph? (state/get-current-repo))]
     (if hashtag?
-      (fn [chosen-result e]
+      (fn [chosen-result ^js e]
         (util/stop e)
         (state/clear-editor-action!)
         (let [chosen-result (if (:block/uuid chosen-result)
@@ -348,6 +348,7 @@
               class? (and db-based? hashtag?
                           (or (string/includes? chosen (str (t :new-tag) " "))
                               (ldb/class? chosen-result)))
+              inline-tag? (and class? (= (.-identifier e) "auto-complete/meta-complete"))
               chosen (-> chosen
                          (string/replace-first (str (t :new-tag) " ") "")
                          (string/replace-first (str (t :new-page) " ") ""))
@@ -364,7 +365,7 @@
               last-pattern (str "#" (when wrapped? page-ref/left-brackets) last-pattern)]
           (p/do!
            (editor-handler/insert-command! id
-                                           (if class? "" (str "#" wrapped-tag))
+                                           (if (and class? (not inline-tag?)) "" (str "#" wrapped-tag))
                                            format
                                            {:last-pattern last-pattern
                                             :end-pattern (when wrapped? page-ref/right-brackets)

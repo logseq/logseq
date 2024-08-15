@@ -21,7 +21,6 @@
             [reitit.frontend.easy :as rfe]
             [rum.core :as rum]
             [frontend.db.rtc.debug-ui :as rtc-debug-ui]
-            [frontend.handler.property.util :as pu]
             [frontend.handler.route :as route-handler]
             [logseq.db :as ldb]
             [frontend.components.icon :as icon]))

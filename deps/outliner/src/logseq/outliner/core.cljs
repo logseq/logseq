@@ -222,6 +222,15 @@
                                    tags)))
       m)))
 
+(defn- remove-tags-when-title-changed
+  [block new-content]
+  (->> (:block/tags block)
+       (filter (fn [tag]
+                 (and (ldb/inline-tag? (:block/raw-title block) tag)
+                      (not (ldb/inline-tag? new-content tag)))))
+       (map (fn [tag]
+              [:db/retract (:db/id block) :block/tags (:db/id tag)]))))
+
 (extend-type Entity
   otree/INode
   (-save [this txs-state conn repo _date-formatter {:keys [retract-attributes? retract-attributes]
@@ -242,9 +251,6 @@
                  common-util/remove-nils
                  block-with-updated-at
                  fix-tag-ids)
-          m* (if db-based?
-               (dissoc m* :block/tags)
-               m*)
           db @conn
           db-id (:db/id this)
           block-uuid (:block/uuid this)
@@ -295,6 +301,12 @@
       (when (and db-based? (integer? (:logseq.property/heading block-entity))
                  (not (some-> (:block/title data) (string/starts-with? "#"))))
         (swap! txs-state (fn [txs] (conj (vec txs) [:db/retract (:db/id block-entity) :logseq.property/heading]))))
+
+      ;; delete tags when title changed
+      (when (and db-based? (:block/tags block-entity))
+        (let [tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
+          (when (seq tx-data)
+            (swap! txs-state (fn [txs] (concat txs tx-data))))))
 
       this))
 
