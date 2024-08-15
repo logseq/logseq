@@ -5,7 +5,7 @@
             [frontend.ui :as ui]
             [frontend.config :as config]
             [frontend.state :as state]
-            [frontend.handler.plugin :refer [hook-extensions-enhancer-by-key]]
+            [frontend.handler.plugin :refer [hook-extensions-enhancers-by-key]]
             [promesa.core :as p]))
 
 ;; TODO: Why does shadow fail when code is required
@@ -23,7 +23,7 @@
                   (if-not @loaded?
                     (p/finally
                      (p/all (when-let [enhancers (and config/lsp-enabled?
-                                                      (seq (hook-extensions-enhancer-by-key :codemirror)))]
+                                                      (seq (hook-extensions-enhancers-by-key :codemirror)))]
                               (for [{f :enhancer} enhancers]
                                 (when (fn? f) (f (. js/window -CodeMirror))))))
                      (fn []

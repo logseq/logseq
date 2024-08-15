@@ -402,12 +402,9 @@
   ([type *providers] (create-local-renderer-getter type *providers false))
   ([type *providers many?]
    (fn [key]
-     (when-let [key (or many? (and (seq @*providers) key (keyword key)))]
+     (when-let [key (and (seq @*providers) key (keyword key))]
        (when-let [rs (->> @*providers
-                       (map #(if many?
-                               (some-> (state/get-plugin-resources-with-type % type)
-                                 (vals))
-                               (state/get-plugin-resource % type key)))
+                       (map (fn [pid] (state/get-plugin-resource pid type key)))
                        (remove nil?)
                        (flatten)
                        (seq))]
@@ -425,11 +422,13 @@
 
 (def *extensions-enhancer-providers (atom #{}))
 (def register-extensions-enhancer
+  ;; a plugin can only register one enhancer for a type
   (create-local-renderer-register
     :extensions-enhancers *extensions-enhancer-providers))
-(def hook-extensions-enhancer-by-key
+(def hook-extensions-enhancers-by-key
+  ;; multiple plug-ins can obtain more than one enhancer
   (create-local-renderer-getter
-    :extensions-enhancers *extensions-enhancer-providers))
+    :extensions-enhancers *extensions-enhancer-providers true))
 
 (def *route-renderer-providers (atom #{}))
 (def register-route-renderer
