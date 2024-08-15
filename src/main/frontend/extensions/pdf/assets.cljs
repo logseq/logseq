@@ -113,12 +113,16 @@
                                       (pu/get-pid :logseq.property/hl-type) :area
                                       (pu/get-pid :logseq.property.pdf/hl-stamp) stamp)
                                %)
+                 db-base? (config/db-based-graph? (state/get-current-repo))
                  props (cond->
                         {(pu/get-pid :logseq.property/ls-type)  :annotation
                          (pu/get-pid :logseq.property.pdf/hl-page)  page
-                         (pu/get-pid :logseq.property/hl-color) (:color properties)
-                         (pu/get-pid :logseq.property.pdf/hl-value) hl}
-                         (not (config/db-based-graph? (state/get-current-repo)))
+                         (pu/get-pid :logseq.property/hl-color) (:color properties)}
+
+                         db-base?
+                         (assoc (pu/get-pid :logseq.property.pdf/hl-value) hl)
+
+                         (not db-base?)
                          ;; force custom uuid
                          (assoc :id (if (string? id) (uuid id) id)))
                  properties (wrap-props props)]
@@ -256,6 +260,7 @@
         page-name (:block/title page)
         file-path (pu/get-block-property-value block :logseq.property.pdf/file-path)
         hl-page (pu/get-block-property-value block :logseq.property.pdf/hl-page)
+        hl-value (pu/get-block-property-value block :logseq.property.pdf/hl-value)
         db-base? (config/db-based-graph? (state/get-current-repo))]
     (when-let [target-key (and page-name (subs page-name 5))]
       (p/let [hls (resolve-hls-data-by-key$ target-key)
@@ -263,7 +268,8 @@
               file-path (or file-path (str "../assets/" target-key ".pdf"))
               href (and db-base? (assets-handler/make-asset-url file-path))]
         (if-let [matched (or (and hls (medley/find-first #(= id (:id %)) hls))
-                           (and hl-page {:page hl-page}))]
+                           (if hl-page {:page hl-page}
+                             (when-let [page (some-> hl-value :page)] {:page page})))]
           (do
             (state/set-state! :pdf/ref-highlight matched)
             ;; open pdf viewer
