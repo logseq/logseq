@@ -127,7 +127,12 @@ export type BlockUUIDTuple = ['uuid', BlockUUID]
 export type IEntityID = { id: EntityID; [key: string]: any }
 export type IBatchBlock = {
   content: string
+
+  /**
+   * @NOTE: not supported for DB graph
+   */
   properties?: Record<string, any>
+
   children?: Array<IBatchBlock>
 }
 export type IDatom = [e: number, a: string, v: any, t: number, added: boolean]

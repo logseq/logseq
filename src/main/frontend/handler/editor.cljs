@@ -2065,28 +2065,29 @@
                   sibling?
                   keep-uuid?
                   revert-cut-txs
-                  skip-empty-target?]
+                  skip-empty-target?
+                  ops-only?]
            :or {exclude-properties []}}]
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/entity [:block/uuid (:block/uuid editing-block)])
-                                (assoc :block/title (state/get-edit-content))))
+                          (assoc :block/title (state/get-edit-content))))
         has-unsaved-edits (and editing-block
-                               (not= (:block/title (db/entity (:db/id editing-block)))
-                                     (state/get-edit-content)))
+                            (not= (:block/title (db/entity (:db/id editing-block)))
+                              (state/get-edit-content)))
         target-block (or target-block editing-block)
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
-                 (when target-block (:block/page (db/entity (:db/id target-block)))))
+               (when target-block (:block/page (db/entity (:db/id target-block)))))
         empty-target? (if (true? skip-empty-target?) false
-                          (string/blank? (:block/title target-block)))
+                        (string/blank? (:block/title target-block)))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         replace-empty-target? (and empty-target?
-                                   (or (not target-block-has-children?)
-                                       (and target-block-has-children? (= (count blocks) 1))))
+                                (or (not target-block-has-children?)
+                                  (and target-block-has-children? (= (count blocks) 1))))
         target-block' (if (and empty-target? target-block-has-children? paste-nested-blocks?)
                         (or (ldb/get-left-sibling target-block)
-                            (:block/parent (db/entity (:db/id target-block))))
+                          (:block/parent (db/entity (:db/id target-block))))
                         target-block)
         sibling? (cond
                    (and paste-nested-blocks? empty-target?)
@@ -2099,27 +2100,30 @@
                    false
 
                    :else
-                   true)]
-
-    (p/let [_ (when has-unsaved-edits
-                (ui-outliner-tx/transact!
-                 {:outliner-op :save-block}
-                 (outliner-save-block! editing-block)))
-            result (ui-outliner-tx/transact!
-                    {:outliner-op :insert-blocks
-                     :additional-tx revert-cut-txs}
-                    (when target-block'
-                      (let [format (or (:block/format target-block') (state/get-preferred-format))
-                            repo (state/get-current-repo)
-                            blocks' (map (fn [block]
-                                           (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
-                                         blocks)]
-                        (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
-                                                                           :outliner-op :paste
-                                                                           :replace-empty-target? replace-empty-target?
-                                                                           :keep-uuid? keep-uuid?}))))]
-      (state/set-block-op-type! nil)
-      (when result (edit-last-block-after-inserted! (ldb/read-transit-str result))))))
+                   true)
+        transact-blocks! #(ui-outliner-tx/transact!
+                            {:outliner-op :insert-blocks
+                             :additional-tx revert-cut-txs}
+                            (when target-block'
+                              (let [format (or (:block/format target-block') (state/get-preferred-format))
+                                    repo (state/get-current-repo)
+                                    blocks' (map (fn [block]
+                                                   (paste-block-cleanup repo block page exclude-properties format content-update-fn keep-uuid?))
+                                              blocks)]
+                                (outliner-op/insert-blocks! blocks' target-block' {:sibling? sibling?
+                                                                                   :outliner-op :paste
+                                                                                   :replace-empty-target? replace-empty-target?
+                                                                                   :keep-uuid? keep-uuid?}))))]
+    (if ops-only?
+      (transact-blocks!)
+      (p/let [_ (when has-unsaved-edits
+                  (ui-outliner-tx/transact!
+                    {:outliner-op :save-block}
+                    (outliner-save-block! editing-block)))
+              result (transact-blocks!)]
+        (state/set-block-op-type! nil)
+        (when-let [result (some-> result (ldb/read-transit-str))]
+          (edit-last-block-after-inserted! result) result)))))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2156,7 +2160,7 @@
      {:outliner-op :paste-blocks}
      (when (seq block-refs)
        (db/transact! (map (fn [[_ id]] {:block/uuid id}) block-refs)))
-     (paste-blocks blocks opts))))
+     (paste-blocks blocks (merge opts {:ops-only? true})))))
 
 (defn insert-block-tree-after-target
   "`tree-vec`: a vector of blocks.

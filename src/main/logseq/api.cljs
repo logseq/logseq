@@ -736,11 +736,13 @@
                                        (when (and uuid (db-model/query-block-by-uuid (sdk-utils/uuid-or-throw-error uuid)))
                                          (throw (js/Error.
                                                  (util/format "Custom block UUID already exists (%s)." uuid)))))))
-                block (if (and before sibling)
-                        (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)
-                _ (editor-handler/insert-block-tree-after-target
-                   (:db/id block) sibling bb (:block/format block) keep-uuid?)]
-            nil))))))
+                block (if before
+                        (db/pull (:db/id (ldb/get-left-sibling (db/entity (:db/id block))))) block)]
+            (some-> (editor-handler/insert-block-tree-after-target
+                      (:db/id block) sibling bb (:block/format block) keep-uuid?)
+              (p/then (fn [results]
+                        (some-> results (ldb/read-transit-str)
+                          :blocks (sdk-utils/normalize-keyword-for-json) (bean/->js)))))))))))
 
 (def ^:export remove_block
   (fn [block-uuid ^js _opts]
