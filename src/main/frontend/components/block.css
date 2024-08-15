@@ -842,3 +842,8 @@ html.is-mac {
     @apply bg-gray-04;
   }
 }
+
+.block-title-wrap a.tag, .block-body a.tag {
+  font-size: initial;
+  opacity: 1;
+}

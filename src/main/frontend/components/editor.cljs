@@ -137,7 +137,8 @@
 
 (rum/defc page-search-aux
   [id format embed? db-tag? q current-pos input pos]
-  (let [[matched-pages set-matched-pages!] (rum/use-state nil)]
+  (let [db? (config/db-based-graph? (state/get-current-repo))
+        [matched-pages set-matched-pages!] (rum/use-state nil)]
     (rum/use-effect! (fn []
                        (when-not (string/blank? q)
                          (p/let [result (if db-tag?
@@ -165,37 +166,43 @@
                               (cons (first matched-pages)
                                     (matched-pages-with-new-page (rest matched-pages)))
                               (matched-pages-with-new-page matched-pages))))]
-      (ui/auto-complete
-       matched-pages
-       {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
-        :on-enter    (fn []
-                       (page-handler/page-not-exists-handler input id q current-pos))
-        :item-render (fn [block _chosen?]
-                       [:div.flex.flex-row.items-center.gap-1
-                        (when-not db-tag?
-                          (cond
-                            (ldb/class? block)
-                            [:div (ui/icon "hash" {:size 14})]
-                            (ldb/property? block)
-                            [:div (ui/icon "letter-p" {:size 14})]
-                            (db-model/whiteboard-page? block)
-                            [:div (ui/icon "whiteboard" {:extension? true})]
-                            (db/page? block)
-                            [:div (ui/icon "page" {:extension? true})]
-                            (or (string/starts-with? (:block/title block) (t :new-tag))
-                                (string/starts-with? (:block/title block) (t :new-page)))
-                            nil
-                            :else
-                            [:div (ui/icon "letter-n" {:size 14})]))
+      [:<>
+       (ui/auto-complete
+        matched-pages
+        {:on-chosen   (page-on-chosen-handler embed? input id q pos format)
+         :on-enter    (fn []
+                        (page-handler/page-not-exists-handler input id q current-pos))
+         :item-render (fn [block _chosen?]
+                        [:div.flex.flex-row.items-center.gap-1
+                         (when-not db-tag?
+                           (cond
+                             (ldb/class? block)
+                             [:div (ui/icon "hash" {:size 14})]
+                             (ldb/property? block)
+                             [:div (ui/icon "letter-p" {:size 14})]
+                             (db-model/whiteboard-page? block)
+                             [:div (ui/icon "whiteboard" {:extension? true})]
+                             (db/page? block)
+                             [:div (ui/icon "page" {:extension? true})]
+                             (or (string/starts-with? (:block/title block) (t :new-tag))
+                                 (string/starts-with? (:block/title block) (t :new-page)))
+                             nil
+                             :else
+                             [:div (ui/icon "letter-n" {:size 14})]))
 
-                        (let [title (if db-tag?
-                                      (:block/title block)
-                                      (title/block-unique-title block))]
-                          (search-handler/highlight-exact-query title q))])
-        :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                   "Search for a tag"
-                                                                   "Search for a node")]
-        :class       "black"}))))
+                         (let [title (if db-tag?
+                                       (:block/title block)
+                                       (title/block-unique-title block))]
+                           (search-handler/highlight-exact-query title q))])
+         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
+                                                                    "Search for a tag"
+                                                                    "Search for a node")]
+         :class       "black"})
+
+       (when (and db? db-tag? (not (string/blank? q)))
+         [:p.px-1.opacity-50.text-sm
+          [:code (if util/mac? "Cmd+Enter" "Ctrl+Enter")]
+          [:span " to display this tag inline instead of at the end of this node."]])])))
 
 (rum/defc page-search < rum/reactive
   {:will-unmount (fn [state]

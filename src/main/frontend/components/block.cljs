@@ -2364,15 +2364,19 @@
                    (str uuid "-" idx)))))]))))
 
 (rum/defc tags
+  "Tags without inline tags"
   [config block]
-  (let [block-tags (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) (:block/tags block))]
+  (let [block-tags (->>
+                    (:block/tags block)
+                    (remove (fn [t] (= (:db/ident t) :logseq.class/Task)))
+                    (remove (fn [t] (ldb/inline-tag? (:block/raw-title block) t))))]
     (when (seq block-tags)
       [:div.block-tags.flex.flex-row.flex-wrap.items-center.gap-1
        (for [tag block-tags]
          (rum/with-key
            (page-cp (assoc config
-                          :tag? true
-                          :disable-preview? true) tag)
+                           :tag? true
+                           :disable-preview? true) tag)
            (str "tag-" (:db/id tag))))])))
 
 (rum/defc block-positioned-properties

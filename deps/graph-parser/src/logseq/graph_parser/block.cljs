@@ -309,56 +309,59 @@
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
     (let [db-based? (ldb/db-based-graph? db)
-          page (cond
-                 (and original-page-name (string? original-page-name))
-                 (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
-                       [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
-                       namespace? (and (not db-based?)
-                                       (not (boolean (text/get-nested-page-name original-page-name)))
-                                       (text/namespace-page? original-page-name))
-                       page-entity (when db
-                                     (if class?
-                                       (ldb/get-case-page db original-page-name)
-                                       (ldb/get-page db original-page-name)))
-                       original-page-name (or from-page (:block/title page-entity) original-page-name)]
-                   (merge
-                    {:block/name page-name
-                     :block/title original-page-name}
-                    (let [new-uuid* (if (uuid? page-uuid)
-                                      page-uuid
-                                      (if journal-day
-                                        (common-uuid/gen-uuid :journal-page-uuid journal-day)
-                                        (common-uuid/gen-uuid)))
-                          new-uuid (if skip-existing-page-check?
-                                     new-uuid*
-                                     (or
-                                      (cond page-entity       (:block/uuid page-entity)
-                                            (uuid? page-uuid) page-uuid)
-                                      new-uuid*))]
-                      {:block/uuid new-uuid})
-                    (when namespace?
-                      (let [namespace (first (common-util/split-last "/" original-page-name))]
-                        (when-not (string/blank? namespace)
-                          {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
-                    (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
-                      (let [current-ms (common-util/time-ms)]
-                        {:block/created-at current-ms
-                         :block/updated-at current-ms}))
-                    (if journal-day
-                      {:block/type "journal"
-                       :block/journal-day journal-day}
-                      {})))
+          [page page-entity] (cond
+                               (and original-page-name (string? original-page-name))
+                               (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
+                                     [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
+                                     namespace? (and (not db-based?)
+                                                     (not (boolean (text/get-nested-page-name original-page-name)))
+                                                     (text/namespace-page? original-page-name))
+                                     page-entity (when db
+                                                   (if class?
+                                                     (ldb/get-case-page db original-page-name)
+                                                     (ldb/get-page db original-page-name)))
+                                     original-page-name (or from-page (:block/title page-entity) original-page-name)
+                                     page (merge
+                                           {:block/name page-name
+                                            :block/title original-page-name}
+                                           (let [new-uuid* (if (uuid? page-uuid)
+                                                             page-uuid
+                                                             (if journal-day
+                                                               (common-uuid/gen-uuid :journal-page-uuid journal-day)
+                                                               (common-uuid/gen-uuid)))
+                                                 new-uuid (if skip-existing-page-check?
+                                                            new-uuid*
+                                                            (or
+                                                             (cond page-entity       (:block/uuid page-entity)
+                                                                   (uuid? page-uuid) page-uuid)
+                                                             new-uuid*))]
+                                             {:block/uuid new-uuid})
+                                           (when namespace?
+                                             (let [namespace (first (common-util/split-last "/" original-page-name))]
+                                               (when-not (string/blank? namespace)
+                                                 {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
+                                           (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
+                                             (let [current-ms (common-util/time-ms)]
+                                               {:block/created-at current-ms
+                                                :block/updated-at current-ms}))
+                                           (if journal-day
+                                             {:block/type "journal"
+                                              :block/journal-day journal-day}
+                                             {}))]
+                                 [page page-entity])
 
-                 (and (map? original-page-name) (:block/uuid original-page-name))
-                 original-page-name
+                               :else
+                               (let [page (cond (and (map? original-page-name) (:block/uuid original-page-name))
+                                                original-page-name
 
-                 (map? original-page-name)
-                 (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
+                                                (map? original-page-name)
+                                                (assoc original-page-name :block/uuid (or page-uuid (d/squuid)))
 
-                 :else
-                 nil)]
+                                                :else
+                                                nil)]
+                                 [page nil]))]
       (when page
-        (let [type (if class? "class" (or (:block/type page) "page"))]
+        (let [type (if class? "class" (or (:block/type page-entity) "page"))]
           (assoc page :block/type type))))))
 
 (defn- with-page-refs-and-tags

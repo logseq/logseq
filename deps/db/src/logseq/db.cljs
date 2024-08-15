@@ -14,7 +14,8 @@
             [logseq.db.frontend.order :as db-order]
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
-            [logseq.db.sqlite.util :as sqlite-util]))
+            [logseq.db.sqlite.util :as sqlite-util]
+            [logseq.db.frontend.content :as db-content]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -567,3 +568,8 @@
     (when-let [page (get-page db common-config/views-page-name)]
       (->> (:block/_parent page)
            (filter (fn [b] (= :all-pages (:logseq.property/view-for b))))))))
+
+(defn inline-tag?
+  [block-raw-title tag]
+  (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
+      (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
