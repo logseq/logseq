@@ -28,7 +28,13 @@
               rows' (sort-by
                      (fn [row]
                        (let [sort-value (or (get column-id->get-value id)
-                                           (fn [row] (get row id)))]
+                                            (let [valid-type? (some-fn number? string? boolean?)]
+                                              ;; need to check value type, otherwise `compare` can be failed,
+                                              ;; then crash the UI.
+                                              (fn [row]
+                                                (let [v (get row id)]
+                                                  (when (valid-type? v)
+                                                    v)))))]
                          (sort-value row)))
                      (if asc? compare #(compare %2 %1))
                      rows)]
@@ -55,4 +61,4 @@
   [{:keys [rows columns sorting row-filter]}]
   (let [rows' (if row-filter (filter row-filter rows) rows)]
     (cond-> rows'
-     (seq sorting) (sort-rows sorting columns))))
+      (seq sorting) (sort-rows sorting columns))))
