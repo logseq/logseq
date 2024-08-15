@@ -484,6 +484,27 @@
                (util/stop e)
                (on-submit command @input-value pos)))])))))
 
+(rum/defc image-uploader < rum/reactive
+  [id format]
+  [:div.image-uploader
+   [:input
+    {:id "upload-file"
+     :type "file"
+     :on-change (fn [e]
+                  (let [files (.-files (.-target e))]
+                    (editor-handler/upload-asset! id files format editor-handler/*asset-uploading? false)))
+     :hidden true}]
+   #_:clj-kondo/ignore
+   ;(when-let [uploading? (util/react editor-handler/*asset-uploading?)]
+   ;  (let [processing (util/react editor-handler/*asset-uploading-process)]
+   ;    (transition-cp
+   ;      [:div.flex.flex-row.align-center.rounded-md.shadow-sm.bg-base-2.px-1.py-1
+   ;       (ui/loading
+   ;         (util/format "Uploading %s%" (util/format "%2d" processing)))]
+   ;      "upload-file"
+   ;      false)))
+   ])
+
 (defn- set-up-key-down!
   [state format]
   (mixins/on-key-down
@@ -753,4 +774,7 @@
 
      (ui/ls-textarea opts)
      (mock-textarea content)
-     (command-popups id format)]))
+     (command-popups id format)
+
+     (when format
+       (image-uploader id format))]))
