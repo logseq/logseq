@@ -224,12 +224,13 @@
 
 (defn- remove-tags-when-title-changed
   [block new-content]
-  (->> (:block/tags block)
-       (filter (fn [tag]
-                 (and (ldb/inline-tag? (:block/raw-title block) tag)
-                      (not (ldb/inline-tag? new-content tag)))))
-       (map (fn [tag]
-              [:db/retract (:db/id block) :block/tags (:db/id tag)]))))
+  (when (and (:block/raw-title block) new-content)
+    (->> (:block/tags block)
+         (filter (fn [tag]
+                   (and (ldb/inline-tag? (:block/raw-title block) tag)
+                        (not (ldb/inline-tag? new-content tag)))))
+         (map (fn [tag]
+                [:db/retract (:db/id block) :block/tags (:db/id tag)])))))
 
 (extend-type Entity
   otree/INode
@@ -303,7 +304,7 @@
         (swap! txs-state (fn [txs] (conj (vec txs) [:db/retract (:db/id block-entity) :logseq.property/heading]))))
 
       ;; delete tags when title changed
-      (when (and db-based? (:block/tags block-entity))
+      (when (and db-based? (:block/tags block-entity) block-entity)
         (let [tx-data (remove-tags-when-title-changed block-entity (:block/title m))]
           (when (seq tx-data)
             (swap! txs-state (fn [txs] (concat txs tx-data))))))

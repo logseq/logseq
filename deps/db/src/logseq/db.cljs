@@ -571,5 +571,6 @@
 
 (defn inline-tag?
   [block-raw-title tag]
+  (assert (string? block-raw-title) "block-raw-title should be a string")
   (or (string/includes? block-raw-title (str "#" (db-content/block-id->special-id-ref (:block/uuid tag))))
       (string/includes? block-raw-title (str "#" db-content/page-ref-special-chars (:block/uuid tag)))))
