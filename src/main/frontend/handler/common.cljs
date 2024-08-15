@@ -9,14 +9,16 @@
             [goog.object :as gobj]
             [goog.dom :as gdom]
             ["ignore" :as Ignore]
-            [goog.functions :refer [debounce]]))
+            [goog.functions :refer [debounce]]
+            [frontend.db :as db]))
 
 (defn copy-to-clipboard-without-id-property!
   [repo format raw-text html blocks]
-  (util/copy-to-clipboard! (property-handler/remove-id-property repo format raw-text)
-                           :html html
-                           :graph repo
-                           :blocks blocks))
+  (let [blocks' (map (fn [b] (assoc b :block/title (:block/raw-title (db/entity (:db/id b))))) blocks)]
+    (util/copy-to-clipboard! (property-handler/remove-id-property repo format raw-text)
+                             :html html
+                             :graph repo
+                             :blocks blocks')))
 
 (defn config-with-document-mode
   [config]
