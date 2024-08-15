@@ -632,7 +632,11 @@
        (= value :logseq.property/empty-placeholder)
        (property-empty-btn-value)
 
-       (or (ldb/page? value) (seq (:block/tags value)))
+       (or (ldb/page? value)
+           (and (seq (:block/tags value))
+                ;; FIXME: page-cp should be renamed to node-cp and
+                ;; support this case and maybe other complex cases.
+                (not (string/includes? (:block/title value) "[["))))
        (when value
          (rum/with-key
            (page-cp {:disable-preview? true
