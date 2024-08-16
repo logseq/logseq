@@ -383,6 +383,7 @@
                                         [:div title]])
                                      (or (:label node) (:block/title node)))]
                          (assoc node
+                                :label-value (:block/title node)
                                 :label label
                                 :value id))) nodes)
         classes' (remove (fn [class] (= :logseq.class/Root (:db/ident class))) classes)
@@ -404,7 +405,7 @@
                                               "Choose node")
                  :show-new-when-not-exact-match? true
                  :extract-chosen-fn :value
-                 :extract-fn :label
+                 :extract-fn (fn [x] (or (:label-value x) (:label x)))
                  :input-opts input-opts
                  :on-input (debounce on-input 50)
                  :on-chosen (fn [chosen selected?]
