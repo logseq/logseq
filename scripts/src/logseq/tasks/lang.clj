@@ -5,7 +5,13 @@
             [frontend.dicts :as dicts]
             [logseq.tasks.util :as task-util]
             [babashka.cli :as cli]
-            [babashka.process :refer [shell]]))
+            [babashka.process :refer [shell]]
+            [babashka.fs :as fs]
+            [babashka.deps :as deps]))
+
+(deps/add-deps '{:deps {borkdude/rewrite-edn {:mvn/version "0.4.8"}}})
+(require '[borkdude.rewrite-edn :as r])
+
 
 (defn- get-dicts
   []
@@ -126,6 +132,17 @@
        string/split-lines
        (map #(keyword (subs % 3)))))
 
+(defn- delete-not-used-key-from-dict-file
+  [invalid-keys]
+  (let [paths (fs/list-dir "src/resources/dicts")]
+    (doseq [path paths]
+      (let [result (r/parse-string (String. (fs/read-all-bytes path)))
+            new-content (str (reduce
+                              (fn [result k]
+                                (r/dissoc result k))
+                              result invalid-keys))]
+        (spit (fs/file path) new-content)))))
+
 (defn- validate-ui-translations-are-used
   "This validation checks to see that translations done by (t ...) are equal to
   the ones defined for the default :en lang. This catches translations that have
@@ -156,7 +173,8 @@
           (task-util/print-table (map #(hash-map :invalid-key %) actual-only)))
         (when (seq expected-only)
           (println "\nThese translation keys are invalid because they are not used in the UI:")
-          (task-util/print-table (map #(hash-map :invalid-key %) expected-only)))
+          (task-util/print-table (map #(hash-map :invalid-key %) expected-only))
+          (delete-not-used-key-from-dict-file expected-only))
         (System/exit 1)))))
 
 (def allowed-duplicates

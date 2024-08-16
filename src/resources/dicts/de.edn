@@ -184,22 +184,16 @@
  :help/title-terms "Rechtliches"
  :help/title-usage "Bedienung"
 
- :left-side-bar/create "Erstellen"
  :left-side-bar/journals "Journale"
  :left-side-bar/nav-favorites "Favoriten"
  :left-side-bar/nav-recent-pages "Neuste"
- :left-side-bar/new-page "Neue Seite"
- :left-side-bar/new-whiteboard "Neues Whiteboard"
  :left-side-bar/switch "Wechseln zu:"
 
  :linked-references/filter-search "Suche in verknüpften Seiten"
 
  :notification/clear-all "Alles löschen"
 
- :on-boarding/add-graph "Graph hinzufügen"
  :on-boarding/command-palette-quick-tour "Kurze Tour für Neueinsteiger"
- :on-boarding/demo-graph "Dies ist ein Demo-Graph. Änderungen werden nicht gespeichert, solange Sie kein lokales Verzeichnis öffnen."
-
  :on-boarding/importing-desc "Logseq importiert JSON, EDN und Markdown."
  :on-boarding/importing-lsq-desc "Ein früheres Backup eines Logseq-Graphen aus EDN oder JSON importieren"
  :on-boarding/importing-main-desc "Sie können dies auch später in der App tun."
@@ -210,13 +204,6 @@
 
  :on-boarding/main-desc "Wählen Sie ein Verzeichnis, wo Logseq Ihre Gedanken, Ideen und Notizen aufbewahren kann."
  :on-boarding/main-title (fn [] ["Willkommen bei " [:strong "Logseq!"]])
- :on-boarding/new-graph-desc-1 "Zur Textformatierung unterstützt Logseq sowohl Markdown als auch Org-mode. Ihre Daten werden nur auf diesem Gerät gespeichert. Sie können ein bestehendes Verzeichnis auf Ihrem Rechner öffnen ein neues anlegen. Ein Verzeichnis wird auch als Ordner bezeichnet."
- :on-boarding/new-graph-desc-2 "Nachdem Sie ein Verzeichnis geöffnet haben, werden darin Unterordner angelegt:"
- :on-boarding/new-graph-desc-3 "/journals - enthält Ihre Journal-Seiten"
- :on-boarding/new-graph-desc-4 "/pages - enthält die anderen Seiten"
- :on-boarding/new-graph-desc-5 "/logseq - enthält Einstellungen, Metadaten und die custom.css"
- :on-boarding/open-local-dir "Lokales Verzeichnis öffnen"
-
  :on-boarding/quick-tour-btn-back "Zurück"
  :on-boarding/quick-tour-btn-finish "Beenden"
  :on-boarding/quick-tour-btn-next "Weiter"
@@ -233,20 +220,6 @@
  :on-boarding/quick-tour-left-sidebar-desc "Öffnen Sie die linke Seitenleiste, um wichtige Menus in Logseq zu erkunden."
  :on-boarding/quick-tour-left-sidebar-title "👀 Linke Seitenleiste"
  :on-boarding/quick-tour-steps "SCHRITT "
-
- :on-boarding/section-app "App-Internes"
- :on-boarding/section-assets "Eingefügte Grafiken & Dokumente"
- :on-boarding/section-btn-desc "Vorhandenen Ordner öffnen oder Einen neuen anlegen"
- :on-boarding/section-btn-title "Ordner auswählen"
- :on-boarding/section-computer "Computer"
- :on-boarding/section-config "Konfigurationsdatei"
- :on-boarding/section-desc "Im gewählten Ordner wird Logseq 4 Unterordner anlegen."
- :on-boarding/section-journals "Tägliche Notizen"
- :on-boarding/section-pages "Seiten"
- :on-boarding/section-phone "Telefon"
- :on-boarding/section-tip-1 "Jede Seite ist eine Datei, die nur auf ihrem {1} gespeichert ist."
- :on-boarding/section-tip-2 "Wenn Sie möchten, können Sie Ihre Notizen später synchronisieren."
- :on-boarding/section-title "Wie Logseq Ihre Arbeit speichert"
 
  :on-boarding/tour-whiteboard-btn-back "Zurück"
  :on-boarding/tour-whiteboard-btn-finish "Beenden"
@@ -348,7 +321,6 @@
  :right-side-bar/flashcards "Karteikarten"
  :right-side-bar/graph-view "Graph-Ansicht"
  :right-side-bar/help "Hilfe"
- :right-side-bar/new-page "Neue Seite"
  :right-side-bar/page-graph "Seiten-Graph"
  :right-side-bar/separator "Griff zur Größenänderung der rechten Seitenleiste"
  :right-side-bar/show-journals "Zeige Journale"
@@ -389,9 +361,6 @@
  :settings-permission/start-granting "Erlauben"
 
  :tips/all-done "Alles erledigt!"
-
- :tutorial/text #resource "tutorials/tutorial-de.md"
- :tutorial/dummy-notes #resource "tutorials/dummy-notes-de.md"
 
  :whiteboard/add-block-or-page "Block oder Seite hinzufügen"
  :whiteboard/align-bottom "Am unteren Rand ausrichten"

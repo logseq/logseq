@@ -93,18 +93,7 @@
  :left-side-bar/journals "Journalen"
  :left-side-bar/nav-favorites "Favorieten"
  :left-side-bar/nav-recent-pages "Recent"
- :left-side-bar/new-page "Nieuwe pagina"
-
  :linked-references/filter-search "Zoeken in gelinkte pagina's"
-
- :on-boarding/add-graph "Grafiek toevoegen"
- :on-boarding/demo-graph "Dit is een demo grafiek, wijzigingen worden niet opgeslagen totdat u een lokale map opent."
- :on-boarding/new-graph-desc-1 "Logseq ondersteunt zowel Markdown als Org-mode. U kunt een bestaande map openen of een nieuwe aanmaken op uw apparaat, een map is ook gewoon bekend als een folder. Uw gegevens worden alleen op dit apparaat opgeslagen."
- :on-boarding/new-graph-desc-2 "Nadat u map hebt geopend, worden er drie mappen in die map aangemaakt:"
- :on-boarding/new-graph-desc-3 "/journals - bewaart de Journaal pagina's"
- :on-boarding/new-graph-desc-4 "/pages - bewaart de andere pagina's"
- :on-boarding/new-graph-desc-5 "/logseq - bewaart configuratie, custom.css, en wat metadata."
- :on-boarding/open-local-dir "Open een lokale map"
 
  :page/add-to-favorites "Voeg aan favorieten toe"
  :page/copy-page-url "Kopieer pagina URL"
@@ -154,7 +143,6 @@
  :right-side-bar/block-ref "Blok verwijzingen"
  :right-side-bar/contents "Inhoud"
  :right-side-bar/graph-view "Grafiekweergave"
- :right-side-bar/new-page "Nieuwe pagina"
  :right-side-bar/page-graph "Pagina grafiek"
  :right-side-bar/show-journals "Toon Journaals"
  :right-side-bar/switch-theme "Thema modes"
