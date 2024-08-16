@@ -402,15 +402,21 @@
                            :else
                            (block-ref/->block-ref (:block/uuid chosen-result)))
                          (get-page-ref-text chosen'))]
-          (when (de/entity? chosen-result)
-            (state/conj-block-ref! chosen-result))
-          (editor-handler/insert-command! id
-                                          ref-text
-                                          format
-                                          {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
-                                           :end-pattern page-ref/right-brackets
-                                           :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
-                                           :command :page-ref}))))))
+          (p/do!
+           (editor-handler/insert-command! id
+                                           ref-text
+                                           format
+                                           {:last-pattern (str page-ref/left-brackets (if (editor-handler/get-selected-text) "" q))
+                                            :end-pattern page-ref/right-brackets
+                                            :postfix-fn   (fn [s] (util/replace-first page-ref/right-brackets s ""))
+                                            :command :page-ref})
+           (p/let [result (when-not (de/entity? chosen-result)
+                            (<create! chosen'
+                                      {:redirect? false
+                                       :create-first-block? false}))
+                   chosen-result (or result chosen-result)]
+             (when (de/entity? chosen-result)
+               (state/conj-block-ref! chosen-result)))))))))
 
 (defn create-today-journal!
   []

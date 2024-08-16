@@ -150,11 +150,7 @@
                           ;; reorder, shortest and starts-with first.
                           (let [matched-pages-with-new-page
                                 (fn [partial-matched-pages]
-                                  (if (or (db/page-exists? q (if db-tag? "class" "page"))
-                                          (some (fn [p] (and
-                                                         (not (:page? p))
-                                                         (= (string/lower-case q)
-                                                            (string/lower-case (:block/title p))))) matched-pages))
+                                  (if (db/page-exists? q (if db-tag? "class" "page"))
                                     partial-matched-pages
                                     (if db-tag?
                                       (concat [{:block/title (str (t :new-tag) " " q)}]

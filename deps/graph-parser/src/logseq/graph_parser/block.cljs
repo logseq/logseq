@@ -317,7 +317,7 @@
                                      namespace? (and (not db-based?)
                                                      (not (boolean (text/get-nested-page-name original-page-name)))
                                                      (text/namespace-page? original-page-name))
-                                     page-entity (when db (ldb/get-page db original-page-name))
+                                     page-entity (when (and db (not skip-existing-page-check?)) (ldb/get-page db original-page-name))
                                      original-page-name (or from-page (:block/title page-entity) original-page-name)
                                      page (merge
                                            {:block/name page-name
