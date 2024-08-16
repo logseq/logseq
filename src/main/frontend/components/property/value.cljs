@@ -165,11 +165,11 @@
             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
               (let [journal (date/js-date->journal-title gd)]
                 (p/do!
-                 (when-not (db/get-case-page journal)
+                 (when-not (db/get-page journal)
                    (page-handler/<create! journal {:redirect? false
                                                    :create-first-block? false}))
                  (when (fn? on-change)
-                   (on-change (db/get-case-page journal)))
+                   (on-change (db/get-page journal)))
                  (shui/popup-hide! id)
                  (ui/hide-popups-until-preview-popup!)
                  (shui/dialog-close!))))))]
@@ -250,17 +250,22 @@
   (let [page* (string/trim page)
         ;; inline-class is only for input from :transform-fn
         [page inline-class] (if (and (seq classes) (not (contains? db-property/db-attribute-properties (:db/ident property))))
-                                (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
-                                    [page* nil])
-                                [page* nil])
-        id (:db/id (ldb/get-case-page (db/get-db) page))]
-    (if (nil? id)
+                              (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
+                                  [page* nil])
+                              [page* nil])
+        page-entity (ldb/get-page (db/get-db) page)
+        id (:db/id page-entity)
+        class? (= :block/tags (:db/ident property))
+        ;; Note: property and other types shouldn't be converted to class
+        page? (= "page" (:block/type page-entity))]
+    (cond
+      ;; page not exists or page exists but not a page type
+      (or (nil? id) (and class? (not page?)))
       (let [inline-class-uuid
             (when inline-class
-              (or (:block/uuid (ldb/get-case-page (db/get-db) inline-class))
+              (or (:block/uuid (ldb/get-page (db/get-db) inline-class))
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))
-            class? (= :block/tags (:db/ident property))
             create-options {:redirect? false
                             :create-first-block? false
                             :tags (if inline-class-uuid
@@ -272,6 +277,12 @@
                        (page-handler/<create-class! page create-options)
                        (page-handler/<create! page create-options))]
           (:db/id page)))
+
+      (and class? page? id)
+      (p/let [_ (page-handler/convert-to-tag! page-entity)]
+        id)
+
+      :else
       id)))
 
 (defn- select-aux

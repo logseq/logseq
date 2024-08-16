@@ -497,7 +497,7 @@
         create-page? (page-handler/<create! @!input {:redirect? true}))
       (state/close-modal!)
       (when create-class?
-        (state/pub-event! [:class/configure (db/get-case-page class)])))))
+        (state/pub-event! [:class/configure (db/get-page class)])))))
 
 (defn- get-filter-user-input
   [input]

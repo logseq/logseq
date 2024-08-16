@@ -207,15 +207,6 @@
       (d/entity db [:block/uuid id])
       (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
 
-(defn get-case-page
-  "Case sensitive version of get-page. For use with DB graphs"
-  [db page-name-or-uuid]
-  (when db
-    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
-                    (parse-uuid page-name-or-uuid))]
-      (d/entity db [:block/uuid id])
-      (d/entity db (sqlite-common-db/get-first-page-by-title db page-name-or-uuid)))))
-
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?
   `page-id` could be either a string or a db/id."
