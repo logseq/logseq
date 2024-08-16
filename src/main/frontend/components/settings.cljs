@@ -417,7 +417,7 @@
 (rum/defc modal-appearance-inner < rum/reactive
   []
   [:div.cp__settings-appearance-modal-inner
-   [:h1.text-2xl.font-bold.pb-2.pt-1 "Appearance"]
+   [:h1.text-2xl.font-bold.pb-2.pt-1 (t :appearance)]
    (theme-modes-row t)
    (editor-font-family-row t (state/sub :ui/editor-font))
    (toggle-wide-mode-row t (state/sub :ui/wide-mode?))
