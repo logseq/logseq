@@ -84,27 +84,42 @@
   [:div.its.icons-row items])
 
 (rum/defc pane-section
-  [label items & {:keys [virtual-list?]}]
-  [:div.pane-section
-   {:class (when virtual-list? "has-virtual-list")}
-   [:div.hd.px-1.pb-1.leading-none
-    [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
-   (if virtual-list?
-     (let [total (count items)
-           step 9 rows (quot total step)
-           mods (mod total step)
-           rows (if (zero? mods) rows (inc rows))
-           items (vec items)]
-       (ui/virtualized-list
-         {:total-count rows
-          :item-content (fn [idx]
-                          (icons-row
-                            (let [last? (= (dec rows) idx)
-                                  start (* idx step)
-                                  end (* (inc idx) (if (and last? (not (zero? mods))) mods step))]
-                              (try (subvec items start end)
-                                (catch js/Error _e nil)))))}))
-     [:div.its items])])
+  [label items & {:keys [virtual-list? searching?]}]
+  (let [[ready?, set-ready!] (rum/use-state false)
+        *el-ref (rum/use-ref nil)
+        virtual-list? (and (not searching?) virtual-list?)]
+
+    (rum/use-effect!
+      (fn []
+        (set-ready! true))
+      [])
+
+    [:div.pane-section
+     {:ref *el-ref
+      :class (util/classnames
+               [{:has-virtual-list virtual-list?
+                 :searching-result searching?}])}
+     [:div.hd.px-1.pb-1.leading-none
+      [:strong.text-xs.font-medium.text-gray-07.dark:opacity-80 label]]
+     (if (and virtual-list? ready?)
+       (let [total (count items)
+             step 9 rows (quot total step)
+             mods (mod total step)
+             rows (if (zero? mods) rows (inc rows))
+             items (vec items)]
+         (ui/virtualized-list
+           (cond-> {:total-count rows
+                    :item-content (fn [idx]
+                                    (icons-row
+                                      (let [last? (= (dec rows) idx)
+                                            start (* idx step)
+                                            end (* (inc idx) (if (and last? (not (zero? mods))) mods step))]
+                                        (try (subvec items start end)
+                                          (catch js/Error _e nil)))))}
+
+             searching?
+             (assoc :custom-scroll-parent (some-> (rum/deref *el-ref) (.closest ".bd-scroll"))))))
+       [:div.its items])]))
 
 (rum/defc emoji-cp < rum/static
   [{:keys [id name] :as emoji} {:keys [on-chosen hover]}]
@@ -120,12 +135,13 @@
    [:em-emoji {:id id}]])
 
 (rum/defc emojis-cp < rum/static
-  [emojis opts]
+  [emojis {:keys [searching?] :as opts}]
   (pane-section
     (util/format "Emojis (%s)" (count emojis))
     (for [emoji emojis]
       (rum/with-key (emoji-cp emoji opts) (:id emoji)))
-    {:virtual-list? true}))
+    {:virtual-list? true
+     :searching? searching?}))
 
 (rum/defc icon-cp < rum/static
   [icon {:keys [on-chosen hover]}]
@@ -146,12 +162,13 @@
    (ui/icon icon {:size 24})])
 
 (rum/defc icons-cp < rum/static
-  [icons opts]
+  [icons {:keys [searching?] :as opts}]
   (pane-section
     (util/format "Icons (%s)" (count icons))
     (for [icon icons]
       (icon-cp icon opts))
-    {:virtual-list? true}))
+    {:virtual-list? true
+     :searching? searching?}))
 
 (defn get-used-items
   []
@@ -351,17 +368,17 @@
        (when-not (string/blank? @*q)
          [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]]
      ;; body
-     [:div.bd
+     [:div.bd.bd-scroll
       {:ref *result-ref
        :class (or (some-> @*tab (name)) "other")
        :on-mouse-leave #(reset! *hover nil)}
-      [:div.search-result
+      [:div.content-pane
        (if (seq result)
-         [:div.flex.flex-1.flex-col.gap-1
+         [:div.flex.flex-1.flex-col.gap-1.search-result
           (when (seq (:emojis result))
-            (emojis-cp (:emojis result) opts))
+            (emojis-cp (:emojis result) (assoc opts :searching? true)))
           (when (seq (:icons result))
-            (icons-cp (:icons result) opts))]
+            (icons-cp (:icons result) (assoc opts :searching? true)))]
          [:div.flex.flex-1.flex-col.gap-1
           (case @*tab
             :emoji (emojis-cp emojis opts)
