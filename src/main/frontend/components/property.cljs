@@ -619,29 +619,10 @@
   (rum/local false ::hover?)
   [state block property {:keys [class-schema? page-cp inline-text other-position?]}]
   (let [*hover? (::hover? state)
-        icon (:logseq.property/icon property)
-        property-name (:block/title property)]
+        icon (:logseq.property/icon property)]
     [:div.flex.flex-row.items-center.gap-1
      {:on-mouse-over   #(reset! *hover? true)
-      :on-mouse-leave  #(reset! *hover? false)
-      :on-context-menu (fn [^js e]
-                         (util/stop e)
-                         (shui/popup-show! e
-                                           [(shui/dropdown-menu-item
-                                             {:on-click (fn []
-                                                          (when-let [schema (some-> property :block/schema)]
-                                                            (components-pu/update-property! property property-name (assoc schema :hide? true))
-                                                            (shui/popup-hide!)))}
-                                             "Hide property")
-                                            (when-not (ldb/built-in-class-property? block property)
-                                              (shui/dropdown-menu-item
-                                               {:on-click (fn []
-                                                            (handle-delete-property! block property {:class-schema? class-schema?})
-                                                            (shui/popup-hide!))}
-                                               [:span.w-full.text-red-rx-09
-                                                "Delete property"]))]
-                                           {:as-dropdown? true
-                                            :content-props {:class "w-48"}}))}
+      :on-mouse-leave  #(reset! *hover? false)}
      ;; icon picker
      (when-not other-position?
        (let [content-fn (fn [{:keys [id]}]
@@ -671,7 +652,7 @@
 
        (shui/trigger-as :a
                         {:tabIndex 0
-                         :title (str "Configure property: " (:block/title property))
+                         :title (str "Configure property​ " (:block/title property))
                          :class "property-k flex select-none jtrigger w-full"
                          :on-pointer-down (fn [^js e]
                                             (when (util/meta-key? e)
@@ -688,9 +669,21 @@
                                            {:variant :ghost :size :sm :class "!w-4 !h-6"
                                             :on-click #(shui/popup-hide! id)}
                                            (shui/tabler-icon "x" {:size 16}))]
+
                                          (property-config property
                                                           {:inline-text inline-text
-                                                           :page-cp page-cp})])
+                                                           :page-cp page-cp})
+
+                                         (when-not (ldb/built-in-class-property? block property)
+                                           [:div.mt-8.my-4
+                                            (shui/button
+                                             {:variant :destructive
+                                              :class "text-muted-foreground opacity-50 hover:opacity-80"
+                                              :size :sm
+                                              :on-click (fn []
+                                                          (handle-delete-property! block property {:class-schema? class-schema?})
+                                                          (shui/popup-hide!))}
+                                             "Delete property from this node")])])
                                       {:content-props {:class "property-configure-popup-content"
                                                        :collisionPadding {:bottom 10 :top 10}
                                                        :avoidCollisions true
