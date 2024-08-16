@@ -263,13 +263,14 @@
         all-pages (get-all-pages db)
         structured-datoms (when db-graph?
                             (get-structured-datoms db))
-        data (concat idents
-                     all-pages
-                     structured-datoms
-                     favorites
-                     views
-                     latest-journals
-                     all-files)]
+        data (distinct
+              (concat idents
+                      all-pages
+                      structured-datoms
+                      favorites
+                      views
+                      latest-journals
+                      all-files))]
     {:schema schema
      :initial-data data}))
 
