@@ -9,9 +9,9 @@
   }
 
   > .bd {
-    @apply py-1;
+    @apply py-1 h-full;
 
-    &.all {
+    &.all, &:has(.search-result) {
       @apply overflow-y-scroll;
     }
   }
@@ -53,6 +53,8 @@
     }
   }
 
+  .search-result {}
+
   .pane-section {
     @apply pl-2 overflow-y-scroll h-full;
 
@@ -70,6 +72,10 @@
 
     &.has-virtual-list {
       @apply h-[285px] overflow-y-visible;
+
+      &.searching-result {
+        @apply h-auto;
+      }
     }
 
     .virtuoso-item-list {
