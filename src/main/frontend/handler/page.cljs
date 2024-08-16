@@ -501,10 +501,11 @@
 
 (defn toggle-properties!
   [page-entity]
-  (property-handler/set-block-property! (state/get-current-repo)
-                                        (:block/uuid page-entity)
-                                        :logseq.property/hide-properties?
-                                        (not (:logseq.property/hide-properties? page-entity))))
+  (let [e (db/entity (:db/id page-entity))]
+    (property-handler/set-block-property! (state/get-current-repo)
+                                         (:block/uuid page-entity)
+                                         :logseq.property/hide-properties?
+                                         (not (:logseq.property/hide-properties? e)))))
 
 (defn convert-to-tag!
   [page-entity]
