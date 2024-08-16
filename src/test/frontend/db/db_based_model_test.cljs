@@ -29,7 +29,7 @@
 (deftest get-class-objects-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
-        class (db/get-case-page "class1")
+        class (db/get-page "class1")
         _ (test-helper/save-block! repo fbid "Block 1" {:tags ["class1"]})]
     (is (= (map :db/id (model/get-class-objects repo (:db/id class)))
            [(:db/id (db/entity [:block/uuid fbid]))]))
@@ -37,7 +37,7 @@
     (testing "classes parent"
       (test-helper/create-page! "class2" opts)
       ;; set class2's parent to class1
-      (let [class2 (db/get-case-page "class2")]
+      (let [class2 (db/get-page "class2")]
         (db/transact! [{:db/id (:db/id class2)
                         :class/parent (:db/id class)}]))
       (test-helper/save-block! repo sbid "Block 2" {:tags ["class2"]})
@@ -49,8 +49,8 @@
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)
-        class1 (db/get-case-page "class1")
-        class2 (db/get-case-page "class2")
+        class1 (db/get-page "class1")
+        class2 (db/get-page "class2")
         conn (db/get-db false)]
     (outliner-property/upsert-property! conn :user.property/property-1 {:type :node} {})
     (outliner-property/class-add-property! conn (:db/id class1) :user.property/property-1)
@@ -72,13 +72,13 @@
         _ (test-helper/create-page! "class1" opts)
         _ (test-helper/create-page! "class2" opts)
         _ (test-helper/create-page! "class3" opts)
-        class1 (db/get-case-page "class1")
-        class2 (db/get-case-page "class2")
-        class3 (db/get-case-page "class3")
+        class1 (db/get-page "class1")
+        class2 (db/get-page "class2")
+        class3 (db/get-page "class3")
         _ (db/transact! [{:db/id (:db/id class2)
                           :class/parent (:db/id class1)}
                          {:db/id (:db/id class3)
                           :class/parent (:db/id class2)}])]
     (is
-     (= (model/get-class-children repo (:db/id (db/get-case-page "class1")))
+     (= (model/get-class-children repo (:db/id (db/get-page "class1")))
         [(:db/id class2) (:db/id class3)]))))

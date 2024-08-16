@@ -13,7 +13,7 @@
            (let [k (:property-key (last (:rum/args state)))]
              (assoc state
                     ::property-key (atom k)
-                    ::property (atom (when k (db/get-case-page k))))))}
+                    ::property (atom (when k (db/get-page k))))))}
   [state blocks opts]
   (when (seq blocks)
     (let [*property-key (::property-key state)

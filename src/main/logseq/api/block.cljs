@@ -41,7 +41,7 @@
           (if multi?
             (-> (for [v value]
                   (when-let [page (some-> v (str) (string/trim))]
-                    (let [id (:db/id (ldb/get-case-page (conn/get-db) page))]
+                    (let [id (:db/id (ldb/get-page (conn/get-db) page))]
                       (if (nil? id)
                         (-> (page-handler/<create! page {:redirect? false :create-first-block? false})
                           (p/then #(:db/id %)))

@@ -470,11 +470,6 @@ independent of format as format specific heading characters are stripped"
   (when page-name-or-uuid
     (ldb/get-page (conn/get-db) page-name-or-uuid)))
 
-(defn get-case-page
-  [page-name-or-uuid]
-  (when page-name-or-uuid
-    (ldb/get-case-page (conn/get-db) page-name-or-uuid)))
-
 (defn get-redirect-page-name
   "Given any readable page-name, return the exact page-name in db. If page
    doesn't exists yet, will return the passed `page-name`. Accepts both
