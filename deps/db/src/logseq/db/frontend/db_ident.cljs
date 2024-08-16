@@ -26,13 +26,13 @@
       new-ident)
     db-ident))
 
-(def nano-char-range "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-(def non-int-nano-char-range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+(def ^:private nano-char-range "-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+(def ^:private non-int-nano-char-range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
 (defn- nano-id-char []
   (rand-nth nano-char-range))
 
-(defn nano-id [length]
+(defn- nano-id [length]
   (assert (> length 1))
   (str
    (rand-nth non-int-nano-char-range)
@@ -57,9 +57,11 @@
               (string/replace "/" "-")
               (string/trim))]
     (try
-      (assert (seq n) "name is not empty")
+      (when-not (seq n)
+        (throw (ex-info "name is not empty" {:n n})))
       (let [k (keyword user-namespace n)]
-        (assert (= k (edn/read-string (str k))))
+        (when-not (= k (edn/read-string (str k)))
+          (throw (ex-info "illegal keyword" {:k k})))
         k)
       (catch :default _e
         (let [n (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq n))
