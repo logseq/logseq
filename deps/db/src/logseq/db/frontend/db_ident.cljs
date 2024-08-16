@@ -26,6 +26,19 @@
       new-ident)
     db-ident))
 
+(def nano-char-range "_-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+(def non-int-nano-char-range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+(defn- nano-id-char []
+  (rand-nth nano-char-range))
+
+(defn nano-id [length]
+  (assert (> length 1))
+  (str
+   (rand-nth non-int-nano-char-range)
+   (->> (repeatedly (dec length) nano-id-char)
+        (string/join))))
+
 ;; TODO: db ident should obey clojure's rules for keywords
 (defn create-db-ident-from-name
   "Creates a :db/ident for a class or property by sanitizing the given name.
@@ -53,4 +66,4 @@
                      (apply str))]
           (if (seq n)
             (keyword user-namespace n)
-            (keyword user-namespace (subs (str (random-uuid)) 30))))))))
+            (keyword user-namespace (nano-id 8))))))))
