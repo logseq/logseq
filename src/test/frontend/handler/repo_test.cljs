@@ -25,7 +25,7 @@
 
     (docs-graph-helper/docs-graph-assertions db graph-dir (map :file/path files))
     (testing "Additional Counts"
-      (is (= 76922 (count (d/datoms db :eavt))) "Correct datoms count")
+      (is (= 76968 (count (d/datoms db :eavt))) "Correct datoms count")
 
       (is (= 7047
              (ffirst
