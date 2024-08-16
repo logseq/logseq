@@ -2365,12 +2365,14 @@
 
 (rum/defc tags
   "Tags without inline tags"
-  [config block]
+  [config block hover?]
   (when (:block/raw-title block)
-    (let [block-tags (->>
-                      (:block/tags block)
-                      (remove (fn [t] (= (:db/ident t) :logseq.class/Task)))
-                      (remove (fn [t] (ldb/inline-tag? (:block/raw-title block) t))))]
+    (let [block-tags (cond->>
+                      (->>
+                       (:block/tags block)
+                       (remove (fn [t] (ldb/inline-tag? (:block/raw-title block) t))))
+                       (not hover?)
+                       (remove (fn [t] (= (:db/ident t) :logseq.class/Task))))]
       (when (seq block-tags)
         [:div.block-tags.flex.flex-row.flex-wrap.items-center.gap-1
          (for [tag block-tags]
@@ -2531,6 +2533,7 @@
       [:div.more (ui/icon "dots-circle-horizontal" {:size 18})])]])
 
 (rum/defcs ^:large-vars/cleanup-todo block-content-or-editor < rum/reactive
+  (rum/local false ::hover?)
   {:init (fn [state]
            (let [block (second (:rum/args state))
                  config (first (:rum/args state))
@@ -2545,7 +2548,8 @@
                     ::hide-block-refs? (atom default-hide?)
                     ::refs-count *refs-count)))}
   [state config {:block/keys [uuid format] :as block} {:keys [edit-input-id block-id edit? hide-block-refs-count?]}]
-  (let [*hide-block-refs? (get state ::hide-block-refs?)
+  (let [*hover? (::hover? state)
+        *hide-block-refs? (get state ::hide-block-refs?)
         *refs-count (get state ::refs-count)
         hide-block-refs? (rum/react *hide-block-refs?)
         editor-box (state/get-component :editor/box)
@@ -2563,6 +2567,8 @@
                      (rum/react *refs-count))
         table? (:table? config)]
     [:div.block-content-or-editor-wrap
+     {:on-mouse-over #(reset! *hover? true)
+      :on-mouse-leave #(reset! *hover? false)}
      (when (and db-based? (not table?)) (block-positioned-properties config block :block-left))
      [:div.flex.flex-1.flex-col
       [:div.flex.flex-1.flex-row.gap-1.items-start
@@ -2613,7 +2619,7 @@
        (when-not (or (:block-ref? config) (:table? config))
          [:div.flex.flex-row.items-center.gap-1.h-6
           (when (and db-based? (seq (:block/tags block)))
-            (tags config block))])
+            (tags config block @*hover?))])
 
        (when-not (:table? config)
          (block-refs-count block refs-count *hide-block-refs?))]
