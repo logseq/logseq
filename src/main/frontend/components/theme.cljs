@@ -128,14 +128,16 @@
      [system-theme?])
 
     (rum/use-effect!
-     #(if settings-open?
-        (shui/dialog-open!
-          (fn [] [:div.settings-modal (settings/settings settings-open?)])
-          {:label "app-settings"
-           :align :top
-           :id :app-settings})
-        (shui/dialog-close! :app-settings))
-     [settings-open?])
+      (fn []
+        (if settings-open?
+          (shui/dialog-open!
+            (fn [] [:div.settings-modal (settings/settings settings-open?)])
+            {:label "app-settings"
+             :align :top
+             :content-props {:onOpenAutoFocus #(.preventDefault %)}
+             :id :app-settings})
+          (shui/dialog-close! :app-settings)))
+      [settings-open?])
 
     (rum/use-effect!
      #(storage/set :file-sync/onboarding-state onboarding-state)
