@@ -675,10 +675,10 @@
                                                            :page-cp page-cp})
 
                                          (when-not (ldb/built-in-class-property? block property)
-                                           [:div.mt-8.my-4
+                                           [:div.mt-4.border-t.pt-3.px-3.-mx-4.-mb-1
                                             (shui/button
-                                             {:variant :destructive
-                                              :class "text-muted-foreground opacity-50 hover:opacity-80"
+                                             {:variant :ghost
+                                              :class "!text-red-rx-09 opacity-50 hover:opacity-100"
                                               :size :sm
                                               :on-click (fn []
                                                           (handle-delete-property! block property {:class-schema? class-schema?})
