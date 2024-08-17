@@ -2367,12 +2367,12 @@
   "Tags without inline tags"
   [config block hover?]
   (when (:block/raw-title block)
-    (let [block-tags (cond->>
-                      (->>
-                       (:block/tags block)
-                       (remove (fn [t] (ldb/inline-tag? (:block/raw-title block) t))))
-                       (not hover?)
-                       (remove (fn [t] (= (:db/ident t) :logseq.class/Task))))]
+    (let [tags (->>
+                (:block/tags block)
+                (remove (fn [t] (ldb/inline-tag? (:block/raw-title block) t))))
+          block-tags (if (and (not hover?) (= [:logseq.class/Task] (map :db/ident tags)))
+                       (remove (fn [t] (= (:db/ident t) :logseq.class/Task)) tags)
+                       tags)]
       (when (seq block-tags)
         [:div.block-tags.flex.flex-row.flex-wrap.items-center.gap-1
          (for [tag block-tags]
