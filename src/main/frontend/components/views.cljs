@@ -131,8 +131,7 @@
 (defn build-columns
   [config properties & {:keys [with-object-name?]
                         :or {with-object-name? true}}]
-  (let [container-id (state/get-next-container-id)]
-    (->> (concat
+  (->> (concat
           [{:id :select
             :name "Select"
             :header (fn [table _column] (header-checkbox table))
@@ -178,7 +177,7 @@
                 :cell (or (:cell property)
                           (when (de/entity? property)
                             (fn [_table row _column]
-                              (pv/property-value row property (get row (:db/ident property)) {:container-id container-id}))))
+                              (pv/property-value row property (get row (:db/ident property)) {}))))
                 :get-value get-value
                 :get-value-for-sort get-value-for-sort
                 :type (:type property)}))
@@ -194,7 +193,7 @@
             :type :date-time
             :header header-cp
             :cell timestamp-cell-cp}])
-         (remove nil?))))
+         (remove nil?)))
 
 (defn- sort-columns
   [columns ordered-column-ids]
