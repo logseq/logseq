@@ -148,7 +148,8 @@
                                               :hide? true
                                               :view-context :page
                                               :public? true}}
-   :logseq.property/description {:schema
+   :logseq.property/description {:title "Description"
+                                 :schema
                                  {:type :default
                                   :public? true}}
 

@@ -333,7 +333,7 @@
     :else
     "letter-n"))
 
-(rum/defc select-node < rum/reactive db-mixins/query
+(rum/defc ^:large-vars/cleanup-todo select-node < rum/reactive db-mixins/query
   [property
    {:keys [block multiple-choices? dropdown? input-opts on-input] :as opts}
    *result]
@@ -547,9 +547,12 @@
                                         (when-let [f (:on-chosen select-opts)] (f))
                                         nil))})})))))
 
-(rum/defc property-normal-block-value
-  [block property value-block opts]
-  (let [multiple-values? (db-property/many? property)
+(rum/defcs property-normal-block-value <
+  {:init (fn [state]
+           (assoc state :container-id (state/get-next-container-id)))}
+  [state block property value-block]
+  (let [container-id (:container-id state)
+        multiple-values? (db-property/many? property)
         block-container (state/get-component :block/container)
         blocks-container (state/get-component :block/blocks-container)
         value-block (if (and (coll? value-block) (every? de/entity? value-block))
@@ -560,7 +563,7 @@
        (let [config {:id (str (if multiple-values?
                                 (:block/uuid block)
                                 (:block/uuid value-block)))
-                     :container-id (:container-id opts)
+                     :container-id container-id
                      :editor-box (state/get-component :editor/box)
                      :property-block? true}]
          (if (set? value-block)
@@ -577,7 +580,7 @@
              (when-let [block-id (or (:db/id block) (:block/uuid block))]
                (db-async/<get-block (state/get-current-repo) block-id :children? true)))
            state)}
-  [state value block property opts page-cp]
+  [state value block property page-cp]
   (when value
     (if (state/sub-async-query-loading value)
       [:div.text-sm.opacity-70 "loading"]
@@ -588,7 +591,7 @@
           (when v-block
             (cond
               (:block/page v-block)
-              (property-normal-block-value block property v-block opts)
+              (property-normal-block-value block property v-block)
 
                 ;; page/class/etc.
               (:block/name v-block)
@@ -722,8 +725,7 @@
 
 (defn- property-value-inner
   [block property value {:keys [inline-text page-cp
-                                dom-id row?]
-                         :as opts}]
+                                dom-id row?]}]
   (let [schema (:block/schema property)
         multiple-values? (db-property/many? property)
         class (str (when-not row? "flex flex-1 ")
@@ -742,7 +744,7 @@
        [:div.jtrigger (property-empty-btn-value)]
 
        (= type :default)
-       (property-block-value value block property opts page-cp)
+       (property-block-value value block property page-cp)
 
        :else
        (inline-text {} :markdown (macro-util/expand-value-if-macro (str value) (state/get-macros))))]))
@@ -885,8 +887,7 @@
                                 (when-not (:other-position? opts) " w-full"))}
                    (cond
                      (and multiple-values? (= type :default) (not closed-values?))
-                     (property-normal-block-value block property v
-                                                  (assoc opts :id (str (:db/id block) "-" (:db/id property))))
+                     (property-normal-block-value block property v)
 
                      multiple-values?
                      (multiple-values block property opts schema)
