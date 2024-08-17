@@ -710,7 +710,7 @@
 (rum/defc property-cp <
   rum/reactive
   db-mixins/query
-  [block k v {:keys [inline-text page-cp] :as opts}]
+  [block k v {:keys [inline-text page-cp sortable-opts] :as opts}]
   (when (keyword? k)
     (when-let [property (db/sub-block (:db/id (db/entity k)))]
       (let [type (get-in property [:block/schema :type] :default)
@@ -723,17 +723,20 @@
                                  (:block/page (first v))))
                         (contains? #{:default} type))
             date? (= type :date)
-            checkbox? (= type :checkbox)]
+            checkbox? (= type :checkbox)
+            property-key-cp [:div.property-key.col-span-2
+                             (property-key block property (assoc (select-keys opts [:class-schema?])
+                                                                 :block? block?
+                                                                 :inline-text inline-text
+                                                                 :page-cp page-cp))]]
         [:div {:class (cond
                         (or date? checkbox?)
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}
-         [:div.property-key.col-span-2
-          (property-key block property (assoc (select-keys opts [:class-schema?])
-                                              :block? block?
-                                              :inline-text inline-text
-                                              :page-cp page-cp))]
+         (if (seq sortable-opts)
+           (dnd/sortable-item sortable-opts property-key-cp)
+           property-key-cp)
          [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
           (when-not block? [:div.opacity-30 {:style {:margin-left 5}}
                             [:span.bullet-container.cursor [:span.bullet]]])
@@ -764,11 +767,14 @@
         m (zipmap (map first properties) (map second properties))
         properties (mapv (fn [k] [k (get m k)]) properties-order)
         choices (map (fn [[k v]]
-                       {:id (subs (str k) 1)
-                        :value k
-                        :content (property-cp block k v opts)}) properties)]
+                       (let [id (subs (str k) 1)
+                             opts (assoc opts :sortable-opts {:id id})]
+                         {:id id
+                          :value k
+                          :content (property-cp block k v opts)})) properties)]
     (dnd/items choices
-               {:on-drag-end (fn [properties-order {:keys [active-id over-id direction]}]
+               {:sort-by-inner-element? true
+                :on-drag-end (fn [properties-order {:keys [active-id over-id direction]}]
                                (let [move-down? (= direction :down)
                                      over (db/entity (keyword over-id))
                                      active (db/entity (keyword active-id))
