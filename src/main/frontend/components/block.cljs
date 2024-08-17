@@ -634,7 +634,10 @@
 
                         :else
                         (util/trim-safe page-name))
-                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name))]
+                _ (when-not page-entity (js/console.warn "page-inner's page-entity is nil, given page-name: " page-name))
+                s (if (re-find db-content/special-id-ref-pattern s)
+                    (db-content/special-id-ref->page s (:block/refs page-entity))
+                    s)]
             (if tag? (str "#" s) s))))]
 
      (let [repo (state/get-current-repo)
