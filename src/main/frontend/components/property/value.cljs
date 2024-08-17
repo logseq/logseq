@@ -333,15 +333,20 @@
     :else
     "letter-n"))
 
-(rum/defc ^:large-vars/cleanup-todo select-node < rum/reactive db-mixins/query
-  [property
+(rum/defcs ^:large-vars/cleanup-todo select-node < rum/reactive db-mixins/query
+  (rum/local 0 ::refresh-count)
+  [state property
    {:keys [block multiple-choices? dropdown? input-opts on-input] :as opts}
    *result]
-  (let [repo (state/get-current-repo)
+  (let [*refresh-count (::refresh-count state)
+        ;; Trigger refresh
+        _ @*refresh-count
+        repo (state/get-current-repo)
         classes (:property/schema.classes property)
         tags? (= :block/tags (:db/ident property))
         alias? (= :block/alias (:db/ident property))
         tags-or-alias? (or tags? alias?)
+        block (db/entity (:db/id block))
         selected-choices (when block
                            (when-let [v (get block (:db/ident property))]
                              (if (every? de/entity? v)
@@ -409,14 +414,18 @@
                  :input-opts input-opts
                  :on-input (debounce on-input 50)
                  :on-chosen (fn [chosen selected?]
-                              (p/let [id (if (integer? chosen) chosen
-                                             (when-not (string/blank? (string/trim chosen))
-                                               (<create-page-if-not-exists! property classes' chosen)))
+                              (p/let [[id new?] (if (integer? chosen)
+                                                  [chosen false]
+                                                  (when-not (string/blank? (string/trim chosen))
+                                                    (p/let [result (<create-page-if-not-exists! property classes' chosen)]
+                                                      [result true])))
                                       _ (when (and (integer? id) (not (ldb/page? (db/entity id))))
                                           (db-async/<get-block repo id))]
-                                (if id
-                                  (add-or-remove-property-value block property id selected? {})
-                                  (log/error :msg "No :db/id found or created for chosen" :chosen chosen))))})
+                                (p/do!
+                                 (if id
+                                   (add-or-remove-property-value block property id selected? {})
+                                   (log/error :msg "No :db/id found or created for chosen" :chosen chosen))
+                                 (when new? (swap! *refresh-count inc)))))})
 
                 (and (seq classes') (not tags-or-alias?))
                 (assoc
