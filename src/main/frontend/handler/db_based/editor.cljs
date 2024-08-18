@@ -32,7 +32,11 @@
 (defn- use-cached-refs!
   [refs block]
   (let [refs (remove #(= (:block/uuid block) (:block/uuid %)) refs)
-        cached-refs @(:editor/block-refs @state/state)
+        cached-refs (->> @(:editor/block-refs @state/state)
+                         (concat (map (fn [ref]
+                                        (select-keys ref [:db/id :block/uuid :block/title]))
+                                      (:block/refs (db/entity (:db/id block)))))
+                         (util/distinct-by-last-wins :block/uuid))
         title->ref (zipmap (map :block/title cached-refs) cached-refs)]
     (map (fn [x]
            (if-let [ref (and (map? x) (title->ref (:block/title x)))]
@@ -84,7 +88,7 @@
 
 (defn wrap-parse-block
   [{:block/keys [title level] :as block}]
-  (let [block (or (and (:db/id block) (db/pull (:db/id block))) block)
+  (let [block (or (and (:db/id block) (db/entity (:db/id block))) block)
         block (if (nil? title)
                 block
                 (let [ast (mldoc/->edn (string/trim title) :markdown)
