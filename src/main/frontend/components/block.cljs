@@ -2395,20 +2395,20 @@
                      :inline-text inline-text
                      :other-position? true})]
     (when (seq properties)
-       (case position
-         :block-below
-         [:div.positioned-properties.flex.flex-row.gap-2.item-center.ml-2.pl-8.flex-wrap.text-sm.overflow-x-hidden.max-h-6
-          (for [pid properties]
-            (let [property (db/entity pid)
-                  v (get block pid)]
-              [:div.flex.flex-row.items-center.gap-1.px-1.hover:bg-secondary.rounded
-               [:div.flex.flex-row.opacity-50.hover:opacity-100
-                (property-component/property-key block property opts)
-                [:div.select-none ":"]]
-               (pv/property-value block property v opts)]))]
-         [:div.positioned-properties.flex.flex-row.items-center.gap-1.select-none.h-6.flex-wrap
-          (for [pid properties]
-            (when-let [property (db/entity pid)]
+      (case position
+        :block-below
+        [:div.positioned-properties.flex.flex-row.gap-2.item-center.ml-2.pl-8.flex-wrap.text-sm.overflow-x-hidden.max-h-6
+         (for [pid properties]
+           (let [property (db/entity pid)
+                 v (get block pid)]
+             [:div.flex.flex-row.items-center.gap-1.px-1.hover:bg-secondary.rounded
+              [:div.flex.flex-row.opacity-50.hover:opacity-100
+               (property-component/property-key block property opts)
+               [:div.select-none ":"]]
+              (pv/property-value block property v opts)]))]
+        [:div.positioned-properties.right-align.flex.flex-row.items-center.gap-1.select-none.h-6.overflow-hidden
+         (for [pid properties]
+           (when-let [property (db/entity pid)]
              (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
 
 (rum/defc ^:large-vars/cleanup-todo block-content < rum/reactive

@@ -847,3 +847,11 @@ html.is-mac {
   font-size: initial;
   opacity: 1;
 }
+
+.positioned-properties.right-align  {
+  .block-title-wrap {
+    @apply overflow-hidden h-6;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+}
