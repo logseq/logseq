@@ -47,7 +47,7 @@
                        (filter string?)
                        (map string/lower-case)
                        (set))]
-    (contains? favorites page-name)))
+    (contains? favorites (string/lower-case page-name))))
 
 (defn file-favorite-page!
   [page-name]

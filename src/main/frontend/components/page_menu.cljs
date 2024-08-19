@@ -49,13 +49,14 @@
   [page]
   (when-let [page-name (and page (db/page? page) (:block/name page))]
     (let [repo (state/sub :git/current-repo)
-          page-title (:block/title page)
+          db-based? (config/db-based-graph? repo)
+          page-title (if db-based? (str (:block/uuid page)) (:block/title page))
           whiteboard? (ldb/whiteboard? page)
           block? (and page (util/uuid-string? page-name) (not whiteboard?))
           contents? (= page-name "contents")
           public? (pu/get-block-property-value page :logseq.property/public)
           _favorites-updated? (state/sub :favorites/updated?)
-          favorited? (page-handler/favorited? page-name)
+          favorited? (page-handler/favorited? page-title)
           developer-mode? (state/sub [:ui/developer-mode?])
           file-rpath (when (util/electron?) (page-util/get-page-file-rpath page-name))
           _ (state/sub :auth/id-token)
@@ -63,8 +64,7 @@
                                     (file-sync-handler/enable-sync?)
                                     ;; FIXME: Sync state is not cleared when switching to a new graph
                                     (file-sync-handler/current-graph-sync-on?)
-                                    (file-sync-handler/get-current-graph-uuid))
-          db-based? (config/db-based-graph? repo)]
+                                    (file-sync-handler/get-current-graph-uuid))]
       (when (not block?)
         (->>
          [(when-not config/publishing?
