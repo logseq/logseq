@@ -28,10 +28,10 @@
   [f]
   (fn [e]
     (when (state/editing?)
-      (if (mobile-util/native-ios?)
-        (util/stop-propagation e)
-        (util/stop e))
-      (f e))))
+      (when-not (false? (f e))
+        (if (mobile-util/native-ios?)
+          (util/stop-propagation e)
+          (util/stop e))))))
 
 (defn enable-when-not-component-editing!
   [f]

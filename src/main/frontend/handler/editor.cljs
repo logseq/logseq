@@ -2763,86 +2763,89 @@
 (defn keydown-backspace-handler
   [cut? e]
   (let [^js input (state/get-input)
-        id (state/get-edit-input-id)
-        current-pos (cursor/pos input)
-        value (gobj/get input "value")
-        deleted (and (> current-pos 0)
-                     (util/nth-safe value (dec current-pos)))
-        selected-start (util/get-selection-start input)
-        selected-end (util/get-selection-end input)
-        block (state/get-edit-block)
-        block (db/entity (:db/id block))
-        repo (state/get-current-repo)
-        top-block? (= (:db/id (or (ldb/get-left-sibling block) (:block/parent block)))
-                      (:db/id (:block/page block)))
-        single-block? (inside-of-single-block (.-target e))
-        root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
-    (block-handler/mark-last-input-time! repo)
-    (cond
-      (not= selected-start selected-end)
-      (do
-        (util/stop e)
-        (when cut?
-          (js/document.execCommand "copy"))
-        (delete-and-update input selected-start selected-end))
-
-      (zero? current-pos)
-      (let [editor-state (get-state)
-            custom-query? (get-in editor-state [:config :custom-query?])]
-        (util/stop e)
-        (when (and (not (and top-block? (not (string/blank? value))))
-                   (not root-block?)
-                   (not single-block?)
-                   (not custom-query?))
-          (if (own-order-number-list? block)
-            (p/do!
-             (save-current-block!)
-             (remove-block-own-order-list-type! block))
-            (delete-block! repo))))
-
-      (and (> current-pos 0)
-           (contains? #{commands/command-trigger commands/angle-bracket commands/command-ask}
-                      (util/nth-safe value (dec current-pos))))
-      (do
-        (util/stop e)
-        (commands/restore-state)
-        (delete-and-update input (dec current-pos) current-pos))
-
-      ;; pair
-      (and
-       deleted
-       (contains?
-        (set (keys delete-map))
-        deleted)
-       (>= (count value) (inc current-pos))
-       (= (util/nth-safe value current-pos)
-          (get delete-map deleted)))
-
-      (do
-        (util/stop e)
-        (commands/delete-pair! id)
+        element js/document.activeElement]
+    (if (= input element)
+      (let [id (state/get-edit-input-id)
+            current-pos (cursor/pos input)
+            value (gobj/get input "value")
+            deleted (and (> current-pos 0)
+                      (util/nth-safe value (dec current-pos)))
+            selected-start (util/get-selection-start input)
+            selected-end (util/get-selection-end input)
+            block (state/get-edit-block)
+            block (db/entity (:db/id block))
+            repo (state/get-current-repo)
+            top-block? (= (:db/id (or (ldb/get-left-sibling block) (:block/parent block)))
+                         (:db/id (:block/page block)))
+            single-block? (inside-of-single-block (.-target e))
+            root-block? (= (:block.temp/container block) (str (:block/uuid block)))]
+        (block-handler/mark-last-input-time! repo)
         (cond
-          (and (= deleted "[") (state/get-editor-show-page-search?))
-          (state/clear-editor-action!)
+          (not= selected-start selected-end)
+          (do
+            (util/stop e)
+            (when cut?
+              (js/document.execCommand "copy"))
+            (delete-and-update input selected-start selected-end))
 
-          (and (= deleted "(") (state/get-editor-show-block-search?))
-          (state/clear-editor-action!)
+          (zero? current-pos)
+          (let [editor-state (get-state)
+                custom-query? (get-in editor-state [:config :custom-query?])]
+            (util/stop e)
+            (when (and (not (and top-block? (not (string/blank? value))))
+                    (not root-block?)
+                    (not single-block?)
+                    (not custom-query?))
+              (if (own-order-number-list? block)
+                (p/do!
+                  (save-current-block!)
+                  (remove-block-own-order-list-type! block))
+                (delete-block! repo))))
 
+          (and (> current-pos 0)
+            (contains? #{commands/command-trigger commands/angle-bracket commands/command-ask}
+              (util/nth-safe value (dec current-pos))))
+          (do
+            (util/stop e)
+            (commands/restore-state)
+            (delete-and-update input (dec current-pos) current-pos))
+
+          ;; pair
+          (and
+            deleted
+            (contains?
+              (set (keys delete-map))
+              deleted)
+            (>= (count value) (inc current-pos))
+            (= (util/nth-safe value current-pos)
+              (get delete-map deleted)))
+
+          (do
+            (util/stop e)
+            (commands/delete-pair! id)
+            (cond
+              (and (= deleted "[") (state/get-editor-show-page-search?))
+              (state/clear-editor-action!)
+
+              (and (= deleted "(") (state/get-editor-show-block-search?))
+              (state/clear-editor-action!)
+
+              :else
+              nil))
+
+          ;; deleting hashtag
+          (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
+          (do
+            (state/clear-editor-action!)
+            (delete-and-update input (dec current-pos) current-pos))
+
+          ;; just delete
           :else
-          nil))
-
-      ;; deleting hashtag
-      (and (= deleted "#") (state/get-editor-show-page-search-hashtag?))
-      (do
-        (state/clear-editor-action!)
-        (delete-and-update input (dec current-pos) current-pos))
-
-      ;; just delete
-      :else
-      (when (and input (not (mobile-util/native-ios?)))
-        (util/stop e)
-        (delete-and-update
-         input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos)))))
+          (when (and input (not (mobile-util/native-ios?)))
+            (util/stop e)
+            (delete-and-update
+              input (util/safe-dec-current-pos-from-end (.-value input) current-pos) current-pos))))
+      false)))
 
 (defn indent-outdent
   [indent?]
