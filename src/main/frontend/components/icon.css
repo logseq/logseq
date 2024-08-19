@@ -41,9 +41,9 @@
       @apply absolute right-0 top-0 hover:opacity-80;
     }
 
-    .form-input {
+    .ui__input {
       @apply leading-none pl-8 outline-none border-none bg-gray-03;
-      @apply focus:!shadow-accent-06 focus:bg-gray-02;
+      @apply focus:!shadow-accent-06 focus:bg-gray-02 !h-8;
     }
 
     &:focus-within {

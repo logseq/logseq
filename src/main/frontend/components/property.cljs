@@ -638,8 +638,11 @@
          (shui/trigger-as
           :button
           (-> (when-not config/publishing?
-                {:on-click #(shui/popup-show! (.-target %) content-fn {:as-dropdown? true :auto-focus? true})})
-              (assoc :class "flex items-center"))
+                {:on-click (fn [^js e]
+                             (shui/popup-show! (.-target e) content-fn
+                               {:as-dropdown? true :auto-focus? true
+                                :content-props {:onEscapeKeyDown #(.preventDefault %)}}))})
+            (assoc :class "flex items-center"))
           (if icon
             [:span.flex.items-center {:style {:color (or (some-> icon :color) "inherit")}}
              (icon-component/icon icon {:size 15})]
