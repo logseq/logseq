@@ -195,7 +195,7 @@
               set))))
 
     (testing "user properties"
-      (is (= 17
+      (is (= 18
              (->> @conn
                   (d/q '[:find [(pull ?b [:db/ident]) ...]
                          :where [?b :block/type "property"]])
@@ -429,22 +429,6 @@
       (is (= {:block/tags [:user.class/Movie]}
              (readable-properties @conn (find-page-by-name @conn "Interstellar")))
           "tagged page has configured tag imported as a class"))))
-
-(deftest-async export-files-with-invalid-class-and-property-display-notifications
-  (p/let [file-graph-dir "test/resources/exporter-test-graph"
-          files (mapv #(node-path/join file-graph-dir %) ["journals/2024_07_24.md" "ignored/invalid-property-page.md"])
-          conn (d/create-conn db-schema/schema-for-db-based-graph)
-          _ (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
-          notifications (atom [])
-          _ (import-files-to-db files conn {:tag-classes ["123"]
-                                            :notify-user #(swap! notifications conj %)})]
-
-    (is (= [:error :error] (map :level @notifications))
-        "Error notifications for both invalid property and class")
-    (is (some #(re-find #"invalid class" %) (map :msg @notifications))
-        "Helpful message for invalid class")
-    (is (some #(re-find #"invalid property" %) (map :msg @notifications))
-        "Helpful message for invalid property")))
 
 (deftest-async export-files-with-property-classes-option
   (p/let [file-graph-dir "test/resources/exporter-test-graph"

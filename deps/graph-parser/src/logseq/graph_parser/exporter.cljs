@@ -43,14 +43,8 @@
   [db class-name all-idents]
   (if-let [db-ident (get @all-idents (keyword class-name))]
     {:db/ident db-ident}
-    (let [m (try
-              (db-class/build-new-class db {:block/title class-name
-                                            :block/name (common-util/page-name-sanity-lc class-name)})
-              (catch :default e
-                ;; Notify with more helpful error message
-                (if (= :notification (:type (ex-data e)))
-                  (throw (ex-info (str "Class " (pr-str class-name) " is an invalid class name. Please rename it.") {}))
-                  (throw e))))]
+    (let [m (db-class/build-new-class db {:block/title class-name
+                                          :block/name (common-util/page-name-sanity-lc class-name)})]
       (swap! all-idents assoc (keyword class-name) (:db/ident m))
       m)))
 
@@ -235,15 +229,9 @@
     (some? non-ref-char)))
 
 (defn- create-property-ident [db all-idents property-name]
-  (let [db-ident (try
-                   (->> (db-property/create-user-property-ident-from-name (name property-name))
-                        ;; TODO: Detect new ident conflicts within same page
-                        (db-ident/ensure-unique-db-ident db))
-                   (catch :default e
-                     ;; Notify with more helpful error message
-                     (if (re-find #"name.*empty" (str (ex-message e)))
-                       (throw (ex-info (str "Property " (pr-str property-name) " is an invalid property name. Please rename it.") {}))
-                       (throw e))))]
+  (let [db-ident (->> (db-property/create-user-property-ident-from-name (name property-name))
+                      ;; TODO: Detect new ident conflicts within same page
+                      (db-ident/ensure-unique-db-ident db))]
     (swap! all-idents assoc property-name db-ident)))
 
 (defn- get-ident [all-idents kw]

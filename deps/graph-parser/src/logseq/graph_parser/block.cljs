@@ -310,7 +310,7 @@
   (when-not (and db (common-util/uuid-string? original-page-name)
                  (not (ldb/page? (d/entity db [:block/uuid (uuid original-page-name)]))))
     (let [db-based? (ldb/db-based-graph? db)
-          [page page-entity] (cond
+          [page _page-entity] (cond
                                (and original-page-name (string? original-page-name))
                                (let [original-page-name (common-util/remove-boundary-slashes original-page-name)
                                      [original-page-name page-name journal-day] (convert-page-if-journal original-page-name date-formatter)
