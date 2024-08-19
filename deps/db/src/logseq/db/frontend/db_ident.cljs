@@ -52,20 +52,26 @@
               (string/replace #"\s*:\s*$" "")
               (string/replace-first #"^\d+" "")
               (string/replace " " "-")
-              (string/replace "#" "")
               ;; '/' cannot be in name - https://clojure.org/reference/reader
               (string/replace "/" "-")
-              (string/trim))]
-    (try
-      (when-not (seq n)
-        (throw (ex-info "name is not empty" {:n n})))
-      (let [k (keyword user-namespace n)]
-        (when-not (= k (edn/read-string (str k)))
-          (throw (ex-info "illegal keyword" {:k k})))
-        k)
-      (catch :default _e
-        (let [n (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq n))
-                     (apply str))]
-          (if (seq n)
+              (string/replace #"[#()]" "")
+              (string/trim))
+        ;; Similar check to common-util/valid-edn-keyword?. Consider merging the two use cases
+        keyword-is-valid-edn! (fn keyword-is-valid-edn! [k]
+                                (when-not (= k (edn/read-string (str k)))
+                                  (throw (ex-info "Keyword is not valid edn" {:keyword k}))))
+        k (if (seq n)
             (keyword user-namespace n)
-            (keyword user-namespace (nano-id 8))))))))
+            (keyword user-namespace (nano-id 8)))]
+    (try
+      (keyword-is-valid-edn! k)
+      k
+      (catch :default _e
+        (js/console.error "Generating backup db-ident for keyword" (str k))
+        (let [n (->> (filter #(re-find #"[0-9a-zA-Z-]{1}" %) (seq n))
+                     (apply str))
+              k (if (seq n)
+                  (keyword user-namespace n)
+                  (keyword user-namespace (nano-id 8)))]
+          (keyword-is-valid-edn! k)
+          k)))))
