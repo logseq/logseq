@@ -844,8 +844,13 @@ html.is-mac {
 }
 
 .block-title-wrap a.tag, .block-body a.tag {
+  position: relative;
   font-size: initial;
   opacity: 1;
+
+  &:has(.ui__icon) {
+    top: 4px;
+  }
 }
 
 .positioned-properties.right-align  {
