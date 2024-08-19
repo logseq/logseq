@@ -100,15 +100,20 @@
   (sort-by :block/order blocks))
 
 (defn- get-block-and-children-aux
-  [entity]
-  (if-let [children (sort-by-order (:block/_parent entity))]
-    (cons entity (mapcat get-block-and-children-aux children))
+  [entity & {:keys [include-property-block?]
+             :or {include-property-block? false}
+             :as opts}]
+  (if-let [children (sort-by-order
+                     (if include-property-block?
+                       (:block/_raw-parent entity)
+                       (:block/_parent entity)))]
+    (cons entity (mapcat #(get-block-and-children-aux % opts) children))
     [entity]))
 
 (defn get-block-and-children
-  [db block-uuid]
+  [db block-uuid & {:as opts}]
   (when-let [e (d/entity db [:block/uuid block-uuid])]
-    (get-block-and-children-aux e)))
+    (get-block-and-children-aux e opts)))
 
 (defn get-page-blocks
   "Return blocks of the designated page, without using cache.
