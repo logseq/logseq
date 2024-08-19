@@ -987,7 +987,8 @@
          result []]
     (if (seq ids)
       (let [db-id (:db/id (db/entity [:block/uuid (first ids)]))
-            blocks (tree/get-sorted-block-and-children repo db-id)
+            blocks (tree/get-sorted-block-and-children repo db-id
+                                                       {:include-property-block? true})
             result (vec (concat result blocks))]
         (recur (remove (set (map :block/uuid result)) (rest ids)) result))
       result)))
@@ -999,10 +1000,24 @@
           ids (distinct (keep #(when-let [id (dom/attr % "blockid")]
                                  (uuid id)) blocks))
           [top-level-block-uuids content] (compose-copied-blocks-contents repo ids)
-          block (db/entity [:block/uuid (first ids)])]
+          block (db/entity [:block/uuid (first ids)])
+          db-based? (config/db-based-graph? repo)]
       (when block
         (let [html (export-html/export-blocks-as-html repo top-level-block-uuids nil)
-              copied-blocks (get-all-blocks-by-ids repo top-level-block-uuids)]
+              copied-blocks (cond->> (get-all-blocks-by-ids repo top-level-block-uuids)
+                              db-based?
+                              (map (fn [block]
+                                     (let [b (db/pull (:db/id block))]
+                                       (->> (map (fn [[k v]]
+                                                   (let [v' (cond
+                                                              (and (map? v) (:db/id v))
+                                                              [:block/uuid (:block/uuid (db/entity (:db/id v)))]
+                                                              (and (coll? v) (every? #(and (map? %) (:db/id %)) v))
+                                                              (set (map (fn [i] [:block/uuid (:block/uuid (db/entity (:db/id i)))]) v))
+                                                              :else
+                                                              v)]
+                                                     [k v'])) b)
+                                            (into {}))))))]
           (common-handler/copy-to-clipboard-without-id-property! repo (:block/format block) content (when html? html) copied-blocks))
         (state/set-block-op-type! :copy)
         (notification/show! "Copied!" :success)))))
@@ -2027,15 +2042,13 @@
            (cond->
             {:block/page {:db/id (:db/id page)}
              :block/format format
-             ;; only file graphs exclude properties because db graphs don't put ids in properties
-             :block/properties (if db-based?
-                                 (:block/properties block)
-                                 (apply dissoc (:block/properties block)
+             :block/title new-content}
+             (not db-based?)
+             (assoc :block/properties (apply dissoc (:block/properties block)
                                         (concat
                                          (when-not keep-uuid? [:id])
                                          [:custom_id :custom-id]
                                          exclude-properties)))
-             :block/title new-content}
              (not db-based?)
              (assoc :block/properties-text-values (apply dissoc (:block/properties-text-values block)
                                                          (concat
