@@ -2406,7 +2406,7 @@
                (property-component/property-key block property opts)
                [:div.select-none ":"]]
               (pv/property-value block property v opts)]))]
-        [:div.positioned-properties.right-align.flex.flex-row.items-center.gap-1.select-none.h-6.overflow-hidden
+        [:div.positioned-properties.right-align.flex.flex-row.items-center.gap-1.select-none.h-6
          (for [pid properties]
            (when-let [property (db/entity pid)]
              (pv/property-value block property (get block pid) (assoc opts :show-tooltip? true))))]))))
@@ -2439,7 +2439,7 @@
                 :class (when (:property-block? config) "jtrigger")
                 :containerid (:container-id config)
                 :data-type (name block-type)
-                :style {:width "100%" :pointer-events (when stop-events? "none")}}
+                :style {:pointer-events (when stop-events? "none")}}
 
                 (not (string/blank?
                       (pu/lookup properties :logseq.property/hl-color)))

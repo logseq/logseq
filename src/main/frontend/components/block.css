@@ -849,6 +849,9 @@ html.is-mac {
 }
 
 .positioned-properties.right-align  {
+  button {
+    white-space: nowrap;
+  }
   .block-title-wrap {
     @apply overflow-hidden h-6;
     white-space: nowrap;
