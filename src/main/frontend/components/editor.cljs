@@ -456,8 +456,7 @@
                           ;; escape
                           27 (fn [_state _e]
                                (let [[id _on-submit on-cancel] (:rum/args state)]
-                                 (on-cancel id)))}))
-                     )
+                                 (on-cancel id)))})))
   [state _id on-submit _on-cancel]
   (when-let [action-data (state/get-editor-action-data)]
     (let [{:keys [pos options]} action-data
@@ -465,11 +464,12 @@
       (when (seq options)
         (let [command (:command (first options))]
           [:div.p-2.rounded-md.flex.flex-col.gap-2
-           (for [{:keys [id placeholder type] :as input-item} options]
+           (for [{:keys [id placeholder type]} options]
              (shui/input
                (cond->
                  {:key (str "modal-input-" (name id))
                   :type (or type "text")
+                  :auto-complete (if (util/chrome?) "chrome-off" "off")
                   :on-change (fn [e]
                                (swap! input-value assoc id (util/evalue e)))}
 
@@ -480,8 +480,7 @@
              :on-click
              (fn [e]
                (util/stop e)
-               (on-submit command @input-value pos)))
-           ])))))
+               (on-submit command @input-value pos)))])))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
