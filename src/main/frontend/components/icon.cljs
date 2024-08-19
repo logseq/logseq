@@ -338,33 +338,34 @@
         (select-observer *input-ref))
       [:div.search-input
        (shui/tabler-icon "search" {:size 16})
-       [:input.form-input
-        {:auto-focus true
-         :ref *input-ref
-         :placeholder (util/format "Search %s items" (string/lower-case (name @*tab)))
-         :default-value ""
-         :on-focus #(reset! *select-mode? false)
-         :on-key-down (fn [^js e]
-                        (case (.-keyCode e)
-                          ;; esc
-                          27 (do (util/stop e)
+       [(shui/input
+          {:auto-focus true
+           :ref *input-ref
+           :placeholder (util/format "Search %s items" (string/lower-case (name @*tab)))
+           :default-value ""
+           :on-focus #(reset! *select-mode? false)
+           :on-key-down (fn [^js e]
+                          (case (.-keyCode e)
+                            ;; esc
+                            27 (do (util/stop e)
                                  (if (string/blank? @*q)
-                                   (some-> (rum/deref *input-ref) (.blur))
+                                   ;(some-> (rum/deref *input-ref) (.blur))
+                                   (shui/popup-hide!)
                                    (reset-q!)))
-                          38 (do (util/stop e))
-                          (9 40) (do
-                                   (reset! *select-mode? true)
-                                   (util/stop e))
-                          :dune))
-         :on-change (debounce
-                      (fn [e]
-                        (reset! *q (util/evalue e))
-                        (reset! *select-mode? false)
-                        (if (string/blank? @*q)
-                          (reset! *result {})
-                          (p/let [result (search @*q @*tab)]
-                            (reset! *result result))))
-                      200)}]
+                            38 (do (util/stop e))
+                            (9 40) (do
+                                     (reset! *select-mode? true)
+                                     (util/stop e))
+                            :dune))
+           :on-change (debounce
+                        (fn [e]
+                          (reset! *q (util/evalue e))
+                          (reset! *select-mode? false)
+                          (if (string/blank? @*q)
+                            (reset! *result {})
+                            (p/let [result (search @*q @*tab)]
+                              (reset! *result result))))
+                        200)})]
        (when-not (string/blank? @*q)
          [:a.x {:on-click reset-q!} (shui/tabler-icon "x" {:size 14})])]]
      ;; body
@@ -430,9 +431,11 @@
         {:variant (if has-icon? :ghost :text)
          :size :sm
          :class (if has-icon? "px-1 leading-none" "font-normal text-sm px-[0.5px] opacity-50")
-         :on-click #(when-not disabled?
-                      (shui/popup-show! (.-target %) content-fn
-                        {:content-props {:class "ls-icon-picker"}}))}
+         :on-click (fn [^js e]
+                     (when-not disabled?
+                       (shui/popup-show! (.-target e) content-fn
+                         {:content-props {:class "ls-icon-picker"
+                                          :onEscapeKeyDown #(.preventDefault %)}})))}
         (if has-icon?
           [:span {:style {:color (or (:color icon-value) "inherit")}}
            (icon icon-value (merge {:size 18} icon-props))]
