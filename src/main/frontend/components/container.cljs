@@ -74,6 +74,7 @@
 (rum/defc page-name
   [page icon recent?]
   (let [repo (state/get-current-repo)
+        db-based? (config/db-based-graph? repo)
         page (or (db/get-alias-source-page repo (:db/id page)) page)
         title (:block/title page)
         whiteboard-page? (db-model/whiteboard-page? page)
@@ -91,7 +92,7 @@
                            [:<>
                             (when-not recent?
                               (x-menu-item
-                               {:on-click #(page-handler/<unfavorite-page! title)}
+                               {:on-click #(page-handler/<unfavorite-page! (if db-based? (str (:block/uuid page)) title))}
                                (ctx-icon "star-off")
                                (t :page/unfavorite)
                                (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
