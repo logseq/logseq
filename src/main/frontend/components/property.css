@@ -290,3 +290,42 @@ a.control-link {
     padding: 0.25em 0.75em;
   }
 }
+
+.ls-property-dropdown-editor {
+  @apply w-[300px] p-1.5;
+
+  .ui__dropdown-menu-item, .ui__dropdown-menu-sub-trigger {
+  }
+
+  [role=separator] {
+    @apply my-2;
+  }
+
+  .inner-wrap {
+    @apply flex items-center w-full justify-between;
+
+    > strong {
+      @apply flex items-center gap-1 font-normal opacity-90;
+    }
+
+    > small {
+      @apply flex items-center opacity-50;
+    }
+
+    &.disabled {
+      @apply opacity-70 select-none cursor-not-allowed;
+
+      > small {
+        @apply flex items-center gap-1 opacity-40 relative top-[2px] right-[1px];
+      }
+    }
+
+    & + svg {
+      @apply opacity-30;
+    }
+
+    .ui__switch {
+      @apply relative top-[1px];
+    }
+  }
+}

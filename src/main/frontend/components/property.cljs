@@ -28,6 +28,7 @@
             [frontend.components.dnd :as dnd]
             [frontend.components.property.closed-value :as closed-value]
             [frontend.components.property.util :as components-pu]
+            [frontend.components.property-v2 :as property-v2]
             [promesa.core :as p]
             [logseq.db :as ldb]
             [logseq.db.frontend.order :as db-order]
@@ -661,40 +662,46 @@
                                             (when (util/meta-key? e)
                                               (route-handler/redirect-to-page! (:block/uuid property))
                                               (.preventDefault e)))
+                         :on-context-menu (fn [^js e]
+                                            (shui/popup-show! (.-target e)
+                                              (fn [{:keys [id]}]
+                                                (property-v2/dropdown-editor id property))
+                                              {:content-props {:class "ls-property-dropdown-editor"}
+                                               :as-dropdown? true}))
                          :on-click (fn [^js e]
                                      (shui/popup-show!
-                                      (.-target e)
-                                      (fn [{:keys [id]}]
-                                        [:div.p-2
-                                         [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
-                                         [:span.close.absolute.right-2.top-2
-                                          (shui/button
-                                           {:variant :ghost :size :sm :class "!w-4 !h-6"
-                                            :on-click #(shui/popup-hide! id)}
-                                           (shui/tabler-icon "x" {:size 16}))]
+                                       (.-target e)
+                                       (fn [{:keys [id]}]
+                                         [:div.p-2
+                                          [:h2.text-lg.font-medium.mb-2.p-1 "Configure property"]
+                                          [:span.close.absolute.right-2.top-2
+                                           (shui/button
+                                             {:variant :ghost :size :sm :class "!w-4 !h-6"
+                                              :on-click #(shui/popup-hide! id)}
+                                             (shui/tabler-icon "x" {:size 16}))]
 
-                                         (property-config property
-                                                          {:inline-text inline-text
-                                                           :page-cp page-cp})
+                                          (property-config property
+                                            {:inline-text inline-text
+                                             :page-cp page-cp})
 
-                                         (when-not (ldb/built-in-class-property? block property)
-                                           [:div.mt-4.border-t.pt-3.px-3.-mx-4.-mb-1
-                                            (shui/button
-                                             {:variant :ghost
-                                              :class "!text-red-rx-09 opacity-50 hover:opacity-100"
-                                              :size :sm
-                                              :on-click (fn []
-                                                          (handle-delete-property! block property {:class-schema? class-schema?})
-                                                          (shui/popup-hide!))}
-                                             "Delete property from this node")])])
-                                      {:content-props {:class "property-configure-popup-content"
-                                                       :collisionPadding {:bottom 10 :top 10}
-                                                       :avoidCollisions true
-                                                       :align "start"}
-                                       :align "start"
-                                       :auto-side? true
-                                       :auto-focus? true}))}
-                        (:block/title property)))]))
+                                          (when-not (ldb/built-in-class-property? block property)
+                                            [:div.mt-4.border-t.pt-3.px-3.-mx-4.-mb-1
+                                             (shui/button
+                                               {:variant :ghost
+                                                :class "!text-red-rx-09 opacity-50 hover:opacity-100"
+                                                :size :sm
+                                                :on-click (fn []
+                                                            (handle-delete-property! block property {:class-schema? class-schema?})
+                                                            (shui/popup-hide!))}
+                                               "Delete property from this node")])])
+                                       {:content-props {:class "property-configure-popup-content"
+                                                        :collisionPadding {:bottom 10 :top 10}
+                                                        :avoidCollisions true
+                                                        :align "start"}
+                                        :align "start"
+                                        :auto-side? true
+                                        :auto-focus? true}))}
+         (:block/title property)))]))
 
 (defn- resolve-linked-block-if-exists
   "Properties will be updated for the linked page instead of the refed block.
