@@ -450,42 +450,38 @@
                                    ;; no new line input
                                    (util/stop e)
                                    (let [[_id on-submit] (:rum/args state)
-                      command (:command (first input-option))]
-                  (on-submit command @input-value))
-                (reset! input-value nil))))
-       ;; escape
-       27 (fn [_state _e]
-            (let [[id _on-submit on-cancel] (:rum/args state)]
-              (on-cancel id)))})))
+                                         command (:command (first input-option))]
+                                     (on-submit command @input-value))
+                                   (reset! input-value nil))))
+                          ;; escape
+                          27 (fn [_state _e]
+                               (let [[id _on-submit on-cancel] (:rum/args state)]
+                                 (on-cancel id)))}))
+                     )
   [state _id on-submit _on-cancel]
   (when-let [action-data (state/get-editor-action-data)]
     (let [{:keys [pos options]} action-data
           input-value (get state ::input-value)]
       (when (seq options)
         (let [command (:command (first options))]
-          [:div.p-2.rounded-md
-           (for [{:keys [id placeholder type autoFocus] :as input-item} options]
-             [:div.my-3 {:key id}
-              [:input.form-input.block.w-full.pl-2.sm:text-sm.sm:leading-5
-               (merge
-                 (cond->
-                   {:key (str "modal-input-" (name id))
-                    :id (str "modal-input-" (name id))
-                    :type (or type "text")
-                    :on-change (fn [e]
-                                 (swap! input-value assoc id (util/evalue e)))
-                    :auto-complete (if (util/chrome?) "chrome-off" "off")}
-                   placeholder
-                   (assoc :placeholder placeholder)
-                   autoFocus
-                   (assoc :auto-focus true))
-                 (dissoc input-item :id))]])
+          [:div.p-2.rounded-md.flex.flex-col.gap-2
+           (for [{:keys [id placeholder type] :as input-item} options]
+             (shui/input
+               (cond->
+                 {:key (str "modal-input-" (name id))
+                  :type (or type "text")
+                  :on-change (fn [e]
+                               (swap! input-value assoc id (util/evalue e)))}
+
+                 placeholder
+                 (assoc :placeholder placeholder))))
            (ui/button
              "Submit"
              :on-click
              (fn [e]
                (util/stop e)
-               (on-submit command @input-value pos)))])))))
+               (on-submit command @input-value pos)))
+           ])))))
 
 (rum/defc image-uploader < rum/reactive
   [id format]
@@ -651,7 +647,8 @@
                       (fn [command m]
                         (editor-handler/handle-command-input command id format m))
                       (fn []
-                        (editor-handler/handle-command-input-close id))) {})
+                        (editor-handler/handle-command-input-close id)))
+                    {:content-props {:onOpenAutoFocus #()}})
 
                   :select-code-block-mode
                   (open-editor-popup! :code-block-mode-picker
