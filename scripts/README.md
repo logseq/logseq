@@ -12,18 +12,25 @@ Before running [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be su
 
 #### Create graph scripts
 
-For database graphs, it is possible to create graphs with the
+These scripts generate custom database graphs written with nbb-logseq. If this
+your first time generating a DB graph, it is recommended to first try the
+`dev:db-create` bb task in [db graph
+tasks](../docs/dev-practices.md#db-graph-tasks) as it only requires writing EDN.
+
+Creating graphs from the commandline using scripts and a concise EDN map is
+possible thanks to nbb-logseq and the namespaces
 [logseq.outliner.db-pipeline](deps/outliner/src/logseq/outliner/db_pipeline.cljs)
-and [logseq.db.sqlite.build](deps/db/src/logseq/db/sqlite/build.cljs). These
-namespaces makes it easy to write scripts to create graphs with a concise EDN
-map. For example, the `create_graph_with_properties.cljs` script uses this ns to
-create a graph with a variety of properties:
+and [logseq.db.sqlite.build](deps/db/src/logseq/db/sqlite/build.cljs).  For
+example, the `create_graph_with_properties.cljs` script uses this ns to create a
+graph with a variety of properties:
 
 ```
 $ yarn nbb-logseq src/logseq/tasks/db_graph/create_graph_with_properties.cljs woot
 Generating 16 pages and 24 blocks ...
 Created graph woot!
 ```
+
+**NOTE**: To use this created graph, click on the three dots menu in the upper right corner and select `Import`. Then click on the `SQLite` import button and upload the generated graph.
 
 This script creates a DB graph with blocks containing several property types for
 both single and many cardinality. It also includes queries for most of these
@@ -57,7 +64,7 @@ with the https://schema.org/ ontology with as many of the classes and properties
 $ yarn -s nbb-logseq src/logseq/tasks/db_graph/create_graph_with_schema_org.cljs schema
 Skipping 67 superseded properties
 Skipping 25 properties with unsupported data types
-Renaming 44 classes due to page name conflicts
+Renaming 1 properties due to page name conflicts
 Generating 2268 pages with 900 classes and 1368 properties ...
 Created graph schema!
 ```
