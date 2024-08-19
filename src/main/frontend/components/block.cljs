@@ -2439,7 +2439,8 @@
                 :class (when (:property-block? config) "jtrigger")
                 :containerid (:container-id config)
                 :data-type (name block-type)
-                :style {:pointer-events (when stop-events? "none")}}
+                :style {:width "100%"
+                        :pointer-events (when stop-events? "none")}}
 
                 (not (string/blank?
                       (pu/lookup properties :logseq.property/hl-color)))
