@@ -852,7 +852,7 @@
         [properties-tx pages-tx'] ((juxt filter remove)
                                    #(contains? new-properties (keyword (:block/name %))) pages-tx)
         property-pages-tx (map (fn [{:block/keys [title uuid]}]
-                                 (let [db-ident (get @(:all-idents import-state) (keyword title))]
+                                 (let [db-ident (get @(:all-idents import-state) (keyword (string/lower-case title)))]
                                    (sqlite-util/build-new-property db-ident
                                                                    (get @(:property-schemas import-state) (keyword title))
                                                                    {:title title :block-uuid uuid})))

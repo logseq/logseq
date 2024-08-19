@@ -362,9 +362,7 @@
                                                 nil)]
                                  [page nil]))]
       (when page
-        (let [type (if class? "class" (or (:block/type page-entity)
-                                          (:block/type page)
-                                          "page"))]
+        (let [type (if class? "class" (or (:block/type page) "page"))]
           (assoc page :block/type type))))))
 
 (defn- with-page-refs-and-tags
