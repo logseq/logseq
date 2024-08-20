@@ -189,8 +189,20 @@
   "Whether a page exists with the `type`."
   [db page-name type]
   (when page-name
-    (let [page-name (common-util/page-name-sanity-lc page-name)]
-      (if (db-based-graph? db)
+    (if (db-based-graph? db)
+      ;; Classes and properties are case sensitive
+      (if (#{"class" "property"} type)
+        (seq
+         (d/q
+          '[:find [?p ...]
+            :in $ ?name ?type
+            :where
+            [?p :block/title ?name]
+            [?p :block/type ?type]]
+          db
+          page-name
+          type))
+        ;; TODO: Decouple db graphs from file specific :block/name
         (seq
          (d/q
           '[:find [?p ...]
@@ -199,9 +211,9 @@
             [?p :block/name ?name]
             [?p :block/type ?type]]
           db
-          page-name
-          type))
-        (d/entity db [:block/name page-name])))))
+          (common-util/page-name-sanity-lc page-name)
+          type)))
+      (d/entity db [:block/name (common-util/page-name-sanity-lc page-name)]))))
 
 (defn get-page
   "Get a page given its unsanitized name"
@@ -211,6 +223,15 @@
                     (parse-uuid page-name-or-uuid))]
       (d/entity db [:block/uuid id])
       (d/entity db (get-first-page-by-name db (name page-name-or-uuid))))))
+
+(defn get-case-page
+  "Case sensitive version of get-page. For use with DB graphs"
+  [db page-name-or-uuid]
+  (when db
+    (if-let [id (if (uuid? page-name-or-uuid) page-name-or-uuid
+                    (parse-uuid page-name-or-uuid))]
+      (d/entity db [:block/uuid id])
+      (d/entity db (sqlite-common-db/get-first-page-by-title db page-name-or-uuid)))))
 
 (defn page-empty?
   "Whether a page is empty. Does it has a non-page block?

@@ -165,11 +165,11 @@
             (let [gd (goog.date.Date. (.getFullYear d) (.getMonth d) (.getDate d))]
               (let [journal (date/js-date->journal-title gd)]
                 (p/do!
-                 (when-not (db/get-page journal)
+                 (when-not (db/get-case-page journal)
                    (page-handler/<create! journal {:redirect? false
                                                    :create-first-block? false}))
                  (when (fn? on-change)
-                   (on-change (db/get-page journal)))
+                   (on-change (db/get-case-page journal)))
                  (shui/popup-hide! id)
                  (ui/hide-popups-until-preview-popup!)
                  (shui/dialog-close!))))))]
@@ -253,7 +253,7 @@
                               (or (seq (map string/trim (rest (re-find #"(.*)#(.*)$" page*))))
                                   [page* nil])
                               [page* nil])
-        page-entity (ldb/get-page (db/get-db) page)
+        page-entity (ldb/get-case-page (db/get-db) page)
         id (:db/id page-entity)
         class? (= :block/tags (:db/ident property))
         ;; Note: property and other types shouldn't be converted to class
@@ -263,7 +263,7 @@
       (or (nil? id) (and class? (not page?)))
       (let [inline-class-uuid
             (when inline-class
-              (or (:block/uuid (ldb/get-page (db/get-db) inline-class))
+              (or (:block/uuid (ldb/get-case-page (db/get-db) inline-class))
                   (do (log/error :msg "Given inline class does not exist" :inline-class inline-class)
                       nil)))
             create-options {:redirect? false
