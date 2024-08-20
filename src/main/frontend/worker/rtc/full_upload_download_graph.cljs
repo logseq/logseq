@@ -6,6 +6,7 @@
             [datascript.core :as d]
             [frontend.common.missionary-util :as c.m]
             [frontend.worker.rtc.client-op :as client-op]
+            [frontend.worker.rtc.const :as rtc-const]
             [frontend.worker.rtc.log-and-state :as rtc-log-and-state]
             [frontend.worker.rtc.ws-util :as ws-util]
             [frontend.worker.state :as worker-state]
@@ -129,15 +130,17 @@
                                                         :s3-key key
                                                         :graph-name remote-graph-name}))]
         (if-let [graph-uuid (:graph-uuid upload-resp)]
-          (let [^js worker-obj (:worker/object @worker-state/*state)]
+          (do
             (ldb/transact! conn
                            [{:db/ident :logseq.kv/graph-uuid :kv/value graph-uuid}
                             {:db/ident :logseq.kv/graph-local-tx :kv/value "0"}])
-            (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
             (client-op/update-graph-uuid repo graph-uuid)
+            (when-not rtc-const/RTC-E2E-TEST
+              (let [^js worker-obj (:worker/object @worker-state/*state)]
+                (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))))
             (rtc-log-and-state/rtc-log :rtc.log/upload {:sub-type :upload-completed
                                                         :message "upload-graph completed"})
-            nil)
+            {:graph-uuid graph-uuid})
           (throw (ex-info "upload-graph failed" {:upload-resp upload-resp})))))))
 
 (def page-of-block
@@ -322,7 +325,8 @@
           (let [all-blocks (ldb/read-transit-str body)]
             (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
             (client-op/update-graph-uuid repo graph-uuid)
-            (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
+            (when-not rtc-const/RTC-E2E-TEST
+              (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid})))))
             (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
                                                           :message "download completed"
                                                           :graph-uuid graph-uuid})
