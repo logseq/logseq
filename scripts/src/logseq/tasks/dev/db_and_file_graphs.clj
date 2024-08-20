@@ -95,7 +95,8 @@
                               ;; anything org mode
                               "org"
                               "pre-block"
-                              "namespace"]))
+                              "namespace"
+                              "db/get-page"]))
         res (apply shell {:out :string :continue true}
                    "git grep -E" (str "(" (string/join "|" file-concepts) ")")
                    db-graph-paths)]

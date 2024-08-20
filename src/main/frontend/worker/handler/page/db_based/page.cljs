@@ -82,7 +82,7 @@
                    "journal"
                    :else
                    "page")]
-    (when-not (ldb/page-exists? @conn page-name type)
+    (when-not (ldb/page-exists? @conn title type)
       (let [format    :markdown
             page      (-> (gp-block/page-name->map title @conn true date-formatter
                                                    {:class? class?
