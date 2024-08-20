@@ -59,6 +59,10 @@
       }
     }
 
+    .property-k {
+      @apply inline-block overflow-hidden text-ellipsis whitespace-nowrap;
+    }
+
     .property-value {
       @apply pl-1;
 

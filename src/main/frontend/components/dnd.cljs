@@ -29,7 +29,8 @@
            {:ref set-node-ref
             :style style}
            (bean/->clj attributes)
-           (bean/->clj listeners))
+           (bean/->clj listeners)
+           (dissoc props :id))
      children]))
 
 (rum/defc items

@@ -656,7 +656,7 @@
 
        (shui/trigger-as :a
                         {:tabIndex 0
-                         :title (str "Configure property​ " (:block/title property))
+                         :title (:block/title property)
                          :class "property-k flex select-none jtrigger w-full"
                          :on-pointer-down (fn [^js e]
                                             (when (util/meta-key? e)
@@ -734,19 +734,19 @@
                         (contains? #{:default} type))
             date? (= type :date)
             checkbox? (= type :checkbox)
-            property-key-cp [:div.property-key.col-span-2
-                             (property-key block property (assoc (select-keys opts [:class-schema?])
-                                                                 :block? block?
-                                                                 :inline-text inline-text
-                                                                 :page-cp page-cp))]]
+            property-key-cp (property-key block property (assoc (select-keys opts [:class-schema?])
+                                                           :block? block?
+                                                           :inline-text inline-text
+                                                           :page-cp page-cp))]
         [:div {:class (cond
                         (or date? checkbox?)
                         "property-pair items-center"
                         :else
                         "property-pair items-start")}
          (if (seq sortable-opts)
-           (dnd/sortable-item sortable-opts property-key-cp)
-           property-key-cp)
+           (dnd/sortable-item (assoc sortable-opts :class "property-key col-span-2") property-key-cp)
+           [:div.property-key.col-span-2 property-key-cp])
+
          [:div.property-value-container.col-span-3.flex.flex-row.gap-1.items-center
           (when-not block? [:div.opacity-30 {:style {:margin-left 5}}
                             [:span.bullet-container.cursor [:span.bullet]]])
