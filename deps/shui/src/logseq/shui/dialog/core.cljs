@@ -193,11 +193,20 @@
 
 (rum/defc confirm-inner
   [config]
-  (let [{:keys [deferred outside-cancel?]} config]
+  (let [{:keys [deferred outside-cancel?]} config
+        *ok-ref (rum/use-ref nil)]
+
+    (rum/use-effect!
+      (fn []
+        (js/setTimeout
+          #(some-> (rum/deref *ok-ref) (.focus)) 128))
+      [])
+
     (alert-inner
       (assoc config
         :overlay-props
         {:on-click #(when outside-cancel? (close!) (p/reject! deferred nil))}
+
         :footer
         [:<>
          (base/button
@@ -208,6 +217,7 @@
            "Cancel")
          (base/button
            {:key "ok"
+            :ref *ok-ref
             :on-click #(do (close!) (p/resolve! deferred true))
             :size :sm
             } "OK")]))))

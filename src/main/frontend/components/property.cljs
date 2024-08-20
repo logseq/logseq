@@ -663,10 +663,12 @@
                                               (route-handler/redirect-to-page! (:block/uuid property))
                                               (.preventDefault e)))
                          :on-context-menu (fn [^js e]
+                                            (util/stop e)
                                             (shui/popup-show! (.-target e)
                                               (fn [{:keys [id]}]
                                                 (property-v2/dropdown-editor id property))
                                               {:content-props {:class "ls-property-dropdown-editor"}
+                                               :align "start"
                                                :as-dropdown? true}))
                          :on-click (fn [^js e]
                                      (shui/popup-show!

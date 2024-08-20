@@ -63,5 +63,7 @@
      (dropdown-editor-menuitem
        {:icon :square-x :title "Remove property" :desc "" :disabled? false
         :item-props {:class "opacity-50 focus:opacity-100 focus:!text-red-rx-08"
-                     :on-select #(-> (shui/dialog-confirm! "remove?")
-                                   (p/then (fn [] (shui/popup-hide! popup-id))))}})]))
+                     :on-select (fn [^js e]
+                                  (util/stop e)
+                                  (-> (shui/dialog-confirm! "remove?")
+                                    (p/then (fn [] (shui/popup-hide! popup-id)))))}})]))
