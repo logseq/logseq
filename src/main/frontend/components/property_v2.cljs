@@ -27,7 +27,9 @@
                                                      (db-property-handler/upsert-property!
                                                        (:db/ident property)
                                                        (:block/schema property)
-                                                       {:properties {:logseq.property/icon icon}}))})
+                                                       {:properties {:logseq.property/icon icon}}))
+                                        :popup-opts {:align "start"}})
+
       (shui/input {:ref *input-ref :size "sm" :default-value title})]
      [:div.pt-2 (shui/textarea {:placeholder "description"})]
      [:div.pt-2.flex.justify-end
@@ -44,7 +46,7 @@
 
   (let [[sub-open? set-sub-open!] (rum/use-state false)
         toggle? (boolean? toggle-checked?)
-        id1 (str "d1-" (or id icon))
+        id1 (str (or id icon (random-uuid)))
         id2 (str "d2-" id1)
         or-close-menu-sub! (fn []
                              (when-not (popup-core/get-popup :ls-icon-picker)
@@ -126,12 +128,13 @@
 
      (shui/dropdown-menu-separator)
      (dropdown-editor-menuitem
-       {:icon :square-x :title "Remove property" :desc "" :disabled? false
+       {:id :remove-property :icon :square-x :title "Remove property" :desc "" :disabled? false
         :item-props {:class "opacity-50 focus:opacity-100 focus:!text-red-rx-08"
                      :on-select (fn [^js e]
                                   (util/stop e)
                                   (-> (shui/dialog-confirm! "remove?")
-                                    (p/then (fn [] (shui/popup-hide! popup-id)))))}})]))
+                                    (p/then (fn [] (shui/popup-hide-all!)))
+                                    (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}})]))
 
 (rum/defc dropdown-editor < rum/reactive
   [popup-id property]

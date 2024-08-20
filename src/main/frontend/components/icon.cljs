@@ -7,6 +7,7 @@
             [clojure.string :as string]
             [frontend.search :as search]
             [frontend.storage :as storage]
+            [medley.core :as m]
             [rum.core :as rum]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
@@ -416,7 +417,7 @@
             (:native (first (:skins @*hover))))]])]]))
 
 (rum/defc icon-picker
-  [icon-value {:keys [disabled? on-chosen icon-props]}]
+  [icon-value {:keys [disabled? on-chosen icon-props popup-opts]}]
   (let [content-fn
         (if config/publishing?
           (constantly [])
@@ -434,9 +435,11 @@
          :on-click (fn [^js e]
                      (when-not disabled?
                        (shui/popup-show! (.-target e) content-fn
-                         {:id :ls-icon-picker
-                          :content-props {:class "ls-icon-picker"
-                                          :onEscapeKeyDown #(.preventDefault %)}})))}
+                         (m/deep-merge
+                           {:id :ls-icon-picker
+                            :content-props {:class "ls-icon-picker"
+                                            :onEscapeKeyDown #(.preventDefault %)}}
+                           popup-opts))))}
         (if has-icon?
           [:span {:style {:color (or (:color icon-value) "inherit")}}
            (icon icon-value (merge {:size 18} icon-props))]
