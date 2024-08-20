@@ -7,7 +7,7 @@
             [clojure.string :as string]
             [frontend.search :as search]
             [frontend.storage :as storage]
-            [medley.core :as m]
+            [medley.core :as medley]
             [rum.core :as rum]
             [frontend.ui :as ui]
             [logseq.shui.ui :as shui]
@@ -435,7 +435,7 @@
          :on-click (fn [^js e]
                      (when-not disabled?
                        (shui/popup-show! (.-target e) content-fn
-                         (m/deep-merge
+                         (medley/deep-merge
                            {:id :ls-icon-picker
                             :content-props {:class "ls-icon-picker"
                                             :onEscapeKeyDown #(.preventDefault %)}}
