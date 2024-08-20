@@ -4,7 +4,7 @@
             [frontend.db :as db]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
-            [logseq.shui.popup.core :as popup-core]
+            [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
             [goog.dom :as gdom]
             [rum.core :as rum]))
@@ -49,7 +49,7 @@
         id1 (str (or id icon (random-uuid)))
         id2 (str "d2-" id1)
         or-close-menu-sub! (fn []
-                             (when-not (popup-core/get-popup :ls-icon-picker)
+                             (when-not (shui-popup/get-popup :ls-icon-picker)
                                (set-sub-open! false)
                                (restore-root-highlight-item! id1)))
         wrap-menuitem (if submenu-content
@@ -106,7 +106,7 @@
 (rum/defc dropdown-editor-impl
   "popup-id: dropdown popup id
    property: block entity"
-  [popup-id property]
+  [_popup-id property]
   (let [title (:block/title property)
         icon (:logseq.property/icon property)
         icon (when icon (icon-component/icon icon {:size 15}))]
