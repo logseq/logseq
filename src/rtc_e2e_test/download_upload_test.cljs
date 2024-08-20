@@ -8,14 +8,17 @@
             [helper]
             [missionary.core :as m]))
 
-(t/use-fixtures :each fixture/install-example-db-fixture)
+(t/use-fixtures :once
+  fixture/install-some-consts
+  fixture/install-example-db-fixture
+  fixture/clear-test-remote-graphs-fixture)
 
 (deftest upload-graph-test
   (t/async
    done
    (c.m/run-task
     (m/sp
-      (let [{:keys [graph-uuid]} (m/? (helper/new-task--upload-example-graph))]
+      (let [{:keys [graph-uuid]} (m/? helper/new-task--upload-example-graph)]
         (m/? (helper/new-task--wait-creating-graph graph-uuid)))
       (done))
     :upload-graph-test)))

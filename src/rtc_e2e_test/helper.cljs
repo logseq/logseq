@@ -4,8 +4,7 @@
             [frontend.worker.rtc.core :as rtc.core]
             [missionary.core :as m]))
 
-(defn new-task--upload-example-graph
-  []
+(def new-task--upload-example-graph
   (rtc.core/new-task--upload-graph const/test-token const/test-repo const/test-repo))
 
 (defn new-task--wait-creating-graph
@@ -20,3 +19,13 @@
        (prn "waiting for graph " graph-uuid " finish creating")
        (when (= "creating" (:graph-status graph))
          (throw (ex-info "wait creating-graph" {:missionary/retry true})))))))
+
+(def new-task--clear-all-test-remote-graphs
+  (m/sp
+    (let [graphs (m/? (rtc.core/new-task--get-graphs const/test-token))
+          test-graphs (filter (fn [graph]
+                                (and (= const/test-repo (:graph-name graph))
+                                     (not= "deleting" (:graph-status graph))))
+                              graphs)]
+      (doseq [graph test-graphs]
+        (m/? (rtc.core/new-task--delete-graph const/test-token (:graph-uuid graph)))))))
