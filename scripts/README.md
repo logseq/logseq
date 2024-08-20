@@ -12,8 +12,8 @@ Before running [nbb-logseq](https://github.com/logseq/nbb-logseq) scripts, be su
 
 #### Create graph scripts
 
-These scripts generate custom database graphs written with nbb-logseq. If this
-your first time generating a DB graph, it is recommended to first try the
+These scripts generate custom database graphs written with nbb-logseq. If this is
+your first time generating a DB graph, first try the
 `dev:db-create` bb task in [db graph
 tasks](../docs/dev-practices.md#db-graph-tasks) as it only requires writing EDN.
 
@@ -72,4 +72,4 @@ Created graph schema!
 #### Update graph scripts
 
 For database graphs, it is recommended to use
-`logseq.outliner.db-pipeline/add-listener!` when updating graphs.  TODO
+`logseq.outliner.db-pipeline/add-listener!` when updating graphs. TODO
