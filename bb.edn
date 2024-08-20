@@ -2,6 +2,7 @@
  :deps
  {metosin/malli
   {:mvn/version "0.16.1"}
+  borkdude/rewrite-edn {:mvn/version "0.4.8"}
   logseq/bb-tasks
   #_{:local/root "../bb-tasks"}
   {:git/url "https://github.com/logseq/bb-tasks"
