@@ -1,43 +1,107 @@
 (ns frontend.components.property-v2
   (:require [frontend.components.icon :as icon-component]
+            [frontend.handler.db-based.property :as db-property-handler]
+            [frontend.db :as db]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
+            [logseq.shui.popup.core :as popup-core]
             [promesa.core :as p]
             [goog.dom :as gdom]
             [rum.core :as rum]))
 
-(rum/defc dropdown-editor-menuitem
-  [{:keys [icon title desc submenu-content item-props disabled? toggle-checked? on-toggle-checked-change]}]
+(rum/defc name-edit-pane
+  [property]
+  (let [title (:block/title property)
+        icon (:logseq.property/icon property)
+        *input-ref (rum/use-ref nil)]
 
-  (let [toggle? (boolean? toggle-checked?)
-        id (str "dem-" icon)
+    (rum/use-effect!
+      (fn []
+        (js/console.log "==>>>> name editor SET-UP!", property)
+        #(js/console.log "==>>>> name editor BYE!"))
+      [])
+
+    [:div.ls-property-name-edit-pane
+     [:div.flex.items-center.input-wrap
+      (icon-component/icon-picker icon {:on-chosen (fn [_e icon]
+                                                     (db-property-handler/upsert-property!
+                                                       (:db/ident property)
+                                                       (:block/schema property)
+                                                       {:properties {:logseq.property/icon icon}}))})
+      (shui/input {:ref *input-ref :size "sm" :default-value title})]
+     [:div.pt-2 (shui/textarea {:placeholder "description"})]
+     [:div.pt-2.flex.justify-end
+      (shui/button {:size "sm" :disabled true
+                    :variant :secondary} "Save")]]))
+
+(defn restore-root-highlight-item!
+  [id]
+  (js/setTimeout
+    #(some-> (gdom/getElement id) (.focus)) 32))
+
+(rum/defc dropdown-editor-menuitem
+  [{:keys [id icon title desc submenu-content item-props sub-content-props disabled? toggle-checked? on-toggle-checked-change]}]
+
+  (let [[sub-open? set-sub-open!] (rum/use-state false)
+        toggle? (boolean? toggle-checked?)
+        id1 (str "d1-" (or id icon))
+        id2 (str "d2-" id1)
+        or-close-menu-sub! (fn []
+                             (when-not (popup-core/get-popup :ls-icon-picker)
+                               (set-sub-open! false)
+                               (restore-root-highlight-item! id1)))
         wrap-menuitem (if submenu-content
                         #(shui/dropdown-menu-sub
-                           (shui/dropdown-menu-sub-trigger (merge {} item-props) %)
-                           (shui/dropdown-menu-sub-content
-                             (if (fn? submenu-content)
-                               (submenu-content) submenu-content)))
+                           {:open sub-open?
+                            :on-open-change (fn [v] (if v (set-sub-open! true) (or-close-menu-sub!)))}
+                           (shui/dropdown-menu-sub-trigger (merge {:id id1} item-props) %)
+                           (shui/dropdown-menu-portal
+                             (shui/dropdown-menu-sub-content
+                               (merge {:hideWhenDetached true
+                                       :onEscapeKeyDown or-close-menu-sub!} sub-content-props)
+                               (if (fn? submenu-content)
+                                 (submenu-content {:set-sub-open! set-sub-open! :id id1}) submenu-content))))
                         #(shui/dropdown-menu-item
                            (merge {:on-select (fn []
                                                 (when toggle?
-                                                  (some-> (gdom/getElement id) (.click))))}
+                                                  (some-> (gdom/getElement id2) (.click))))
+                                   :id id1}
                              item-props) %))]
     (wrap-menuitem
       [:div.inner-wrap
        {:class (util/classnames [{:disabled disabled?}])}
        [:strong
-        (shui/tabler-icon (name icon))
+        (some-> icon (name) (shui/tabler-icon))
         [:span title]]
        (if (fn? desc) (desc)
          (if (boolean? toggle-checked?)
            [:span.scale-90.flex.items-center
-            (shui/switch {:id id :size "sm" :default-checked toggle-checked?
+            (shui/switch {:id id2 :size "sm" :default-checked toggle-checked?
                           :disabled disabled? :on-click #(util/stop-propagation %)
                           :on-checked-change (or on-toggle-checked-change identity)})]
            [:small [:span desc]
             (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))]))])))
 
-(rum/defc dropdown-editor
+(rum/defc choices-sub-pane
+  [_property]
+
+  [:div.ls-property-choices-sub-pane
+   (dropdown-editor-menuitem {})])
+
+(rum/defc ui-position-sub-pane
+  [_property {:keys [id set-sub-open!]}]
+  (let [handle-select! (fn [^js e]
+                         (shui/toast! (.-innerText (.-target e)))
+                         (set-sub-open! false)
+                         (restore-root-highlight-item! id))
+        item-props {:on-select handle-select!}]
+    [:div.ls-property-dropdown-editor.ls-property-ui-position-sub-pane
+     (dropdown-editor-menuitem {:icon :layout-distribute-horizontal :title "Block properties" :item-props item-props})
+     (dropdown-editor-menuitem {:icon :layout-align-right :title "Beginning of the block" :item-props item-props})
+     (dropdown-editor-menuitem {:icon :layout-align-left :title "End of the block" :item-props item-props})
+     (dropdown-editor-menuitem {:icon :layout-align-top :title "Below of the block" :item-props item-props})]))
+
+(rum/defc dropdown-editor-impl
   "popup-id: dropdown popup id
    property: block entity"
   [popup-id property]
@@ -46,16 +110,17 @@
         icon (when icon (icon-component/icon icon {:size 15}))]
     [:<>
      (dropdown-editor-menuitem {:icon :edit :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
-                                :submenu-content (fn [] [:p.p-3 [:strong "edit name pane???"]])})
+                                :submenu-content (fn [] (name-edit-pane property))})
      (dropdown-editor-menuitem {:icon :hash :title "Schema type" :desc "Date" :disabled? true})
      (dropdown-editor-menuitem {:icon :list :title "Available choices" :desc "4 choices"
-                                :submenu-content (fn [] [:p.p-3 [:strong "choices pane???"]])})
+                                :submenu-content (fn [] (choices-sub-pane property))})
      (dropdown-editor-menuitem {:icon :checks :title "Multiple values" :toggle-checked? true :disabled? true
                                 :on-toggle-checked-change (fn [v] (shui/toast! (str title ": " v)))})
 
      (shui/dropdown-menu-separator)
      (dropdown-editor-menuitem {:icon :float-left :title "UI position" :desc "beginning of the block"
-                                :submenu-content (fn [] [:p.p-3 [:strong "position???"]])})
+                                :item-props {:class "ui__position-trigger-item"}
+                                :submenu-content (fn [ops] (ui-position-sub-pane property ops))})
      (dropdown-editor-menuitem {:icon :eye-off :title "Hide by default" :toggle-checked? false
                                 :on-toggle-checked-change (fn [v] (shui/toast! (str title ": " v)))})
 
@@ -67,3 +132,8 @@
                                   (util/stop e)
                                   (-> (shui/dialog-confirm! "remove?")
                                     (p/then (fn [] (shui/popup-hide! popup-id)))))}})]))
+
+(rum/defc dropdown-editor < rum/reactive
+  [popup-id property]
+  (let [property1 (db/sub-block (:db/id property))]
+    (dropdown-editor-impl popup-id property1)))

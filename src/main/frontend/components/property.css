@@ -333,3 +333,31 @@ a.control-link {
     }
   }
 }
+
+.ls-property-name-edit-pane {
+  @apply px-2 pt-2 pb-1;
+
+  > .input-wrap {
+    @apply gap-1.5;
+
+    > .ui__button:first-child {
+      @apply border;
+
+      > span {
+        @apply flex items-center;
+      }
+    }
+
+    > .ui__input:last-child {
+      @apply !h-[29px];
+    }
+  }
+}
+
+.ls-property-choices-sub-pane {
+  @apply px-2 pt-2 pb-1;
+}
+
+.ls-property-ui-position-sub-pane {
+  @apply w-[240px] p-0;
+}

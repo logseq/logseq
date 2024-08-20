@@ -667,7 +667,8 @@
                                             (shui/popup-show! (.-target e)
                                               (fn [{:keys [id]}]
                                                 (property-v2/dropdown-editor id property))
-                                              {:content-props {:class "ls-property-dropdown-editor"}
+                                              {:content-props
+                                               {:class "ls-property-dropdown-editor as-root"}
                                                :align "start"
                                                :as-dropdown? true}))
                          :on-click (fn [^js e]
