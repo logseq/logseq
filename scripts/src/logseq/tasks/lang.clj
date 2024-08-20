@@ -7,11 +7,7 @@
             [babashka.cli :as cli]
             [babashka.process :refer [shell]]
             [babashka.fs :as fs]
-            [babashka.deps :as deps]))
-
-(deps/add-deps '{:deps {borkdude/rewrite-edn {:mvn/version "0.4.8"}}})
-(require '[borkdude.rewrite-edn :as r])
-
+            [borkdude.rewrite-edn :as r]))
 
 (defn- get-dicts
   []
@@ -147,7 +143,7 @@
   "This validation checks to see that translations done by (t ...) are equal to
   the ones defined for the default :en lang. This catches translations that have
   been added in UI but don't have an entry or translations no longer used in the UI"
-  []
+  [{:keys [fix?]}]
   (let [actual-dicts (->> (shell {:out :string}
                                  ;; This currently assumes all ui translations
                                  ;; use (t and src/main. This can easily be
@@ -174,7 +170,9 @@
         (when (seq expected-only)
           (println "\nThese translation keys are invalid because they are not used in the UI:")
           (task-util/print-table (map #(hash-map :invalid-key %) expected-only))
-          (delete-not-used-key-from-dict-file expected-only))
+          (when fix?
+            (delete-not-used-key-from-dict-file expected-only)
+            (println "These invalid keys have been removed.")))
         (System/exit 1)))))
 
 (def allowed-duplicates
@@ -230,7 +228,7 @@
 
 (defn validate-translations
   "Runs multiple translation validations that fail fast if one of them is invalid"
-  []
+  [& args]
   (validate-non-default-languages)
-  (validate-ui-translations-are-used)
+  (validate-ui-translations-are-used {:fix? (contains? (set args) "--fix")})
   (validate-languages-dont-have-duplicates))

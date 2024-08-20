@@ -102,6 +102,8 @@ you'll need to ensure it doesn't fail. Mistakes that it catches:
 [lang.clj](https://github.com/logseq/logseq/blob/master/scripts/src/logseq/tasks/lang.clj) for your language
 with a list of duplicated entries e.g. `:nb-NO #{:port ...}`.
 
+Nonexistent entries can be removed by running `bb lang:validate-translations --fix`.
+
 ## Add a Language
 
 To add a new language:
