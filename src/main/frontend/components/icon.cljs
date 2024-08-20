@@ -434,7 +434,8 @@
          :on-click (fn [^js e]
                      (when-not disabled?
                        (shui/popup-show! (.-target e) content-fn
-                         {:content-props {:class "ls-icon-picker"
+                         {:id :ls-icon-picker
+                          :content-props {:class "ls-icon-picker"
                                           :onEscapeKeyDown #(.preventDefault %)}})))}
         (if has-icon?
           [:span {:style {:color (or (:color icon-value) "inherit")}}
