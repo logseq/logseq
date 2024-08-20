@@ -5,6 +5,8 @@
             [malli.transform :as mt]
             [malli.util :as mu]))
 
+(goog-define RTC-E2E-TEST false)
+
 (def block-pos-schema
   [:catn
    [:parent-uuid [:maybe :uuid]]
