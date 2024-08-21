@@ -21,6 +21,20 @@
     (println cmd)
     (shell cmd)))
 
+(defn kondo-git-changes
+  "Run clj-kondo only for files that git diff detects as changed and unstaged"
+  []
+  (let [files (->> (shell {:out :string} "git diff --name-only")
+                   :out
+                   string/split-lines
+                   (filter #(string/starts-with? % "src")))]
+    (if (seq files)
+      (let [cmd (str "clj-kondo --lint " (string/join " " files))
+            _ (println cmd)
+            res (apply shell {:continue :true} "clj-kondo --lint" files)]
+        (System/exit (:exit res)))
+      (println "No files have changed to lint."))))
+
 (defn- validate-frontend-not-in-worker
   []
   (let [res (shell {:out :string}

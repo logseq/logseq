@@ -152,6 +152,9 @@
   lint:dev
   logseq.tasks.dev.lint/dev
 
+  lint:kondo-git-changes
+  logseq.tasks.dev.lint/kondo-git-changes
+
   lint:large-vars
   logseq.bb-tasks.lint.large-vars/-main
 
