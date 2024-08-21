@@ -29,8 +29,24 @@
   {:before
    #(t/async
      done
-     (c.m/run-task
+     (c.m/run-task-throw
       (m/sp
-       (m/? helper/new-task--clear-all-test-remote-graphs)
-       (done))
+        (m/? helper/new-task--clear-all-test-remote-graphs)
+        (done))
       :clear-test-remote-graphs))})
+
+(def build-two-conns-by-download-example-graph-fixture
+  {:before
+   #(t/async
+     done
+     (c.m/run-task-throw
+      (m/sp
+        (swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo const/downloaded-test-repo2)
+        (let [{:keys [graph-uuid]} (m/? helper/new-task--upload-example-graph)]
+          (m/? (helper/new-task--wait-creating-graph graph-uuid))
+          (m/? (helper/new-task--download-graph graph-uuid const/downloaded-test-graph-name))
+          (m/? (helper/new-task--download-graph graph-uuid const/downloaded-test-graph-name2))
+          (done)))
+      :build-two-conns-by-download-example-graph-fixture))
+   :after
+   #(swap! worker-state/*datascript-conns dissoc const/downloaded-test-repo const/downloaded-test-repo2)})
