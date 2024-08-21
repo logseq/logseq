@@ -136,10 +136,7 @@
                       :options {:on-click #(state/toggle-theme!)}
                       :icon (ui/icon "bulb")})
 
-                   (when (and
-                           (or (util/electron?) (state/developer-mode?))
-                           (file-sync-handler/enable-sync?)
-                           (not login?))
+                   (when (not login?)
                      {:title (t :login)
                       :options {:on-click #(state/pub-event! [:user/login])}
                       :icon (ui/icon "user")})
