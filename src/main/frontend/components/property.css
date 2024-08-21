@@ -355,7 +355,37 @@ a.control-link {
 }
 
 .ls-property-choices-sub-pane {
-  @apply px-2 pt-2 pb-1;
+  @apply w-[220px] p-0;
+
+  > ul.choices-list {
+    @apply m-0 px-1.5 pt-1 pb-1;
+
+    > li {
+      @apply flex items-center gap-1 relative;
+
+      .ls-icon-grip-vertical {
+        @apply opacity-50 cursor-move;
+      }
+
+      > strong {
+        @apply text-sm px-0.5 flex-grow cursor-pointer font-normal
+        select-none active:opacity-60;
+      }
+
+      > .ui__button {
+        @apply px-1.5;
+      }
+
+      > a.del {
+        @apply items-center absolute right-0 top-0 px-1 py-[7px] scale-90 hidden
+        opacity-80 hover:opacity-100 active:opacity-80 text-gray-08 hover:text-red-700;
+      }
+
+      &:hover a.del {
+        @apply flex;
+      }
+    }
+  }
 }
 
 .ls-property-ui-position-sub-pane {
