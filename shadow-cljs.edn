@@ -93,7 +93,15 @@
                  :test-dir "static/rtc-e2e-test"
                  :closure-defines {frontend.worker.rtc.const/RTC-E2E-TEST true}
                  :devtools {:enabled false}
-                 :compiler-options {:static-fns false}}
+                 :compiler-options {:infer-externs      :auto
+                                    :output-feature-set :es-next-in
+                                    :source-map true
+                                    :externs ["datascript/externs.js"
+                                              "externs.js"]
+                                    :warnings {:fn-deprecated false
+                                               :redef false}
+                                    :cross-chunk-method-motion false
+                                    :static-fns false}}
 
   :gen-malli-kondo-config {:target :node-script
                            :closure-defines {frontend.util/NODETEST true}

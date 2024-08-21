@@ -65,6 +65,10 @@
               (assert (= (count (distinct (map :block/order children))) (count children))
                       (str ":block/order is not unique for children blocks, parent id: " (:db/id parent))))))))))
 
+(sr/defkeyword :skip-store-conn
+  "tx-meta option, skip `d/store` on conn.
+default = false")
+
 (defn invoke-hooks
   [repo conn {:keys [tx-meta] :as tx-report} context]
   (when-not (:pipeline-replace? tx-meta)
@@ -77,7 +81,9 @@
                           (when (seq path-refs)
                             (ldb/transact! conn path-refs {:pipeline-replace? true}))
                           (do
-                            (when-not (exists? js/process) (d/store @conn))
+                            (when-not (or (exists? js/process)
+                                          (:skip-store-conn tx-meta false))
+                              (d/store @conn))
                             tx-report))
               full-tx-data (concat (:tx-data tx-report) (:tx-data tx-report'))
               final-tx-report (assoc tx-report'
@@ -117,7 +123,9 @@
               tx-report' (if (seq replace-tx)
                            (ldb/transact! conn replace-tx {:pipeline-replace? true})
                            (do
-                             (when-not (exists? js/process) (d/store @conn))
+                             (when-not (or (exists? js/process)
+                                           (:skip-store-conn tx-meta false))
+                               (d/store @conn))
                              tx-report))
               _ (validate-db! repo conn tx-report tx-meta context)
               full-tx-data (concat (:tx-data tx-report)
