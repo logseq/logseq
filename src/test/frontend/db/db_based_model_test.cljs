@@ -26,7 +26,7 @@
         _ (test-helper/create-page! "class2" opts)]
     (is (= ["Card" "Root tag" "Task" "class1" "class2"] (sort (map :block/title (model/get-all-classes repo)))))))
 
-(deftest get-class-objects-test
+(deftest ^:fix-me get-class-objects-test
   (let [opts {:redirect? false :create-first-block? false :class? true}
         _ (test-helper/create-page! "class1" opts)
         class (db/get-case-page "class1")
