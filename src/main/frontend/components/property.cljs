@@ -162,7 +162,7 @@
             (db/entity (:db/id result))))
         (notification/show! "This is an invalid property name. A property name cannot start with page reference characters '#' or '[['." :error)))))
 
-(rum/defcs schema-type <
+(rum/defcs property-type <
   shortcut/disable-all-shortcuts
   [state property {:keys [*property *property-name *property-schema built-in? disabled?
                           show-type-change-hints? block *show-new-property-config?
@@ -225,7 +225,7 @@
       (shui/select-trigger
        {:class "!px-2 !py-0 !h-8"}
        (shui/select-value
-        {:placeholder "Select a schema type"}))
+        {:placeholder "Select a property type"}))
       (shui/select-content
        (shui/select-group
         (for [{:keys [label value disabled]} schema-types]
@@ -333,7 +333,7 @@
                  (ui/icon "X")])])]
 
           [:div.grid.grid-cols-5.gap-1.items-center.leading-8
-           [:label.col-span-2 "Schema type:"]
+           [:label.col-span-2 "Property type:"]
            (if (or (ldb/built-in? property)
                    (and property-type (seq values)))
              [:div.flex.items-center.col-span-2
@@ -343,7 +343,7 @@
                          :interactive true
                          :disabled    false}
                         (svg/help-circle))]
-             (schema-type property {:*property-name *property-name
+             (property-type property {:*property-name *property-name
                                     :*property-schema *property-schema
                                     :built-in? built-in?
                                     :disabled? disabled?
@@ -581,7 +581,7 @@
          (when (not= @*show-new-property-config? :adding-property)
            (cond
              @*show-new-property-config?
-             (schema-type property (merge opts
+             (property-type property (merge opts
                                           {:*property *property
                                            :*property-name *property-key
                                            :*property-schema *property-schema
