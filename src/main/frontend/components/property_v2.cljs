@@ -53,6 +53,7 @@
 (rum/defc base-edit-form
   [own-property block]
   (let [create? (:create? block)
+        uuid (:block/uuid block)
         *form-data (rum/use-ref
                      {:value (or (:block/title block) "")
                       :icon (:logseq.property/icon block)
@@ -86,7 +87,8 @@
         (shui/button {:size "sm"
                       :disabled (not dirty?)
                       :on-click (fn []
-                                  (-> (<upsert-closed-value! own-property form-data)
+                                  (-> (<upsert-closed-value! own-property
+                                        (cond-> form-data uuid (assoc :id uuid)))
                                     (p/then #(shui/popup-hide!))
                                     (p/catch #(shui/toast! (str %) :error))))
                       :variant (if dirty? :default :secondary)}
@@ -143,8 +145,7 @@
 
 (rum/defc choice-item-content
   [property block]
-  (let [{:block/keys [uuid]} block
-        delete-choice! (fn []
+  (let [delete-choice! (fn []
                          (p/do!
                            (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
                            (re-init-commands! property)))
@@ -154,8 +155,8 @@
                          (select-keys icon [:id :type :color])))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)
-        property-block? (db-property/property-created-block? block)
-        page? (db/page? block)]
+        _property-block? (db-property/property-created-block? block)
+        _page? (db/page? block)]
 
     [:li
      (shui/tabler-icon "grip-vertical" {:size 14})
@@ -163,7 +164,12 @@
        (icon-component/icon-picker icon {:on-chosen (fn [_e icon] (update-icon! icon))
                                          :popup-opts {:align "start"}
                                          :empty-label "?"}))
-     [:strong value]
+     [:strong {:on-click (fn [^js e]
+                           (shui/popup-show! (.-target e)
+                             (fn [] (base-edit-form property block))
+                             {:id :ls-base-edit-form
+                              :align "start"}))}
+      value]
      [:a.del {:on-click delete-choice!
               :title "Delete this choice"}
       (shui/tabler-icon "x" {:size 14})]]))
