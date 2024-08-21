@@ -438,8 +438,6 @@
  :relaunch-confirm-to-work "Harus mengulang aplikasi untuk membuatnya berfungsi. Apakah Anda ingin me-restart sekarang?"
  :import "Impor"
  :importing "Mengimpor"
- :join-community "Bergabung dengan komunitas"
- :discourse-title "Forum kami!"
  :help-shortcut-title "Klik untuk memeriksa pintasan dan tips lainnya"
  :loading "Memuat..."
  :parsing-files "Menganalisis berkas"

@@ -484,8 +484,6 @@
  :import-notes "Import existing notes"
  :import "Import"
  :importing "Importing"
- :join-community "Join the community"
- :discourse-title "Our forum!"
  :help-shortcut-title "Click to check shortcuts and other tips"
  :loading "Loading..."
  :parsing-files "Parsing files"

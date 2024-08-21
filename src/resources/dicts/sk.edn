@@ -441,8 +441,6 @@
  :relaunch-confirm-to-work                         "Aby aplikácia fungovala správne, je potrebné ju reštartovať. Chcete ju reštartovať teraz?"
  :import                                           "Importovať"
  :importing                                        "Importuje sa"
- :join-community                                   "Pridať sa ku komunite"
- :discourse-title                                  "Naše fórum!"
  :help-shortcut-title                              "Kliknutím zobrazíte skratky a ďalšie tipy"
  :loading                                          "Načítava sa ..."
  :parsing-files                                    "Parsovanie súborov"

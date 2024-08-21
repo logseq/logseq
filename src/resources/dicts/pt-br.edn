@@ -441,8 +441,6 @@
  :relaunch-confirm-to-work "Necessita reiniciar o aplicativo para funcionar. Deseja reiniciá-lo agora?"
  :import "Importar"
  :importing "Importando"
- :join-community "Junte-se à comunidade"
- :discourse-title "Nosso fórum!"
  :help-shortcut-title "Clique para verificar os atalhos e outras dicas"
  :loading "Carregando..."
  :parsing-files "Analisando arquivos"

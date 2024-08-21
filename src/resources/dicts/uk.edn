@@ -210,8 +210,6 @@
  :relaunch-confirm-to-work "Потрібно перезагрузити застосунок. Хочете перезагрузити зараз?"
  :import "Імпорт"
  :importing "Імпортування"
- :join-community "Приєднатися до нас"
- :discourse-title "Наш форум!"
  :help-shortcut-title "Клацніть, щоб перевірити комбінації і інші підказки"
  :parsing-files "Розбір файлів"
  :loading-files "Загрузка файлів"

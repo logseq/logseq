@@ -145,8 +145,6 @@
  :plugins "Pluginy"
  :themes "Motywy graficzne"
  :relaunch-confirm-to-work "Aby wprowadzić zmiany, aplikacja musi zostać uruchomiona ponownie. Zrobić to teraz?"
- :join-community "Dołącz do społeczności"
- :discourse-title "Nasze forum!"
  :help-shortcut-title "Kliknij, aby sprawdzić skróty klawiszowe oraz inne porady"
  :parsing-files "Parsuję pliki"
  :loading-files "Ładuję pliki"
