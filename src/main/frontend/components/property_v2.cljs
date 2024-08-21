@@ -88,8 +88,25 @@
 (rum/defc choices-sub-pane
   [_property]
 
-  [:div.ls-property-choices-sub-pane
-   (dropdown-editor-menuitem {})])
+  [:div.ls-property-dropdown-editor.ls-property-choices-sub-pane
+   [:ul.choices-list
+    [:li
+     (shui/tabler-icon "grip-vertical" {:size 14})
+     (shui/button {:size "sm" :variant :outline} "🔥")
+     [:strong "fireworks"]
+     [:a.del (shui/tabler-icon "x" {:size 14})]]
+
+    [:li
+     (shui/tabler-icon "grip-vertical" {:size 14})
+     (shui/button {:size "sm" :variant :outline} "🍄")
+     [:strong "mushroom"]
+     [:a.del (shui/tabler-icon "x" {:size 14})]]
+    ]
+
+   ;; add choice
+   (dropdown-editor-menuitem
+     {:icon :plus :title "Add choice"
+      :item-props {:on-select (fn [] (shui/toast! "+ add choice" :success))}})])
 
 (rum/defc ui-position-sub-pane
   [_property {:keys [id set-sub-open!]}]
