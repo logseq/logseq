@@ -417,7 +417,7 @@
             (:native (first (:skins @*hover))))]])]]))
 
 (rum/defc icon-picker
-  [icon-value {:keys [disabled? on-chosen icon-props popup-opts]}]
+  [icon-value {:keys [empty-label disabled? on-chosen icon-props popup-opts]}]
   (let [content-fn
         (if config/publishing?
           (constantly [])
@@ -443,4 +443,4 @@
         (if has-icon?
           [:span {:style {:color (or (:color icon-value) "inherit")}}
            (icon icon-value (merge {:size 18} icon-props))]
-          "Empty")))))
+          (or empty-label "Empty"))))))
