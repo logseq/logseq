@@ -14,10 +14,12 @@ bb lint:dev
 
 To lint:
 ```sh
-clojure -M:clj-kondo --parallel --lint src --cache false
+clojure -M:clj-kondo --parallel --lint src
 ```
 
 We lint our Clojure(Script) code with https://github.com/clj-kondo/clj-kondo/. If you need to configure specific linters, see [this documentation](https://github.com/clj-kondo/clj-kondo/blob/master/doc/linters.md). Where possible, a global linting configuration is used and namespace specific configuration is avoided.
+
+For engineers, there is a faster version of this command that only checks files that you have changed: `bb lint:kondo-git-changes`.
 
 There are outstanding linting items that are currently ignored to allow linting the rest of the codebase in CI. These outstanding linting items should be addressed at some point:
 
@@ -313,7 +315,7 @@ We strive to use explicit names that are self explanatory so that our codebase i
 
 ### Babashka tasks
 
-There are a number of bb tasks under `dev:` for developers. Some useful ones to
+There are a number of bb tasks under `dev:` for development. Some useful ones to
 point out:
 
 * `dev:validate-repo-config-edn` - Validate a repo config.edn
