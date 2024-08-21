@@ -109,7 +109,9 @@
   [_popup-id property]
   (let [title (:block/title property)
         icon (:logseq.property/icon property)
-        icon (when icon (icon-component/icon icon {:size 15}))]
+        icon (when icon [:span.float-left.w-4.h-4.overflow-hidden.leading-4.relative
+                         {:class "top-0.5 -right-0.5"}
+                         (icon-component/icon icon {:size 15})])]
     [:<>
      (dropdown-editor-menuitem {:icon :edit :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [] (name-edit-pane property))})
