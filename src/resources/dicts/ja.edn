@@ -454,8 +454,6 @@
  :relaunch-confirm-to-work "動作させるには再起動が必要です。いますぐ再起動しますか？"
  :import "インポート"
  :importing "インポートしています"
- :join-community "コミュニティへ参加"
- :discourse-title "私たちのフォーラム！"
  :help-shortcut-title "クリックしてショートカットと他のお役立ち情報を確認"
  :loading "読み込み中..."
  :parsing-files "ファイル解析中"

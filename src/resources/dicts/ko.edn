@@ -134,7 +134,6 @@
  :themes "테마"
  :relaunch-confirm-to-work "완료하려면 앱을 재시작해야 합니다. 지금 재시작하시겠습니까?"
  :import "불러오기"
- :join-community "커뮤니티에 참여"
  :help-shortcut-title "다른 단축키와 도움말 확인하기"
  :parsing-files "파일 파싱 중"
  :loading-files "파일 로딩 중"
@@ -196,7 +195,6 @@
 
  :all-whiteboards "모든 화이트보드"
  :auto-heading "자동 헤딩"
- :discourse-title "포럼!"
  :heading "헤딩 {1}"
  :importing "불러오는 중"
  :remove-heading "헤딩 제거"

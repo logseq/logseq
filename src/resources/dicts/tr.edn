@@ -468,8 +468,6 @@
  :relaunch-confirm-to-work "Çalışması için uygulama yeniden başlatılmalı. Şimdi yeniden başlatmak istiyor musunuz?"
  :import "İçeri aktar"
  :importing "İçeri aktarılıyor"
- :join-community "Topluluğa katıl"
- :discourse-title "Forum sayfamız!"
  :help-shortcut-title "Kısayolları ve diğer ipuçlarını kontrol etmek için tıklayın"
  :loading "Yükleniyor..."
  :parsing-files "Dosyalar ayrıştırılıyor"

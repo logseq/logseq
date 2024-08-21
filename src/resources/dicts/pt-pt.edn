@@ -187,8 +187,6 @@
  :relaunch-confirm-to-work "A aplicação deve ser reiniciada para que funcione corretamente. Quer reiniciar agora?"
  :import "Importar"
  :importing "A importar"
- :join-community "Junte-se à comunidade"
- :discourse-title "O nosso fórum!"
  :help-shortcut-title "Clique para ver atalhos e outras dicas"
  :parsing-files "A analisar ficheiros"
  :loading-files "A carregar ficheiros"

@@ -193,8 +193,6 @@
  :relaunch-confirm-to-work "需要重新啟動應用程式才能使其運作。要現在重新啟動嗎？"
  :import "匯入"
  :importing "正在匯入"
- :join-community "加入社群"
- :discourse-title "我們的論壇！"
  :help-shortcut-title "點擊查看快捷鍵和其他提示。"
  :parsing-files "爬取資料"
  :loading-files "讀取資料"
