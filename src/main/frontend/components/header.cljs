@@ -41,23 +41,6 @@
                    (route-handler/redirect-to-home!))}
      (ui/icon "home" {:size ui/icon-size})]))
 
-(rum/defc login < rum/reactive
-  < {:key-fn #(identity "login-button")}
-  []
-  (let [_ (state/sub :auth/id-token)
-        loading? (state/sub [:ui/loading? :login])
-        sync-enabled? (file-sync-handler/enable-sync?)
-        logged? (user-handler/logged-in?)]
-    (when-not (or config/publishing?
-                  logged?
-                  (not sync-enabled?))
-      [:span.flex.space-x-2
-       [:a.button.text-sm.font-medium.block.text-gray-11
-        {:on-click #(state/pub-event! [:user/login])}
-        [:span (t :login)]
-        (when loading?
-          [:span.ml-2 (ui/loading "")])]])))
-
 (rum/defc rtc-collaborators < rum/reactive
   []
   (let [rtc-graph-id (ldb/get-graph-rtc-uuid (db/get-db))
@@ -148,18 +131,18 @@
                       :options {:href (rfe/href :import)}
                       :icon (ui/icon "file-upload")})
 
-                   (when-not config/publishing?
-                     {:title [:div.flex-row.flex.justify-between.items-center
-                              [:span (t :join-community)]]
-                      :options {:href "https://discuss.logseq.com"
-                                :title (t :discourse-title)
-                                :target "_blank"}
-                      :icon (ui/icon "brand-discord")})
-
                    (when config/publishing?
                      {:title (t :toggle-theme)
                       :options {:on-click #(state/toggle-theme!)}
                       :icon (ui/icon "bulb")})
+
+                   (when (and
+                           (or (util/electron?) (state/developer-mode?))
+                           (file-sync-handler/enable-sync?)
+                           (not login?))
+                     {:title (t :login)
+                      :options {:on-click #(state/pub-event! [:user/login])}
+                      :icon (ui/icon "user")})
 
                    (when login? {:hr true})
                    (when login?
@@ -305,9 +288,6 @@
       (when (and (not= (state/get-current-route) :home)
                  (not custom-home-page?))
         (home-button))
-
-      (when (and (or (util/electron?) (state/developer-mode?)) sync-enabled?)
-        (login))
 
       (when config/lsp-enabled?
         [:<>
