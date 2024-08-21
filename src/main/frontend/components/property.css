@@ -334,14 +334,15 @@ a.control-link {
   }
 }
 
-.ls-property-name-edit-pane {
+.ls-property-name-edit-pane,
+.ls-base-edit-form {
   @apply px-2 pt-2 pb-1;
 
   > .input-wrap {
     @apply gap-1.5;
 
     > .ui__button:first-child {
-      @apply border;
+      @apply px-0 py-0 !w-9 border overflow-hidden;
 
       > span {
         @apply flex items-center;
@@ -373,7 +374,7 @@ a.control-link {
       }
 
       > .ui__button {
-        @apply px-1.5;
+        @apply !p-0 !w-7 !h-7 overflow-hidden;
       }
 
       > a.del {
