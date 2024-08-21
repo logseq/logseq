@@ -32,7 +32,7 @@
         (m/? (rtc.core/new-task--delete-graph const/test-token (:graph-uuid graph)))))))
 
 (defn new-task--download-graph
-  [graph-uuid]
+  [graph-uuid graph-name]
   (m/sp
     (let [download-info-uuid (m/? (rtc.core/new-task--request-download-graph const/test-token graph-uuid))
           result (m/? (rtc.core/new-task--wait-download-info-ready const/test-token download-info-uuid graph-uuid 60000))
@@ -44,7 +44,7 @@
       (when (= result :timeout)
         (throw (ex-info "wait download-info-ready timeout" {})))
       (m/? (rtc.core/new-task--download-graph-from-s3
-            graph-uuid const/downloaded-test-graph-name download-info-s3-url)))))
+            graph-uuid graph-name download-info-s3-url)))))
 
 (defn get-downloaded-test-conn
   []

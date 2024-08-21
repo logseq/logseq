@@ -23,7 +23,7 @@
       (println :example-db-block-count (count (d/datoms @(helper/get-example-test-conn) :avet :block/uuid)))
       (let [{:keys [graph-uuid]} (m/? helper/new-task--upload-example-graph)]
         (m/? (helper/new-task--wait-creating-graph graph-uuid))
-        (m/? (helper/new-task--download-graph graph-uuid))
+        (m/? (helper/new-task--download-graph graph-uuid const/downloaded-test-graph-name))
         (let [conn (helper/get-downloaded-test-conn)]
           (println :repos (keys @worker-state/*datascript-conns))
           (println :block-count (count (d/datoms @conn :avet :block/uuid)))))
