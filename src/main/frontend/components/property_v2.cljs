@@ -234,7 +234,7 @@
     [:<>
      (dropdown-editor-menuitem {:icon :edit :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [] (name-edit-pane property))})
-     (dropdown-editor-menuitem {:icon :hash :title "Schema type" :desc (str property-type-label) :disabled? true})
+     (dropdown-editor-menuitem {:icon :hash :title "Property type" :desc (str property-type-label) :disabled? true})
 
      (when enable-closed-values? (empty? (:property/schema.classes property))
        (let [values (:property/closed-values property)]
