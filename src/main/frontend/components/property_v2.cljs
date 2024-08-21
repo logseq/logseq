@@ -2,6 +2,7 @@
   (:require [frontend.components.icon :as icon-component]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.db :as db]
+            [frontend.handler.route :as route-handler]
             [frontend.util :as util]
             [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
@@ -130,8 +131,14 @@
 
      (shui/dropdown-menu-separator)
      (dropdown-editor-menuitem
+       {:icon :share-3 :title "Go to the node" :desc ""
+        :item-props {:class "opacity-90 focus:opacity-100"
+                     :on-select (fn []
+                                  (shui/popup-hide-all!)
+                                  (route-handler/redirect-to-page! (:block/uuid property)))}})
+     (dropdown-editor-menuitem
        {:id :remove-property :icon :square-x :title "Remove property" :desc "" :disabled? false
-        :item-props {:class "opacity-50 focus:opacity-100 focus:!text-red-rx-08"
+        :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-08"
                      :on-select (fn [^js e]
                                   (util/stop e)
                                   (-> (shui/dialog-confirm! "remove?")
