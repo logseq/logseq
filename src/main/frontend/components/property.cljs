@@ -237,6 +237,19 @@
                   :disabled    false}
                  (svg/info)))]))
 
+(defn- set-property-description
+  [property *property-description]
+  (if-let [ent (:logseq.property/description property)]
+    (db/transact! (state/get-current-repo)
+                  [(outliner-core/block-with-updated-at
+                    {:db/id (:db/id ent) :block/title @*property-description})]
+                  {:outliner-op :save-block})
+    (when-not (string/blank? @*property-description)
+      (db-property-handler/set-block-property!
+       (:db/id property)
+       :logseq.property/description
+       @*property-description))))
+
 (rum/defcs ^:large-vars/cleanup-todo property-config
   "All changes to a property must update the db and the *property-schema. Failure to do
    so can result in data loss"
@@ -294,9 +307,9 @@
              :auto-focus    (not add-new-property?)
              :on-change     #(reset! *property-name (util/evalue %))
              :on-blur       save-property-fn
-             :on-key-press  (fn [e]
-                              (when (= "Enter" (util/ekey e))
-                                (save-property-fn)))
+             :on-key-down  (fn [e]
+                             (when (= "Enter" (util/ekey e))
+                               (save-property-fn)))
              :disabled      disabled?
              :default-value @*property-name})]
 
@@ -419,17 +432,11 @@
                (shui/textarea
                 {:on-change (fn [e]
                               (reset! *property-description (util/evalue e)))
+                 :on-key-down (fn [e]
+                                (when (= "Enter" (util/ekey e))
+                                  (set-property-description property *property-description)))
                  :on-blur (fn []
-                            (if-let [ent (:logseq.property/description property)]
-                              (db/transact! (state/get-current-repo)
-                                            [(outliner-core/block-with-updated-at
-                                              {:db/id (:db/id ent) :block/title @*property-description})]
-                                            {:outliner-op :save-block})
-                              (when-not (string/blank? @*property-description)
-                                (db-property-handler/set-block-property!
-                                 (:db/id property)
-                                 :logseq.property/description
-                                 @*property-description))))
+                            (set-property-description property *property-description))
                  :disabled disabled?
                  :default-value description})]]])]]))))
 
