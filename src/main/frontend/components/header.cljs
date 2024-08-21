@@ -10,7 +10,6 @@
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.handler :as handler]
-            [frontend.handler.file-sync :as file-sync-handler]
             [frontend.components.file-sync :as fs-sync]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.handler.plugin :as plugin-handler]
@@ -231,8 +230,7 @@
                                                  (state/set-left-sidebar-open!
                                                   (not (:ui/left-sidebar-open? @state/state))))})
         custom-home-page? (and (state/custom-home-page?)
-                               (= (state/sub-default-home-page) (state/get-current-page)))
-        sync-enabled? (file-sync-handler/enable-sync?)]
+                               (= (state/sub-default-home-page) (state/get-current-page)))]
     [:div.cp__header.drag-region#head
      {:class           (util/classnames [{:electron-mac   electron-mac?
                                           :native-ios     (mobile-util/native-ios?)

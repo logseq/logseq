@@ -147,16 +147,14 @@
   [property block]
   (let [delete-choice! (fn []
                          (p/do!
-                           (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
-                           (re-init-commands! property)))
+                          (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
+                          (re-init-commands! property)))
         update-icon! (fn [icon]
                        (property-handler/set-block-property!
-                         (state/get-current-repo) (:block/uuid block) :logseq.property/icon
-                         (select-keys icon [:id :type :color])))
+                        (state/get-current-repo) (:block/uuid block) :logseq.property/icon
+                        (select-keys icon [:id :type :color])))
         icon (:logseq.property/icon block)
-        value (db-property/closed-value-content block)
-        _property-block? (db-property/property-created-block? block)
-        _page? (db/page? block)]
+        value (db-property/closed-value-content block)]
 
     [:li
      (shui/tabler-icon "grip-vertical" {:size 14})
