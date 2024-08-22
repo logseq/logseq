@@ -4,7 +4,6 @@
   when use together with dynamic var."
   (:refer-clojure :exclude [map filter mapcat concat remove])
   (:require [cljs.core.match :refer [match]]
-            [clojure.edn :as edn]
             [clojure.string :as string]
             [frontend.db :as db]
             [frontend.format.mldoc :as mldoc]
