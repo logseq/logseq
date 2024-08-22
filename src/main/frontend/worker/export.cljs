@@ -4,7 +4,10 @@
             [frontend.common.file.core :as common-file]
             [logseq.db :as ldb]
             [logseq.graph-parser.property :as gp-property]
-            [logseq.outliner.tree :as otree]))
+            [logseq.outliner.tree :as otree]
+            [cljs-bean.core :as bean]
+            [logseq.db.sqlite.util :as sqlite-util]
+            [clojure.string :as string]))
 
 (defn- safe-keywordize
   [block]
@@ -49,3 +52,42 @@
               (let [e (d/entity db (:e d))]
                 [(:block/title e)
                  (common-file/block->content repo db (:block/uuid e) {} {})])))))
+
+(defn get-debug-datoms
+  [^Object db]
+  (some->> (.exec db #js {:sql "select content from kvs"
+                          :rowMode "array"})
+           bean/->clj
+           (mapcat (fn [result]
+                     (let [result (sqlite-util/transit-read (first result))]
+                       (when (map? result)
+                         (:keys result)))))
+           (group-by first)
+           (mapcat (fn [[_id col]]
+                     (let [type (some (fn [[_e a v _t]]
+                                        (when (= a :block/type)
+                                          v)) col)
+                           ident (some (fn [[_e a v _t]]
+                                         (when (= a :db/ident)
+                                           v)) col)]
+                       (map
+                        (fn [[e a v t]]
+                          (cond
+                            (and (contains? #{:block/title :block/name} a)
+                                 (or
+                                  ;; normal page or block
+                                  (not (contains? #{"class" "property" "journal" "closed value" "hidden"} type))
+                                  ;; class/property created by user
+                                  (and ident
+                                       (contains? #{"class" "property"} type)
+                                       (not (string/starts-with? (namespace ident) "logseq")))))
+                            [e a (str "debug " (random-uuid)) t]
+
+                            (= a :block/uuid)
+                            [e a (str v) t]
+
+                            :else
+                            [e a v t]))
+                        col))))
+           (distinct)
+           (sort-by first)))
