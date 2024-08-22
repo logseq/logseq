@@ -4,7 +4,7 @@ module.exports = {
   packagerConfig: {
     name: 'Logseq',
     icon: './icons/logseq_big_sur.icns',
-    buildVersion: 68,
+    buildVersion: 83,
     protocols: [
       {
         "protocol": "logseq",
@@ -20,9 +20,10 @@ module.exports = {
       'signature-flags': 'library'
     },
     osxNotarize: {
+      tool: 'notarytool',
       appleId: process.env['APPLE_ID'],
       appleIdPassword: process.env['APPLE_ID_PASSWORD'],
-      ascProvider: process.env['APPLE_ASC_PROVIDER']
+      teamId: process.env['APPLE_TEAM_ID']
     },
   },
   makers: [
@@ -47,8 +48,9 @@ module.exports = {
     },
     {
       name: '@electron-forge/maker-zip',
-      platforms: ['darwin', 'linux']
+      platforms: ['darwin', 'linux', 'win32'],
     },
+
     {
       name: 'electron-forge-maker-appimage',
       platforms: ['linux'],

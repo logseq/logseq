@@ -45,7 +45,8 @@
             [logseq.graph-parser.util :as gp-util]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [logseq.common.path :as path]))
+            [logseq.common.path :as path]
+            [electron.ipc :as ipc]))
 
 ;; FIXME: add whiteboard
 (defn- get-directory
@@ -164,7 +165,7 @@
              last-txs (build-page-tx format properties (last pages) journal? whiteboard?)
              txs      (concat txs last-txs)]
          (when (seq txs)
-           (db/transact! txs)))
+           (db/transact! repo txs {:outliner-op :create-page})))
 
        (when create-first-block?
          (when (or
@@ -878,7 +879,7 @@
   (if-let [file-rpath (and (util/electron?) (page-util/get-page-file-rpath))]
     (let [repo-dir (config/get-repo-dir (state/get-current-repo))
           file-fpath (path/path-join repo-dir file-rpath)]
-      (js/window.apis.showItemInFolder file-fpath))
+      (ipc/ipc "openFileInFolder" file-fpath))
     (notification/show! "No file found" :warning)))
 
 (defn copy-page-url

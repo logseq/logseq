@@ -12,7 +12,8 @@
             [cljs.core.async :as async :refer [go <!]]
             [goog.crypt.Sha256]
             [goog.crypt.Hmac]
-            [goog.crypt :as crypt]))
+            [goog.crypt :as crypt]
+            [frontend.handler.notification :as notification]))
 
 (defn set-preferred-format!
   [format]
@@ -69,6 +70,12 @@
    parse-jwt
    :email))
 
+(defn username []
+  (some->
+   (state/get-auth-id-token)
+   parse-jwt
+   :cognito:username))
+
 (defn user-uuid []
   (some->
    (state/get-auth-id-token)
@@ -89,12 +96,21 @@
    (js/localStorage.setItem "access-token" access-token)
    (js/localStorage.setItem "refresh-token" refresh-token)))
 
+(defn- clear-cognito-tokens!
+  "Clear tokens for cognito's localstorage, prefix is 'CognitoIdentityServiceProvider'"
+  []
+  (let [prefix "CognitoIdentityServiceProvider."]
+    (doseq [key (js/Object.keys js/localStorage)]
+      (when (string/starts-with? key prefix)
+        (js/localStorage.removeItem key)))))
+
 (defn- clear-tokens
   ([]
    (state/set-auth-id-token nil)
    (state/set-auth-access-token nil)
    (state/set-auth-refresh-token nil)
-   (set-token-to-localstorage! "" "" ""))
+   (set-token-to-localstorage! "" "" "")
+   (clear-cognito-tokens!))
   ([except-refresh-token?]
    (state/set-auth-id-token nil)
    (state/set-auth-access-token nil)
@@ -133,17 +149,28 @@
           (and (<= 400 (:status resp))
                (> 500 (:status resp)))
           ;; invalid refresh-token
-          (clear-tokens)
+          (let [invalid-grant? (and (= 400 (:status resp))
+                                    (= (:error (:body resp)) "invalid_grant"))]
+            (prn :debug :refresh-token-failed
+                 :status (:status resp))
+            (when invalid-grant?
+              (clear-tokens)))
 
           ;; e.g. api return 500, server internal error
           ;; we shouldn't clear tokens if they aren't expired yet
           ;; the `refresh-tokens-loop` will retry soon
           (and (not (http/unexceptional-status? (:status resp)))
                (not (-> (state/get-auth-id-token) parse-jwt expired?)))
-          nil                           ; do nothing
+          (do
+            (prn :debug :refresh-token-failed
+                 :status (:status resp)
+                 :body (:body resp)
+                 :error-code (:error-code resp)
+                 :error-text (:error-text resp))
+            nil)                           ; do nothing
 
           (not (http/unexceptional-status? (:status resp)))
-          (clear-tokens true)
+          (notification/show! "exceptional status when refresh-token" :warning true)
 
           :else                         ; ok
           (when (and (:id_token (:body resp)) (:access_token (:body resp)))
@@ -159,6 +186,11 @@
         (<! (<refresh-id-token&access-token))
         ;; refresh remote graph list by pub login event
         (when (user-uuid) (state/pub-event! [:user/fetch-info-and-graphs]))))))
+
+(defn has-refresh-token?
+  "Has refresh-token"
+  []
+  (boolean (js/localStorage.getItem "refresh-token")))
 
 (defn login-callback
   [session]
@@ -199,26 +231,27 @@
   (state/clear-user-info!)
   (state/pub-event! [:user/logout]))
 
-(defn upgrade [] 
+(defn upgrade []
   (let [base-upgrade-url "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"
         user-uuid (user-uuid)
         url (cond-> base-upgrade-url
               user-uuid (str "?checkout[custom][user_uuid]=" (name user-uuid)))]
     (println " ~~~ LEMON: " url " ~~~ ")
     (js/window.open url)))
-  ; (js/window.open 
+  ; (js/window.open
   ;   "https://logseqdemo.lemonsqueezy.com/checkout/buy/13e194b5-c927-41a8-af58-ed1a36d6000d"))
 
 (defn <ensure-id&access-token
   []
-  (go
-    (when (or (nil? (state/get-auth-id-token))
-              (-> (state/get-auth-id-token) parse-jwt almost-expired-or-expired?))
-      (debug/pprint (str "refresh tokens... " (tc/to-string (t/now))))
-      (<! (<refresh-id-token&access-token))
-      (when (or (nil? (state/get-auth-id-token))
-                (-> (state/get-auth-id-token) parse-jwt expired?))
-        (ex-info "empty or expired token and refresh failed" {})))))
+  (let [id-token (state/get-auth-id-token)]
+    (go
+      (when (or (nil? id-token)
+                (-> id-token parse-jwt almost-expired-or-expired?))
+        (debug/pprint (str "refresh tokens... " (tc/to-string (t/now))))
+        (<! (<refresh-id-token&access-token))
+        (when (or (nil? (state/get-auth-id-token))
+                  (-> (state/get-auth-id-token) parse-jwt expired?))
+          (ex-info "empty or expired token and refresh failed" {:anom :expired-token}))))))
 
 (defn <user-uuid
   []

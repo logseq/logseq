@@ -29,7 +29,8 @@
 
   (let [*el-popup (rum/use-ref nil)
         [area-dashed? set-area-dashed?] (use-atom *area-dashed?)
-        [hl-block-colored? set-hl-block-colored?] (rum/use-state (state/sub :pdf/block-highlight-colored?))]
+        [hl-block-colored? set-hl-block-colored?] (rum/use-state (state/sub :pdf/block-highlight-colored?))
+        [auto-open-ctx-menu? set-auto-open-ctx-menu!] (rum/use-state (state/sub :pdf/auto-open-ctx-menu?))]
 
     (rum/use-effect!
      (fn []
@@ -53,6 +54,13 @@
          (state/set-state! :pdf/block-highlight-colored? b)
          (storage/set "ls-pdf-hl-block-is-colored" b)))
      [hl-block-colored?])
+
+    (rum/use-effect!
+      (fn []
+        (let [b (boolean auto-open-ctx-menu?)]
+          (state/set-state! :pdf/auto-open-ctx-menu? b)
+          (storage/set "ls-pdf-auto-open-ctx-menu" b)))
+      [auto-open-ctx-menu?])
 
     (rum/use-effect!
      (fn []
@@ -84,6 +92,10 @@
       [:div.extensions__pdf-settings-item.toggle-input.is-between
        [:label (t :pdf/hl-block-colored)]
        (ui/toggle hl-block-colored? #(set-hl-block-colored? (not hl-block-colored?)) true)]
+
+      [:div.extensions__pdf-settings-item.toggle-input.is-between
+       [:label (t :pdf/auto-open-context-menu)]
+       (ui/toggle auto-open-ctx-menu? #(set-auto-open-ctx-menu! (not auto-open-ctx-menu?)) true)]
 
       [:div.extensions__pdf-settings-item.toggle-input
        [:a.is-info.w-full.text-gray-500
@@ -232,14 +244,30 @@
                            :dune))}]
 
         (when entered-active0?
-          (ui/button (ui/icon "arrow-back") :title "Enter to search" :class "icon-enter" :intent "true" :small? true))]
+          (ui/button {:icon "arrow-back"
+                      :intent "link"
+                      :title "Enter to search"
+                      :class "icon-enter"
+                      :small? true}))]
 
-       (ui/button (ui/icon "letter-case")
-                  :class (string/join " " (util/classnames [{:active case-sensitive?}]))
-                  :intent "true" :small? true :on-click #(set-case-sensitive? (not case-sensitive?)))
-       (ui/button (ui/icon "chevron-up") :intent "true" :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %)))
-       (ui/button (ui/icon "chevron-down") :intent "true" :small? true :on-click #(do (do-find! {:type :again}) (util/stop %)))
-       (ui/button (ui/icon "x") :intent "true" :small? true :on-click close-finder!)]
+       (ui/button {:icon "letter-case"
+                   :intent "link"
+                   :class (string/join " " (util/classnames [{:active case-sensitive?}]))
+                   :small? true :on-click #(set-case-sensitive? (not case-sensitive?))})
+
+       (ui/button {:icon "chevron-up"
+                   :intent "link"
+                   :small? true :on-click #(do (do-find! {:type :again :prev? true}) (util/stop %))})
+
+       (ui/button
+         {:icon "chevron-down"
+          :intent "link"
+          :small? true :on-click #(do (do-find! {:type :again}) (util/stop %))})
+
+       (ui/button
+         {:icon "x"
+          :intent "link"
+          :small? true :on-click close-finder!})]
 
       [:div.result-inner
        (when-let [status (and entered-active?

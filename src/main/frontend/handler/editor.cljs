@@ -46,6 +46,8 @@
             [goog.dom :as gdom]
             [goog.dom.classes :as gdom-classes]
             [goog.object :as gobj]
+            [goog.crypt.base64 :as base64]
+            [goog.string :as gstring]
             [lambdaisland.glogi :as log]
             [logseq.db.schema :as db-schema]
             [logseq.graph-parser.block :as gp-block]
@@ -57,7 +59,8 @@
             [logseq.graph-parser.util.block-ref :as block-ref]
             [logseq.graph-parser.util.page-ref :as page-ref]
             [promesa.core :as p]
-            [rum.core :as rum]))
+            [rum.core :as rum]
+            [frontend.fs.capacitor-fs :as capacitor-fs]))
 
 ;; FIXME: should support multiple images concurrently uploading
 
@@ -196,8 +199,9 @@
 
 (defn open-block-in-sidebar!
   [block-id]
+  ; (assert (uuid? block-id) "frontend.handler.editor/open-block-in-sidebar! expects block-id to be of type uuid")
   (when block-id
-    (when-let [block (db/entity [:block/uuid block-id])]
+    (when-let [block (db/entity (if (number? block-id) block-id [:block/uuid block-id]))]
       (let [page? (nil? (:block/page block))]
         (state/sidebar-add-block!
          (state/get-current-repo)
@@ -353,7 +357,9 @@
         block (apply dissoc block db-schema/retract-attributes)]
     (profile
      "Save block: "
-     (let [original-uuid (:block/uuid (db/entity (:db/id block)))
+     (let [original-block (db/entity (:db/id block))
+           original-uuid (:block/uuid original-block)
+           original-props (:block/properties original-block)
            uuid-changed? (not= (:block/uuid block) original-uuid)
            block' (-> (wrap-parse-block block)
                       ;; :block/uuid might be changed when backspace/delete
@@ -365,7 +371,12 @@
                                                      :to original-uuid})))]
        (outliner-tx/transact!
         opts'
-        (outliner-core/save-block! block'))
+        (outliner-core/save-block! block')
+        ;; page properties changed
+        (when-let [page-name (and (:block/pre-block? block')
+                                  (not= original-props (:block/properties block'))
+                                  (some-> (:block/page block') :db/id (db-utils/pull) :block/name))]
+          (state/set-page-properties-changed! page-name)))
 
        ;; sanitized page name changed
        (when-let [title (get-in block' [:block/properties :title])]
@@ -415,7 +426,7 @@
 
 (declare save-current-block!)
 (defn outliner-insert-block!
-  [config current-block new-block {:keys [sibling? keep-uuid?
+  [config current-block new-block {:keys [sibling? keep-uuid? ordered-list?
                                           replace-empty-target?]}]
   (let [ref-query-top-block? (and (or (:ref? config)
                                       (:custom-query? config))
@@ -436,9 +447,11 @@
     (outliner-tx/transact!
      {:outliner-op :insert-blocks}
      (save-current-block! {:current-block current-block})
-     (outliner-core/insert-blocks! [new-block] current-block {:sibling? sibling?
-                                                              :keep-uuid? keep-uuid?
-                                                              :replace-empty-target? replace-empty-target?}))))
+      (outliner-core/insert-blocks! [new-block] current-block
+        {:sibling?              sibling?
+         :keep-uuid?            keep-uuid?
+         :replace-empty-target? replace-empty-target?
+         :ordered-list? ordered-list?}))))
 
 (defn- block-self-alone-when-insert?
   [config uuid]
@@ -556,7 +569,7 @@
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid sibling? before? properties
-                   custom-uuid replace-empty-target? edit-block?]
+                   custom-uuid replace-empty-target? edit-block? ordered-list?]
             :or {sibling? false
                  before? false
                  edit-block? true}}]
@@ -616,9 +629,11 @@
                                    :else
                                    nil)]
           (when block-m
-            (outliner-insert-block! {} block-m new-block {:sibling? sibling?
-                                                          :keep-uuid? true
-                                                          :replace-empty-target? replace-empty-target?})
+            (outliner-insert-block! {} block-m new-block
+              {:sibling?              sibling?
+               :keep-uuid?            true
+               :replace-empty-target? replace-empty-target?
+               :ordered-list? ordered-list?})
             (when edit-block?
               (if (and replace-empty-target?
                        (string/blank? (:block/content last-block)))
@@ -645,7 +660,7 @@
         refs (gp-block/get-page-refs-from-properties properties
                                                      (db/get-db (state/get-current-repo))
                                                      (state/get-date-formatter)
-                                                     (state/get-config))]
+                                                     (assoc (state/get-config) :format format))]
     {:block/pre-block? true
      :block/uuid (db/new-block-id)
      :block/properties properties
@@ -836,9 +851,9 @@
                        concat-prev-block? (boolean (and prev-block new-content))
                        transact-opts (cond->
                                       {:outliner-op :delete-blocks}
-                                       concat-prev-block?
-                                       (assoc :concat-data
-                                              {:last-edit-block (:block/uuid block)}))]
+                                      concat-prev-block?
+                                      (assoc :concat-data
+                                             {:last-edit-block (:block/uuid block)}))]
                    (outliner-tx/transact! transact-opts
                                           (if concat-prev-block?
                                             (let [prev-block' (if (seq (:block/_refs block-e))
@@ -1216,14 +1231,19 @@
       (delete-block-aux! block true))))
 
 (defn highlight-selection-area!
-  [end-block]
-  (when-let [start-block (state/get-selection-start-block-or-first)]
-    (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
-          direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
-          blocks (if (= :up direction)
-                   (reverse blocks)
-                   blocks)]
-      (state/exit-editing-and-set-selected-blocks! blocks direction))))
+  ([end-block]
+   (highlight-selection-area! end-block false))
+  ([end-block append?]
+   (when-let [start-block (state/get-selection-start-block-or-first)]
+     (let [blocks (util/get-nodes-between-two-nodes start-block end-block "ls-block")
+           direction (util/get-direction-between-two-nodes start-block end-block "ls-block")
+           blocks (if (= :up direction)
+                    (reverse blocks)
+                    blocks)]
+       (if append?
+         (do (state/clear-edit!)
+             (state/conj-selection-block! blocks direction))
+         (state/exit-editing-and-set-selected-blocks! blocks direction))))))
 
 (defn- select-block-up-down
   [direction]
@@ -1276,7 +1296,7 @@
 
 (defn save-block!
   ([repo block-or-uuid content]
-    (save-block! repo block-or-uuid content {}))
+   (save-block! repo block-or-uuid content {}))
   ([repo block-or-uuid content {:keys [properties] :as opts}]
    (let [block (if (or (uuid? block-or-uuid)
                        (string? block-or-uuid))
@@ -1368,19 +1388,6 @@
   (when restore?
     (commands/restore-state)))
 
-(defn get-asset-file-link
-  "Link text for inserting to markdown/org"
-  [format url file-name image?]
-  (let [pdf?   (and url (string/ends-with? (string/lower-case url) ".pdf"))
-        media? (and url (or (config/ext-of-audio? url)
-                            (config/ext-of-video? url)))]
-    (case (keyword format)
-      :markdown (util/format (str (when (or image? media? pdf?) "!") "[%s](%s)") file-name url)
-      :org (if image?
-             (util/format "[[%s]]" url)
-             (util/format "[[%s][%s]]" url file-name))
-      nil)))
-
 (defn- ensure-assets-dir!
   [repo]
   (p/let [repo-dir (config/get-repo-dir repo)
@@ -1398,7 +1405,7 @@
   "Save incoming(pasted) assets to assets directory.
 
    Returns: [file-rpath file-obj file-fpath matched-alias]"
-  ([_ repo files]
+  ([repo files]
    (p/let [[repo-dir assets-dir] (ensure-assets-dir! repo)]
      (save-assets! repo repo-dir assets-dir files
                    (fn [index file-stem]
@@ -1442,7 +1449,13 @@
                 (p/catch #(js/console.error "Debug: Copy Asset Error#" %))))
 
           (p/do! (js/console.debug "Debug: Writing Asset #" dir file-rpath)
-                 (fs/write-file! repo dir file-rpath (.stream file) nil)
+                 (if (mobile-util/native-platform?)
+                   ;; capacitor fs accepts Blob, File implements Blob
+                   (p/let [buffer (.arrayBuffer file)
+                           content (base64/encodeByteArray (js/Uint8Array. buffer))
+                           fpath (path/path-join dir file-rpath)]
+                     (capacitor-fs/<write-file-with-base64 fpath content))
+                   (fs/write-file! repo dir file-rpath (.stream file) nil))
                  [file-rpath file (path/path-join dir file-rpath) matched-alias])))))))
 
 (defonce *assets-url-cache (atom {}))
@@ -1467,7 +1480,7 @@
         (assets-handler/resolve-asset-real-path-url (state/get-current-repo) path)
 
         (util/electron?)
-        (path/path-join "assets://" full-path)
+        (path/prepend-protocol "assets:" full-path)
 
         (mobile-util/native-platform?)
         (mobile-util/convert-file-src full-path)
@@ -1524,10 +1537,9 @@
 (defn upload-asset
   "Paste asset and insert link to current editing block"
   [id ^js files format uploading? drop-or-paste?]
-  (let [repo (state/get-current-repo)
-        block (state/get-edit-block)]
+  (let [repo (state/get-current-repo)]
     (when (config/local-db? repo)
-      (-> (save-assets! block repo (js->clj files))
+      (-> (save-assets! repo (js->clj files))
           ;; FIXME: only the first asset is handled
           (p/then
            (fn [res]
@@ -1535,7 +1547,7 @@
                (let [image? (config/ext-of-image? asset-file-name)]
                  (insert-command!
                   id
-                  (get-asset-file-link format
+                  (assets-handler/get-asset-file-link format
                                        (if matched-alias
                                          (str
                                           (if image? "../assets/" "")
@@ -1641,7 +1653,7 @@
         editing-page (and block
                           (when-let [page-id (:db/id (:block/page block))]
                             (:block/name (db/entity page-id))))
-        pages (search/page-search q 100)]
+        pages (search/page-search q)]
     (if editing-page
       ;; To prevent self references
       (remove (fn [p] (= (util/page-name-sanity-lc p) editing-page)) pages)
@@ -2013,8 +2025,10 @@
                   target-block
                   sibling?
                   keep-uuid?
-                  revert-cut-txs]
+                  revert-cut-txs
+                  skip-empty-target?]
            :or {exclude-properties []}}]
+  (state/set-editor-op! :paste-blocks)
   (let [editing-block (when-let [editing-block (state/get-edit-block)]
                         (some-> (db/pull [:block/uuid (:block/uuid editing-block)])
                                 (assoc :block/content (state/get-edit-content))))
@@ -2025,7 +2039,8 @@
         block (db/entity (:db/id target-block))
         page (if (:block/name block) block
                  (when target-block (:block/page (db/entity (:db/id target-block)))))
-        empty-target? (string/blank? (:block/content target-block))
+        empty-target? (if (true? skip-empty-target?) false
+                        (string/blank? (:block/content target-block)))
         paste-nested-blocks? (nested-blocks blocks)
         target-block-has-children? (db/has-children? (:block/uuid target-block))
         replace-empty-target? (and empty-target?
@@ -2066,7 +2081,8 @@
                                                                           :replace-empty-target? replace-empty-target?
                                                                           :keep-uuid? keep-uuid?})]
           (state/set-block-op-type! nil)
-          (edit-last-block-after-inserted! result))))))
+          (edit-last-block-after-inserted! result)))))
+  (state/set-editor-op! nil))
 
 (defn- block-tree->blocks
   "keep-uuid? - maintain the existing :uuid in tree vec"
@@ -2108,9 +2124,10 @@
    A block element: {:content :properties :children [block-1, block-2, ...]}"
   [target-block-id sibling? tree-vec format keep-uuid?]
   (insert-block-tree tree-vec format
-                     {:target-block (db/pull target-block-id)
-                      :keep-uuid?   keep-uuid?
-                      :sibling?     sibling?}))
+    {:target-block       (db/pull target-block-id)
+     :keep-uuid?         keep-uuid?
+     :skip-empty-target? true
+     :sibling?           sibling?}))
 
 (defn insert-template!
   ([element-id db-id]
@@ -2325,8 +2342,14 @@
             (insert "\n")))))))
 
 (defn toggle-list-checkbox
-  [{:block/keys [content] :as block} old-item-content new-item-content]
-  (let [new-content (string/replace-first content old-item-content new-item-content)]
+  [{:block/keys [content] :as block} item-content]
+  (let [toggle-fn (fn [m x-mark]
+                    (case (string/lower-case x-mark)
+                      "[ ]" (str "[x] " item-content)
+                      "[x]" (str "[ ] " item-content)
+                      m))
+        pattern (re-pattern (str "(\\[[xX ]\\])\\s+?" (gstring/regExpEscape item-content)))
+        new-content (string/replace-first content pattern toggle-fn)]
     (save-block-if-changed! block new-content)))
 
 (defn- dwim-in-list
@@ -2549,7 +2572,7 @@
             :down util/get-next-block-non-collapsed)
         sibling-block (f (gdom/getElement (state/get-editing-block-dom-id)))
         {:block/keys [uuid content format]} (state/get-edit-block)]
-    (when sibling-block
+    (if sibling-block
       (when-let [sibling-block-id (dom/attr sibling-block "blockid")]
         (let [value (state/get-edit-content)]
           (when (not= (clean-content! format content)
@@ -2561,7 +2584,10 @@
               block (db/pull repo '[*] [:block/uuid new-uuid])]
           (edit-block! block
                        [direction line-pos]
-                       new-id))))))
+                       new-id)))
+      (case direction
+        :up (cursor/move-cursor-to input 0)
+        :down (cursor/move-cursor-to-end input)))))
 
 (defn keydown-up-down-handler
   [direction]
@@ -2805,7 +2831,12 @@
       (outliner-tx/transact!
        {:outliner-op :move-blocks
         :real-outliner-op :indent-outdent}
-       (outliner-core/indent-outdent-blocks! [block] indent?)))
+       (outliner-core/indent-outdent-blocks! [block] indent?))
+      (edit-block!
+        (db/pull (:db/id block))
+        (cursor/pos (state/get-input))
+        (:block/uuid block))
+    )
     (state/set-editor-op! :nil)))
 
 (defn keydown-tab-handler
@@ -2842,7 +2873,7 @@
              (contains? #{:property-search :property-value-search} (state/get-editor-action)))
         (state/clear-editor-action!)
 
-        (and (util/event-is-composing? e true) ;; #3218
+        (and (util/goog-event-is-composing? e true) ;; #3218
              (not hashtag?) ;; #3283 @Rime
              (not (state/get-editor-show-page-search-hashtag?))) ;; #3283 @MacOS pinyin
         nil
@@ -2999,7 +3030,7 @@
 (defn keyup-handler
   [_state input input-id]
   (fn [e key-code]
-    (when-not (util/event-is-composing? e)
+    (when-not (util/goog-event-is-composing? e)
       (let [current-pos (cursor/pos input)
             value (gobj/get input "value")
             c (util/nth-safe value (dec current-pos))
@@ -3026,7 +3057,7 @@
                  (gobj/get e "key")
                  (gobj/getValueByKeys e "event_" "code"))
                 ;; #3440
-               (util/event-is-composing? e true)])]
+               (util/goog-event-is-composing? e true)])]
         (cond
           ;; When you type something after /
           (and (= :commands (state/get-editor-action)) (not= k commands/command-trigger))
@@ -3561,6 +3592,43 @@
                (recur (dec level))
                (doseq [{:block/keys [uuid]} blocks-to-collapse]
                  (collapse-block! uuid))))))))))
+
+(defn toggle-collapse!
+  ([e] (toggle-collapse! e false))
+  ([e clear-selection?]
+    (when e (util/stop e))
+    (cond
+      (state/editing?)
+      (when-let [block (state/get-edit-block)]
+        ;; get-edit-block doesn't track the latest collapsed state, so we need to reload from db.
+        (let [block-id (:block/uuid block)
+              block (db/pull [:block/uuid block-id])]
+          (if (:block/collapsed? block)
+            (expand! e clear-selection?)
+            (collapse! e clear-selection?))))
+
+      (state/selection?)
+      (do
+        (let [block-ids (map #(-> % (dom/attr "blockid") uuid) (get-selected-blocks))
+              first-block-id (first block-ids)]
+          (when first-block-id
+            ;; If multiple blocks are selected, they may not have all the same collapsed state.
+            ;; For simplicity, use the first block's state to decide whether to collapse/expand all.
+            (let [first-block (db/pull [:block/uuid first-block-id])]
+              (if (:block/collapsed? first-block)
+                (doseq [block-id block-ids] (expand-block! block-id))
+                (doseq [block-id block-ids] (collapse-block! block-id))))))
+        (and clear-selection? (clear-selection!)))
+
+      (whiteboard?)
+      ;; TODO: Looks like detecting the whiteboard selection's collapse state will take more work.
+      ;; Leaving unimplemented for now.
+      nil
+
+      :else
+      ;; If no block is being edited or selected, the "toggle" action doesn't make sense,
+      ;; so we no-op here, unlike in the expand! & collapse! functions.
+      nil)))
 
 (defn collapse-all!
   ([]

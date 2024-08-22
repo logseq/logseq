@@ -33,9 +33,12 @@ test('backspace at the beginning of a refed block #9406', async ({ page, block }
 
 test('delete at the end of a prev block before a refed block #9406', async ({ page, block }) => {
   await setUpBlocks(page, block)
+  await page.waitForTimeout(100)
   await editNthBlock(page, 0)
+  await page.waitForTimeout(100)
   await moveCursorToEnd(page)
-  await page.keyboard.press('Delete')
+  await page.keyboard.press('Delete', { delay: 100 })
+  await page.waitForTimeout(100)
   await expect(page.locator('textarea >> nth=0')).toHaveText("ab")
   await expect(await block.selectionStart()).toEqual(1)
   await expect(page.locator('.block-ref >> text="ab"')).toHaveCount(1);

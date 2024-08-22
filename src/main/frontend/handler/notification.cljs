@@ -18,11 +18,13 @@
   ([content]
    (show! content :info true nil 2000 nil))
   ([content status]
-   (show! content status true nil 1500 nil))
+   (show! content status (not= status :error) nil 1500 nil))
   ([content status clear?]
    (show! content status clear? nil 1500 nil))
   ([content status clear? uid]
    (show! content status clear? uid 1500 nil))
+  ([content status clear? uid timeout]
+   (show! content status clear? uid timeout nil))
   ([content status clear? uid timeout close-cb]
    (let [contents (state/get-notification-contents)
          uid (or uid (keyword (util/unique-id)))]
@@ -31,7 +33,7 @@
                                                           :status status
                                                           :close-cb close-cb}))
 
-     (when (and clear? (not= status :error))
-       (js/setTimeout #(clear! uid) (or timeout 1500)))
+     (when (and clear? (or timeout (not= status :error)))
+       (js/setTimeout #(clear! uid) (or timeout 2000)))
 
      uid)))

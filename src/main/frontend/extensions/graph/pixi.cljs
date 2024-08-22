@@ -2,13 +2,16 @@
   (:require [cljs-bean.core :as bean]
             ["d3-force"
              :refer [forceCenter forceCollide forceLink forceManyBody forceSimulation forceX forceY]
-             :as    force]
+             :as force]
             [goog.object :as gobj]
+            [frontend.colors :as colors]
             ["graphology" :as graphology]
             ["pixi-graph-fork" :as Pixi-Graph]))
 
 (defonce *graph-instance (atom nil))
 (defonce *simulation (atom nil))
+(defonce *simulation-paused?
+  (atom false))
 
 (def Graph (gobj/get graphology "Graph"))
 
@@ -43,30 +46,44 @@
                    :color (if dark? "rgba(255, 255, 255, 0.8)" "rgba(0, 0, 0, 0.8)")
                    :padding  4}}
    :edge {:width 1
-          :color (if dark? "#094b5a" "#cccccc")}})
+          :color (if dark? (or (colors/get-accent-color) "#094b5a") "#cccccc")}})
 
 (defn default-hover-style
   [_dark?]
-  {:node {:color  "#6366F1"
-          :label  {:backgroundColor "rgba(238, 238, 238, 1)"
-                   :color           "#333333"}}
+  {:node {:color (or (colors/get-accent-color) "#6366F1")
+          :label {:backgroundColor "rgba(238, 238, 238, 1)"
+                  :color           "#333333"}}
    :edge {:color "#A5B4FC"}})
 
 (defn layout!
-  [nodes links]
-  (let [nodes-count (count nodes)
-        simulation (forceSimulation nodes)]
+  "Node forces documentation can be read in more detail here https://d3js.org/d3-force"
+  [nodes links link-dist charge-strength charge-range]
+  (let [simulation (forceSimulation nodes)]
     (-> simulation
         (.force "link"
+                ;; The link force pushes linked nodes together or apart according to the desired link distance.
+                ;; The strength of the force is proportional to the difference between the linked nodes distance
+                ;; and the target distance, similar to a spring force.
                 (-> (forceLink)
                     (.id (fn [d] (.-id d)))
-                    (.distance 180)
+                    (.distance link-dist)
                     (.links links)))
         (.force "charge"
+                ;; The many-body (or n-body) force applies mutually amongst all nodes.
+                ;; It can be used to simulate gravity or electrostatic charge.
                 (-> (forceManyBody)
-                    (.distanceMax (if (> nodes-count 500) 4000 600))
+                    ;; The minimum distance between nodes over which this force is considered.
+                    ;; A minimum distance establishes an upper bound on the strength of the force between two nearby nodes, avoiding instability.
+                    (.distanceMin 1)
+                    ;; The maximum distance between nodes over which this force is considered.
+                    ;; Specifying a finite maximum distance improves performance and produces a more localized layout.
+                    (.distanceMax charge-range)
+                    ;; For a cluster of nodes that is far away, the charge force can be approximated by treating the cluster as a single, larger node.
+                    ;; The theta parameter determines the accuracy of the approximation
                     (.theta 0.5)
-                    (.strength -600)))
+                    ;; A positive value causes nodes to attract each other, similar to gravity,
+                    ;; while a negative value causes nodes to repel each other, similar to electrostatic charge.
+                    (.strength charge-strength)))
         (.force "collision"
                 (-> (forceCollide)
                     (.radius (+ 8 18))
@@ -74,7 +91,10 @@
         (.force "x" (-> (forceX 0) (.strength 0.02)))
         (.force "y" (-> (forceY 0) (.strength 0.02)))
         (.force "center" (forceCenter))
-        (.velocityDecay 0.8))
+        ;; The decay factor is akin to atmospheric friction; after the application of any forces during a tick,
+        ;; each node’s velocity is multiplied by 1 - decay. As with lowering the alpha decay rate,
+        ;; less velocity decay may converge on a better solution, but risks numerical instabilities and oscillation.
+        (.velocityDecay 0.5))
     (reset! *simulation simulation)
     simulation))
 
@@ -95,7 +115,20 @@
   (when-let [instance (:pixi @*graph-instance)]
     (.destroy instance)
     (reset! *graph-instance nil)
-    (reset! *simulation nil)))
+    (reset! *simulation nil))
+  (reset! *simulation-paused? false))
+
+(defn stop-simulation!
+  []
+  (when-let [^js simulation @*simulation]
+    (.stop simulation)
+    (reset! *simulation-paused? true)))
+
+(defn resume-simulation!
+  []
+  (when-let [^js simulation @*simulation]
+    (.restart simulation))
+  (reset! *simulation-paused? false))
 
 (defn- update-position!
   [node obj]
@@ -143,7 +176,8 @@
              #_:clj-kondo/ignore
              (when-let [node (.get nodes node-key)]
                (when-let [s @*simulation]
-                 (when-not (.-active event)
+                 (when-not (or (.-active event)
+                               @*simulation-paused?)
                    (-> (.alphaTarget s 0.3)
                        (.restart))
                    (js/setTimeout #(.alphaTarget s 0) 2000))
@@ -166,7 +200,7 @@
     (when @*graph-instance
       (clear-nodes! (:graph @*graph-instance))
       (destroy-instance!))
-    (let [{:keys [nodes links style hover-style height register-handlers-fn dark?]} (first (:rum/args state))
+    (let [{:keys [nodes links style hover-style height register-handlers-fn dark? link-dist charge-strength charge-range]} (first (:rum/args state))
           style                                                                     (or style (default-style dark?))
           hover-style                                                               (or hover-style (default-hover-style dark?))
           graph                                                                     (Graph.)
@@ -181,7 +215,7 @@
           links                                                                     (remove (fn [{:keys [source target]}] (or (nil? source) (nil? target))) links)
           nodes-js                                                                  (bean/->js nodes)
           links-js                                                                  (bean/->js links)
-          simulation                                                                (layout! nodes-js links-js)]
+          simulation                                                                (layout! nodes-js links-js link-dist charge-strength charge-range)]
       (doseq [node nodes-js]
         (try (.addNode graph (.-id node) node)
           (catch :default e

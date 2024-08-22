@@ -1,7 +1,11 @@
 (ns frontend.shui
   "Glue between frontend code and deps/shui for convenience"
   (:require 
+    [frontend.colors :as colors]
     [frontend.date :refer [int->local-time-2]]
+    [frontend.db :as db]
+    [frontend.db.utils :as db-utils]
+    [frontend.handler.search :as search-handler]
     [frontend.state :as state]
     [logseq.shui.context :refer [make-context]]))
 
@@ -18,8 +22,23 @@
           (get-in default-versions [version-key])
           1))))
 
-(defn make-shui-context [block-config inline]
-  (make-context {:block-config block-config 
-                 :app-config (state/get-config) 
-                 :inline inline 
-                 :int->local-time-2 int->local-time-2}))
+(defn make-shui-context 
+  ([] (make-shui-context nil nil))
+  ([block-config inline]
+   (make-context {:block-config block-config 
+                  :config (state/get-config) 
+                  :inline inline 
+                  :int->local-time-2 int->local-time-2 
+                  :search search-handler/search
+                  ;; We need some variable from the state to carry over 
+                  :state state/state
+                  :get-current-repo state/get-current-repo
+                  :color-accent (state/get-color-accent) 
+                  ;; Pass over ability to look up entities 
+                  :entity db-utils/entity
+                  :get-block-and-children db/get-block-and-children
+                  :get-block-children db/get-block-children
+                  :get-page-blocks-no-cache db/get-page-blocks-no-cache
+                  :get-page db/get-page
+                  :linear-gradient colors/linear-gradient})))
+  

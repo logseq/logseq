@@ -1,6 +1,7 @@
 (ns frontend.components.container
   (:require [cljs-drag-n-drop.core :as dnd]
             [clojure.string :as string]
+            [frontend.version :refer [version]]
             [frontend.components.find-in-page :as find-in-page]
             [frontend.components.header :as header]
             [frontend.components.journal :as journal]
@@ -11,16 +12,20 @@
             [frontend.components.select :as select]
             [frontend.components.theme :as theme]
             [frontend.components.widgets :as widgets]
+            [frontend.components.handbooks :as handbooks]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db :as db]
+            [electron.ipc :as ipc]
             [frontend.db-mixins :as db-mixins]
             [frontend.db.model :as db-model]
             [frontend.extensions.pdf.utils :as pdf-utils]
+            [frontend.storage :as storage]
             [frontend.extensions.srs :as srs]
             [frontend.handler.common :as common-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.page :as page-handler]
+            [frontend.util.page :as page-util]
             [frontend.handler.route :as route-handler]
             [frontend.handler.user :as user-handler]
             [frontend.handler.whiteboard :as whiteboard-handler]
@@ -30,11 +35,16 @@
             [frontend.mobile.mobile-bar :refer [mobile-bar]]
             [frontend.mobile.util :as mobile-util]
             [frontend.modules.shortcut.data-helper :as shortcut-dh]
+            [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.ui :as ui]
+            [logseq.shui.ui :as shui]
+            [logseq.shui.toaster.core :as shui-toaster]
+            [logseq.shui.dialog.core :as shui-dialog]
             [frontend.util :as util]
             [frontend.util.cursor :as cursor]
             [frontend.components.window-controls :as window-controls]
+            [medley.core :as medley]
             [goog.dom :as gdom]
             [goog.object :as gobj]
             [logseq.common.path :as path]
@@ -44,20 +54,16 @@
 
 (rum/defc nav-content-item < rum/reactive
   [name {:keys [class count]} child]
-  (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])
-        shrink? (and (not collapsed?) (> count 3))
-        list-item-height 28]
-    [:div.nav-content-item.mt-3
+  (let [collapsed? (state/sub [:ui/navigation-item-collapsed? class])]
+    [:div.nav-content-item
      {:class (util/classnames [class {:is-expand (not collapsed?)
-                                      :flex-shrink-0 (not shrink?)
-                                      :flex-shrink shrink?}])
-      :style {:min-height (when-not collapsed? (* (min count 4) list-item-height))}}
+                                      :has-children (and (number? count) (> count 0))}])}
      [:div.nav-content-item-inner
       [:div.header.items-center
        {:on-click (fn [^js/MouseEvent _e]
                     (state/toggle-navigation-item-collapsed! class))}
-       [:div.font-medium name]
-       (ui/icon "chevron-left" {:class "more"})]
+       [:div.a name]
+       [:div.b (ui/icon "chevron-left" {:class "more" :size 14})]]
       (when child [:div.bd child])]]))
 
 (defn- delta-y
@@ -75,26 +81,84 @@
   [name icon recent?]
   (let [original-name (db-model/get-page-original-name name)
         whiteboard-page? (db-model/whiteboard-page? name)
-        untitiled? (db-model/untitled-page? name)]
-    [:a.flex.items-center
-     {:on-click
-      (fn [e]
-        (let [name        (util/safe-page-name-sanity-lc name)
-              source-page (db-model/get-alias-source-page (state/get-current-repo) name)
-              name        (if (empty? source-page) name (:block/name source-page))]
-          (if (and (gobj/get e "shiftKey") (not whiteboard-page?))
-            (when-let [page-entity (if (empty? source-page) (db/entity [:block/name name]) source-page)]
-              (state/sidebar-add-block!
-               (state/get-current-repo)
-               (:db/id page-entity)
-               :page))
-            (if whiteboard-page?
-              (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
-              (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
-     [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
-     [:span.page-title {:class (when untitiled? "opacity-50")}
-      (if untitiled? (t :untitled)
-          (pdf-utils/fix-local-asset-pagename original-name))]]))
+        untitled? (db-model/untitled-page? name)
+        name (util/safe-page-name-sanity-lc name)
+        file-rpath (when (util/electron?) (page-util/get-page-file-rpath name))
+        source-page (db-model/get-alias-source-page (state/get-current-repo) name)
+        ctx-icon #(shui/tabler-icon %1 {:class "scale-90 pr-1 opacity-80"})
+        open-in-sidebar #(when-let [page-entity (and (not whiteboard-page?)
+                                                  (if (empty? source-page)
+                                                    (db/entity [:block/name name]) source-page))]
+                           (state/sidebar-add-block!
+                             (state/get-current-repo)
+                             (:db/id page-entity)
+                             :page))
+        x-menu-content (fn [type opts]
+                         (let [dropdown? (= type :dropdown)
+                               x-menu-content (if dropdown? shui/dropdown-menu-content shui/context-menu-content)
+                               x-menu-item (if dropdown? shui/dropdown-menu-item shui/context-menu-item)
+                               x-menu-shortcut (if dropdown? shui/dropdown-menu-shortcut shui/context-menu-shortcut)]
+                           (x-menu-content
+                             (merge {:class "w-60"} opts)
+                             (when-not recent?
+                               (x-menu-item
+                                 {:on-click #(page-handler/unfavorite-page! original-name)}
+                                 (ctx-icon "star-off")
+                                 (t :page/unfavorite)
+                                 (x-menu-shortcut (when-let [binding (shortcut-dh/shortcut-binding :command/toggle-favorite)]
+                                                    (some-> binding
+                                                            (first)
+                                                            (shortcut-utils/decorate-binding))))))
+                             (when-let [page-fpath (and (util/electron?) file-rpath
+                                                     (config/get-repo-fpath (state/get-current-repo) file-rpath))]
+                               [:<>
+                                (x-menu-item
+                                  {:on-click #(ipc/ipc :openFileInFolder page-fpath)}
+                                  (ctx-icon "folder")
+                                  (t :page/open-in-finder))
+
+                                (x-menu-item
+                                  {:on-click #(js/window.apis.openPath page-fpath)}
+                                  (ctx-icon "file")
+                                  (t :page/open-with-default-app))])
+
+                             (x-menu-item
+                               {:on-click open-in-sidebar}
+                               (ctx-icon "layout-sidebar-right")
+                               (t :content/open-in-sidebar)
+                               (x-menu-shortcut (shortcut-utils/decorate-binding "shift+click"))))))]
+
+    ;; TODO: move to standalone component
+    (shui/context-menu
+      (shui/context-menu-trigger
+        [:a.flex.items-center.justify-between.relative.group
+         {:on-click
+          (fn [e]
+            (let [name (if (empty? source-page) name (:block/name source-page))]
+              (if (gobj/get e "shiftKey")
+                (open-in-sidebar)
+                (if whiteboard-page?
+                  (route-handler/redirect-to-whiteboard! name {:click-from-recent? recent?})
+                  (route-handler/redirect-to-page! name {:click-from-recent? recent?})))))}
+         [:span.page-icon.ml-3.justify-center (if whiteboard-page? (ui/icon "whiteboard" {:extension? true}) icon)]
+         [:span.page-title {:class (when untitled? "opacity-50")}
+          (if untitled? (t :untitled)
+                        (pdf-utils/fix-local-asset-pagename original-name))]
+
+         ;; dots trigger
+         (shui/dropdown-menu
+           (shui/dropdown-menu-trigger
+             (shui/button
+               {:size     :sm
+                :variant  :ghost
+                :class    "absolute right-2 top-0 px-1.5 scale-75 opacity-30 hidden group-hover:block hover:opacity-80 active:opacity-100"
+                :on-click #(util/stop %)}
+               [:i.relative {:style {:top "1px"}} (shui/tabler-icon "dots")]))
+           ;; menu content
+           (x-menu-content :dropdown {:align "start"}))]
+
+        ;; menu content
+        (x-menu-content :context nil)))))
 
 (defn get-page-icon [page-entity]
   (let [default-icon (ui/icon "page" {:extension? true})
@@ -148,7 +212,7 @@
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "star" {:size 16})
-      [:span.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
+      [:strong.flex-1.ml-2 (string/upper-case (t :left-side-bar/nav-favorites))]]
 
      {:class "favorites"
       :count (count favorite-entities)
@@ -174,7 +238,7 @@
     (nav-content-item
      [:a.flex.items-center.text-sm.font-medium.rounded-md.wrap-th
       (ui/icon "history" {:size 16})
-      [:span.flex-1.ml-2
+      [:strong.flex-1.ml-2
        (string/upper-case (t :left-side-bar/nav-recent-pages))]]
 
      {:class "recent"
@@ -204,7 +268,9 @@
                    (state/pub-event! [:modal/show-cards]))}
      (ui/icon "infinity")
      [:span.flex-1 (t :right-side-bar/flashcards)]
-     [:span.ml-1 (ui/render-keyboard-shortcut (ui/keyboard-shortcut-from-config :go/flashcards))]
+     [:span.ml-1 (ui/render-keyboard-shortcut
+                  (ui/keyboard-shortcut-from-config :go/flashcards
+                                                    {:pick-first? true}))]
      (when (and num (not (zero? num)))
        [:span.ml-1.inline-block.py-0.5.px-3.text-xs.font-medium.rounded-full.fade-in num])]))
 
@@ -349,7 +415,7 @@
         {:aria-label "Navigation menu"}
         (repo/repos-dropdown)
 
-        [:div.nav-header.flex.gap-1.flex-col.mt-3
+        [:div.nav-header.flex.flex-col.mt-2
          (let [page (:page default-home)]
            (if (and page (not (state/enable-journals? (state/get-current-repo))))
              (sidebar-item
@@ -428,6 +494,44 @@
                                   (neg? offset-ratio)
                                   (+ 1))}))]]))
 
+(rum/defc sidebar-resizer
+  []
+  (let [*el-ref (rum/use-ref nil)
+        ^js el-doc js/document.documentElement
+        adjust-size! (fn [width]
+                       (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)
+                       (storage/set :ls-left-sidebar-width width))]
+
+    ;; restore size
+    (rum/use-layout-effect!
+      (fn []
+        (when-let [width (storage/get :ls-left-sidebar-width)]
+          (.setProperty (.-style el-doc) "--ls-left-sidebar-width" width)))
+      [])
+
+    ;; draggable handler
+    (rum/use-effect!
+      (fn []
+        (when-let [el (and (fn? js/window.interact) (rum/deref *el-ref))]
+          (let [^js sidebar-el (.querySelector el-doc "#left-sidebar")]
+            (-> (js/interact el)
+              (.draggable
+                #js {:listeners
+                     #js {:move (fn [^js/MouseEvent e]
+                                  (when-let [offset (.-left (.-rect e))]
+                                    (let [width (.toFixed (max (min offset 460) 240) 2)]
+                                      (adjust-size! (str width "px")))))}})
+              (.styleCursor false)
+              (.on "dragstart" (fn []
+                                 (.. sidebar-el -classList (add "is-resizing"))
+                                 (.. el-doc -classList (add "is-resizing-buf"))))
+              (.on "dragend" (fn []
+                               (.. sidebar-el -classList (remove "is-resizing"))
+                               (.. el-doc -classList (remove "is-resizing-buf"))))))
+          #()))
+      [])
+    [:span.left-sidebar-resizer {:ref *el-ref}]))
+
 (rum/defcs left-sidebar < rum/reactive
   (rum/local false ::closing?)
   (rum/local -1 ::close-signal)
@@ -470,7 +574,9 @@
 
      ;; sidebar contents
      (sidebar-nav route-match close-fn left-sidebar-open? enable-whiteboards? srs-open? *closing?
-                  @*close-signal (and touch-pending? touching-x-offset))]))
+       @*close-signal (and touch-pending? touching-x-offset))
+     ;; resizer
+     (sidebar-resizer)]))
 
 (rum/defc recording-bar
   []
@@ -673,11 +779,7 @@
         links (state/sub :custom-context-menu/links)
         position (state/sub :custom-context-menu/position)]
     (when (and show? links position)
-      (ui/css-transition
-       {:class-names "fade"
-        :timeout {:enter 500
-                  :exit 300}}
-       (render-custom-context-menu links position)))))
+      (render-custom-context-menu links position))))
 
 (rum/defc new-block-mode < rum/reactive
   []
@@ -696,15 +798,74 @@
                {:on-click state/toggle-document-mode!}
                "D"])))
 
+(def help-menu-items
+  [{:title "Handbook" :icon "book-2" :on-click #(handbooks/toggle-handbooks)}
+   {:title "Keyboard shortcuts" :icon "command" :on-click #(state/sidebar-add-block! (state/get-current-repo) "shortcut-settings" :shortcut-settings)}
+   {:title "Documentation" :icon "help" :href "https://docs.logseq.com/"}
+   :hr
+   {:title "Report bug" :icon "bug" :on-click #(rfe/push-state :bug-report)}
+   {:title "Request feature" :icon "git-pull-request" :href "https://discuss.logseq.com/c/feedback/feature-requests/"}
+   {:title "Submit feedback" :icon "messages" :href "https://discuss.logseq.com/c/feedback/13"}
+   :hr
+   {:title "Ask the community" :icon "brand-discord" :href "https://discord.com/invite/KpN4eHY"}
+   {:title "Support forum" :icon "message" :href "https://discuss.logseq.com/"}
+   :hr
+   {:title "Release notes" :icon "asterisk" :href "https://docs.logseq.com/#/page/changelog"}])
+
+(rum/defc help-menu-popup
+  []
+
+  (rum/use-effect!
+    (fn []
+      (state/set-state! :ui/handbooks-open? false))
+    [])
+
+  (rum/use-effect!
+    (fn []
+      (let [h #(state/set-state! :ui/help-open? false)]
+        (.addEventListener js/document.body "click" h)
+        #(.removeEventListener js/document.body "click" h)))
+    [])
+
+  [:div.cp__sidebar-help-menu-popup
+   [:div.list-wrap
+    (for [[idx {:keys [title icon href on-click] :as item}] (medley/indexed help-menu-items)]
+      (case item
+        :hr
+        [:hr.my-2 {:key idx}]
+
+        ;; default
+        [:a.it.flex.items-center.px-4.py-1.select-none
+         {:key      title
+          :on-click (fn []
+                      (cond
+                        (fn? on-click) (on-click)
+                        (string? href) (util/open-url href))
+                      (state/set-state! :ui/help-open? false))}
+         [:span.flex.items-center.pr-2.opacity-40 (ui/icon icon {:size 20})]
+         [:strong.font-normal title]]))]
+   [:div.ft.pl-11.pb-3
+    [:span.opacity.text-xs.opacity-30 "Logseq " version]]])
+
 (rum/defc help-button < rum/reactive
   []
-  (when-not (state/sub :ui/sidebar-open?)
-    [:div.cp__sidebar-help-btn
-     [:div.inner
-      {:title    (t :help-shortcut-title)
-       :on-click (fn []
-                   (state/sidebar-add-block! (state/get-current-repo) "help" :help))}
-      "?"]]))
+  (let [help-open?      (state/sub :ui/help-open?)
+        handbooks-open? (state/sub :ui/handbooks-open?)]
+    [:<>
+     [:div.cp__sidebar-help-btn
+      [:div.inner
+       {:title    (t :help-shortcut-title)
+        :on-click #(state/toggle! :ui/help-open?)}
+       [:svg.scale-125 {:stroke "currentColor", :fill "none", :stroke-linejoin "round", :width "24", :viewbox "0 0 24 24", :xmlns "http://www.w3.org/2000/svg", :stroke-linecap "round", :stroke-width "2", :class "icon icon-tabler icon-tabler-help-small", :height "24"}
+        [:path {:stroke "none", :d "M0 0h24v24H0z", :fill "none"}]
+        [:path {:d "M12 16v.01"}]
+        [:path {:d "M12 13a2 2 0 0 0 .914 -3.782a1.98 1.98 0 0 0 -2.414 .483"}]]]]
+
+     (when help-open?
+       (help-menu-popup))
+
+     (when handbooks-open?
+       (handbooks/handbooks-popup))]))
 
 (rum/defcs ^:large-vars/cleanup-todo sidebar <
   (mixins/modal :modal/show?)
@@ -728,6 +889,7 @@
         current-repo (state/sub :git/current-repo)
         granted? (state/sub [:nfs/user-granted? (state/get-current-repo)])
         theme (state/sub :ui/theme)
+        accent-color (some-> (state/sub :ui/radix-color) (name))
         system-theme? (state/sub :ui/system-theme?)
         light? (= "light" (state/sub :ui/theme))
         sidebar-open?  (state/sub :ui/sidebar-open?)
@@ -755,6 +917,7 @@
     (theme/container
      {:t             t
       :theme         theme
+      :accent-color  accent-color
       :route         route-match
       :current-repo  current-repo
       :edit?         edit?
@@ -795,7 +958,6 @@
                         :route-match    route-match
                         :default-home   default-home
                         :new-block-mode new-block-mode})
-
         (when (util/electron?)
           (find-in-page/search))
 
@@ -821,6 +983,8 @@
       (ui/notification)
       (ui/modal)
       (ui/sub-modal)
+      (shui-toaster/install-toaster)
+      (shui-dialog/install-modals)
       (select/select-modal)
       (custom-context-menu)
       (plugins/custom-js-installer {:t t
@@ -828,7 +992,6 @@
                                     :nfs-granted? granted?
                                     :db-restoring? db-restoring?})
       [:a#download.hidden]
-      (when
-       (and (not config/mobile?)
-            (not config/publishing?))
+      (when (and (not config/mobile?)
+                 (not config/publishing?))
         (help-button))])))

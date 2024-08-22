@@ -44,15 +44,30 @@ h1.title.whiteboard-dashboard-title {
 }
 
 .dashboard-preview-card {
-  @apply transition;
-  border: 1px solid var(--ls-border-color);
+  @apply transition border;
 }
 
 .dashboard-create-card {
-  @apply items-center justify-center relative;
-  background-color: var(--ls-secondary-background-color);
+  @apply items-center justify-center relative border opacity-90 hover:shadow-lg;
+
+  background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
-  border: 1px solid transparent;
+
+  .ls-icon-plus, .dashboard-create-card-caption {
+    @apply opacity-60;
+  }
+
+  &:hover {
+    @apply opacity-100;
+
+    .ls-icon-plus, .dashboard-create-card-caption {
+      @apply opacity-90;
+    }
+  }
+}
+
+.dark .dashboard-create-card {
+  background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
 }
 
 .dashboard-create-card i {
@@ -68,19 +83,14 @@ h1.title.whiteboard-dashboard-title {
   font-size: 14px;
 }
 
-.dashboard-create-card:hover {
-  background-color: var(--ls-selection-background-color);
-  box-shadow: 0 4px 8px -2px rgba(16, 24, 40, 0.1),
-  0 2px 4px -2px rgba(16, 24, 40, 0.06);
-  border: 1px solid var(--ls-page-blockquote-border-color);
+.dashboard-card-title {
+  @apply px-4 py-3 flex flex-col gap-1 border-b;
+
+  background-color: var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)));
 }
 
-.dashboard-card-title {
-  @apply px-4 py-3 flex flex-col;
-  gap: 4px;
-  border-bottom: 1px solid var(--ls-border-color);
-  background-color: var(--ls-secondary-background-color);
-  font-size: 16px;
+.dark .dashboard-card-title {
+  background-color: var(--lx-gray-03, var(--ls-secondary-background-color, var(--rx-gray-03)));
 }
 
 .dashboard-card-title-name {
@@ -140,12 +150,16 @@ input.tl-text-input {
   position: absolute;
   left: 2.5rem;
   top: 0;
-  background: var(--ls-primary-background-color);
   padding: 4px;
   border-radius: 0 0 12px 12px;
   z-index: 2000;
   gap: 4px;
   line-height: 1.4;
+  background: var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))));
+}
+
+.dark .whiteboard-page-title-root {
+  background: var(--lx-gray-02, var(--ls-primary-background-color, hsl(var(--background))));
 }
 
 .whiteboard-page-title {
@@ -174,6 +188,7 @@ input.tl-text-input {
     border: none;
     box-shadow: none;
     padding: 0;
+    background-color: transparent;
   }
 }
 
@@ -205,7 +220,7 @@ input.tl-text-input {
 
   .tl-action-bar {
     left: 0.5rem;
-    bottom: 0.5rem;
+    bottom: 0;
   }
 
   .tl-primary-tools {

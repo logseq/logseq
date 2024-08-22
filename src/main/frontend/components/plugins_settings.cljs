@@ -29,7 +29,7 @@
   [val {:keys [key type title default description inputAs]} update-setting!]
 
   [:div.desc-item.as-input
-   {:data-key key}
+   {:data-key key :key key}
    [:h2 [:code key] (ui/icon "caret-right") [:strong title]]
 
    [:label.form-control

@@ -149,6 +149,19 @@
      properties)
     []))
 
+(defn- extract-refs-from-property-value
+  [value format]
+  (cond
+    (coll? value)
+    (filter (fn [v] (and (string? v) (not (string/blank? v)))) value)
+    (and (string? value) (= \" (first value) (last value)))
+    nil
+    (string? value)
+    (let [ast (gp-mldoc/inline->edn value (gp-mldoc/default-config format))]
+      (text/extract-refs-from-mldoc-ast ast))
+    :else
+    nil))
+
 (defn- get-page-ref-names-from-properties
   [properties user-config]
   (let [page-refs (->>
@@ -162,8 +175,9 @@
                               (keyword k))))
                    ;; get links ast
                    (map last)
-                   (mapcat (or (:extract-refs-from-property-value-fn user-config)
-                               text/extract-refs-from-mldoc-ast))
+                   (mapcat (fn [value]
+                             (let [f (or (:extract-refs-from-property-value-fn user-config) extract-refs-from-property-value)]
+                               (f value (get user-config :format :markdown)))))
                    ;; comma separated collections
                    (concat (->> (map second properties)
                                 (filter coll?)
@@ -513,12 +527,9 @@
                          id (get-custom-id-or-new-id {:properties properties})
                          property-refs (->> (get-page-refs-from-properties
                                              properties db date-formatter
-                                             (assoc user-config
-                                                    :extract-refs-from-property-value-fn
-                                                    (fn [refs]
-                                                      (when (coll? refs)
-                                                        refs))))
+                                             user-config)
                                             (map :block/original-name))
+                         pre-block? (if (:heading properties) false true)
                          block {:block/uuid id
                                 :block/content content
                                 :block/level 1
@@ -526,16 +537,16 @@
                                 :block/properties-order (vec properties-order)
                                 :block/properties-text-values properties-text-values
                                 :block/invalid-properties invalid-properties
-                                :block/pre-block? true
+                                :block/pre-block? pre-block?
                                 :block/macros (extract-macros-from-ast body)
                                 :block/body body}
                          {:keys [tags refs]}
                          (with-page-block-refs {:body body :refs property-refs} false db date-formatter)]
                      (cond-> block
-                             tags
-                             (assoc :block/tags tags)
-                             true
-                             (assoc :block/refs (concat refs (:block-refs pre-block-properties)))))
+                       tags
+                       (assoc :block/tags tags)
+                       true
+                       (assoc :block/refs (concat refs (:block-refs pre-block-properties)))))
                    (select-keys first-block [:block/format :block/page]))
                   blocks)
                  blocks)]
@@ -613,7 +624,7 @@
                                                (str (gp-property/colons-org "id") " " (:block/uuid block)))))]
                            (string/replace-first c replace-str ""))))))
 
-(defn block-exists-in-another-page? 
+(defn block-exists-in-another-page?
   "For sanity check only.
    For renaming file externally, the file is actually deleted and transacted before-hand."
   [db block-uuid current-page-name]

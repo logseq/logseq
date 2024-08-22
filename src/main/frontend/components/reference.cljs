@@ -23,7 +23,7 @@
 
 (defn filtered-refs
   [page-name filters filters-atom filtered-references]
-  [:div.flex.gap-1.flex-wrap
+  [:div.flex.gap-2.flex-wrap.items-center
    (for [[ref-name ref-count] filtered-references]
      (when ref-name
        (let [lc-reference (string/lower-case ref-name)]
@@ -37,7 +37,7 @@
                                               (dissoc % lc-reference)))
                        (page-handler/save-filter! page-name @filters-atom))
            :small? true
-           :intent "border-link"
+           :variant :outline
            :key ref-name))))])
 
 (rum/defcs filter-dialog-inner < rum/reactive (rum/local "" ::filterSearch)
@@ -62,18 +62,18 @@
       [:div.mx-auto.flex-shrink-0.flex.items-center.justify-center.h-12.w-12.rounded-full.bg-gray-200.text-gray-500.sm:mx-0.sm:h-10.sm:w-10
        (ui/icon "filter" {:size 20})]
       [:div.mt-3.text-center.sm:mt-0.sm:ml-4.sm:text-left.pb-2
-       [:h3#modal-headline.text-lg.leading-6.font-medium "Filter"]
+       [:h3#modal-headline.text-lg.leading-6.font-medium (t :linked-references/filter-heading)]
        [:span.text-xs
-        "Click to include and shift-click to exclude. Click again to remove."]]]
+        (t :linked-references/filter-directions)]]]
      (when (seq filters)
        [:div.cp__filters.mb-4.ml-2
         (when (seq includes)
           [:div.flex.flex-row.flex-wrap.center-items
-           [:div.mr-1.font-medium.py-1 "Includes: "]
+           [:div.mr-1.font-medium.py-1 (t :linked-references/filter-includes)]
            (filtered-refs page-name filters filters-atom includes)])
         (when (seq excludes)
           [:div.flex.flex-row.flex-wrap
-           [:div.mr-1.font-medium.py-1 "Excludes: " ]
+           [:div.mr-1.font-medium.py-1 (t :linked-references/filter-excludes)]
            (filtered-refs page-name filters filters-atom excludes)])])
      [:div.cp__filters-input-panel.flex
       (ui/icon "search")
@@ -133,14 +133,9 @@
         *collapsed? (atom nil)]
     (ui/foldable
      [:div.flex.flex-row.flex-1.justify-between.items-center
-      [:h2.font-medium (str
-                        (when (seq filters)
-                          (str filter-n " of "))
-                        total
-                        " Linked Reference"
-                        (when (> total 1) "s"))]
+      [:h2.font-medium (t :linked-references/reference-count (if (seq filters) filter-n nil) total)]
       [:a.filter.fade-link
-       {:title "Filter"
+       {:title (t :linked-references/filter-heading)
         :on-mouse-over (fn [_e]
                          (when @*collapsed? ; collapsed
                            ;; expand
@@ -183,16 +178,25 @@
             (concat children (rest blocks))
             (conj result fb))))))))
 
+(rum/defc sub-page-properties-changed < rum/static
+  [page-name v filters-atom]
+  (rum/use-effect!
+    (fn []
+      (reset! filters-atom
+              (page-handler/get-filters (util/page-name-sanity-lc page-name))))
+    [page-name v filters-atom])
+  [:<>])
+
 (rum/defcs references* < rum/reactive db-mixins/query
   (rum/local nil ::ref-pages)
   {:init (fn [state]
            (let [page-name (first (:rum/args state))
-                 filters (when page-name
-                           (atom (page-handler/get-filters (util/page-name-sanity-lc page-name))))]
+                 filters (when page-name (atom nil))]
              (assoc state ::filters filters)))}
   [state page-name]
   (when page-name
     (let [page-name (util/page-name-sanity-lc page-name)
+          page-props-v (state/sub-page-properties-changed page-name)
           *ref-pages (::ref-pages state)
           repo (state/get-current-repo)
           filters-atom (get state ::filters)
@@ -236,13 +240,14 @@
       (reset! *ref-pages ref-pages)
       (when (or (seq filter-state) (> filter-n 0))
         [:div.references.page-linked.flex-1.flex-row
+         (sub-page-properties-changed page-name page-props-v filters-atom)
          [:div.content.pt-6
           (references-cp page-name filters filters-atom filter-state total filter-n filtered-ref-blocks' *ref-pages)]]))))
 
 (rum/defc references
   [page-name]
   (ui/catch-error
-   (ui/component-error "Linked References: Unexpected error. Please re-index your graph first.")
+   (ui/component-error (t :linked-references/unexpected-error))
    (ui/lazy-visible
     (fn []
       (references* page-name))
@@ -281,11 +286,7 @@
         [:div.references.page-unlinked.mt-6.flex-1.flex-row
          [:div.content.flex-1
           (ui/foldable
-           [:h2.font-medium
-            (if @n-ref
-              (str @n-ref " Unlinked Reference" (when (> @n-ref 1)
-                                                  "s"))
-              "Unlinked References")]
+           [:h2.font-medium (t :unlinked-references/reference-count @n-ref)]
            (fn [] (unlinked-references-aux page-name n-ref))
            {:default-collapsed? true
             :title-trigger? true})]]))))

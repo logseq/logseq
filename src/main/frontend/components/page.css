@@ -1,7 +1,3 @@
-.page-references h2 {
-  color: var(--ls-title-text-color);
-}
-
 .cp__page {
   &-publish-actions {
     background-color: var(--ls-primary-background-color);
@@ -16,7 +12,7 @@
 
     > .it {
       display: flex;
-      justify-content: center;
+      justify-content: flex-start;
       padding-top: 5px;
       padding-bottom: 5px;
 
@@ -74,9 +70,7 @@
       }
 
       > span {
-        @apply text-gray-500 text-sm;
-
-        padding: 6px 8px;
+        @apply text-sm py-1.5 px-2;
       }
     }
 
@@ -99,11 +93,15 @@
 
   .actions {
     position: sticky;
-    background-color: var(--ls-primary-background-color);
+    background-color: var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)));
     white-space: nowrap;
     top: -18px;
     padding-bottom: 10px;
     z-index: 1;
+
+    .dark & {
+        background-color: var(--lx-gray-02, var(--ls-primary-background-color, var(--rx-gray-02)));
+    }
 
     @screen md {
       display: flex;
@@ -135,7 +133,6 @@
       @apply text-base space-x-2;
 
       a.button {
-        color: var(--ls-primary-text-color);
         margin-top: 1px;
         height: unset;
         padding: 4px;
@@ -144,7 +141,6 @@
 
         &.active {
           opacity: 1;
-          color: var(--ls-link-ref-text-color);
         }
       }
 
@@ -175,19 +171,18 @@
         outline: none;
         border: none;
         position: absolute;
+        padding-left: 8px;
       }
 
       .form-input {
-        padding: 3px;
-        padding-left: 30px;
-        padding-right: 8px;
+        padding: 3px 8px 3px 30px;
       }
 
       .cancel {
         opacity: .3;
         position: absolute;
-        right: 5px;
-        top: 2px;
+        right: 6px;
+        top: 6px;
 
         &:hover {
           opacity: .6;
@@ -244,12 +239,9 @@
   }
 
   .edit-input {
-    width: 100%;
-    border: none;
+    @apply w-full border-0 p-0 pr-1 bg-transparent outline-0;
+
     box-shadow: none;
-    padding-left: 5px;
-    padding-top: 5px;
-    padding-bottom: 4px;
 
     &-wrapper {
       @apply rounded;
@@ -278,10 +270,6 @@ a.page-title {
 
   > .title {
     @apply w-full overflow-hidden overflow-ellipsis;
-  }
-
-  .edit-input {
-    padding-right: 4px;
   }
 }
 
@@ -320,6 +308,11 @@ html.is-native-iphone-without-notch {
   &-wrap {
     cursor: pointer;
   }
+}
+
+.add-button-link-wrap:focus .add-button-link {
+  opacity: .8 !important;
+  transform: scale(.9);
 }
 
 .cp__right-sidebar .add-button-link {

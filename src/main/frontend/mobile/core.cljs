@@ -82,8 +82,16 @@
                                   (state/get-left-sidebar-open?)
                                   (state/set-left-sidebar-open! false)
 
-                                  :else true))
+                                  (state/action-bar-open?)
+                                  (state/set-state! :mobile/show-action-bar? false)
 
+                                  (not-empty (state/get-selection-blocks))
+                                  (editor-handler/clear-selection!)
+
+                                  (state/editing?)
+                                  (editor-handler/escape-editing)
+
+                                  :else true))
                      (if (or (string/ends-with? href "#/")
                              (string/ends-with? href "/")
                              (not (string/includes? href "#/")))

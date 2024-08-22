@@ -106,14 +106,8 @@
         query-properties (if page? (remove #{:block} query-properties) query-properties)
         columns (if (seq query-properties)
                   query-properties
-                  (get-keys result page?))
-        included-columns #{:created-at :updated-at}]
-    (distinct
-     (if (some included-columns columns)
-       (concat (remove included-columns columns)
-               (filter included-columns columns)
-               included-columns)
-       columns))))
+                  (get-keys result page?))]
+    (distinct columns)))
 
 (defn- build-column-value
   "Builds a column's tuple value for a query table given a row, column and
@@ -156,12 +150,12 @@
                    (get-in row [:block/properties column])))]))
 
 (defn build-column-text [row column]
-  (case column 
+  (case column
     :page  (or (get-in row [:block/page :block/original-name])
                (get-in row [:block/original-name])
                (get-in row [:block/content]))
-    :block (or (get-in row [:block/original-name]) 
-               (get-in row [:block/content])) 
+    :block (or (get-in row [:block/original-name])
+               (get-in row [:block/content]))
            (or (get-in row [:block/properties column])
                (get-in row [:block/properties-text-values column])
                (get-in row [(keyword :block column)]))))
@@ -185,27 +179,27 @@
           property-separated-by-commas? (partial text/separated-by-commas? (state/get-config))
           table-version (get-shui-component-version :table config)
           result-as-text (for [row sort-result]
-                           (for [column columns] 
+                           (for [column columns]
                              (build-column-text row column)))
-          render-column-value (fn [row-format cell-format value]
-                                (cond 
+          render-column-value (fn [row-block row-format cell-format value]
+                                (cond
                                   ;; elements should be rendered as they are provided
                                   (= :element cell-format) value
                                   ;; collections are treated as a comma separated list of page-cps
                                   (coll? value) (->> (map #(page-cp {} {:block/name %}) value)
                                                      (interpose [:span ", "]))
                                   ;; boolean values need to first be stringified
-                                  (boolean? value) (str value) 
-                                  ;; string values will attempt to be rendered as pages, falling back to 
+                                  (boolean? value) (str value)
+                                  ;; string values will attempt to be rendered as pages, falling back to
                                   ;; inline-text when no page entity is found
                                   (string? value) (if-let [page (db/entity [:block/name (util/page-name-sanity-lc value)])]
                                                     (page-cp {} page)
-                                                    (inline-text row-format value))
+                                                    (inline-text row-block row-format value))
                                   ;; anything else should just be rendered as provided
                                   :else value))]
-                      
+
       (case table-version
-        2 (shui/table-v2 {:data (conj [[columns]] result-as-text)} 
+        2 (shui/table-v2 {:data (conj [[columns]] result-as-text)}
                          (make-shui-context config inline))
         1 [:div.overflow-x-auto {:on-mouse-down (fn [e] (.stopPropagation e))
                                  :style {:width "100%"}
@@ -243,4 +237,4 @@
                                                                 :block-ref)
                                                                (reset! *mouse-down? false)))}
                        (when value
-                         (apply render-column-value format value))]))]))]]]))))
+                         (apply render-column-value row format value))]))]))]]]))))

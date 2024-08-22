@@ -15,7 +15,7 @@
 (defonce *quitting? (atom false))
 
 (def MAIN_WINDOW_ENTRY (if dev?
-                         ;;"http://localhost:3001"
+                         ;"http://localhost:3001"
                          (str "file://" (node-path/join js/__dirname "index.html"))
                          (str "file://" (node-path/join js/__dirname "electron.html"))))
 
@@ -35,6 +35,7 @@
                       :titleBarStyle        "hiddenInset"
                       :trafficLightPosition {:x 16 :y 16}
                       :autoHideMenuBar      (not mac?)
+                      :show                 false
                       :webPreferences
                       {:plugins                 true        ; pdf
                        :nodeIntegration         false
@@ -55,7 +56,6 @@
                      linux?
                      (assoc :icon (node-path/join js/__dirname "icons/logseq.png")))
          win       (BrowserWindow. (clj->js win-opts))]
-     (.manage win-state win)
      (.onBeforeSendHeaders (.. session -defaultSession -webRequest)
                            (clj->js {:urls (array "*://*.youtube.com/*")})
                            (fn [^js details callback]
@@ -76,35 +76,46 @@
      ;;(when dev? (.. win -webContents (openDevTools)))
      win)))
 
+(defn get-all-windows
+  []
+  (.getAllWindows BrowserWindow))
+
 (defn destroy-window!
   [^js win]
   (.destroy win))
 
+(defn close-handler
+  [^js win close-watcher-f e]
+  (.preventDefault e)
+  (when-let [dir (state/get-window-graph-path win)]
+    (close-watcher-f win dir))
+  (state/close-window! win)
+  (let [web-contents (. win -webContents)]
+    (.send web-contents "persist-zoom-level" (.getZoomLevel web-contents))
+    (.send web-contents "persistent-dbs"))
+  (async/go
+    (let [_ (async/<! state/persistent-dbs-chan)]
+      (destroy-window! win)
+      ;; (if @*quitting?
+      ;;   (doseq [win (get-all-windows)]
+      ;;     (destroy-window! win))
+      ;;   (destroy-window! win))
+      (when @*quitting?
+        (async/put! state/persistent-dbs-chan true)))))
+
 (defn on-close-actions!
   ;; TODO merge with the on close in core
   [^js win close-watcher-f] ;; injected watcher related func
-  (.on win "close" (fn [e]
-                     (.preventDefault e)
-                     (when-let [dir (state/get-window-graph-path win)]
-                       (close-watcher-f win dir))
-                     (state/close-window! win)
-                     (let [web-contents (. win -webContents)]
-                       (.send web-contents "persistent-dbs"))
-                     (async/go
-                       (let [_ (async/<! state/persistent-dbs-chan)]
-                         (destroy-window! win)
-                         (when @*quitting?
-                           (async/put! state/persistent-dbs-chan true)))))))
+  (.on win "close" (fn [e] (close-handler win close-watcher-f e))))
 
 (defn switch-to-window!
   [^js win]
   (when (.isMinimized ^object win)
     (.restore win))
-  (.focus win))
-
-(defn get-all-windows
-  []
-  (.getAllWindows BrowserWindow))
+  ;; Ref: https://github.com/electron/electron/issues/8734
+  (.setVisibleOnAllWorkspaces win true)
+  (.focus win)
+  (.setVisibleOnAllWorkspaces win false))
 
 (defn get-graph-all-windows
   [graph-path] ;; graph-path == dir

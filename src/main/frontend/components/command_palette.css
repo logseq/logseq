@@ -1,4 +1,4 @@
-.cp__palette, .cp__select {
+ .cp__select {
   --palettle-input-height: 64px;
   --palettle-container-height: 75vh;
 
@@ -16,7 +16,6 @@
     .menu-link {
       transition: none;
       border: none;
-      border-radius: unset !important;
       background: none;
 
       .type-icon {
@@ -40,8 +39,13 @@
 
       &.chosen,
       &.chosen p {
-        background-color: var(--ls-a-chosen-bg);
+        background-color: var(--lx-gray-03, var(--ls-a-chosen-bg, var(--rx-gray-03)));
         color: var(--ls-secondary-text-color);
+      }
+
+      .dark &.chosen,
+      .dark &.chosen p {
+        background-color: var(--lx-gray-02, var(--ls-a-chosen-bg, var(--rx-gray-02)));
       }
 
       &:hover p {

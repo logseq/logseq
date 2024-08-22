@@ -41,9 +41,9 @@ on:
         required: true
 
 env:
-  CLOJURE_VERSION: '1.10.1.763'
+  CLOJURE_VERSION: '1.11.1.1413'
   NODE_VERSION: '18'
-  JAVA_VERSION: '11'
+  JAVA_VERSION: '17'
 
 jobs:
   build-apk:
@@ -146,11 +146,13 @@ jobs:
           ./gradlew clean
           ./gradlew zipApksForRelease
         working-directory: android
+        env:
+          LOGSEQ_SENTRY_DSN: ${{ secrets.LOGSEQ_SENTRY_DSN }}
 
       - name: Sign Android APK
         run: |
           echo ${{ secrets.ANDROID_KEYSTORE }} | base64 -d > keystore.jks
-          /usr/local/lib/android/sdk/build-tools/30.0.3/apksigner sign \
+          /usr/local/lib/android/sdk/build-tools/33.0.0/apksigner sign \
             --ks keystore.jks --ks-pass "pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" \
             --in app/build/outputs/apk/release/app-release-unsigned.apk \
             --out app-signed.apk

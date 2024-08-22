@@ -161,22 +161,27 @@
   {:fr #{:port :type :help/docs :search-item/page :shortcut.category/navigating :text/image
          :settings-of-plugins :code :on-boarding/section-pages :paginates/pages :right-side-bar/history-global
          :shortcut.category/plugins :whiteboard/rectangle :whiteboard/triangle}
-   :de #{:graph :host :plugins :port :right-side-bar/whiteboards :search-item/block
+   :de #{:graph :host :plugins :port :right-side-bar/whiteboards
          :settings-of-plugins :search-item/whiteboard :shortcut.category/navigating
          :settings-page/enable-tooltip :settings-page/enable-whiteboards :settings-page/plugin-system}
-   :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color :search/command-palette-tip-1 :right-side-bar/history-global}
-   :it #{:plugins}
+   :es #{:settings-page/tab-general :settings-page/tab-editor :whiteboard/color :right-side-bar/history-global}
+   :it #{:home :handbook/home :host :help/awesome-logseq :on-boarding/section-computer
+         :settings-page/tab-account :settings-page/tab-editor :whiteboard/link}
    :nl #{:plugins :type :left-side-bar/nav-recent-pages :plugin/update}
    :pl #{:port}
    :pt-BR #{:plugins :right-side-bar/flashcards :settings-page/enable-flashcards :page/backlinks
-            :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link}
+            :host :settings-page/tab-editor :shortcut.category/plugins :whiteboard/link :settings-of-plugins :whiteboard
+            :whiteboards :on-boarding/quick-tour-journal-page-desc-2 :plugin/downloads :right-side-bar/history-global
+            :right-side-bar/whiteboards :search-item/whiteboard :settings-page/enable-whiteboards :settings-page/plugin-system
+            :shortcut.category/whiteboard :command.whiteboard/zoom-in :command.whiteboard/zoom-out}
    :pt-PT #{:plugins :settings-of-plugins :plugin/downloads :right-side-bar/flashcards
             :settings-page/enable-flashcards :settings-page/plugin-system}
    :nb-NO #{:port :type :whiteboard :right-side-bar/flashcards :right-side-bar/whiteboards
             :search-item/whiteboard :settings-page/enable-flashcards :settings-page/enable-whiteboards
             :settings-page/tab-editor :shortcut.category/whiteboard :whiteboard/medium
-            :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global}
-   :tr #{:help/awesome-logseq}})
+            :whiteboard/twitter-url :whiteboard/youtube-url :right-side-bar/history-global :linked-references/filter-heading}
+   :tr #{:help/awesome-logseq}
+   :id #{:host :port :on-boarding/section-app :right-side-bar/history-global}})
 
 (defn- validate-languages-dont-have-duplicates
   "Looks up duplicates for all languages"

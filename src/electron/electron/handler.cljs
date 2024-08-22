@@ -6,6 +6,7 @@
             ["buffer" :as buffer]
             ["diff-match-patch" :as google-diff]
             ["electron" :refer [app autoUpdater dialog ipcMain shell]]
+            ["electron-window-state" :as windowStateKeeper]
             ["fs" :as fs]
             ["fs-extra" :as fs-extra]
             ["os" :as os]
@@ -28,6 +29,7 @@
             [electron.state :as state]
             [electron.utils :as utils]
             [electron.window :as win]
+            [goog.functions :refer [debounce]]
             [logseq.common.graph :as common-graph]
             [promesa.core :as p]))
 
@@ -82,8 +84,14 @@
 
 (defmethod handle :openFileBackupDir [_window [_ repo path]]
   (when (string? path)
-    (let [dir (backup-file/get-backup-dir repo path)]
-      (.openPath shell dir))))
+    (let [dir (backup-file/get-backup-dir repo path)
+          full-path (utils/to-native-win-path! dir)]
+      (.openPath shell full-path))))
+
+(defmethod handle :openFileInFolder [_window [_ full-path]]
+  (when-let [full-path (utils/to-native-win-path! full-path)]
+    (logger/info ::open-file-in-folder full-path)
+    (.showItemInFolder shell full-path)))
 
 (defmethod handle :readFile [_window [_ path]]
   (utils/read-file path))
@@ -96,6 +104,12 @@
     (catch :default _e
       false)))
 
+(defn chmod-enabled?
+  []
+  (if (= nil (cfgs/get-item :feature/enable-automatic-chmod?))
+    true
+    (cfgs/get-item :feature/enable-automatic-chmod?)))
+
 (defmethod handle :copyFile [_window [_ _repo from-path to-path]]
   (logger/info ::copy-file from-path to-path)
   (fs-extra/copy from-path to-path))
@@ -106,7 +120,7 @@
                       (.from Buf content)
                       content)]
     (try
-      (when (and (fs/existsSync path) (not (writable? path)))
+      (when (and (chmod-enabled?) (fs/existsSync path) (not (writable? path)))
         (fs/chmodSync path "644"))
       (fs/writeFileSync path content)
       (fs/statSync path)
@@ -243,7 +257,7 @@
                                   (.toString (.readFileSync fs txid-path)))]
           (reader/read-string sync-meta))))
     (catch :default e
-      (js/console.debug "[read txid meta] #" root (.-message e)))))
+      (logger/error "[read txid meta] #" root (.-message e)))))
 
 (defmethod handle :inflateGraphsInfo [_win [_ graphs]]
   (if (seq graphs)
@@ -447,7 +461,6 @@
   (let [old-path (state/get-window-graph-path window)]
     (when (and old-path graph-path (not= old-path graph-path))
       (close-watcher-when-orphaned! window old-path))
-    (swap! state/state assoc :graph/current graph-path)
     (swap! state/state assoc-in [:window/graph window] graph-path)
     nil))
 
@@ -455,14 +468,14 @@
   (when graph-name
     (set-current-graph! window (utils/get-graph-dir graph-name))))
 
-(defmethod handle :runGit [_ [_ args]]
-  (when (seq args)
-    (git/raw! args)))
+(defmethod handle :runGit [_ [_ {:keys [repo command]}]]
+  (when (seq command)
+    (git/raw! (utils/get-graph-dir repo) command)))
 
-(defmethod handle :runGitWithinCurrentGraph [_ [_ args]]
-  (when (seq args)
-    (git/init!)
-    (git/run-git2! (clj->js args))))
+(defmethod handle :runGitWithinCurrentGraph [_ [_ {:keys [repo command]}]]
+  (when (seq command)
+    (git/init! (utils/get-graph-dir repo))
+    (git/run-git2! (utils/get-graph-dir repo) (clj->js command))))
 
 (defmethod handle :runCli [window [_ {:keys [command args returnResult]}]]
   (try
@@ -485,8 +498,14 @@
 (defmethod handle :gitCommitAll [_ [_ message]]
   (git/add-all-and-commit! message))
 
-(defmethod handle :gitStatus [_ [_]]
-  (git/short-status!))
+(defmethod handle :gitStatus [_ [_ repo]]
+  (git/short-status! (utils/get-graph-dir repo)))
+
+(def debounced-configure-auto-commit! (debounce git/configure-auto-commit! 5000))
+(defmethod handle :setGitAutoCommit []
+  (debounced-configure-auto-commit!)
+  nil)
+
 
 (defmethod handle :installMarketPlugin [_ [_ mft]]
   (plugin/install-or-update! mft))
@@ -618,6 +637,10 @@
 (defmethod handle :window-close [^js win]
   (.close win))
 
+(defmethod handle :theme-loaded [^js win]
+  (.manage (windowStateKeeper) win)
+  (.show win))
+
 ;;;;;;;;;;;;;;;;;;;;;;;
 ;; file-sync-rs-apis ;;
 ;;;;;;;;;;;;;;;;;;;;;;;
@@ -711,6 +734,9 @@
 
 (defmethod handle :server/set-config [^js _win [_ config]]
   (server/set-config! config))
+
+(defmethod handle :window/open-blank-callback [^js win [_ _type]]
+  (win/setup-window-listeners! win) nil)
 
 (defn set-ipc-handler! [window]
   (let [main-channel "main"]

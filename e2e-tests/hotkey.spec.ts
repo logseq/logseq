@@ -7,9 +7,9 @@ test('open search dialog', async ({ page }) => {
   await closeSearchBox(page)
   await page.keyboard.press(modKey + '+k')
 
-  await page.waitForSelector('[placeholder="Search or create page"]')
+  await page.waitForSelector('[placeholder="What are you looking for?"]', { state: 'visible' })
   await page.keyboard.press('Escape')
-  await page.waitForSelector('[placeholder="Search or create page"]', { state: 'hidden' })
+  await page.waitForSelector('[placeholder="What are you looking for?"]', { state: 'hidden' })
 })
 
 test('insert link #3278', async ({ page }) => {

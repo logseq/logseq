@@ -80,7 +80,7 @@
                   (do
                     (reset! *loading? true)
                     (loader/load
-                     (config/asset-uri "/static/js/reveal.js")
+                     (config/asset-uri (if config/publishing? "static/js/reveal.js" "/static/js/reveal.js"))
                      (fn []
                        (reset! *loading? false)
                        (render!)))))

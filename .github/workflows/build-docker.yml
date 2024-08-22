@@ -7,7 +7,7 @@ on:
     types: [released]
 
 env:
-  CLOJURE_VERSION: '1.10.1.763'
+  CLOJURE_VERSION: '1.11.1.1413'
 
 jobs:
 

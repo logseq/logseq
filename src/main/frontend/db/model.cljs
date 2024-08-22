@@ -190,9 +190,9 @@
           '[:find ?path
              ;; ?modified-at
             :where
-            [?file :file/path ?path]
+            [?file :file/path ?path]]
              ;; [?file :file/last-modified-at ?modified-at]
-            ]
+
           db)
          (seq)
          ;; (sort-by last)
@@ -907,6 +907,7 @@ independent of format as format specific heading characters are stripped"
 
 (defn get-block-page
   [repo block-uuid]
+  (assert (uuid? block-uuid) (str "get-block-page requires block-uuid to be of type uuid but got " block-uuid))
   (when-let [block (db-utils/entity repo [:block/uuid block-uuid])]
     (db-utils/entity repo (:db/id (:block/page block)))))
 
@@ -1480,21 +1481,28 @@ independent of format as format specific heading characters are stripped"
            [?referee-b :block/refs ?refed-b]] db)))
 
 ;; block/uuid and block/content
+(defn get-single-block-contents [id]
+  (let [e (db-utils/entity [:block/uuid id])]
+    (when (and (not (:block/name e))
+               (not (string/blank? (:block/content e))))
+      {:db/id (:db/id e)
+       :block/uuid id
+       :block/page (:db/id (:block/page e))
+       :block/content (:block/content e)
+       :block/format (:block/format e)})))
+
 (defn get-all-block-contents
   []
   (when-let [db (conn/get-db)]
     (->> (d/datoms db :avet :block/uuid)
          (map :v)
-         (map (fn [id]
-                (let [e (db-utils/entity [:block/uuid id])]
-                  (when (and (not (:block/name e))
-                             (not (string/blank? (:block/content e))))
-                    {:db/id (:db/id e)
-                     :block/uuid id
-                     :block/page (:db/id (:block/page e))
-                     :block/content (:block/content e)
-                     :block/format (:block/format e)}))))
+         (map get-single-block-contents)
          (remove nil?))))
+
+(defn get-all-block-avets
+  []
+  (when-let [db (conn/get-db)]
+    (->> (d/datoms db :avet :block/uuid))))
 
 ;; Deprecated?
 (defn delete-blocks
@@ -1675,6 +1683,7 @@ independent of format as format specific heading characters are stripped"
   [repo]
   (d/q
     '[:find [(pull ?page [:block/name
+                          :block/original-name
                           :block/created-at
                           :block/updated-at]) ...]
       :where

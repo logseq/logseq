@@ -343,11 +343,8 @@
                                  _ (setting/set-profile profile-name)]
                            (reset! profile* profile-name)))
                        (state/close-modal!))))]
-      [:span.mt-3.flex.w-full.rounded-md.shadow-sm.sm:mt-0.sm:w-auto
-       [:button.inline-flex.justify-center.w-full.rounded-md.border.border-gray-300.px-4.py-2.bg-white.text-base.leading-6.font-medium.text-gray-700.shadow-sm.hover:text-gray-500.focus:outline-none.focus:border-blue-300.focus:shadow-outline-blue.transition.ease-in-out.duration-150.sm:text-sm.sm:leading-5
-        {:type     "button"
-         :on-click close-fn}
-        "Cancel"]]]]))
+      [:span.mt-3.flex.w-full.rounded-md.sm:mt-0.sm:w-auto
+       (ui/button "Cancel" {:variant :ghost :on-click close-fn :class "opacity-70 hover:opacity-100"})]]]))
 
 (rum/defc zotero-profile-selector <
   rum/reactive
@@ -355,8 +352,9 @@
   [:div.flex.flex-row.mb-4.items-center
    [:label.title.mr-32 {:for "profile-select"} "Choose a profile:"]
    [:div.flex.flex-row.ml-4
-    [:select.ml-1
-     {:value @profile*
+    [:select.ml-1.rounded
+     {:style {:padding "0px 36px 0px 8px"}
+      :value @profile*
       :on-change
       (fn [e]
         (when-let [profile (util/evalue e)]

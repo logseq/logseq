@@ -5,7 +5,7 @@
 .tippy-popper[x-placement^=top] [x-arrow],
 .tippy-popper[x-placement^=top] [x-arrow].arrow-small,
 .tippy-popper[x-placement^=top] [x-arrow].arrow-big {
-  border-top-color: var(--ls-quaternary-background-color);
+  border-top-color: var(--ls-tertiary-background-color);
 }
 
 .tippy-popper[x-placement^=top] .tippy-tooltip.transparent-theme [x-circle],
@@ -25,7 +25,7 @@
 .tippy-popper[x-placement^=bottom] [x-arrow],
 .tippy-popper[x-placement^=bottom] [x-arrow].arrow-small,
 .tippy-popper[x-placement^=bottom] [x-arrow].arrow-big {
-  border-bottom-color: var(--ls-quaternary-background-color);
+  border-bottom-color: var(--ls-tertiary-background-color);
 }
 
 .tippy-popper[x-placement^=bottom] .tippy-tooltip.transparent-theme [x-arrow],
@@ -37,7 +37,7 @@
 .tippy-popper[x-placement^=left] [x-arrow],
 .tippy-popper[x-placement^=left] [x-arrow].arrow-small,
 .tippy-popper[x-placement^=left] [x-arrow].arrow-big {
-  border-left-color: var(--ls-quaternary-background-color);
+  border-left-color: var(--ls-tertiary-background-color);
 }
 
 .tippy-popper[x-placement^=left] .tippy-tooltip.transparent-theme [x-arrow],
@@ -49,21 +49,21 @@
 .tippy-popper[x-placement^=right] [x-arrow],
 .tippy-popper[x-placement^=right] [x-arrow].arrow-small,
 .tippy-popper[x-placement^=right] [x-arrow].arrow-big {
-  border-right-color: var(--ls-quaternary-background-color);
+  border-right-color: var(--ls-tertiary-background-color);
 }
 
 .tippy-popper[x-placement^=right] .tippy-tooltip.transparent-theme [x-arrow],
 .tippy-popper[x-placement^=right] .tippy-tooltip.transparent-theme [x-arrow].arrow-small,
 .tippy-popper[x-placement^=right] .tippy-tooltip.transparent-theme [x-arrow].arrow-big {
-  border-right-color: var(--ls-secondary-background-color);
+  border-right-color: var(--ls-tertiary-background-color);
 }
 
 .tippy-tooltip {
-  color: var(--ls-primary-text-color);
-  font-size: inherit;
-  padding: 0;
+  @apply shadow border border-gray-07 dark:border-gray-05 px-2 py-1;
+
   will-change: auto;
-  background-color: var(--ls-quaternary-background-color);
+  color: var(--ls-primary-text-color, hsl(var(--foreground)));
+  background-color: var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)));
 }
 
 .tippy-tooltip [x-circle] {
@@ -75,7 +75,8 @@
 }
 
 .tippy-wrapper {
-  background-color: var(--ls-quaternary-background-color);
+  border-radius: 8px;
+  margin: 0 -6px;
 }
 
 .tippy-hover {

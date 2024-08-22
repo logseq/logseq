@@ -13,11 +13,21 @@
             [goog.dom :as gdom]
             [rum.core :as rum]))
 
+
+(defn- blur-if-compositing
+  "Call blur on the textarea if it is in composition mode, let the IME commit the composing text"
+  []
+  (when-let [edit-input-id (and (state/editor-in-composition?)
+                                (state/get-edit-input-id))]
+    (let [textarea-el (gdom/getElement edit-input-id)]
+      (.blur textarea-el))))
+
 (rum/defc indent-outdent [indent? icon]
   [:div
    [:button.bottom-action
     {:on-mouse-down (fn [e]
                       (util/stop e)
+                      (blur-if-compositing)
                       (editor-handler/indent-outdent indent?))}
     (ui/icon icon {:size ui/icon-size})]])
 
@@ -91,7 +101,13 @@
         (command #(if (state/sub :document/mode?)
                     (editor-handler/insert-new-block! nil)
                     (commands/simple-insert! parent-id "\n" {})) {:icon "arrow-back"})
-        (command editor-handler/cycle-todo! {:icon "checkbox"} true)
+        ;; On mobile devies, some IME(keyboard) uses composing mode.
+        ;; The composing text can be committed by losing focus.
+        ;; 100ms is enough to commit the composing text to db.
+        (command #(do
+                    (blur-if-compositing)
+                    (editor-handler/cycle-todo!))
+                 {:icon "checkbox"} true)
         (command #(mobile-camera/embed-photo parent-id) {:icon "camera"} true)
         (command history/undo! {:icon "rotate" :class "rotate-180"} true)
         (command history/redo! {:icon "rotate-clockwise" :class "rotate-180"} true)

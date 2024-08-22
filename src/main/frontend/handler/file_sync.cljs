@@ -91,14 +91,19 @@
 
 (defn <list-graphs
   []
-  (go (:Graphs (<! (sync/<list-remote-graphs sync/remoteapi)))))
+  (go
+    (let [r (<! (sync/<list-remote-graphs sync/remoteapi))]
+      (if (instance? ExceptionInfo r)
+        r
+        (:Graphs r)))))
 
 (defn load-session-graphs
   []
   (when-not (state/sub [:file-sync/remote-graphs :loading])
     (go (state/set-state! [:file-sync/remote-graphs :loading] true)
-        (let [graphs (<! (<list-graphs))]
-          (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs})))))
+        (let [graphs-or-exp (<! (<list-graphs))]
+          (when-not (instance? ExceptionInfo graphs-or-exp)
+            (state/set-state! :file-sync/remote-graphs {:loading false :graphs graphs-or-exp}))))))
 
 (defn reset-session-graphs
   []

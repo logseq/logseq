@@ -1,10 +1,5 @@
 .extensions__code {
-  @apply relative;
-  z-index: 0;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: nowrap;
-  justify-content: space-between;
+  @apply relative z-0 flex flex-row flex-nowrap justify-between;
 
   &-lang {
     @apply p-1 text-sm;
@@ -51,7 +46,7 @@
   line-height: 1.45em;
 
   &-scroll {
-    padding-top: 18px;
+    padding-top: 14px;
     padding-bottom: 62px;
   }
 
@@ -68,4 +63,8 @@
   .CodeMirror-hscrollbar {
     cursor: pointer;
   }
+}
+
+.cm-s-solarized.CodeMirror {
+    box-shadow: none;
 }

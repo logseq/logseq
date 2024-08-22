@@ -28,7 +28,7 @@
   < {:key-fn #(identity "home-button")}
   []
   (ui/with-shortcut :go/home "left"
-    [:button.button.icon.inline
+    [:button.button.icon.inline.mx-1
      {:title (t :home)
       :on-click #(do
                    (when (mobile-util/native-iphone?)
@@ -47,7 +47,7 @@
                   logged?
                   (not sync-enabled?))
       [:span.flex.space-x-2
-       [:a.button.text-sm.font-medium.block
+       [:a.button.text-sm.font-medium.block.text-gray-11
         {:on-click #(state/pub-event! [:user/login])}
         [:span (t :login)]
         (when loading?
@@ -62,13 +62,16 @@
       :on-click on-click}
      (ui/icon "menu-2" {:size ui/icon-size})]))
 
-(def bug-report-url
+(defn bug-report-url []
   (let [ua (.-userAgent js/navigator)
         safe-ua (string/replace ua #"[^_/a-zA-Z0-9\.\(\)]+" " ")
         platform (str "App Version: " version "\n"
                       "Git Revision: " config/REVISION "\n"
                       "Platform: " safe-ua "\n"
-                      "Language: " (.-language js/navigator))]
+                      "Language: " (.-language js/navigator) "\n"
+                      "Plugins: " (string/join ", " (map (fn [[k v]]
+                                                           (str (name k) " (" (:version v) ")"))
+                                                         (:plugin/installed-plugins @state/state))))]
     (str "https://github.com/logseq/logseq/issues/new?"
          "title=&"
          "template=bug_report.yaml&"
@@ -81,7 +84,8 @@
   [{:keys [current-repo t]}]
   (let [page-menu (page-menu/page-menu nil)
         page-menu-and-hr (when (seq page-menu)
-                           (concat page-menu [{:hr true}]))]
+                           (concat page-menu [{:hr true}]))
+        login? (and (state/sub :auth/id-token) (user-handler/logged-in?))]
     (ui/dropdown-with-links
      (fn [{:keys [toggle-fn]}]
        [:button.button.icon.toolbar-dots-btn
@@ -114,7 +118,7 @@
           :options {:href (rfe/href :import)}
           :icon (ui/icon "file-upload")})
 
-       (when-not config/publishing? 
+       (when-not config/publishing?
          {:title [:div.flex-row.flex.justify-between.items-center
                   [:span (t :join-community)]]
           :options {:href "https://discuss.logseq.com"
@@ -133,13 +137,18 @@
           :options {:on-click #(state/toggle-theme!)}
           :icon (ui/icon "bulb")})
 
-       (when (and (state/sub :auth/id-token) (user-handler/logged-in?))
-         {:title (t :logout-user (user-handler/email))
-          :options {:on-click #(user-handler/logout)}
-          :icon  (ui/icon "logout")})]
-      (concat page-menu-and-hr)
-      (remove nil?))
-     {})))
+       (when login? {:hr true})
+       (when login?
+         {:item [:span.flex.flex-col.relative.group.pt-1
+                 [:b.leading-none (user-handler/username)]
+                 [:small.opacity-70 (user-handler/email)]
+                 [:i.absolute.opacity-0.group-hover:opacity-100.text-red-rx-09
+                  {:class "right-1 top-3" :title (t :logout)}
+                  (ui/icon "logout")]]
+          :options {:on-click #(user-handler/logout)}})]
+       (concat page-menu-and-hr)
+       (remove nil?))
+      {})))
 
 (rum/defc back-and-forward
   < {:key-fn #(identity "nav-history-buttons")}

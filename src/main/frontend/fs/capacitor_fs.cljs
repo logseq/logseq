@@ -41,6 +41,18 @@
            (fn [_error]
              false)))
 
+(defn <write-file-with-base64
+  "Write a binary file, requires base64 encoding"
+  [path content]
+  (when-not (string/blank? path)
+    (-> (p/chain (.writeFile Filesystem (clj->js {:path path
+                                                  :data content
+                                                  :recursive true}))
+                 #(js->clj % :keywordize-keys true))
+        (p/catch (fn [error]
+                   (js/console.error "writeFile Error: " path ": " error)
+                   nil)))))
+
 (defn- <write-file-with-utf8
   [path content]
   (when-not (string/blank? path)

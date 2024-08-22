@@ -6,7 +6,7 @@
     -webkit-overflow-scrolling: touch;
 
     .menu-link {
-      word-break: break-all;
+      @apply break-all rounded;
 
       .has-help {
         display: flex;
@@ -14,20 +14,17 @@
         justify-content: space-between;
 
         small {
-          visibility: visible;
-          cursor: help;
+          @apply cursor-help visible flex;
 
           svg {
-            opacity: .3;
-          }
-
-          &:hover svg {
-            opacity: .9;
+            @apply opacity-30 hover:opacity-90;
           }
         }
       }
-      
+
       &:hover, &.chosen {
+        background-color: var(--lx-gray-05, var(--ls-menu-hover-color, hsl(var(--secondary))));
+
         .has-help small {
           visibility: visible;
         }
@@ -35,7 +32,7 @@
 
       &:not(.chosen):hover {
         background-color: unset !important;
-        color: var(--ls-primary-text-color);
+        color: var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--secondary))));
       }
     }
   }
@@ -48,8 +45,7 @@
 }
 
 .ui__ac-group-name {
-  @apply p-2 text-xs;
-  color: var(--ls-block-ref-link-text-color);
+  @apply p-2 text-xs text-popover-foreground/20 font-medium;
 }
 
 .search-all #ui__ac-inner {
@@ -70,8 +66,10 @@
   }
 
   .notification-area {
-    background-color: var(--ls-tertiary-background-color, #fff);
-    color: var(--ls-primary-text-color);
+    @apply border;
+
+    background-color: or(--ls-notification-background, --lx-gray-03, --ls-tertiary-background-color, --rx-gray-03);
+    color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color, --rx-gray-11);
   }
 }
 
@@ -102,19 +100,19 @@
   top-12 sm:top-[calc(3vh+50px)];
 
   &-overlay {
-    @apply fixed inset-0 transition-opacity;
+    @apply fixed inset-0;
   }
 
   &-overlay div {
-    background-image: linear-gradient(to bottom, var(--ls-primary-background-color), var(--ls-quaternary-background-color));
+    --from: or(--ls-modal-overlay-gradient-start, --lx-gray-03, --ls-primary-background-color);
+    --to: or(--ls-modal-overlay-gradient-end, --lx-gray-06, --ls-quaternary-background-color);
+    background-image: linear-gradient(to bottom, var(--from), var(--to));
   }
 
   &-panel {
-    @apply relative rounded-md shadow-xl border;
-    border-color: var(--ls-border-color);
+    @apply relative rounded-md shadow-lg border border-gray-06 overflow-hidden;
 
-    overflow: hidden;
-    background: var(--ls-secondary-background-color);
+    background: var(--lx-gray-02, var(--ls-secondary-background-color, hsl(var(--popover))));
 
     .panel-content {
       overflow-y: auto;
@@ -161,7 +159,8 @@
     }
   }
 
-  &[label="ls-modal-align-center"] {
+  &[label="ls-modal-align-center"],
+  &.as-center{
     top: 0;
 
     .ui__modal-panel {
@@ -257,6 +256,13 @@ html.is-mobile {
         padding-bottom: 0;
       }
     }
+
+    &[label="ls-modal-align-center"] {
+      .ui__modal-panel {
+        top: 8vh;
+        transform: translateY(-10%);
+      }
+    }
   }
 }
 
@@ -273,60 +279,12 @@ html.is-mobile {
   }
 }
 
-.ui__button {
-  @apply inline-flex items-center px-3 py-2 border border-transparent
-  text-sm leading-4 font-medium rounded-md text-white
-  focus:outline-none transition ease-in-out duration-150;
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  &:hover:not([disabled]) {
-    opacity: 0.8;
-  }
-
-  &.is-link {
-    @apply text-white;
-  }
-
-  &[intent='logseq'] {
-    @apply focus:border-gray-500 dark:hover:text-gray-200;
-
-    color: var(--ls-primary-text-color);
-    background: var(--ls-secondary-background-color);
-
-    &:hover {
-      color: var(--ls-link-text-color);
-    }
-  }
-
-  &[intent='link'], &[intent='border-link'] {
-    @apply focus:border-gray-500 dark:hover:text-gray-200;
-
-    color: var(--ls-primary-text-color);
-    background: transparent;
-
-    &:hover {
-      color: var(--ls-link-text-color);
-    }
-  }
-
-  &[intent='border-link'] {
-    border: 1px solid;
-  }
-
-  &.p-1 {
-    padding: 0.25rem 0.5rem !important;
-  }
-}
-
 .dropdown-wrapper {
-  background-color: var(--ls-primary-background-color, #fff);
-  border: 1px solid var(--ls-tertiary-background-color);
-  min-width: 12rem;
-  border-radius: 6px;
+  @apply border min-w-[12rem] rounded-md bg-popover overflow-hidden;
+
+  .menu-links-wrapper {
+    @apply border-0;
+  }
 }
 
 .dropdown-caret {
@@ -346,10 +304,10 @@ html.is-mobile {
   @apply block w-full pl-3 pr-10 py-2 text-base leading-6 rounded
   border-gray-300 focus:outline-none sm:text-sm sm:leading-5;
 
-  background-color: var(--ls-primary-background-color, transparent);
+  background-color: var(--lx-gray-03, var(--ls-primary-background-color, transparent));
   background-repeat: no-repeat;
   border-width: 1px;
-  border-color: var(--ls-border-color);
+  border-color: var(--lx-gray-07, var(--ls-border-color));
 
   &.is-small {
     @apply pl-2 py-1.5 sm:leading-4 sm:text-xs;
@@ -357,11 +315,7 @@ html.is-mobile {
 }
 
 .form-input {
-  @apply block w-full pl-2
-  sm:text-sm sm:leading-5 rounded;
-
-  border-width: 1px;
-  border-color: var(--ls-border-color);
+  @apply block w-full pl-2 sm:text-sm sm:leading-5 rounded bg-background border border-gray-07;
 
   &:focus {
     box-shadow: 0 0 0 2px rgba(164, 202, 254, 0.45);
@@ -381,7 +335,7 @@ html.is-mobile {
 }
 
 .bg-quaternary {
-  background-color: var(--ls-quaternary-background-color);
+  background-color: or(--ls-bg-quaternary, --lx-gray-06, --ls-quaternary-background-color);
 }
 
 .ui__icon {
@@ -394,9 +348,9 @@ html.is-mobile {
   width: 24px;
   height: 24px;
   flex-shrink: 0;
-  border-color: var(--ls-primary-background-color);
+  border-color: var(--lx-gray-03, var(--ls-primary-background-color));
   overflow: hidden;
-  color: var(--ls-primary-text-color);
+  color: var(--lx-gray-12, var(--ls-primary-text-color));
 
   .ti,
   .tie {
@@ -405,11 +359,23 @@ html.is-mobile {
 
   &:before {
     @apply block absolute inset-0 ;
-    background: var(--ls-primary-background-color);
+    background: var(--lx-gray-03, var(--ls-primary-background-color));
     content: " ";
   }
 }
 
 .ui__radio-list {
   @apply grid grid-flow-col gap-2;
+}
+
+.ui__toggle-background-on {
+  @apply bg-primary;
+}
+
+.ui__toggle-background-off {
+  background: var(--lx-gray-08, rgb(212, 212, 212));
+}
+
+input[type='range'] {
+  accent-color: var(--lx-accent-10, var(--rx-blue-10));
 }

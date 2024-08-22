@@ -18,3 +18,7 @@
 .ls-filters {
     max-width: 704px;
 }
+
+.custom-query-page-result {
+    @apply p-2 my-2 rounded;
+}

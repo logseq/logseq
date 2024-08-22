@@ -90,8 +90,7 @@ translations here are some things to keep in mind:
   fn translation. Hiccup vectors are needed when word order matters for a
   translation and formatting is involved. See [this 3 word Turkish
   example](https://github.com/logseq/logseq/commit/1d932f07c4a0aad44606da6df03a432fe8421480#r118971415).
-* Translations can have arguments for interpolating strings. When they do, be
-  sure translators are using them correctly.
+* Translations can be anonymous fns with arguments for interpolating strings. Fns should be simple and only include the following fns: `str`, `when`, `if` and `=`.
 
 ### Spell Checker
 
@@ -308,10 +307,21 @@ point out:
   ```sh
   # One time setup
   $ cd scripts && yarn install && cd -
-  # Build the export
+
+  # Build a release publishing app
   $ bb dev:publishing /path/to/graph-dir tmp/publish
-  # View the app in a browser
-  $ open tmp/publish/index.html
+
+  # OR build a dev publishing app that watches frontend changes
+  $ bb dev:publishing /path/to/graph-dir tmp/publish --dev
+
+  # View the publishing app in a browser
+  $ python3 -m http.server 8080 -d tmp/publish &; open http://localhost:8080
+
+  # Rebuild the publishing backend for dev/release.
+  # Handy when making backend changes in deps/publishing or
+  # to test a different graph
+  $ bb dev:publishing-backend /path/graph-dir tmp/publish
+
   ```
 
 There are also some tasks under `nbb:` which are useful for inspecting database

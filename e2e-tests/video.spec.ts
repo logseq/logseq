@@ -13,7 +13,7 @@ const TINY_MP4_BASE64 = 'AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAAAIZnJlZQA
 
 
 test.describe('embedded video', () => {
-    const assets_dir =  path.resolve(graphDir, 'assets')
+    const assets_dir = path.resolve(graphDir, 'assets')
     console.log("ASSETS DIRECTORY: ", assets_dir)
 
     // Save tiny mp4 to assets folder for testing local assets
@@ -70,7 +70,7 @@ test.describe('embedded video', () => {
                 // await page.waitForLoadState('domcontentloaded')
 
                 // this method of checking the innerHTML handles <iframe>, <video> and <span>
-                const renderHtml = await blockRender.innerHTML({timeout: VIDEO_TIMEOUT})
+                const renderHtml = await blockRender.innerHTML({ timeout: VIDEO_TIMEOUT })
 
                 expect(renderHtml, "must embed video").toContain('<video')
                 expect(renderHtml, "must not autoplay").not.toContain('autoplay')

@@ -6,7 +6,7 @@
             ["/frontend/selection" :as selection]
             ["/frontend/utils" :as utils]
             ["@capacitor/status-bar" :refer [^js StatusBar Style]]
-            ["@hugotomazi/capacitor-navigation-bar" :refer [^js NavigationBar]]
+            ["@capgo/capacitor-navigation-bar" :refer [^js NavigationBar]]
             ["grapheme-splitter" :as GraphemeSplitter]
             ["remove-accents" :as removeAccents]
             ["sanitize-filename" :as sanitizeFilename]
@@ -60,25 +60,13 @@
 #?(:cljs (defonce el-visible-in-viewport? utils/elementIsVisibleInViewport))
 #?(:cljs (defonce convert-to-roman utils/convertToRoman))
 #?(:cljs (defonce convert-to-letters utils/convertToLetters))
+#?(:cljs (defonce hsl2hex utils/hsl2hex))
 
 (defn string-join-path
   "Replace all `strings/join` used to construct paths with this function to reduce lint output.
   https://github.com/logseq/logseq/pull/8679"
   [parts]
   (string/join "/" parts))
-
-(defn normalize-user-keyname
-  [k]
-  (let [keynames {";" "semicolon"
-                  "=" "equals"
-                  "-" "dash"
-                  "[" "open-square-bracket"
-                  "]" "close-square-bracket"
-                  "'" "single-quote"}]
-    (some-> (str k)
-            (string/lower-case)
-            (string/replace #"[;=-\[\]']" (fn [s]
-                                            (get keynames s))))))
 
 #?(:cljs
    (defn safe-re-find
@@ -217,26 +205,63 @@
 
 ;; Keep the following colors in sync with common.css
 #?(:cljs
+   (defn- get-computed-bg-color
+     []
+     ;; window.getComputedStyle(document.body, null).getPropertyValue('background-color');
+     (let [styles (js/window.getComputedStyle (js/document.querySelector "#app-container"))
+           bg-color (gobj/get styles "background-color")
+           ;; convert rgb(r,g,b) to #rrggbb
+           rgb2hex (fn [rgb]
+                     (->> rgb
+                          (map (comp #(.toString % 16) parse-long string/trim))
+                          (map #(if (< (count %) 2)
+                                  (str "0" %)
+                                  %))
+                          (string/join)
+                          (str "#")))]
+       (when (string/starts-with? bg-color "rgb(")
+         (let [rgb (-> bg-color
+                       (string/replace #"^rgb\(" "")
+                       (string/replace #"\)$" "")
+                       (string/split #","))
+               rgb (take 3 rgb)]
+           (rgb2hex rgb)))))
+)
+
+#?(:cljs
+   (defn set-android-theme
+     []
+     (when (mobile-util/native-android?)
+       (when-let [bg-color (try (get-computed-bg-color)
+                                (catch :default _
+                                  nil))]
+         (.setNavigationBarColor NavigationBar (clj->js {:color bg-color}))
+         (.setBackgroundColor StatusBar (clj->js {:color bg-color}))))))
+
+#?(:cljs
    (defn set-theme-light
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Light Style)}))
-      (when (mobile-util/native-android?)
-        (.setColor NavigationBar (clj->js {:color "#ffffff"}))
-        (.setBackgroundColor StatusBar (clj->js {:color "#ffffff"}))))))
+      (set-android-theme))))
 
 #?(:cljs
    (defn set-theme-dark
      []
      (p/do!
       (.setStyle StatusBar (clj->js {:style (.-Dark Style)}))
-      (when (mobile-util/native-android?)
-        (.setColor NavigationBar (clj->js {:color "#002b36"}))
-        (.setBackgroundColor StatusBar (clj->js {:color "#002b36"}))))))
+      (set-android-theme))))
 
 (defn find-first
   [pred coll]
   (first (filter pred coll)))
+
+(defn find-index
+  "Find first index of an element in list"
+  [pred-or-val coll]
+  (let [pred (if (fn? pred-or-val) pred-or-val #(= pred-or-val %))]
+    (reduce-kv #(if (pred %3) (reduced %2) %1) -1
+               (cond-> coll (list? coll) (vec)))))
 
 ;; (defn format
 ;;   [fmt & args]
@@ -659,7 +684,7 @@
    (defn safe-dec-current-pos-from-end
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substring input (max (- current-pos 20) 0) current-pos))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -667,15 +692,16 @@
              (- current-pos (.-length (.pop input))))
            (catch :default e
              (js/console.error e)
-             (dec current-pos))))
-       (dec current-pos))))
+             (dec current-pos)))
+         (dec current-pos))
+       current-pos)))
 
 #?(:cljs
    ;; for widen char
    (defn safe-inc-current-pos-from-start
      [input current-pos]
      (if-let [len (and (string? input) (.-length input))]
-       (when-let [input (and (>= len 2) (<= current-pos len)
+       (if-let [input (and (>= len 2) (<= current-pos len)
                              (.substr input current-pos 20))]
          (try
            (let [^js splitter (GraphemeSplitter.)
@@ -683,8 +709,9 @@
              (+ current-pos (.-length (.shift input))))
            (catch :default e
              (js/console.error e)
-             (inc current-pos))))
-       (inc current-pos))))
+             (inc current-pos)))
+         (inc current-pos))
+       current-pos)))
 
 #?(:cljs
    (defn kill-line-before!
@@ -999,7 +1026,7 @@
      (when s
        (let [normalize-str (.normalize (string/lower-case s) "NFKC")]
          (if remove-accents?
-           (removeAccents  normalize-str)
+           (removeAccents normalize-str)
            normalize-str)))))
 
 #?(:cljs
@@ -1037,18 +1064,8 @@
                      (d/set-attr! :type "text/css")
                      (d/set-attr! :href style)
                      (d/set-attr! :media "all"))]
-           (d/append! parent-node link))))))
-
-(defn ->platform-shortcut
-  [keyboard-shortcut]
-  (let [result (or keyboard-shortcut "")
-        result (string/replace result "left" "←")
-        result (string/replace result "right" "→")]
-    (if mac?
-      (-> result
-          (string/replace "Ctrl" "Cmd")
-          (string/replace "Alt" "Opt"))
-      result)))
+           (d/append! parent-node link))
+         (set-android-theme)))))
 
 (defn remove-common-preceding
   [col1 col2]
@@ -1141,11 +1158,11 @@
                will poll it when its return value is channel,
   - :flush-fn exec flush-fn when time to flush, (flush-fn item-coll)
   - :stop-ch stop go-loop when stop-ch closed
-  - :distinct-coll? distinct coll when put into CH
+  - :distinct-key-fn distinct coll when put into CH
   - :chan-buffer buffer of return CH, default use (async/chan 1000)
   - :flush-now-ch flush the content in the queue immediately
   - :refresh-timeout-ch refresh (timeout max-duration)"
-     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-coll? chan-buffer flush-now-ch refresh-timeout-ch]}]
+     [in-ch max-duration & {:keys [filter-fn flush-fn stop-ch distinct-key-fn chan-buffer flush-now-ch refresh-timeout-ch]}]
      (let [ch (if chan-buffer (async/chan chan-buffer) (async/chan 1000))
            stop-ch* (or stop-ch (async/chan))
            flush-now-ch* (or flush-now-ch (async/chan))
@@ -1173,8 +1190,8 @@
                                (async/<! filter-v)
                                filter-v)]
                (if filter-v*
-                 (recur timeout-ch (cond-> (conj coll e)
-                                     distinct-coll? distinct
+                 (recur timeout-ch (cond->> (conj coll e)
+                                     distinct-key-fn (distinct-by distinct-key-fn)
                                      true vec))
                  (recur timeout-ch coll)))
 
@@ -1299,10 +1316,6 @@
   (re-matches (re-pattern (regex-escape "$u^8(d)+w.*[dw]d?")) "$u^8(d)+w.*[dw]d?"))
 
 #?(:cljs
-   (defn meta-key-name []
-     (if mac? "Cmd" "Ctrl")))
-
-#?(:cljs
    (defn meta-key? [e]
      (if mac?
        (gobj/get e "metaKey")
@@ -1374,25 +1387,40 @@
        [] (breakpoint? 640))))
 
 #?(:cljs
-   (defn event-is-composing?
-     "Check if keydown event is a composing (IME) event.
-      Ignore the IME process by default."
-     ([e]
-      (event-is-composing? e false))
-     ([e include-process?]
-      (let [event-composing? (gobj/getValueByKeys e "event_" "isComposing")]
-        (if include-process?
-          (or event-composing?
-              (= (gobj/get e "keyCode") 229)
-              (= (gobj/get e "key") "Process"))
-          event-composing?)))))
+   (do
+     (defn goog-event?
+       [^js e]
+       (and e (fn? (gobj/get e "getBrowserEvent"))))
+
+     (defn goog-event-is-composing?
+       "Check if keydown event is a composing (IME) event.
+        Ignore the IME process by default."
+       ([^js e]
+        (goog-event-is-composing? e false))
+       ([^js e include-process?]
+        (when (goog-event? e)
+          (let [event-composing? (some-> (.getBrowserEvent e) (.-isComposing))]
+            (if include-process?
+              (or event-composing?
+                (= (gobj/get e "keyCode") 229)
+                (= (gobj/get e "key") "Process"))
+              event-composing?)))))))
 
 #?(:cljs
-   (defn onchange-event-is-composing?
+   (defn native-event-is-composing?
      "Check if onchange event of Input is a composing (IME) event.
        Always ignore the IME process."
-     [e]
-     (gobj/getValueByKeys e "nativeEvent" "isComposing"))) ;; No keycode available
+     [^js e]
+     (when-let [^js native-event
+                (and e (cond
+                         (goog-event? e)
+                         (.getBrowserEvent e)
+
+                         (js-in "_reactName" e)
+                         (.-nativeEvent e)
+
+                         :else e))]
+       (.-isComposing native-event))))
 
 #?(:cljs
    (defn open-url
@@ -1447,6 +1475,23 @@
      (p/create
       (fn [resolve]
         (load url resolve)))))
+
+#?(:cljs
+   (defn css-load$
+     ([url] (css-load$ url nil))
+     ([url id]
+      (p/create
+       (fn [resolve reject]
+         (let [id (str "css-load-" (or id url))]
+           (if-not (gdom/getElement id)
+             (let [^js link (js/document.createElement "link")]
+               (set! (.-id link) id)
+               (set! (.-rel link) "stylesheet")
+               (set! (.-href link) url)
+               (set! (.-onload link) resolve)
+               (set! (.-onerror link) reject)
+               (.append (.-head js/document) link))
+             (resolve))))))))
 
 #?(:cljs
    (defn copy-image-to-clipboard

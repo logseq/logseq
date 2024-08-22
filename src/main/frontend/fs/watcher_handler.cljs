@@ -29,14 +29,17 @@
   "For every referred block in the content, fix their block ids in files if missing."
   [content]
   (when (string? content)
-    (doseq [block-id (block-ref/get-all-block-ref-ids content)]
-      (when-let [block (try
-                         (model/get-block-by-uuid block-id)
-                         (catch :default _e
-                           nil))]
-        (let [id-property (:id (:block/properties block))]
-          (when-not (= (str id-property) (str block-id))
-            (editor-property/set-block-property! block-id "id" block-id)))))))
+    (let [missing-blocks (->> (block-ref/get-all-block-ref-ids content)
+                              (distinct)
+                              (keep model/get-block-by-uuid)
+                              (filter (fn [block]
+                                        (not= (str (:id (:block/properties block)))
+                                              (str (:block/uuid block))))))]
+      (when (seq missing-blocks)
+        (editor-property/batch-set-block-property!
+         (mapv
+          (fn [b] [(:block/uuid b) :id (str (:block/uuid b))])
+          missing-blocks))))))
 
 (defn- handle-add-and-change!
   [repo path content db-content mtime backup?]
@@ -64,70 +67,71 @@
                  :else (config/get-local-repo dir))
           repo-dir (config/get-local-dir repo)
           {:keys [mtime]} stat
-          db-content (db/get-file repo path)
-          exists-in-db? (not (nil? db-content))
-          db-content (or db-content "")]
+          ext (keyword (path/file-ext path))]
+      (when (contains? #{:org :md :markdown :css :js :edn :excalidraw :tldr} ext)
+        (let [db-content (db/get-file repo path)
+              exists-in-db? (not (nil? db-content))
+              db-content (or db-content "")]
+          (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
+            (cond
+              (and (= "unlinkDir" type) dir)
+              (state/pub-event! [:graph/dir-gone dir])
 
-      (when (or content (contains? #{"unlink" "unlinkDir" "addDir"} type))
-        (cond
-          (and (= "unlinkDir" type) dir)
-          (state/pub-event! [:graph/dir-gone dir])
+              (and (= "addDir" type) dir)
+              (state/pub-event! [:graph/dir-back repo dir])
 
-          (and (= "addDir" type) dir)
-          (state/pub-event! [:graph/dir-back repo dir])
+              (contains? (:file/unlinked-dirs @state/state) dir)
+              nil
 
-          (contains? (:file/unlinked-dirs @state/state) dir)
-          nil
+              (and (= "add" type)
+                   (not= (string/trim content) (string/trim db-content)))
+              (let [backup? (not (string/blank? db-content))]
+                (handle-add-and-change! repo path content db-content mtime backup?))
 
-          (and (= "add" type)
-               (not= (string/trim content) (string/trim db-content)))
-          (let [backup? (not (string/blank? db-content))]
-            (handle-add-and-change! repo path content db-content mtime backup?))
+              (and (= "change" type)
+                   (= dir repo-dir)
+                   (not= (string/trim content) (string/trim db-content))
+                   (not (gp-config/local-asset? path)))
+              (when-not (and
+                         (string/includes? path (str "/" (config/get-journals-directory) "/"))
+                         (or
+                          (= (string/trim content)
+                             (string/trim (or (state/get-default-journal-template) "")))
+                          (= (string/trim content) "-")
+                          (= (string/trim content) "*")))
+                (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
 
-          (and (= "change" type)
-               (= dir repo-dir)
-               (not= (string/trim content) (string/trim db-content))
-               (not (gp-config/local-asset? path)))
-          (when-not (and
-                     (string/includes? path (str "/" (config/get-journals-directory) "/"))
-                     (or
-                      (= (string/trim content)
-                         (string/trim (or (state/get-default-journal-template) "")))
-                      (= (string/trim content) "-")
-                      (= (string/trim content) "*")))
-            (handle-add-and-change! repo path content db-content mtime (not global-dir))) ;; no backup for global dir
-
-          (and (= "unlink" type)
-               exists-in-db?)
-          (p/let [dir-exists? (fs/file-exists? dir "")]
-            (when dir-exists?
-              (when-let [page-name (db/get-file-page path)]
-                (println "Delete page: " page-name ", file path: " path ".")
-                (page-handler/delete! page-name #() :delete-file? false))))
+              (and (= "unlink" type)
+                   exists-in-db?)
+              (p/let [dir-exists? (fs/file-exists? dir "")]
+                (when dir-exists?
+                  (when-let [page-name (db/get-file-page path)]
+                    (println "Delete page: " page-name ", file path: " path ".")
+                    (page-handler/delete! page-name #() :delete-file? false))))
 
           ;; global config handling
-          (and (= "change" type)
-               (= dir (global-config-handler/global-config-dir)))
-          (when (= path "config.edn")
-            (file-handler/alter-global-file
-             (global-config-handler/global-config-path) content {:from-disk? true}))
+              (and (= "change" type)
+                   (= dir (global-config-handler/global-config-dir)))
+              (when (= path "config.edn")
+                (file-handler/alter-global-file
+                 (global-config-handler/global-config-path) content {:from-disk? true}))
 
-          (and (= "change" type)
-               (not exists-in-db?))
-          (js/console.error "Can't get file in the db: " path)
+              (and (= "change" type)
+                   (not exists-in-db?))
+              (js/console.error "Can't get file in the db: " path)
 
-          (and (contains? #{"add" "change" "unlink"} type)
-               (string/ends-with? path "logseq/custom.css"))
-          (do
-            (println "reloading custom.css")
-            (ui-handler/add-style-if-exists!))
+              (and (contains? #{"add" "change" "unlink"} type)
+                   (string/ends-with? path "logseq/custom.css"))
+              (do
+                (println "reloading custom.css")
+                (ui-handler/add-style-if-exists!))
 
-          (contains? #{"add" "change" "unlink"} type)
-          nil
+              (contains? #{"add" "change" "unlink"} type)
+              nil
 
-          :else
-          (log/error :fs/watcher-no-handler {:type type
-                                             :payload payload})))
+              :else
+              (log/error :fs/watcher-no-handler {:type type
+                                                 :payload payload})))))
 
       ;; return nil, otherwise the entire db will be transferred by ipc
       nil)))
@@ -256,4 +260,3 @@
                                                                :clear? true}]))))
             (p/catch (fn [error]
                        (js/console.dir error))))))))
-
