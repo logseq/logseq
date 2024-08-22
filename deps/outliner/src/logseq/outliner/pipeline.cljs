@@ -151,9 +151,14 @@
                         (into {}))
         property-key-refs (->> (keys properties)
                                (remove private-built-in-props))
-        page-or-object? (fn [block] (and (de/entity? block)
-                                         (or (ldb/page? block)
-                                             (seq (:block/tags block)))))
+        page-or-object? (fn [block]
+                          (and (de/entity? block)
+                               (or (ldb/page? block)
+                                   (seq (:block/tags block)))
+                               ;; Don't allow :default property value objects to reference their
+                               ;; parent block as they are dependent on their block for display
+                               ;; and look weirdly recursive - https://github.com/logseq/db-test/issues/36
+                               (not (:logseq.property/created-from-property block))))
         property-value-refs (->> (vals properties)
                                  (mapcat (fn [v]
                                            (cond
