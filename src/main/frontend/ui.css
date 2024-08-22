@@ -72,7 +72,7 @@
     color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color, --rx-gray-11);
 
     &:has(.ls-wrap-widen) {
-      @apply w-2xl max-w-[96vw];
+      @apply w-[680px] max-w-[96vw];
     }
   }
 }
