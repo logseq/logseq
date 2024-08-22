@@ -312,14 +312,14 @@ a.control-link {
       @apply flex items-center gap-1 font-normal opacity-90;
     }
 
-    > small {
-      @apply flex items-center opacity-50;
+    > label {
+      @apply text-xs flex items-center opacity-40;
     }
 
     &.disabled {
       @apply opacity-70 select-none cursor-not-allowed;
 
-      > small {
+      > label {
         @apply flex items-center gap-1 opacity-40 relative top-[2px] right-[1px];
       }
     }
@@ -350,7 +350,7 @@ a.control-link {
     }
 
     > .ui__input:last-child {
-      @apply !h-[29px];
+      @apply !h-[29px] px-2;
     }
   }
 }
