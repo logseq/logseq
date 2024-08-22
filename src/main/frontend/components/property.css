@@ -313,7 +313,7 @@ a.control-link {
     }
 
     > label {
-      @apply text-xs flex items-center opacity-40;
+      @apply text-xs flex items-center opacity-50;
     }
 
     &.disabled {

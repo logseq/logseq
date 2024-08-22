@@ -27,9 +27,7 @@ html[data-theme=dark] {
 }
 
 html {
-  .ui__dropdown-menu-content,
-  .ui__dropdown-menu-sub-content,
-  .ui__context-menu-content,
+  div[data-radix-menu-content],
   .ui__select-content {
     --accent: var(--rx-gray-04-hsl);
     --accent-foreground: var(--rx-gray-12-hsl);
@@ -163,8 +161,7 @@ html[data-theme=dark] {
       }
     }
 
-    .ui__dropdown-menu-content,
-    .ui__context-menu-content,
+    div[data-radix-menu-content],
     .ui__select-content {
       --accent: 190 100% 15%;
       --muted: 192 100% 13%;
