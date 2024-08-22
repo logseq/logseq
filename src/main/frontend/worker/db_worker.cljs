@@ -5,7 +5,6 @@
             [cljs-bean.core :as bean]
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [clojure.set :as set]
             [datascript.core :as d]
             [datascript.storage :refer [IStorage]]
             [frontend.common.file.core :as common-file]
@@ -123,7 +122,7 @@
                                         :bind item}))))
     (when (seq delete-addrs)
       (.transaction db (fn [tx]
-                         (prn :debug :delete-addrs delete-addrs)
+                         ;; (prn :debug :delete-addrs delete-addrs)
                          (doseq [addr delete-addrs]
                            (.exec tx #js {:sql "Delete from kvs WHERE addr = ? AND NOT EXISTS (SELECT 1 FROM json_each(addresses) WHERE value = ?);"
                                           :bind #js [addr]})))))))
@@ -247,6 +246,8 @@
       (.exec db "PRAGMA locking_mode=exclusive")
       (sqlite-common-db/create-kvs-table! db)
       (sqlite-common-db/create-kvs-table! client-ops-db)
+      (db-migrate/migrate-sqlite-db db)
+      (db-migrate/migrate-sqlite-db client-ops-db)
       (search/create-tables-and-triggers! search-db)
       (let [schema (sqlite-util/get-schema repo)
             conn (sqlite-common-db/get-storage-conn storage schema)
@@ -266,7 +267,7 @@
           (catch :default _e))
 
         ;; (gc-kvs-table! db)
-        (db-migrate/migrate conn search-db db)
+        (db-migrate/migrate conn search-db)
 
         (db-listener/listen-db-changes! repo conn)))))
 
