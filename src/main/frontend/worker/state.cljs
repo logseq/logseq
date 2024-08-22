@@ -19,8 +19,6 @@
                        :config {}
                        :git/current-repo nil
 
-                       :rtc/downloading-graph? false
-
                        :undo/repo->page-block-uuid->undo-ops (atom {})
                        :undo/repo->page-block-uuid->redo-ops (atom {})
 
@@ -114,11 +112,3 @@
 (defn get-date-formatter
   [repo]
   (common-config/get-date-formatter (get-config repo)))
-
-(defn set-rtc-downloading-graph!
-  [value]
-  (swap! *state assoc :rtc/downloading-graph? value))
-
-(defn rtc-downloading-graph?
-  []
-  (:rtc/downloading-graph? @*state))
