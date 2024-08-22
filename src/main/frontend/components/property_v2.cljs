@@ -29,27 +29,70 @@
     (db-property-handler/upsert-closed-value! (:db/ident property) item)
     (re-init-commands! property)))
 
+(defn- loop-focusable-elements!
+  ([^js cnt] (loop-focusable-elements! cnt
+               ".ui__button:not([disabled]), .ui__input, .ui__textarea"))
+  ([^js cnt selectors]
+   (when-let [els (some-> cnt (.querySelectorAll selectors) (seq))]
+     (let [active js/document.activeElement
+           current-idx (.indexOf els active)
+           total-len (count els)
+           to-idx (cond
+                    (or (= -1 current-idx)
+                      (= total-len (inc current-idx)))
+                    0
+                    :else
+                    (inc current-idx))]
+       (some-> els (nth to-idx) (.focus))))))
 
 (rum/defc name-edit-pane
-  [property]
-  (let [title (:block/title property)
-        icon (:logseq.property/icon property)
-        *input-ref (rum/use-ref nil)]
-    [:div.ls-property-name-edit-pane
-     [:div.flex.items-center.input-wrap
-      (icon-component/icon-picker icon {:on-chosen (fn [_e icon]
-                                                     (db-property-handler/upsert-property!
-                                                       (:db/ident property)
-                                                       (:block/schema property)
-                                                       {:properties {:logseq.property/icon icon}}))
-                                        :popup-opts {:align "start"}
-                                        :empty-label "?"})
+  [property {:keys [set-sub-open!]}]
+  (let [*form-data (rum/use-ref {:icon (:logseq.property/icon property)
+                                 :title (or (:block/title property) "")
+                                 :description (or (:logseq.property/description property) "")})
+        [form-data, set-form-data!] (rum/use-state (rum/deref *form-data))
+        *el (rum/use-ref nil)
+        *input-ref (rum/use-ref nil)
+        title (util/trim-safe (:title form-data))
+        description (util/trim-safe (:description form-data))]
 
-      (shui/input {:ref *input-ref :size "sm" :default-value title})]
-     [:div.pt-2 (shui/textarea {:placeholder "description"})]
-     [:div.pt-2.flex.justify-end
-      (shui/button {:size "sm" :disabled true
-                    :variant :secondary} "Save")]]))
+    (rum/use-effect!
+      (fn []
+        (js/setTimeout #(some-> (rum/deref *el) (.focus)) 32))
+      [])
+
+    [:div.ls-property-name-edit-pane.outline-none
+     {:on-key-down (fn [^js e] (when (= "Tab" (.-key e))
+                                 (loop-focusable-elements! (rum/deref *el))))
+      :tab-index -1
+      :ref *el}
+     [:div.flex.items-center.input-wrap
+      (icon-component/icon-picker (:icon form-data)
+        {:on-chosen (fn [_e icon] (set-form-data! (assoc form-data :icon icon)))
+         :popup-opts {:align "start"}
+         :empty-label "?"})
+      (shui/input {:ref *input-ref :size "sm" :default-value title :placeholder "name"
+                   :on-change (fn [^js e] (set-form-data! (assoc form-data :title (util/trim-safe (util/evalue e)))))})]
+     [:div.pt-2 (shui/textarea {:placeholder "description" :default-value description
+                                :on-change (fn [^js e] (set-form-data! (assoc form-data :description (util/trim-safe (util/evalue e)))))})]
+
+     (let [dirty? (not= (rum/deref *form-data) form-data)]
+       [:div.pt-2.flex.justify-end
+        (shui/button {:size "sm" :disabled (not dirty?)
+                      :variant (if dirty? :default :secondary)
+                      :on-click (fn []
+                                  (when (string/blank? title)
+                                    (some-> (rum/deref *input-ref) (.focus))
+                                    (throw (js/Error. "property name is empty")))
+
+                                  (-> (db-property-handler/upsert-property!
+                                        (:db/ident property)
+                                        (:block/schema property)
+                                        {:property-name title
+                                         :properties {:logseq.property/icon (:icon form-data)}})
+                                    (p/then #(set-sub-open! false))
+                                    (p/catch #(shui/toast! (str %) :error))))}
+          "Save")])]))
 
 (rum/defc base-edit-form
   [own-property block]
@@ -141,19 +184,19 @@
             (shui/switch {:id id2 :size "sm" :default-checked toggle-checked?
                           :disabled disabled? :on-click #(util/stop-propagation %)
                           :on-checked-change (or on-toggle-checked-change identity)})]
-           [:small [:span desc]
+           [:label [:span desc]
             (when disabled? (shui/tabler-icon "forbid-2" {:size 15}))]))])))
 
 (rum/defc choice-item-content
   [property block]
   (let [delete-choice! (fn []
                          (p/do!
-                          (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
-                          (re-init-commands! property)))
+                           (db-property-handler/delete-closed-value! (:db/id property) (:db/id block))
+                           (re-init-commands! property)))
         update-icon! (fn [icon]
                        (property-handler/set-block-property!
-                        (state/get-current-repo) (:block/uuid block) :logseq.property/icon
-                        (select-keys icon [:id :type :color])))
+                         (state/get-current-repo) (:block/uuid block) :logseq.property/icon
+                         (select-keys icon [:id :type :color])))
         icon (:logseq.property/icon block)
         value (db-property/closed-value-content block)]
 
@@ -230,11 +273,10 @@
                                 (or property-type :default))
         icon (:logseq.property/icon property)
         icon (when icon [:span.float-left.w-4.h-4.overflow-hidden.leading-4.relative
-                         {:class "top-[1px]"}
                          (icon-component/icon icon {:size 15})])]
     [:<>
      (dropdown-editor-menuitem {:icon :edit :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
-                                :submenu-content (fn [] (name-edit-pane property))})
+                                :submenu-content (fn [ops] (name-edit-pane property ops))})
      (dropdown-editor-menuitem {:icon :hash :title "Property type" :desc (str property-type-label) :disabled? true})
 
      (when enable-closed-values? (empty? (:property/schema.classes property))
