@@ -253,9 +253,10 @@ DROP TRIGGER IF EXISTS blocks_au;
   "Options:
    * :page - the page to specifically search on
    * :limit - Number of result to limit search results. Defaults to 100
-   * :built-in?  - Whether to return built-in pages for db graphs. Defaults to false"
-  [repo conn search-db q {:keys [limit page enable-snippet?
-                                 built-in?] :as option
+   * :dev? - Allow all nodes to be seen for development. Defaults to false
+   * :built-in?  - Whether to return public built-in nodes for db graphs. Defaults to false"
+  [repo conn search-db q {:keys [limit page enable-snippet?  built-in? dev?]
+                          :as option
                           :or {enable-snippet? true}}]
   (when-not (string/blank? q)
     (p/let [match-input (get-match-input q)
@@ -280,7 +281,13 @@ DROP TRIGGER IF EXISTS blocks_au;
                                 (let [{:keys [id page title snippet]} result
                                       block-id (uuid id)]
                                   (when-let [block (d/entity @conn [:block/uuid block-id])]
-                                    (when-not (and (not built-in?) (ldb/built-in? block))
+                                    (when (if dev?
+                                            true
+                                            (if built-in?
+                                              (or (not (ldb/built-in? block))
+                                                 (ldb/class? block)
+                                                 (ldb/public-built-in-property? block))
+                                              (not (ldb/built-in? block))))
                                       {:db/id (:db/id block)
                                        :block/uuid block-id
                                        :block/title (or snippet title)

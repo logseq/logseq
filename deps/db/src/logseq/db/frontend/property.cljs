@@ -319,3 +319,9 @@
               [(:block/title (d/entity db k))
                (ref->property-value-contents db v)]))
        (into {})))
+
+(defn public-built-in-property?
+  "Indicates whether built-in property can be seen and edited by users"
+  [entity]
+  ;; No need to do :built-in? check yet since user properties can't set this
+  (get-in entity [:block/schema :public?]))
