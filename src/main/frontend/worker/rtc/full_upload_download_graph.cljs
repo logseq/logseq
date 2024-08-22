@@ -320,11 +320,9 @@
                                                         :message "transacting graph data to local db"
                                                         :graph-uuid graph-uuid})
           (let [all-blocks (ldb/read-transit-str body)]
-            (worker-state/set-rtc-downloading-graph! true)
             (m/? (new-task--transact-remote-all-blocks all-blocks repo graph-uuid))
             (client-op/update-graph-uuid repo graph-uuid)
             (m/? (c.m/await-promise (.storeMetadata worker-obj repo (pr-str {:kv/value graph-uuid}))))
-            (worker-state/set-rtc-downloading-graph! false)
             (rtc-log-and-state/rtc-log :rtc.log/download {:sub-type :download-completed
                                                           :message "download completed"
                                                           :graph-uuid graph-uuid})
