@@ -480,8 +480,14 @@ a.tag {
 }
 
 .preview-ref-link {
+  @apply inline-block;
+
   & + &, & + a.tag, a.tag + & {
     @apply mx-[3px];
+  }
+
+  .block-title-wrap.as-heading {
+    @apply my-0 pb-0;
   }
 }
 
