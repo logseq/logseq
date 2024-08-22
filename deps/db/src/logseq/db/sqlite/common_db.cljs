@@ -282,7 +282,7 @@
 (defn create-kvs-table!
   "Creates a sqlite table for use with datascript.storage if one doesn't exist"
   [sqlite-db]
-  (.exec sqlite-db "create table if not exists kvs (addr INTEGER primary key, content TEXT)"))
+  (.exec sqlite-db "create table if not exists kvs (addr INTEGER primary key, content TEXT, addresses JSON)"))
 
 (defn get-storage-conn
   "Given a datascript storage, returns a datascript connection for it"

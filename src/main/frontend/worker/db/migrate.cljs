@@ -117,8 +117,9 @@
                                            :else
                                            (first types))
                                          types)]
-                              [[:db/retract id :block/type]
-                               [:db/add id :block/type type]]))))
+                              (when type
+                                [[:db/retract id :block/type]
+                                [:db/add id :block/type type]])))))
         schema (:schema db)]
     (ldb/transact! conn new-type-tx {:db-migrate? true})
     (d/reset-schema! conn (update schema :block/type #(assoc % :db/cardinality :db.cardinality/one)))
