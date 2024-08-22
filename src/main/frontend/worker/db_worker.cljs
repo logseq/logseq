@@ -262,11 +262,11 @@
 
         (try
           (when-not (ldb/page-exists? @conn common-config/views-page-name "hidden")
-           (ldb/create-views-page! conn))
+            (ldb/create-views-page! conn))
           (catch :default _e))
 
         ;; (gc-kvs-table! db)
-        (db-migrate/migrate conn search-db)
+        (db-migrate/migrate conn search-db db)
 
         (db-listener/listen-db-changes! repo conn)))))
 
