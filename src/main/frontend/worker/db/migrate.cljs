@@ -127,25 +127,37 @@
     (d/reset-schema! conn (update schema :block/type #(assoc % :db/cardinality :db.cardinality/one)))
     []))
 
-(defn- separate-addresses-in-kvs-table
-  [_conn _search-db ^Object sqlite-db]
-  (let [data (some->> (.exec sqlite-db #js {:sql "select addr, content from kvs where addr = 0"
-                                            :rowMode "array"})
-                      bean/->clj
-                      (map (fn [[addr content]]
-                             (let [content' (sqlite-util/transit-read content)
-                                   [content' addresses] (if (map? content')
-                                                          [(dissoc content' :addresses) (:addresses content')]
-                                                          [content' nil])]
-                               #js {:$addr addr
-                                    :$content content'
-                                    :$addresses addresses}))))]
-    (.exec sqlite-db #js [:sql "alter table kvs add column addresses JSON"])
-    (.transaction sqlite-db
-                  (fn [tx]
-                    (doseq [item data]
-                      (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
-                                     :bind item}))))))
+(defn- add-addresses-in-kvs-table
+  [^Object sqlite-db]
+  (let [columns (->> (.exec sqlite-db #js {:sql "SELECT NAME FROM PRAGMA_TABLE_INFO('kvs')"
+                                           :rowMode "array"})
+                     bean/->clj
+                     (map first)
+                     set)]
+    (prn :debug :columns columns)
+    (when-not (contains? columns "addresses")
+      (let [data (some->> (.exec sqlite-db #js {:sql "select addr, content from kvs"
+                                                :rowMode "array"})
+                          bean/->clj
+                          (map (fn [[addr content]]
+                                 (let [content' (sqlite-util/transit-read content)
+                                       [content' addresses] (if (map? content')
+                                                              [(dissoc content' :addresses)
+                                                               (when-let [addresses (:addresses content')]
+                                                                 (prn :debug :addresses addresses)
+                                                                 (js/JSON.stringify (bean/->js addresses)))]
+                                                              [content' nil])
+                                       content' (sqlite-util/transit-write content')]
+                                   #js {:$addr addr
+                                        :$content content'
+                                        :$addresses addresses}))))]
+        (.exec sqlite-db #js {:sql "alter table kvs add column addresses JSON"})
+        (.transaction sqlite-db
+                      (fn [tx]
+                        (doseq [item data]
+                          (prn :debug :item item)
+                          (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
+                                         :bind item}))))))))
 
 (def schema-version->updates
   [[3 {:properties [:logseq.property/table-sorting :logseq.property/table-filters
@@ -167,16 +179,19 @@
    [9 {:fix update-task-ident}]
    [10 {:fix update-table-properties}]
    [11 {:fix property-checkbox-type-non-ref}]
-   [12 {:fix update-block-type-many->one}]
-   [13 {:fix separate-addresses-in-kvs-table}]])
+   [12 {:fix update-block-type-many->one}]])
 
 (let [max-schema-version (apply max (map first schema-version->updates))]
   (assert (<= db-schema/version max-schema-version))
   (when (< db-schema/version max-schema-version)
     (js/console.warn (str "Current db schema-version is " db-schema/version ", max available schema-version is " max-schema-version))))
 
+(defn migrate-sqlite-db
+  [db]
+  (add-addresses-in-kvs-table db))
+
 (defn migrate
-  [conn search-db sqlite-db]
+  [conn search-db]
   (let [db @conn
         version-in-db (or (:kv/value (d/entity db :logseq.kv/schema-version)) 0)]
     (cond
@@ -208,7 +223,7 @@
                    (fn [update]
                      (when-let [fix (:fix update)]
                        (when (fn? fix)
-                         (fix conn search-db sqlite-db)))) updates)
+                         (fix conn search-db)))) updates)
             tx-data' (if db-based? (concat new-properties fixes) fixes)]
         (when (seq tx-data')
           (let [tx-data' (concat tx-data' [(sqlite-create-graph/kv :logseq.kv/schema-version db-schema/version)])]
