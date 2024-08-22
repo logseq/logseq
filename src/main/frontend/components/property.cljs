@@ -147,7 +147,7 @@
     ;; existing property selected or entered
     (if property
       (do
-        (when (and (not (get-in property [:block/schema :public?]))
+        (when (and (not (ldb/public-built-in-property? property))
                    (ldb/built-in? property))
           (notification/show! "This is a private built-in property that can't be used." :error))
         property)
@@ -865,7 +865,7 @@
                        (when-let [ent (db/entity id)]
                          (or
                           ;; built-in
-                          (and (not (get-in ent [:block/schema :public?]))
+                          (and (not (ldb/public-built-in-property? ent))
                                ;; TODO: Use ldb/built-in? when intermittent lazy loading issue fixed
                                (get db-property/built-in-properties (:db/ident ent)))
                           ;; other position

@@ -15,7 +15,8 @@
             [logseq.db.frontend.rules :as rules]
             [logseq.db.sqlite.common-db :as sqlite-common-db]
             [logseq.db.sqlite.util :as sqlite-util]
-            [logseq.db.frontend.content :as db-content]))
+            [logseq.db.frontend.content :as db-content]
+            [logseq.db.frontend.property :as db-property]))
 
 ;; Use it as an input argument for datalog queries
 (def block-attrs
@@ -94,6 +95,7 @@
 (def whiteboard? sqlite-util/whiteboard?)
 (def journal? sqlite-util/journal?)
 (def hidden? sqlite-util/hidden?)
+(def public-built-in-property? db-property/public-built-in-property?)
 
 (defn sort-by-order
   [blocks]
