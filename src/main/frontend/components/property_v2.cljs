@@ -10,6 +10,7 @@
             [frontend.util :as util]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
+            [logseq.outliner.core :as outliner-core]
             [logseq.shui.ui :as shui]
             [logseq.shui.popup.core :as shui-popup]
             [promesa.core :as p]
@@ -45,11 +46,23 @@
                     (inc current-idx))]
        (some-> els (nth to-idx) (.focus))))))
 
+(defn- set-property-description!
+  [property description]
+  (if-let [ent (:logseq.property/description property)]
+    (db/transact! (state/get-current-repo)
+      [(outliner-core/block-with-updated-at
+         {:db/id (:db/id ent) :block/title description})]
+      {:outliner-op :save-block})
+    (when-not (string/blank? description)
+      (db-property-handler/set-block-property!
+        (:db/id property)
+        :logseq.property/description description))))
+
 (rum/defc name-edit-pane
   [property {:keys [set-sub-open!]}]
   (let [*form-data (rum/use-ref {:icon (:logseq.property/icon property)
                                  :title (or (:block/title property) "")
-                                 :description (or (:logseq.property/description property) "")})
+                                 :description (or (db-property/property-value-content (:logseq.property/description property)) "")})
         [form-data, set-form-data!] (rum/use-state (rum/deref *form-data))
         *el (rum/use-ref nil)
         *input-ref (rum/use-ref nil)
@@ -85,11 +98,14 @@
                                     (some-> (rum/deref *input-ref) (.focus))
                                     (throw (js/Error. "property name is empty")))
 
-                                  (-> (db-property-handler/upsert-property!
-                                        (:db/ident property)
-                                        (:block/schema property)
-                                        {:property-name title
-                                         :properties {:logseq.property/icon (:icon form-data)}})
+                                  (-> [(db-property-handler/upsert-property!
+                                         (:db/ident property)
+                                         (:block/schema property)
+                                         {:property-name title
+                                          :properties {:logseq.property/icon (:icon form-data)}})
+                                       (when (not= description (:description (rum/deref *form-data)))
+                                         (set-property-description! property description))]
+                                    (p/all)
                                     (p/then #(set-sub-open! false))
                                     (p/catch #(shui/toast! (str %) :error))))}
           "Save")])]))
