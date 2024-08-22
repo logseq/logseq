@@ -134,7 +134,6 @@
                      bean/->clj
                      (map first)
                      set)]
-    (prn :debug :columns columns)
     (when-not (contains? columns "addresses")
       (let [data (some->> (.exec sqlite-db #js {:sql "select addr, content from kvs"
                                                 :rowMode "array"})
@@ -144,7 +143,6 @@
                                        [content' addresses] (if (map? content')
                                                               [(dissoc content' :addresses)
                                                                (when-let [addresses (:addresses content')]
-                                                                 (prn :debug :addresses addresses)
                                                                  (js/JSON.stringify (bean/->js addresses)))]
                                                               [content' nil])
                                        content' (sqlite-util/transit-write content')]
@@ -155,7 +153,6 @@
         (.transaction sqlite-db
                       (fn [tx]
                         (doseq [item data]
-                          (prn :debug :item item)
                           (.exec tx #js {:sql "INSERT INTO kvs (addr, content, addresses) values ($addr, $content, $addresses) on conflict(addr) do update set content = $content, addresses = $addresses"
                                          :bind item}))))))))
 
