@@ -38,7 +38,7 @@
         pull-data (with-out-str (pprint/pprint result))]
     (println pull-data)
     (notification/show!
-     [:div
+     [:div.ls-wrap-widen
       [:pre.code pull-data]
       [:br]
       (ui/button "Copy to clipboard"
@@ -53,7 +53,7 @@
                      with-out-str)]
     (println ast-data)
     (notification/show!
-     [:div
+     [:div.ls-wrap-widen
       ;; Show clipboard at top since content is really long for pages
       (ui/button "Copy to clipboard"
                  :on-click #(.writeText js/navigator.clipboard ast-data))
