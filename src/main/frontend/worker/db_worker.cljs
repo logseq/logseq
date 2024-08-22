@@ -659,6 +659,11 @@
                                    (ldb/read-transit-str tree->file-opts)
                                    (ldb/read-transit-str context)))))
 
+  (get-debug-datoms
+   [this repo]
+   (when-let [db (worker-state/get-sqlite-conn repo)]
+     (ldb/write-transit-str (worker-export/get-debug-datoms db))))
+
   (get-all-pages
    [this repo]
    (when-let [conn (worker-state/get-datascript-conn repo)]
