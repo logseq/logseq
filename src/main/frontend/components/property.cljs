@@ -669,11 +669,12 @@
                                             (when (util/meta-key? e)
                                               (route-handler/redirect-to-page! (:block/uuid property))
                                               (.preventDefault e)))
-                         :on-context-menu (fn [^js e]
+                         :on-context-menu (fn [^js/MouseEvent e]
                                             (util/stop e)
                                             (shui/popup-show! (.-target e)
                                               (fn [{:keys [id]}]
-                                                (property-v2/dropdown-editor id property))
+                                                (property-v2/dropdown-editor id property
+                                                  {:debug? (.-altKey e)}))
                                               {:content-props
                                                {:class "ls-property-dropdown-editor as-root"}
                                                :align "start"

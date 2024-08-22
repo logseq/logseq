@@ -70,6 +70,10 @@
 
     background-color: or(--ls-notification-background, --lx-gray-03, --ls-tertiary-background-color, --rx-gray-03);
     color: or(--ls-notification-text-color, --lx-gray-11, --ls-primary-text-color, --rx-gray-11);
+
+    &:has(.ls-wrap-widen) {
+      @apply w-2xl max-w-[96vw];
+    }
   }
 }
 

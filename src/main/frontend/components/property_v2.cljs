@@ -1,6 +1,7 @@
 (ns frontend.components.property-v2
   (:require [clojure.string :as string]
             [frontend.components.icon :as icon-component]
+            [frontend.handler.common.developer :as dev-common-handler]
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.db :as db]
             [frontend.handler.property :as property-handler]
@@ -221,7 +222,7 @@
 (rum/defc dropdown-editor-impl
   "popup-id: dropdown popup id
    property: block entity"
-  [_popup-id property]
+  [_popup-id property opts]
   (let [title (:block/title property)
         property-type (get-in property [:block/schema :type])
         property-type-label (some-> property-type (property-type-label))
@@ -266,9 +267,18 @@
                                   (util/stop e)
                                   (-> (shui/dialog-confirm! "remove?")
                                     (p/then (fn [] (shui/popup-hide-all!)))
-                                    (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}})]))
+                                    (p/catch (fn [] (restore-root-highlight-item! :remove-property)))))}})
+     (when (:debug? opts)
+       [:<>
+        (shui/dropdown-menu-separator)
+        (dropdown-editor-menuitem
+          {:icon :bug :title (str (:db/ident property)) :desc "" :disabled? false
+           :item-props {:class "opacity-60 focus:opacity-100 focus:!text-red-rx-08"
+                        :on-select (fn []
+                                     (dev-common-handler/show-entity-data (:db/id property))
+                                     (shui/popup-hide!))}})])]))
 
 (rum/defc dropdown-editor < rum/reactive
-  [popup-id property]
+  [popup-id property opts]
   (let [property1 (db/sub-block (:db/id property))]
-    (dropdown-editor-impl popup-id property1)))
+    (dropdown-editor-impl popup-id property1 opts)))
