@@ -3,7 +3,6 @@
   (:require ["@logseq/sqlite-wasm" :default sqlite3InitModule]
             ["comlink" :as Comlink]
             [cljs-bean.core :as bean]
-            [cljs.core.async :as async]
             [clojure.edn :as edn]
             [clojure.string :as string]
             [datascript.core :as d]
@@ -128,9 +127,7 @@
                     #js {:$addr addr
                          :$content (sqlite-util/transit-write data)})
                   addr+data-seq)]
-        (if (worker-state/rtc-downloading-graph?)
-          (upsert-addr-content! repo data delete-addrs) ; sync writes when downloading whole graph
-          (async/go (upsert-addr-content! repo data delete-addrs)))))
+        (upsert-addr-content! repo data delete-addrs)))
 
     (-restore [_ addr]
       (restore-data-from-addr repo addr))))
