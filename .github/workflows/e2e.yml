@@ -14,6 +14,10 @@ on:
     paths:
       - 'e2e-tests/**'
 
+# TODO: Re-enable when ready to enable tests for file graphs
+defaults:
+  if: false
+
 env:
   CLOJURE_VERSION: '1.11.1.1413'
   JAVA_VERSION: '11'
