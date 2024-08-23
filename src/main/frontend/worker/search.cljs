@@ -9,7 +9,8 @@
             [frontend.common.search-fuzzy :as fuzzy]
             [logseq.db.sqlite.util :as sqlite-util]
             [logseq.common.util :as common-util]
-            [logseq.db :as ldb]))
+            [logseq.db :as ldb]
+            [clojure.set :as set]))
 
 ;; TODO: use sqlite for fuzzy search
 ;; maybe https://github.com/nalgeon/sqlean/blob/main/docs/fuzzy.md?
@@ -412,7 +413,12 @@ DROP TRIGGER IF EXISTS blocks_au;
 
     ;; update block indice
     (when (or (seq blocks-to-add) (seq blocks-to-remove))
-      (let [blocks-to-add (keep block->index blocks-to-add)
-            blocks-to-remove (set (map (comp str :block/uuid) blocks-to-remove))]
+      (let [blocks-to-add' (keep block->index blocks-to-add)
+            blocks-to-remove (set (concat (map (comp str :block/uuid) blocks-to-remove)
+                                          (->>
+                                           (set/difference
+                                            (set (map :block/uuid blocks-to-add))
+                                            (set (map :block/uuid blocks-to-add')))
+                                           (map str))))]
         {:blocks-to-remove-set blocks-to-remove
-         :blocks-to-add        blocks-to-add}))))
+         :blocks-to-add        blocks-to-add'}))))
