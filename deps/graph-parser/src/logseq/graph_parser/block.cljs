@@ -341,9 +341,9 @@
                                                                new-uuid*))]
                                                {:block/uuid new-uuid}))
                                            (when namespace?
-                                             (let [namespace (first (common-util/split-last "/" original-page-name))]
-                                               (when-not (string/blank? namespace)
-                                                 {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace)}})))
+                                             (let [namespace' (first (common-util/split-last "/" original-page-name))]
+                                               (when-not (string/blank? namespace')
+                                                 {:block/namespace {:block/name (common-util/page-name-sanity-lc namespace')}})))
                                            (when (and with-timestamp? (or skip-existing-page-check? (not page-entity))) ;; Only assign timestamp on creating new entity
                                              (let [current-ms (common-util/time-ms)]
                                                {:block/created-at current-ms
@@ -463,13 +463,13 @@
        blocks))
 
 (defn get-block-content
-  [utf8-content block format meta block-pattern]
-  (let [content (if-let [end-pos (:end_pos meta)]
+  [utf8-content block format meta' block-pattern]
+  (let [content (if-let [end-pos (:end_pos meta')]
                   (utf8/substring utf8-content
-                                  (:start_pos meta)
+                                  (:start_pos meta')
                                   end-pos)
                   (utf8/substring utf8-content
-                                  (:start_pos meta)))
+                                  (:start_pos meta')))
         content (when content
                   (let [content (text/remove-level-spaces content format block-pattern)]
                     (if (or (:pre-block? block)
@@ -599,7 +599,7 @@
                 (-> (assoc block :collapsed? true)
                     (update :properties (fn [m] (dissoc m :collapsed)))
                     (update :properties-text-values dissoc :collapsed)
-                    (update :properties-order (fn [keys] (vec (remove #{:collapsed} keys)))))
+                    (update :properties-order (fn [keys'] (vec (remove #{:collapsed} keys')))))
                 block)
         title (cond->> (get-block-content encoded-content block format pos-meta block-pattern)
                 remove-properties?
@@ -742,7 +742,7 @@
                    (map #(dissoc % :block/level-spaces) result)
                    (let [[block & others] blocks
                          level-spaces (:block/level-spaces block)
-                         {:block/keys [uuid level parent] :as last-parent} (last parents)
+                         {uuid' :block/uuid :block/keys [level parent] :as last-parent} (last parents)
                          parent-spaces (:block/level-spaces last-parent)
                          [blocks parents result]
                          (cond
@@ -755,7 +755,7 @@
                              [others parents' result'])
 
                            (> level-spaces parent-spaces)         ; child
-                           (let [parent (if uuid [:block/uuid uuid] (:page/id last-parent))
+                           (let [parent (if uuid' [:block/uuid uuid'] (:page/id last-parent))
                                  block (cond->
                                         (assoc block
                                                :block/parent parent)

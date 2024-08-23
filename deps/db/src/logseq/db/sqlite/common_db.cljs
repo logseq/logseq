@@ -213,8 +213,8 @@
 
 (defn get-structured-datoms
   [db]
-  (mapcat (fn [type]
-            (->> (d/datoms db :avet :block/type type)
+  (mapcat (fn [type']
+            (->> (d/datoms db :avet :block/type type')
                  (mapcat (fn [d]
                            (d/datoms db :eavt (:e d))))))
           [

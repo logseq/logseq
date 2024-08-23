@@ -74,10 +74,10 @@
                (when-not (@*computed-ids (:block/uuid block))
                  (let [page? (ldb/page? block)
                        from-property (:logseq.property/created-from-property block)
-                       parents (when-not page?
+                       parents' (when-not page?
                                  (ldb/get-block-parents db-after (:block/uuid block) {}))
                        parents-refs (->> (cond->>
-                                          (mapcat :block/path-refs parents)
+                                          (mapcat :block/path-refs parents')
                                            from-property
                                            (remove (fn [parent] (and (ldb/property? parent) (not= (:db/id parent) (:db/id from-property))))))
                                          (map :db/id))

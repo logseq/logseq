@@ -35,7 +35,7 @@ the remaining chars for data of this type"
   - :journal-page-uuid
   - :db-ident-block-uuid"
   ([] (d/squuid))
-  ([type v]
-   (case type
+  ([type' v]
+   (case type'
      :journal-page-uuid (gen-journal-page-uuid v)
      :db-ident-block-uuid (gen-db-ident-block-uuid v))))

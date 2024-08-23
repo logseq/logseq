@@ -36,11 +36,11 @@
            s (seq (char-array str))
            mult 1
            idx MAX-STRING-LENGTH
-           score 0]
+           score' 0]
       (cond
         ;; add str-len-distance to score, so strings with matches in same position get sorted by length
         ;; boost score if we have an exact match including punctuation
-        (empty? q) (+ score
+        (empty? q) (+ score'
                       (str-len-distance query str)
                       (if (<= 0 (.indexOf ostr oquery)) MAX-STRING-LENGTH 0))
         (empty? s) 0
@@ -49,12 +49,12 @@
                        (rest s)
                        (inc mult) ;; increase the multiplier as more query chars are matched
                        (dec idx) ;; decrease idx so score gets lowered the further into the string we match
-                       (+ mult score)) ;; score for this match is current multiplier * idx
+                       (+ mult score')) ;; score for this match is current multiplier * idx
                 (recur q
                        (rest s)
                        1 ;; when there is no match, reset multiplier to one
                        (dec idx)
-                       (- score 0.1)))))))
+                       (- score' 0.1)))))))
 
 (defn search-normalize
   "Normalize string for searching (loose)"
