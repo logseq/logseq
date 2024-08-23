@@ -32,7 +32,7 @@
 
 (defn- search
   [mode]
-  (editor-handler/escape-editing false)
+  (editor-handler/escape-editing true)
   (if (state/get-search-mode)
     (js/setTimeout #(route-handler/go-to-search! mode) 128)
     (route-handler/go-to-search! mode)))
@@ -454,7 +454,7 @@
    :command/run                             {:binding  "mod+shift+1"
                                              :inactive (not (util/electron?))
                                              :fn       #(do
-                                                          (editor-handler/escape-editing)
+                                                          (editor-handler/escape-editing true)
                                                           (state/pub-event! [:command/run]))}
 
    :go/home                                 {:binding "g h"
