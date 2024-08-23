@@ -2544,7 +2544,8 @@
                  current-block-page? (= (str (:block/uuid block)) (state/get-current-page))
                  embed-self? (and (:embed? config)
                                   (= (:block/uuid block) (:block/uuid (:block config))))
-                 default-hide? (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
+                 default-hide? (or (not (and current-block-page? (not embed-self?) (state/auto-expand-block-refs?)))
+                                   (= (str (:id config)) (str (:block/uuid block))))
                  *refs-count (atom nil)]
              (p/let [count (db-async/<get-block-refs-count (state/get-current-repo) (:db/id block))]
                (reset! *refs-count count))
@@ -2630,8 +2631,7 @@
 
       (when (and (not (:table? config))
                  (not hide-block-refs?)
-                 (> refs-count 0)
-                 (not= (str (:id config)) (str (:block/uuid block))))
+                 (> refs-count 0))
         (when-let [refs-cp (state/get-component :block/linked-references)]
           (refs-cp uuid)))]]))
 
