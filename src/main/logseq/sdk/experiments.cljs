@@ -13,7 +13,7 @@
         unlinked-refs? (some-> props1 :include-unlinked-refs)
         config (some-> props1 (dissoc :page :include-linked-refs :include-unlinked-refs))]
     (when-let [_entity (page/get-page-entity page-name)]
-      (page/page
+      (page/page-cp
         {:repo (state/get-current-repo)
          :page-name page-name
          :preview? false

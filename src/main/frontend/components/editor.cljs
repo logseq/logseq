@@ -501,11 +501,11 @@
    {:not-matched-handler (editor-handler/keydown-not-matched-handler format)}))
 
 (defn- set-up-key-up!
-  [state input input-id]
+  [state input' input-id]
   (mixins/on-key-up
    state
    {}
-   (editor-handler/keyup-handler state input input-id)))
+   (editor-handler/keyup-handler state input' input-id)))
 
 (def search-timeout (atom nil))
 
@@ -513,9 +513,9 @@
   [state]
   (let [{:keys [id format]} (get-state)
         input-id id
-        input (gdom/getElement input-id)]
+        input' (gdom/getElement input-id)]
     (set-up-key-down! state format)
-    (set-up-key-up! state input input-id)))
+    (set-up-key-up! state input' input-id)))
 
 (defn get-editor-style-class
   "Get textarea css class according to it's content"

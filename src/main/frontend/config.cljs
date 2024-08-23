@@ -162,17 +162,17 @@
   ([s] (ext-of-video? s true))
   ([s html5?]
    (when-let [s (and (string? s) (util/get-file-ext s))]
-     (let [video-formats (cond-> video-formats
-                                 html5? (disj :mkv))]
-       (extname-of-supported? s [video-formats])))))
+     (let [video-formats' (cond-> video-formats
+                            html5? (disj :mkv))]
+       (extname-of-supported? s [video-formats'])))))
 
 (defn ext-of-audio?
   ([s] (ext-of-audio? s true))
   ([s html5?]
    (when-let [s (and (string? s) (util/get-file-ext s))]
-     (let [audio-formats (cond-> audio-formats
-                                 html5? (disj :wma :ogg))]
-       (extname-of-supported? s [audio-formats])))))
+     (let [audio-formats' (cond-> audio-formats
+                            html5? (disj :wma :ogg))]
+       (extname-of-supported? s [audio-formats'])))))
 
 (defn ext-of-image?
   [s]

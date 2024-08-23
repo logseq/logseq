@@ -108,19 +108,19 @@
           (let [detail-info                 (rum/react *detail-info)
                 _                           (state/sub :auth/id-token)
                 online?                     (state/sub :network/online?)
-                uploading?                  (uploading? detail-info)
-                downloading?                (downloading? detail-info)
+                uploading?'                  (uploading? detail-info)
+                downloading?'                (downloading? detail-info)
                 rtc-state                   (:rtc-state detail-info)
                 unpushed-block-update-count (:pending-local-ops detail-info)]
             [:div.cp__rtc-sync
              [:div.cp__rtc-sync-indicator.flex.flex-row.items-center.gap-1
-              (when downloading?
+              (when downloading?'
                 (shui/button
                  {:class   "opacity-50"
                   :variant :ghost
                   :size    :sm}
                  "Downloading..."))
-              (when uploading?
+              (when uploading?'
                 (shui/button
                  {:class   "opacity-50"
                   :variant :ghost

@@ -449,16 +449,16 @@
                   "origin-top-right.absolute.left-0.mt-2.ml-2.rounded-md.shadow-lg.w-64")}))
 
 (rum/defc clause
-  [*tree *find loc clause]
-  (when (seq clause)
+  [*tree *find loc clauses]
+  (when (seq clauses)
     [:div.query-builder-clause
-     (let [kind (keyword (first clause))]
+     (let [kind (keyword (first clauses))]
        (if (query-builder/operators-set kind)
          [:div.operator-clause.flex.flex-row.items-center {:data-level (count loc)}
           [:div.clause-bracket "("]
-          (clauses-group *tree *find (conj loc 0) kind (rest clause))
+          (clauses-group *tree *find (conj loc 0) kind (rest clauses))
           [:div.clause-bracket ")"]]
-         (clause-inner *tree loc clause)))]))
+         (clause-inner *tree loc clauses)))]))
 
 (rum/defc clauses-group
   [*tree *find loc kind clauses]

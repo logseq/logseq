@@ -290,7 +290,7 @@
   [_popup-id property opts]
   (let [title (:block/title property)
         property-type (get-in property [:block/schema :type])
-        property-type-label (some-> property-type (property-type-label))
+        property-type-label' (some-> property-type (property-type-label))
         enable-closed-values? (contains? db-property-type/closed-value-property-types
                                 (or property-type :default))
         icon (:logseq.property/icon property)
@@ -301,7 +301,7 @@
     [:<>
      (dropdown-editor-menuitem {:icon :edit :title "Property name" :desc [:span.flex.items-center.gap-1 icon title]
                                 :submenu-content (fn [ops] (name-edit-pane property (assoc ops :disabled? disabled?)))})
-     (dropdown-editor-menuitem {:icon :hash :title "Property type" :desc (str property-type-label) :disabled? true})
+     (dropdown-editor-menuitem {:icon :hash :title "Property type" :desc (str property-type-label') :disabled? true})
 
      (when enable-closed-values? (empty? (:property/schema.classes property))
        (let [values (:property/closed-values property)]

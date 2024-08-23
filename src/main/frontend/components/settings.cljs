@@ -29,7 +29,7 @@
             [frontend.storage :as storage]
             [frontend.ui :as ui]
             [frontend.util :refer [classnames web-platform?] :as util]
-            [frontend.version :refer [version]]
+            [frontend.version :as fv]
             [goog.object :as gobj]
             [goog.string :as gstring]
             [promesa.core :as p]
@@ -718,7 +718,7 @@
   (let [preferred-language (state/sub [:preferred-language])
         show-radix-themes? true]
     [:div.panel-wrap.is-general
-     (version-row t version)
+     (version-row t fv/version)
      (language-row t preferred-language)
      (theme-modes-row t)
      (when (and (util/electron?) (not util/mac?)) (native-titlebar-row t))

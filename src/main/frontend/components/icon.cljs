@@ -21,14 +21,14 @@
 (defonce emojis (vals (bean/->clj (gobj/get emoji-data "emojis"))))
 
 (defn icon
-  [icon & [opts]]
+  [icon' & [opts]]
   (cond
-    (and (= :emoji (:type icon)) (:id icon))
-    [:em-emoji (merge {:id (:id icon)}
+    (and (= :emoji (:type icon')) (:id icon'))
+    [:em-emoji (merge {:id (:id icon')}
                       opts)]
 
-    (and (= :tabler-icon (:type icon)) (:id icon))
-    (ui/icon (:id icon) opts)))
+    (and (= :tabler-icon (:type icon')) (:id icon'))
+    (ui/icon (:id icon') opts)))
 
 (defn get-node-icon
   [node-entity opts]
@@ -76,9 +76,9 @@
 (defn- search
   [q tab]
   (p/let [icons (when (not= tab :emoji) (search-tabler-icons q))
-          emojis (when (not= tab :icon) (search-emojis q))]
+          emojis' (when (not= tab :icon) (search-emojis q))]
     {:icons icons
-     :emojis emojis}))
+     :emojis emojis'}))
 
 (rum/defc icons-row
   [items]
@@ -136,38 +136,38 @@
    [:em-emoji {:id id}]])
 
 (rum/defc emojis-cp < rum/static
-  [emojis {:keys [searching?] :as opts}]
+  [emojis' {:keys [searching?] :as opts}]
   (pane-section
-    (util/format "Emojis (%s)" (count emojis))
-    (for [emoji emojis]
+    (util/format "Emojis (%s)" (count emojis'))
+    (for [emoji emojis']
       (rum/with-key (emoji-cp emoji opts) (:id emoji)))
     {:virtual-list? true
      :searching? searching?}))
 
 (rum/defc icon-cp < rum/static
-  [icon {:keys [on-chosen hover]}]
+  [icon' {:keys [on-chosen hover]}]
   [:button.w-9.h-9.transition-opacity
-   (when-let [icon (cond-> icon (string? icon) (string/replace " " ""))]
-     {:key icon
+   (when-let [icon' (cond-> icon' (string? icon') (string/replace " " ""))]
+     {:key icon'
       :tabIndex "0"
-      :title icon
+      :title icon'
       :on-click (fn [e]
                   (on-chosen e {:type :tabler-icon
-                                :id icon
-                                :name icon}))
+                                :id icon'
+                                :name icon'}))
       :on-mouse-over #(reset! hover {:type :tabler-icon
-                                     :id icon
-                                     :name icon
-                                     :icon icon})
+                                     :id icon'
+                                     :name icon'
+                                     :icon icon'})
       :on-mouse-out #()})
-   (ui/icon icon {:size 24})])
+   (ui/icon icon' {:size 24})])
 
 (rum/defc icons-cp < rum/static
   [icons {:keys [searching?] :as opts}]
   (pane-section
     (util/format "Icons (%s)" (count icons))
-    (for [icon icons]
-      (icon-cp icon opts))
+    (for [icon' icons]
+      (icon-cp icon' opts))
     {:virtual-list? true
      :searching? searching?}))
 
