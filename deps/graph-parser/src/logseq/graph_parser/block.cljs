@@ -414,8 +414,9 @@
                              (let [macro? (and (map? item)
                                                (= "macro" (:type item)))]
                                (when-not macro?
-                                 (let [result (cond->> (page-name->map item db true date-formatter {:class? tag?})
-                                                tag?
+                                 (let [m (page-name->map item db true date-formatter {:class? tag?})
+                                       result (cond->> m
+                                                (and tag? (not (:db/ident m)))
                                                 (db-class/build-new-class db))
                                        page-name (:block/name result)
                                        id (get @*name->id page-name)]
