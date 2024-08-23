@@ -180,8 +180,8 @@
                              [:div (ui/icon "whiteboard" {:extension? true})]
                              (db/page? block)
                              [:div (ui/icon "page" {:extension? true})]
-                             (or (string/starts-with? (:block/title block) (t :new-tag))
-                                 (string/starts-with? (:block/title block) (t :new-page)))
+                             (or (string/starts-with? (str (:block/title block)) (t :new-tag))
+                                 (string/starts-with? (str (:block/title block)) (t :new-page)))
                              nil
                              :else
                              [:div (ui/icon "letter-n" {:size 14})]))
